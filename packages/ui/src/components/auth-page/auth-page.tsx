@@ -54,7 +54,7 @@ export function AuthPage({
   footnote,
   children,
 }: {
-  /** The artwork the page opens with: an `AuthMark`, or the app's face. */
+  /** The artwork the page opens with: an `AuthMark`, or the product's mark. */
   mark?: ReactNode;
   /** What the page is for, or how it ended, which names it. */
   title: ReactNode;

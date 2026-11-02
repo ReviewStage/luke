@@ -1,10 +1,10 @@
 # `@luke/ui`
 
-Every shared React component, one app's alone included: the face and the glyphs traced from
+Every shared React component, one app's alone included: the product's mark and the glyphs traced from
 `@luke/brand`'s generated art, every provider's brand mark, the chart, `cn`, and
 the custom-property bridge a component's `style` reads; and the DOM-free view
 models a page is drawn from (the site's account initials, activity calendar,
-daily series, and animations roster).
+and daily series).
 
 - A component or CSS pattern duplicated elsewhere is folded into one here.
 - A view model is a `.ts` module that imports no React, at a subpath of its

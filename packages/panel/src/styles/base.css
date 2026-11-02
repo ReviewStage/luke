@@ -28,11 +28,9 @@
      draws every ink in it whatever the machine says. */
 
   /* Whose voice is live, so a glance says who is talking. Your turn is the
-     palette's green (`--luke-color-complete`); the app answers in the blue the
+     palette's green (`--luke-color-complete`); the app answers in the working ink the
      rest of the surface already uses for something live and in progress,
-     which is what a reply is. The meter and the face (`@luke/ui`'s
-     `face/face.css`) read the same two roles, so the two can never disagree
-     about who has the turn. */
+     which is what a reply is. */
   --voice-luke: var(--luke-color-working);
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
@@ -306,19 +304,19 @@ body,
   user-select: none;
 }
 
-/* The app's face ------------------------------------------------------------- */
+/* The product's mark --------------------------------------------------------- */
 
-/* The face's ink, motion wiring, and generated motions are `@luke/ui`'s
-   (`face/face.css`); its size where nothing more particular lays it out is
-   the window's, except where it is asked to fill its box (`fill`), which
-   this unlayered size would otherwise beat. */
-.luke-face:not([data-fill="true"]) {
+/* The mark's ink is `@luke/ui`'s (`marks/product-mark.css`); its size where
+   nothing more particular lays it out is the window's, except where it is
+   asked to fill its box (`fill`), which this unlayered size would otherwise
+   beat. */
+.luke-product-mark:not([data-fill="true"]) {
   width: 18px;
   height: 18px;
 }
 
-/* A face handed to an auth card as its mark takes the artwork's size. */
-.luke-auth-mark .luke-face {
+/* The mark handed to an auth card takes the artwork's size. */
+.luke-auth-mark .luke-product-mark {
   width: 52px;
   height: 52px;
 }
@@ -374,13 +372,10 @@ body:has(.app-stage[data-capture="true"]) {
   /* A confirmation stands for a beat and goes (a Saved, a landed check), so a
      capture holds none rather than catching one wherever the shutter fell. */
   --luke-confirm-delay: 0s;
-  /* The app's face blinks and sways on a loop with no end to wait for, so a
-     capture would otherwise land wherever in it the shutter happened to fall.
-     Held on its first frame, it is the same face in every PNG. The working
-     rows' spinners hold still for exactly the same reason. */
+  /* The working rows' spinners loop with no end to wait for, so a capture
+     would otherwise land wherever in them the shutter happened to fall. */
   --luke-loop-motion: paused;
   /* A toast's countdown says time passing, which a still frame cannot. */
   --luke-wait-motion: paused;
-  --luke-face-motion: paused;
   --luke-scroll-glide: auto;
 }

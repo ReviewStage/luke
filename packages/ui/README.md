@@ -1,7 +1,7 @@
 # `@luke/ui`
 
 Vespin's design system: the tokens, components, and page patterns the desktop
-window and the site both draw with, plus the face, glyphs, provider marks, and
+window and the site both draw with, plus the product's mark, glyphs, provider marks, and
 the DOM-free view models more than one app reads. `CLAUDE.md` beside this file
 holds the package's rules; this file is the reference for what it ships.
 
@@ -109,7 +109,11 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   holds both profiles to one set of names.
 - **Palette** (`palettes.css`): semantic colours, `--luke-color-*` (`text`,
   `text-muted`, `ground`, `surface`, `overlay`, `fill-*`, `border*`, `accent*`,
-  `danger*`, `focus-ring`, …), set by both profiles in both themes.
+  `danger*`, `focus-ring`, …), set by both profiles in both themes. The
+  brand's own colours among them (the grounds, the inks, the accent, the status
+  inks) are `brand.css`, generated from the brand table in `@luke/brand`'s
+  `scripts/brand-palette.mjs`, so a rebrand or a second theme is that table;
+  `tokens/brand-contrast.test.ts` holds its inks to WCAG AA.
 - **Display** (`display.css`): the site's marketing styles, `--luke-display-*`,
   set under the web profile only; the window has no display type.
 - **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
@@ -119,12 +123,8 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-confirm-delay` (how long a `SavedTick` stands, which reduced motion
   keeps, so the words stay to be read), `--luke-settle-delay` (the beat a hover
   card or a delayed spinner waits to see whether the state settles), and
-  `--luke-loop-motion`, the play state an endless loop holds, and
-  `--luke-face-motion`, the face's. Reduced motion zeroes the durations but
-  hover's and pauses both loops. The face's own rules are `face/face.css`, and
-  its motions `face/face-motion.css`, which `@luke/brand`'s
-  `generate-brand-assets.mjs` writes; an app sets only the face's size where
-  it lays one out. A component reads
+  `--luke-loop-motion`, the play state an endless loop holds. Reduced motion
+  zeroes the durations but hover's and pauses the loop. A component reads
   only `--luke-*` custom properties, directly or through the Tailwind theme.
 - **Tailwind theme** (`tailwind/theme.css`, `tailwind/sources.css`):
   shadcn/ui's utility vocabulary (`bg-primary`, `text-muted-foreground`,
@@ -373,7 +373,7 @@ What the barrel holds (`src/index.ts`):
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
 | Patterns | `Toolbar` (a workspace's top bar, with `NotFound` under it; `PageToolbar` until its callers move), `PageHeader` (a document's own, which `SettingsPage`, `CollectionPage`, and `DetailPage` head themselves with), `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
-| Brand | `WingFace`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
+| Brand | `ProductMark`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
 
 Each component's design comment, at the top of its `.tsx`, says what it owns
 and what it leaves to its caller.
@@ -409,7 +409,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `literal-type` | A literal `font-size`, `font-weight`, or `font`, or `text-sm`, `font-medium`, `text-[13px]` | Draw the words with `Text`, or read a type role (`--luke-type-*-size`, `--luke-weight-*`, `text-body`) |
 | `literal-radius` | A literal corner, `50%` among them, or `rounded`, `rounded-md` | Read a radius role (`--luke-control-radius`, `--luke-radius-full`, `rounded-menu`); a factor of a role (`calc(var(--luke-control-height) / 2)`) passes |
 | `ellipsis` | `text-overflow: ellipsis`, `truncate`, `text-ellipsis` | A cut line fades rather than ending in "…": mask the end it is cut at, `mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade))`, as `Chip` and `ListRow` do |
-| `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--luke-duration-*`, `--luke-*-delay`). An endless loop whose `animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion` may keep its literal |
+| `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--luke-duration-*`, `--luke-*-delay`). An endless loop whose `animation-play-state` answers `--luke-loop-motion` may keep its literal |
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit`, or `--luke-motion-pane`; a hover's `ease` is the default, so drop it |
 | `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
 | `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-luke-profile` selector or variant | A control reads `cursor-press` (`--luke-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--luke-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
@@ -419,8 +419,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `grid-columns` | A block grid that places its items (`place-items-*`, `justify-items-*`, `place-items: center`) and names no columns | Name them, `grid-cols-1` (`minmax(0, 1fr)`), under the grid's own variants (`sm:grid-cols-1` leaves a phone's column `auto`, as `grid-cols-none` and `[auto]` do everywhere), so the column is the box's width: an `auto` column grows to its item's widest line, and a card or a sheet whose width is a share of it (`min(520px, 100%)`) then centres in a column wider than the screen and stands off its edge on a phone, as New task's Relation sheet did. A grid drawn inline (`inline-grid`) is sized by what it holds and passes |
 
 No comment silences it, and it refuses one that asks to
-(`style-guard-disable`); the face's generated `face/face-motion.css` is the one
-file a rule passes whole. A rule that had places left when it landed starts
+(`style-guard-disable`). A rule that had places left when it landed starts
 from a baseline that may only shrink: `tools/anti-slop/style-baselines/<rule>.json`
 counts each file's places, and the guard fails on a file holding more than its
 count and on a count above what the file still holds. So the change that fixes a

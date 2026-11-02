@@ -152,11 +152,11 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { withoutFinishedRuns } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
-import { LukeIdentity } from "./luke-identity.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
+import { ProductIdentity } from "./product-identity.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -2231,7 +2231,7 @@ function SidebarColumn({
       {tasks.signedIn && tasks.workspace !== undefined ? (
         <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
       ) : (
-        <LukeIdentity />
+        <ProductIdentity />
       )}
 
       {/* One scroller for the pages' rows and both sections, so neither the

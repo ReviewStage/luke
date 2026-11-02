@@ -84,15 +84,9 @@ dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 
 The generated outputs are regenerated from `packages/brand`'s sources
 (`generate-brand-assets.mjs`, whose `--check` reports drift when run by hand),
-never hand-edited. The app draws the face rather than loading the SVGs because it needs
-`currentColor` and CSS animation, and `@luke/ui`'s `--luke-face-motion` is what holds every loop
-still for a capture run and for reduced motion. SMIL answers to neither.
-
-The face is still unless something is happening. A gesture plays once and a rest
-repeats, so only a motion that stays true for as long as it holds may be a rest.
-Every motion begins and ends at the resting pose, or it snaps there on the way in
-and out; every layer of a gesture shares a period, because the app hands the face
-back after the longest of them.
+never hand-edited. The app draws the mark (`@luke/ui`'s `ProductMark`) rather
+than loading the SVGs because it takes its holder's ink through
+`currentColor`. The mark is static: it carries no motion of its own.
 
 ## Settings rows
 

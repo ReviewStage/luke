@@ -53,6 +53,7 @@ import {
   POPOVER_PANEL_LOOK,
   PopoverPanel,
   PROVIDER_MARK_SIZE,
+  ProductMark,
   ProviderMark,
   RowHint,
   RowHintOptions,
@@ -69,7 +70,6 @@ import {
   Text,
   Tooltip,
   VisuallyHidden,
-  WingFace,
   wholeWordsHint,
 } from "@luke/ui";
 import {
@@ -125,7 +125,7 @@ import { ServerCard } from "./server-card.js";
  * started agent, our own tools under Built in, then the servers under
  * Connected, which counts how many this agent has on, and Not connected
  * (`agent-servers-model.ts`), each section under `@luke/ui`'s `MenuSection`,
- * and Manage in Settings pinned at the foot. The app's row is its face, its
+ * and Manage in Settings pinned at the foot. The app's row is its mark, its
  * name, how many of its tools the agent is offered (`agent-luke-tools.ts`),
  * `run_on_mac off` in the attention tone where it is, and Always on in a
  * switch's place, since his tools cannot be turned off; pressing it turns
@@ -469,11 +469,11 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
   );
 }
 
-/** The app's face, at a provider mark's seat. */
-function LukeMark(): React.JSX.Element {
+/** The product's mark, at a provider mark's seat. */
+function AppMark(): React.JSX.Element {
   return (
     <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
-      <WingFace />
+      <ProductMark small />
     </GlyphSlot>
   );
 }
@@ -487,7 +487,7 @@ function AlwaysOn(): React.JSX.Element {
   );
 }
 
-/** What the app's row says between its face and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
+/** What the app's row says between its mark and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
 function LukeRowWords({ luke }: { luke: LukeToolsRead }): React.JSX.Element {
   return (
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
@@ -1007,12 +1007,12 @@ function ServersPopover({
       onPress: () => open(row, query),
     });
 
-  /** The app's own row, heading the home: its face, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
+  /** The app's own row, heading the home: its mark, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
   const lukeRow = (
     <RowHighlight.Provider value={at === LUKE_PICK ? undefined : () => setHighlight(LUKE_PICK)}>
       <ListRow
         id={`${rowsId}-${LUKE_PICK}`}
-        leading={<LukeMark />}
+        leading={<AppMark />}
         title={<LukeRowWords luke={luke} />}
         actions={<AlwaysOn />}
         current={onLukeRow ? LIST_ROW_CURRENT.ITEM : undefined}
@@ -1175,7 +1175,7 @@ function ServersPopover({
     );
   };
 
-  /** The app's page in the popover's place: back, its face and name, its count, Always on, a filter, and its tools under their groups. */
+  /** The app's page in the popover's place: back, its mark and name, its count, Always on, a filter, and its tools under their groups. */
   const lukePage = (
     <>
       <div className={SERVER_PAGE_HEAD_CLASS}>
@@ -1185,7 +1185,7 @@ function ServersPopover({
           command={NO_BACK_KEY}
           onBack={backFromLuke}
         />
-        <LukeMark />
+        <AppMark />
         <ServerPageTitle name={PRODUCT_NAME} />
         {luke.answer !== undefined ? (
           <span className={SERVER_COUNT_CLASS}>{toolsCount(lukeNames.length)}</span>

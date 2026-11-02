@@ -29,13 +29,10 @@ motion those runs cannot stop. Easings are tokens too, never `ease` or `ease-out
 hover settle and a press ride `--luke-motion-exit`, a pane and a fold `--luke-motion-pane`,
 and a travel the spring. A script that plays motion reads the same tokens through `tokenTiming`
 (`@luke/ui`), and asks `motionHeld` rather than `matchMedia` whether to move at all. The one sanctioned exception is an endless loop
-(a spinner, a breathing idle, the face's own motions) whose
-`animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion`: those runs
+(a spinner, a breathing idle) whose
+`animation-play-state` answers `--luke-loop-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
-and a loop that carries one must answer a play-state token. A finite companion
-timed to a generated face gesture may also use the gesture's literal phase,
-but it must answer `--luke-face-motion`, live beside a comment naming the generated
-cycle and phase it follows, and do no work when that gesture is not selected.
+and a loop that carries one must answer a play-state token.
 A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@luke/ui`'s `hint.tsx`)
 names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors. A wait drawn
 over its own length, a toast's countdown bar draining over the hold its

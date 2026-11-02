@@ -8,8 +8,8 @@ import {
   ListRow,
   MenuSection,
   PROVIDER_MARK_SIZE,
+  ProductMark,
   ProviderMark,
-  WingFace,
 } from "@luke/ui";
 import { ICON_SIZE } from "@luke/ui/icons";
 import type { Example } from "../examples";
@@ -30,7 +30,7 @@ function MenuSections(): React.JSX.Element {
             <ListRow
               leading={
                 <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
-                  <WingFace />
+                  <ProductMark />
                 </GlyphSlot>
               }
               title={PRODUCT_NAME}

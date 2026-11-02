@@ -273,10 +273,8 @@ function DashboardSections({
 }
 
 /**
- * The overview's own read. It is held by the shell rather than by the screen
- * below, because the animations view — which reads nothing itself — honors the
- * refusals this read already landed, and a read mounted with the screen would
- * take them away with it.
+ * The overview's own read, held by the shell rather than by the screen below,
+ * so the refusals it lands outlive the screen that asked.
  */
 export function useMetricsRead(
   hideAdmins: boolean,

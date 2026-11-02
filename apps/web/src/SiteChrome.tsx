@@ -1,8 +1,8 @@
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
-  FaceMark,
   IconButtonLink,
   MARK_PROVIDER,
+  ProductMark,
   ProviderMark,
   TEXT_ELEMENT,
   TEXT_FONT,
@@ -76,7 +76,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
       >
         <span className={`inline-flex items-center gap-2 text-(--luke-color-text) ${WORDMARK}`}>
           <span className="inline-flex h-4.5 w-5 shrink-0">
-            <FaceMark />
+            <ProductMark fill inherit />
           </span>
           {PRODUCT_NAME}
         </span>

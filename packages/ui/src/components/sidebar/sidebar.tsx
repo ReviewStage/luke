@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import type { ReactNode } from "react";
 import type { DisclosureFold } from "../disclosure/disclosure.js";
 
 /**
@@ -20,31 +20,25 @@ import type { DisclosureFold } from "../disclosure/disclosure.js";
  */
 
 /**
- * The head of the sidebar: a face on its tile beside a name, and under the
+ * The head of the sidebar: a mark on its tile beside a name, and under the
  * name, muted, where the head stands on a surface that is the name's own
- * but not the app itself (the admin dashboard's "Admin"). The face is the
- * caller's, which fills the tile's middle; `faceRef` is the tile, the box a
- * face's hover is read against, which outlives a face remounted to play.
+ * but not the app itself (the admin dashboard's "Admin"). The mark is the
+ * caller's, which fills the tile's middle.
  */
 export function SidebarIdentity({
   name,
   qualifier,
-  face,
-  faceRef,
+  mark,
 }: {
   name: string;
   qualifier?: string | undefined;
-  /** The face, drawn to fill its seat (a `WingFace` with `fill`). */
-  face: ReactNode;
-  faceRef?: Ref<HTMLSpanElement> | undefined;
+  /** The mark, drawn to fill its seat (a `ProductMark` with `fill`). */
+  mark: ReactNode;
 }): React.JSX.Element {
   return (
     <div className="sidebar-identity flex items-center gap-luke-12 px-row-inset pt-luke-2 pb-section-gap">
-      <span
-        ref={faceRef}
-        className="grid size-luke-40 flex-none place-items-center rounded-luke-14 bg-fill-strong"
-      >
-        <span className="grid size-luke-24">{face}</span>
+      <span className="grid size-luke-40 flex-none place-items-center rounded-luke-14 bg-fill-strong">
+        <span className="grid size-luke-24">{mark}</span>
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="text-dialog-size font-dialog tracking-identity">{name}</span>

@@ -1,11 +1,11 @@
-import { FILL_ELEMENT, Fill, TEXT_ELEMENT, TEXT_VARIANT, Text, WingFace } from "@luke/ui";
+import { FILL_ELEMENT, Fill, ProductMark, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { freshAccount } from "../tasks/resting-page.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 
 /**
- * desktop-welcome.tsx -- a new account's welcome, the page the window rests on with no task open while the account has nothing yet: the app's face, one line, and New task's composer under them.
+ * desktop-welcome.tsx -- a new account's welcome, the page the window rests on with no task open while the account has nothing yet: the product's mark, one line, and New task's composer under them.
  *
  * An account with tasks, or a question waiting on it, rests on the Inbox
  * instead (`resting-page.ts`), so this page draws the welcome only for an account
@@ -57,10 +57,10 @@ export function DesktopWelcome({ tasks }: { tasks: TasksControl }): React.JSX.El
       aria-label="Welcome"
     >
       <span
-        className="home-welcome-face mb-tight-gap flex size-welcome-tile items-center justify-center rounded-luke-14 bg-muted text-foreground [&_.luke-face]:size-welcome-face!"
+        className="home-welcome-mark mb-tight-gap flex size-welcome-tile items-center justify-center rounded-luke-14 bg-muted text-foreground [&_.luke-product-mark]:size-welcome-mark!"
         aria-hidden="true"
       >
-        <WingFace />
+        <ProductMark />
       </span>
       <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
         Start your first task

@@ -5,11 +5,11 @@ import {
   Avatar,
   GAP,
   Inline,
+  ProductMark,
   Stack,
   TerminalIcon,
   Text,
   UnassignedAvatar,
-  WingFace,
 } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -69,7 +69,7 @@ function Avatars(): React.JSX.Element {
               />
               <Avatar
                 name={PRODUCT_NAME}
-                glyph={<WingFace />}
+                glyph={<ProductMark />}
                 shape={AVATAR_SHAPE.SQUARE}
                 size={size}
                 tiled

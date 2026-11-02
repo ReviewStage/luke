@@ -9,13 +9,12 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import * as ui from "@luke/ui";
 import {
-  FaceMark,
   FiringGlyph,
   HarnessMark,
   MARK_PROVIDER,
   PROVIDER_MARK_SIZE,
+  ProductMark,
   ProviderMark,
-  WingFace,
 } from "@luke/ui";
 import codexOneX from "../../../../packages/panel/marks/codex-16.png";
 import codexTwoX from "../../../../packages/panel/marks/codex-32.png";
@@ -25,7 +24,7 @@ import { CatalogSection } from "../section";
 
 /**
  * artwork.tsx -- the production artwork `@luke/ui` draws from `@luke/brand`'s
- * generated sources: the app's face at rest and its still mark, every glyph, every provider's
+ * generated sources: the product's mark, every glyph, every provider's
  * mark, and what fires an automation, each drawn from the package itself
  * rather than from a copy.
  */
@@ -69,24 +68,24 @@ const GLYPHS = Object.entries(ui).filter(isGlyph);
 function Artwork(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="artwork-face" title="Face">
-        <div className="catalog-face">
-          <WingFace />
+      <CatalogSection id="artwork-mark" title="Mark">
+        <div className="catalog-mark">
+          <ProductMark />
         </div>
       </CatalogSection>
-      <CatalogSection id="artwork-face-muted" title="Muted face, filling its box">
-        <div className="catalog-face">
-          <WingFace muted fill />
+      <CatalogSection id="artwork-mark-muted" title="Muted mark, filling its box">
+        <div className="catalog-mark">
+          <ProductMark muted fill />
         </div>
       </CatalogSection>
-      <CatalogSection id="artwork-face-inherit" title="Face in its holder's ink, filling its box">
-        <div className="catalog-face">
-          <WingFace fill inherit />
+      <CatalogSection id="artwork-mark-inherit" title="Mark in its holder's ink, filling its box">
+        <div className="catalog-mark">
+          <ProductMark fill inherit />
         </div>
       </CatalogSection>
-      <CatalogSection id="artwork-face-mark" title="Face mark, filling its box in its holder's ink">
-        <div className="catalog-face">
-          <FaceMark />
+      <CatalogSection id="artwork-mark-small" title="The small cut, for 32 pixels and under">
+        <div className="catalog-mark catalog-mark-small">
+          <ProductMark fill small />
         </div>
       </CatalogSection>
       <CatalogSection id="artwork-glyphs" title="Glyphs">

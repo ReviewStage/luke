@@ -3,7 +3,6 @@
   "tests/accept-invitation.test.ts": 4072,
   "tests/admin-account.test.ts": 1445,
   "tests/admin-activity-chart.test.ts": 763,
-  "tests/admin-animations.test.ts": 409,
   "tests/admin-cost.test.ts": 2157,
   "tests/admin-dashboard.test.ts": 3047,
   "tests/admin-day.test.ts": 942,
