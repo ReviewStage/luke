@@ -1323,9 +1323,20 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or that it was withdrawn with why under it, or, where a member closed the item, none, the thread ending in a line saying who resolved it", async () => {
+/** Each line of a mounted thread but the draft reply, as the kind of comment it is and what its writer did, where it says. */
+function threadLines(pane: Element): (readonly [string | null, string | null])[] {
+  return [...pane.querySelectorAll(".inbox-thread > li:not([data-inbox-comment='draft'])")].map(
+    (line) => [
+      line.getAttribute("data-inbox-comment"),
+      wordsOf(line.querySelector(".luke-comment-said"))?.trim() ?? null,
+    ],
+  );
+}
+
+test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, then a line of the thread saying the agent replaced it with a newer question, or a newer message where none asks, or withdrew it with why under it, where it did, or, where a member closed the item, who resolved it", async () => {
   const withdrawnId = "e1b2c3d4-0000-4000-8000-000000000020";
   const closedId = "e1b2c3d4-0000-4000-8000-000000000021";
+  const leaningId = "e1b2c3d4-0000-4000-8000-000000000022";
   const laterId = "e1b2c3d4-0000-4000-8000-000000000023";
   const shown = threadItem(
     [
@@ -1334,8 +1345,10 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
         id: withdrawnId,
         status: INBOX_ASK_STATUS.WITHDRAWN,
         withdrawnReason: "Product picked 14 days.",
+        withdrawnAt: 2_500,
         createdAt: 2_000,
       }),
+      threadMessage(leaningId, { member: READER }, "Leaning 7 days.", 2_200),
       askingMessage(EXPIRY_ASK, {
         id: closedId,
         status: INBOX_ASK_STATUS.WITHDRAWN,
@@ -1349,18 +1362,13 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
 
   assert.deepEqual(askBoxes(pane), [], "no settled ask draws a card");
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
-  for (const [id, settled, words, why] of [
-    [ASKING_ID, "replaced", "Replaced by a newer question", null],
-    [withdrawnId, "withdrawn", "Withdrawn", "Product picked 14 days."],
-    [closedId, null, null, null],
-  ] as const) {
+  for (const id of [ASKING_ID, withdrawnId, closedId]) {
     const message =
-      pane.querySelector(`[data-message-id="${id}"]`) ??
-      assert.fail(`the ${settled} ask's message`);
+      pane.querySelector(`[data-message-id="${id}"]`) ?? assert.fail(`the ask's message ${id}`);
     const offered =
       message.querySelector<HTMLElement>(
         "[data-inbox-replaced] .inbox-ask-replaced-controls [data-stepped-back]",
-      ) ?? assert.fail(`the ${settled} ask keeps its controls, stepped back`);
+      ) ?? assert.fail("the settled ask keeps its controls, stepped back");
     const options = [...offered.querySelectorAll<HTMLElement>("[role='radio']")];
     assert.deepEqual(
       options.map((option) =>
@@ -1377,39 +1385,33 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     );
     act(() => options[1]?.click());
     assert.equal(options[1]?.getAttribute("aria-checked"), "false", "and a press picks nothing");
-    assert.equal(
-      message
-        .querySelector("[data-inbox-replaced] > :last-child")
-        ?.getAttribute("data-inbox-settled"),
-      settled,
-      "the marker stands under them",
-    );
-    assert.deepEqual(
-      [...message.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
-        marker.dataset.inboxSettled,
-        wordsOf(marker.querySelector(".luke-badge")),
-      ]),
-      settled === null ? [] : [[settled, words]],
-      "the agent's message ends with the marker saying so, or none where the thread's own line says who closed it",
-    );
-    assert.equal(
-      wordsOf(message.querySelector("[data-inbox-settled] [data-inbox-withdrawn-why]")),
-      why,
-      "with why it was withdrawn under the pill, where its agent said",
-    );
   }
   assert.deepEqual(
-    [...pane.querySelectorAll(".inbox-thread > li:not([data-inbox-comment='draft'])")]
-      .slice(-2)
-      .map((line) => [
-        line.getAttribute("data-inbox-comment"),
-        wordsOf(line.querySelector(".luke-comment-name")),
-      ]),
+    threadLines(pane),
     [
-      ["closed", "Charles Pan resolved this without an answer"],
-      ["message", "You"],
+      ["message", null],
+      ["replaced", "replaced this with a newer question"],
+      ["message", null],
+      ["message", null],
+      ["withdrawn", "withdrew this"],
+      ["message", null],
+      ["closed", "resolved this without an answer"],
+      ["message", null],
     ],
-    "a line saying who resolved it stands where they did, before a message written since",
+    "each line stands where it happened: the replacing post's own line before it, a withdrawal after a message written before it, and the member's close before a message written since",
+  );
+  const withdrawn =
+    pane.querySelector("[data-inbox-comment='withdrawn']") ?? assert.fail("the withdrawn line");
+  assert.equal(faceKind(withdrawn), "agent", "the agent's tile heads the line saying it withdrew");
+  assert.equal(
+    wordsOf(withdrawn.querySelector("[data-inbox-withdrawn-why]")),
+    "Product picked 14 days.",
+    "with why under it",
+  );
+  assert.equal(
+    wordsOf(pane.querySelector("[data-inbox-comment='closed'] .luke-comment-name")),
+    "Charles Pan resolved this without an answer",
+    "and the close names who resolved it",
   );
 
   act(() => world.root?.unmount());
@@ -1417,12 +1419,12 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
   const noticed = await mountThread(
     threadItem([
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
-      threadMessage("e1b2c3d4-0000-4000-8000-000000000022", "agent", "Deploy finished.", 2_000),
+      threadMessage("e1b2c3d4-0000-4000-8000-000000000024", "agent", "Deploy finished.", 2_000),
     ]),
   );
-  assert.equal(
-    wordsOf(noticed.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-settled]`)),
-    "Replaced by a newer message",
+  assert.deepEqual(
+    threadLines(noticed)[1],
+    ["replaced", "replaced this with a newer message"],
     "an ask replaced by a message that asks nothing names no newer question",
   );
 
@@ -1462,23 +1464,6 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
 
   act(() => world.root?.unmount());
   world.root = undefined;
-  const words = await mountThread(
-    threadItem([askingMessage({ type: INBOX_ASK.ANSWER }, { status: INBOX_ASK_STATUS.REPLACED })]),
-  );
-  const asked = words.querySelector(`[data-message-id="${ASKING_ID}"]`);
-  assert.equal(
-    asked?.querySelector("[data-inbox-replaced]"),
-    null,
-    "an ask of words alone has no controls to keep",
-  );
-  assert.equal(
-    wordsOf(asked?.querySelector("[data-inbox-settled]") ?? null),
-    "Replaced by a newer message",
-    "and ends with the marker alone",
-  );
-
-  act(() => world.root?.unmount());
-  world.root = undefined;
   const taken = await mountThread(
     threadItem([
       askingMessage(
@@ -1487,21 +1472,18 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
       ),
     ]),
   );
-  const takenBack = taken.querySelector(`[data-message-id="${ASKING_ID}"]`);
   assert.equal(
-    takenBack?.querySelector(".inbox-ask"),
+    taken.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-replaced]`),
     null,
-    "a withdrawn ask of words alone draws no card",
+    "an ask of words alone has no controls to keep",
   );
   assert.deepEqual(
     [
-      wordsOf(takenBack?.querySelector('[data-inbox-settled="withdrawn"] .luke-badge')),
-      wordsOf(
-        takenBack?.querySelector('[data-inbox-settled="withdrawn"] [data-inbox-withdrawn-why]'),
-      ),
+      threadLines(taken)[1],
+      wordsOf(taken.querySelector("[data-inbox-comment='withdrawn'] [data-inbox-withdrawn-why]")),
     ],
-    ["Withdrawn", "Found it in the README."],
-    "and ends with the withdrawn marker alone, why under its pill",
+    [["withdrawn", "withdrew this"], "Found it in the README."],
+    "and the thread's line still says it was withdrawn, and why",
   );
 });
 

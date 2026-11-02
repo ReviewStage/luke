@@ -26,16 +26,21 @@ function openAskId(item: InboxItem): string | undefined {
   return item.thread?.findLast((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id;
 }
 
-/** The thread with the ask on the message given settled as `status` says, and the messages given after it. */
+/** How a settled ask stands: answered, or withdrawn at a moment. */
+type SettledStanding =
+  | { readonly status: typeof INBOX_ASK_STATUS.ANSWERED }
+  | { readonly status: typeof INBOX_ASK_STATUS.WITHDRAWN; readonly withdrawnAt: number };
+
+/** The thread with the ask on the message given settled as `standing` says, and the messages given after it. */
 function settledThread(
   thread: readonly InboxMessage[],
   askId: string,
-  status: typeof INBOX_ASK_STATUS.ANSWERED | typeof INBOX_ASK_STATUS.WITHDRAWN,
+  standing: SettledStanding,
   after: readonly InboxMessage[],
 ): readonly InboxMessage[] {
   const settled = thread.map((message) =>
     message.id === askId && message.ask !== undefined
-      ? { ...message, ask: { ...message.ask, status } }
+      ? { ...message, ask: { ...message.ask, ...standing } }
       : message,
   );
   return [...settled, ...after];
@@ -82,13 +87,16 @@ export function answeredNow(
     answers: sent.answers,
     createdAt: now,
   };
-  const thread = settledThread(item.thread ?? [], sent.answers.ask, INBOX_ASK_STATUS.ANSWERED, [
-    reply,
-  ]);
+  const thread = settledThread(
+    item.thread ?? [],
+    sent.answers.ask,
+    { status: INBOX_ASK_STATUS.ANSWERED },
+    [reply],
+  );
   return { ...acknowledgedNow(item, reader, now), thread };
 }
 
-/** The item as the reader closed it without an answer, before the service says how it stands: closed by the reader, now, and read, its thread's open ask withdrawn with no reason. */
+/** The item as the reader closed it without an answer, before the service says how it stands: closed by the reader, now, and read, its thread's open ask withdrawn now with no reason. */
 export function closedNow(
   item: InboxItem,
   reader: InboxReader | undefined,
@@ -98,7 +106,12 @@ export function closedNow(
   const thread =
     item.thread === undefined || askId === undefined
       ? undefined
-      : settledThread(item.thread, askId, INBOX_ASK_STATUS.WITHDRAWN, []);
+      : settledThread(
+          item.thread,
+          askId,
+          { status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnAt: now },
+          [],
+        );
   return {
     ...item,
     status: INBOX_STATUS.CLOSED,
