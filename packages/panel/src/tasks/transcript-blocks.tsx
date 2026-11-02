@@ -1562,9 +1562,9 @@ function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boo
  * has got, which opens onto the list itself, set bare at the row's text
  * column as Claude Code and Codex hang theirs under the call, since it is
  * words rather than the code a call's card holds, and selectable as a
- * call's body is; a failure is said under it as a subagent's is. Whether it starts open is the caller's, since only
- * the newest list is worth reading unasked, and so is whether it is `live`,
- * the list the agent is at, whose item in progress wears the moving mark.
+ * call's body is; a failure is said under it as a subagent's is. It starts
+ * folded, as every call's row does, and whether it is `live`, the list the
+ * agent is at, whose item in progress wears the moving mark, is the caller's.
  */
 export function TranscriptTodos({
   state,
