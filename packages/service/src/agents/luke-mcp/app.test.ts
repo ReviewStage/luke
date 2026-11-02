@@ -6,11 +6,12 @@ import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
 import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_PAYER } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
@@ -221,6 +222,32 @@ const agentWithBearer = Effect.gen(function* () {
     bearer,
   };
 });
+
+/** An agent with a bearer that the agent given started, as its `start_agent` starts one: on its task and its account. */
+function agentStartedBy(starter: {
+  readonly userId: string;
+  readonly taskId: string;
+  readonly agentId: string;
+}) {
+  return Effect.gen(function* () {
+    const started = yield* createAgent(starter.userId, {
+      taskId: starter.taskId,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/relay",
+      planSnapshot: null,
+      prompt: "Fix the invite email",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+      startedByAgentId: starter.agentId,
+    });
+    const agent = Option.getOrThrow(started).agent;
+    const bearer = randomBytes(32).toString("base64url");
+    yield* recordAgentRunnerToken(starter.userId, agent.id, runnerTokenDigest(bearer));
+    return { userId: starter.userId, taskId: starter.taskId, agentId: agent.id, bearer };
+  });
+}
 
 /** A Codex agent on no task and in no repository, as an automation's run starts one, with a runner's bearer recorded for its conversation. */
 const agentOnNoTaskWithBearer = Effect.gen(function* () {
@@ -618,21 +645,78 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       }),
   );
 
-  it.effect(
-    "tools/list leaves out what eve offers no agent in no repository, the checkout's, and the memory where its starter has Memory off, and lists the plan's tools to one on no task",
-    () =>
+  it.effect.each([
+    {
+      // An agent on no task is listed the plan's tools all the same.
+      why: "in no repository, the checkout's",
+      agent: agentOnNoTaskWithBearer,
+      withheld: ["open_pull_request"],
+    },
+    {
+      why: "another agent started, post_thread, however deep its chain",
+      agent: Effect.gen(function* () {
+        const starter = yield* agentWithBearer;
+        const middle = yield* agentStartedBy(starter);
+        return yield* agentStartedBy(middle);
+      }),
+      withheld: ["post_thread"],
+    },
+    {
+      why: "a teammate has put words into, run_on_mac",
+      agent: Effect.gen(function* () {
+        const agent = yield* agentInSandbox;
+        const teammate = `user-${randomUUID()}`;
+        yield* Database.use((db) =>
+          db
+            .insert(user)
+            .values({ id: teammate, name: "Teammate", email: `${teammate}@luke.test` }),
+        );
+        yield* Database.use((db) =>
+          db.insert(messages).values({
+            userId: agent.userId,
+            conversationId: agent.conversationId,
+            seq: 1,
+            clientId: randomUUID(),
+            role: "user",
+            parts: [],
+            placedAt: new Date(0),
+            sender: MESSAGE_SENDER.MEMBER,
+            senderUserId: teammate,
+          }),
+        );
+        return agent;
+      }),
+      withheld: ["run_on_mac"],
+    },
+    {
+      why: "on a device, the browser and run_on_mac",
+      agent: Effect.gen(function* () {
+        const agent = yield* agentWithBearer;
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ machine: AGENT_MACHINE.DEVICE })
+            .where(eq(agentTable.id, agent.agentId)),
+        );
+        return agent;
+      }),
+      withheld: ["browser", "run_on_mac"],
+    },
+  ])(
+    "tools/list leaves out what eve offers no agent $why, and the memory where its starter has Memory off",
+    ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
-        const agent = yield* agentOnNoTaskWithBearer;
+        const agent = yield* made;
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const withheld = ["open_pull_request", "save_memory", "search_memory"];
+        const left = [...withheld, "save_memory", "search_memory"];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
-          SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),
+          SERVED_TOOLS.filter((name) => !left.includes(name)).sort(),
         );
       }),
   );

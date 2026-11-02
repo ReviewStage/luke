@@ -16,8 +16,8 @@ import { offeredStarterTools, runInboxTool, threadWords } from "../host.js";
  * purposes (`threadWords`), for the agent to choose one by. A picture the
  * body draws by its path is read from the session's sandbox through the
  * same door eve hands every file tool, opened on first use, so a post with
- * no such picture opens none. It is offered to every agent but one under a
- * pilot, which reports to that pilot instead (`starterToolsOf`).
+ * no such picture opens none. It is offered to every agent but one another
+ * agent started, which reports to its starter instead (`starterToolsOf`).
  */
 export default defineDynamic({
   events: {

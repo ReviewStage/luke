@@ -1,5 +1,5 @@
-import { readAgentUnderPilot } from "@luke/database/models/agent-store";
 import { hostTurnId } from "@luke/database/models/ids";
+import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
@@ -43,6 +43,8 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
+  type MacTool,
+  macToolsOf,
   type RepositoryTool,
   repositoryToolsOf,
   type StarterTool,
@@ -227,11 +229,32 @@ export function offeredStarterTools(
       if (Result.isFailure(admitted)) return new Set<StarterTool>();
       const agent = yield* host.agent(admitted.success);
       if (Result.isFailure(agent)) return new Set<StarterTool>();
-      const underPilot = yield* readAgentUnderPilot(
-        admitted.success.target.userId,
-        agent.success.id,
+      return starterToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The tools the session is offered by whose words its agent has heard and
+ * where it runs, for the turn it opens, for those tools' own files
+ * (`macToolsOf`): none for a session the host does not admit or whose
+ * conversation is no agent's.
+ */
+export function offeredMacTools(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<ReadonlySet<MacTool>> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return new Set<MacTool>();
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return new Set<MacTool>();
+      // Note that a read that fails withholds the tool, as the door refuses a call it cannot read for.
+      const heard = yield* Effect.catch(heardFromAnotherAccount(admitted.success.target), () =>
+        Effect.succeed(true),
       );
-      return starterToolsOf({ underPilot });
+      return macToolsOf(agent.success, { heardFromAnotherAccount: heard });
     }),
   );
 }
@@ -630,8 +653,9 @@ export function integrationConnectionsFor(
  * `run_on_mac` as the agent is offered it, and no worker, which changes
  * nothing of the developer's: admitted on the session's own standing and
  * run through the one door every agent's call goes through
- * (`packages/service/src/agents/mac-command.ts`). A session the host does not admit runs
- * nothing.
+ * (`packages/service/src/agents/mac-command.ts`), which still refuses a
+ * conversation another account put words into. A session the host does not
+ * admit runs nothing.
  */
 export function macCommandTool() {
   return defineTool({

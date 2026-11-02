@@ -555,10 +555,34 @@ test("the thread post tool tells the session never to ask for a credential or a 
   );
 });
 
-test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
+test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post and is never told to post", () => {
   const READY = "ready for them to look at or review";
+  const POST = `\`${INBOX_TOOLS.POST.name}\``;
   for (const brief of Object.values(AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
+      const started = coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        taskLink,
+        undefined,
+        null,
+        false,
+        CODER_HARNESS.EVE,
+        AGENT_KIND.CODER,
+        false,
+        undefined,
+        true,
+      );
+      // Note that such an agent is offered no post_thread, so its one mention is that it has none.
+      assert.equal(started.split(POST).length, 2, brief);
+      assert.ok(started.includes(`are offered no ${POST}`), brief);
+      assert.ok(
+        started.includes(
+          "send your answer, or once a request is done what you did, to the agent that started you",
+        ),
+        brief,
+      );
       const inbox = coderInstructions("Acme/Relay", brief, true, taskLink).split("## Threads")[1];
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);

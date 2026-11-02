@@ -36,7 +36,8 @@
  * which the agent reads as it reads any tool's answer.
  */
 
-import { readAgentOfConversation, readAgentUnderPilot } from "@luke/database/models/agent-store";
+import { readAgentOfConversation } from "@luke/database/models/agent-store";
+import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
@@ -238,11 +239,15 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
-/** What an agent whose row is gone is offered by: no repository, on our own machine. */
-const NO_AGENT_OFFERED: LukeMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
+/** What an agent whose row is gone is offered by: no repository, on our own machine, started by no agent. */
+const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
+  repository: null,
+  machine: AGENT_MACHINE.VERCEL,
+  startedByAgentId: null,
+};
 
-/** What beside its row an agent whose row is gone is offered by: no Memory, and under no pilot. */
-const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, underPilot: false };
+/** What beside its row an agent whose row is gone is offered by: no Memory, and no outside words. */
+const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, heardFromAnotherAccount: false };
 
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
@@ -320,8 +325,9 @@ function callLukeTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
- * repository, its kind, whether a pilot started it, and its starter's
- * Memory (`offeredLukeMcpTool`),
+ * repository, whether another agent started it, where it runs, whether
+ * anyone but its starter has put words into it, and its starter's Memory
+ * (`offeredLukeMcpTool`),
  * each in the words it is shown them with (`describe`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
@@ -336,7 +342,7 @@ function listLukeTools(
         Option.isSome(found)
           ? Effect.all({
               memoryOn: memoryOnFor(found.value.userId),
-              underPilot: readAgentUnderPilot(userId, found.value.id),
+              heardFromAnotherAccount: heardFromAnotherAccount(admitted.target),
             })
           : Effect.succeed(NO_AGENT_BESIDE),
         (beside) =>

@@ -124,6 +124,7 @@ import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
   CODER_TOOL,
   machineToolsOf,
+  macToolsOf,
   type OfferedBeside,
   repositoryToolsOf,
   starterToolsOf,
@@ -430,23 +431,25 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine">;
+export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine" | "startedByAgentId">;
 
 /** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/save_memory.ts`'s `memoryOffered`). */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, starter, or starter's Memory withholds. */
+/** The tools eve offers some agents and not others: each one some agent's repository, starter, machine, outside words, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...repositoryToolsOf({ repository: "any" }),
-  ...starterToolsOf({ underPilot: false }),
+  ...starterToolsOf({ startedByAgentId: null }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
+  ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }, { heardFromAnotherAccount: false }),
 ]);
 
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * repository, whether a pilot started it, and whether
+ * repository, whether another agent started it, where it runs, and, beside
+ * its row, whether anyone but its starter has put words into it and whether
  * its starter has Memory on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
@@ -460,8 +463,9 @@ export function offeredLukeMcpTool(
   const offered: ReadonlySet<string> = new Set<string>([
     ...(beside.memoryOn ? MEMORY_TOOLS : []),
     ...repositoryToolsOf(agent),
-    ...starterToolsOf(beside),
+    ...starterToolsOf(agent),
     ...machineToolsOf(agent),
+    ...macToolsOf(agent, beside),
   ]);
   return (name) => !NARROWED_TOOLS.has(name) || offered.has(name);
 }

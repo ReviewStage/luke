@@ -954,7 +954,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "an agent a pilot started is refused post_thread and posts nothing, while one a coder started posts",
+    "an agent another agent started is refused post_thread however deep its chain, while the one the developer started posts",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
@@ -963,11 +963,12 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         const underPilot = yield* agentOn(userId, task, { startedByAgentId: pilot.agentId });
         const underCoder = yield* agentOn(userId, task, { startedByAgentId: underPilot.agentId });
 
-        assert.equal(refusalOf(yield* post(underPilot, QUEUE)), INBOX_REFUSAL.UNDER_PILOT);
-        const posted = yield* post(underCoder, QUEUE);
+        assert.equal(refusalOf(yield* post(underPilot, QUEUE)), INBOX_REFUSAL.STARTED_BY_AGENT);
+        assert.equal(refusalOf(yield* post(underCoder, QUEUE)), INBOX_REFUSAL.STARTED_BY_AGENT);
+        const posted = yield* post(pilot, QUEUE);
 
         assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
-        assert.equal((yield* onlyItem(underCoder)).key, QUEUE.key);
+        assert.equal((yield* onlyItem(pilot)).key, QUEUE.key);
       }),
   );
 
