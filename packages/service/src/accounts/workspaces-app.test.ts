@@ -89,7 +89,7 @@ import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspace
  * plugin on PGlite and a GitHub the test scripts: the bearer names the
  * account and nothing else does, a workspace a member creates is theirs to
  * own, only an owner or admin connects GitHub, nobody disconnects it from
- * Vespin, and an installation is linked to a workspace only through a live
+ * the app, and an installation is linked to a workspace only through a live
  * intent, only where the user who authorized sees it, and only to one
  * workspace.
  *

@@ -47,7 +47,7 @@ import { agentLineSender, steerAgent } from "./steer.js";
  * so a call run again sends once. Its words open with who sent it, by the
  * sender's mention link, and close with how to answer, by the sender's id,
  * both written here rather than by the model, so the receiving agent reads
- * them as a colleague's word, never the developer's or Fullspin's. The message
+ * them as a colleague's word, never the developer's or the app's. The message
  * stands in the two transcripts and nowhere else. It reaches any agent of the sender's
  * workspace, on any task, held to what a steer into it is held to; an
  * archived agent, one whose starter has left the workspace, or the sender

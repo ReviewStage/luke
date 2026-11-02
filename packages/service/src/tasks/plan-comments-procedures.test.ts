@@ -29,7 +29,7 @@ import { announcingClock, driven } from "../testing/clock-driven.js";
 import { planCommentsProcedures } from "./plan-comments-procedures.js";
 
 /**
- * A plan's comments read held on Vespin Sync, through the route a desktop
+ * A plan's comments read held on Sync, through the route a desktop
  * holds: a read at the current cursor answers within a coalesce window of
  * a thread started, answered, or deleted on the plan, and of the reader
  * leaving the plan's workspace, which it then answers as not found. A hold

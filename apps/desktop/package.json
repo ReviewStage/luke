@@ -1,9 +1,9 @@
 {
   "name": "@luke/desktop",
-  "productName": "Luke",
+  "productName": "Vespin",
   "version": "0.24.0",
   "private": true,
-  "description": "Luke desktop application",
+  "description": "Vespin desktop application",
   "main": "dist/main.js",
   "imports": {
     "#main/*": [

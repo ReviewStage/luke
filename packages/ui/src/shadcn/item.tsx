@@ -5,7 +5,7 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * item.tsx -- shadcn/ui's item (style `base-nova`, on Base UI), vendored and drawn as Fullspin's settings row: a mark, its words, and the controls that set it.
+ * item.tsx -- shadcn/ui's item (style `base-nova`, on Base UI), vendored and drawn as our settings row: a mark, its words, and the controls that set it.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add item` reads as a small diff. Its local
@@ -17,7 +17,7 @@ import { cn } from "../cn.js";
  *   the mark (`ItemMedia`), the words (`ItemContent`), and the controls
  *   (`ItemActions`) is the caller's, which holds the mark and the words
  *   together where the controls drop below them.
- * - Its `size` is Fullspin's row density (`card`, `compact`, `list`) rather than
+ * - Its `size` is our row density (`card`, `compact`, `list`) rather than
  *   `default`, `sm`, and `xs`: a card's padding and least height, a bare
  *   row's at a menu row's height, and a reference list's tighter ones, each
  *   a `--luke-settings-row-*` role. Its `variant` is dropped, because a
@@ -29,7 +29,7 @@ import { cn } from "../cn.js";
  * - `ItemMedia` is centred beside the words whether or not they are
  *   described, with none of shadcn's `icon` and `image` variants: the
  *   mark's box is `@luke/ui`'s `SettingsRowMark`.
- * - `ItemContent`, `ItemTitle`, and `ItemDescription` are drawn in Fullspin's
+ * - `ItemContent`, `ItemTitle`, and `ItemDescription` are drawn in our
  *   label and caption roles with no line clamp: a long name or word breaks
  *   rather than being cut, and `ItemTitle` stands only where the label
  *   carries an adornment, the two wrapping between each other.

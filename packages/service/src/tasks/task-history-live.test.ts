@@ -21,7 +21,7 @@ import { taskHistoryLiveStatements } from "./task-history-live.js";
  * A task's newest page of plan history as Realtime would deliver it, over
  * the real migrations on PGlite: the statement run as Realtime runs it, its
  * rows decoded and ordered as the desktop does, beside `listRevisions`, the
- * held read the version history read it with. The two agree as Vespin, a
+ * held read the version history read it with. The two agree as the notetaker, a
  * coding agent, and the developer save, a revision is restored,
  * the history outgrows a page, and for an account that does not reach the
  * task.

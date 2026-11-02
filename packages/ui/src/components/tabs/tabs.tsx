@@ -99,7 +99,7 @@ const TAB = '[role="tab"]';
 /*
  * The strip's plain looks, in Tailwind over the theme as shadcn/ui's tabs
  * draw theirs: each box's layout, type, and the inks no state changes. Note
- * that the strip is Fullspin's own rather than Base UI's tabs, because an
+ * that the strip is our own rather than Base UI's tabs, because an
  * editor's strip chooses with Return, closes with Delete, reorders, and
  * holds each tab's choice in the tab, which Base UI's tabs, owning the
  * value and their roving focus, are not for; and that what a state, a

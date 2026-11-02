@@ -1,10 +1,10 @@
 /**
- * agent-sandbox-image.ts -- the snapshot a native harness's sandbox opens from: the coding agent's image, prepared in Fullspin's own template.
+ * agent-sandbox-image.ts -- the snapshot a native harness's sandbox opens from: the coding agent's image, prepared in our own template.
  *
  * eve prepares the coding agent's image (`agent-runtime/sandbox-image.ts`'s
- * `prepareImage`) into a snapshot of its own and hands no code of Fullspin's its
- * id. A sandbox Fullspin opens itself for Claude Code or Codex opens from the
- * snapshot this seam answers: Fullspin's own template of the same image
+ * `prepareImage`) into a snapshot of its own and hands no code of ours its
+ * id. A sandbox we open ourselves for Claude Code or Codex opens from the
+ * snapshot this seam answers: our own template of the same image
  * (`native-sandbox-template.ts`), keyed by the preparation's digest, so a
  * launch always opens on the image as it stands now.
  *
@@ -68,7 +68,7 @@ export class AgentSandboxImage extends Context.Service<
 >()("AgentSandboxImage") {}
 
 /**
- * The seam over Fullspin's own template, asked of Vercel under the token the
+ * The seam over our own template, asked of Vercel under the token the
  * reader hands, waiting on a build for at most `wait`: a request whose
  * client cannot hold a build's minutes names less, down to none, and its
  * caller asks again instead.

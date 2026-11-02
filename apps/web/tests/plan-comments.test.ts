@@ -272,10 +272,10 @@ const startAgent = (owner: string, taskId: string) =>
 
 /** An agent's mention link, as a member's chip writes it. */
 const agentLink = (taskId: string, agentId: string) =>
-  `[@Invite email](https://tryluke.dev/acme/plan/${taskId}/agent/${agentId})`;
+  `[@Invite email](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
 
 /** A task's Vespin's mention link, as a chip wrote it while a task had one. */
-const lukeLink = (taskId: string) => `[@Vespin](https://tryluke.dev/acme/plan/${taskId}/luke)`;
+const lukeLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
 
 /** A start of a thread on the sentence above. */
 function startBody(comment: string) {
@@ -549,7 +549,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         yield* reply(words, key);
         const elsewhere = threadIn(
           yield* reply(
-            `[@Other](https://tryluke.dev/acme/plan/${randomUUID()}/agent/${randomUUID()}) saw this`,
+            `[@Other](https://vespin.dev/acme/plan/${randomUUID()}/agent/${randomUUID()}) saw this`,
             randomUUID(),
           ),
         );

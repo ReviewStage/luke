@@ -7,13 +7,13 @@ export const NOTICE_RESOURCE_NAME = "LUKE-NOTICE.txt";
 // This is the sentence macOS shows when it asks for the microphone, so it is
 // what consent is given against. It has to say where the audio goes.
 export const MICROPHONE_USAGE_DESCRIPTION =
-  "Luke uses the microphone for dictation. What you dictate is sent to OpenAI to be transcribed.";
-// The sentence macOS shows when it asks whether Luke may control another app,
+  "Vespin uses the microphone for dictation. What you dictate is sent to OpenAI to be transcribed.";
+// The sentence macOS shows when it asks whether Vespin may control another app,
 // so it is what consent is given against. Note that only a command an agent
 // runs on this Mac (an `osascript` through luke-host, which inherits the
 // app's entitlements) can raise it.
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
-  "Luke asks before a command an agent runs on this Mac controls another app.";
+  "Vespin asks before a command an agent runs on this Mac controls another app.";
 // The bundle carries one icon for every mode, so the icns is cut from the dark
 // tile — space black reads on either desktop. The running app swaps the Dock
 // image between the light and dark tiles itself; see src/main/window/dock-icon.ts.

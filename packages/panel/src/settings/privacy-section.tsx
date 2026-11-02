@@ -8,7 +8,7 @@ import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
 /**
- * privacy-section.tsx -- whether this Fullspin shares its usage data, the Profile page's Privacy group under Links.
+ * privacy-section.tsx -- whether this copy of the app shares its usage data, the Profile page's Privacy group under Links.
  *
  * The switch is kept on this device, but the counts it stops are sent under
  * the account, so it stands on Profile beside what is the account's.

@@ -303,7 +303,7 @@ test("Escape while a picture is being kept leaves the editor open until it is, t
   assert.ok(
     saved
       .at(-1)
-      ?.includes(`![Screenshot](https://tryluke.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`),
+      ?.includes(`![Screenshot](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`),
     "the saved text names the kept picture",
   );
 });

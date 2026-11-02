@@ -13,11 +13,11 @@ import { workspaceIdSchema } from "./task-wire.js";
 /**
  * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates, renames, or gives a photo, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
  *
- * A workspace is a team in Fullspin: the first one, made for the account when it
+ * A workspace is a team in Vespin: the first one, made for the account when it
  * first signs in, or one a member created; either way teammates join by
  * invitation. Membership has nothing
  * to do with GitHub. A workspace's repositories come from the installations
- * of the Fullspin GitHub App an owner or admin connects to it, one per GitHub
+ * of the Vespin GitHub App an owner or admin connects to it, one per GitHub
  * account: `POST /api/workspaces/github/connect` answers the App's install
  * address carrying a short-lived, single-use intent bound to the account
  * and the workspace, and GitHub's return through the Setup URL adds the
@@ -43,9 +43,9 @@ import { workspaceIdSchema } from "./task-wire.js";
  * themselves, whose way out is leaving, or the owner. A rename moves the
  * name alone: the slug stays the one the workspace was made under.
  *
- * A workspace's slug is the first step of a Fullspin link's path
- * (`https://tryluke.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
- * takes one Fullspin's own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
+ * A workspace's slug is the first step of a Vespin link's path
+ * (`https://vespin.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
+ * takes one Vespin's own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
  * slug only reads well; a link is found by the task's id alone, so a slug
  * spelled differently later breaks no link written under the old one.
  *
@@ -68,7 +68,7 @@ export type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE]
 
 const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
-/** The highest role the plugin's role text names, which may list several comma-separated, read as a member where it names none Fullspin knows. */
+/** The highest role the plugin's role text names, which may list several comma-separated, read as a member where it names none Vespin knows. */
 export function roleOf(text: string): WorkspaceRole {
   const named = text.split(",").map((part) => part.trim());
   return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
@@ -85,7 +85,7 @@ export const ASSIGNABLE_ROLE = {
 } as const;
 
 /**
- * The first steps of tryluke.dev's paths that are Fullspin's own, now or likely
+ * The first steps of vespin.dev's paths that are Vespin's own, now or likely
  * soon, which no workspace's slug may be: every page the web app serves
  * under its own name (the root `vercel.json`, `apps/web/vite.config.ts`),
  * and the words a later page is likeliest to want.

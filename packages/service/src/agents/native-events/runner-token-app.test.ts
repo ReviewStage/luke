@@ -306,7 +306,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
             agentId: agent.agentId,
             kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
             payload: {
-              checkoutPath: "/Users/fixture/.luke/agents/a/repository",
+              checkoutPath: "/Users/fixture/.vespin/agents/a/repository",
               repository: null,
               startBranch: null,
               firstSequence: 0,

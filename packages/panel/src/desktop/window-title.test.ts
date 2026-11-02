@@ -8,7 +8,7 @@ import { useWindowTitle } from "./window-title.js";
 
 /**
  * window-title.test.ts -- the window is called by what it shows: the open
- * task and its workspace, the workspace alone at home, and Vespin while
+ * task and its workspace, the workspace alone at home, and the product's name while
  * nothing is signed in.
  */
 

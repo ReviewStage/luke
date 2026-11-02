@@ -620,7 +620,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
     }),
     /**
-     * Which of Fullspin's own tools the agent is offered, by the rules its
+     * Which of our own tools the agent is offered, by the rules its
      * runtime narrows them by, and whether its `run_on_mac` would run now.
      */
     lukeTools: signedIn.lukeTools.effect(function* ({ input, context }) {

@@ -383,7 +383,7 @@ async function fakeCoderEve(
   };
 }
 
-/** Vespin's Sentry integration as a deployment that configures it holds it. */
+/** Our Sentry integration as a deployment that configures it holds it. */
 const SENTRY_CONFIGURED = Layer.succeed(
   SentryApp,
   sentryAppService(
@@ -620,7 +620,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: tasks.invitations, name: "Teammate invitations" },
     onYourTask: true,
     archived: true,
-    mention: `[@${agents.archived.name}](https://tryluke.dev/workspace-${workspaceId}/agent/${agents.archived.id})`,
+    mention: `[@${agents.archived.name}](https://vespin.dev/workspace-${workspaceId}/agent/${agents.archived.id})`,
   };
   const teammates = {
     ...reading,
@@ -631,7 +631,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: tasks.billing, name: "Billing" },
     onYourTask: false,
     archived: false,
-    mention: `[@${agents.teammates.name}](https://tryluke.dev/workspace-${workspaceId}/agent/${agents.teammates.id})`,
+    mention: `[@${agents.teammates.name}](https://vespin.dev/workspace-${workspaceId}/agent/${agents.teammates.id})`,
   };
 
   const listed = await call(CODER_TOOL.LIST_AGENTS, {});
@@ -696,7 +696,7 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  // The teammate's final report runs past the short entry Vespin summarises aloud.
+  // The teammate's final report runs past the short entry the app summarises aloud.
   const report = Array.from(
     { length: 10 },
     () => "The invitations backfill stalls on rows whose inviter left the workspace.",
@@ -781,7 +781,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   // The agent is answered with the mention its starter names it by, its model's name while it has no title.
   assert.equal(
     started.agent.mention,
-    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://tryluke.dev/workspace-${workspaceId}/agent/${startedId})`,
+    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://vespin.dev/workspace-${workspaceId}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
@@ -1055,7 +1055,7 @@ test("start_agent with a title names the agent by it from the start, and a title
   assert.equal(named.title, title);
   assert.equal(
     started.agent.mention,
-    `[@${named.title}](https://tryluke.dev/workspace-${workspaceId}/agent/${startedId})`,
+    `[@${named.title}](https://vespin.dev/workspace-${workspaceId}/agent/${startedId})`,
   );
 
   // The title generated as the agent's words arrive is filled only where none stands.
@@ -1370,7 +1370,7 @@ test("start_agent continues a teammate's agent that ended, on that agent's own t
   );
   const first = {
     id: stored.id,
-    mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/agent/${stored.id})`,
+    mention: `[@Invoice export (continued)](https://vespin.dev/workspace-${workspaceId}/agent/${stored.id})`,
   };
   assert.deepEqual(second.earlierContinuations, [first]);
 
@@ -1677,7 +1677,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
       ? [{ id: task.id, name: task.name, isYourTask: task.isYourTask, mention: task.mention }]
       : [],
   );
-  const home = `https://tryluke.dev/workspace-${workspaceId}/plan`;
+  const home = `https://vespin.dev/workspace-${workspaceId}/plan`;
   assert.deepEqual(
     [...tasks].sort((a, b) => String(a.name).localeCompare(String(b.name))),
     [
@@ -1844,7 +1844,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
     assignee: null,
     name,
     repository: RELAY_FULL_NAME,
-    mention: `[@${name}](https://tryluke.dev/workspace-${workspaceId}/plan/${taskId})`,
+    mention: `[@${name}](https://vespin.dev/workspace-${workspaceId}/plan/${taskId})`,
   });
   assert.deepEqual(
     [stored.ownerId, stored.task.workspaceId, stored.task.repository, stored.text, stored.brief],
@@ -2260,7 +2260,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     await database.run(readTask(agents.teammates.userId, tasks.billing)),
   );
   // An unarchive moves the task into progress, which assigns the caller's member a task no one was on.
-  const assignee = `[@Test User](https://tryluke.dev/workspace-${workspaceId}/person/${agents.caller.userId})`;
+  const assignee = `[@Test User](https://vespin.dev/workspace-${workspaceId}/person/${agents.caller.userId})`;
   const answered = (status: string, already: boolean, assigned: string | null = null) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
     task: {
@@ -2272,7 +2272,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       name: "Billing",
       repository: RELAY_FULL_NAME,
       pinned: false,
-      mention: `[@Billing](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing})`,
+      mention: `[@Billing](https://vespin.dev/workspace-${workspaceId}/plan/${tasks.billing})`,
     },
     already,
   });
@@ -2658,7 +2658,7 @@ test("message_agent hands another agent of the workspace the words under the sen
   assert.match(
     words,
     new RegExp(
-      `^${AGENT_MESSAGE_LEAD} · \\[@[^\\]]+\\]\\(https://tryluke\\.dev/[^)]+/agent/${agents.caller.id}\\) to you:\\n\\n`,
+      `^${AGENT_MESSAGE_LEAD} · \\[@[^\\]]+\\]\\(https://vespin\\.dev/[^)]+/agent/${agents.caller.id}\\) to you:\\n\\n`,
       "u",
     ),
     words,
@@ -3712,7 +3712,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     Option.isSome(await database.run(savePlanText(teammates.userId, taskIds.billing, plan))),
   );
 
-  const home = `https://tryluke.dev/workspace-${workspaceId}/plan`;
+  const home = `https://vespin.dev/workspace-${workspaceId}/plan`;
   const read = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
   assert.ok(isRecord(read.task) && isRecord(read.plan));
@@ -3849,7 +3849,7 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
     return listed.tasks.map((each) => (isRecord(each) ? each.id : undefined));
   };
   const personLink = (userId: string) =>
-    `https://tryluke.dev/workspace-${workspaceId}/person/${userId}`;
+    `https://vespin.dev/workspace-${workspaceId}/person/${userId}`;
 
   const filed = taskOf(
     await call(

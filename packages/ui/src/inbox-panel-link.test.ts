@@ -50,13 +50,13 @@ test("a file of the item's repository and the task's own page and Pull request t
     { kind: INBOX_PANEL_TARGET.FILE, path: "src/invites.ts", lines: undefined },
   );
   const page = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
-  assert.deepEqual(inboxPanelTarget(`https://tryluke.dev/acme/plan/${TASK}/page/${page}`, PLACE), {
+  assert.deepEqual(inboxPanelTarget(`https://vespin.dev/acme/plan/${TASK}/page/${page}`, PLACE), {
     kind: INBOX_PANEL_TARGET.PAGE,
     pageId: page,
   });
   assert.equal(
     inboxPanelTarget(
-      `https://tryluke.dev/acme/plan/9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32/page/${page}`,
+      `https://vespin.dev/acme/plan/9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32/page/${page}`,
       PLACE,
     ),
     undefined,
@@ -71,22 +71,19 @@ test("a file of the item's repository and the task's own page and Pull request t
 });
 
 test("a Vespin link to an agent of the item's own task reads beside the item, under the task or the agent, and one to another task's agent, or to an agent on no task, is the window's to open", () => {
-  assert.deepEqual(
-    inboxPanelTarget(`https://tryluke.dev/acme/plan/${TASK}/agent/${AGENT}`, PLACE),
-    {
-      kind: INBOX_PANEL_TARGET.AGENT,
-      agentId: AGENT,
-    },
-  );
+  assert.deepEqual(inboxPanelTarget(`https://vespin.dev/acme/plan/${TASK}/agent/${AGENT}`, PLACE), {
+    kind: INBOX_PANEL_TARGET.AGENT,
+    agentId: AGENT,
+  });
   const other = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
   assert.equal(
-    inboxPanelTarget(`https://tryluke.dev/acme/plan/${other}/agent/${AGENT}`, PLACE),
+    inboxPanelTarget(`https://vespin.dev/acme/plan/${other}/agent/${AGENT}`, PLACE),
     undefined,
   );
-  assert.equal(inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}`, PLACE), undefined);
+  assert.equal(inboxPanelTarget(`https://vespin.dev/acme/agent/${AGENT}`, PLACE), undefined);
   // An archived agent, held by the item's task though no longer one of its tabs, still opens its Changes beside the item.
   assert.deepEqual(
-    inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}/changes`, {
+    inboxPanelTarget(`https://vespin.dev/acme/agent/${AGENT}/changes`, {
       ...PLACE,
       agentIds: [],
       heldIds: [AGENT],

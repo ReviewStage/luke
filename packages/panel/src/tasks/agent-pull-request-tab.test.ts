@@ -105,7 +105,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * Changes from its bar, says so where there is no pull request yet, and
  * offers a retry where a read failed. The overview is three reads, the pull
  * request itself, its checks, and its conversation, each drawn as it lands,
- * a skeleton until then, under the pill and title Vespin already held.
+ * a skeleton until then, under the pill and title the app already held.
  * Synthetic people throughout.
  */
 
@@ -510,7 +510,7 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   });
 }
 
-/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in Vespin where one is given. */
+/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function draw(
   control: AgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
@@ -521,7 +521,7 @@ async function draw(
   return drawn(createElement(Switching, { control, first }), registry, github, openPlace);
 }
 
-/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in Vespin where one is given. */
+/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function drawn(
   tab: React.ReactElement,
   registry = AtomRegistry.make(),
@@ -5656,7 +5656,7 @@ test("Copy link in a thread's ⋯ copies its Vespin link in the view it is drawn
   await threadMenuItem(card ?? assert.fail("the thread is drawn"), "Copy link");
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
+    `https://vespin.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
   ]);
 });
 

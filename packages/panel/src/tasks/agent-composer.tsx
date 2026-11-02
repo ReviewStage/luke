@@ -648,7 +648,7 @@ export function AgentComposer({
           repositoryRemedy(note, () => {
             if (latest.current.note === note) latest.current.retry();
           });
-  // Note that a remedy finished where Fullspin cannot watch keeps Retry beside it, since the same send goes once it is done.
+  // Note that a remedy finished where we cannot watch keeps Retry beside it, since the same send goes once it is done.
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
   // Note that a closed box asks for nothing, since it takes nothing.
   const placeholder = closed

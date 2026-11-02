@@ -441,7 +441,7 @@ const STEP_START = "step-start";
 
 /** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
 const AGENT_MESSAGE =
-  "Message · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
+  "Message · [@Invite emails](https://vespin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
 
 /** The agent that sends `AGENT_MESSAGE`, as its line's row keeps it. */
 const MESSAGE_SENDING_AGENT = {
@@ -1841,7 +1841,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // The thread's id and mention are spelled out in `coder-inbox.test.ts`; here they are only carried.
           const [{ mention, id: _id, ...line } = { mention: undefined, id: undefined }] =
             "inbox" in read ? read.inbox : [];
-          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/tryluke\.dev\//u);
+          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/vespin\.dev\//u);
           assert.deepEqual(
             { ...read, inbox: [line] },
             {
@@ -2283,11 +2283,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               (answer) => answer.status,
             );
 
-          // Vespin's notes before the agent's first turn: that turn opens on the plan as its first message.
+          // Our notes before the agent's first turn: that turn opens on the plan as its first message.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [added("Context", "Invites go by email.")]);
           assert.equal(yield* typedAt("turn_0"), undefined);
-          // The first turn runs, started at the relay's clock, after Vespin's notes.
+          // The first turn runs, started at the relay's clock, after our notes.
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
           const state = memoryRelayState();
           for (const event of codingTurn("turn_0", "turn.completed")) {
@@ -2306,7 +2306,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
           assert.equal(yield* typedAt("turn_1"), undefined);
 
-          // Vespin's notes while that turn ran, and the agent's after them in the same section, which
+          // Our notes while that turn ran, and the agent's after them in the same section, which
           // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [

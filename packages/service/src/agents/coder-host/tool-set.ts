@@ -133,13 +133,13 @@ export function starterToolsOf(starter: {
   return starter.underPilot ? new Set() : new Set([CODER_TOOL.POST_THREAD]);
 }
 
-/** The tools only an agent in a sandbox of Fullspin's is offered. */
+/** The tools only an agent in a sandbox of ours is offered. */
 export type MachineTool = typeof CODER_TOOL.BROWSER;
 
 /**
- * The tools an agent is offered by where it runs: the browser of Fullspin's,
+ * The tools an agent is offered by where it runs: the browser of ours,
  * a Chromium in the agent's own sandbox, to an agent in one, and nothing to
- * a local agent, whose Mac runs no browser of Fullspin's (it drives its own
+ * a local agent, whose Mac runs no browser of ours (it drives its own
  * from its shell instead), so the tool would only be refused. The
  * instructions leave out the same words (`instructions.ts`).
  */
@@ -198,7 +198,7 @@ export function offeredCoderTools(
 /**
  * The tools a coding agent's transcript may name that no agent is offered
  * now: eve's provider-run page fetch, which coding agents ran before they had
- * the hosted page read, Fullspin's own hosted search on Fullspin's key, since
+ * the hosted page read, our own hosted search on our key, since
  * replaced by eve's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
@@ -303,8 +303,8 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 /**
  * The two task controls eve adds beside any task, which a coding agent's
  * \`delegate\` is (\`apps/dev/tools/delegate.ts\`): eve runs them, so they are no
- * tool of Fullspin's, but a turn that waits on its worker or stops one names them.
- * Their tasks are eve's subagent tasks, not a Fullspin task.
+ * tool of ours, but a turn that waits on its worker or stops one names them.
+ * Their tasks are eve's subagent tasks, not a task of ours.
  */
 const CODER_TASK_TOOL = {
   TASK_WAIT: "task_wait",

@@ -686,7 +686,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             .name,
           "luke",
         );
-        // Every other key and the body as installed, under the name and description Vespin keeps.
+        // Every other key and the body as installed, under the name and description we keep.
         assert.equal(
           skills.get("/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md"),
           '---\nname: sentry-triage\ndescription: "Triage a Sentry issue."\nallowed-tools: Bash\n---\n\nRun `scripts/triage.sh`.\n',

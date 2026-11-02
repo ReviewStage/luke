@@ -25,7 +25,7 @@ import { VersionView } from "./version-view.js";
 /**
  * plan-pictures.test.ts -- a plan's pictures where its words are drawn: each
  * read through the host and drawn from its bytes with its caption, one this
- * reader cannot reach drawn as its words, one from outside Vespin a link that
+ * reader cannot reach drawn as its words, one from outside the app a link that
  * reads nothing, a press opening the plan's pictures over the window, and a
  * version drawing a picture it struck and the one it wrote in, each marked,
  * and the plan's card in an agent's transcript drawing the plan's pictures.

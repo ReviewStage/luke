@@ -4,7 +4,7 @@ import { cn } from "../cn.js";
 import { STATUS_TONE, type StatusTone } from "../status-tone.js";
 
 /**
- * alert.tsx -- shadcn/ui's alert (style `base-nova`), vendored and drawn as Fullspin's banner: a glyph, its words, and the presses that answer it on one row.
+ * alert.tsx -- shadcn/ui's alert (style `base-nova`), vendored and drawn as our banner: a glyph, its words, and the presses that answer it on one row.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add alert` reads as a small diff. Its local
@@ -13,17 +13,17 @@ import { STATUS_TONE, type StatusTone } from "../status-tone.js";
  * - `Alert` is a `<section>` with no `role="alert"`, because a banner is a
  *   region named by its own words (`aria-labelledby`), which a reader finds
  *   rather than hears announced the moment it mounts. Its `variant`
- *   (`default`, `destructive`) is Fullspin's `look` (`strip`, `card`, `row`, `inset`) and
+ *   (`default`, `destructive`) is our `look` (`strip`, `card`, `row`, `inset`) and
  *   a status `tone` (`../status-tone.ts`), each kept on the section as
  *   `data-look`/`data-tone` too, so the tone's ink and tint
  *   (`tokens/status-tone.css`) reach its strip's mix and its card's disc.
- * - shadcn's grid of an icon beside a title and a description is Fullspin's one
+ * - shadcn's grid of an icon beside a title and a description is our one
  *   flex row (`AlertRow`) of a glyph slot (`AlertGlyph`, which shadcn reaches
  *   as `*:[svg]`), the words (`AlertDescription`), and the presses
  *   (`AlertAction`), which stand in the row rather than absolutely at its
  *   corner, so they drop beneath the words where the banner is narrow
  *   (`components/banner/banner.css`'s container query).
- * - Fullspin's inks, type, spacing, and radii from the theme rather than
+ * - Our inks, type, spacing, and radii from the theme rather than
  *   `bg-card` and `text-sm`, and no `text-balance`, link underline, or
  *   `md:` breakpoint, because a banner measures its own width.
  * - `AlertTitle` is dropped, because a banner's words are one slot whose

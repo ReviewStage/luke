@@ -177,7 +177,7 @@ import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
-import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
+import { PhoneBack, PhoneHead, PlaceMore, phoneFindGroups } from "./phone-head.js";
 import {
   type AddEntry,
   AddTabButton,
@@ -1568,8 +1568,7 @@ interface DrawnSubagent {
 
 /**
  * A subagent as its tab draws it, `status` saying where the delegated
- * worker stands; nothing for a tab no delegation started, which a task's
- * own Fullspin's worker was.
+ * worker stands; nothing for a tab no delegation started.
  */
 function drawnSubagent(
   tab: SubagentStripTab,
@@ -1700,7 +1699,7 @@ export interface TaskCards {
 /**
  * The cards a transcript's rows hang, each the card the tab the row opens
  * hangs, drawn as that tab draws it (`tab-card.tsx`): an agent's, code
- * shown the file's with Fullspin's note on the lines, a page's previewing it,
+ * shown the file's with the app's note on the lines, a page's previewing it,
  * the plan's or another task's the task's card, and a subagent's row its
  * worker's, read as its tab reads its own, `chosen` telling whether that
  * tab is the one shown, whose transcript follows the run; a tab that hangs
@@ -2049,7 +2048,7 @@ function TabContent({
         />
       );
     }
-    // A tab no delegation started, a task's own Fullspin's worker's, stands only until the panel moves back to the board, a render away.
+    // A tab no delegation started stands only until the panel moves back to the board, a render away.
     return <SpinnerRegion delay label={readingWords("the worker")} />;
   }
   switch (tab) {
@@ -2853,6 +2852,7 @@ function PanelPhoneHead({
                       },
                     ]),
               ],
+              ...phoneFindGroups(),
               ...tabActions,
             ].filter((group) => group.length > 0);
           }}

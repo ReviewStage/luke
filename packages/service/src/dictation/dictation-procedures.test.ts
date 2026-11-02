@@ -25,7 +25,7 @@ import { dictationProcedures } from "./dictation-procedures.js";
  * A dictated clip answered by the hosted oRPC router the way the web route answers it, over
  * a real dialect and OpenAI faked at its HTTP door: the clip and its words
  * go to the transcription model on the account's own OpenAI key, never
- * Vespin's, the text comes back, the account's day is metered, and nothing of
+ * ours, the text comes back, the account's day is metered, and nothing of
  * the clip or the text is logged. An account with no key of its own is
  * refused as missing one.
  *

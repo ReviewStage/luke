@@ -34,7 +34,7 @@ import { OpenLinkProvider } from "./use-open-link.js";
 const TASK = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const PAGE = "26494df1-595a-4364-abf7-85781c65a9f8";
 const AGENT = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
-const HOME = `https://tryluke.dev/acme/plan/${TASK}`;
+const HOME = `https://vespin.dev/acme/plan/${TASK}`;
 
 /** A reply as an agent writes one, naming each kind as its instructions show. */
 const REPLY = [
