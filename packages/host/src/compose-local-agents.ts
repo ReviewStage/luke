@@ -16,6 +16,7 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ISOLATION,
   DEVICE_LAUNCH_REFUSAL,
+  DEVICE_LAUNCH_STEP,
   DEVICE_SETUP,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLayout,
@@ -24,6 +25,7 @@ import {
   type DeviceAgentRequest,
   type DeviceIsolation,
   type DeviceLaunchRefusal,
+  type DeviceLaunchStep,
   type DeviceSignedIn,
   deviceAgentFilesPayloadSchema,
   deviceAgentLaunchPayloadSchema,
@@ -122,12 +124,17 @@ import type { RunMode } from "./run-mode.js";
  * starts the runner (`LocalAgentPlatformSeam.launch`), with the claim's
  * secrets in its environment and nowhere else, never a file, an argument,
  * or a log, and its first lines on its stdin; its line is settled with the
- * runner's exit code once it exits. A message or retune line is written to
- * the running runner's stdin; a files line writes its files under the
- * agent's folder; a stop line ends the runner; a discard line ends it and
- * removes the agent's folder with everything in it, unless the platform's
- * check of the worktree finds work there that is nowhere else; a line of a
- * kind it does not know is settled untouched. A launch whose repository
+ * runner's exit code once it exits. As it goes, it reports on its line the
+ * step it has reached (`DEVICE_LAUNCH_STEP`), which the agent's transcript
+ * words until the harness's first event: preparing once it is taken,
+ * fetching just before a repository is made, and starting just before the
+ * runner, each on a fiber of its own, so the launch never waits on it. A
+ * message or retune line is written to the running runner's stdin; a files
+ * line writes its files under the agent's folder; a stop line ends the
+ * runner; a discard line ends it and removes the agent's folder with
+ * everything in it, unless the platform's check of the worktree finds work
+ * there that is nowhere else; a line of a kind it does not know is settled
+ * untouched. A launch whose repository
  * could not be made is settled as not started, and the runner never
  * starts. A launch or files line keeps the agent as one whose folder this
  * machine made (`keepOwnedAgent`), and a discard that removes the folder
@@ -330,6 +337,7 @@ type LocalAgentClient = Pick<
   | "beat"
   | "lines"
   | "claimLine"
+  | "lineStep"
   | "settleLine"
   | "requests"
   | "claimRequest"
@@ -801,6 +809,17 @@ export function composeLocalAgents(
           asked(client.settleLine(deviceId, id, exitCode, refusal));
 
         /**
+         * The step a launch line's launch has reached, reported on a fiber of
+         * the agent's scope, so the launch never waits on it; one refused or
+         * unanswered, an older service's among them, says nothing. Note that
+         * each is sent as the launch reaches it and may land out of order,
+         * because the service only ever moves a line's step forward, so a
+         * late report never takes it back.
+         */
+        const stepReported = (agentScope: Scope.Scope, id: string, step: DeviceLaunchStep) =>
+          Effect.asVoid(Effect.forkIn(asked(client.lineStep(deviceId, id, step)), agentScope));
+
+        /**
          * A kept launch settled with how it ended, asked once; let go of
          * where the service took it, and otherwise left kept, which every
          * beat settles again (`reconciledBeat`).
@@ -823,13 +842,15 @@ export function composeLocalAgents(
         /**
          * The agent's own repository made where it has none, reading the
          * agent's GitHub token where it has one through gh's helper, never
-         * the token itself: a folder for an agent with no repository.
+         * the token itself, and `fetching` run just before its script: a
+         * folder for an agent with no repository.
          */
         const madeWorktree = (
           layout: DeviceAgentLayout,
           repository: string | null,
           branch: string | null,
           github: Readonly<Record<string, string>> | undefined,
+          fetching: Effect.Effect<void>,
         ) =>
           Effect.gen(function* () {
             if (yield* fileSystem.exists(path.join(layout.checkoutPath, ".git"))) return true;
@@ -837,6 +858,7 @@ export function composeLocalAgents(
               yield* fileSystem.makeDirectory(layout.checkoutPath, { recursive: true });
               return true;
             }
+            yield* fetching;
             const script = platform.worktreeScript({
               home: folder,
               repository,
@@ -1009,6 +1031,7 @@ export function composeLocalAgents(
               payload.value.repository,
               payload.value.startBranch,
               withRepository ? agentGithubEnv(layout.folder, platform.clis.paths.gh) : undefined,
+              stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.FETCHING),
             );
             if (!made) {
               // Note that the token was written before the repository was made, and no turn reads it where none starts.
@@ -1054,6 +1077,7 @@ export function composeLocalAgents(
               bundle: platform.runnerBundle,
               env: { ...shellVariables, TMPDIR: temp, ...platform.runnerEnv, ...secrets.env },
             });
+            yield* stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.STARTING);
             const started = yield* ChildProcess.make(command.command, [...command.args], {
               cwd: layout.checkoutPath,
               env: command.env,
@@ -1257,6 +1281,10 @@ export function composeLocalAgents(
                 // Note that a launch replaces the runner it finds, which is ended and its line settled first.
                 // It is starting until its runner runs or it is settled unstarted, so no beat settles it meanwhile.
                 return yield* Effect.gen(function* () {
+                  // Note that it reads as preparing while the runner it replaces stops, unless it is settled at once.
+                  if (claimed.secretsGone !== true) {
+                    yield* stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.PREPARING);
+                  }
                   yield* stopped(agentId);
                   // Note that a launch whose claim was asked again lost its secrets with the first answer, so it is settled as a runner gone, which ends its turn in words.
                   if (claimed.secretsGone === true) return yield* settle(line.id);

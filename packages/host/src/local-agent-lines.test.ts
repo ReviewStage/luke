@@ -1,5 +1,5 @@
 /**
- * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, a line of a kind it does not know is settled without holding back the lines after it, and a launch whose folder was cleared since its last turn starts afresh, told so, while one whose folder stands goes on from its session.
+ * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, a line of a kind it does not know is settled without holding back the lines after it, and a launch whose folder was cleared since its last turn starts afresh, told so, while one whose folder stands goes on from its session, each reporting the steps it passes, fetching only where it makes its repository.
  *
  * The follower runs over the real client, its held read and claims answered
  * by a scripted service, so an answer is decoded as the wire decodes it; on
@@ -21,6 +21,7 @@ import {
   DEVICE_ARCH,
   DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
+  DEVICE_LAUNCH_STEP,
   DEVICE_PLATFORM,
   type DeviceAgentLine,
   deviceAgentLayout,
@@ -269,7 +270,8 @@ const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
  * session, and whose runner ends at once; where `workStands` says, the
  * agent's repository already stands in its folder, as its last turn left it.
  * With the processes spawned, what the repository's script was asked for,
- * and what waits for the launch's settle.
+ * the steps the launch reported in the order the service had them, and what
+ * waits for the launch's settle and its report that the runner starts.
  */
 const launching = (workStands: boolean) =>
   Effect.gen(function* () {
@@ -278,6 +280,8 @@ const launching = (workStands: boolean) =>
     const layout = deviceAgentLayout(home, AGENT_ID);
     if (workStands) mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });
     const launchSettled = Deferred.makeUnsafe<void>();
+    const starting = Deferred.makeUnsafe<void>();
+    const steps: string[] = [];
     let linesRead = 0;
     const fetchLike = async (url: string | URL | Request, init?: RequestInit) => {
       const { pathname } = new URL(String(url));
@@ -285,6 +289,10 @@ const launching = (workStands: boolean) =>
       switch (pathname) {
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES:
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE:
+          return json({ done: true });
+        case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_STEP:
+          steps.push(body.step);
+          if (body.step === DEVICE_LAUNCH_STEP.STARTING) Deferred.doneUnsafe(starting, Exit.void);
           return json({ done: true });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_CLAIM:
           return json({
@@ -361,19 +369,24 @@ const launching = (workStands: boolean) =>
       }),
     }).pipe(Effect.provide(services));
     yield* composer.lifetime;
-    return { spawned: spawner.spawned, worktrees, launchSettled: Deferred.await(launchSettled) };
+    return {
+      spawned: spawner.spawned,
+      worktrees,
+      steps,
+      launched: Effect.andThen(Deferred.await(launchSettled), Deferred.await(starting)),
+    };
   });
 
 it.effect.each([
   { workStands: true, resumed: true },
   { workStands: false, resumed: false },
 ])(
-  "a launch whose work stands in its folder ($workStands) goes on from its session ($resumed), and one whose folder was cleared starts afresh from its branch, told why",
+  "a launch whose work stands in its folder ($workStands) goes on from its session ($resumed), and one whose folder was cleared starts afresh from its branch, told why, reporting it fetches only then",
   ({ workStands, resumed }) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { spawned, worktrees, launchSettled } = yield* launching(workStands);
-        yield* launchSettled;
+        const { spawned, worktrees, steps, launched } = yield* launching(workStands);
+        yield* launched;
 
         const [config, message] = yield* firstLinesOf(spawned);
         assert.equal(config?.resume, resumed ? "session-fixture" : undefined);
@@ -381,6 +394,10 @@ it.effect.each([
         assert.deepEqual(
           worktrees.map((each) => each.branch),
           workStands ? [] : ["main"],
+        );
+        assert.deepEqual(
+          steps,
+          workStands ? ["preparing", "starting"] : ["preparing", "fetching", "starting"],
         );
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
