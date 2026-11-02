@@ -290,9 +290,6 @@ function versionWords(version: number): string {
 /** What a pull request's row says beside its name where no agent is named for it. */
 const PULL_REQUEST_DETAIL = "Pull request";
 
-/** What the Dates kind's row says beside its name. */
-const DATES_DETAIL = "A day, a time, or a range";
-
 /** The row of a list narrowed to dates that opens the date picker, to write the day picked there. */
 const PICK_DATE_ROW: MentionRow = {
   picksDate: true,
@@ -1582,7 +1579,7 @@ function kindsOf(
             detail: countWords(known.length, TERM.SKILL),
           },
         ]),
-    { from: MENTION_FROM.DATES, name: MENTION_GROUP.DATES, detail: DATES_DETAIL },
+    { from: MENTION_FROM.DATES, name: MENTION_GROUP.DATES, detail: undefined },
   ].map(({ from, name, detail }) => ({ narrow: { from }, name, detail, keyword: from }));
   const named = new Set<IntegrationProvider>();
   const connected = servers.map(({ provider, connection, name }): MentionKind => {

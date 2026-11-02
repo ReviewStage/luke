@@ -35,7 +35,7 @@ import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseChannel } from "../tasks/use-channels.js";
+import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -1250,7 +1250,7 @@ function buttonSaying(words: string): HTMLButtonElement {
   );
 }
 
-test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose, with no view's menu", async () => {
+test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
@@ -1274,7 +1274,45 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
     [EXPIRY.title, THRESHOLD.title],
     "#general's threads alone, a teammate's among them, the latest first",
   );
-  assert.equal(page.querySelector('button[aria-label="View options"]'), null);
+});
+
+test("a channel's view's menu narrows it as the Inbox's does, its scope standing in every channel and in the Inbox", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  world.inboxes = new Map([
+    [
+      BILLING.id,
+      [
+        { ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE },
+        { ...RETRY, channelId: APP_CHANNEL.id, startedBy: TEAMMATE },
+      ],
+    ],
+  ]);
+  const { page } = mount([], { channels: true });
+  await settle();
+  showScope(page, "Open");
+  chooseView(page, "Addressed to", "Me");
+  await settle();
+  assert.deepEqual(rowTitles(page), [], "Open addressed to Me leaves out the teammate's thread");
+
+  act(() => chooseChannel(APP_CHANNEL.id));
+  await settle();
+  assert.deepEqual(rowTitles(page), [], "another channel opens on it too");
+
+  act(() => leaveChannel());
+  await settle();
+  assert.deepEqual(rowTitles(page), [], "the Inbox stands on it too");
+
+  showScope(page, "All");
+  chooseView(page, "Addressed to", "Anyone");
+  act(() => chooseChannel(GENERAL.id));
+  await settle();
+  assert.deepEqual(
+    rowTitles(page),
+    [THRESHOLD.title],
+    "a scope turned in the Inbox stands in a channel",
+  );
 });
 
 test("a channel chosen while the workspace's channels could not be read says so with Retry, and ⌘K's Mark all as read marks the chosen channel's threads alone", async () => {

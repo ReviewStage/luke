@@ -1616,8 +1616,7 @@ const githubSent = () =>
       : [],
   );
 
-/** The words GitHub's row says once an account is connected: to an owner or an admin, and to a member. */
-const MANAGES_ON_GITHUB = "Add accounts and choose repositories on GitHub.";
+/** The words GitHub's row says to a member once an account is connected. */
 const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
 
 test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
@@ -1641,7 +1640,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     );
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
-      ["GitHub", MANAGES_ON_GITHUB],
+      ["GitHub", undefined],
       ["acme-org", "Connected"],
       ["acme-labs", "Suspended or removed on GitHub."],
     ]);
@@ -1684,7 +1683,7 @@ test("a service from before several connections names one GitHub account alone, 
   const { page } = await mount(legacy);
 
   assert.deepEqual(integrationRows(page), [
-    ["GitHub", MANAGES_ON_GITHUB],
+    ["GitHub", undefined],
     ["acme-org", "Connected"],
   ]);
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);

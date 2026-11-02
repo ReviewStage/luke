@@ -9,7 +9,12 @@
  * (`Page.startScreencast`), as the live view does (`browser-live/relay.ts`),
  * and writes to disk the latest frame of each tenth of a second, with the
  * time the browser drew it, so a page that redraws fast costs no more than
- * the video's own rate; the frames go once encoded. Only a
+ * the video's own rate; the frames go once encoded. A frame of a document
+ * that has not yet drawn any content, as a page still loading shows, blank
+ * while a dev server compiles it, is left out (`RECORDING_PAINTED_SOURCE`),
+ * so the video opens on the page and a navigation holds the page before it
+ * until the next one draws; where no frame drew content, every frame is
+ * kept. Only a
  * page on screen draws, so the frames follow the tab the browser shows; and
  * it draws the agent's pointer into each page it records
  * (`RECORDING_CURSOR_SOURCE`), which the frames would otherwise lack. It
@@ -160,6 +165,15 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
 export const RECORDING_CURSOR_STOP = 'window.dispatchEvent(new Event("luke-recording-stop"));';
 
 /**
+ * Whether the page's document has drawn content yet: its first contentful
+ * paint, which a background alone or the recorder's own pointer never is.
+ * The recorder asks it of a page from its first frame, and again after each
+ * navigation, every tenth of a second until it says yes.
+ */
+export const RECORDING_PAINTED_SOURCE =
+  'performance.getEntriesByName("first-contentful-paint").length > 0';
+
+/**
  * The recorder, run by Node with the DevTools port, its directory, its most
  * seconds and bytes, the encoder, and the frame's most width and height as
  * its arguments. It writes `ready` once it reaches the browser, and
@@ -180,10 +194,13 @@ const TAIL_SECONDS = 0.5;
 const frames = [];
 const casting = new Set();
 const contexts = new Map();
+const pages = new Map();
+const answers = new Map();
 let ended = false;
 let next = 0;
 const CURSOR_SOURCE = ${JSON.stringify(RECORDING_CURSOR_SOURCE)};
 const CURSOR_STOP = ${JSON.stringify(RECORDING_CURSOR_STOP)};
+const PAINTED_SOURCE = ${JSON.stringify(RECORDING_PAINTED_SOURCE)};
 const write = (name, value) => fs.writeFileSync(path.join(dir, name), JSON.stringify(value));
 const end = (word) => {
   fs.rmSync(path.join(dir, "frames"), { recursive: true, force: true });
@@ -223,6 +240,9 @@ const finish = async (socket, send) => {
   await new Promise((resolve) => setTimeout(resolve, 200));
   try { socket.close(); } catch {}
   if (frames.length === 0) return end({ ok: false, reason: "empty" });
+  // A frame a page drew before it had content is left out, unless no frame had any.
+  const drawn = frames.filter((frame) => frame.painted);
+  if (drawn.length > 0) frames.splice(0, frames.length, ...drawn);
   const seconds = Math.round((frames[frames.length - 1].at - frames[0].at + TAIL_SECONDS) * 10) / 10;
   const out = path.join(dir, "recording.webm");
   for (const [crf, scale] of [[36, 0], [44, 600], [52, 400]]) {
@@ -234,11 +254,38 @@ const finish = async (socket, send) => {
 };
 fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json()).then((version) => {
   const socket = new WebSocket(version.webSocketDebuggerUrl);
-  const send = (method, params, sessionId) => {
+  const send = (method, params, sessionId, answered) => {
     next += 1;
     const message = { id: next, method, params };
     if (sessionId !== undefined) message.sessionId = sessionId;
+    if (answered) answers.set(next, answered);
     try { socket.send(JSON.stringify(message)); } catch {}
+  };
+  // Asks the page, every tenth of a second until it says yes, whether it has drawn content since it last navigated.
+  // Note that a yes marks the page's latest frame rather than the one asked about, because a page records its first paint only after the frame that shows it.
+  const askPainted = (sessionId, page) => {
+    if (page.asking || page.painted || pages.get(sessionId) !== page) return;
+    page.asking = true;
+    const navigation = page.navigation;
+    send("Runtime.evaluate", { expression: PAINTED_SOURCE, returnByValue: true }, sessionId, (answer) => {
+      page.asking = false;
+      if (page.navigation === navigation && answer.result?.result?.value === true) {
+        page.painted = true;
+        if (page.latest) page.latest.painted = true;
+        return;
+      }
+      setTimeout(() => askPainted(sessionId, page), page.navigation === navigation ? 100 : 0);
+    });
+  };
+  const markPainted = (frame, sessionId) => {
+    const page = pages.get(sessionId);
+    if (!page) {
+      frame.painted = true;
+      return;
+    }
+    page.latest = frame;
+    frame.painted = page.painted;
+    askPainted(sessionId, page);
   };
   const started = Date.now();
   socket.onopen = () => {
@@ -251,9 +298,14 @@ fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json
   };
   socket.onmessage = (event) => {
     const message = JSON.parse(String(event.data));
-    if (message.method === "Target.attachedToTarget" && message.params.targetInfo.type === "page") {
+    if (message.id !== undefined) {
+      const answered = answers.get(message.id);
+      answers.delete(message.id);
+      if (answered) answered(message);
+    } else if (message.method === "Target.attachedToTarget" && message.params.targetInfo.type === "page") {
       const sessionId = message.params.sessionId;
       casting.add(sessionId);
+      pages.set(sessionId, { painted: false, navigation: 0, asking: false, latest: undefined });
       send("Page.enable", {}, sessionId);
       contexts.set(sessionId, new Set());
       send("Runtime.enable", {}, sessionId);
@@ -266,9 +318,17 @@ fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json
       contexts.get(message.sessionId)?.delete(message.params.executionContextId);
     } else if (message.method === "Runtime.executionContextsCleared") {
       contexts.get(message.sessionId)?.clear();
+    } else if (message.method === "Page.frameNavigated" && !message.params.frame.parentId) {
+      const page = pages.get(message.sessionId);
+      if (page) {
+        page.painted = false;
+        page.latest = undefined;
+        page.navigation += 1;
+      }
     } else if (message.method === "Target.detachedFromTarget") {
       casting.delete(message.params.sessionId);
       contexts.delete(message.params.sessionId);
+      pages.delete(message.params.sessionId);
     } else if (message.method === "Page.screencastFrame") {
       send("Page.screencastFrameAck", { sessionId: message.params.sessionId }, message.sessionId);
       if (ended) return;
@@ -279,8 +339,10 @@ fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json
       const held = last !== undefined && last.tick === tick ? last : undefined;
       const file = held ? held.file : path.join(dir, "frames", String(frames.length).padStart(6, "0") + ".jpg");
       fs.writeFileSync(file, Buffer.from(message.params.data, "base64"));
+      const frame = held ?? { at, tick, file };
       if (held) held.at = at;
-      else frames.push({ at, tick, file });
+      else frames.push(frame);
+      markPainted(frame, message.sessionId);
     }
   };
   socket.onclose = () => finish(socket, send);

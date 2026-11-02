@@ -139,6 +139,25 @@ a status and priority and adds twelve: Expire invite links after 7 days
 signing secrets, Retry Postmark sends on a 429, and others across the three
 repositories.
 
+## The Browser tab (0.23.0 on)
+
+The Invite emails agent's cloud browser is on
+`https://acme.relay.dev/invite/7Kq2mWx9`, "Join acme on Relay"
+(`relay-pictures.ts`'s accept page), its pointer on Accept invite.
+
+## Sub-tasks, relations, and the queue (0.24.0 on)
+
+`sub-tasks.ts` in `staging/releases/v0.24.0.patch` breaks Teammate invitations
+(ACME-42) into five sub-tasks, all Dean's: Pending memberships schema
+(ACME-54, done), Invite and accept endpoints (ACME-55, done), Accept page
+(ACME-56, in progress), Invite emails through Postmark (ACME-57, todo, blocked
+by Dana's Verify acme.dev with Postmark, ACME-58), and Expire invite links
+after 7 days (ACME-46), so its ring reads 2/5. Teammate invitations waited on
+Members page empty state (ACME-39, done) and holds up Resend an expired invite
+(ACME-44) and Handle Postmark bounces (ACME-43). The Invite emails agent runs on
+Codex, and while it adds the invite email's plain-text part, Dean has three
+follow-ups queued behind its turn (`queue.ts`).
+
 ## Automations
 
 From 0.14.0 (behind its experiment): **Morning Sentry triage**, acme's

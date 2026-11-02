@@ -13,6 +13,8 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * finished. Opening again while it leaves keeps it, and the exit cut short
  * takes nothing away. Reduced motion and a capture run zero the tokens an
  * exit is timed on, and an element that runs no motion is taken out at once.
+ * A caller whose element stands in the layout hears it go (`onGone`) in the
+ * same breath as it is taken out, so a motion around it can read that commit.
  *
  * The motion itself is the stylesheet's. The Disclosure's stylesheet
  * (`disclosure.css`) also draws an optional layer for a disclosure that
@@ -49,10 +51,12 @@ export function runningMotions(element: HTMLElement): Animation[] {
   return "getAnimations" in element ? element.getAnimations() : [];
 }
 
-export function useDisclosure(open: boolean): Disclosure {
+export function useDisclosure(open: boolean, onGone?: () => void): Disclosure {
   const [was, setWas] = useState(open);
   const [leaving, setLeaving] = useState(false);
   const held = useRef<HTMLElement | null>(null);
+  const gone = useRef(onGone);
+  gone.current = onGone;
   const ref = useCallback((element: HTMLElement | null) => {
     held.current = element;
   }, []);
@@ -66,8 +70,13 @@ export function useDisclosure(open: boolean): Disclosure {
   useLayoutEffect(() => {
     if (!leaving) return undefined;
     const exits = held.current === null ? [] : runningMotions(held.current);
-    if (exits.length === 0) {
+    // Note that the caller hears it go in the update that takes it out, so both land in one commit.
+    const leave = () => {
       setLeaving(false);
+      gone.current?.();
+    };
+    if (exits.length === 0) {
+      leave();
       return undefined;
     }
     // Note that an exit cancelled counts as done, since nothing is left to
@@ -78,7 +87,7 @@ export function useDisclosure(open: boolean): Disclosure {
     for (const exit of exits) {
       const ended = () => {
         left.delete(exit);
-        if (current && left.size === 0) setLeaving(false);
+        if (current && left.size === 0) leave();
       };
       exit.addEventListener("finish", ended, { once: true });
       exit.addEventListener("cancel", ended, { once: true });

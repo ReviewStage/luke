@@ -101,6 +101,7 @@ import {
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
 import { UNREPORTED } from "@luke/ui/reported-failure";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Equal, Schema } from "effect";
@@ -233,10 +234,119 @@ const QUOTE_CLASS =
 /**
  * A card's place in the margin: a card already there travels to its next
  * place, as threads above it open, grow, or arrive, on the spring every move
- * rides; one arriving lands where it belongs and fades in (tasks.css).
+ * rides; one arriving lands where it belongs and fades in, and one leaving,
+ * its thread resolved or deleted or the thread being started let go, fades
+ * out where it last stood as the cards below travel up (tasks.css).
  */
 const SLOT_CLASS =
   "comment-slot absolute inset-x-0 top-0 data-[moves=true]:transition-transform data-[moves=true]:duration-(--luke-duration-shape)";
+
+/** A card in the margin as it was last drawn: its thread or the thread being started, where it stood, and whether it stood open. */
+interface MarginCard {
+  readonly id: string;
+  readonly thread: PlanCommentThread | undefined;
+  readonly pending: PendingThread | undefined;
+  readonly top: number;
+  readonly open: boolean;
+}
+
+/** A card drawn in the margin, and whether it is fading out. */
+interface DrawnCard extends MarginCard {
+  readonly leaving: boolean;
+}
+
+function sameCards(a: readonly MarginCard[], b: readonly MarginCard[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((card, at) => {
+      const other = b[at];
+      return (
+        other !== undefined &&
+        card.id === other.id &&
+        card.thread === other.thread &&
+        card.pending === other.pending &&
+        card.top === other.top &&
+        card.open === other.open
+      );
+    })
+  );
+}
+
+/**
+ * The margin's cards to draw, while it is drawn: those standing, then each
+ * that left, as it was last drawn, until its fade is done (`gone`). Note that what left is
+ * taken in the render that sees it go, so its card is the same element
+ * fading rather than one drawn again, and a card standing again is no
+ * longer held.
+ */
+function useMarginCards(
+  cards: readonly MarginCard[],
+  drawing: boolean,
+): {
+  drawn: readonly DrawnCard[];
+  gone: (id: string) => void;
+} {
+  const [held, setHeld] = useState<{
+    last: readonly MarginCard[];
+    leaving: readonly MarginCard[];
+  }>(() => ({ last: cards, leaving: [] }));
+  let { leaving } = held;
+  // Note that a margin not drawn, folded, holds nothing, since a card it held would fade out once it is drawn again.
+  if (!sameCards(held.last, cards) || (!drawing && leaving.length > 0)) {
+    const standing = new Set(cards.map((card) => card.id));
+    const left = held.last.filter((card) => !standing.has(card.id));
+    leaving = drawing ? [...leaving.filter((card) => !standing.has(card.id)), ...left] : [];
+    setHeld({ last: cards, leaving });
+  }
+  const gone = useCallback((id: string) => {
+    setHeld((now) => ({ last: now.last, leaving: now.leaving.filter((card) => card.id !== id) }));
+  }, []);
+  return {
+    drawn: [
+      ...cards.map((card) => ({ ...card, leaving: false })),
+      ...leaving.map((card) => ({ ...card, leaving: true })),
+    ],
+    gone,
+  };
+}
+
+/** A card's place in the margin, held drawn through its fade once it leaves, and let go once that is done. */
+function MarginSlot({
+  card,
+  moves,
+  slotRef,
+  onGone,
+  children,
+}: {
+  card: DrawnCard;
+  moves: boolean;
+  slotRef: (element: HTMLDivElement | null) => void;
+  onGone: (id: string) => void;
+  children: ReactNode;
+}): React.JSX.Element | null {
+  const shown = useDisclosure(!card.leaving);
+  const { id } = card;
+  useEffect(() => {
+    if (!shown.mounted) onGone(id);
+  }, [shown.mounted, onGone, id]);
+  if (!shown.mounted) return null;
+  return (
+    <div
+      ref={(element) => {
+        shown.ref(element);
+        // Note that a card leaving is no longer measured, so the cards below take its room as it fades.
+        slotRef(card.leaving ? null : element);
+      }}
+      className={SLOT_CLASS}
+      data-moves={moves && !card.leaving}
+      data-leaving={card.leaving ? "true" : undefined}
+      inert={card.leaving}
+      style={{ transform: `translateY(${card.top}px)` }}
+    >
+      {children}
+    </div>
+  );
+}
 
 /** The column's room a margin needs beside the reading width: the gap and the card, as `planning.css` spends them. */
 const MARGIN_ROOM = 48 + 288;
@@ -1861,6 +1971,29 @@ export function PlanCommentLayer({
   // The cards already stood in the margin, which move to their next place rather than land there, so a card arriving lands where it belongs.
   const settled = useRef(new Set<string>());
   const open = doors.control.threads.filter(openThread);
+  const marginCards = useMarginCards(
+    [
+      ...open.map((thread) => ({
+        id: thread.id,
+        thread,
+        pending: undefined,
+        top: tops.get(thread.id) ?? 0,
+        open: active === thread.id,
+      })),
+      ...(pending === undefined
+        ? []
+        : [
+            {
+              id: PENDING_THREAD,
+              thread: undefined,
+              pending,
+              top: tops.get(PENDING_THREAD) ?? 0,
+              open: true,
+            },
+          ]),
+    ],
+    wide,
+  );
 
   // The margin folds where the scroller has no room for it beside the reading width.
   useEffect(() => {
@@ -2238,10 +2371,13 @@ export function PlanCommentLayer({
           },
     holds: (target) => target instanceof Element && target.closest(KEEPS_THREAD_OPEN) !== null,
   });
-  const slotStyle = (id: string) => ({ transform: `translateY(${tops.get(id) ?? 0}px)` });
   const close = () => {
     onActive(undefined);
     setPending(undefined);
+  };
+  const startedFromPending = (thread: PlanCommentThread) => {
+    setPending(undefined);
+    onActive(thread.id);
   };
   const pendingCard =
     pending === undefined ? null : (
@@ -2250,10 +2386,7 @@ export function PlanCommentLayer({
         doors={doors}
         text={text}
         onCancel={close}
-        onStarted={(thread) => {
-          setPending(undefined);
-          onActive(thread.id);
-        }}
+        onStarted={startedFromPending}
       />
     );
   const blockButton =
@@ -2298,38 +2431,38 @@ export function PlanCommentLayer({
         {blockButton}
         {bubbleDrawn}
         <div className="comment-margin absolute top-0 left-comment-margin w-comment-card">
-          {open.map((thread) => (
-            <div
-              key={thread.id}
-              ref={cardRef(thread.id)}
-              className={SLOT_CLASS}
-              data-moves={settled.current.has(thread.id)}
-              style={slotStyle(thread.id)}
+          {marginCards.drawn.map((card) => (
+            <MarginSlot
+              key={card.id}
+              card={card}
+              moves={settled.current.has(card.id)}
+              slotRef={cardRef(card.id)}
+              onGone={marginCards.gone}
             >
-              <ThreadCard
-                thread={thread}
-                open={active === thread.id}
-                place={THREAD_PLACE.MARGIN}
-                doors={doors}
-                pointed={pointed === thread.id}
-                onOpen={() => {
-                  setPending(undefined);
-                  onActive(thread.id);
-                }}
-                onClose={close}
-              />
-            </div>
+              {card.thread !== undefined ? (
+                <ThreadCard
+                  thread={card.thread}
+                  open={card.open}
+                  place={THREAD_PLACE.MARGIN}
+                  doors={doors}
+                  pointed={!card.leaving && pointed === card.id}
+                  onOpen={() => {
+                    setPending(undefined);
+                    onActive(card.id);
+                  }}
+                  onClose={close}
+                />
+              ) : card.pending !== undefined ? (
+                <PendingCard
+                  pending={card.pending}
+                  doors={doors}
+                  text={text}
+                  onCancel={close}
+                  onStarted={startedFromPending}
+                />
+              ) : null}
+            </MarginSlot>
           ))}
-          {pendingCard === null ? null : (
-            <div
-              ref={cardRef(PENDING_THREAD)}
-              className={SLOT_CLASS}
-              data-moves={settled.current.has(PENDING_THREAD)}
-              style={slotStyle(PENDING_THREAD)}
-            >
-              {pendingCard}
-            </div>
-          )}
         </div>
       </div>
     );

@@ -74,7 +74,8 @@ export const SHOW_IMAGE_TOOL = {
     "then name each file by its path with a one-line caption saying what it shows. Show the pictures " +
     "that belong together in one call, as one set: before and after, or each screen a change touches. " +
     "To show a flow rather than a screen, such as clicking through a form you built, record it as a " +
-    "WebM video, for instance with Playwright's `recordVideo`, and show that file the same way; the " +
+    "WebM video, for instance with Playwright's `page.screencast.start({ path })` once the page has " +
+    "drawn, so the video opens on it rather than on its loading, and show that file the same way; the " +
     "transcript plays it. " +
     `Each is a PNG, JPEG, or WebP, or a WebM video, of at most ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB. ` +
     "Never show a picture of a secret. A Markdown image in your reply shows nothing; this is the one " +

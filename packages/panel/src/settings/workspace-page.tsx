@@ -274,11 +274,8 @@ const GITHUB_UNCONNECTED = {
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
 
-/** What the GitHub row says once an account is connected, by who is reading it: where its access is changed. */
-const GITHUB_CONNECTED_LINE = {
-  MANAGES: "Add accounts and choose repositories on GitHub.",
-  MEMBER: "Accounts and repositories are managed on GitHub.",
-} as const;
+/** What the GitHub row says to a member once an account is connected, who has no Manage on GitHub to say it: where its access is changed. */
+const GITHUB_CONNECTED_MEMBER = "Accounts and repositories are managed on GitHub.";
 
 /** GitHub's own mark, which leads its row as a provider's leads Settings › Integrations'. */
 const GITHUB_MARK = (
@@ -1363,7 +1360,7 @@ function ManagedGitHub({
       <SettingsRow
         leading={GITHUB_MARK}
         label="GitHub"
-        description={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
+        description={connected ? undefined : GITHUB_UNCONNECTED.MANAGES}
         error={refusedShown(refusal ?? addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB)}
       >
         {() => (
@@ -1428,7 +1425,7 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           leading={GITHUB_MARK}
           label="GitHub"
           description={
-            connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
+            connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_MEMBER
           }
           error={refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB)}
         >

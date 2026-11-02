@@ -100,6 +100,8 @@ sub-tasks and set blocks too.
 [#6163](https://github.com/ReviewStage/luke/pull/6163),
 [#6164](https://github.com/ReviewStage/luke/pull/6164))
 
+![Luke's whole window with the sidebar open on Teammate invitations, unfolded over its sub-tasks Invite emails through Postmark, wearing the stop sign, Accept page, and Expire invite links after 7 days, its ring reading 2/5; beside it the task's head groups five sub-tasks, ACME-54 to ACME-57 and ACME-46, under Sub-tasks 2/5, and Members page empty state, Resend an expired invite, and Handle Postmark bounces under Relations.](apps/web/public/changelog/0.24.0/sub-tasks-and-blocked-tasks.png)
+
 ### Queue a message behind a turn
 
 While an agent works, ⌘↩, or Send with ⌘ held, queues your message rather
@@ -113,6 +115,8 @@ other way.
 [#6107](https://github.com/ReviewStage/luke/pull/6107),
 [#6121](https://github.com/ReviewStage/luke/pull/6121),
 [#6124](https://github.com/ReviewStage/luke/pull/6124))
+
+![The Invite emails agent close up, Working… 20s into a turn after Dean asked for a plain-text fallback, with three messages queued over its message box below #216, the second under the pointer offering Steer, Edit, and Delete.](apps/web/public/changelog/0.24.0/queue-a-message-behind-a-turn.png)
 
 ### Tool calls in plain words
 
@@ -454,6 +458,8 @@ that agent's, and New browser tab, from the panel's "+" or ⌘K, opens an
 address in an agent's browser for you.
 ([#5695](https://github.com/ReviewStage/luke/pull/5695),
 [#5794](https://github.com/ReviewStage/luke/pull/5794))
+
+![The side panel filling the window on a Browser tab beside the plan's, the Invite emails agent's cloud browser showing Relay's Join acme on Relay page at acme.relay.dev with the agent's pointer on Accept invite, under the address bar, Invite emails is using this tab, and Take over.](apps/web/public/changelog/0.23.0/the-browser-tab.png)
 
 ### One mark for how a task stands
 

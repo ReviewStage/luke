@@ -3,6 +3,7 @@
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { useDisclosureFold } from "../disclosure/disclosure.js";
 import { LIST_MOTION_WAY, ListMotion, motionKey, motionRows, useLeaving } from "./list-motion.js";
 
 /**
@@ -13,8 +14,9 @@ import { LIST_MOTION_WAY, ListMotion, motionKey, motionRows, useLeaving } from "
  * than leaving and arriving, a change landing while rows still move adds
  * onto what they play rather than stopping it, a row arriving while the
  * lists are still read only fades in, nothing plays where no motion is
- * to play, and a row out of the reader's sight plays nothing, so a change
- * of thousands of rows plays a screenful.
+ * to play, a row out of the reader's sight plays nothing, so a change
+ * of thousands of rows plays a screenful, and the rows under a fold glide
+ * up once its body has gone.
  * jsdom lays nothing out and plays nothing, so each row's place is given
  * and each motion recorded.
  */
@@ -365,5 +367,49 @@ test("a list whose rows scale rather than slide scales a leaving row out where i
       { opacity: "1", transform: "none" },
       { opacity: 0, transform: "scale(0.6)" },
     ],
+  ]);
+});
+
+test("the rows under a fold glide down as a press opens it, and up once its body has faded and gone", () => {
+  for (const [name, value] of Object.entries(TOKENS)) {
+    document.documentElement.style.setProperty(name, value);
+  }
+  // Note that the fold keeps its own state and its body is a row of the list, so only the fold draws the commits that move the row under it.
+  let toggle = (): void => undefined;
+  function Folded(): React.JSX.Element {
+    const { state } = useDisclosureFold(false);
+    toggle = state.toggle;
+    return createElement(
+      "ul",
+      motionRows(),
+      createElement("li", { key: "head" }, "Head"),
+      state.drawn ? createElement("li", { key: "body", ref: state.body }, "Body") : null,
+      createElement("li", { key: "under" }, "Under"),
+    );
+  }
+  function Sidebar(): React.JSX.Element {
+    const box = useRef<HTMLDivElement>(null);
+    return createElement(ListMotion, {
+      root: box,
+      children: createElement("div", { ref: box }, createElement(Folded)),
+    });
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(Sidebar)));
+
+  act(() => toggle());
+
+  expect(drawn()).toEqual([["Head", "Body", "Under"]]);
+  expect(motionsOf(rowOf("Under"))).toEqual([
+    [{ transform: `translate(0px, ${-ROW}px)` }, { transform: "none" }],
+  ]);
+
+  played = [];
+  act(() => toggle());
+
+  expect(drawn()).toEqual([["Head", "Under"]]);
+  expect(motionsOf(rowOf("Under"))).toEqual([
+    [{ transform: `translate(0px, ${ROW}px)` }, { transform: "none" }],
   ]);
 });

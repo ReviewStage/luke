@@ -16,8 +16,11 @@ import { cn } from "../cn.js";
  * its title and its foot on screen. Both keep to what is seen of the window
  * (`tokens/viewport.css`), so on a phone the card keeps above the
  * keyboard, and both claim their presses back from the desktop's drag
- * strip. The card is the profile's dialog card, its inset, corners, edge,
- * and lift, at a question's measure; it fades and rises in on the motion
+ * strip. The grid's one column is the room's width (`grid-cols-1`), never
+ * an `auto` one, which grows to a line that never wraps, such as a menu
+ * row's name, and stood a phone's sheet off the screen's edge. The card is
+ * the profile's dialog card, its inset, corners, edge, and lift, at a
+ * question's measure; it fades and rises in on the motion
  * tokens, and as it closes it and its dimmed window fade out over
  * `--luke-duration-exit`, taking no press while they do, Base UI holding
  * them drawn (`data-ending-style`) until the card's fade has run. A card
@@ -80,7 +83,7 @@ function DialogContent({
         data-slot="dialog-viewport"
         className={cn(
           DIALOG_ROOM,
-          "@container/luke-dialog-room box-border grid place-items-center bg-scrim p-6 animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
+          "@container/luke-dialog-room box-border grid grid-cols-1 place-items-center bg-scrim p-6 animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
           viewportClassName,
         )}
         {...room}

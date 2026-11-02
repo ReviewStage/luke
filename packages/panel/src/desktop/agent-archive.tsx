@@ -241,7 +241,7 @@ function ArchivedAgentRow({
           {agentEndMark(agent, false)}
         </span>
       </Tooltip>
-      <span className="task-summary-marks pointer-events-none absolute top-0 right-luke-4 flex h-control items-center opacity-0">
+      <span className="task-summary-marks pointer-events-none absolute top-0 right-luke-4 flex h-control items-center opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit">
         <Tooltip label={UNARCHIVE.label}>
           <IconButton
             icon={UNARCHIVE.icon}
