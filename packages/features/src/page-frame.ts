@@ -29,7 +29,7 @@ export const PAGE_SCHEME = "luke-page";
  * this host to the page route and lets the app frame it, and the service
  * serves pages there only where `AGENT_PAGES_ORIGIN` names it.
  */
-export const PAGE_SANDBOX_ORIGIN = "https://fullspin.page";
+export const PAGE_SANDBOX_ORIGIN = "https://vespin.page";
 
 /** What a page's frame shows on the web where the deployment has no sandbox: the site's page saying pages open in the Mac app. */
 export const PAGE_IN_MAC_APP_PATH = "/page-in-mac-app.html";

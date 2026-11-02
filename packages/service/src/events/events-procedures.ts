@@ -15,10 +15,7 @@ import { text as trimmedText, type UnparsedWireValue } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
-import { type EventsOptions, recordEvents } from "./events.js";
-
-/** Vercel's own name for the deployment: `production`, `preview`, or `development`. */
-const DEPLOYMENT_VARIABLE = "VERCEL_ENV";
+import { DEPLOYMENT_VARIABLE, type EventsOptions, recordEvents } from "./events.js";
 
 export interface EventsProcedureSeams {
   /** The account behind a request: its bearer, or with none, the browser's session cookie. */

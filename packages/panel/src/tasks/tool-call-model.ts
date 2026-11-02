@@ -756,6 +756,11 @@ export interface SentWords {
   readonly note: string | undefined;
 }
 
+/** A message's words as the service reads them: under `text`, or under `message` where no `text` stands, as Claude Code's agents name them. */
+function messageWords(input: WireValue | undefined): string | undefined {
+  return stringAt(input, "text") ?? stringAt(input, "message");
+}
+
 /**
  * What a `start_agent` or a `message_agent` call sent, whole, which its row's
  * line cuts to its first line: a message's words, or a start's prompt (named
@@ -766,7 +771,7 @@ export interface SentWords {
 export function sentWords(tool: string, input: WireValue | undefined): SentWords | undefined {
   const words =
     tool === AGENT_TOOL.MESSAGE_AGENT || tool === RETIRED_TOOL.MESSAGE_CODING_AGENT
-      ? stringAt(input, "text")
+      ? messageWords(input)
       : tool === AGENT_TOOL.START_AGENT || tool === RETIRED_TOOL.START_CODING_AGENT
         ? (stringAt(input, "prompt") ?? stringAt(input, "task"))
         : undefined;
@@ -946,8 +951,10 @@ const AGENT_TOOL_VIEWS = {
     namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined),
   [AGENT_TOOL.READ_AGENT]: ({ input, output }) =>
     namedCall(CALL_KIND.READ_AGENT, input, output, "agentId"),
-  [AGENT_TOOL.MESSAGE_AGENT]: ({ input, output }) =>
-    namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text"),
+  [AGENT_TOOL.MESSAGE_AGENT]: ({ input, output }) => ({
+    ...namedCall(CALL_KIND.MESSAGE_AGENT, input, output, undefined),
+    subject: messageWords(input) ?? "",
+  }),
   [AGENT_TOOL.START_AGENT]: ({ input, output }) =>
     // Note that a start journaled before the prompt had its name carries it as `task`.
     namedCall(

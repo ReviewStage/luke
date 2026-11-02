@@ -39,7 +39,7 @@ export function DemoVideo(): React.JSX.Element {
 
   return (
     <PublicMedia>
-      {/* biome-ignore lint/a11y/useMediaCaption: Fullspin's side of the call is captioned in the recording itself; a track for the developer's side waits on a transcript. */}
+      {/* biome-ignore lint/a11y/useMediaCaption: the app's side of the call is captioned in the recording itself; a track for the developer's side waits on a transcript. */}
       <video
         ref={video}
         src={DEMO.SOURCE}

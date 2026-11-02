@@ -89,6 +89,7 @@ import {
   TASK_BLOCK_RELATION,
   TASK_CREATE_RELATION_KIND,
   TASK_MODE,
+  TASK_STATUS,
   type Task,
   type TaskAgentStart,
   type TaskBlockRequest,
@@ -115,7 +116,12 @@ import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js
 import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED } from "../core.js";
-import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
+import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_TASK_FINISHER,
+  SERVER_TASK_SOURCE,
+} from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { refreshRepositoryReads } from "../github/repository-reads.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
@@ -810,8 +816,18 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { task: plan, txid, archived } = task.value;
+      const { task: plan, txid, archived, statusMoved } = task.value;
       if (archived.length > 0) yield* stoppedInBackground(seams, archived);
+      // Counted where this write moved the task to Done or Canceled, as the store read it under the task's lock.
+      if (
+        statusMoved &&
+        (plan.status === TASK_STATUS.DONE || plan.status === TASK_STATUS.CANCELED)
+      ) {
+        yield* recordServerEvent(SERVER_EVENT.TASK_FINISH, userId, {
+          status: plan.status,
+          by: SERVER_TASK_FINISHER.MEMBER,
+        });
+      }
       return txid === undefined ? { plan } : { plan, txid };
     }),
 

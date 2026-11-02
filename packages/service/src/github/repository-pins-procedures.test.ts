@@ -9,6 +9,7 @@ import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, type Context, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -25,6 +26,9 @@ import { repositoryPinsProcedures } from "./repository-pins-procedures.js";
 
 const ORIGIN = "https://luke.test";
 const PINS = "/api/repository-pins";
+
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
 
 interface Answer {
   readonly status: number;
@@ -49,8 +53,10 @@ const openAccounts = Effect.gen(function* () {
 const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
   Effect.gen(function* () {
     // The procedure runs on the services handed to it, the test's clock among them: a pin's instant is read from it.
-    // SAFETY: the procedures yield the database and the clock alone, which the test's own context holds.
-    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>().pipe(
+      Effect.provide(ANALYTICS.layer),
+    )) as Context.Context<WebServices>;
     const handle = hostedFetch({
       repositoryPins: repositoryPinsProcedures({
         resolveUserId: (incoming) =>
@@ -136,6 +142,29 @@ it.layer(getTestDB())("the repository pins route", (it) => {
         assert.deepEqual(unpinnedTwice, unpinned);
         assert.deepEqual(pinsOf(yield* ask(request(owner))), unpinned);
         assert.deepEqual(pinsOf(yield* ask(request(other))), [], "another account holds none");
+      }),
+  );
+
+  it.effect(
+    "a pin that changed a row is counted without its repository, and a pin that moved nothing is not",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        const pin = (pinned: boolean) =>
+          ask(request(owner, { method: "PUT", body: { repository: "acme/relay", pinned } }));
+
+        yield* pin(true);
+        yield* pin(true);
+        yield* pin(false);
+        yield* pin(false);
+
+        assert.deepEqual(
+          ANALYTICS.recorded.filter((event) => event.userId === owner),
+          [
+            { name: SERVER_EVENT.REPOSITORY_PIN, userId: owner, properties: { pinned: true } },
+            { name: SERVER_EVENT.REPOSITORY_PIN, userId: owner, properties: { pinned: false } },
+          ],
+        );
       }),
   );
 

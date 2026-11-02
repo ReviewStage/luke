@@ -14,6 +14,7 @@
 
 import { listRepositoryPins, setRepositoryPin } from "@luke/database/models/repository-pin-store";
 import { Effect, Option } from "effect";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
@@ -38,6 +39,12 @@ export function repositoryPinsProcedures(seams: RepositoryPinsProcedureSeams) {
       );
       // A pin past the bound is a request the service will not keep, as a name past its bound is.
       if (Option.isNone(set)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      // Counted only where the write changed a row, which is the one that answers a transaction.
+      if (set.value.txid !== undefined) {
+        yield* recordServerEvent(SERVER_EVENT.REPOSITORY_PIN, context.userId, {
+          pinned: input.pinned,
+        });
+      }
       return set.value;
     }),
   };

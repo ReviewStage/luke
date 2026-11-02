@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect";
 import { afterEach, test, vi } from "vitest";
 import type { WireValue } from "../core.js";
 import { clearRevokedAuthorization } from "../github/github-app.js";
+import { authDatabaseHooks, withAuthCounts } from "./auth-counts.js";
 import { authDatabaseAdapter } from "./auth-database.js";
 import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./auth-policy.js";
 
@@ -64,6 +65,7 @@ function linkingAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
     baseURL: BASE_URL,
     secret: "auth-account-linking-test-secret-of-enough-length",
     database: authDatabaseAdapter(drizzle({ client })),
+    databaseHooks: authDatabaseHooks,
     account: ACCOUNT_TOKEN_STORAGE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     emailAndPassword: { enabled: true },
@@ -115,8 +117,8 @@ async function linkGitHub(auth: Auth) {
   const callback = new URL(`${BASE_URL}/api/auth/callback/github`);
   callback.searchParams.set("code", "github-code-under-test");
   callback.searchParams.set("state", authorize.searchParams.get("state") ?? "");
-  const landed = await auth.handler(
-    new Request(callback, { headers: { cookie: cookiesFrom(started, session) } }),
+  const { answer: landed, counts } = await withAuthCounts(() =>
+    auth.handler(new Request(callback, { headers: { cookie: cookiesFrom(started, session) } })),
   );
 
   const context = await auth.$context;
@@ -124,6 +126,8 @@ async function linkGitHub(auth: Auth) {
   assert.ok(found);
   const accounts = await context.internalAdapter.findAccounts(found.user.id);
   return {
+    counts,
+    userId: found.user.id,
     location: landed.headers.get("location") ?? "",
     providers: accounts.map((row) => row.providerId).sort(),
     github: accounts.find((row) => row.providerId === "github")?.accountId,
@@ -166,6 +170,10 @@ test("a signed-in account links a GitHub whose address is not its own, and holds
     assert.equal(landedAt.pathname + landedAt.search, DONE_URL);
     assert.deepEqual(linked.providers, ["credential", "github"]);
     assert.equal(linked.github, String(GITHUB_ACCOUNT_ID));
+    // Counted under the account that linked, as a link and not as a sign-up.
+    assert.deepEqual(linked.counts, [
+      { name: "github:account_link", userId: linked.userId, properties: {} },
+    ]);
   });
 });
 

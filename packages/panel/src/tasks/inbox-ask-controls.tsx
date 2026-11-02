@@ -37,7 +37,7 @@ import {
   TextField,
 } from "@luke/ui";
 import { isComposingKey } from "@luke/ui/composing-key";
-import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
+import { CheckIcon, Undo2Icon } from "@luke/ui/icons";
 import { MarkdownMessage } from "../markdown-message.js";
 import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
@@ -45,7 +45,6 @@ import {
   ANSWER_TONE,
   type AnswerTone,
   answeredDraft,
-  CLOSED_WORDS,
   decideButtons,
   doDecision,
   fieldValueOf,
@@ -884,25 +883,7 @@ export function AnsweredCard({
 /** What an ask's line says of one answered, where the answer itself is not drawn beside it. */
 export const ANSWERED = "Answered";
 
-/** What an ask's line says of one taken back. */
-const WITHDRAWN = "Withdrawn";
-
-/**
- * How a withdrawn ask's line reads, after a slashed circle: "Withdrawn"
- * where its agent said why, the why standing apart (`WithdrawnWhy`) so a
- * long one never wraps inside the line, or, where none was said, that it
- * was resolved without an answer.
- */
-export function WithdrawnWords({ reason }: { reason: string | undefined }): React.JSX.Element {
-  return (
-    <span className={INBOX_ASK_STANDING}>
-      <GLYPH.DISMISSED />
-      {reason === undefined ? CLOSED_WORDS : WITHDRAWN}
-    </span>
-  );
-}
-
-/** Why an ask was taken back, as a muted sentence under its line; nothing where none was said. */
+/** Why an ask was taken back, as a muted sentence under the line saying so; nothing where none was said. */
 export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.JSX.Element | null {
   if (reason === undefined) return null;
   return (

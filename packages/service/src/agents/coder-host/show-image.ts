@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { asPictureList } from "@luke/features/agent-pictures-model";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   type KeptPicture,
@@ -168,7 +169,7 @@ export function runShowImage(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const read = readEither(SHOW_IMAGE_INPUT)(input);
+    const read = readEither(SHOW_IMAGE_INPUT)(asPictureList(input));
     if (Result.isFailure(read)) return showImageRejected(SHOW_IMAGE_REFUSAL.UNREADABLE);
     const pictures: ReadPicture[] = [];
     for (const image of read.success.images) {

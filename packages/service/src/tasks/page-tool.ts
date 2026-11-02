@@ -82,7 +82,7 @@ const CODER_SHOW_PAGE_INPUT = Schema.Struct({
   ),
   path: describeWire(
     Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1_024)),
-    "A file in your sandbox holding the page as one whole HTML document, relative to the checkout.",
+    "A file in your sandbox holding the page as one whole HTML document, relative to your working folder or absolute.",
   ),
   page: Schema.optionalKey(
     describeWire(

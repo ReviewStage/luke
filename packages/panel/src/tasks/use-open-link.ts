@@ -1,6 +1,6 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { isGitHubAddress, isOpenableAddress } from "@luke/host/acts";
 import {
   listedPullRequestOf,
   pullRequestAgentOf,
@@ -211,7 +211,7 @@ export function useOpenPlace(): ((place: LinkPlace) => void) | undefined {
  * that opens nothing; an app link is a web address, and both take it.
  */
 export function opensAsLink(href: string): boolean {
-  return isGitHubAddress(href) || isWebAddress(href);
+  return isGitHubAddress(href) || isOpenableAddress(href);
 }
 
 /** The place an app link names, or the plan a link written before the link was settled names; nothing for any other address. */

@@ -26,7 +26,7 @@ export const MEMORY_BOUNDS = {
   /** The longest memory kept: a fact or a convention in a sentence or three, never a document. */
   MAX_CHARS: 400,
   /** The most memories one workspace keeps; past it a new one is refused until one is corrected or forgotten. */
-  MAX_MEMORIES: 200,
+  MAX_MEMORIES: 1_000,
 } as const;
 
 /** The query every request names its workspace in, and `DELETE` its memory. */

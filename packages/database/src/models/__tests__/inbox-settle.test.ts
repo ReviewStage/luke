@@ -63,6 +63,7 @@ const standingOf = (itemId: string) =>
         closedReason: inboxItem.closedReason,
         closedBy: inboxItem.closedBy,
         openAsk: inboxItem.openAskMessageId,
+        settledAt: inboxItem.settledAt,
       })
       .from(inboxItem)
       .where(eq(inboxItem.id, itemId));
@@ -73,22 +74,33 @@ const standingOf = (itemId: string) =>
     return {
       ...(item ?? assert.fail("the item is gone")),
       asks: messages.flatMap(({ ask }) =>
-        ask === null ? [] : [{ status: ask.status, withdrawnReason: ask.withdrawnReason }],
+        ask === null
+          ? []
+          : [
+              {
+                status: ask.status,
+                withdrawnReason: ask.withdrawnReason,
+                withdrawnAt: ask.withdrawnAt,
+              },
+            ],
       ),
     };
   });
 
-/** The items stand open, each question's ask open too. */
+/** The items stand open, each question's ask open too, with no withdrawal's time left on it. */
 const assertOpen = (itemIds: readonly string[]) =>
   Effect.gen(function* () {
     for (const itemId of itemIds) {
       const standing = yield* standingOf(itemId);
       assert.equal(standing.status, INBOX_STATUS.OPEN);
-      for (const ask of standing.asks) assert.equal(ask.status, INBOX_ASK_STATUS.OPEN);
+      for (const ask of standing.asks) {
+        assert.equal(ask.status, INBOX_ASK_STATUS.OPEN);
+        assert.equal(ask.withdrawnAt, undefined);
+      }
     }
   });
 
-/** The items stand closed by no member, with why, and every ask they held withdrawn with the same why. */
+/** The items stand closed by no member, with why, and every ask they held withdrawn with the same why when the item settled. */
 const assertSettled = (itemIds: readonly string[], reason: string) =>
   Effect.gen(function* () {
     for (const itemId of itemIds) {
@@ -98,7 +110,11 @@ const assertSettled = (itemIds: readonly string[], reason: string) =>
       assert.equal(standing.closedBy, null);
       assert.equal(standing.openAsk, null);
       for (const ask of standing.asks) {
-        assert.deepEqual(ask, { status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: reason });
+        assert.deepEqual(ask, {
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+          withdrawnReason: reason,
+          withdrawnAt: standing.settledAt?.getTime(),
+        });
       }
     }
   });

@@ -7,13 +7,14 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { messages } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/agent-wire";
+import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/agent-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -51,6 +52,7 @@ import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
 } from "@luke/service/testing/integration-connect";
+import { scriptedHarnessLayer } from "@luke/service/testing/native-harness-fake";
 import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -148,6 +150,7 @@ const servicesOver = (clock: Clock.Clock) =>
       modelCatalogOf([]),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       ANALYTICS.layer,
+      scriptedHarnessLayer(fakeEve),
     );
   });
 
@@ -259,6 +262,8 @@ const startAgent = (owner: string, taskId: string) =>
         repository: null,
         planSnapshot: null,
         prompt: "Draft the invite email.",
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        payer: AGENT_PAYER.API_KEY,
       }),
     );
     const claimed = yield* claimRuntimeSession(

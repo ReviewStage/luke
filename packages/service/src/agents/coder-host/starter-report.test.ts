@@ -6,8 +6,9 @@ import { type Agent, archiveAgent, createAgent } from "@luke/database/models/age
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { SettledTurnListener, storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { agentMessageReplyLine } from "@luke/features/agent-wire";
+import { AGENT_PAYER, agentMessageReplyLine } from "@luke/features/agent-wire";
 import {
   AssistantMessageBuilder,
   RUN_EVENT,
@@ -39,7 +40,7 @@ const T0 = new Date("2026-10-28T12:00:00Z").getTime();
 
 const REPORT = "Opened the pull request; the checks are green and auto-merge is armed.";
 
-/** A member of a fresh workspace, their orchestrating agent with its eve session recorded, and an agent it started. */
+/** A member of a fresh workspace, their orchestrating agent with its session recorded, and an agent it started, both on Claude Code. */
 const openStarted = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -48,7 +49,12 @@ const openStarted = () =>
     yield* connectAgentApiKeys(member);
     const organizationId = yield* openWorkspace(member);
     const start = { taskId: null, organizationId, planSnapshot: null, repository: null };
-    const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+    const choice = {
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: AGENT_PAYER.API_KEY,
+    };
     const starter = Option.getOrThrow(
       yield* createAgent(member, {
         ...start,
