@@ -39,7 +39,7 @@ import { pictureBudgetMiddleware } from "./picture-budget.js";
  * options. Nothing goes through AI Gateway, so the catalog's efforts for a
  * model are handed to the provider as the catalog lists them. Each step
  * also asks for its reasoning in words, so the agent's tab can show what
- * it thought as the Work tab shows Luke's: OpenAI for a summary, as the
+ * it thought as the Work tab shows Fullspin's: OpenAI for a summary, as the
  * brain does, and Anthropic for its summarized thinking on a
  * model that thinks whether asked or not. A fast version runs as its base
  * model asked for Anthropic's fast speed, the SDK sending the beta header
@@ -58,8 +58,8 @@ import { pictureBudgetMiddleware } from "./picture-budget.js";
  * revealed here alone, into the SDK client that puts it on its requests.
  *
  * A step runs on the account's own key for its provider, and never on
- * Luke's: an account that saved none for the provider, or whose key cannot
- * be read, has the step refused, so nothing is quietly billed to Luke. A step on the
+ * Fullspin's: an account that saved none for the provider, or whose key cannot
+ * be read, has the step refused, so nothing is quietly billed to Fullspin. A step on the
  * account's key reports how the provider answered it, so its row reads
  * invalid when the provider refuses the key, quota exceeded when it refuses
  * the work for the key's billing, and verified again once a step goes
@@ -377,8 +377,8 @@ export function titleModel(own: OwnKey, fetch?: typeof globalThis.fetch): Langua
 }
 
 /**
- * The choice as a step runs it, or why it cannot: a provider Luke does not
- * run, a fast version Luke cannot ask its provider for, an account's key
+ * The choice as a step runs it, or why it cannot: a provider Fullspin does not
+ * run, a fast version Fullspin cannot ask its provider for, an account's key
  * that cannot be read, or no key at all. `onFastRefused` marks the step's turn where a fast call of it ran at
  * standard speed instead.
  */

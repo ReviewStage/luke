@@ -20,13 +20,13 @@ import { CatalogSection } from "../section";
 /**
  * auth-page.tsx -- the sign-in page with its provider choices, a landing's
  * ringed mark on its way, settled, and failed, with and
- * without Open Luke, and a form with an error on a phone's width, each in a
+ * without Open Fullspin, and a form with an error on a phone's width, each in a
  * frame the size of the screen it stands for. Every name and address is
  * made up.
  */
 
-/** Open Luke as a page offers it; the catalog goes nowhere. */
-const OPEN_LUKE = { label: "Open Luke", href: "#" } as const;
+/** Open Fullspin as a page offers it; the catalog goes nowhere. */
+const OPEN_LUKE = { label: "Open Fullspin", href: "#" } as const;
 
 function Face(): React.JSX.Element {
   return (
@@ -49,7 +49,7 @@ function EmailForm(): React.JSX.Element {
   const [email, setEmail] = useState("someone@acme-corporation.example");
   return (
     <>
-      <FormField label="Work email" description="Luke sends a sign-in link to it.">
+      <FormField label="Work email" description="Fullspin sends a sign-in link to it.">
         {(control) => (
           <TextField
             field={control}
@@ -71,8 +71,8 @@ function AuthPages(): React.JSX.Element {
         <div className="catalog-screen">
           <AuthPage
             mark={<Face />}
-            title="Sign in to Luke"
-            footnote="You can close this window after Luke confirms the sign-in."
+            title="Sign in to Fullspin"
+            footnote="You can close this window after Fullspin confirms the sign-in."
           >
             <ProviderChoices />
           </AuthPage>
@@ -83,7 +83,7 @@ function AuthPages(): React.JSX.Element {
           <div className="catalog-screen catalog-screen-phone">
             <SocialSignInCard
               mark={<Face />}
-              title="Luke admin"
+              title="Fullspin admin"
               pending={undefined}
               onPress={() => undefined}
             />
@@ -119,7 +119,7 @@ function AuthPages(): React.JSX.Element {
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.DANGER} />}
-              title="Luke could not reach Notion"
+              title="Fullspin could not reach Notion"
               description="Try again in a moment."
               action={OPEN_LUKE}
             />
@@ -128,20 +128,20 @@ function AuthPages(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection
         id="auth-luke"
-        title="Luke's own mark, on its way and failed, with no Open Luke"
+        title="Fullspin's own mark, on its way and failed, with no Open Fullspin"
       >
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark />}
-              title="Continuing to Luke…"
+              title="Continuing to Fullspin…"
               description="This window will close soon."
             />
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark tone={LANDING_TONE.DANGER} />}
-              title="Luke could not continue"
+              title="Fullspin could not continue"
               description="Start sign-in again."
             />
           </div>

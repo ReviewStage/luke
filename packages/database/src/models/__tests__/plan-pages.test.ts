@@ -20,7 +20,7 @@ import { createTask, deleteTask } from "../task-store.js";
  * member of the task's workspace reads the newest version or one named,
  * beside the task it stands on and its newest version, and an account
  * outside the workspace, or a version the page never had, reads nothing.
- * Each version keeps who showed it, Luke or a coding agent by its id, which
+ * Each version keeps who showed it, Fullspin or a coding agent by its id, which
  * a member reads on the plan's list and on the version, and a version shown
  * before that was kept reads as shown by no one named.
  *

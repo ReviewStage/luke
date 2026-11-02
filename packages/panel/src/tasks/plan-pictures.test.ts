@@ -25,7 +25,7 @@ import { VersionView } from "./version-view.js";
 /**
  * plan-pictures.test.ts -- a plan's pictures where its words are drawn: each
  * read through the host and drawn from its bytes with its caption, one this
- * reader cannot reach drawn as its words, one from outside Luke a link that
+ * reader cannot reach drawn as its words, one from outside Fullspin a link that
  * reads nothing, a press opening the plan's pictures over the window, and a
  * version drawing a picture it struck and the one it wrote in, each marked,
  * and the plan's card in an agent's transcript drawing the plan's pictures.
@@ -174,7 +174,7 @@ test("who last changed a picture's section is said in the viewer over the window
 
   assert.deepEqual(
     [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
-    ["Luke 2h"],
+    ["Fullspin 2h"],
     "only the section with a heading carries its line in the words",
   );
 
@@ -189,12 +189,12 @@ test("who last changed a picture's section is said in the viewer over the window
   });
   assert.equal(
     note(),
-    "Edited by Luke · 2h ago",
+    "Edited by Fullspin · 2h ago",
     "the next picture, by the section that draws it rather than one naming its address",
   );
 });
 
-test("a picture from outside Luke is a link to it, and nothing is read for it", async () => {
+test("a picture from outside Fullspin is a link to it, and nothing is read for it", async () => {
   const taskId = "c4d5e6f7-1a2b-4c3d-8e9f-0a1b2c3d4e05";
   const asked: string[] = [];
   standHost(new Set(), asked);

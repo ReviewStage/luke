@@ -1,7 +1,7 @@
 /**
- * link-home.ts -- where a Luke link lives: the host its address is written on, the desktop's own scheme, and the earlier names every reader still takes.
+ * link-home.ts -- where a Fullspin link lives: the host its address is written on, the desktop's own scheme, and the earlier names every reader still takes.
  *
- * A Luke link is the thing's address on the web, `https://<host>/<workspace>/…`,
+ * A Fullspin link is the thing's address on the web, `https://<host>/<workspace>/…`,
  * and the desktop is handed the same address with its scheme swapped for the
  * app's own. The product's name, and so
  * the host and the scheme, may still change, so both are spelled here and
@@ -33,9 +33,9 @@ export const LINK_ORIGIN = `https://${LINK_HOME.HOST}`;
 const APP_LINK_PROTOCOL = `${LINK_HOME.APP_SCHEME}:`;
 
 /**
- * Luke's home in the desktop's own scheme. It names no place, so the app
+ * Fullspin's home in the desktop's own scheme. It names no place, so the app
  * opens nothing of it (`app-links.ts`), but macOS still brings the app
- * forward to take it: the link a page hands a Mac to open Luke at all.
+ * forward to take it: the link a page hands a Mac to open Fullspin at all.
  */
 export const APP_HOME_LINK = `${APP_LINK_PROTOCOL}//${LINK_HOME.HOST}/`;
 
@@ -50,7 +50,7 @@ export function isAppLinkProtocol(protocol: string): boolean {
   return APP_PROTOCOLS.has(protocol);
 }
 
-/** Whether an address is a Luke link's: on the home's host or an alias of it, by the web's scheme or the desktop's. */
+/** Whether an address is a Fullspin link's: on the home's host or an alias of it, by the web's scheme or the desktop's. */
 export function isLinkHome(url: URL): boolean {
   return HOSTS.has(url.host) && (url.protocol === "https:" || isAppLinkProtocol(url.protocol));
 }

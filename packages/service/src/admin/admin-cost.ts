@@ -7,7 +7,7 @@
  * the seconds of dictation the service metered, priced per second at the
  * provider's published list price. No turn
  * records whose key paid for it — a coding agent's step on the account's own
- * key keeps the same usage row as one on Luke's — so the totals count every
+ * key keeps the same usage row as one on Fullspin's — so the totals count every
  * model token whichever key paid, and say so. A model the catalog does not
  * price is never a zero: its tokens are told apart as unpriced, and every
  * dollar figure is the priced part alone.

@@ -60,7 +60,7 @@ function git(root: string, ...args: string[]): string {
     "git",
     [
       "-c",
-      "user.name=Luke",
+      "user.name=Fullspin",
       "-c",
       "user.email=luke@example.com",
       "-c",

@@ -1,5 +1,5 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed, its beat told of a newer release and listing where its update stands; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Fullspin never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed, its beat told of a newer release and listing where its update stands; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
  *
  * Synthetic accounts, bearers, codes, Macs, hosts, and keys throughout.
  */
@@ -527,7 +527,7 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
   );
 
   it.effect(
-    "a desktop enrolls its own Mac on its sign-in, created where Luke never saw it, which then calls on its secret, is listed as a Mac with its user and why its setup failed, and is removed as any machine; no other account enrolls it",
+    "a desktop enrolls its own Mac on its sign-in, created where Fullspin never saw it, which then calls on its secret, is listed as a Mac with its user and why its setup failed, and is removed as any machine; no other account enrolls it",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();

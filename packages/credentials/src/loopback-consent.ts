@@ -21,8 +21,8 @@ import { codeChallenge, createCodeVerifier } from "./pkce.js";
  * One consent trip, from a press to a grant: an authorization page opened in
  * the user's own browser, a code handed back on a loopback redirect that never
  * leaves this machine, and a PKCE-verified exchange with whoever issued the
- * page. Every provider Luke asks consent of runs this same trip — today the
- * Luke account — and differs only in the four things the options below name: which ports the redirect may land on, what the
+ * page. Every provider Fullspin asks consent of runs this same trip — today the
+ * Fullspin account — and differs only in the four things the options below name: which ports the redirect may land on, what the
  * authorization page's URL is, what the exchange does with the code, and how
  * the landing card is worded.
  *
@@ -61,10 +61,10 @@ const ARRIVAL_GRACE_MS = 1_000;
  * a row shows beside the provider's name.
  */
 const SHARED_REASON = {
-  UNAVAILABLE: "Luke could not open a sign-in callback on this machine.",
+  UNAVAILABLE: "Fullspin could not open a sign-in callback on this machine.",
   ALREADY_WAITING: "A sign-in is already waiting in your browser.",
-  BROWSER: "Luke could not open the sign-in page in your browser.",
-  CHALLENGE: "Luke could not prepare a secure sign-in on this machine.",
+  BROWSER: "Fullspin could not open the sign-in page in your browser.",
+  CHALLENGE: "Fullspin could not prepare a secure sign-in on this machine.",
   OFFLINE: "This machine is offline.",
 } as const;
 
@@ -75,7 +75,7 @@ const SHARED_REASON = {
 const ALREADY_USED_CARD = {
   badge: "Already used",
   title: "This sign-in has already been used",
-  body: "You can close this tab and return to Luke.",
+  body: "You can close this tab and return to Fullspin.",
 } as const;
 
 const RESPONSE_STATUS = {
@@ -116,7 +116,7 @@ function parameter(
  * Binds the first port that is free, or the one ephemeral port when the flow
  * named none, and answers the trip's own callback on it for as long as the scope
  * this is called in stands. A registered port already held is the ordinary
- * case — another copy of Luke, or another app — and not a failure until every
+ * case — another copy of Fullspin, or another app — and not a failure until every
  * address the provider knows has been tried, because a port it was never told
  * about would fail at the redirect instead. An attempt that never listened
  * releases as a no-op, so a port tried past costs the trip nothing.

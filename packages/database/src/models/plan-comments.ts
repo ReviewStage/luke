@@ -44,7 +44,7 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * Each write takes the plan row's lock first, as the plan's own save does,
  * so a thread started while the text is saved lands on the text as saved. A comment
  * is edited or deleted only by its writer, and a whole thread deleted only by
- * its starter, or by any member where Luke or an agent started it; the rest,
+ * its starter, or by any member where Fullspin or an agent started it; the rest,
  * resolving and reopening, is any member's or agent's.
  *
  * A thread's anchor is offsets into the plan's text (`schemas/plan-comment.ts`).
@@ -64,7 +64,7 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
  * Who writes to a thread: the account it acts for, and whether it is that
- * member or a coding agent on it. Luke is read back from entries written
+ * member or a coding agent on it. Fullspin is read back from entries written
  * while a task had one, and nothing writes as him now.
  */
 export type PlanCommentWriterRef =
@@ -558,7 +558,7 @@ function writtenBy(row: EntryRow, writer: PlanCommentWriterRef): boolean {
 
 /**
  * Whether the writer may delete the whole thread: its starter may, and any
- * member may where Luke or an agent started it, since no member wrote it.
+ * member may where Fullspin or an agent started it, since no member wrote it.
  */
 function mayDeleteThread(starter: EntryRow, writer: PlanCommentWriterRef): boolean {
   if (writtenBy(starter, writer)) return true;
@@ -752,10 +752,10 @@ function settled(
 }
 
 /**
- * What a member, Luke, or an agent does to one thread of the plan: answer
+ * What a member, Fullspin, or an agent does to one thread of the plan: answer
  * it, edit or delete a comment of its own (deleting the first deletes the
  * thread), resolve or reopen it, or delete it whole, which only its starter
- * does, or any member where Luke or an agent started it. Nothing where the
+ * does, or any member where Fullspin or an agent started it. Nothing where the
  * account reaches no such plan, or the plan no such thread.
  */
 export function actOnPlanCommentThread(
@@ -819,7 +819,7 @@ export function actOnPlanCommentThread(
 }
 
 /**
- * The line an ask wrote taken back, where its hand-over to Luke or the agent
+ * The line an ask wrote taken back, where its hand-over to Fullspin or the agent
  * did not land, so the thread never says someone was asked who was not.
  */
 export function withdrawPlanCommentAsk(taskId: string, clientKey: string): TaskStoreEffect<void> {

@@ -195,8 +195,8 @@ test("the deployment's retire of a session, which a delete a browser asked for e
   }
 });
 
-test("a Claude Code agent is told of Claude Code's own tools and never of Luke's it is not offered, and an eve agent of Luke's as before", () => {
-  // The tools Claude Code owns in place of Luke's, as eve's instructions name Luke's.
+test("a Claude Code agent is told of Claude Code's own tools and never of Fullspin's it is not offered, and an eve agent of Fullspin's as before", () => {
+  // The tools Claude Code owns in place of Fullspin's, as eve's instructions name Fullspin's.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -242,7 +242,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
           [],
           label,
         );
-        // The tools that touch Luke stay Luke's, under their own names.
+        // The tools that touch Fullspin stay Fullspin's, under their own names.
         for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
           assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
         }
@@ -262,7 +262,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
   }
 });
 
-test("a Claude Code or Codex agent is told of its browser, which Luke's MCP server serves it, with Playwright run from its own shell", () => {
+test("a Claude Code or Codex agent is told of its browser, which Fullspin's MCP server serves it, with Playwright run from its own shell", () => {
   const BROWSER = `\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox`;
   const SHELL_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "on Playwright from Bash,"],
@@ -353,7 +353,7 @@ test.each([
     untold: ["Linux virtual machine of your own", "Claude Code's own sandbox"],
   },
 ])(
-  "a local agent run on Luke's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
+  "a local agent run on Fullspin's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
   ({ isolation, told, untold }) => {
     const VM = {
       local: true,
@@ -389,8 +389,8 @@ test.each([
   },
 );
 
-test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
-  // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
+test("a Codex agent is told of Codex's own tools and never of Fullspin's it is not offered, nor of Claude Code's", () => {
+  // Fullspin's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -574,7 +574,7 @@ test("the session sends whatever is ready for the developer to look at or review
   }
 });
 
-test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
+test("an agent writing as its developer is told to end every commit on the trailer naming Fullspin as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(AGENT_BRIEF)) {
     const developer = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER);

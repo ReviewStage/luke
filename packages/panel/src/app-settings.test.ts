@@ -87,7 +87,7 @@ function toasts(): string[] {
 }
 
 test("a Restart main refuses raises a toast in main's own words", async () => {
-  const refusal = "Luke can't restart while a call is open.";
+  const refusal = "Fullspin can't restart while a call is open.";
   const panel = await mountRefusingInstall(refusal);
 
   await act(async () => panel().updates.onInstall());

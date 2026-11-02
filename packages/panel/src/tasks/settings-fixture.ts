@@ -5,7 +5,7 @@
  * every page that reads the account, and Admin and Automations stand nowhere.
  * Under one of these profiles the window's document holds a synthetic
  * account instead, the owner of the fixture's first workspace and an admin of
- * Acme, signed in and an admin of Luke, with the experiments its pages stand
+ * Acme, signed in and an admin of Fullspin, with the experiments its pages stand
  * behind turned on; the window opens on the page the profile names; and each
  * read those pages ask is answered here, through the act door (`act.ts`), as
  * main would answer it with the service behind it. The workspaces' members
@@ -81,7 +81,7 @@ const ACCOUNT: AccountSnapshot = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 
-/** An admin of Luke, read, so Admin stands rather than waiting on the read. */
+/** An admin of Fullspin, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
 /** The experiments the staged pages stand behind: Hosts' page, Skills', and Memory's. */
@@ -730,7 +730,7 @@ export function settingsLaunchLink(profile: string): SettingsLink | undefined {
 
 /**
  * Main's document as these profiles draw it: the account signed in, an
- * admin of Luke, with the staged pages' experiments on. The same document,
+ * admin of Fullspin, with the staged pages' experiments on. The same document,
  * the very object, under any other profile. Each slice laid over is one
  * object across deliveries, but the settings, which carry main's own, so a
  * delivery that moves nothing of them draws nothing again.

@@ -282,7 +282,7 @@ function TextFields(): React.JSX.Element {
             {(value, onChange) => (
               <SettingsRow
                 label="Cron"
-                error={inputProblem("That isn't a schedule Luke can read.")}
+                error={inputProblem("That isn't a schedule Fullspin can read.")}
               >
                 {(control) => (
                   <TextField

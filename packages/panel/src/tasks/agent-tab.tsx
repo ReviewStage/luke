@@ -377,7 +377,7 @@ const AUTOMATION_WORDS = "Automation";
  * What a transcript opens on where something handed it its first message:
  * the sender line under the card, naming who, the card's kind where it is not
  * the transcript's own lead, and the card's words where they are not the
- * message's own, an automation's prompt without the lines Luke adds of its
+ * message's own, an automation's prompt without the lines Fullspin adds of its
  * firing, with the webhook body that rode in with it.
  */
 export interface TranscriptOrigin {
@@ -1447,7 +1447,7 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
+  /** Who wrote or said the message, named over it: a teammate, Fullspin, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
   arrived?: readonly ArrivedLine[];
@@ -1511,7 +1511,7 @@ export function AgentMessage({
         </Message>
       );
     }
-    // A line anyone but the reader sent (a teammate's, an automation's, Luke's) stands at the left under its sender, as another agent's message does, so the reader's own alone stands at the right.
+    // A line anyone but the reader sent (a teammate's, an automation's, Fullspin's) stands at the left under its sender, as another agent's message does, so the reader's own alone stands at the right.
     const received = sender !== undefined;
     const threadHead =
       thread === undefined ? null : (

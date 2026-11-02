@@ -1,10 +1,10 @@
 /**
- * sentry-environment.ts -- the environment a desktop build's Sentry reports are filed under, by which Luke it is.
+ * sentry-environment.ts -- the environment a desktop build's Sentry reports are filed under, by which Fullspin it is.
  */
 
 import type { AppIdentityContext } from "./app-identity.js";
 
-/** The environment a build's reports are filed under; the release is the same `Luke@X.Y.Z` for each. */
+/** The environment a build's reports are filed under; the release is the same `Fullspin@X.Y.Z` for each. */
 export const SENTRY_ENVIRONMENT = {
   /** A packaged build signed with the Developer ID: what users run. */
   PRODUCTION: "production",

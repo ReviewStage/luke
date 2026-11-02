@@ -100,7 +100,7 @@ export interface TurnClock {
 /**
  * The developer's own time as the turn opens: the weekday, the date, and the
  * time in their zone, the zone's name and offset, and the time in UTC beside
- * them, then today as the date mention the plan writes it, so Luke counts
+ * them, then today as the date mention the plan writes it, so Fullspin counts
  * "Friday" from their today rather than UTC's and spells a time at their
  * offset. A turn whose window named no zone, a desktop released before it
  * sent one, reads UTC and says so.
@@ -143,11 +143,11 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * What a turn about a task is handed beside its instructions: the
  * developer's own time and today (`developerTimeText`), the plan's name, the
  * developer's brief where they wrote one as they started it, the saved
- * document as JSON, the newest saves coding agents made on it (so Luke can
+ * document as JSON, the newest saves coding agents made on it (so Fullspin can
  * raise what an agent asked or decided), the sections the developer last
- * wrote themselves (so Luke treats them as decided), and the plan's open
- * comment threads (so Luke can raise what a member asked), each read again
- * every turn so what Luke saved is what the next turn reads. A task that no
+ * wrote themselves (so Fullspin treats them as decided), and the plan's open
+ * comment threads (so Fullspin can raise what a member asked), each read again
+ * every turn so what Fullspin saved is what the next turn reads. A task that no
  * longer stands gets the heading and the developer's time alone.
  */
 export function standingContext(

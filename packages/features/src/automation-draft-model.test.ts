@@ -112,7 +112,7 @@ test("a new draft runs at nine on weekdays in the window's zone, and a saved one
   );
 });
 
-test("a draft saves once it is named, told its task, on a schedule Luke reads at most every 15 minutes, and in a repository", () => {
+test("a draft saves once it is named, told its task, on a schedule Fullspin reads at most every 15 minutes, and in a repository", () => {
   const fresh = automationDraft(undefined, DEFAULTS);
   assert.deepEqual(Object.keys(draftProblems(fresh, false, NOW)).toSorted(), [
     DRAFT_FIELD.NAME,
@@ -131,7 +131,7 @@ test("a draft saves once it is named, told its task, on a schedule Luke reads at
   const unread = { ...written, schedule: scheduleDraftOf("every morning") };
   assert.equal(
     draftProblems(unread, false, NOW)[DRAFT_FIELD.SCHEDULE],
-    "That isn't a schedule Luke can read.",
+    "That isn't a schedule Fullspin can read.",
   );
   const nowhere = { ...written, timezone: "Mars/Olympus" };
   assert.equal(draftProblems(nowhere, false, NOW)[DRAFT_FIELD.SCHEDULE], "Pick a time zone.");

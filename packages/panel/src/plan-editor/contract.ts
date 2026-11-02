@@ -302,7 +302,7 @@ export type MentionDrawer = (
 interface ComposerMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly drawMention: MentionDrawer;
-  /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
+  /** The mention words pasted whole stand for, an address of Fullspin's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
 }
 
@@ -339,7 +339,7 @@ export interface PlanEditorMentions {
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly drawMention: MentionDrawer;
   readonly retarget: (target: string, change: HeadingsChange) => MentionNode | undefined;
-  /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
+  /** The mention words pasted whole stand for, an address of Fullspin's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
   /** Whether a link's target names a mention, which the read view draws as its chip, so the editor draws the link in a chip's light look. */
   readonly namesMention: (target: string) => boolean;
@@ -356,7 +356,7 @@ export interface EditorSpan {
 /** An editor as mounted. */
 export interface PlanEditorHandle extends EditorFormatting {
   /**
-   * A save's merged answer taken in: Luke's part of `merged`, against what was
+   * A save's merged answer taken in: Fullspin's part of `merged`, against what was
    * `sent`, laid in place of the blocks it changed. Answers the text the next
    * save is a change from, and the text the editor holds now.
    */

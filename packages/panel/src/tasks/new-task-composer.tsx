@@ -216,7 +216,7 @@ const COMPOSER_WORDS = {
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
 const DEVICES_UNREAD: Failure = {
   reason: FAILURE_REASON.OTHER,
-  text: "Couldn't read your devices, so Luke can't tell where this task should run.",
+  text: "Couldn't read your devices, so Fullspin can't tell where this task should run.",
 };
 
 /** The devices Runs on offers before a read lists any, or while Bring your own host is off: none, so it offers Cloud alone. */

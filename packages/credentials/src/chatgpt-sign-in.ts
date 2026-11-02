@@ -1,5 +1,5 @@
 /**
- * chatgpt-sign-in.ts -- OpenAI's open-source Sign in with ChatGPT for Luke's hosted runtime, as the desktop runs it: one consent trip whose exchange hands the credentials straight to the service and answers only what the service said.
+ * chatgpt-sign-in.ts -- OpenAI's open-source Sign in with ChatGPT for Fullspin's hosted runtime, as the desktop runs it: one consent trip whose exchange hands the credentials straight to the service and answers only what the service said.
  *
  * The flow is the one OpenAI documents for an open-source client
  * (developers.openai.com/siwc/token-sharing-open-source/sign-in) and the one
@@ -10,7 +10,7 @@
  * otherwise) carrying the code and the issued `client_id`; the code is
  * exchanged under that client with the PKCE verifier; and the ID token is
  * checked against OpenAI's published keys, its issuer, audience, nonce and
- * expiry, before anything is kept. The host here is Luke's hosted runtime,
+ * expiry, before anything is kept. The host here is Fullspin's hosted runtime,
  * not this Mac (OpenAI's self-hosted VM recipe), so its id is the account's
  * own, which the service minted and serves.
  *
@@ -47,7 +47,7 @@ export const CHATGPT_SIGN_IN = {
   RESOURCE: "https://api.openai.com/v1",
   /** The first-registration entrypoint, never the client a sign-in is kept under. */
   REGISTRATION_CLIENT_ID: "dynamic_agent_client",
-  AGENT_NAME_HINT: "Luke",
+  AGENT_NAME_HINT: "Fullspin",
   CALLBACK_PATH: "/auth/callback",
   /** OpenAI's example port; any free one serves, since only the port may vary. */
   PREFERRED_PORT: 1455,
@@ -67,24 +67,24 @@ export const CHATGPT_SIGN_IN = {
 export const CHATGPT_SIGN_IN_REASON = {
   REFUSED: "ChatGPT sign-in was not completed.",
   TIMED_OUT: "ChatGPT sign-in timed out.",
-  UNREACHABLE: "Luke couldn't reach ChatGPT. Try again.",
-  NOT_REGISTERED: "ChatGPT didn't finish connecting Luke. Try again.",
+  UNREACHABLE: "Fullspin couldn't reach ChatGPT. Try again.",
+  NOT_REGISTERED: "ChatGPT didn't finish connecting Fullspin. Try again.",
   USAGE_NOT_ENABLED:
-    "ChatGPT subscription use wasn't enabled for Luke. Try again and allow it in the browser.",
-  NOT_VERIFIED: "Luke couldn't verify the ChatGPT sign-in. Try again.",
+    "ChatGPT subscription use wasn't enabled for Fullspin. Try again and allow it in the browser.",
+  NOT_VERIFIED: "Fullspin couldn't verify the ChatGPT sign-in. Try again.",
 } as const;
 
 /** The landing cards the browser is left on. */
 const PAGES = {
   granted: {
     badge: "Connected",
-    title: "Luke is connected to ChatGPT",
-    body: "You can close this tab and return to Luke.",
+    title: "Fullspin is connected to ChatGPT",
+    body: "You can close this tab and return to Fullspin.",
   },
   notGranted: {
     badge: "Not connected",
-    title: "Luke isn't connected to ChatGPT",
-    body: "Return to Luke to see why and try again.",
+    title: "Fullspin isn't connected to ChatGPT",
+    body: "Return to Fullspin to see why and try again.",
   },
 } as const;
 

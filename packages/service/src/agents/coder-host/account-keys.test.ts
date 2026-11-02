@@ -23,7 +23,7 @@ import { productionSummaryModel } from "./replay-summary.js";
  * The key a coding agent's step runs on, read from the account's rows over a
  * real dialect and spent against a provider faked at its fetch: the
  * account's own key where it saved one, and a step refused, never moved
- * onto Luke's key, where it saved none or its key cannot be read; the row's
+ * onto Fullspin's key, where it saved none or its key cannot be read; the row's
  * status kept as the provider answers the account's key; a fast step run on
  * the account's key with what it showed of the key's organization kept on
  * the row; and the own key a call beside the agents spends on.
@@ -150,7 +150,7 @@ async function step(selected: Awaited<ReturnType<typeof stepModel>>): Promise<st
   }
 }
 
-test("a step runs on the account's own key where it saved one, and is refused for a provider where it saved none, never run on Luke's key", async () => {
+test("a step runs on the account's own key where it saved one, and is refused for a provider where it saved none, never run on Fullspin's key", async () => {
   const userId = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
   });
@@ -196,7 +196,7 @@ async function ownKey(
   return own === undefined ? undefined : { provider: own.provider, key: Redacted.value(own.key) };
 }
 
-test("a call beside an account's agents, such as a title, chapters, or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none or none opens, never Luke's", async () => {
+test("a call beside an account's agents, such as a title, chapters, or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none or none opens, never Fullspin's", async () => {
   const both = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
     [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
@@ -223,7 +223,7 @@ test("a call beside an account's agents, such as a title, chapters, or a replay'
   assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, null), undefined);
 });
 
-test("a Claude setup-token is no key a step runs on: an account holding only one is refused as holding no key, never run on Luke's", async () => {
+test("a Claude setup-token is no key a step runs on: an account holding only one is refused as holding no key, never run on Fullspin's", async () => {
   const userId = await database.createUser();
   const ring = parseKeyRing(Redacted.make(RING.HELD));
   if (Result.isFailure(ring)) return assert.fail("not a ring");
@@ -252,7 +252,7 @@ test("a Claude setup-token is no key a step runs on: an account holding only one
   assert.deepEqual(anthropic.keys, []);
 });
 
-test("an account's key the ring cannot open, or one on a deployment holding no ring, refuses the step and never runs it on Luke's key", async () => {
+test("an account's key the ring cannot open, or one on a deployment holding no ring, refuses the step and never runs it on Fullspin's key", async () => {
   const userId = await accountWithKeys({ [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI });
   const reached = provider([jsonResponse({}, 200)]);
 
@@ -320,7 +320,7 @@ test("a fast step runs on the account's own key, and the key's row keeps what it
   assert.equal(await rowFastAccess(refused), FAST_ACCESS.NOT_ENABLED);
 });
 
-/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of Luke's, which it holds none of. */
+/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of Fullspin's, which it holds none of. */
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -363,7 +363,7 @@ async function titleModelFor(
   return own === undefined ? undefined : titleModel(own, fetch);
 }
 
-test("an agent's title is told on the account's own key, Anthropic's small model on its Anthropic key and OpenAI's on an OpenAI key it saved alone, and no model at all where it saved none, never on Luke's key", async () => {
+test("an agent's title is told on the account's own key, Anthropic's small model on its Anthropic key and OpenAI's on an OpenAI key it saved alone, and no model at all where it saved none, never on Fullspin's key", async () => {
   const anthropicKeyed = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
   });
@@ -401,7 +401,7 @@ function summaryModelFor(userId: string, choice: ModelChoice, fetch: typeof glob
   );
 }
 
-test("a replay's summary is written on the account's own key, the new agent's own model where it saved that provider's key and the other provider's where it saved only that, and none where it saved none, so the Start replays without one, never on Luke's key", async () => {
+test("a replay's summary is written on the account's own key, the new agent's own model where it saved that provider's key and the other provider's where it saved only that, and none where it saved none, so the Start replays without one, never on Fullspin's key", async () => {
   const anthropicKeyed = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
   });

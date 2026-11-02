@@ -18,7 +18,7 @@
  * started detached in a session of its own, so it outlives the command, and
  * waited for until its DevTools answers. Everything it starts runs with
  * every capability dropped (`sandbox-capabilities.ts`), since the pages the
- * browser loads are no one's Luke vouches for, which would make it read as
+ * browser loads are no one's Fullspin vouches for, which would make it read as
  * the agent's own work; it is told apart by its sessions' leaders instead
  * (`@luke/agent-runner/pins`'s `LUKE_BROWSER_PIN`), so it never holds a
  * sandbox up through a pause. Every value the script reads

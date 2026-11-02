@@ -17,7 +17,7 @@
  * token travels through the Mac's queue.
  * What this answers is the token the runner's launch was already handed as
  * the plan's payer, to the same sandbox the same bearer already reaches
- * Luke's MCP server from. The token is never logged, and travels in the
+ * Fullspin's MCP server from. The token is never logged, and travels in the
  * answer's body alone, which no cache keeps.
  *
  * A device asks here too, for a GitHub token for one of its agents
@@ -186,7 +186,7 @@ const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
-/** How a device runs agents that Luke hands a GitHub token: on Luke's sign-ins, in a VM or straight on the device. */
+/** How a device runs agents that Fullspin hands a GitHub token: on Fullspin's sign-ins, in a VM or straight on the device. */
 const ON_LUKES_SIGN_INS: ReadonlySet<DeviceIsolation> = new Set([
   DEVICE_ISOLATION.SANDBOX,
   DEVICE_ISOLATION.DIRECT,
@@ -196,7 +196,7 @@ const ON_LUKES_SIGN_INS: ReadonlySet<DeviceIsolation> = new Set([
  * A GitHub token for a device's own agent named in the body, the one rule
  * every device caller is held to: an installation token for the agent's
  * repository, where the agent is the member's own and pinned to the caller's own device
- * (`actsForDevice`), that device runs its agents on Luke's sign-ins, in a VM
+ * (`actsForDevice`), that device runs its agents on Fullspin's sign-ins, in a VM
  * of their own (`DEVICE_ISOLATION.SANDBOX`) or straight on the device
  * (`DEVICE_ISOLATION.DIRECT`), never on its developer's own logins
  * (`DEVICE_ISOLATION.BARE`), whose agents push on those, and the agent works in a

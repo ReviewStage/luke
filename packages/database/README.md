@@ -35,7 +35,7 @@ table sits in `public` rather than Drizzle's default `drizzle` schema, because
 `20261013123642_dead_tables_drop` drops that schema and would take the table
 with it partway through a fresh database's run.
 
-### Luke Sync's capture
+### Fullspin Sync's capture
 
 A synced table is declared in `src/sync/tables.ts` (`defineSyncTable`): the
 topics a write to it notifies on `luke_sync`, and the hot columns whose

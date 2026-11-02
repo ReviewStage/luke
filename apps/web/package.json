@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "Luke landing page",
+  "description": "Fullspin landing page",
   "engines": {
     "node": "24.x"
   },

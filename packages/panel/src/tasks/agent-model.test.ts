@@ -638,7 +638,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Luke's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
+  // Giving the repository to Fullspin's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -652,7 +652,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   );
   assert.deepEqual(notSelected, {
     reason: FAILURE_REASON.ADD_REPOSITORY,
-    text: "Luke's GitHub App doesn't have access to acme/relay.",
+    text: "Fullspin's GitHub App doesn't have access to acme/relay.",
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });
@@ -714,7 +714,7 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
   );
 });
 
-test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Luke's key paid for says to continue in a new one, Settings mending nothing", () => {
+test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Fullspin's key paid for says to continue in a new one, Settings mending nothing", () => {
   const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) => ({
     failure: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
     ...(provider === undefined ? undefined : { provider }),
@@ -745,7 +745,7 @@ test("a Start refused for a missing credential says in one sentence which harnes
       },
       {
         reason: FAILURE_REASON.OTHER,
-        text: "Luke's key no longer runs agents. Continue in a new one.",
+        text: "Fullspin's key no longer runs agents. Continue in a new one.",
       },
     ],
   );
@@ -770,13 +770,13 @@ test("a message to an agent whose device is away says it is offline, in the word
   );
 });
 
-test("a message Luke heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
+test("a message Fullspin heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
   assert.deepEqual(
     [
       messageFailureWords(AGENT_CALL_FAILURE.UNANSWERED),
       messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
     ],
-    ["Luke didn't hear back. Try again.", "Luke didn't hear back."],
+    ["Fullspin didn't hear back. Try again.", "Fullspin didn't hear back."],
   );
 });
 

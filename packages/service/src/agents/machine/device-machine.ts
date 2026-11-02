@@ -1,5 +1,5 @@
 /**
- * device-machine.ts -- the agent machine over the starter's Mac: the runner launched there by a line the Mac follows, its stdin written as more lines, and Luke's doors read through requests the Mac answers.
+ * device-machine.ts -- the agent machine over the starter's Mac: the runner launched there by a line the Mac follows, its stdin written as more lines, and Fullspin's doors read through requests the Mac answers.
  *
  * A local agent (`agent.machine` is `mac`) runs its runner on the
  * Mac it is pinned to (`agent.device_id`), which follows the rows the
@@ -11,7 +11,7 @@
  * `layout` and `open` answer at once, from the agent and the home folder its
  * Mac registered, with no round trip: the agent's folder in that home holds
  * its worktree, which the Mac makes as it takes the launch line, the files
- * a message carries, and the skills its member installed into Luke
+ * a message carries, and the skills its member installed into Fullspin
  * (`deviceAgentLayout`). `launchRunner` queues the launch line, its runner's
  * environment and first lines sealed together under the deployment's key
  * ring (`sealMacLaunchSecrets`) and opened again only by the Mac's claim,
@@ -26,7 +26,7 @@
  * holds (`../coder-host/runner-sessions.ts`), because the lines' order is
  * their order of commit and only the lease keeps two from interleaving
  * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
- * has no firewall Luke sets, so `setCredential` does nothing, and nothing
+ * has no firewall Fullspin sets, so `setCredential` does nothing, and nothing
  * to stop, resume, or throw away, since a warm runner ends by itself at its
  * idle cap, settling its line; the agent's folder goes from its device only
  * once the agent is archived (`../device-discard.ts`).
@@ -123,7 +123,7 @@ import {
 export const MAC_MACHINE = {
   /** How long a tool's request waits for its Mac's answer before the call is unavailable. */
   ANSWER_WAIT: Duration.seconds(30),
-  /** How often a waiting request, or a runner's exit, is read again where Luke Sync cannot wake it. */
+  /** How often a waiting request, or a runner's exit, is read again where Fullspin Sync cannot wake it. */
   POLL: Duration.millis(250),
   /** How long a read of a runner's exit waits where its caller names no wait, as a sandbox's does. */
   EXIT_WAIT: Duration.seconds(2),
@@ -170,7 +170,7 @@ function onlyEnds(text: string): boolean {
     .every((each) => Option.exists(decodeInputLine(each), (input) => ENDING_LINES.has(input.type)));
 }
 
-/** A local agent's place on its Mac, under Luke's session given: the agent itself, since it has one place. */
+/** A local agent's place on its Mac, under Fullspin's session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
   return { machine: AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
 }
@@ -236,7 +236,7 @@ function deviceMachineOver(
         // Note that the Mac writes the skills where they are installed, since no root installs them after.
         skillsUpload: folders.installedSkills,
         attachments: folders.attachments,
-        // Note that the Mac answers reads inside the agent's folder alone, so what Luke reads back is saved in its temp folder, never `/tmp`, which its VM keeps to itself.
+        // Note that the Mac answers reads inside the agent's folder alone, so what Fullspin reads back is saved in its temp folder, never `/tmp`, which its VM keeps to itself.
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,

@@ -308,9 +308,9 @@ export function editorTookTheirs(editor: DocumentEditor): DocumentEditor {
 }
 
 /**
- * The text once the open editor has taken Luke's part of a save's merged
+ * The text once the open editor has taken Fullspin's part of a save's merged
  * answer into its words: the base becomes the text the service holds of the
- * developer's and Luke's alike, and the words what the editor holds now, in
+ * developer's and Fullspin's alike, and the words what the editor holds now, in
  * one step, so no save goes out from the one without the other.
  */
 export function editorRebased(editor: DocumentEditor, base: string, draft: string): DocumentEditor {

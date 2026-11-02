@@ -2,11 +2,11 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * label.tsx -- shadcn/ui's label (style `base-nova`), vendored and drawn in Luke's label role.
+ * label.tsx -- shadcn/ui's label (style `base-nova`), vendored and drawn in Fullspin's label role.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add label` reads as a small diff. Its classes
- * are Luke's label rather than shadcn's: the label role's type in the text
+ * are Fullspin's label rather than shadcn's: the label role's type in the text
  * ink, at medium weight, breaking anywhere a long word must, and inline as
  * a label stands, so its words stay selectable and its line keeps the
  * baseline a count beside it sits on. A label in a stepped-back form takes

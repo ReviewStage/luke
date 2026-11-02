@@ -660,9 +660,9 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
 });
 
-test("the field asks to search Luke under All, and the kind under its filter", () => {
+test("the field asks to search Fullspin under All, and the kind under its filter", () => {
   openPalette();
-  assert.equal(field().placeholder, "Search Luke");
+  assert.equal(field().placeholder, "Search Fullspin");
 
   chooseFilter("This task");
   assert.equal(field().placeholder, "Search this task");
@@ -1571,7 +1571,7 @@ test("a task whose assignee and creator share a first name says the one the whol
   assert.deepEqual(rows(), ["Audit trail · relay · Charles Ward"]);
 });
 
-test("a task Luke or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
+test("a task Fullspin or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const task = (id: string, origin?: TaskSummary["origin"]) => ({
     id,
@@ -1605,7 +1605,7 @@ test("a task Luke or a coding agent made says who in its detail and is found by 
 
   assert.deepEqual(rows(), [
     "Invite emails · relay · by Agent",
-    "Audit log export · relay · by Luke",
+    "Audit log export · relay · by Fullspin",
     "Rate limits · relay",
   ]);
   assert.deepEqual(marks(), [null, null, null]);
@@ -2736,7 +2736,7 @@ test("⌘K still offers Show inbox for a task an item waits on while its agents 
   assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
 });
 
-test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
+test("⌘K draws no Issues filter, with every experiment on, since Fullspin keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();

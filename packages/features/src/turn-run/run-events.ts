@@ -78,7 +78,7 @@ type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
 export const RUN_TURN_ORIGIN = {
   /**
    * A developer's ask typed into a composer. No turn of this build opens
-   * under it — Luke is voice only — but the stored rows an earlier build
+   * under it — Fullspin is voice only — but the stored rows an earlier build
    * wrote carry it, and the hosted store's row shape still spells it.
    */
   TYPED: "typed",

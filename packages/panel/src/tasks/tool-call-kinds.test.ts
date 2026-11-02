@@ -64,7 +64,7 @@ function rowOf(tool: string, input: WireRecord, output: WireRecord) {
 
 const NO_ANSWER = { status: "accepted" };
 
-test("each of Luke's tools that fell through to 'Used' reads as its own verb, with no wrench", () => {
+test("each of Fullspin's tools that fell through to 'Used' reads as its own verb, with no wrench", () => {
   const rows = [
     [AGENT_TOOL.LIST_TASKS, {}, "Listed the tasks"],
     [

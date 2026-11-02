@@ -21,7 +21,7 @@ const DEMO = {
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 const DEMO_LABEL =
-  "A one-minute recording of a call with Luke: he asks about a budgeting feature while the plan fills in beside him.";
+  "A one-minute recording of a call with Fullspin: it asks about a budgeting feature while the plan fills in beside it.";
 
 export function DemoVideo(): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null);
@@ -39,7 +39,7 @@ export function DemoVideo(): React.JSX.Element {
 
   return (
     <PublicMedia>
-      {/* biome-ignore lint/a11y/useMediaCaption: Luke's side of the call is captioned in the recording itself; a track for the developer's side waits on a transcript. */}
+      {/* biome-ignore lint/a11y/useMediaCaption: Fullspin's side of the call is captioned in the recording itself; a track for the developer's side waits on a transcript. */}
       <video
         ref={video}
         src={DEMO.SOURCE}

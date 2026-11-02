@@ -1,5 +1,5 @@
 /**
- * tools.ts -- every tool Luke offers any of its agents, and the roles each one serves.
+ * tools.ts -- every tool Fullspin offers any of its agents, and the roles each one serves.
  *
  * The one registry of the agent runtime's tools:
  * each tool, named once by the name a model calls it by
@@ -12,7 +12,7 @@
  * role is one entry here and its implementation where the role's root
  * reaches it. The tools eve injects of its own beside a task or a connection
  * (`task_wait`, `task_cancel`, `connection_search`, `connection_execute`)
- * and a declared subagent's own tool are eve's, not Luke's, and are not
+ * and a declared subagent's own tool are eve's, not Fullspin's, and are not
  * listed.
  *
  * This module is a leaf: a tool's module takes its name from here, so the

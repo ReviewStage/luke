@@ -20,8 +20,8 @@ import type { HostOs } from "./host-os.js";
  * of its own in its folder (`agentWorktreeScript`), made from the box's
  * shared clone. Its harnesses run no sandbox of their own and ask no
  * approval (`RUNNER_PLACE.HOST`), and no login left on the box reaches
- * them, so they run on the sign-ins saved in Luke; its GitHub token comes
- * from Luke, in gh's config in its home. Claude Code refuses to skip its
+ * them, so they run on the sign-ins saved in Fullspin; its GitHub token comes
+ * from Fullspin, in gh's config in its home. Claude Code refuses to skip its
  * permissions as root unless it is told the box is a sandbox of its own, so
  * a host running as root, as a dedicated box's may, tells it so
  * (`IS_SANDBOX`). What differs by OS, the platform it registers as, its

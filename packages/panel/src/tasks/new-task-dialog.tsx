@@ -8,7 +8,7 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
- * new-task-dialog.tsx -- New task as a small modal over the window: the title, and the composer card whose words start a coding agent, or a plan with Luke.
+ * new-task-dialog.tsx -- New task as a small modal over the window: the title, and the composer card whose words start a coding agent, or a plan with Fullspin.
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds New task's composer
@@ -20,7 +20,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
- * Plan mode an empty plan and a call with Luke. Tab stays inside the
+ * Plan mode an empty plan and a call with Fullspin. Tab stays inside the
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
  * card away with nothing started, its words and files kept as New task's

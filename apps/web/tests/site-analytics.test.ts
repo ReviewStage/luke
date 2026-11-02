@@ -73,7 +73,7 @@ beforeAll(async () => {
     return new Response("{}", { status: 200 });
   });
   window.history.replaceState(null, "", LANDING_WITH_CODE);
-  document.body.innerHTML = "<main><h1>Luke</h1></main>";
+  document.body.innerHTML = "<main><h1>Fullspin</h1></main>";
   Reflect.set(window, "_POSTHOG_REMOTE_CONFIG", { [PROJECT_KEY]: { config: EVERYTHING_ON } });
   // Note that native gzip is removed before the import, because the recorder checks for it as it loads.
   Reflect.deleteProperty(globalThis, "CompressionStream");

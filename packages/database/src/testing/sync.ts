@@ -1,5 +1,5 @@
 /**
- * sync.ts -- Luke Sync's capture as a test reads it: the drift check, and what a write notifies.
+ * sync.ts -- Fullspin Sync's capture as a test reads it: the drift check, and what a write notifies.
  *
  * The drift check holds the migrated database to the declarations: every
  * function and trigger a declaration renders stands as it renders it, and

@@ -11,7 +11,7 @@
  * only the digests Postgres computes of them, or answered unchanged at the
  * hold's end, its digests and no rows, and the desktop asks again
  * (`sealedParts`). The hold looks again every 3 s, or every
- * second for a read someone watches move, or, for a read Luke Sync wakes
+ * second for a read someone watches move, or, for a read Fullspin Sync wakes
  * (`../sync/live-queries.ts`), whenever a write to its topics lands, and
  * then answers with that write's txid (`liveQueryParts`). The account's
  * inbox is one such read (`inboxLive`).
@@ -66,13 +66,13 @@
  * two statements, its channels and where each one's threads stand
  * (`inbox-store.ts`'s `channelsLiveStatements`), after the account is read
  * as a member of it, so a workspace it is not in is not found, as its held
- * read answers; woken by Luke Sync (`channelsLive`). Released desktops follow
+ * read answers; woken by Fullspin Sync (`channelsLive`). Released desktops follow
  * it; a build since follows `GET /api/live/workspace-channels?workspaceId=`,
  * which answers the list itself as four statements, every channel and, for
  * the reader, each one's threads, its asks waiting on them, and their looks
  * (`inbox-store.ts`'s `workspaceChannelsLiveStatements`), after the account
  * is read as a member and the workspace's #general minted where it has none
- * yet, as the held list mints it; woken by Luke Sync
+ * yet, as the held list mints it; woken by Fullspin Sync
  * (`workspaceChannelsLive`).
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
@@ -82,7 +82,7 @@
  * agent's workspace. A worker's delegation may not be recorded yet, as a
  * tab opened on its call is read before it is, so its statements name the
  * conversation the call will open rather than wait for it. It is woken by
- * Luke Sync (`agentTranscriptLive`), and a reader that names where it holds
+ * Fullspin Sync (`agentTranscriptLive`), and a reader that names where it holds
  * the newest messages (`cursor`) is answered only those written or amended
  * past it (`liveCursorParts`). Its answers are measured
  * (`transcript-metrics.ts`).
@@ -91,7 +91,7 @@
  * one plan's inbox, or one agent's, the same way: its open items and its
  * latest settled ones as one statement, their threads and files as two
  * more, after the plan or the agent is read as the account, so one it does
- * not reach is not found, as its held read answers; each woken by Luke Sync
+ * not reach is not found, as its held read answers; each woken by Fullspin Sync
  * (`taskInboxLive`, `agentInboxLive`).
  *
  * `GET /api/live/inbox-items?since=` answers every inbox item the account
@@ -101,7 +101,7 @@
  * carries them (`inbox-store.ts`'s `accountItemsLiveStatements`). Its poll
  * is held on where the items stand alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`),
  * so a reader whose `since` moved to the items it was just answered is
- * held rather than answered again; woken by Luke Sync on the account's
+ * held rather than answered again; woken by Fullspin Sync on the account's
  * topic (`inboxItemsLive`).
  */
 
@@ -347,7 +347,7 @@ function topicsOf<Param extends string, Part extends string>(
  * looks again every `look` where nothing wakes it, on every part or on
  * those it is held on alone (`heldOn`), and for an older reader on the
  * parts it keeps (`olderParts`, `sealedParts`). This is how a
- * procedure answers a read Luke Sync wakes; unavailable where its
+ * procedure answers a read Fullspin Sync wakes; unavailable where its
  * statements can't be built or its topics looked up.
  */
 const queryParts = /* @__PURE__ */ Effect.fnUntraced(function* <

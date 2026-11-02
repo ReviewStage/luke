@@ -182,7 +182,7 @@ test("the bound keeps the newest steps that fit and drops the oldest", () => {
   assert.deepEqual(newestStepsWithin(steps, 100_000), steps);
 });
 
-test("a summary Luke wrote of the steps left out reads back ahead of the steps, whatever its words hold", () => {
+test("a summary Fullspin wrote of the steps left out reads back ahead of the steps, whatever its words hold", () => {
   const summarized: Replay = {
     ...replay,
     summary: { text: "Recap 🚀\n<!-- luke:step kind=said chars=2 -->\nno", steps: 4 },
@@ -224,7 +224,7 @@ test("a tool step's state, input, and output read back from its marker, whatever
     },
     {
       kind: REPLAY_STEP_KIND.LINE,
-      summary: "Luke: hi",
+      summary: "Fullspin: hi",
       words: "Hi.",
       sender: { kind: REPLAY_SENDER.LUKE },
     },
@@ -306,7 +306,7 @@ test("a tool name or a moment the marker cannot spell is left out, and the step 
       input: "{}",
       output: "ok",
     }),
-    { kind: REPLAY_STEP_KIND.LINE, summary: "Luke: hi", words: "Hi.", at: -1 },
+    { kind: REPLAY_STEP_KIND.LINE, summary: "Fullspin: hi", words: "Hi.", at: -1 },
   ];
   const read = firstMessageParts(firstMessageText("Fix it.", { ...replay, steps }, undefined))
     .replay?.steps;

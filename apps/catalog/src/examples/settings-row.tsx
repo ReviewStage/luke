@@ -72,7 +72,10 @@ function HeldSwitch({ label, control }: { label: string; control: SettingsRowCon
 function Rows(): React.JSX.Element {
   return (
     <SettingsSection>
-      <SettingsRow label="Launch at login" description="Luke opens with the Mac, in the menu bar.">
+      <SettingsRow
+        label="Launch at login"
+        description="Fullspin opens with the Mac, in the menu bar."
+      >
         {(control) => <HeldSwitch label="Launch at login" control={control} />}
       </SettingsRow>
       <SettingsRow

@@ -643,7 +643,7 @@ function KeptInbox({
 }
 
 /**
- * Luke's window: the sidebar on the left and the chosen work on the right,
+ * Fullspin's window: the sidebar on the left and the chosen work on the right,
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
  * keeps its page list whatever the sidebar's collapse says, and hands the

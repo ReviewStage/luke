@@ -145,7 +145,7 @@ export function RepositoryDetail({
 /**
  * Who created the task, at the card's foot: their face and "Created by
  * Charles Pan · 3d ago", "Created by you", or a member who left saying so;
- * or, for a task Luke or an agent made, its square with the member's face on
+ * or, for a task Fullspin or an agent made, its square with the member's face on
  * its corner and "Created by Invite emails for you · from Teammate
  * invitations",
  * read against the members of the directory around the card, a press
@@ -162,7 +162,7 @@ function CreatorDetail({
 }): React.JSX.Element {
   const creator = useCreator(task, readerId);
   const maker = useTaskMaker(task);
-  // Note that the line opens the member it names, whoever made the task for them, since Luke and an agent have no page.
+  // Note that the line opens the member it names, whoever made the task for them, since Fullspin and an agent have no page.
   const door = useActorDoor(creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
   const by = `${actorName(creator, { sentence: true })}${left ? ", who left" : ""}`;
@@ -410,7 +410,7 @@ export function TaskCard({
       : related.find((each) => each.id === task.parentTaskId);
   const subTasks = subTasksOf(related, task.id);
   const placed = parent !== undefined || subTasks.length > 0 || task.blocked === true;
-  // Note that a task Luke or an agent made says so in a workspace of one too, where its member's own needs no saying.
+  // Note that a task Fullspin or an agent made says so in a workspace of one too, where its member's own needs no saying.
   const creatorShown =
     (task.origin !== undefined || (shared ?? (members !== undefined && members.length > 1))) &&
     (task.createdBy !== undefined || task.ownerId !== undefined);

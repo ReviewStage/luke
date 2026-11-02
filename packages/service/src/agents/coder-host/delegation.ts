@@ -64,7 +64,7 @@ export function delegationChoice(
   if (Result.isSuccess(checked)) return checked;
   if (checked.failure === MODEL_CHOICE_REFUSAL.UNKNOWN_MODEL) {
     return Result.fail(
-      `Not run: \`${choice.model}\` is no model Luke offers. The models: ${offeredIds(catalog)}.`,
+      `Not run: \`${choice.model}\` is no model Fullspin offers. The models: ${offeredIds(catalog)}.`,
     );
   }
   const efforts = catalog.find((offered) => offered.id === choice.model)?.efforts ?? [];

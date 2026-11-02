@@ -81,7 +81,7 @@ const TURN_INSTANT = sql`coalesce(${turns.settledAt}, ${turns.queuedAt})`;
 /**
  * A coding agent's turns are its own conversation's and its workers', which
  * are its conversation's children, as `turnUsagesOf` sums an agent's; every
- * other turn is Luke's own.
+ * other turn is Fullspin's own.
  */
 const TURN_SOURCE = sql<string>`case when ${conversations.kind} = ${CONVERSATION_KIND.AGENT} or ${parentConversation.kind} = ${CONVERSATION_KIND.AGENT} then ${COST_SOURCE.AGENTS} else ${COST_SOURCE.LUKE} end`;
 

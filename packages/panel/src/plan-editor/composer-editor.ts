@@ -724,7 +724,7 @@ function pasted(
   const over = (pasting: string) =>
     textOf(view.state.tr.replaceSelection(sliceOf(schema, pasting, state)).doc).length -
     props.maxLength;
-  // An address of Luke's own or a page of an integration's pasted whole, outside code, is laid in as its mention, where its link has room.
+  // An address of Fullspin's own or a page of an integration's pasted whole, outside code, is laid in as its mention, where its link has room.
   const mention = props.mentions?.pasted(words);
   if (
     mention !== undefined &&

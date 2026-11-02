@@ -136,7 +136,7 @@ function welcomed(page: HTMLElement): boolean {
   return page.querySelector("[aria-label='Welcome']") !== null;
 }
 
-test("an account with no plan yet is welcomed with New task's composer under Luke's line, and nothing the page says names the sidebar", async () => {
+test("an account with no plan yet is welcomed with New task's composer under Fullspin's line, and nothing the page says names the sidebar", async () => {
   const { page, started } = mount();
 
   await settle();

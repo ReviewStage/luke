@@ -4,7 +4,7 @@ import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agen
  * device-platform.ts -- what a device is to the member, by its platform: the one reading every surface that names a device or draws its glyph takes.
  *
  * A device's words and glyph follow its platform, never its kind, since a
- * Mac and a Linux server join Luke the same way and both run the host
+ * Mac and a Linux server join Fullspin the same way and both run the host
  * program.
  */
 

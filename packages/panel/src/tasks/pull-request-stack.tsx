@@ -20,7 +20,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * agent of the workspace whose branch is each one's head. A pull request an
  * agent owns opens that agent's Pull request tab, on its own task's side
  * panel whatever task this one is on, through the window's own opener for a
- * Luke link (`LINK_PLACE.CHANGES`), as a link to that tab would; an agent
+ * Fullspin link (`LINK_PLACE.CHANGES`), as a link to that tab would; an agent
  * on no task opens it on its own page. One no agent owns opens on GitHub, and so
  * does every one outside the window, where there is no opener.
  */
@@ -48,7 +48,7 @@ function markOf(entry: PullRequestStackEntry): PullRequestMarked {
   };
 }
 
-/** The place in Luke a stacked pull request's agent stands: its Pull request tab, on its task where it has one, else on its own page. */
+/** The place in Fullspin a stacked pull request's agent stands: its Pull request tab, on its task where it has one, else on its own page. */
 function placeOf(agent: NonNullable<PullRequestStackEntry["agent"]>): LinkPlace {
   const task = agent.taskId === null ? undefined : { planId: agent.taskId };
   return { kind: LINK_PLACE.CHANGES, ...task, agentId: agent.id };

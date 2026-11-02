@@ -68,7 +68,7 @@ import { WorkingTime } from "./working-time.js";
  * started it, by its tile and name, where the window knows it, or else, for
  * a teammate's agent, the teammate's face and name; either hangs its own
  * card over this one. Then its pull request where the place holds one, by
- * its mark, number, and title. An archived agent's says who archived it, Luke or another agent on a
+ * its mark, number, and title. An archived agent's says who archived it, Fullspin or another agent on a
  * member's behalf among them, and the reason given. The card has no way to the tab of its own: wherever it hangs, the
  * name it hangs from is what a press opens, so the card only says.
  *

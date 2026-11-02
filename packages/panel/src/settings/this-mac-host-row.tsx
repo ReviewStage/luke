@@ -15,7 +15,7 @@ import { useAct } from "../act.js";
 import { deviceSetupWords } from "../device-setup.js";
 
 /**
- * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise not turned on with Turn on, getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
+ * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise not turned on with Turn on, getting ready, not running yet, waiting for approval in Login Items, removed from Fullspin with Turn on again, or a turn-on or setup that failed with why and Retry.
  *
  * A setup is said in the words every host's row says it in
  * (`setupLineOf`), so This Mac getting ready or failing to set up reads as
@@ -60,7 +60,7 @@ function lineOf(standing: ThisMacHostStanding): HostLine | null {
       return {
         words:
           "Run agents here, straight on this Mac, each in a folder of its own. Turning on downloads " +
-          "Claude Code, Codex, and GitHub's CLI and starts Luke's host at login.",
+          "Claude Code, Codex, and GitHub's CLI and starts Fullspin's host at login.",
         state: SETTINGS_ROW_STATE.PLAIN,
         act: "Turn on",
       };
@@ -72,12 +72,12 @@ function lineOf(standing: ThisMacHostStanding): HostLine | null {
       return { words: "Not running yet.", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.REQUIRES_APPROVAL:
       return {
-        words: "Allow Luke in System Settings › General › Login Items.",
+        words: "Allow Fullspin in System Settings › General › Login Items.",
         state: SETTINGS_ROW_STATE.ATTENTION,
       };
     case THIS_MAC_HOST_STANDING.REMOVED:
       return {
-        words: "Removed from Luke.",
+        words: "Removed from Fullspin.",
         state: SETTINGS_ROW_STATE.ATTENTION,
         act: "Turn on again",
       };
@@ -86,7 +86,7 @@ function lineOf(standing: ThisMacHostStanding): HostLine | null {
     case THIS_MAC_HOST_STANDING.SETUP_FAILED:
       return { ...setupLineOf(DEVICE_SETUP.FAILED, standing.reason), act: "Retry" };
     case THIS_MAC_HOST_STANDING.OTHER_ACCOUNT:
-      return { words: "Used by another Luke account.", state: SETTINGS_ROW_STATE.PLAIN };
+      return { words: "Used by another Fullspin account.", state: SETTINGS_ROW_STATE.PLAIN };
   }
 }
 

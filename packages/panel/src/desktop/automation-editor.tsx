@@ -267,7 +267,7 @@ function sentryWithheld(
 const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
 
 /** What the page says where a Sentry trigger is held back from saving. */
-const SENTRY_WITHHELD = "Luke cannot receive Sentry events here. Choose another trigger.";
+const SENTRY_WITHHELD = "Fullspin cannot receive Sentry events here. Choose another trigger.";
 
 /** What the Trigger card says where the read of the workspace's Sentry did not land. */
 const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
@@ -305,10 +305,10 @@ const SENTRY_EVENTS: readonly { value: SentryTriggerEvent; label: string }[] = [
   { value: SENTRY_TRIGGER_EVENT.ISSUE_CREATED, label: "New issue" },
 ];
 
-/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches Luke. */
+/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches Fullspin. */
 const SENTRY_EVENT_DETAIL: Partial<Record<SentryTriggerEvent, string>> = {
   [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]:
-    "Set the alert rule's action to send a notification to the Luke integration.",
+    "Set the alert rule's action to send a notification to the Fullspin integration.",
 };
 
 /** Sentry's levels as the level pills name them, least severe first. */
@@ -361,7 +361,7 @@ const SAVE_REFUSAL_WORDS = {
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
   [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository it works in.",
   [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke cannot reach that repository from this workspace on GitHub.",
+    "Fullspin cannot reach that repository from this workspace on GitHub.",
   [AUTOMATION_CALL_FAILURE.INVALID]:
     "The automation could not be saved as written. Check its schedule and prompt.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
@@ -750,7 +750,7 @@ function optionValue<Value extends string>(
   return (raw) => options.find((option) => option.value === raw)?.value;
 }
 
-/** When the draft runs next, its next two runs; nothing for one Luke cannot read. */
+/** When the draft runs next, its next two runs; nothing for one Fullspin cannot read. */
 function nextRunsText(draft: AutomationDraft): string | undefined {
   const [first, second] = draftNextRuns(draft, new Date(), 2);
   if (first === undefined) return undefined;
@@ -792,7 +792,7 @@ function ScheduleRows({
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
-  // Note that a zone Luke cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
+  // Note that a zone Fullspin cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
   const read =
     problem === undefined
       ? undefined
@@ -1294,8 +1294,8 @@ const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: st
   { value: GITHUB_SENDER.PEOPLE, label: "From people" },
   {
     value: GITHUB_SENDER.LUKE_AGENTS,
-    label: "From Luke's agents",
-    detail: "What Luke's agents open, as you or as the workspace's GitHub App.",
+    label: "From Fullspin's agents",
+    detail: "What Fullspin's agents open, as you or as the workspace's GitHub App.",
   },
   {
     value: GITHUB_SENDER.OTHER_BOTS,
@@ -1311,7 +1311,7 @@ const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail
   {
     value: PULL_REQUEST_MOMENT.PUSHED,
     label: "When pushed to",
-    detail: "A push by Luke's own agents never starts a run.",
+    detail: "A push by Fullspin's own agents never starts a run.",
   },
 ];
 
@@ -1687,8 +1687,8 @@ function WebhookRows({
         description={
           <>
             POST to the address with the secret as <code>Authorization: Bearer</code>. Don't send
-            secrets in the body: Luke hands the body to the run's agent, and it shows in the run's
-            transcript.
+            secrets in the body: Fullspin hands the body to the run's agent, and it shows in the
+            run's transcript.
           </>
         }
       >
@@ -1724,7 +1724,7 @@ function WebhookRows({
         confirm={rotation}
         question={{
           title: "Make a new secret?",
-          body: `The secret your sender uses now stops working until you give it the new one, which Luke shows you once. ${IRREVERSIBLE_WORDS}`,
+          body: `The secret your sender uses now stops working until you give it the new one, which Fullspin shows you once. ${IRREVERSIBLE_WORDS}`,
           verb: "Make secret",
           running: "Making",
           loss: CONFIRM_LOSS.IRREVERSIBLE,

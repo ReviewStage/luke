@@ -105,7 +105,7 @@ function SettingsSections(): React.JSX.Element {
           <SettingsSection title="General">
             <SwitchRow
               label="Launch at login"
-              description="Luke opens with the Mac, in the menu bar."
+              description="Fullspin opens with the Mac, in the menu bar."
             />
             <SwitchRow
               label="Show captions"

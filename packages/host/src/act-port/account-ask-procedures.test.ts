@@ -48,7 +48,7 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Could not sign in with ChatGPT on this system.",
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
     "Could not cancel the ChatGPT sign-in on this system.",
-  [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: "Could not read Luke's memory on this system.",
+  [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: "Could not read Fullspin's memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: "Could not forget that memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: "Could not transcribe the recording on this system.",
 } as const;
@@ -93,7 +93,7 @@ const ACTS = [
   },
   {
     kind: ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE,
-    payload: { audio: "GkXfow==", durationMs: 1200, keywords: ["Luke"] },
+    payload: { audio: "GkXfow==", durationMs: 1200, keywords: ["Fullspin"] },
     ask: "dictationTranscribe",
   },
 ] as const;

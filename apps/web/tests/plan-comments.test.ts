@@ -236,7 +236,7 @@ function threadIn(answered: Answered): PlanCommentThread {
 /** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
-  // Luke's key pays for no coding agent, so the owner's agent takes the thread on the owner's own keys.
+  // Fullspin's key pays for no coding agent, so the owner's agent takes the thread on the owner's own keys.
   yield* connectAgentApiKeys(owner);
   const teammate = yield* openAccount("Charles Pan");
   const outsider = yield* openAccount("Someone Else");
@@ -274,8 +274,8 @@ const startAgent = (owner: string, taskId: string) =>
 const agentLink = (taskId: string, agentId: string) =>
   `[@Invite email](https://tryluke.dev/acme/plan/${taskId}/agent/${agentId})`;
 
-/** A task's Luke's mention link, as a chip wrote it while a task had one. */
-const lukeLink = (taskId: string) => `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke)`;
+/** A task's Fullspin's mention link, as a chip wrote it while a task had one. */
+const lukeLink = (taskId: string) => `[@Fullspin](https://tryluke.dev/acme/plan/${taskId}/luke)`;
 
 /** A start of a thread on the sentence above. */
 function startBody(comment: string) {
@@ -471,7 +471,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
-    "a thread started, or a reply, that mentions the task's Luke hands no one the thread and writes nothing as Luke, since no task has a Luke of its own",
+    "a thread started, or a reply, that mentions the task's Fullspin hands no one the thread and writes nothing as Fullspin, since no task has a Fullspin of its own",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;

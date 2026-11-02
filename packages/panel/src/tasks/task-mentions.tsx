@@ -154,7 +154,7 @@ export interface TasklessPlace {
  * names opens through `onOpenTask`, and a file through `onOpenFile`, in
  * the panel beside the page, which reads it by the place's workspace and
  * repository, or on GitHub where the place hands none. A place of no
- * repository, as Luke's page is, offers the rest all the same. A link to a
+ * repository, as Fullspin's page is, offers the rest all the same. A link to a
  * pull request the place's agent opened hangs the card `pullRequestOf`
  * answers, where the place hands one.
  */

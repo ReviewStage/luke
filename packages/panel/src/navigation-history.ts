@@ -13,7 +13,7 @@
  * The history is held by the adapter the window's root installs
  * (`@luke/ui/history-adapter`), each place as the state a step back reopens
  * it from, the way a browser's `history.state` stands beside its URL, and
- * the path of its Luke link as its address: the link Copy link names for
+ * the path of its Fullspin link as its address: the link Copy link names for
  * the step (`links-at-hand.ts`), so the two never disagree, or `/app` for a
  * place with none. The step standing takes its address again whenever that
  * link changes, as when a workspace's slug is read after the visit; a step

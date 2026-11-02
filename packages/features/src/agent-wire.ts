@@ -131,7 +131,7 @@ export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_W
 /**
  * Who a coding agent's commits are by and its pull request is opened as,
  * settled once for the agent as its first session starts: the developer who
- * started it, on their own GitHub account with the Luke GitHub App's bot as
+ * started it, on their own GitHub account with the Fullspin GitHub App's bot as
  * co-author, or the App's bot alone, with why it is the bot.
  */
 export const AGENT_AUTHOR = {
@@ -154,7 +154,7 @@ export type AgentAuthor = (typeof AGENT_AUTHOR)[keyof typeof AGENT_AUTHOR];
 /**
  * Who pays for a coding agent's model calls, recorded as the agent starts
  * and never moved after: the starter's Claude plan or ChatGPT plan, which
- * run the provider's own harness, the starter's own API key, or Luke's key;
+ * run the provider's own harness, the starter's own API key, or Fullspin's key;
  * or, for a local agent, its Mac's own login to the harness. A plan that
  * runs out pauses the agent rather than falling through to another payer; a
  * Mac signed out since falls back to the account's saved credential.
@@ -174,7 +174,7 @@ export type AgentPayer = (typeof AGENT_PAYER)[keyof typeof AGENT_PAYER];
 /**
  * What answers a coding agent's conversation, as its conversation's row
  * records it: eve, as every agent ran before the native harnesses, or the
- * provider's own harness, Claude Code or Codex, which Luke launches in the
+ * provider's own harness, Claude Code or Codex, which Fullspin launches in the
  * agent's sandbox. The store's own vocabulary spells the same words
  * (`@luke/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
  */
@@ -346,7 +346,7 @@ export const AGENT_FAILURE = {
   PROVIDER_KEY: "provider_key",
   /** The agent's session never started, so no turn ran; a new agent is the way on. */
   NOT_STARTED: "not_started",
-  /** The agent ran a fast version on the account's own key while Luke ran Fast on its own key alone; no agent fails this way now, and one that did still reads as this. */
+  /** The agent ran a fast version on the account's own key while Fullspin ran Fast on its own key alone; no agent fails this way now, and one that did still reads as this. */
   FAST_ON_OWN_KEY: "fast_own_key",
   /** The provider refused fast mode for the organization of the key the step ran on. */
   FAST_NOT_ENABLED: "fast_not_enabled",
@@ -796,7 +796,7 @@ export const AGENT_LIST_ARCHIVED = {
 } as const;
 
 /**
- * Who archived an agent: a member from the window, Luke on a call for the
+ * Who archived an agent: a member from the window, Fullspin on a call for the
  * member on it, or another coding agent of the workspace for the member who
  * started that agent, through its `archive_agent` tool.
  */
@@ -809,7 +809,7 @@ export const AGENT_ARCHIVER = {
 export type AgentArchiver = (typeof AGENT_ARCHIVER)[keyof typeof AGENT_ARCHIVER];
 
 /**
- * Who archived an agent, as its banner and card say it: a member, or Luke or
+ * Who archived an agent, as its banner and card say it: a member, or Fullspin or
  * another agent on a member's behalf, the member absent once their account
  * is gone, the agent by its id and its title as it stood then, and the
  * reason it was archived for where one was given. `withTask` marks an agent
@@ -1034,7 +1034,7 @@ export const agentDeleteAnswerSchema = EffectSchema.Struct({
 
 /**
  * The run of an automation that started an agent, as its page opens on it:
- * the automation's prompt alone, without the lines Luke adds of the firing,
+ * the automation's prompt alone, without the lines Fullspin adds of the firing,
  * then what fired it, each where the firing has one: the issue or pull
  * request a GitHub event names, a webhook call's body as its caller sent
  * it, cut as the agent was handed it, and the member who asked for a run
@@ -1262,8 +1262,8 @@ export const REVIEW_STATE = {
 /**
  * Someone a pull request names on GitHub: their login, their avatar where
  * GitHub's own avatar host serves it, whether they are an App's bot, and
- * the Luke account whose linked GitHub account it is, where that account is
- * a member of the agent's workspace. Luke's own App's bot is an App's bot
+ * the Fullspin account whose linked GitHub account it is, where that account is
+ * a member of the agent's workspace. Fullspin's own App's bot is an App's bot
  * like any other.
  */
 const githubPersonSchema = EffectSchema.Struct({
@@ -1735,7 +1735,7 @@ export const agentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
  * (GET), read of its repository rather than its pull request: the
  * repository's labels, the users who may be asked for a review (those it
  * may assign), and its organization's teams that reach it, each up to
- * the bound; each empty where the Luke GitHub App may not read it.
+ * the bound; each empty where the Fullspin GitHub App may not read it.
  */
 export const agentReviewOptionsAnswerSchema = EffectSchema.Struct({
   labels: EffectSchema.Array(pullRequestLabelSchema).check(
@@ -1898,7 +1898,7 @@ export const agentDelegationInputSchema = EffectSchema.Struct({
   model: EffectSchema.optionalKey(
     describeWire(
       EffectSchema.String,
-      "The id of the model the worker runs on, from Luke's catalog; your own where left out.",
+      "The id of the model the worker runs on, from Fullspin's catalog; your own where left out.",
     ),
   ),
   effort: EffectSchema.optionalKey(
@@ -1929,7 +1929,7 @@ export const agentDelegationOutputSchema = EffectSchema.Struct({
  * carries in the transcript (`tool-write_todos`). Each call carries the
  * whole list, so the newest call's input is the list as it stands, and a
  * tab draws each call where it landed with the older ones folded. Named
- * to-dos rather than a plan, because the plan is Luke's own document.
+ * to-dos rather than a plan, because the plan is Fullspin's own document.
  */
 export const AGENT_TODOS_TOOL = "write_todos";
 
@@ -2027,7 +2027,7 @@ export type TurnRecord = typeof turnRecordSchema.Type;
 
 /**
  * What sent one of the developer's lines to a coding agent: a member, from
- * the message box or an Inbox answer; Luke, from a call; an automation's
+ * the message box or an Inbox answer; Fullspin, from a call; an automation's
  * run, on its creator's behalf; GitHub, telling the agent of a review, a
  * comment, or a failed check on its pull request, by who caused it there;
  * or another coding agent of the workspace, through `message_agent`.
@@ -2042,7 +2042,7 @@ export const MESSAGE_SENDER = {
 
 export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
 
-/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
+/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Fullspin from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const AGENT_SENDER = {
   MEMBER: "member",
   FORMER: "former",
@@ -2056,8 +2056,8 @@ export const AGENT_SENDER = {
  * a reader sees over it: a member by their account's id and the name it
  * holds now, a member who has left among them, and with no id what sent it
  * in a member's place or a member whose account is gone, each named as the
- * service words it, and what kind of sender it is, so the window draws Luke
- * as Luke, an automation as one, and GitHub as the login named; the kind is
+ * service words it, and what kind of sender it is, so the window draws Fullspin
+ * as Fullspin, an automation as one, and GitHub as the login named; the kind is
  * absent from a service older than it. The window names nobody over the reader's own.
  * Another coding agent of the workspace is named with no kind and marked
  * `agent` instead, because a window reads `kind` as one of the words it
@@ -2139,7 +2139,7 @@ const agentTranscriptMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
    * What opened a brain turn, as its row recorded it, on the turn's
-   * journal: a spoken turn is the voice's, whose words Luke says aloud
+   * journal: a spoken turn is the voice's, whose words Fullspin says aloud
    * whether or not a line on screen asked for it, as the look around a
    * call opens with is. Absent on a coding agent's page, on any other row,
    * and from a service older than it.

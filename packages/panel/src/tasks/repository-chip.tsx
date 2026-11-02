@@ -116,7 +116,7 @@ const NONE_LABEL = "No repository";
 
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
-  NONE_REACHED: "Luke cannot see any repository yet.",
+  NONE_REACHED: "Fullspin cannot see any repository yet.",
   NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
   NOT_CONNECTED_IN: (workspace: string) => `${workspace} has no GitHub connected yet.`,
   LAPSED: "This workspace's GitHub connection was removed or suspended on GitHub.",
@@ -129,7 +129,7 @@ const MENU_NOTE = {
 const OWNER_ASK = {
   CONNECT: "connect GitHub",
   RECONNECT: "reconnect GitHub",
-  ADD_REPOSITORY: "add a repository to Luke's GitHub App",
+  ADD_REPOSITORY: "add a repository to Fullspin's GitHub App",
 } as const;
 
 type OwnerAsk = (typeof OWNER_ASK)[keyof typeof OWNER_ASK];
@@ -387,7 +387,7 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     ) : list === undefined ? (
       <Spinner delay label={readingWords("repositories")} />
     ) : rows.length === 0 && listed?.installed ? (
-      // Installed but giving Luke nothing: the repositories are chosen on GitHub, through the workspace's row.
+      // Installed but giving Fullspin nothing: the repositories are chosen on GitHub, through the workspace's row.
       deadEnd([MENU_NOTE.NONE_REACHED], OWNER_ASK.ADD_REPOSITORY, undefined)
     ) : undefined;
 

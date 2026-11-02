@@ -35,7 +35,7 @@ import {
 } from "../staged-fetch.js";
 
 /**
- * host-update.ts -- an account install's host updating itself to the newer release Luke names: fetched and checked while its agents run, and switched to once none does, by moving the install's `current` and starting again.
+ * host-update.ts -- an account install's host updating itself to the newer release Fullspin names: fetched and checked while its agents run, and switched to once none does, by moving the install's `current` and starting again.
  *
  * Only a host the account install put in place updates itself: `apps/host`
  * hands it the install's releases (`HostReleases`) where the daemon's own
@@ -43,11 +43,11 @@ import {
  * app, a development run, and an install that came before are handed none,
  * and take no notice of a release.
  *
- * Each answered beat names the release Luke publishes where it is newer
+ * Each answered beat names the release Fullspin publishes where it is newer
  * than the daemon (`deviceAgentBeatAnswerSchema`'s `release`), and the
  * follower hands it here (`LocalAgentsUpdate.heard`). A version above the
  * daemon's own is fetched from GitHub for the box's target
- * (`hostTarballUrl`), on a client that carries nothing of Luke's, while its
+ * (`hostTarballUrl`), on a client that carries nothing of Fullspin's, while its
  * agents keep running, one fetch at a time: streamed to a staging folder
  * beside the releases and hashed as it arrives within `HOST_FETCH`'s bounds,
  * checked against the SHA-256 the answer named, unpacked by the system's
@@ -66,7 +66,7 @@ import {
  * A fetch, check, unpack, or `version` run that fails removes what it
  * staged and leaves `current` alone, and every beat says the update failed
  * and why until it is tried again, about `RETRY_AFTER` later, or at once
- * where Luke names another release. An answer naming no release, once the
+ * where Fullspin names another release. An answer naming no release, once the
  * daemon is on the newest or the release is withdrawn, lets go of what is
  * staged and of any failure, so the next beat names no update. A host never
  * moves to a version at or below its own.
@@ -79,7 +79,7 @@ const HOST_FETCH: FetchBounds = {
   timeout: Duration.minutes(30),
 };
 
-/** How long after a failed update it is tried again, while Luke names the same release. */
+/** How long after a failed update it is tried again, while Fullspin names the same release. */
 const RETRY_AFTER = Duration.hours(1);
 
 /** How long the new version's `luke-host version` may take to answer. */
@@ -111,7 +111,7 @@ const TARGET_OF: {
   [DEVICE_PLATFORM.DARWIN]: { [DEVICE_ARCH.ARM64]: HOST_TARGET.DARWIN_ARM64 },
 };
 
-/** The release target of the platform and architecture given; none where Luke builds no host for it. */
+/** The release target of the platform and architecture given; none where Fullspin builds no host for it. */
 export function hostTargetOf(platform: DevicePlatform, arch: DeviceArch): HostTarget | undefined {
   return TARGET_OF[platform]?.[arch];
 }
@@ -189,7 +189,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
   /** The update failed for the reason given, which every beat says until it is tried again. */
   const failed = (release: DeviceAgentRelease, reason: string) =>
     Effect.gen(function* () {
-      report(`Luke host: could not update to ${release.version}: ${reason}`);
+      report(`Fullspin host: could not update to ${release.version}: ${reason}`);
       yield* Ref.set(standing, {
         release,
         update: {
@@ -205,9 +205,9 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
       const { version } = release;
       const sha256 = release.sha256[target];
       if (sha256 === undefined) {
-        return yield* Effect.fail(`Luke host ${version} has no build for ${target}`);
+        return yield* Effect.fail(`Fullspin host ${version} has no build for ${target}`);
       }
-      report(`Luke host: fetching ${version}, to switch to once no agent runs.`);
+      report(`Fullspin host: fetching ${version}, to switch to once no agent runs.`);
       yield* stagedFolder(
         {
           parent: releases.folder,
@@ -257,7 +257,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
       Effect.andThen(
         Effect.gen(function* () {
           yield* Ref.set(standing, { release, update: { update: HOST_UPDATE.WAITING } });
-          report(`Luke host: ${release.version} is ready, and switches in once no agent runs.`);
+          report(`Fullspin host: ${release.version} is ready, and switches in once no agent runs.`);
         }),
       ),
       // Note that the schedule never ends, so a failure is only ever tried again.
@@ -320,7 +320,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
       }
       yield* othersRemoved(version);
       yield* Ref.set(standing, { release, update: { update: HOST_UPDATE.UPDATING } });
-      report(`Luke host: switching to ${version}.`);
+      report(`Fullspin host: switching to ${version}.`);
       yield* beat;
       yield* currentMoved(version);
     });
@@ -357,7 +357,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
           ),
         );
         if (Result.isSuccess(outcome)) {
-          report(`Luke host: switched to ${release.version}, so it starts again on it.`);
+          report(`Fullspin host: switched to ${release.version}, so it starts again on it.`);
           yield* Deferred.succeed(switched, undefined);
           return true;
         }

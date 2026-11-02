@@ -25,7 +25,7 @@ import { useMemberDirectory } from "../member-directory.js";
  * the actor they are to the reader (`githubActor`). A GitHub account linked
  * to a member is that member, by their face and card; anyone else is
  * themself on GitHub, a person's circle or an App's bot's square, by their
- * avatar and a card saying so, Luke's own App's bot among them. A
+ * avatar and a card saying so, Fullspin's own App's bot among them. A
  * reviewer's face wears where they stand at its corner, a disc in GitHub's
  * own colours with its glyph cut from it: approved a green check, changes
  * asked for a red cross, a review asked for and not given an amber dot, and

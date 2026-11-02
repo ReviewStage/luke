@@ -11,8 +11,8 @@ import { isDeveloperLine, MESSAGE_ROLE, type StoredUIMessage } from "../../core.
 /** Who a stored message's words are attributed to when a stored message is rendered as a line. */
 const SPEAKER = {
   DEVELOPER: "Developer",
-  LUKE: "Luke",
-  NOTE: "Luke's own note",
+  LUKE: "Fullspin",
+  NOTE: "Fullspin's own note",
 } as const;
 
 function speakerOf(message: StoredUIMessage): string {

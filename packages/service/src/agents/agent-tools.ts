@@ -199,7 +199,7 @@ import {
  * transcript's turn journals, rendered as a short tail of what the agent
  * said and did; a read of one agent also asks GitHub what that branch
  * published, as the agent's tab does (`coder-host/published.ts`), and says
- * nothing of it where GitHub could not be asked. Luke summarises a read
+ * nothing of it where GitHub could not be asked. Fullspin summarises a read
  * aloud, so his tail's entries are cut close and his words for the tool say
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
@@ -229,7 +229,7 @@ import {
  * one another agent already continued among them, whose earlier
  * continuations its answer names, and with one of its messages
  * it forks it there, which leaves it going on; either is handed the
- * source's brief, its replay with Luke's summary of what does not fit, a
+ * source's brief, its replay with Fullspin's summary of what does not fit, a
  * copy of its work, and the note, and takes no prompt and no branch. A read
  * names the message each entry of the tail stands in, which a fork names.
  * An archive takes the rule the Archive agent menu's does for the member
@@ -322,7 +322,7 @@ export const UPDATE_TASK_REFUSAL = {
     "Not run: a thread of that task still holds an ask open for the developer, which marking " +
     `it done would withdraw. Withdraw each ask of yours it no longer needs with ${AGENT_TOOL.WITHDRAW_ASK} ` +
     `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands until ` +
-    "they are answered: Luke then marks a task whose pull request merged done by itself, and " +
+    "they are answered: Fullspin then marks a task whose pull request merged done by itself, and " +
     "you mark any other done once the answer reaches you.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
@@ -424,7 +424,7 @@ export const START_AGENT_REFUSAL = {
   PLAN_INELIGIBLE:
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
   CREDENTIAL_MISSING:
-    "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
+    "Not started: no subscription or API key of its starter's pays for that model, and Fullspin's key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
   DEVICE_REMOVED:
@@ -491,7 +491,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
   [LOCAL_AGENT_REFUSAL.MAC_AWAY]:
-    "Not started: the device this task runs its agents on is away, asleep or with Luke closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
+    "Not started: the device this task runs its agents on is away, asleep or with Fullspin closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.CODEX]:
     "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
@@ -697,7 +697,7 @@ const START_AGENT_INPUT = Schema.Struct({
       }),
       "Another agent of your workspace to take over from, on its own task, or on no " +
         "task where it has none: the new " +
-        "agent is handed its brief and its transcript (with Luke's summary of the steps that " +
+        "agent is handed its brief and its transcript (with Fullspin's summary of the steps that " +
         "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
         "the note after them; it takes no prompt and no branch. Without messageId it continues " +
         "the agent, which is stopped; with one it forks the agent at that message, which goes on.",
@@ -776,7 +776,7 @@ const UPDATE_TASK_CALL = Schema.Struct({
 
 const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_CALL);
 /**
- * A start as a call carries it: one Luke made under the tool's earlier words
+ * A start as a call carries it: one Fullspin made under the tool's earlier words
  * names its prompt `task`, and one made before `create_task` may name a
  * `newTask`, which is read only to be refused with where to go now.
  */
@@ -788,7 +788,7 @@ const START_AGENT_CALL = Schema.Struct({
 
 const readStart = Schema.decodeUnknownResult(START_AGENT_CALL);
 
-/** The tools as Luke and every coding agent are offered them: each its name, its words, and its input schema. */
+/** The tools as Fullspin and every coding agent are offered them: each its name, its words, and its input schema. */
 export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
@@ -1162,7 +1162,7 @@ interface AgentReading {
   /** The agent's title, what it works on, which update_agent renames; the model's id where it has none yet. */
   readonly title: string;
   readonly model: string;
-  /** The model as Luke says it and the screen shows it, without the maker's word (`modelLabel`). */
+  /** The model as Fullspin says it and the screen shows it, without the maker's word (`modelLabel`). */
   readonly modelName: string;
   readonly effort: string;
   readonly status: AgentStatus;
@@ -2165,7 +2165,7 @@ export function runUpdateTask(
               read.value.task.status ?? TASK_STATUS.TODO,
               archived,
             );
-      // Note that an agent's Done waits on the task's open asks, as Luke's own finish does, because a Done withdraws them (`inbox-settle.ts`).
+      // Note that an agent's Done waits on the task's open asks, as Fullspin's own finish does, because a Done withdraws them (`inbox-settle.ts`).
       if (
         status === TASK_STATUS.DONE &&
         read.value.task.status !== TASK_STATUS.DONE &&

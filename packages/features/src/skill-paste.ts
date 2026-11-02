@@ -3,7 +3,7 @@
  *
  * The box takes either a `skills add` command, as the `skills` command-line
  * tool's README and skills.sh print one (`npx skills add owner/repo --skill
- * name`), or a skill's own text. Luke never runs the command: it reads it
+ * name`), or a skill's own text. Fullspin never runs the command: it reads it
  * for the GitHub repository, the ref and folder where one is named, and
  * the skills asked for, and the service fetches the files itself. So the
  * desktop can say what it detected as the member types, and the service
@@ -38,7 +38,7 @@ import { TASK_SKILL_BOUNDS } from "./task-wire.js";
 export const SKILL_PASTE_KIND = {
   /** A `skills add` command naming a GitHub repository. */
   SOURCE: "source",
-  /** A `skills add` command, or an address, naming what Luke does not install from. */
+  /** A `skills add` command, or an address, naming what Fullspin does not install from. */
   UNSUPPORTED: "unsupported",
   /** A skill's own text. */
   TEXT: "text",
@@ -54,7 +54,7 @@ const SKILL_SOURCE_HOST = {
 /** Every skill a repository holds, as `--all` or `--skill '*'` asks. */
 export const ALL_SKILLS = "all";
 
-/** Why a command's source is not one Luke installs from. */
+/** Why a command's source is not one Fullspin installs from. */
 export const SKILL_PASTE_UNSUPPORTED = {
   /** A GitLab repository. */
   GITLAB: "gitlab",
@@ -72,7 +72,7 @@ export const SKILL_PASTE_UNSUPPORTED = {
   OTHER_COMMAND: "other-command",
   /** A `skills add` command naming no source. */
   NO_SOURCE: "no-source",
-  /** A source that names no repository Luke can read. */
+  /** A source that names no repository Fullspin can read. */
   UNREADABLE_SOURCE: "unreadable-source",
 } as const;
 
@@ -388,7 +388,7 @@ function readSkillsShAddress(segments: readonly string[]): SourceRead {
   return { owner, repo, ...(skill === undefined || skill === "" ? {} : { skill }) };
 }
 
-/** Why an address on a host Luke does not read is unsupported. */
+/** Why an address on a host Fullspin does not read is unsupported. */
 function otherHostReason(host: string, path: string): SkillPasteUnsupportedReason {
   if (DOWNLOAD.test(path)) return SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL;
   if (host === "gitlab.com" || host.startsWith("gitlab.")) return SKILL_PASTE_UNSUPPORTED.GITLAB;
@@ -418,7 +418,7 @@ function splitFragment(source: string): {
   };
 }
 
-/** A command's source read as a repository, its fragment's ref and skill where the source names none, or the reason it is not one Luke reads. */
+/** A command's source read as a repository, its fragment's ref and skill where the source names none, or the reason it is not one Fullspin reads. */
 function readSource(pasted: string): SourceRead {
   const fragment = splitFragment(pasted);
   const read = readBareSource(fragment.source);
@@ -432,7 +432,7 @@ function readSource(pasted: string): SourceRead {
   };
 }
 
-/** A source with no fragment read as a repository, or the reason it is not one Luke reads. */
+/** A source with no fragment read as a repository, or the reason it is not one Fullspin reads. */
 function readBareSource(written: string): SourceRead {
   const unprefixed = written.replace(/^github:/u, "").replace(/^git\+(?=https?:\/\/)/u, "");
   const source = SOURCE_ALIASES.get(unprefixed) ?? unprefixed;
@@ -518,7 +518,7 @@ function readCommand(text: string): SkillPaste | undefined {
   return sourcePaste(readSource(source), skills, fullDepth);
 }
 
-/** A source read as what it installs, the skill it names among those asked for; or why it is not one Luke reads. */
+/** A source read as what it installs, the skill it names among those asked for; or why it is not one Fullspin reads. */
 function sourcePaste(
   read: SourceRead,
   skills: SkillPasteSource["skills"],

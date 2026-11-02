@@ -194,7 +194,7 @@ import {
  * pill saying a newer question, or message, replaced it; withdrawn, the
  * same over a pill saying so and its why as a muted sentence, or who closed
  * the item. An ask of a type this build does not know, one a newer service
- * wrote, is drawn as a line naming a newer Luke, so the rest still reads.
+ * wrote, is drawn as a line naming a newer Fullspin, so the rest still reads.
  *
  * The draft reply is the reader's chip, "You" and nothing after it, over
  * the agent composer's box, its card and its field, with its `@` mentions,
@@ -516,7 +516,7 @@ function useScrollToOwnMessage(
 }
 
 /** What an ask's box says where its type is one this build does not know. */
-const NEWER_LUKE_ASK = "Answer this in a newer Luke.";
+const NEWER_LUKE_ASK = "Answer this in a newer Fullspin.";
 
 /**
  * Who an open ask waits on where that is a teammate (`inboxWaitsOn`): its
@@ -725,7 +725,7 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * (`HeldAsk`); for a withdrawn one the same, over a marker saying so and
  * why, or with none where a member's close stands, which the thread's own
  * line says (`ResolvedEvent`); and an ask this build does not know a card
- * naming a newer Luke.
+ * naming a newer Fullspin.
  */
 function AskBox({
   title,

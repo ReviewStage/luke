@@ -11,7 +11,7 @@ import { withMentions } from "./mention-node.js";
  * TipTap re-prints Markdown in its own style (`*` bullets as `-`, a soft wrap
  * as a hard break, `_em_` as `*em*`). Over a whole plan, one typed word
  * re-printed everywhere would be a change on every line: a false conflict
- * with Luke in every section, every section said to be edited by the
+ * with Fullspin in every section, every section said to be edited by the
  * developer, and a noisy history. So the document is split by the same
  * `marked` lexer TipTap reads with, whose top-level tokens' sources join back
  * into the document exactly; each top-level token is parsed on its own into
@@ -28,8 +28,8 @@ import { withMentions } from "./mention-node.js";
  * with LF ones and written back with its own (`lineEndingOf`), since the
  * lexer reads each CR as words of its own.
  *
- * A save answers with the document as merged with what Luke wrote since its
- * base. Luke's part of it, the blocks that differ between what was sent and
+ * A save answers with the document as merged with what Fullspin wrote since its
+ * base. Fullspin's part of it, the blocks that differ between what was sent and
  * what came back, is laid into the open editor in place of only the blocks
  * it changed, where the developer has not changed them since the send, so
  * the caret's block stays and the selection maps through; it is no step of
@@ -233,7 +233,7 @@ export interface TakenDocument {
   readonly base: string;
 }
 
-/** One stretch of the editor's top-level blocks to put Luke's blocks in place of. */
+/** One stretch of the editor's top-level blocks to put Fullspin's blocks in place of. */
 interface Taken {
   readonly from: number;
   readonly to: number;
@@ -242,14 +242,14 @@ interface Taken {
 }
 
 /**
- * Luke's part of a merged answer laid into the open editor: the blocks that
+ * Fullspin's part of a merged answer laid into the open editor: the blocks that
  * differ between what was `sent` and what was `merged`, each put in place of
  * the blocks it changed where they still stand as they were sent, so a block
  * the developer changed since stays theirs until the next save merges it.
  * Answers what the editor holds of the sources afterwards, and the base the
  * next save is a change from: the merged text, but for a change it left to
  * the next save, which keeps what was sent there, so the service still sees
- * the developer's words and Luke's meet there.
+ * the developer's words and Fullspin's meet there.
  */
 export function documentTook(
   editor: Editor,

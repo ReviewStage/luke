@@ -99,7 +99,7 @@ export function remedyLabel(failure: Failure): string | undefined {
     case FAILURE_REASON.RECONNECT_GITHUB:
       return "Reconnect GitHub";
     case FAILURE_REASON.ADD_REPOSITORY:
-      return `Add ${failure.repository} to Luke's GitHub App`;
+      return `Add ${failure.repository} to Fullspin's GitHub App`;
     case FAILURE_REASON.CHOOSE_REPOSITORY:
       return "Choose a repository";
     case FAILURE_REASON.MOVE_TASK:
@@ -116,7 +116,7 @@ export function remedyLabel(failure: Failure): string | undefined {
 }
 
 /**
- * Whether Retry stands beside the remedy: a remedy finished somewhere Luke
+ * Whether Retry stands beside the remedy: a remedy finished somewhere Fullspin
  * cannot watch, on GitHub or in Settings, leaves the same send to be made
  * again once it is done.
  */

@@ -17,7 +17,7 @@ function ProgressBars(): React.JSX.Element {
           {SHARES.map((share) => (
             <Stack key={share} gap={GAP.ICON}>
               <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                {`Downloading Luke 4.2 · ${String(share)}%`}
+                {`Downloading Fullspin 4.2 · ${String(share)}%`}
               </Text>
               <Progress value={share} />
             </Stack>

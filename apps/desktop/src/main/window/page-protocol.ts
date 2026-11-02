@@ -8,7 +8,7 @@ import type { CustomScheme } from "electron";
 /**
  * page-protocol.ts -- the `luke-page:` scheme: one version of one plan's page, served to the frame that draws it.
  *
- * A page is HTML an agent wrote, so it is served as nothing of Luke's own: a
+ * A page is HTML an agent wrote, so it is served as nothing of Fullspin's own: a
  * scheme of its own, read from the service by this process on the account's
  * bearer and answered whole, under the page policy `@luke/features/page-policy`
  * states for every server of a page, with the find's script ahead of it

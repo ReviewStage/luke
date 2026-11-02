@@ -21,11 +21,11 @@ export const SETTINGS_PAGE = {
   HOSTS: "hosts",
   /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
   INTEGRATIONS: "integrations",
-  /** The skills the account installs into Luke for its agents, its own and its workspace's, each the service's rather than a stored setting. */
+  /** The skills the account installs into Fullspin for its agents, its own and its workspace's, each the service's rather than a stored setting. */
   SKILLS: "skills",
   /** A workspace the account is in: its name and the account's role, its members, and its GitHub repositories, each the service's rather than a stored setting. */
   WORKSPACE: "workspace",
-  /** What this Mac lets agents do on it, the stored switch for running commands here, and whether Luke opens as it starts. */
+  /** What this Mac lets agents do on it, the stored switch for running commands here, and whether Fullspin opens as it starts. */
   THIS_MAC: "this-mac",
   /** The features the account can turn on before they are finished, each the account's on the service rather than a stored setting. */
   EXPERIMENTAL: "experimental",
@@ -38,7 +38,7 @@ export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
 /**
  * Which run of rows inside a page draws a setting. A page is not always one
  * list: This Mac draws its microphone's route under the permission that lets
- * Luke listen, and a setting has to say which run it stands in rather than
+ * Fullspin listen, and a setting has to say which run it stands in rather than
  * leave the section to pick its own members.
  */
 export const SETTING_SECTION = {
@@ -50,15 +50,15 @@ export const SETTING_SECTION = {
   LINES: "lines",
   /** How code looks, the third: the syntax themes, the type, its size and line height, and ligatures. */
   TEXT: "text",
-  /** Where the account's Luke links open, a group of its own on Account, under who is signed in. */
+  /** Where the account's Fullspin links open, a group of its own on Account, under who is signed in. */
   LINKS: "links",
   /** What New task does once a task starts, a group of its own on Account, under Links. */
   TASKS: "tasks",
-  /** Whether this Luke counts how its features are used, a group of its own on Account, under Tasks. */
+  /** Whether this Fullspin counts how its features are used, a group of its own on Account, under Tasks. */
   PRIVACY: "privacy",
-  /** Whether Luke opens as this Mac starts, a group of its own on This Mac, under its own rows. */
+  /** Whether Fullspin opens as this Mac starts, a group of its own on This Mac, under its own rows. */
   STARTUP: "startup",
-  /** The microphone dictation listens on, a group of its own on This Mac, under the permission that lets Luke listen. */
+  /** The microphone dictation listens on, a group of its own on This Mac, under the permission that lets Fullspin listen. */
   MICROPHONE: "microphone",
   /** How an agent's message box sends while its turn runs, a group of its own on Agents, under the default model. */
   COMPOSER: "composer",

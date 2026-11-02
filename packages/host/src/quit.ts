@@ -1,5 +1,5 @@
 /**
- * quit.ts -- the quit's three stages, the holds a quit passes first, and the one question every way out of Luke asks while something would be lost.
+ * quit.ts -- the quit's three stages, the holds a quit passes first, and the one question every way out of Fullspin asks while something would be lost.
  *
  * The quit, as the three states the launch and the entry both read. It is a
  * flag rather than a fiber because what asks for it is Electron's own
@@ -133,7 +133,7 @@ export function confirmingHold(options: {
   };
 }
 
-/** A way out of Luke that asks first while something would be lost: a quit, a restart to install an update, a sign-out, or a window's page reloaded. */
+/** A way out of Fullspin that asks first while something would be lost: a quit, a restart to install an update, a sign-out, or a window's page reloaded. */
 export const LEAVE = {
   QUIT: "quit",
   RESTART: "restart",
@@ -143,7 +143,7 @@ export const LEAVE = {
 
 export type Leave = (typeof LEAVE)[keyof typeof LEAVE];
 
-/** What a way out would lose: edits the panel holds unsaved, and the terminals of this Mac Luke has open. */
+/** What a way out would lose: edits the panel holds unsaved, and the terminals of this Mac Fullspin has open. */
 export interface AtStake {
   readonly unsavedWork: boolean;
   readonly macTerminals: number;
@@ -166,13 +166,13 @@ const STAY_ANSWER = 1;
 
 /** What each way out asks, the act its button names, and whether it closes this Mac's terminals. */
 const LEAVE_WORDS = {
-  [LEAVE.QUIT]: { message: "Quit Luke?", act: "Quit", closesTerminals: true },
+  [LEAVE.QUIT]: { message: "Quit Fullspin?", act: "Quit", closesTerminals: true },
   [LEAVE.RESTART]: {
-    message: "Restart Luke to update?",
+    message: "Restart Fullspin to update?",
     act: "Restart",
     closesTerminals: true,
   },
-  [LEAVE.SIGN_OUT]: { message: "Sign out of Luke?", act: "Sign out", closesTerminals: false },
+  [LEAVE.SIGN_OUT]: { message: "Sign out of Fullspin?", act: "Sign out", closesTerminals: false },
   [LEAVE.RELOAD]: { message: "Reload this window?", act: "Reload", closesTerminals: false },
 } as const satisfies Record<Leave, { message: string; act: string; closesTerminals: boolean }>;
 
@@ -234,7 +234,7 @@ function askingOneAtATime<Subject>(
   };
 }
 
-/** The one ask every way out of Luke goes through: yes at once while nothing is at stake, else the question put to the developer and their answer. */
+/** The one ask every way out of Fullspin goes through: yes at once while nothing is at stake, else the question put to the developer and their answer. */
 export function leaveGate(options: {
   atStake: () => AtStake;
   ask: (question: LeaveQuestion) => Promise<boolean>;
@@ -246,7 +246,7 @@ export function leaveGate(options: {
 
 /**
  * The ask a window's reload goes through, on the same terms as a way out of
- * Luke: yes at once unless that page holds edits that haven't saved. Note
+ * Fullspin: yes at once unless that page holds edits that haven't saved. Note
  * that this Mac's terminals are never at stake, because main keeps them open
  * across a page's reload.
  */

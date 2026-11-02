@@ -24,7 +24,7 @@ function Shortcuts(): React.JSX.Element {
             <Shortcut chord={{ key: SHORTCUT_KEY.ESCAPE, bare: true }} />
           </Inline>
           <Inline gap={GAP.CONTROL}>
-            <Text>Talk to Luke</Text>
+            <Text>Talk to Fullspin</Text>
             <Shortcut accelerator="Alt+Space" />
           </Inline>
         </Stack>

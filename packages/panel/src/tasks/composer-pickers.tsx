@@ -100,7 +100,7 @@ export function useComposerPickers({
   });
   // An `@` picks a mention of the page the box stands on, where it stands on one that hands them.
   const taskMentions = useTaskMentions();
-  // A Luke address pasted whole is called by the name the window holds for what it names.
+  // A Fullspin address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
   const mentionPicker = useMentionPicker({
     source: taskMentions,

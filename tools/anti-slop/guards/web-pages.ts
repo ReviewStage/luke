@@ -7,10 +7,10 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
 /**
  * web-pages.ts -- what the site's pages carry in their heads and the stylesheets they draw with.
  *
- * Every page names Luke's icons and a theme colour, each icon a file the
+ * Every page names Fullspin's icons and a theme colour, each icon a file the
  * site serves, so no page ships a blank tab; the web app installs from a
- * manifest whose icons are the sizes they claim; a pasted Luke link unfurls
- * as the landing page's card under Luke's name, since an unfurler reads it
+ * manifest whose icons are the sizes they claim; a pasted Fullspin link unfurls
+ * as the landing page's card under Fullspin's name, since an unfurler reads it
  * signed out; the page the app frames carries its one style by the digest
  * its policy admits and loads nothing; and every Tailwind entry takes
  * `@luke/ui`'s theme (`packages/ui/AGENTS.md`), without which the buttons'
@@ -73,7 +73,7 @@ export function headProblems(page: string, html: string): readonly string[] {
   return problems;
 }
 
-/** Where a pasted link's card differs from the landing page's, or leaves Luke's name or one description. */
+/** Where a pasted link's card differs from the landing page's, or leaves Fullspin's name or one description. */
 export function unfurlProblems(app: string, landing: string): readonly string[] {
   const tags = metaOf(app);
   const card = metaOf(landing);
@@ -82,7 +82,7 @@ export function unfurlProblems(app: string, landing: string): readonly string[] 
     if (tags.get(key) !== value)
       problems.push(`app.html: ${key} is ${tags.get(key) ?? "missing"}, not ${value ?? "absent"}`);
   };
-  for (const key of ["og:title", "twitter:title", "og:site_name"]) expect(key, "Luke");
+  for (const key of ["og:title", "twitter:title", "og:site_name"]) expect(key, "Fullspin");
   // Note that a card naming a URL would lead to the landing page rather than the link pasted.
   expect("og:url", undefined);
   for (const key of ["og:image", "og:image:width", "og:image:height", "og:image:alt"])
@@ -119,7 +119,7 @@ export function manifestProblems(
   for (const meta of ["apple-mobile-web-app-capable", "apple-mobile-web-app-status-bar-style"]) {
     if (!metaOf(html).has(meta)) problems.push(`app.html: names no ${meta}`);
   }
-  if (manifest.name !== "Luke") say("its name is not Luke");
+  if (manifest.name !== "Fullspin") say("its name is not Fullspin");
   if (manifest.start_url !== "/app") say("it does not start at /app");
   if (typeof manifest.scope !== "string" || !"/app".startsWith(manifest.scope))
     say("its scope leaves out /app");

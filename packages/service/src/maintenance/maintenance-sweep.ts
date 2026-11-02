@@ -26,7 +26,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * turn whose end eve never told the relay is settled as
  * abandoned, a local agent's open run is taken from a device that stopped
  * beating for its lease, its turn ended naming the device, the Vercel
- * Sandboxes of the eve sessions Luke let go of are deleted, a coding agent's
+ * Sandboxes of the eve sessions Fullspin let go of are deleted, a coding agent's
  * sandbox no developer's terminal holds any more is stopped, a native
  * agent's sandbox whose run ended and no terminal holds is stopped where the
  * run's own end did not stop it, an eve agent's sandbox left running with
@@ -65,7 +65,7 @@ interface MaintenanceSweeps {
   sweepEveSandboxes: (now: number) => SweepRead<EveSandboxSweepOutcome>;
   /** Bounds the snapshot retention of the stopped agents' sandboxes opened before it was bounded, a bucket's worth. */
   sweepSandboxRetention: (now: number) => SweepRead<SandboxRetentionSweepOutcome>;
-  /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from Luke. */
+  /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from Fullspin. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
   /** Deletes the withdrawn lines no turn took within a coding agent's turn bound, a sweep's worth, answering how many went. */
   purgeWithdrawnLines: (now: number) => SweepRead<number>;

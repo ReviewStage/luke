@@ -171,7 +171,7 @@ const ACCOUNT_CHANGED: MacCommandRefusal = {
 /** What a command of a kind this Mac cannot run answers, such as one a newer service queued. */
 const CANNOT_RUN: MacCommandRefusal = {
   refused:
-    "Not run: Luke on the developer's Mac cannot run this kind of command; updating Luke there " +
+    "Not run: Fullspin on the developer's Mac cannot run this kind of command; updating Fullspin there " +
     "may let it.",
 };
 
@@ -179,7 +179,7 @@ const CANNOT_RUN: MacCommandRefusal = {
 const NO_HOME: MacShellResult = {
   exitCode: null,
   stdout: "",
-  stderr: "Luke could not start the command: this Mac names no home folder.",
+  stderr: "Fullspin could not start the command: this Mac names no home folder.",
   truncated: false,
   timedOut: false,
 };

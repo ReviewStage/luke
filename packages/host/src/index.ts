@@ -1,5 +1,5 @@
 /**
- * Luke's runtime as one host: everything that executes, persists, schedules,
+ * Fullspin's runtime as one host: everything that executes, persists, schedules,
  * observes, or holds an account, composed once over an explicit state root
  * and reached only through the Gateway methods it answers. It draws nothing
  * and imports no Electron: what a window must learn leaves as a host event,

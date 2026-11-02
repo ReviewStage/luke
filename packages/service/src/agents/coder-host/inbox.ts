@@ -142,7 +142,7 @@ const POST_THREAD_WORDS =
   "to is the member the thread's ask is addressed to, by their mention link, the [@Name](link) you name a member by, and the ask waits on them; " +
   "without it, it waits on the task's assignee, or on the developer who started you. " +
   `body is the message, one Markdown body of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters. ` +
-  "Write a file, a pull request, or an issue in it as a mention, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so Luke draws it as a chip. " +
+  "Write a file, a pull request, or an issue in it as a mention, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so Fullspin draws it as a chip. " +
   "Put a link alone on its own line to show it as a card: a pull request, an issue, a page such as the GitHub settings page a to-do is done on, " +
   "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
   `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
@@ -292,7 +292,7 @@ interface AgentInboxLine {
   readonly id: string;
   readonly key: string;
   readonly title: string;
-  /** The thread as the agent names it in its words, `[@title](link)`, which Luke draws as its chip; none where the member reads its workspace no longer. */
+  /** The thread as the agent names it in its words, `[@title](link)`, which Fullspin draws as its chip; none where the member reads its workspace no longer. */
   readonly mention?: string;
   readonly status: InboxItem["status"];
   /** Whether an answer to the open ask reaches the agent as a message, on a thread still asking. */

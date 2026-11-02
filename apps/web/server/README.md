@@ -1,4 +1,4 @@
-# Luke web server
+# Fullspin web server
 
 ## Database and auth workflow
 
@@ -10,7 +10,7 @@ builder reads it through, and `pnpm db:generate` writes the migration that
 builds it from that module. "The data layer" below is the rest.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
 over `packages/database/src/schemas/auth.ts` (see below), which is in the same barrel as
-the eleven Luke-owned modules, so a migration that changes an auth column's type
+the eleven Fullspin-owned modules, so a migration that changes an auth column's type
 changes that declaration too.
 
 Every instant column is `timestamp with time zone` (migration 0026 moved the
@@ -56,7 +56,7 @@ No package lifecycle hook runs migrations.
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and
 `GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
-under "The Luke GitHub App" below.
+under "The Fullspin GitHub App" below.
 
 The web service's `routes` in `vercel.json` carry a legacy entry for
 `/api/auth/(.*)` because Vercel's zero-config `api/` detection treats
@@ -69,7 +69,7 @@ Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
 so every database the application reaches already carries the clients, including
 the branch database Neon creates for a Preview deployment, which would otherwise
 be migrated but empty. The Drizzle seed is idempotent, upserting each public
-OAuth client compiled into Luke, which is what makes running it on every build
+OAuth client compiled into Fullspin, which is what makes running it on every build
 safe. The same step then deletes every JWKS signing key the deployment's
 `BETTER_AUTH_SECRET` cannot open (`dropUnreadableJwks`): Better Auth seals a
 private key under the secret of the deployment that minted it and fails the
@@ -97,7 +97,7 @@ The organization plugin's tables (`organization`, `member`, `invitation`, and
 one edit, instants through `timestamptz()`, and migration
 `20261013230002_organization` is drizzle-kit's from that module. They keep
 Better Auth's default model names, since the Drizzle adapter finds a model by
-its export's name. A Luke workspace is an
+its export's name. A Fullspin workspace is an
 `organization` and its team the `member` rows, under the plugin's default
 roles `owner`, `admin`, and `member`. A desktop caller holds an OAuth token and
 no Better Auth session, which every member and organization endpoint requires,
@@ -219,7 +219,7 @@ Better Auth session as a signed bearer token that the bearer plugin reads as
 the session cookie, and the browser's cookie only where it carries none, so a
 bearer the plugin did not sign is never read past to a cookie beside it. So these six
 paths take the session, not the OAuth token, and the plugin checks the
-caller's role and membership again behind Luke's own rules. A workspace the
+caller's role and membership again behind Fullspin's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,
 `not-permitted`; a session the service does not take,
 `invalid-token`, which is the Mac's cue to ask for a new one through the
@@ -238,7 +238,7 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 OAuth scope (`GITHUB_SIGN_IN` in `packages/service/src/auth/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
 App's "Email addresses: read" among them, which is what answers the email
-read Luke requires for its account snapshot, and what Better Auth's GitHub
+read Fullspin requires for its account snapshot, and what Better Auth's GitHub
 provider reads to link the account at all.
 
 Accounts link (`accountLinking` in `ACCOUNT_TOKEN_STORAGE`,
@@ -252,7 +252,7 @@ through Better Auth's own `/link-social`, whatever email address GitHub holds
 hold the GitHub its workspaces and repositories need; `/link-social`,
 `/unlink-account`, and `/list-accounts` stay open, since none of them answers
 a token. A user revoking the App's authorization on GitHub deletes that
-GitHub user's account row (`github_app_authorization` under "The Luke GitHub
+GitHub user's account row (`github_app_authorization` under "The Fullspin GitHub
 App" below).
 
 ## How the functions deploy
@@ -771,7 +771,7 @@ is a build-time variable that lets the site's own pages talk to PostHog
 directly, so PostHog sees a visitor's address there. A build without it never
 loads the library at all.
 
-Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
+Use is counted per user per UTC day in the Fullspin-owned `hosted_usage` table:
 one atomic upsert before each upstream call (`packages/database/src/models/quota.ts`).
 A dictated clip is counted once it is transcribed instead, as one call and its
 seconds of audio in the row's `dictation_seconds`. Nothing is refused on the count, which the admin pages read; a spend limit on

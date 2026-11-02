@@ -14,10 +14,10 @@ import { TurnBudget } from "./turn-budget.js";
 /**
  * public-research.ts -- a coding agent's one public read beside its provider-run search: one page's text, bounded and answered as data.
  *
- * A search is no tool of Luke's: an eve agent searches with eve's
+ * A search is no tool of Fullspin's: an eve agent searches with eve's
  * provider-run `web_search` (`apps/dev/tools/web_search.ts`), Anthropic's
  * server search for a Claude model and OpenAI's for a GPT one, inside its
- * own model call and so on its own key, never Luke's. What stays here is the
+ * own model call and so on its own key, never Fullspin's. What stays here is the
  * page read, which spends no key. Nothing here knows which account or task
  * asked: a page read sends a GET for the one URL the model named, with no
  * cookie, credential, or header of the account's. What comes back is the

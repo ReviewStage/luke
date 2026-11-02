@@ -71,7 +71,7 @@ function collect(blocks: readonly Block[] | string | undefined, into: Received):
   }
 }
 
-/** One step over the transcript given, on Luke's key against the fake, and what Anthropic received. */
+/** One step over the transcript given, on Fullspin's key against the fake, and what Anthropic received. */
 async function stepOver(messages: ModelMessage[]): Promise<Received> {
   const received: Received = { pictures: [], words: [] };
   const fetch: typeof globalThis.fetch = async (_input, init) => {

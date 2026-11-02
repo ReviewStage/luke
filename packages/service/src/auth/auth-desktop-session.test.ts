@@ -59,7 +59,7 @@ const decodeSession = Schema.decodeUnknownSync(
 
 function desktopAuth() {
   return betterAuth({
-    appName: "Luke",
+    appName: "Fullspin",
     baseURL: SERVICE_URL,
     secret: "desktop-session-test-secret-of-enough-length",
     database: memoryAdapter({
@@ -267,7 +267,7 @@ test("after its OAuth sign-in the Mac holds a session of its own, carried as a s
 
   const session = await sessionFor(auth, { authorization: `Bearer ${signed}` });
   assert.equal(session?.user.email, GITHUB_EMAIL);
-  // Luke's own routes still read the OAuth token through userinfo, beside the bearer plugin.
+  // Fullspin's own routes still read the OAuth token through userinfo, beside the bearer plugin.
   assert.equal(await userInfoSubject(auth, accessToken), session?.user.id);
 });
 

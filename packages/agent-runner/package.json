@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "The runner in a coding agent's sandbox: Claude Code through the Agent SDK or Codex through its app-server, Luke's messages in on stdin, the harness's messages out to Luke",
+  "description": "The runner in a coding agent's sandbox: Claude Code through the Agent SDK or Codex through its app-server, Fullspin's messages in on stdin, the harness's messages out to Fullspin",
   "exports": {
     "./pins": "./src/pins.js",
     "./protocol": "./src/protocol.js"

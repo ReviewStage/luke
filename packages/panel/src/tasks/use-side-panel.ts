@@ -57,7 +57,7 @@ import {
  * agent's transcript opens it too. A task New task started with an agent
  * opens on the agent alone, its plan's tab closed there (`use-tasks-tab.ts`),
  * so the panel stands as it stood on every other task. Not to be confused
- * with "the panel", which in this renderer is Luke's whole surface.
+ * with "the panel", which in this renderer is Fullspin's whole surface.
  *
  * A fixed tab stands in the strip only once the open task has used it: a
  * comment was left on its plan. The plan's own tab is used on every task, so it stands on each
@@ -193,7 +193,7 @@ export const SIDE_PANEL_TAB = {
  * The kinds an earlier version had and this one does not, which what it kept
  * may still name: History, whose versions now take the whole window
  * (`desktop-version-history.tsx`), Transcript, Work, and Call, the task's
- * calls with Luke, whose calls every agent's tab takes now, the task's
+ * calls with Fullspin, whose calls every agent's tab takes now, the task's
  * Chat channel, gone with Chat, Code, the code its agents showed, gone
  * with `show_code`, and Board, the task's whiteboard. Note that a
  * kind is retired here rather than deleted, because a kept state naming one
@@ -1200,7 +1200,7 @@ function withOpenFileChosen(
  * asks, ⌘K's or a File tab's tree's with ⌘ held: the tab it has, chosen as
  * it stands, or a new one at the strip's end, viewed after the tab it was
  * chosen from, and browsed to on the task named, so the task draws it
- * though Luke never showed it.
+ * though Fullspin never showed it.
  */
 function withFileShown(
   held: HeldState,
@@ -1926,7 +1926,7 @@ function firstHeld(was: TaskHolds, now: TaskHolds): readonly FixedSidePanelTab[]
  * each fixed kind, `agents` its agents whose tabs stand open in the task's
  * column, by agent id, or nothing while they have not been read,
  * `subagents` the workers no delegation started that it draws, by the call
- * that started each, which is none now that a task has no Luke of its own,
+ * that started each, which is none now that a task has no Fullspin of its own,
  * and `pages` the pages agents wrote for it, by
  * id; the tabs drawn and the tab shown are held to them, a delegated
  * worker's to the open agent tabs. In a narrow `room` the panel stands only

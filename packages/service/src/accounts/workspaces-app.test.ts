@@ -77,7 +77,7 @@ import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspace
  * plugin on PGlite and a GitHub the test scripts: the bearer names the
  * account and nothing else does, a workspace a member creates is theirs to
  * own, only an owner or admin connects GitHub, nobody disconnects it from
- * Luke, and an installation is linked to a workspace only through a live
+ * Fullspin, and an installation is linked to a workspace only through a live
  * intent, only where the user who authorized sees it, and only to one
  * workspace.
  *
@@ -447,7 +447,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspace named as one of Luke's own pages, or as an account's first, is slugged apart from it",
+  "a workspace named as one of Fullspin's own pages, or as an account's first, is slugged apart from it",
   () =>
     Effect.gen(function* () {
       const { seams, database } = yield* openWorkspacePlugin;

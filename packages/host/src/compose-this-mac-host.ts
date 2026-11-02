@@ -47,14 +47,14 @@ import type { RunMode } from "./run-mode.js";
  * (`host-device-record.ts`); the launches kept under the account are handed
  * to the device, whose follower settles them; and its login item is
  * registered (`ThisMacHost`). From then on the record keeps it on: a Mac
- * holding a record of the account's that Luke has not refused stands on as
+ * holding a record of the account's that Fullspin has not refused stands on as
  * the app starts, its login item registered again where it is not, with
  * nothing to switch, since a task runs here only where its Runs on picks
  * this Mac; one holding none stands not turned on until the member asks.
  *
  * The record names the account the Mac runs agents for, the one whose
  * device id it carries, so another account signed in on the same Mac sees
- * it as another member's machine and turns nothing on or off. Luke refusing
+ * it as another member's machine and turns nothing on or off. Fullspin refusing
  * the record's secret marks it refused (`@luke/host/daemon`), the Mac
  * removed in Settings, and nothing enrolls it again on its own: only the
  * member's own act does, Turn on again (`THIS_MAC_HOST_TURN_ON`). A turn-on
@@ -90,16 +90,16 @@ const SETUP_READ_EVERY = Duration.seconds(30);
 
 /** What a failed turn-on says, by what failed. */
 const FAILED_WORDS = {
-  VERSION: "Luke couldn't start its host program on this Mac",
-  NOT_FOUND: "Luke didn't find this Mac under your account. Retry.",
+  VERSION: "Fullspin couldn't start its host program on this Mac",
+  NOT_FOUND: "Fullspin didn't find this Mac under your account. Retry.",
   UPGRADE_NEEDED:
-    "Luke needs a newer version of this app to run agents here. Update Luke, then Retry.",
-  UNANSWERED: "Luke couldn't be reached to add this Mac. Check your connection, then Retry.",
-  REFUSED: "Luke refused to add this Mac",
-  NOT_SAVED: "Luke couldn't save this Mac's sign-in in its state folder. Retry.",
-  LOGIN_ITEM: "macOS refused Luke's login item",
-  NO_LOGIN_ITEM: "This build of Luke carries no login item to run agents with.",
-  SETUP: "Luke couldn't download what agents run on here",
+    "Fullspin needs a newer version of this app to run agents here. Update Fullspin, then Retry.",
+  UNANSWERED: "Fullspin couldn't be reached to add this Mac. Check your connection, then Retry.",
+  REFUSED: "Fullspin refused to add this Mac",
+  NOT_SAVED: "Fullspin couldn't save this Mac's sign-in in its state folder. Retry.",
+  LOGIN_ITEM: "macOS refused Fullspin's login item",
+  NO_LOGIN_ITEM: "This build of Fullspin carries no login item to run agents with.",
+  SETUP: "Fullspin couldn't download what agents run on here",
 } as const;
 
 /** Where this Mac's setup stands as the service lists it: none for one that is ready. */
@@ -220,7 +220,7 @@ export function composeThisMacHost(
 
     const set = (next: ThisMacHostStanding) => Effect.as(Ref.set(standing, next), next);
 
-    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for, naming the Mac as its `luke-host` registers it, so Luke creates the device where it never saw this Mac. */
+    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for, naming the Mac as its `luke-host` registers it, so Fullspin creates the device where it never saw this Mac. */
     const enrolled = (deviceId: string, version: string) =>
       Effect.flatMap(host.machine, (machine) => client.enrollOwn(deviceId, machine)).pipe(
         Effect.updateService(

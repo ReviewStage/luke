@@ -69,7 +69,7 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
 const MAC_COMMAND_SERVICE = {
   /** How long the Mac's read is held while nothing waits for it. */
   HOLD: Duration.seconds(20),
-  /** How often a held read, and a call waiting on its result, looks again where Luke Sync cannot wake it. */
+  /** How often a held read, and a call waiting on its result, looks again where Fullspin Sync cannot wake it. */
   POLL: Duration.millis(500),
   /** How lately a Mac must have read for a call to count it listening: one hold, and room for the next read to arrive. */
   LISTENER_FRESH: Duration.seconds(45),
@@ -91,7 +91,7 @@ export const MAC_COMMAND_STATUS = {
 /** Why a call ran nothing, or never heard back, in words the model can act on. */
 const MAC_COMMAND_REFUSAL = {
   NO_MAC:
-    "Not run: Luke is not running on the developer's Mac, or they switched off " +
+    "Not run: Fullspin is not running on the developer's Mac, or they switched off " +
     "Settings › Let agents run commands on this Mac.",
   NO_ANSWER:
     "No answer: the developer's Mac did not say what the command did in time; it may or may " +
@@ -171,7 +171,7 @@ export const RUN_ON_MAC_TOOL = {
     `for input fails. It is killed after ${MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS} seconds ` +
     "unless `timeout_seconds` says otherwise. Answers the exit code, stdout, and stderr, each " +
     `cut to ${MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS} characters, or \`not-run\` and why, such as ` +
-    "Luke not running on the Mac.",
+    "Fullspin not running on the Mac.",
   inputSchema: RUN_ON_MAC_INPUT,
 } as const;
 

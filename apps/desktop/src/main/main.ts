@@ -27,7 +27,7 @@ import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
  * from it — the name, the paths, and the crash reporter over them — and the
  * single-instance lock, which the losing copy must lose having touched
  * nothing, the scheme a plan's pages are served on, which Electron reads
- * once before it is ready, and the Luke links macOS hands the app, the one
+ * once before it is ready, and the Fullspin links macOS hands the app, the one
  * that launched it arriving before it is ready. Everything else is composed
  * and then started, in `main`.
  */
@@ -37,12 +37,12 @@ import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
  * exit. The host's own drain is bounded inside it; what this bounds is the
  * rest — a start that stops answering mid-launch, a stop that never returns —
  * because this process holds the single-instance lock, so a quit that waited
- * forever would leave the next launch able only to report that Luke is
+ * forever would leave the next launch able only to report that Fullspin is
  * already running.
  */
 const RUNTIME_CLOSE_WAIT_MS = 15_000;
 
-// A Luke link macOS hands the app (`tryluke://`) is heard from the first
+// A Fullspin link macOS hands the app (`tryluke://`) is heard from the first
 // moment, since the one that launched the app arrives before it is ready,
 // and held until a window can open it (`@luke/features/app-links`).
 const appLinks = appLinkInbox();
@@ -93,8 +93,8 @@ const quit = desktopQuit();
  * The whole quit: the one scope every service and the host were built in
  * closes, so each gives back what it began in the reverse of the order it
  * began in and the host's drain is the first of those steps — no runtime work
- * of Luke's continues after an intentional quit. Every terminal of this Mac
- * Luke opened is hung up beside it, with what it started, since neither
+ * of Fullspin's continues after an intentional quit. Every terminal of this Mac
+ * Fullspin opened is hung up beside it, with what it started, since neither
  * waits on the other. The close is forked so the
  * bound above cannot interrupt it: a close that outran its wait is still
  * closing when this process leaves, which is the same answer an unsettled
@@ -117,21 +117,21 @@ const closeRuntime = (runtime: { readonly disposeEffect: Effect.Effect<void> }) 
     }
   });
 
-// One Luke per machine, decided before any window, host, or composition work:
+// One Fullspin per machine, decided before any window, host, or composition work:
 // the losing copy must exit having claimed no global shortcut and opened no
 // window.
 if (app.requestSingleInstanceLock()) {
   void main();
 } else {
   reportToStderr(
-    "Luke is already running; the existing panel was refreshed instead of starting a second copy.",
+    "Fullspin is already running; the existing panel was refreshed instead of starting a second copy.",
   );
   app.quit();
 }
 
 async function main(): Promise<void> {
   await app.whenReady();
-  // Luke is an ordinary app with a window of its own: the bundle gives him a
+  // Fullspin is an ordinary app with a window of its own: the bundle gives it a
   // Dock tile and a place in Command-Tab, and these menus give its fields Copy
   // and Paste, its window Close, Minimize, and Quit, and its own commands
   // their shortcuts.

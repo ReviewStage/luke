@@ -480,7 +480,7 @@ export const APP_SHORTCUTS = {
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.HIDE]: {
-    label: "Hide Luke",
+    label: "Hide Fullspin",
     chord: { key: SHORTCUT_KEY.H },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
@@ -490,7 +490,7 @@ export const APP_SHORTCUTS = {
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.QUIT]: {
-    label: "Quit Luke",
+    label: "Quit Fullspin",
     chord: { key: SHORTCUT_KEY.Q },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },

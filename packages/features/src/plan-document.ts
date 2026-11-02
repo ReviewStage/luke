@@ -3,7 +3,7 @@ import { PLAN_SECTION_BOUNDS, type PlanActor, type PlanEditor } from "./task-wir
 /**
  * plan-document.ts -- a plan kept as one free Markdown document: its sections, and who last changed each.
  *
- * A plan is one Markdown text the developer and Luke both write, started
+ * A plan is one Markdown text the developer and Fullspin both write, started
  * from the account's own template (`docs/TASKS.md`). The text has no title line,
  * since the plan's name is its own, and its assumptions are a section like
  * any other. A section is a `#` or `##` heading and everything up to the

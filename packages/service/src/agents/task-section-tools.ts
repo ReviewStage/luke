@@ -30,13 +30,13 @@ import { calledId } from "./called-id.js";
 /**
  * task-section-tools.ts -- the tools every agent keeps the developer's sidebar sections by: make one, and delete one.
  *
- * Luke on a call and every coding agent are offered the same
+ * Fullspin on a call and every coding agent are offered the same
  * `create_section` and `delete_section`, one implementation each, beside
  * `list_tasks`, which names each task's section and the sections themselves,
  * and `update_task`, whose `sectionId` moves a task into one or out of them
  * (`agent-tools.ts`). A section is its maker's
  * own, as the sidebar's are (`@luke/features/task-section-wire`), so each
- * call acts on the sections of the member the caller acts for (Luke's member
+ * call acts on the sections of the member the caller acts for (Fullspin's member
  * on the call, or the coding agent's starter), in the caller's own
  * workspace, read on that member's standing now; a section of another
  * workspace is none of the caller's, even where the member is also in it. Every write is the one the sidebar's own drag or
@@ -87,7 +87,7 @@ const DELETE_SECTION_INPUT = Schema.Struct({ sectionId: SECTION_ID });
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_SECTION_INPUT);
 const readDeleteAsked = Schema.decodeUnknownResult(DELETE_SECTION_INPUT);
 
-/** The tools as Luke and every coding agent are offered them: each its name, its words, and its input schema. */
+/** The tools as Fullspin and every coding agent are offered them: each its name, its words, and its input schema. */
 export const CREATE_SECTION_TOOL = {
   name: AGENT_TOOL.CREATE_SECTION,
   description:

@@ -4,7 +4,7 @@ import { UNREPORTED } from "@luke/ui/reported-failure";
 import { useSocialSignIn } from "../../sign-in-choices";
 import { authClient } from "../auth-client";
 
-/** Luke's mark at the head of the gate's cards. */
+/** Fullspin's mark at the head of the gate's cards. */
 function AdminMark(): React.JSX.Element {
   return (
     <span className="inline-flex w-13">
@@ -21,7 +21,7 @@ export function SignInCard(): React.JSX.Element {
   return (
     <SocialSignInCard
       mark={<AdminMark />}
-      title="Luke admin"
+      title="Fullspin admin"
       pending={pending}
       failed={failed ? UNREPORTED.NO_REPORTER : undefined}
       onPress={begin}

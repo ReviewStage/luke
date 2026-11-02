@@ -154,7 +154,7 @@ export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
 function writerOf(entry: PlanCommentEntry): string {
   switch (entry.writer.actor) {
     case PLAN_COMMENT_ACTOR.LUKE:
-      return "Luke";
+      return "Fullspin";
     case PLAN_COMMENT_ACTOR.AGENT:
       return entry.writer.agentId === undefined ? "agent" : `agent ${entry.writer.agentId}`;
     case PLAN_COMMENT_ACTOR.MEMBER:
@@ -180,7 +180,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
       by: writerOf(entry),
       to:
         entry.asked?.actor === PLAN_COMMENT_ACTOR.LUKE
-          ? "Luke"
+          ? "Fullspin"
           : `agent ${entry.asked?.agentId ?? ""}`,
     }));
   return {
@@ -262,7 +262,7 @@ export function runCommentTool(
 }
 
 /**
- * The plan's open threads as Luke is handed them every turn, beside the
+ * The plan's open threads as Fullspin is handed them every turn, beside the
  * saved document: one line each, read again every turn, so a comment a
  * member left since his last turn is there to raise. Nothing where the plan
  * holds no open thread.
@@ -273,5 +273,5 @@ export function openThreadsText(threads: readonly PlanCommentThread[]): readonly
   return [OPEN_THREADS_MARKER, ...open.map((thread) => JSON.stringify(threadRead(thread)))];
 }
 
-/** The marker the open threads ride behind in Luke's standing context. */
+/** The marker the open threads ride behind in Fullspin's standing context. */
 export const OPEN_THREADS_MARKER = "[open comment threads]";

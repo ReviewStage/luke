@@ -104,10 +104,10 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
 
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  FAILED: readFailedWords("Luke's memory"),
+  FAILED: readFailedWords("Fullspin's memory"),
   WORKSPACES_FAILED: readFailedWords("your workspaces"),
   SIGNED_OUT: SIGNED_OUT_WORDS,
-  EMPTY: "Luke hasn't remembered anything yet.",
+  EMPTY: "Fullspin hasn't remembered anything yet.",
   FORGET_FAILED: "The memory could not be forgotten. Try again.",
   NO_MATCH: "No memories match",
   CLEAR: "Clear search and filter",
@@ -134,7 +134,7 @@ const NO_CAPTURE = "ph-no-capture";
 
 /** What the skeletons say to a reader who cannot see them. */
 const READING_LABEL = {
-  MEMORY: readingWords("Luke's memory"),
+  MEMORY: readingWords("Fullspin's memory"),
   WORKSPACES: readingWords("your workspaces"),
 } as const;
 

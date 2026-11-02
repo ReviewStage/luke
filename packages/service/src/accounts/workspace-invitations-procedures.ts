@@ -13,7 +13,7 @@
  * /api/workspaces/invitations/offer` answers one invitation as its
  * recipient is offered it (`invitation-offers.ts`): the workspace's name,
  * the role, and the inviter while they are still a member, or why there is
- * none to offer. Luke's own rules stand in front of the plugin's, which
+ * none to offer. Fullspin's own rules stand in front of the plugin's, which
  * checks the caller's role and membership again itself.
  *
  * The session is resolved before the input is read, by the middleware on
@@ -57,7 +57,7 @@ function expiryOf(invitation: PluginInvitation): Date {
     : new Date(invitation.expiresAt);
 }
 
-/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of Luke's. */
+/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of Fullspin's. */
 function invitationRoleOf(role: string): WorkspaceInvitation["role"] | undefined {
   return Object.values(INVITATION_ROLE).find((one) => one === role);
 }

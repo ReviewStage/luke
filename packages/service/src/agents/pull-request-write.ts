@@ -3,8 +3,8 @@
  *
  * A member may press a button on any agent of their workspace, a teammate's
  * among them, so who acts on GitHub is the member and never the agent's
- * developer or the Luke GitHub App: the App's token would let a member do
- * through Luke what their own account may not, such as merge without write
+ * developer or the Fullspin GitHub App: the App's token would let a member do
+ * through Fullspin what their own account may not, such as merge without write
  * access. The agent is first reached as every read reaches it
  * (`agent-reach.ts`, then `coder-host/published.ts`'s
  * `agentPullRequestReach`), so a repository the workspace's installation no
@@ -16,7 +16,7 @@
  * token GitHub answers 401 to, is answered as one who must sign in with
  * GitHub again, and nothing is tried as anyone else. A change GitHub
  * refuses is answered in GitHub's own words (`github/pull-request-writes.ts`).
- * Luke's own failures, the store, an unconfigured App, or a GitHub that did
+ * Fullspin's own failures, the store, an unconfigured App, or a GitHub that did
  * not answer, are the hosted refusals a read answers, each logged by its
  * kind alone.
  */
@@ -76,7 +76,7 @@ const reached = (userId: string, agent: WithRepository<Agent>) =>
     }),
   );
 
-/** The member's own token, or none where they must sign in with GitHub again; Luke's own failure to read it is unavailable. */
+/** The member's own token, or none where they must sign in with GitHub again; Fullspin's own failure to read it is unavailable. */
 const memberToken = (userId: string) =>
   Effect.gen(function* () {
     const app = yield* GitHubApp;
@@ -131,7 +131,7 @@ function writtenOf<A>(failure: GitHubWriteFailure): Effect.Effect<MemberWritten<
 /**
  * One write on the agent's pull request as the member: the repository
  * reached, the member's token read, and the write made with it; how it went,
- * or Luke's own refusal.
+ * or Fullspin's own refusal.
  */
 export const memberPullRequestWrite = <A>(
   userId: string,

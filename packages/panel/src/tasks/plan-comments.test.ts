@@ -726,7 +726,7 @@ test("a failed send says why in the foot under the box, and no note stands over 
   act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
   act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
   const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
-  typeInto(pending()?.querySelector("textarea"), "Ask Luke about retries");
+  typeInto(pending()?.querySelector("textarea"), "Ask Fullspin about retries");
 
   act(() => {
     pending()
@@ -1162,7 +1162,7 @@ test("in the Comments tab a thread's quote shows its words in the plan, and a de
   assert.equal(documentsShown.length, 2);
 });
 
-test("a comment's field offers no Luke among the agents, since no task has one, and no Send to beside it", async () => {
+test("a comment's field offers no Fullspin among the agents, since no task has one, and no Send to beside it", async () => {
   installEditorLayout();
   const { container } = drawn("page", THREADS, () => true, PLAN, undefined, PAGE_MENTIONS);
   act(() =>
@@ -1181,8 +1181,8 @@ test("a comment's field offers no Luke among the agents, since no task has one, 
     (row) => row.textContent ?? "",
   );
   assert.ok(
-    rows.every((row) => !row.startsWith("Luke")),
-    `no Luke is offered: ${rows.join(" | ")}`,
+    rows.every((row) => !row.startsWith("Fullspin")),
+    `no Fullspin is offered: ${rows.join(" | ")}`,
   );
   assert.equal(card.querySelector(".comment-send-to"), null);
 });
@@ -1280,7 +1280,7 @@ test("a thread being started keeps its card through a press away while its words
   assert.ok(field);
   act(() => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(field, "Ask Luke about retries");
+    setter?.call(field, "Ask Fullspin about retries");
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
@@ -1293,7 +1293,7 @@ test("a thread being started keeps its card through a press away while its words
   await act(async () => undefined);
   assert.equal(
     pending()?.querySelector<HTMLTextAreaElement>("textarea")?.value,
-    "Ask Luke about retries",
+    "Ask Fullspin about retries",
     "and takes them back where the send fails",
   );
 });

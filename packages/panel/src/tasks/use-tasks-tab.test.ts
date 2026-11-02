@@ -316,7 +316,7 @@ function _undoButton(): HTMLButtonElement {
   return undo;
 }
 
-/** A task with a history: Luke wrote it on a call, over a first version. */
+/** A task with a history: Fullspin wrote it on a call, over a first version. */
 const _EDITED: TasksView = {
   ...OPEN,
   document: {
@@ -325,7 +325,7 @@ const _EDITED: TasksView = {
   },
 };
 
-/** One revision as the history lists it, written by Luke on a call. */
+/** One revision as the history lists it, written by Fullspin on a call. */
 function _revisionLine(seq: number) {
   return {
     seq,
@@ -839,7 +839,7 @@ test("in a narrow room Back to a task opens it as it stood, its plan's tab close
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
-test("in a narrow room a Luke link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
+test("in a narrow room a Fullspin link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
   const tab = mount(
     { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID }, room: SHELL_ROOM.NARROW },
     {
@@ -893,7 +893,7 @@ test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows
   assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
 });
 
-test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
+test("a Fullspin link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -912,7 +912,7 @@ test("a Luke link to another plan's section opens that plan and asks its page to
   });
 });
 
-test("a Luke link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page", async () => {
+test("a Fullspin link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page", async () => {
   const ELSEWHERE = "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d";
   const TASKLESS = "2b7c9e4d-1f3a-4b6e-8d2c-9a1e5f7b3c40";
   const UNREAD = "6d4e2c1b-9a8f-4e7d-b6c5-3a2f1e0d9c8b";
@@ -982,7 +982,7 @@ test("a Luke link keyed by the agent alone opens on the agent's task where it ha
   assert.equal(tab.told.length, told, "the late read opens no other task");
 });
 
-test("a Luke link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {
+test("a Fullspin link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {
   const page = { id: "page-1", title: "Flaky funnel", version: 1, at: 1 };
   fakeActs({
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
@@ -1011,7 +1011,7 @@ test("a Luke link to a page an agent on no task showed opens that agent's page, 
   assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
 
-test("a Luke link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
+test("a Fullspin link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
 
@@ -1091,7 +1091,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
-test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
+test("a Fullspin link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const link = {
@@ -1109,7 +1109,7 @@ test("a Luke link to an agent's message opens the agent and asks its tab to brin
   assert.equal(tab.control().messageReveal, undefined);
 });
 
-test("a Luke link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
+test("a Fullspin link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const link = (view: PullRequestThreadView) =>
@@ -1150,7 +1150,7 @@ test("a Luke link to a review thread opens its agent's Pull request tab on the v
   assert.equal(tab.control().threadReveal, undefined);
 });
 
-test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the task's workspace, under the task or under its agent, whose task is read, and one to an automation in the workspace its slug names", async () => {
+test("a Fullspin link to an Inbox item opens it in its task's own Inbox tab in the task's workspace, under the task or under its agent, whose task is read, and one to an automation in the workspace its slug names", async () => {
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const agentItemId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
@@ -1265,7 +1265,7 @@ test("with Channels on, a channel's link opens the Inbox narrowed to it, which a
   handState({});
 });
 
-test("a Luke link to an automation's run opens its editor naming the run, which its runs mark", () => {
+test("a Fullspin link to an automation's run opens its editor naming the run, which its runs mark", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
   act(() =>
@@ -1282,7 +1282,7 @@ test("a Luke link to an automation's run opens its editor naming the run, which 
   });
 });
 
-test("a Luke link to a person opens their page in the workspace its slug names, in the place of the Inbox", () => {
+test("a Fullspin link to a person opens their page in the workspace its slug names, in the place of the Inbox", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   act(() => tab.control().inboxView.onOpen());
 
@@ -1299,7 +1299,7 @@ test("a Luke link to a person opens their page in the workspace its slug names, 
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
 });
 
-test("a Luke link to the Admin place opens it on its Overview, and one to a view opens that view, in the place of the Inbox, listing no other workspace", () => {
+test("a Fullspin link to the Admin place opens it on its Overview, and one to a view opens that view, in the place of the Inbox, listing no other workspace", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const listed = tab.control().workspace?.id;
   act(() => tab.control().inboxView.onOpen());
@@ -1328,7 +1328,7 @@ test("a Luke link to the Admin place opens it on its Overview, and one to a view
   assert.equal(tab.control().workspace?.id, listed);
 });
 
-test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
+test("a Fullspin link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const listed = tab.control().workspace?.id;
 
@@ -1343,7 +1343,7 @@ test("a Luke link whose slug names no workspace of the account's leaves the list
   assert.equal(tab.control().automationsView.open, true);
 });
 
-test("a Luke link to a task's version opens its version history on that version, and one to the task opens its plan", () => {
+test("a Fullspin link to a task's version opens its version history on that version, and one to the task opens its plan", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -1368,7 +1368,7 @@ test("a Luke link to a task's version opens its version history on that version,
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
 });
 
-test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
+test("a Fullspin link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },

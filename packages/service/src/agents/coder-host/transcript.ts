@@ -94,7 +94,7 @@ import { usageOfTurns } from "./usage.js";
  * past the first or amended past the second is new to it. A read with
  * nothing new is held open while the agent is starting or its newest turn
  * still runs, looked at again as each write to the conversation lands
- * (`transcriptTopics`), every `MESSAGES_POLL` where Luke Sync cannot wake
+ * (`transcriptTopics`), every `MESSAGES_POLL` where Fullspin Sync cannot wake
  * it, and let go at `MESSAGES_HOLD`, so a tab hears each message as it
  * lands without asking every half second and a tab on an agent whose
  * first turn has not landed costs one held read per hold rather than a
@@ -284,15 +284,15 @@ const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[])
   );
 };
 
-/** The names a line is sent under where no member's account names it: Luke's, and a member's whose account is gone. */
+/** The names a line is sent under where no member's account names it: Fullspin's, and a member's whose account is gone. */
 const SENDER_NAME = {
-  LUKE: "Luke",
+  LUKE: "Fullspin",
   FORMER_MEMBER: "Former member",
 } as const;
 
 /**
  * What sent a line, as the page names it and by its kind, so the window
- * draws Luke, an automation, and GitHub's login as themselves. Another agent
+ * draws Fullspin, an automation, and GitHub's login as themselves. Another agent
  * is named with no kind and marked `agent`, because the window's schema reads
  * the kind as one of the words it knows, so a kind it was built before would
  * refuse the whole page, while a key it does not know is dropped: an older
@@ -769,7 +769,7 @@ function transcriptTopics(target: ConversationTarget, own?: OwnAgent): readonly 
  * page that ends that hold carries the title. Each look comes as a write
  * to the transcript lands (`transcriptTopics`), and no later than the
  * instant the clock alone may end the hold, the agent passing its grace or
- * a title's window closing (`titleEdge`), so a hold Luke Sync wakes ends
+ * a title's window closing (`titleEdge`), so a hold Fullspin Sync wakes ends
  * when a polled one would.
  */
 export function transcriptPast(

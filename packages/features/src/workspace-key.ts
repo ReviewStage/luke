@@ -3,7 +3,7 @@
  *
  * The prefix is read off the workspace's name rather than kept, so it
  * follows a rename: the initials of a name of several words, or the head of
- * a name of one, upper-cased, so "Acme" is ACME and "Luke Labs" is LL. A
+ * a name of one, upper-cased, so "Acme" is ACME and "Fullspin Labs" is LL. A
  * task's number is its workspace's, counted from one and never reused, so
  * its key names one task of the workspace for good.
  */

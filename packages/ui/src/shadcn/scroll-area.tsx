@@ -6,7 +6,7 @@ import { cn } from "../cn.js";
  *
  * shadcn's source draws a Base UI `ScrollArea.Root` around a
  * `ScrollArea.Viewport` that scrolls, with Base UI's own scroll bar, thumb,
- * and corner over it. Luke keeps the browser's own scrolling and scroll bar,
+ * and corner over it. Fullspin keeps the browser's own scrolling and scroll bar,
  * so the vendored component is shadcn's `ScrollArea` with its root and
  * viewport folded into the one `<div>` that scrolls, and none of Base UI. Its
  * local changes, each because Base UI's part would change what a caller sees

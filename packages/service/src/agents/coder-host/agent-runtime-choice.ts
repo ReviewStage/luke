@@ -20,7 +20,7 @@
  * own API key for the model's provider otherwise: where this function
  * reaches a harness, on Claude Code, as its documented `ANTHROPIC_API_KEY`,
  * for a Claude model, and on Codex, as its provider's `env_key`, for a GPT
- * model; on eve where it reaches none. Luke's own key
+ * model; on eve where it reaches none. Fullspin's own key
  * pays for no coding agent: an account with neither is refused by name
  * (`AgentCredentialMissing`, which names the provider), and connects one in
  * Settings › Agents. A brand-new account starts no coding agent until it
@@ -39,7 +39,7 @@
  * Codex on a Mac with none, or on no harness at all, is refused by name. A
  * local agent whose Mac is signed in to the model's harness itself, Claude
  * Code for a Claude model or Codex for a GPT model, runs on that login
- * (`localAgentRuntimeChoice`), whatever the account saved in Luke, and that
+ * (`localAgentRuntimeChoice`), whatever the account saved in Fullspin, and that
  * Mac offers the harness's models whether or not the account could pay for
  * them.
  */
@@ -239,7 +239,7 @@ const providerRuntimeChoice = Effect.fnUntraced(function* (
   const harness = Option.isSome(yield* Effect.serviceOption(NativeAgentSessions));
   const plan = harness ? keptPlan(userId, provider, yield* deploymentRing, rows) : undefined;
   if (plan?.forAgents === true) return onPlanOf(provider);
-  // Luke's key pays for no coding agent, so an account with no API key of the provider's is refused by name.
+  // Fullspin's key pays for no coding agent, so an account with no API key of the provider's is refused by name.
   if (!keepsApiKey(provider, rows))
     return yield* Effect.fail(new AgentCredentialMissing({ provider }));
   if (!harness) return ON_API_KEY;
@@ -268,7 +268,7 @@ const runsCodex = (device: Device): boolean => device.codexExecutable !== null;
 /**
  * Whether the Mac runs a Start of the provider's models: Claude Code's
  * anywhere, Codex's where it checked a Codex; where the account pays for the
- * harness in Luke (`paid`), or the Mac is signed in to it itself.
+ * harness in Fullspin (`paid`), or the Mac is signed in to it itself.
  */
 function macRunsProvider(
   device: Device,
@@ -297,7 +297,7 @@ const RUNTIME_OF = {
  * The providers a Start on any of the account's Macs runs, as the account
  * can pay for them: each of `MAC_PROVIDERS` whose model a Start of the
  * account's would run on that provider's own harness, on a plan or a key
- * it keeps in Luke, and none it cannot pay for.
+ * it keeps in Fullspin, and none it cannot pay for.
  */
 const paidMacProviders = Effect.fnUntraced(function* (
   userId: string,
@@ -328,7 +328,7 @@ const freshMacs = (userId: string) =>
  * Claude Code for a Claude model, Codex for a GPT model on a Mac that
  * checked a Codex; otherwise as any agent's (`agentRuntimeChoice`), on the
  * account's saved credential. So an account that saved no credential of the
- * provider's in Luke still starts one on a Mac signed in to its harness.
+ * provider's in Fullspin still starts one on a Mac signed in to its harness.
  * Note that the Mac read here is the one the Start pins (`agentMachineChoice`),
  * by its id, so the payer and the pin are of the same Mac.
  */
@@ -500,7 +500,7 @@ export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The provider whose credential an agent standing on eve lacks to take a
- * message, or none where it may: one recorded as paid for by Luke's key is
+ * message, or none where it may: one recorded as paid for by Fullspin's key is
  * refused whatever its starter keeps now, since an agent never moves to
  * another payer, and any other agent on eve (its own API key, or from
  * before payers were recorded) needs its starter's API key for its model's

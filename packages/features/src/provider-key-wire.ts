@@ -17,7 +17,7 @@ import { countedNumber } from "./service-wire.js";
  * then stand, so the page draws the service's word rather than its own guess.
  */
 
-/** The providers an account may hold a key of its own for: the two Luke runs coding agents on. */
+/** The providers an account may hold a key of its own for: the two Fullspin runs coding agents on. */
 export const PROVIDER_KEY_PROVIDER = MODEL_PROVIDER;
 
 export type ProviderKeyProvider =
@@ -35,7 +35,7 @@ export const PROVIDER_KEY_KIND = {
   CLAUDE_SETUP_TOKEN: "claude_setup_token",
   /**
    * A ChatGPT plan's renewable sign-in, as OpenAI's open-source Sign in with
-   * ChatGPT issues it to the desktop for Luke's hosted runtime; OpenAI's
+   * ChatGPT issues it to the desktop for Fullspin's hosted runtime; OpenAI's
    * alone. It is saved through its own route (`chatGptCredentialsSaveRequestSchema`),
    * never as a pasted key.
    */
@@ -63,7 +63,7 @@ export const PROVIDER_KEY_STATUS = {
   QUOTA_EXCEEDED: "quota_exceeded",
   /** The service cannot decrypt the key it holds, so it is used for nothing until it is replaced. */
   UNREADABLE: "unreadable",
-  /** A subscription credential no provider has answered yet: it is kept unchecked, since Luke never calls a provider on a plan itself. */
+  /** A subscription credential no provider has answered yet: it is kept unchecked, since Fullspin never calls a provider on a plan itself. */
   UNVERIFIED: "unverified",
   /** A plan whose usage limit refused an agent's turn; it pays again once the limit resets, which `limitResetsAt` says where the provider said. */
   LIMIT_REACHED: "limit_reached",
@@ -209,8 +209,8 @@ export const providerKeysAnswerSchema = EffectSchema.Struct({
   rejected: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(PROVIDER_KEY_REJECTION))),
   /**
    * Set where a ChatGPT sign-in was removed without OpenAI confirming its
-   * renewable session revoked: Luke holds it no longer, and the account may
-   * disconnect Luke in ChatGPT's settings to end it there.
+   * renewable session revoked: Fullspin holds it no longer, and the account may
+   * disconnect Fullspin in ChatGPT's settings to end it there.
    */
   revocationUnconfirmed: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
@@ -246,7 +246,7 @@ export const providerKeyForAgentsRequestSchema = EffectSchema.Struct({
   forAgents: EffectSchema.Boolean,
 });
 
-/** No OAuth token, client id, or subject Luke is handed is longer; a field past it is no credential. */
+/** No OAuth token, client id, or subject Fullspin is handed is longer; a field past it is no credential. */
 const CHATGPT_CREDENTIAL_BOUNDS = {
   MAX_TOKEN_CHARS: 16_384,
   MAX_ID_CHARS: 512,
@@ -268,7 +268,7 @@ const credentialId = EffectSchema.String.check(
 );
 
 /**
- * A ChatGPT sign-in the desktop completed for Luke's hosted runtime (PUT),
+ * A ChatGPT sign-in the desktop completed for Fullspin's hosted runtime (PUT),
  * as OpenAI's token endpoint answered it and its ID token validated on the
  * desktop: the issued client it renews under, the account's validated
  * subject, the tokens, the access token's lifetime from the moment the
@@ -297,9 +297,9 @@ export const chatGptCredentialsSaveRequestSchema = EffectSchema.Struct({
 export type ChatGptCredentialsSaveRequest = typeof chatGptCredentialsSaveRequestSchema.Type;
 
 /**
- * The account's `ext_agent_host_id` for Luke's hosted runtime (GET), minted
+ * The account's `ext_agent_host_id` for Fullspin's hosted runtime (GET), minted
  * on the first read and the same on every read after it, a sign-out's
- * included, which the desktop names as the host when it signs in for Luke.
+ * included, which the desktop names as the host when it signs in for Fullspin.
  * An opaque identifier, not a credential.
  */
 export const chatGptHostAnswerSchema = EffectSchema.Struct({

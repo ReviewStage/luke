@@ -38,7 +38,7 @@ function labelsOf(template: MenuItemConstructorOptions[], menu: string): readonl
 
 describe("the menu bar's gate", () => {
   test("every item stands while every command does", () => {
-    assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
+    assert.deepEqual(labelsOf(appMenuTemplate("Fullspin"), "Go"), [
       "Command Palette",
       "-",
       "Inbox",
@@ -58,7 +58,7 @@ describe("the menu bar's gate", () => {
 
   test("a command that does not stand has no item, and strands no separator", () => {
     const withoutInbox = appMenuTemplate(
-      "Luke",
+      "Fullspin",
       undefined,
       (command) => command !== APP_COMMAND.INBOX,
     );
@@ -79,7 +79,7 @@ describe("the menu bar's gate", () => {
     ]);
 
     const withoutPlaces = appMenuTemplate(
-      "Luke",
+      "Fullspin",
       undefined,
       (command) =>
         command !== APP_COMMAND.INBOX &&
@@ -104,7 +104,7 @@ describe("the menu bar's gate", () => {
 describe("the menu bar's drawer", () => {
   test("keeps the update item it was last told when the experiments move", () => {
     const drawn: MenuItemConstructorOptions[][] = [];
-    const show = menuBarDrawer({ appName: "Luke", packaged: false }, (template) =>
+    const show = menuBarDrawer({ appName: "Fullspin", packaged: false }, (template) =>
       drawn.push(template),
     );
 
@@ -118,11 +118,11 @@ describe("the menu bar's drawer", () => {
       onOpenLatest: () => undefined,
     } as const;
     show({ update });
-    assert.ok(labelsOf(drawn.at(-1) ?? [], "Luke").includes("Restart to Update"));
+    assert.ok(labelsOf(drawn.at(-1) ?? [], "Fullspin").includes("Restart to Update"));
 
     // The experiments moving keeps the update item it was last told.
     show({ experiments: {}, capabilities: [] });
-    assert.ok(labelsOf(drawn.at(-1) ?? [], "Luke").includes("Restart to Update"));
+    assert.ok(labelsOf(drawn.at(-1) ?? [], "Fullspin").includes("Restart to Update"));
   });
 });
 
@@ -136,7 +136,9 @@ function choosableLabels(items: readonly MenuItemConstructorOptions[]): string[]
 
 /** The labels of every item a reader can choose that end with an ellipsis, in any state of the update item. */
 function ellipsizedLabels(update?: Parameters<typeof appMenuTemplate>[1]): string[] {
-  return choosableLabels(appMenuTemplate("Luke", update)).filter((label) => label.endsWith("…"));
+  return choosableLabels(appMenuTemplate("Fullspin", update)).filter((label) =>
+    label.endsWith("…"),
+  );
 }
 
 const ASKING_ITEMS = ["Permanently Delete…", "Send Feedback…", "Settings…", "Suggest a Feature…"];
@@ -161,7 +163,7 @@ describe("the menu bar's names", () => {
 
 describe("the command palette and tab moves", () => {
   test("stand under Go with their chords, as items of their own commands", () => {
-    const items = everyItem(appMenuTemplate("Luke")).filter((item) =>
+    const items = everyItem(appMenuTemplate("Fullspin")).filter((item) =>
       [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.MOVE_TAB_LEFT, APP_COMMAND.MOVE_TAB_RIGHT].some(
         (command) => command === item.id,
       ),
@@ -188,7 +190,7 @@ function everyItem(items: readonly MenuItemConstructorOptions[]): MenuItemConstr
 /** The menu bar a build draws once the windows have told it of their developer tools. */
 function drawnFor(packaged: boolean): MenuItemConstructorOptions[] {
   let last: MenuItemConstructorOptions[] = [];
-  const show = menuBarDrawer({ appName: "Luke", packaged }, (template) => {
+  const show = menuBarDrawer({ appName: "Fullspin", packaged }, (template) => {
     last = template;
   });
   show({ developerTools: true });
@@ -214,7 +216,7 @@ describe("the developer tools", () => {
     );
   });
 
-  test("their chord is no window command's, so it shadows none of Luke's shortcuts", () => {
+  test("their chord is no window command's, so it shadows none of Fullspin's shortcuts", () => {
     const tools = everyItem(drawnFor(false)).find((item) => item.role === "toggleDevTools");
     assert.ok(tools?.accelerator, "the developer tools answer a chord");
     assert.ok(
@@ -225,7 +227,7 @@ describe("the developer tools", () => {
   });
 });
 
-/** A window of Luke's, as the menu is handed the one it was chosen over. */
+/** A window of Fullspin's, as the menu is handed the one it was chosen over. */
 function aWindow(): BaseWindow {
   return {} as BaseWindow;
 }
@@ -238,7 +240,7 @@ function pressNewTask(window: BaseWindow | undefined, panelWindow: BaseWindow): 
     onReopen: (command) => reopened.push(command),
   };
   let drawn: MenuItemConstructorOptions[] = [];
-  menuBarDrawer({ appName: "Luke", packaged: true }, (template) => {
+  menuBarDrawer({ appName: "Fullspin", packaged: true }, (template) => {
     drawn = template;
   })({ panel });
   const newTask = everyItem(drawn).find((item) => item.id === APP_COMMAND.NEW_TASK);
@@ -252,7 +254,7 @@ describe("New Task", () => {
     assert.deepEqual(pressNewTask(undefined, aWindow()), [APP_COMMAND.NEW_TASK]);
   });
 
-  test("its key over another of Luke's windows brings the panel forward on a new task", () => {
+  test("its key over another of Fullspin's windows brings the panel forward on a new task", () => {
     assert.deepEqual(pressNewTask(aWindow(), aWindow()), [APP_COMMAND.NEW_TASK]);
   });
 
@@ -265,7 +267,7 @@ describe("New Task", () => {
 /** View's first item, as the menu bar draws it once main has (or has not) told it of the reload. */
 function viewReload(reload?: ReloadMenu): MenuItemConstructorOptions | undefined {
   let drawn: MenuItemConstructorOptions[] = [];
-  const show = menuBarDrawer({ appName: "Luke", packaged: true }, (template) => {
+  const show = menuBarDrawer({ appName: "Fullspin", packaged: true }, (template) => {
     drawn = template;
   });
   show(reload === undefined ? undefined : { reload });

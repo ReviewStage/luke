@@ -6,7 +6,7 @@
  * account row, which `GitHubApp.userToken` reads and refreshes. So GitHub
  * has no connector, no `integration_connection` row, and no Connect or
  * Disconnect of its own (`INTEGRATION_GRANT_OF`): it stands connected
- * whenever that sign-in does, reaches what the Luke GitHub App reaches for
+ * whenever that sign-in does, reaches what the Fullspin GitHub App reaches for
  * the account, and is mended by signing in with GitHub again. The token is
  * read afresh at every ask, never kept here.
  */

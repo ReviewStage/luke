@@ -22,7 +22,7 @@ import { useOpenSettings } from "./open-settings.js";
  * openai-key.tsx -- whether the signed-in account has an OpenAI API key saved, which its calls and dictation run on, as every surface offering them reads it.
  *
  * Calls and dictated clips run on the account's own OpenAI key and never on
- * Luke's, so with none saved the Call and Dictate buttons say where to add
+ * Fullspin's, so with none saved the Call and Dictate buttons say where to add
  * one and open Codex's row in Settings › Agents rather than starting
  * something the service would refuse. The window reads the account's keys
  * once it is signed in, again whenever it is focused, which is how the

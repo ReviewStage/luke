@@ -27,7 +27,7 @@ const _workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema
 
 /** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
-  "GitHub is the only way you sign in to this Luke account, so it cannot be disconnected." as const;
+  "GitHub is the only way you sign in to this Fullspin account, so it cannot be disconnected." as const;
 
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =
@@ -61,7 +61,7 @@ export const FENCE_LANGUAGE_MAX_CHARS = 32;
 /** The one host the browser is sent to from a task: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 
-/** An address on GitHub, and nowhere else: what a repository link, the installation link, or Luke's own issues open. */
+/** An address on GitHub, and nowhere else: what a repository link, the installation link, or Fullspin's own issues open. */
 export const githubAddress = EffectSchema.String.check(
   EffectSchema.isMaxLength(2_048),
   EffectSchema.isPattern(GITHUB_ADDRESS),

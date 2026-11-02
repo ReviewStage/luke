@@ -606,7 +606,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
-      "under Luke's own bar, with an Expand into the viewer",
+      "under Fullspin's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
@@ -631,7 +631,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
-      "under Luke's own bar",
+      "under Fullspin's own bar",
     );
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
@@ -785,7 +785,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
-      "under Luke's own bar, with an Expand into the viewer",
+      "under Fullspin's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.ok(inline.closest(".ph-no-capture"));
@@ -808,7 +808,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
-      "under Luke's own bar",
+      "under Fullspin's own bar",
     );
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
   } finally {

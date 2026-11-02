@@ -1,6 +1,6 @@
-# Contributing to Luke
+# Contributing to Fullspin
 
-Luke is a macOS Electron app for working through a task with coding agents
+Fullspin is a macOS Electron app for working through a task with coding agents
 that read your code, write the task's plan, and open its pull requests.
 
 This page covers setup and points at the documents that own the rest.
@@ -12,7 +12,7 @@ reviewers hold a pull request to; read it to know what review will check, not as
 a setup guide. Its Never section matters most: no credential or account secret
 reaches an answer, an event, a trace, or a fixture, and
 session replay leaves the machine as layout, never text. A change that widens
-what Luke may read or write, or what leaves the developer's machine, is a
+what Fullspin may read or write, or what leaves the developer's machine, is a
 product decision, so open an issue first rather than a pull request.
 
 ## Set up
@@ -29,7 +29,7 @@ Command Line Tools.
 ./scripts/run.sh --preview         # launch against this branch's Vercel Preview, as its own instance
 ```
 
-## Developing without Luke's accounts
+## Developing without Fullspin's accounts
 
 - **On Linux**, `./scripts/bootstrap.sh` installs dependencies (it skips
   Electron's binary), and `./scripts/check.sh`, the vitest suites
@@ -96,8 +96,8 @@ packages/
   wire/           the vocabulary every side speaks and the Schema tooling it is declared with
 tools/
   anti-slop/      the repository's oxlint rules
-  claude-code-probe/  proves Claude Code runs inside a Luke sandbox
-  codex-probe/    proves Codex runs inside a Luke sandbox
+  claude-code-probe/  proves Claude Code runs inside a Fullspin sandbox
+  codex-probe/    proves Codex runs inside a Fullspin sandbox
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
 docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
 ```

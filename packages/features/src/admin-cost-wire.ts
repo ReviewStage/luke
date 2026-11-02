@@ -12,7 +12,7 @@ import type { AdminTrend } from "./admin-answer-wire.js";
 export const COST_SOURCE = {
   /** A coding agent's turns and its workers'. */
   AGENTS: "agents",
-  /** Luke's own turns: every other conversation kind, the brain and its workers. */
+  /** Fullspin's own turns: every other conversation kind, the brain and its workers. */
   LUKE: "luke",
   DICTATION: "dictation",
 } as const;

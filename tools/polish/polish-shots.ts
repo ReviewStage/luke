@@ -16,7 +16,7 @@
  *
  * Every picture is taken in light and in dark, with `data-luke-theme` held on
  * the root and the machine's appearance emulated to match, at the three sizes
- * the window is checked at: wide, the window Luke opens in (1280×840,
+ * the window is checked at: wide, the window Fullspin opens in (1280×840,
  * `DESKTOP_WINDOW` in `apps/desktop/src/main/window/panel-manager.ts`); the
  * least window (760×520); and narrow, which is the phone layout on the web
  * (390 wide) and the least window at 125% zoom on the desktop (608 CSS px).
@@ -36,7 +36,7 @@
  * burnt off (`electron-builder-config.mjs`) and Playwright attaches through
  * the inspector. Each launch runs as a named instance of its own
  * (`LUKE_INSTANCE`), so it holds a lock and a state folder no other launch
- * shares and never replaces the Luke a developer has open; the folder is
+ * shares and never replaces the Fullspin a developer has open; the folder is
  * deleted once that launch has exited, which it is made to do past its quit
  * guard and so leaves its state unclosed. The motion tokens are zeroed as a capture run
  * zeroes them, so a picture lands on the steady state. It is not a test:
@@ -494,7 +494,7 @@ async function exitsInTime(child: ChildProcess): Promise<boolean> {
 }
 
 /**
- * Ends the app at once, past its quit guard: one that asks "Quit Luke?"
+ * Ends the app at once, past its quit guard: one that asks "Quit Fullspin?"
  * before a quit has no one there to answer it, so Playwright's own close,
  * a quit, would wait on it for ever. One that does not exit in time is
  * killed. Answers whether the process is gone.

@@ -10,9 +10,9 @@ import { authDatabaseAdapter } from "./auth-database.js";
 import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "./auth-policy.js";
 
 /**
- * Workspace invitations on Luke's own organization policy over a migrated
+ * Workspace invitations on Fullspin's own organization policy over a migrated
  * PGlite: made, listed, and canceled through the server-only calls under the
- * inviter's session, as Luke's routes make them for the Mac, and read and
+ * inviter's session, as Fullspin's routes make them for the Mac, and read and
  * accepted over HTTP, as the accept page reaches them from a browser
  * session. Email and password sign-up stands in for the Google or GitHub
  * sign-in, whose provider verifies the address, so an account is marked
@@ -91,7 +91,7 @@ async function verify(auth: Auth, userId: string): Promise<void> {
   await context.internalAdapter.updateUser(userId, { emailVerified: true });
 }
 
-/** A workspace the server made for its owner, as Luke's own routes make one. */
+/** A workspace the server made for its owner, as Fullspin's own routes make one. */
 async function workspaceOf(auth: Auth, owner: Account): Promise<string> {
   const created = await auth.api.createOrganization({
     body: { name: "Acme", slug: "acme", userId: owner.id },
@@ -124,7 +124,7 @@ function sessionOf(account: Account): Headers {
   return new Headers({ cookie: account.cookie });
 }
 
-/** An invitation made through the server-only call Luke's route makes, answered as the plugin answers it. */
+/** An invitation made through the server-only call Fullspin's route makes, answered as the plugin answers it. */
 async function invite(auth: Auth, inviter: Account, workspaceId: string, email: string) {
   return auth.api.createInvitation({
     headers: sessionOf(inviter),
@@ -264,7 +264,7 @@ test("an invitation is accepted only by the invited address, and only once its p
   });
 });
 
-test("no browser invites, lists, or cancels over HTTP: the Mac does, through Luke's routes", async () => {
+test("no browser invites, lists, or cancels over HTTP: the Mac does, through Fullspin's routes", async () => {
   await withAuth(async (auth) => {
     const owner = await signUp(auth, "owner");
     const workspaceId = await workspaceOf(auth, owner);

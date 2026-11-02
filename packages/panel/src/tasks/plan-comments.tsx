@@ -682,7 +682,7 @@ function CommentEntry({
         },
       ]
     : [];
-  // Note that a thread's starter deletes it whole, or any member where Luke or an agent started it, as the service holds it to.
+  // Note that a thread's starter deletes it whole, or any member where Fullspin or an agent started it, as the service holds it to.
   const deletes: MenuAction[] = [
     ...(mine && !first
       ? [

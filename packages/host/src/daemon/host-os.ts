@@ -121,7 +121,7 @@ export interface HostRuntime {
   readonly stateRoot: string;
 }
 
-/** The description and state folder of the OS given, as Node's `process.platform` names it, for a daemon run with the home given; none where Luke builds no host for it. */
+/** The description and state folder of the OS given, as Node's `process.platform` names it, for a daemon run with the home given; none where Fullspin builds no host for it. */
 export function hostRuntime(input: {
   readonly platform: string;
   readonly home: string;

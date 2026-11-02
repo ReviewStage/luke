@@ -4,13 +4,13 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { clsx } from "clsx";
 
 /**
- * badge.tsx -- shadcn/ui's badge (style `base-nova`, on Base UI), vendored and drawn as Luke's badge.
+ * badge.tsx -- shadcn/ui's badge (style `base-nova`, on Base UI), vendored and drawn as Fullspin's badge.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add badge` reads as a small diff. Its local
  * changes:
  *
- * - The base box is Luke's badge: a capsule that may shrink below its words
+ * - The base box is Fullspin's badge: a capsule that may shrink below its words
  *   and wrap them (no `h-5`, `w-fit`, `shrink-0`, `overflow-hidden`, or
  *   `whitespace-nowrap`), cornered by half a one-line badge's height
  *   (`rounded-badge`) rather than a full round, so a wrapped badge stands as

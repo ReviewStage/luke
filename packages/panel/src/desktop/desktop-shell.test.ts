@@ -474,7 +474,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, or Channels in its place, Automations, or Settings, and Luke once signed out", async () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, or Channels in its place, Automations, or Settings, and Fullspin once signed out", async () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
@@ -500,7 +500,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
       titled(false, PANEL_TAB.TASKS, false),
       titled(false, PANEL_TAB.TASKS, true, [{ ...ACME, id: "workspace-other" }]),
     ],
-    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke", DOCUMENT_NAME],
+    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Fullspin", DOCUMENT_NAME],
   );
 
   mount(false, false, {
@@ -693,7 +693,7 @@ test("a press on the Automations row in a floating sidebar puts the sidebar away
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
 
-test("the sidebar offers no Issues row, with every experiment on, since Luke keeps no issues of its own", async () => {
+test("the sidebar offers no Issues row, with every experiment on, since Fullspin keeps no issues of its own", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   const page = mount(false);
   await settle();

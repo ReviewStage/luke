@@ -40,7 +40,7 @@ import { useOpenLink } from "./use-open-link.js";
  * which is where a picture's edit is named rather than over it in the text. A
  * picture of another plan, one copied across, is read as that plan's, which
  * only that plan's readers may, and opens nothing here. A picture from
- * outside Luke is never fetched, since the window's policy refuses it and a
+ * outside Fullspin is never fetched, since the window's policy refuses it and a
  * fetch would tell its host who reads the plan: it is a link to it, which
  * opens in the browser.
  */
@@ -191,7 +191,7 @@ function PlanPicture({
   );
 }
 
-/** A picture from outside Luke: a link to it, never fetched. */
+/** A picture from outside Fullspin: a link to it, never fetched. */
 function OutsidePicture({
   href,
   alt,

@@ -65,7 +65,7 @@ import { failedCallRefusal } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
 
 /**
- * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from Luke's voice.
+ * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from Fullspin's voice.
  *
  * The words are handed to the session the agent runs in, where they steer
  * the turn under way or open one, and written as a line awaiting its turn
@@ -97,7 +97,7 @@ import { agentStatusOf } from "./status.js";
  * (the starter alone, for an agent on its starter's own GitHub token),
  * while the line
  * lands in the agent's conversation under the member who started it,
- * naming what sent it: the member, Luke from a call, or an automation's run.
+ * naming what sent it: the member, Fullspin from a call, or an automation's run.
  * A teammate's words, a member's other than the starter, are handed to eve
  * behind a label naming them by their mention link (`attached-files.ts`'s
  * `senderLabel`), which the row leaves out, since its sender is its own
@@ -130,7 +130,7 @@ import { agentStatusOf } from "./status.js";
  * send is made under, which a repeat carries again, and what sent them, which
  * the row keeps and eve is not told; and what the row says carried it, the
  * developer's typed ask unless the caller names another agent's message, a
- * thread, a plan comment, GitHub, Luke, or an automation's run, which eve is
+ * thread, a plan comment, GitHub, Fullspin, or an automation's run, which eve is
  * not told either.
  */
 export interface SteerLine {
@@ -354,7 +354,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { runtime, payer } = routing.value;
   if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  // Note that Luke's key pays for no coding agent, so one it paid for, or one on eve whose starter
+  // Note that Fullspin's key pays for no coding agent, so one it paid for, or one on eve whose starter
   // keeps no API key for its model now, is refused by name and never moved to another payer.
   const missing = yield* hostedStoreOrUnavailable(
     messageCredentialMissing(agent, { runtime, payer }),
@@ -405,7 +405,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     },
     { concurrency: "unbounded" },
   );
-  // Note that a GitHub that did not answer, or that holds Luke's calls for its rate limit, lets the words through,
+  // Note that a GitHub that did not answer, or that holds Fullspin's calls for its rate limit, lets the words through,
   // because the agent's checkout already stands and only GitHub's definite no is a reason to keep them from it.
   yield* Effect.fromResult(reached.repository).pipe(
     Effect.catch((refusal) =>

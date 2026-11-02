@@ -355,7 +355,7 @@ function handedMention(
     case MENTION_KIND.FILE:
       return mention.lines === undefined ? undefined : mention;
     case MENTION_KIND.FOLDER:
-    // Luke named in words is a comment's ask of him, which hands an agent nothing.
+    // Fullspin named in words is a comment's ask of it, which hands an agent nothing.
     case MENTION_KIND.LUKE:
     // A date's words are the date in full, which is all there is to hand.
     case MENTION_KIND.DATE:

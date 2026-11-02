@@ -3,7 +3,7 @@
  *
  * The shell is the app's own (`@luke/panel`'s `shell.css`, which the panel
  * lays for its window): the same two columns, the sidebar's ground, insets,
- * and width, Luke's head over its rows, and the toggle standing at the
+ * and width, Fullspin's head over its rows, and the toggle standing at the
  * column's top-left whichever way the sidebar is. Hiding the sidebar slides
  * it off the left edge on the pane's motion while the view takes the room at
  * once, and the choice is remembered (`prefs.ts`). A narrow room's sidebar,
@@ -112,7 +112,7 @@ function AccountFoot({
 }
 
 /**
- * The column itself: the title bar's row the toggle stands over, Luke's head
+ * The column itself: the title bar's row the toggle stands over, Fullspin's head
  * named for the dashboard, the places as the app's sidebar lists its own,
  * each a real anchor to its own address so a modified click still gets the
  * browser's own gesture, and the account at the foot.

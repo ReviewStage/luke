@@ -53,7 +53,7 @@ import { mountPrerenderedPage } from "./mount-page";
  * connect ended is said in every landing's words
  * (`@luke/features/landing-outcome`), and an error by our words for its code,
  * or by Better Auth's own. Once the page says how it ended it offers Open
- * Luke (`connect-return.ts`), and a connect the web app started closes where
+ * Fullspin (`connect-return.ts`), and a connect the web app started closes where
  * that is `done=1`; never while the page is still on its way to GitHub.
  */
 
@@ -70,7 +70,7 @@ type View =
 const WORKING: View = { kind: VIEW.WORKING };
 const GITHUB = INTEGRATION_NAME[INTEGRATION_PROVIDER.GITHUB];
 const RELOAD = "Reload this page to try again.";
-const SIGN_IN_BODY = "Sign in to the Luke account you use on your Mac.";
+const SIGN_IN_BODY = "Sign in to the Fullspin account you use on your Mac.";
 
 /** A claim that did not settle: the browser has no session, or the service gave no answer. */
 const CLAIM_UNSETTLED = { SIGNED_OUT: "signed-out", UNANSWERED: "unanswered" } as const;
@@ -111,7 +111,7 @@ async function connect(intent: string): Promise<View> {
   if (claim === GITHUB_CONNECT_CLAIM.OTHER_ACCOUNT) {
     return signIn(
       "Sign in as the account you're connecting",
-      "This browser is signed in to a different Luke account than the one that asked to connect GitHub.",
+      "This browser is signed in to a different Fullspin account than the one that asked to connect GitHub.",
     );
   }
   if (claim === GITHUB_CONNECT_CLAIM.EXPIRED) return said(LANDING_OUTCOME.EXPIRED);
@@ -145,7 +145,7 @@ function settledView(step: ConnectStep): View | undefined {
  * The page opens on GitHub's mark, badged once the connect has ended: the
  * title says where the connect stands, the description what to do about it,
  * with a link that offers a refused connect again, the body holds the
- * providers when a sign-in comes first, and Open Luke goes back once it
+ * providers when a sign-in comes first, and Open Fullspin goes back once it
  * ended. A sign-in that cannot start is said in the page's alert region
  * rather than under the choices.
  */

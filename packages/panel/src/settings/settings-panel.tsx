@@ -148,7 +148,7 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
         <>
           <MacCommandsSection view={panelView} writes={writes} notifications={notifications} />
-          {/* Dictation's microphone, on a platform whose microphone Luke asks for itself. */}
+          {/* Dictation's microphone, on a platform whose microphone Fullspin asks for itself. */}
           {capabilities.includes(HOST_CAPABILITY.MICROPHONE) ? (
             <MicrophoneSection view={panelView} writes={writes} microphone={microphone} />
           ) : null}

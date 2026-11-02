@@ -228,7 +228,7 @@ const CREATE_TASK_INPUT = Schema.Struct({
   brief: Schema.optionalKey(
     describeWire(
       Schema.Trim.check(Schema.isMaxLength(TASK_BOUNDS.MAX_BRIEF_CHARS)),
-      "The developer's own words about the task, which Luke is handed when they open a call on " +
+      "The developer's own words about the task, which Fullspin is handed when they open a call on " +
         "it; their words where they gave them, left out otherwise.",
     ),
   ),

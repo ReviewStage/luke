@@ -1,5 +1,5 @@
 /**
- * workspace-sentry.ts -- a workspace's installations of Luke's Sentry integration begun, read, and ended (`sentry-install-wire.ts`).
+ * workspace-sentry.ts -- a workspace's installations of Fullspin's Sentry integration begun, read, and ended (`sentry-install-wire.ts`).
  *
  * Where Sentry returns the browser after an install (`triggers/sentry/installed`)
  * is a redirect, not a procedure, and stays a route of its own.

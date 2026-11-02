@@ -264,7 +264,7 @@ test("a Start refused because the workspace has no GitHub connected names the re
 
   assert.equal(
     tab.words(),
-    "This workspace isn't connected to GitHub, so Luke cannot reach Acme/Relay.",
+    "This workspace isn't connected to GitHub, so Fullspin cannot reach Acme/Relay.",
   );
   assert.equal(tab.draft(), DRAFT.prompt, "the words stay in the box");
   await tab.press("Connect GitHub");
@@ -281,7 +281,7 @@ test("a Start refused because the workspace's GitHub was removed or suspended of
 
   assert.equal(
     tab.words(),
-    "This workspace's GitHub connection was removed or suspended, so Luke cannot reach Acme/Relay.",
+    "This workspace's GitHub connection was removed or suspended, so Fullspin cannot reach Acme/Relay.",
   );
   await tab.press("Reconnect GitHub");
   assert.deepEqual(tab.remedies, [`workspace-github:${TASK_ID}`]);
@@ -295,8 +295,8 @@ test("a Start refused because the installation was not given the repository open
   ]);
   await tab.send();
 
-  assert.equal(tab.words(), "Luke's GitHub App doesn't have access to Acme/Relay.");
-  await tab.press("Add Acme/Relay to Luke's GitHub App");
+  assert.equal(tab.words(), "Fullspin's GitHub App doesn't have access to Acme/Relay.");
+  await tab.press("Add Acme/Relay to Fullspin's GitHub App");
   assert.deepEqual(tab.remedies, [`github:${settingsUrl}`]);
   assert.ok(tab.button("Retry"));
 });
@@ -351,7 +351,7 @@ test("a Start GitHub did not answer says so and offers Retry alone, and one from
 
   assert.equal(tab.words(), "GitHub didn't answer.");
   await tab.press("Retry");
-  assert.equal(tab.words(), "Luke cannot reach this task's repository on GitHub.");
+  assert.equal(tab.words(), "Fullspin cannot reach this task's repository on GitHub.");
   assert.ok(tab.button("Retry"));
   assert.deepEqual(tab.remedies, []);
 });

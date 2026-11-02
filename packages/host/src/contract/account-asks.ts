@@ -70,7 +70,9 @@ export const accountAskActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: actProcedure("Could not read Luke's memory on this system.")
+  [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: actProcedure(
+    "Could not read Fullspin's memory on this system.",
+  )
     .input(exactInput(memoriesReadParamsSchema))
     .output(EffectSchema.flip(memoriesAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: actProcedure(

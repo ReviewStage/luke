@@ -3,7 +3,7 @@
  * today: tasks, plans, coding agents, pull requests, the inbox, and
  * automations, shaped from the rows the queries read.
  *
- * Everything here is an aggregate or a per-account count of rows Luke already
+ * Everything here is an aggregate or a per-account count of rows Fullspin already
  * keeps for its own operation. No title, plan text, prompt, message, workspace
  * name, or repository name is read, so none can reach the answer. The queries
  * live in `admin-overview-queries.ts`; this module is the pure fold, so the

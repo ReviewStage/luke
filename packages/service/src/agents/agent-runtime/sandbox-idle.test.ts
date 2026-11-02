@@ -93,7 +93,7 @@ function sandboxOver(proc: string): RepositorySandbox {
 
 const SANDBOX_INIT: Process = { pid: 1, name: "sandbox-init", bounding: FULL_SET };
 const API_SHELL: Process = { pid: 1298, name: "bash", bounding: FULL_SET };
-/** Luke's browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
+/** Fullspin's browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
 const LUKE_BROWSER: readonly Process[] = [
   {
     pid: 300,
@@ -116,11 +116,13 @@ const LUKE_BROWSER: readonly Process[] = [
   },
 ];
 
-it.effect("a sandbox running only what the sandbox's API started and Luke's browser is idle", () =>
-  Effect.gen(function* () {
-    const proc = yield* procOf([SANDBOX_INIT, API_SHELL, ...LUKE_BROWSER]);
-    assert.equal(yield* sandboxIdle(sandboxOver(proc)), true);
-  }).pipe(Effect.scoped),
+it.effect(
+  "a sandbox running only what the sandbox's API started and Fullspin's browser is idle",
+  () =>
+    Effect.gen(function* () {
+      const proc = yield* procOf([SANDBOX_INIT, API_SHELL, ...LUKE_BROWSER]);
+      assert.equal(yield* sandboxIdle(sandboxOver(proc)), true);
+    }).pipe(Effect.scoped),
 );
 
 it.effect("a sandbox where a process the agent started still runs is busy, whatever it is", () =>

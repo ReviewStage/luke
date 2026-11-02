@@ -10,7 +10,7 @@ import { closeEveryMacTerminal, type MacTerminalTools, startMacTerminal } from "
  * a real terminal, takes what is typed, follows a resize, says how it ended,
  * and a close hangs up what it started, and kills what ignores that once
  * its grace is up. On a Mac it runs on macOS's own
- * tools as Luke starts them; elsewhere `script` and `stty` take Linux's
+ * tools as Fullspin starts them; elsewhere `script` and `stty` take Linux's
  * arguments, which the tools seam hands in.
  */
 
@@ -35,7 +35,7 @@ function open(
   });
   const terminal = startMacTerminal({
     build: script,
-    // On a Mac, its own tools as Luke starts them; elsewhere, the Linux ones.
+    // On a Mac, its own tools as Fullspin starts them; elsewhere, the Linux ones.
     tools: { ...(process.platform === "darwin" ? {} : LINUX_TOOLS), ...tools },
     onOutput: (bytes) => {
       printed += Buffer.from(bytes).toString("utf8");
@@ -206,7 +206,7 @@ it.effect("a close kills what ignores the hang-up and the terminate once its gra
   }),
 );
 
-test("a terminal that cannot start says why and ends, and Luke goes on", async () => {
+test("a terminal that cannot start says why and ends, and Fullspin goes on", async () => {
   let printed = "";
   const code = await new Promise<number | null>((resolve) => {
     startMacTerminal({

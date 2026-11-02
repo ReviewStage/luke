@@ -61,7 +61,7 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.CREATOR_LEFT]: "Its creator is no longer in the workspace.",
   [AUTOMATION_RUN_REASON.NO_REPOSITORY]: "It names no repository to work in.",
   [AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE]:
-    "Luke can no longer reach its repository on GitHub.",
+    "Fullspin can no longer reach its repository on GitHub.",
   [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in expired.",
   [AUTOMATION_RUN_REASON.MODEL]: "Its model is no longer offered. Choose another.",
   [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "Connect its model's provider in settings to run it.",
@@ -89,7 +89,7 @@ const GITHUB_EVENT_WORDS = {
 /** Whose events a GitHub trigger hears, as its sentence names them after "by". */
 const GITHUB_SENDER_WORDS = {
   [GITHUB_SENDER.PEOPLE]: "people",
-  [GITHUB_SENDER.LUKE_AGENTS]: "Luke's agents",
+  [GITHUB_SENDER.LUKE_AGENTS]: "Fullspin's agents",
   [GITHUB_SENDER.OTHER_BOTS]: "other bots",
 } as const satisfies Record<GitHubSender, string>;
 

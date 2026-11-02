@@ -298,7 +298,7 @@ export type NewAgent = AgentPlace & {
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
   /** The agent of the same plan this one is started from, with its replay's counts; none for one started afresh. */
   readonly startedFrom?: StoredStartedFrom | undefined;
-  /** The coding agent whose `start_agent` starts this one; none for a Start by a member, Luke, or an automation. */
+  /** The coding agent whose `start_agent` starts this one; none for a Start by a member, Fullspin, or an automation. */
   readonly startedByAgentId?: string | undefined;
   /** The pilot this one continues, whose unarchived agents of the account now report to this one; none for any other Start. */
   readonly takesOverFrom?: string | undefined;
@@ -338,7 +338,7 @@ export interface AgentRouting {
   readonly runtime: ConversationRuntime;
   /** The harness's session or thread id; null on eve and before the harness answers one. */
   readonly nativeSession: string | null;
-  /** The digest of the runner's bearer at Luke's MCP server; null where no runner holds one. */
+  /** The digest of the runner's bearer at Fullspin's MCP server; null where no runner holds one. */
   readonly runnerTokenHash: string | null;
   /** Who pays for the agent's model calls; null for an agent from before the column. */
   readonly payer: AgentPayer | null;
@@ -1288,7 +1288,7 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
     ),
 });
 
-/** The runtimes whose sandbox Luke opens itself, with a runner in it: the native harnesses. */
+/** The runtimes whose sandbox Fullspin opens itself, with a runner in it: the native harnesses. */
 const NATIVE_RUNTIMES = [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX] as const;
 
 /** The turn statuses a turn ends in; a queued or running one has not ended. */
@@ -1997,7 +1997,7 @@ const deleteAgentPin = SqlSchema.findOneOption({
  * The columns of an agent that a caller holding only its conversation most
  * often needs: who it is, who started it, its task, repository, title, and
  * archive. Note that these leave out the plan's text and the prompt, the bulk
- * of a row, since every Luke tool call an agent makes reads its agent.
+ * of a row, since every Fullspin tool call an agent makes reads its agent.
  */
 const AGENT_HEADER_COLUMNS = {
   id: agentTable.id,
@@ -3293,7 +3293,7 @@ export interface NativeRunStanding {
  * hand, because the scheduled sweep stops ended native sandboxes for every
  * account: its conversation, and when its newest turn ended. Nothing for an
  * id that names no agent, an agent on eve, or one whose conversation was
- * deleted. Only for an id a sandbox Luke opened carries; it answers nothing
+ * deleted. Only for an id a sandbox Fullspin opened carries; it answers nothing
  * a member wrote.
  */
 export function readNativeRunStanding(
@@ -3564,7 +3564,7 @@ export function delegationStartsOf(
 /**
  * What sent one of the developer's lines to an agent, as a reader names it:
  * a member by their account's id and the name it holds now, or nobody where
- * their account is gone; Luke; an automation by the name its run kept; or
+ * their account is gone; Fullspin; an automation by the name its run kept; or
  * GitHub by the login the line kept; or another coding agent by the name
  * its send kept, and the model it ran on then, which its harness is read
  * off, where the line kept one, and the agent itself, by its id and the

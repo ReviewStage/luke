@@ -300,7 +300,7 @@ test("a teammate's card says who they are and what they last changed in the plan
   assert.match(card.textContent ?? "", /Edited Goal and Risks · now$/u);
 });
 
-test("Luke's card says when he wrote, and what he wrote", async () => {
+test("Fullspin's card says when it wrote, and what it wrote", async () => {
   const at = Date.now();
   const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: false };
   const task: Task = {
@@ -313,7 +313,7 @@ test("Luke's card says when he wrote, and what he wrote", async () => {
   };
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
-  assert.ok(card.querySelector('[data-actor-card="luke"]'), "Luke's card hangs");
+  assert.ok(card.querySelector('[data-actor-card="luke"]'), "Fullspin's card hangs");
   assert.match(card.textContent ?? "", /^LukenowEdited Goal and Risks$/u);
 });
 
@@ -371,7 +371,7 @@ test("the sections changed since the last look are counted beside a face for eac
     ),
     ["person", "luke"],
   );
-  assert.equal(line.querySelector(".luke-visually-hidden")?.textContent, "Charles Pan, Luke");
+  assert.equal(line.querySelector(".luke-visually-hidden")?.textContent, "Charles Pan, Fullspin");
   act(() => line.querySelector("button")?.click());
   assert.equal(dismissed, 1);
 });

@@ -1569,7 +1569,7 @@ interface DrawnSubagent {
 /**
  * A subagent as its tab draws it, `status` saying where the delegated
  * worker stands; nothing for a tab no delegation started, which a task's
- * own Luke's worker was.
+ * own Fullspin's worker was.
  */
 function drawnSubagent(
   tab: SubagentStripTab,
@@ -1700,7 +1700,7 @@ export interface TaskCards {
 /**
  * The cards a transcript's rows hang, each the card the tab the row opens
  * hangs, drawn as that tab draws it (`tab-card.tsx`): an agent's, code
- * shown the file's with Luke's note on the lines, a page's previewing it,
+ * shown the file's with Fullspin's note on the lines, a page's previewing it,
  * the plan's or another task's the task's card, and a subagent's row its
  * worker's, read as its tab reads its own, `chosen` telling whether that
  * tab is the one shown, whose transcript follows the run; a tab that hangs
@@ -2049,7 +2049,7 @@ function TabContent({
         />
       );
     }
-    // A tab no delegation started, a task's own Luke's worker's, stands only until the panel moves back to the board, a render away.
+    // A tab no delegation started, a task's own Fullspin's worker's, stands only until the panel moves back to the board, a render away.
     return <SpinnerRegion delay label={readingWords("the worker")} />;
   }
   switch (tab) {

@@ -55,7 +55,7 @@ const MAXIMUM_DELIVERY_BYTES = 1024 * 1024;
 /** The most automations one event queues runs for, of those listening for it. */
 const MAXIMUM_AUTOMATIONS = 100;
 
-/** Every integration Luke receives events from, by its trigger source. */
+/** Every integration Fullspin receives events from, by its trigger source. */
 const TRIGGER_SOURCES = {
   [TRIGGER_PROVIDER.SENTRY]: sentryTriggerSource,
 } as const satisfies Record<TriggerProvider, TriggerSource<SentryApp>>;

@@ -372,7 +372,7 @@ it("a payload its kind's schema refuses, or none where the kind takes one, is re
   assert.deepEqual(asked, []);
 });
 
-it("an item whose thread carries an ask of a type this build does not know reaches the panel unchanged, so it draws it as a newer Luke's", async () => {
+it("an item whose thread carries an ask of a type this build does not know reaches the panel unchanged, so it draws it as a newer Fullspin's", async () => {
   const newer = {
     ...ITEM,
     thread: [

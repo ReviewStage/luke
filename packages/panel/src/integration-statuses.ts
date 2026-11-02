@@ -46,7 +46,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * service answers connected came too late: the sign-in had finished, and
  * the row stands connected.
  *
- * A Luke account may hold more than one account at a provider, so every
+ * A Fullspin account may hold more than one account at a provider, so every
  * read and change here names a server: one account by its connection name
  * (`notion`, `notion-2`), the first account's being its provider's, so a
  * provider with no account at all is named by the provider alone. An
@@ -58,7 +58,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 export interface IntegrationStatuses {
   /** Where one server stands (an account by its connection name, or a provider with none), or nothing until the first read answers. */
   readonly statusOf: (server: string) => IntegrationStatus | undefined;
-  /** The accounts the Luke account holds at one provider, in their places' order; none where it holds none. */
+  /** The accounts the Fullspin account holds at one provider, in their places' order; none where it holds none. */
   readonly accountsOf: (provider: IntegrationProvider) => readonly IntegrationAccount[];
   /** Whether another account may be added at the provider. */
   readonly canAdd: (provider: IntegrationProvider) => boolean;

@@ -146,7 +146,7 @@ export const GLYPH = {
   CALL: WaveformIcon,
   SETTINGS: GearIcon,
   TIME: lucideGlyph(Clock),
-  // Where a task's coding agents run: the cloud, a member's Mac running Luke, or a host they added.
+  // Where a task's coding agents run: the cloud, a member's Mac running Fullspin, or a host they added.
   CLOUD: lucideGlyph(Cloud),
   DESKTOP: LaptopIcon,
   HOST: lucideGlyph(Server),
@@ -156,7 +156,7 @@ export const GLYPH = {
   TODOS: lucideGlyph(ListChecks),
   // An ask that wants a choice among options, the Inbox's "decide".
   DECIDE: lucideGlyph(Split),
-  // Word sent back to the makers of Luke, which no comment is.
+  // Word sent back to the makers of Fullspin, which no comment is.
   FEEDBACK: lucideGlyph(MessageSquareHeart),
   // A message waiting behind an agent's running turn, to open the next one.
   QUEUED: lucideGlyph(ListEnd),

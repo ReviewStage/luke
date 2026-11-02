@@ -24,7 +24,7 @@ import {
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
 /**
- * installed-skill-client.ts -- the window's side of the skills members install into Luke, as the host asks the service for them.
+ * installed-skill-client.ts -- the window's side of the skills members install into Fullspin, as the host asks the service for them.
  *
  * Every call is a procedure of the hosted contract
  * (`contract/installed-skills.ts`) carried by the one account call

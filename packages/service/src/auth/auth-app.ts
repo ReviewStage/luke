@@ -12,7 +12,7 @@ import { recordAuthCount, withAuthCounts } from "./auth-counts.js";
  * redirects, the cookies, and its own refusals — so the group holds it as a
  * passthrough rather than describing its endpoints: an `HttpApi` that
  * declared them would be a second copy of a contract Better Auth already
- * versions, and the first one to drift would be the one Luke ships.
+ * versions, and the first one to drift would be the one Fullspin ships.
  */
 
 /** What every path `vercel.json`'s `/api/auth/(.*)` entry sends to this function begins with. */

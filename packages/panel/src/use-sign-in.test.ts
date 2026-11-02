@@ -22,7 +22,7 @@ import { useSignIn } from "./use-sign-in.js";
 /** What the screen says for each reason, as a person reads it. */
 const SAID = {
   [SIGN_IN_FAILURE.TIMED_OUT]: "Sign-in timed out waiting for your browser. Try again.",
-  [SIGN_IN_FAILURE.BROWSER]: "Luke couldn't open the sign-in page in your browser. Try again.",
+  [SIGN_IN_FAILURE.BROWSER]: "Fullspin couldn't open the sign-in page in your browser. Try again.",
   [SIGN_IN_FAILURE.ALREADY_WAITING]:
     "A sign-in is already waiting in your browser. Finish it there, or try again later.",
   [SIGN_IN_FAILURE.REFUSED]: "The sign-in was declined in your browser. Try again.",

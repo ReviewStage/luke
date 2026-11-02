@@ -2,10 +2,10 @@ import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 import { cn } from "../cn.js";
 
 /**
- * slider.tsx -- shadcn/ui's slider (style `base-nova`, on Base UI), vendored and drawn in Luke's switch inks.
+ * slider.tsx -- shadcn/ui's slider (style `base-nova`, on Base UI), vendored and drawn in Fullspin's switch inks.
  *
  * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add slider` reads as a small diff. Luke's
+ * allows, so a later `shadcn add slider` reads as a small diff. Fullspin's
  * changes: the track and range in the switch's track and "on" inks, the
  * thumb a 16px round of the switch's thumb ink lifted by its shadow, as a
  * switch's is, giving a little under a press held; a `thumbLabel` each

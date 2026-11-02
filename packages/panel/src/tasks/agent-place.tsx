@@ -16,7 +16,7 @@ import { presenceStanding, useDevicePresence } from "../device-presence.js";
  * registered, beside the laptop glyph that already says it is a place, and
  * a reader hears "Runs on:" before it. An agent in a sandbox says "Cloud",
  * beside the cloud glyph the Runs on chips draw, and a reader hears
- * "Runs on: Cloud". While a device has not beaten lately, asleep or with Luke
+ * "Runs on: Cloud". While a device has not beaten lately, asleep or with Fullspin
  * closed, judged from how long ago the service says it last beat, the label
  * adds that it is offline ("Charles's MacBook Pro · Offline"), as the Runs on
  * chips do, in the attention tone, since the agent's messages wait for it to

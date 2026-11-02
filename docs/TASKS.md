@@ -2,7 +2,7 @@
 
 This is the reference the Feature Planning MVP builds against (LUKE-331). It
 fixes what the developer sees and hears, in order, from picking a GitHub
-repository to copying the finished plan, and it names the existing piece of Luke
+repository to copying the finished plan, and it names the existing piece of Fullspin
 each part of the Tasks tab is built from. It is a design, not an
 implementation: the issues that build it (LUKE-334 document store, LUKE-337 the
 first Mac surface, LUKE-347 its move into the panel, LUKE-338 GitHub source
@@ -40,7 +40,7 @@ A reviewer can hold the build to these as easily as to the layout:
   developer's own words. The plan's open comment threads reach it the same
   way, as data beside the document; a thread reaches an agent as a request
   only when a member mentions that agent in it with \`@\`, and the agent
-  answers it in the thread. An \`@\` of Luke hands the thread to no one.
+  answers it in the thread. An \`@\` of Fullspin hands the thread to no one.
 - No Approve button, no readiness meter, no progress or coverage score, and
   no separate export or handoff screen. Earlier versions of the plan are
   read and restored from its version history ("History" below), which is the
@@ -57,7 +57,7 @@ A reviewer can hold the build to these as easily as to the layout:
   in a side panel ("Side panel" below) that the developer opens and closes.
   A task opens with the panel shown on its plan; only an Inbox item not yet
   seen opens it on its own, and there are no second documents.
-- No window of its own. Tasks live in Luke's one window (LUKE-347): there
+- No window of its own. Tasks live in Fullspin's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
 ## The Tasks tab
@@ -276,7 +276,7 @@ Dictate, and Start.
 ### Document
 
 - Above the text, one muted line says who last edited the plan, from its
-  newest revision ("History" below): "Edited by you · just now", or an agent by its row's name. A revision a task's own Luke wrote, before tasks
+  newest revision ("History" below): "Edited by you · just now", or an agent by its row's name. A revision a task's own Fullspin wrote, before tasks
   lost him, still names him. The time moves on once a minute. A task whose
   plan nobody has written since it started shows no line. A press on the
   line opens the plan's version history.
@@ -291,7 +291,7 @@ Dictate, and Start.
   section's line, or Return on it from the keyboard, opens the version
   history on the revision that save made, and opens no editor.
 - The sections someone other than the developer changed since they last
-  looked at the task on this Mac wear a still tint of Luke's accent, counted
+  looked at the task on this Mac wear a still tint of Fullspin's accent, counted
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
   Dismiss") until Dismiss or leaving the task (`tasks/use-task-looks.ts`),
   each section known by its heading.
@@ -345,7 +345,7 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   opens whole in a File tab, one per file, the lines named lit; opening a
   file already open chooses its tab and moves the lit lines. The file is read
   (`GET /api/plans/{id}/file`, `packages/service/src/tasks/task-file.ts`) from GitHub at the
-  head of the default branch through the Luke GitHub App, a `.env` file never
+  head of the default branch through the Fullspin GitHub App, a `.env` file never
   read (`packages/service/src/tasks/shown-file.ts`); a file changed since is
   drawn as it is now, and one not on that branch, or not read at all, says so
   in its place. A File tab opened from a code block of the task's Inbox is
@@ -440,12 +440,12 @@ account starts on Claude Opus 5.5 at high.
 
 Beside the skills a task's repository keeps in `.agents/skills` or
 `.claude/skills`, which an agent reads from GitHub as its session starts, a
-member installs skills into Luke itself on the Skills page of Settings. Add
+member installs skills into Fullspin itself on the Skills page of Settings. Add
 skill is one paste box: an `npx skills add …` command (or `pnpx`, `pnpm dlx`,
 `bunx`, `yarn dlx`, or a bare `skills add`) naming a GitHub repository, a
 folder of one, `owner/repo@skill`, or a skills.sh link, with `--skill` picking
 which of its skills to install; or a skill's own text, frontmatter and all.
-Luke never runs the command. The service reads the named folders from GitHub,
+Fullspin never runs the command. The service reads the named folders from GitHub,
 on the workspace's GitHub App, the member's own token, or anonymously for a
 public repository, shows what it found before anything is installed, and pins
 the files to the commit it read; a later commit on the source is offered as
@@ -565,9 +565,9 @@ The service lays each save over what others wrote meanwhile
   it. Where it does not, the developer's change is laid over what it holds
   now as a patch, line by line, so a point an agent added meanwhile stays. A
   change to a line someone else also changed is a conflict: nothing is
-  saved, and under the editor it says "Luke changed this section while you
+  saved, and under the editor it says "Fullspin changed this section while you
   were editing." with **Keep mine**, which saves the developer's words over
-  theirs, and **Use Luke's**, which closes the editor on theirs. Each save
+  theirs, and **Use Fullspin's**, which closes the editor on theirs. Each save
   that lands answers with the text merged with what was written since its
   base; the editor takes that part block by block, in place of only the
   blocks it changed where the developer has not changed them since, so the
@@ -599,7 +599,7 @@ Every save that changes the plan is kept as a revision
 (`packages/database/src/models/plan-revisions.ts`, table `plan_revision`): the
 plan's text as it stood after it, who wrote it (the
 developer, editing the text or restoring the earlier revision `restored_from`
-names; or an agent, by its row; a revision a task's own Luke wrote,
+names; or an agent, by its row; a revision a task's own Fullspin wrote,
 before tasks lost him, keeps the notetaker and the call it was written on),
 when its first and latest saves were, and how many notes it took. It is written in
 the transaction that saves the plan, so the two never disagree. The same
@@ -623,7 +623,7 @@ right-click alike) and behind the "Edited by" line, takes the whole window
 the way Settings does (`desktop/desktop-version-history.tsx`): a column as
 wide as the sidebar, with Back at its head, "Version history", and the
 revisions newest first, fifty a page
-(`GET /api/plans/{id}/revisions`), each as who wrote it ("You", an agent by its row, or "Luke" for a revision a task's own Luke wrote before),
+(`GET /api/plans/{id}/revisions`), each as who wrote it ("You", an agent by its row, or "Fullspin" for a revision a task's own Fullspin wrote before),
 whether on a call, how many changes it made, and
 how long ago; the newest is labelled "Current", and the plan from before
 history reads "Earlier". The list is read while the view stands and again
@@ -720,7 +720,7 @@ your Mac").
 ### From a plan to a pull request
 
 A task with a repository can be handed to an agent: a cloud session of
-Luke's eve service (`apps/dev`), which checks the repository out in a Vercel
+Fullspin's eve service (`apps/dev`), which checks the repository out in a Vercel
 Sandbox of its own, implements the plan given as its first message, runs the
 repository's checks, and decides whether to open a pull request. Started
 instead on a prompt the developer wrote, it is handed that prompt as its first
@@ -756,7 +756,7 @@ a task named "Teammate invitations":
 This is direct formatting of the saved document, not a second model step.
 There is no separate handoff prompt: the plan is what the agent
 reads. The developer pastes it into the agent of their choice, or
-presses `Start` instead, and an agent of Luke's own checks the
+presses `Start` instead, and an agent of Fullspin's own checks the
 repository out in a sandbox, implements the plan, and decides on a pull
 request, watched from its tab in the task's column ("From a plan to a pull
 request" above). When an agent or the developer changes the plan later,
@@ -777,7 +777,7 @@ Copy copies the new document.
   new-task page.
 - **Loading a task.** The document region shows the failure and `Try again`.
 - **Start.** The service refuses to start an agent on a task with no
-  repository (`no-repository`, 409), on one the Luke GitHub App no longer
+  repository (`no-repository`, 409), on one the Fullspin GitHub App no longer
   reaches for the workspace (`repository-not-reachable`, 403), and answers
   `unavailable` where eve did not take the session; the reason is said
   beside the button until the next press. An agent that ends `failed` or
@@ -868,7 +868,7 @@ changes when a check is run, not when one is planned.
 
 ### Known limitations
 
-- **The GitHub App's user token can write.** GitHub sign-in is the Luke
+- **The GitHub App's user token can write.** GitHub sign-in is the Fullspin
   GitHub App's user authorization (`packages/service/src/auth/auth-policy.ts`,
   `GITHUB_SIGN_IN` with `disableDefaultScope`): it names no OAuth scope, and
   the token reaches the repositories the App is installed on and the

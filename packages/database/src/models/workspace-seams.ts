@@ -41,7 +41,7 @@ export class OrganizationRefused extends Data.TaggedError("OrganizationRefused")
   readonly code?: string | undefined;
 }> {}
 
-/** One invitation as the plugin holds it, in the fields Luke reads. */
+/** One invitation as the plugin holds it, in the fields Fullspin reads. */
 const InvitationSchema = Schema.Struct({
   id: Schema.String,
   email: Schema.String,

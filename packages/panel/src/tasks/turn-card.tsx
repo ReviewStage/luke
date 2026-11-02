@@ -116,7 +116,7 @@ function turnEnding(ending: TurnEnding): RunEnding {
 /**
  * A turn's card: the model it ran on at the head,
  * wearing its provider's mark as read from the model's id, so a model the
- * catalog does not list wears it too, and no mark for a provider Luke runs
+ * catalog does not list wears it too, and no mark for a provider Fullspin runs
  * nothing on; when it ran under the model, or as the head itself where no
  * model is on record; how it ended at the head's right; a note; and its
  * figures under a rule.

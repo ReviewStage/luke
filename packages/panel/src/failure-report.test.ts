@@ -100,7 +100,7 @@ test("a failure drawn in place is reported once as it stands, again for another,
     await act(async () => copy.click());
     assert.deepEqual(copied, [
       [
-        "Luke showed an error. Find it in Sentry and the logs by these details:",
+        "Fullspin showed an error. Find it in Sentry and the logs by these details:",
         "time: 2026-10-29T18:30:03.197Z",
         "failure.surface: tasks.read",
         "failure.kind: unexpected",

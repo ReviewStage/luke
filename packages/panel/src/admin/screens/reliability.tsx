@@ -227,7 +227,7 @@ function attentionColumns(
 const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "luke-turns",
-    label: () => "Luke turns failed",
+    label: () => "Fullspin turns failed",
     value: ({ headline }) => formatPercent(share(headline.lukeTurns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.lukeTurns, "turns", windowDays),
   },

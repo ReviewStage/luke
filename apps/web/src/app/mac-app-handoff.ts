@@ -1,7 +1,7 @@
 /**
- * mac-app-handoff.ts -- a Luke link opened in a tab handed to Luke for Mac, once, where the account chose the Mac app and the tab is on a Mac.
+ * mac-app-handoff.ts -- a Fullspin link opened in a tab handed to Fullspin for Mac, once, where the account chose the Mac app and the tab is on a Mac.
  *
- * An account chooses where its Luke links open (`@luke/features/link-open`,
+ * An account chooses where its Fullspin links open (`@luke/features/link-open`,
  * Settings › Profile's Links). The web serves the app at every link's own
  * address, so a link opened in a browser lands here first; the root asks this
  * once per page load, after the panel's first paint, and the address it asks

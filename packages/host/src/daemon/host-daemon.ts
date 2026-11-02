@@ -15,21 +15,21 @@ import { type HostReleases, hostTargetOf, hostUpdate } from "./host-update.js";
  * in at it has in place of an account: its device id for the account and
  * the device both, its device secret as the bearer of every call in place
  * of the desktop's OAuth sign-in, and a gate that stands open but while
- * Luke has refused the box (`host-standing.ts`), so a daemon below the
- * service's floor, or a removed box, rests rather than asks Luke every few
- * seconds. Once Luke refuses the box's secret, the host was removed, so the
+ * Fullspin has refused the box (`host-standing.ts`), so a daemon below the
+ * service's floor, or a removed box, rests rather than asks Fullspin every few
+ * seconds. Once Fullspin refuses the box's secret, the host was removed, so the
  * daemon stops every runner it started, marks the box's record refused
  * (`host-device-record.ts`), so neither it at its next start nor This Mac's
  * app takes the box as never enrolled, and returns. A daemon of an account
- * install, handed its releases, updates itself to the newer release Luke
+ * install, handed its releases, updates itself to the newer release Fullspin
  * names (`host-update.ts`), and once it switched to it, returns the same
  * way, every runner stopped, for its service manager to start it again on
  * the new release. Everything else is the follower's own: its reads and
- * claims retried in place when Luke is out of reach, and the launches it
+ * claims retried in place when Fullspin is out of reach, and the launches it
  * kept settled as it next opens.
  */
 
-/** Why the daemon returned: Luke refused the box's secret, or it switched to a newer release, which a start on it runs. */
+/** Why the daemon returned: Fullspin refused the box's secret, or it switched to a newer release, which a start on it runs. */
 export const HOST_DAEMON_END = { REMOVED: "removed", UPDATED: "updated" } as const;
 
 export interface HostDaemonOptions {
@@ -42,7 +42,7 @@ export interface HostDaemonOptions {
   readonly releases?: HostReleases | undefined;
 }
 
-/** The daemon run until Luke refuses the box's secret, every runner it started stopped and its record marked refused before it returns, or until it switched to a newer release, every runner stopped. */
+/** The daemon run until Fullspin refuses the box's secret, every runner it started stopped and its record marked refused before it returns, or until it switched to a newer release, every runner stopped. */
 export const hostDaemon = Effect.fnUntraced(function* (options: HostDaemonOptions) {
   const { report } = yield* Reporter;
   const standing = yield* hostServiceStanding({
@@ -57,7 +57,7 @@ export const hostDaemon = Effect.fnUntraced(function* (options: HostDaemonOption
   // Note that the follower and the update live in this scope alone, so closing it once the secret is refused, or the daemon switched releases, stops every runner it started.
   const ended = yield* Effect.scoped(
     Effect.gen(function* () {
-      // Note that the update is made on the daemon's own client, never the one that puts its version on a call to Luke, so its download carries nothing of Luke's.
+      // Note that the update is made on the daemon's own client, never the one that puts its version on a call to Fullspin, so its download carries nothing of Fullspin's.
       const update =
         releases === undefined || target === undefined
           ? undefined

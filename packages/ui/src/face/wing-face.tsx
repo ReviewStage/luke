@@ -5,7 +5,7 @@ import React from "react";
 void React;
 
 /**
- * What Luke is doing, if anything. No motion is the resting face itself: no
+ * What Fullspin is doing, if anything. No motion is the resting face itself: no
  * `data-motion` matches no generated rule, so nothing animates and the drawing
  * simply sits there. Stillness is drawn by not asking for anything, which is
  * why it costs neither an entry in the artwork table nor a paused animation.
@@ -38,7 +38,7 @@ const SIDES = ["LEFT", "RIGHT"] as const;
 const EYE_CLASS = { LEFT: "luke-face-eye-left", RIGHT: "luke-face-eye-right" } as const;
 
 /**
- * Luke's face. The artwork is drawn here rather than loaded, for the same reason
+ * Fullspin's face. The artwork is drawn here rather than loaded, for the same reason
  * the provider marks are — the renderer stays asset-free and the face scales
  * with whatever holds it — and painted in `currentColor`, so it can take the
  * microphone's colour.

@@ -221,7 +221,7 @@ async function searchFor(page: HTMLElement, query: string): Promise<void> {
   await settle();
 }
 
-test("what Luke kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
+test("what Fullspin kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
   const { page } = await mount();
 
   assert.deepEqual(
@@ -459,12 +459,12 @@ test("another account signing in on the same workspace reads its memories again,
   );
 });
 
-test("a workspace Luke has remembered nothing in says so", async () => {
+test("a workspace Fullspin has remembered nothing in says so", async () => {
   stored = [];
   const { page } = await mount();
 
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /Luke hasn't remembered anything yet\./u);
+  assert.match(page.textContent ?? "", /Fullspin hasn't remembered anything yet\./u);
 });
 
 test("a read that fails offers to try again, and no account reads nothing", async () => {
@@ -472,7 +472,7 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
   const { page: failed } = await mount();
   const { page: signedOut } = await mount(false);
 
-  assert.match(failed.textContent ?? "", /Luke's memory could not be read\./u);
+  assert.match(failed.textContent ?? "", /Fullspin's memory could not be read\./u);
   refuseRead = false;
   act(() => button(failed, "Retry").click());
   await settle();
@@ -490,7 +490,7 @@ test("while the memories are read the page says Reading, which is neither its fa
   const { page } = await mount();
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no reading region");
-  assert.equal(status.textContent, "Reading Luke's memory");
+  assert.equal(status.textContent, "Reading Fullspin's memory");
   assert.doesNotMatch(page.textContent ?? "", /could not be read|hasn't remembered/u);
 });
 

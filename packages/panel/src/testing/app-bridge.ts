@@ -266,7 +266,7 @@ export function fakeActs(
   const settled = (kind: PortActKind, outcome: FakeActAnswer): PortActResult<PortActKind> => {
     if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
     if (outcome.status === FAKE_ANSWER.REFUSED) throw refusedOnPort(outcome.reason);
-    throw new Error(`Luke does not know the act ${kind}.`);
+    throw new Error(`Fullspin does not know the act ${kind}.`);
   };
   const answered = async (request: PortAct): Promise<PortActResult<PortActKind>> =>
     settled(request.kind, await answer(request));

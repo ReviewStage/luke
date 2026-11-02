@@ -106,7 +106,7 @@ function ComposerFoots(): React.JSX.Element {
       <CatalogSection id="composer-foot-states" title="States">
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
-            <Box words="Ask Luke to change something…" send={{ label: "Send", empty: true }} />
+            <Box words="Ask Fullspin to change something…" send={{ label: "Send", empty: true }} />
             <Box
               words="Add a note"
               send={{

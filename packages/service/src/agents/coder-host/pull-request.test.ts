@@ -244,7 +244,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
           assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
           assert.ok(result.status === ACTION_RESULT_STATUS.ACCEPTED);
           assert.equal(result.openedAs, "app");
-          assert.match(result.note ?? "", /Opened as Luke's GitHub App/u);
+          assert.match(result.note ?? "", /Opened as Fullspin's GitHub App/u);
           assert.deepEqual(
             openings.map((sent) => sent.headers.get("authorization")),
             [`Bearer ${DEVELOPER_TOKEN}`, `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`],

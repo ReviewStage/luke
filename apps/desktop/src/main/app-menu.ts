@@ -84,7 +84,7 @@ export interface UpdateMenu {
 /**
  * What the menu reaches of the panel window beyond the window chosen over:
  * whether that window is the panel, and the panel brought back, for a
- * command chosen while it stands closed or behind another of Luke's windows.
+ * command chosen while it stands closed or behind another of Fullspin's windows.
  */
 export interface PanelMenu {
   isPanel: (window: BaseWindow) => boolean;
@@ -306,7 +306,7 @@ function developerItem(): MenuItemConstructorOptions {
  * the order Chrome's View keeps it, the command palette, the places, back
  * and forward (as Finder and Safari keep them) and the tab moves are Go's, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
- * the people who make Luke are Help's. A gated feature's item stands only
+ * the people who make Fullspin are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), a command item is
  * called what `named` says, which an experiment may rename (`shortcutLabel`), and View's
  * Developer submenu only where `developerTools` is true. New Task brings a

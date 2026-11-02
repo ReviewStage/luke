@@ -14,7 +14,7 @@ import { useMemberDirectory } from "./member-directory.js";
  * and so does someone who left, by the account id the service still
  * names them by. Someone GitHub names who is no member opens their GitHub
  * profile in the browser, and an App's bot the App's page, since the
- * window has no page for either. Luke, an agent, and an automation hand
+ * window has no page for either. Fullspin, an agent, and an automation hand
  * their own doors where they are named, and someone nobody names opens
  * nothing. Outside the window's Plans tab, where nobody provides the
  * opener, a person opens nothing either.

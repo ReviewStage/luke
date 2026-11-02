@@ -319,7 +319,7 @@ it.layer(getTestDB())("a plan's starting text", (it) => {
 
 it.layer(getTestDB())("who made a task", (it) => {
   it.effect(
-    "a task its member made by hand names no origin, and one Luke made on their call names him, in the list too",
+    "a task its member made by hand names no origin, and one Fullspin made on their call names it, in the list too",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;

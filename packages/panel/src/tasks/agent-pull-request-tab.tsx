@@ -258,7 +258,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * itself (its description, branches, mergeability, and people); its
  * conversation, whose reviews say where each reviewer the header draws
  * stands; and its checks, whose deployments the header's Preview opens, as
- * stage-cli's header reads them. What Luke already holds of
+ * stage-cli's header reads them. What Fullspin already holds of
  * the pull request, what the agent published, draws the pill, the title,
  * and the Files changed tab's lines at once; each part stands as a skeleton
  * until its read lands, and says so with its own Retry where its read
@@ -945,7 +945,7 @@ function HeadSkeleton(): React.JSX.Element {
   );
 }
 
-/** The title while neither the read nor Luke holds it, in the title's own line. */
+/** The title while neither the read nor Fullspin holds it, in the title's own line. */
 function TitleSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label={PULL_REQUEST_WORDS.READING}>
@@ -1033,7 +1033,7 @@ function useThreadJump(
 }
 
 /**
- * A thread's ⋯ at the end of its head: Copy link, the thread's Luke link in
+ * A thread's ⋯ at the end of its head: Copy link, the thread's Fullspin link in
  * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`), then View in
  * the tab's other view, where the thread is found by its id; nothing where
  * the thread offers neither.
@@ -1093,9 +1093,9 @@ type EntryThing = (typeof ENTRY_THING)[keyof typeof ENTRY_THING];
  * The ⋯ of a comment or a review: Copy GitHub link, its page's address on
  * GitHub, then Open on GitHub. The description wears none, because its
  * address is the pull request's own, which the tab's toolbar copies and
- * opens. Note that it offers no Copy link, because no Luke link names one
+ * opens. Note that it offers no Copy link, because no Fullspin link names one
  * of them (`link-grammar.ts`'s `PULL_REQUEST_THREAD` names a review thread
- * alone), and a GitHub address is never called a link of Luke's.
+ * alone), and a GitHub address is never called a link of Fullspin's.
  */
 function GitHubEntryMenu({ thing, url }: { thing: EntryThing; url: string }): React.JSX.Element {
   const menu = useMenu(true);
@@ -1992,7 +1992,7 @@ function ConversationPart({
   );
 }
 
-/** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them, ⌘-click opening it on GitHub; a skeleton where neither has. */
+/** The fixed header's title and number, as the pull request's read says or, until it lands, as Fullspin held them, ⌘-click opening it on GitHub; a skeleton where neither has. */
 function HeaderTitle({
   title,
   writes,
@@ -2125,7 +2125,7 @@ function conversationCount(conversation: AgentOverviewConversation): number {
 }
 
 /**
- * The four tabs under the header, each counting what Luke has read of it
+ * The four tabs under the header, each counting what Fullspin has read of it
  * so far: the conversation once read; the checks by how they went from the
  * first frame, as the pill's mark says it, and by how many once read; the
  * chapters once they are ready (`chaptersCount`); and

@@ -26,11 +26,11 @@ import { Option, Schema } from "effect";
 export const LAUNCH_NOTE = {
   /** The agent's folder on the device was cleared since its last turn, so it starts afresh from what it pushed. */
   CLEARED:
-    "Your folder on this machine was cleared since your last turn, so this turn starts in a fresh one, with none of your earlier work but what you pushed to GitHub, and with no memory of the conversation before it. Fetch your branch to carry on from what you pushed. Your transcript is still in Luke.",
+    "Your folder on this machine was cleared since your last turn, so this turn starts in a fresh one, with none of your earlier work but what you pushed to GitHub, and with no memory of the conversation before it. Fetch your branch to carry on from what you pushed. Your transcript is still in Fullspin.",
 } as const;
 
-/** What leads the device's notes, so the agent reads them as Luke's rather than the developer's. */
-const NOTES_LEAD = "From Luke, about the machine this turn runs on:";
+/** What leads the device's notes, so the agent reads them as Fullspin's rather than the developer's. */
+const NOTES_LEAD = "From Fullspin, about the machine this turn runs on:";
 
 /** The keys of a runner's config that continue a harness's session: Claude Code's session, Codex's thread, and the cut a rewind makes in either. */
 const RESUME_KEYS = ["resume", "threadId", "rewindBefore"] as const satisfies readonly (

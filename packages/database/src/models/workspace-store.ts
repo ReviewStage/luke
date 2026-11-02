@@ -419,7 +419,7 @@ function workspaceOfRow(
 /** The longest slug spelled from a workspace's name, before any suffix. */
 const MAX_SLUG_CHARS = 48;
 
-/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under or one Luke's own pages stand under. */
+/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under or one Fullspin's own pages stand under. */
 function slugOf(name: string): string {
   const spelled = name
     .normalize("NFKD")
@@ -429,7 +429,7 @@ function slugOf(name: string): string {
     .slice(0, MAX_SLUG_CHARS)
     .replace(/-+$/u, "");
   if (spelled === "") return "workspace";
-  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there, nor a step of Luke's own paths.
+  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there, nor a step of Fullspin's own paths.
   const own = spelled.startsWith(PERSONAL_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
   return own ? `workspace-${spelled}` : spelled;
 }

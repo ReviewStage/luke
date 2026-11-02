@@ -45,22 +45,22 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * Which target a mention is written with is decided here: every caller
  * holds a `Mention`, which names its subject and nothing of the form, and
  * goes through `encodeMention` and `decodeMention` to write and read one.
- * How each address is spelled, Luke's, GitHub's, and the `luke:` form, is
+ * How each address is spelled, Fullspin's, GitHub's, and the `luke:` form, is
  * `link-grammar.ts`'s, which this reads and writes every target through.
  *
- * Drawn, the `@` is not asked for: wherever Luke draws words a person,
- * Luke, or an agent wrote, any link whose target names a mention is drawn
+ * Drawn, the `@` is not asked for: wherever Fullspin draws words a person,
+ * Fullspin, or an agent wrote, any link whose target names a mention is drawn
  * as its chip (`linkMention`), a bare address among them, so an agent that
  * writes a file's GitHub page or a Linear issue's address is drawn as a
  * developer's mention of it is. The `@` still says which links a developer
  * placed, which a writer must keep (`mentionLinksIn`). An agent is handed
- * those and, of Luke's own kinds alone, a bare address too
+ * those and, of Fullspin's own kinds alone, a bare address too
  * (`handedMentionsIn`), since a plan's or a section's address pasted among
  * words is drawn as its chip and means the same; a bare GitHub page or a
  * Linear issue's address is the words' own, and is handed nothing.
  *
  * The target is the address the thing has on the web, so a mention copied
- * out of Luke, into Slack, a pull request or a mail, still leads somewhere:
+ * out of Fullspin, into Slack, a pull request or a mail, still leads somewhere:
  *
  * - A task is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
  *   sections that with `#<anchor>` after it. Only the id finds the task: the
@@ -142,7 +142,7 @@ export const MENTION_KIND = {
   PERSON: "person",
   /** A channel of the workspace, `#app`. */
   CHANNEL: "channel",
-  /** Luke on one task, whom a comment's mention sends its thread. */
+  /** Fullspin on one task, whom a comment's mention sends its thread. */
   LUKE: "luke",
   /** A day, a time on one, or a range of either. */
   DATE: "date",
@@ -165,7 +165,7 @@ const MENTION_BOUNDS = {
   MAX_MENTIONS: 20,
 } as const;
 
-/** The step after a task's address that names Luke on it: `/luke`, a place of no link's own. */
+/** The step after a task's address that names Fullspin on it: `/luke`, a place of no link's own. */
 const LUKE_STEP = "luke";
 
 /** A tool's name as an MCP server lists it, which is the name the agent's connection runs it by. */
@@ -234,7 +234,7 @@ const taskIdSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_TASK_ID_CHARS),
 );
 
-/** A page's or an agent's id as the service mints one, as a Luke link holds it: letters, digits, `_`, and `-`. */
+/** A page's or an agent's id as the service mints one, as a Fullspin link holds it: letters, digits, `_`, and `-`. */
 const thingIdSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_TASK_ID_CHARS),
   EffectSchema.isPattern(/^[A-Za-z0-9_-]+$/u),
@@ -475,7 +475,7 @@ function legacyFields({ host, steps, hash, search }: LegacyLink) {
   }
 }
 
-/** The fields a place of Luke's own spells as a mention: a task, a section, a page, an agent, a person, or a channel; nothing for a place no mention names. */
+/** The fields a place of Fullspin's own spells as a mention: a task, a section, a page, an agent, a person, or a channel; nothing for a place no mention names. */
 function placeFields(place: LinkPlace, hash: string) {
   // Note that only a task's address takes a fragment, its section's anchor; a fragment past any other's names nothing.
   if (hash !== "" && place.kind !== LINK_PLACE.TASK && place.kind !== LINK_PLACE.SECTION) {
@@ -504,7 +504,7 @@ function placeFields(place: LinkPlace, hash: string) {
   }
 }
 
-/** The fields an address on Luke's home spells as a mention: a place of Luke's own, or Luke on a task, its address with `/luke` after it. */
+/** The fields an address on Fullspin's home spells as a mention: a place of Fullspin's own, or Fullspin on a task, its address with `/luke` after it. */
 function lukeFields(url: URL) {
   const luke = `/${LUKE_STEP}`;
   if (url.pathname.endsWith(luke) && url.hash === "") {
@@ -797,7 +797,7 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
             { kind: LINK_PLACE.PAGE, planId: mention.taskId, pageId: mention.pageId },
             workspace,
           );
-    // An agent stands under its workspace, whichever task it works on, as its own Luke link does.
+    // An agent stands under its workspace, whichever task it works on, as its own Fullspin link does.
     case MENTION_KIND.AGENT:
       return linkOf({ kind: LINK_PLACE.AGENT, agentId: mention.agentId }, workspace);
     case MENTION_KIND.PERSON:
@@ -878,7 +878,7 @@ export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
 }
 
-/** The kinds an address of Luke's own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, a person, and a channel. */
+/** The kinds an address of Fullspin's own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, a person, and a channel. */
 const LUKE_KINDS: ReadonlySet<Mention["kind"]> = new Set([
   MENTION_KIND.TASK,
   MENTION_KIND.SECTION,
@@ -895,7 +895,7 @@ const BARE_NAME = {
   AGENT: "Agent",
   PERSON: "Person",
   CHANNEL: "Channel",
-  LUKE: "Luke",
+  LUKE: "Fullspin",
 } as const;
 
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
@@ -944,7 +944,7 @@ function bareName(mention: Mention): string {
 }
 
 /**
- * Words pasted whole that are one address of Luke's own, a plan's, a
+ * Words pasted whole that are one address of Fullspin's own, a plan's, a
  * section's, a page's, an agent's, or a person's, or one page of an integration's or a well-known site's, as
  * the mention they become and the name its bare address says of it
  * (`bareName`), which a place holding the thing's own name may better;
@@ -1085,7 +1085,7 @@ export function mentionsIn(
  * The coding agents a comment on the task's plan asks: those its words
  * mention, each once, in the order written. A mention is a link the writer
  * placed with `@`; a bare link to an agent asks no one, and neither does a
- * mention of a task's Luke, whom no task has any more.
+ * mention of a task's Fullspin, whom no task has any more.
  */
 export function askedInWords(words: string): readonly string[] {
   const agentIds: string[] = [];
@@ -1255,7 +1255,7 @@ function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[]
 /**
  * Every mention an agent is handed of the words, in order, standing outside
  * code: each `@` link whose target names a mention (`mentionsIn`), and each
- * address of Luke's own written bare (`bareLinksIn`), a plan's, a section's,
+ * address of Fullspin's own written bare (`bareLinksIn`), a plan's, a section's,
  * a page's, an agent's, or a person's, as the window draws either as its chip. A bare
  * address of any other kind, a file's GitHub page or a Linear issue's, is
  * the words' own, and is handed nothing. At most `limit` are read, across
@@ -1286,7 +1286,7 @@ export type MemberMention = Extract<
   { readonly kind: typeof MENTION_KIND.PERSON | typeof MENTION_KIND.AGENT }
 >;
 
-/** Whether a mention names a member, which a file's, a task's, or a Luke's does not. */
+/** Whether a mention names a member, which a file's, a task's, or a Fullspin's does not. */
 function namesMember(mention: Mention): mention is MemberMention {
   return mention.kind === MENTION_KIND.PERSON || mention.kind === MENTION_KIND.AGENT;
 }

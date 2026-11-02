@@ -353,12 +353,12 @@ const glueDrawnLinks =
  *
  * A link is drawn as a plain link (`text-link.tsx`), naming its destination
  * on hover. It is pressed only where the place showing the words hands an
- * opener (`openLink`), as the task's page, its versions, and Luke's notes
+ * opener (`openLink`), as the task's page, its versions, and Fullspin's notes
  * do; elsewhere, as in a caption, it is words going nowhere, so a message's
  * words become an action only where a reader expects a link to open. Only
  * HTTP and HTTPS destinations survive `urlTransform` below, so anything else
  * arrives here as words alone. A place that draws its own links
- * (`LinkDrawer`), one showing a plan's words or Luke's notes, draws a link
+ * (`LinkDrawer`), one showing a plan's words or Fullspin's notes, draws a link
  * naming a mention as the chip that opens what it names before it is ever
  * drawn as a plain one.
  *

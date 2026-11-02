@@ -41,7 +41,7 @@ import type { HeldComposer } from "./use-agent-composer.js";
 const UNANSWERED: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 /** What a refused delete says in its dialog. */
-const DELETE_REFUSED = "Luke could not delete the message. Try again.";
+const DELETE_REFUSED = "Fullspin could not delete the message. Try again.";
 
 /** A queue with nothing in it, as an agent's page before its first change carries none. */
 const EMPTY: AgentQueue = { messages: [], revision: 0 };

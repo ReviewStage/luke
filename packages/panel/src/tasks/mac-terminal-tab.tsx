@@ -49,7 +49,7 @@ import { useOpenLink } from "./use-open-link.js";
  * the agent's pushed branch, saying so on the screen, or says to ask the
  * agent to push where it has none, and asks main to run it at the screen's
  * size (`mac-terminal-acts.ts`): main brings the branch into a worktree of
- * Luke's own clone and runs the repository's command there. The screen
+ * Fullspin's own clone and runs the repository's command there. The screen
  * shows what the run prints and takes nothing typed. Stop asks first, then ends the run, the
  * tab hearing it end; Run starts it anew; Open in Terminal opens the Mac's
  * own Terminal in the worktree for what the developer wants to do by hand.
@@ -65,7 +65,7 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 const readOutbound = Schema.decodeUnknownOption(macTerminalPortOutboundSchema);
 
-/** Dim words on the screen, as Luke's own lines between the run's. */
+/** Dim words on the screen, as Fullspin's own lines between the run's. */
 function said(words: string): string {
   return `\r\n\x1b[2m${words}\x1b[0m\r\n`;
 }

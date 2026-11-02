@@ -77,7 +77,7 @@ export interface WindowService extends DesktopService {
    * screen.
    */
   appStateFor: (sender: WebContents) => AppStateSnapshot;
-  /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
+  /** A panel has painted and hears the links it is handed: every Fullspin link held opens now, and each later one as it comes. */
   panelReady: () => void;
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
@@ -224,13 +224,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     afterDelay(DISPLAY_SETTLE_MS, () => panels.reconcile());
   }
 
-  // A second launch's Luke link is heard by main itself, from before the windows stand (`../main.ts`).
+  // A second launch's Fullspin link is heard by main itself, from before the windows stand (`../main.ts`).
   const handleSecondInstance = (): void => {
     if (!launchStanding()) return;
     panels.reconcile();
     panels.focusExpanded();
   };
-  // A Luke link's place opens in the panels, the window brought forward.
+  // A Fullspin link's place opens in the panels, the window brought forward.
   const openAppLink = (link: ShownLink): void => {
     panels.focusExpanded();
     panels.broadcast(PUSH.SHOW_LINK, link);
@@ -311,7 +311,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       panels.reconcile();
       configurePermissions();
 
-      // A packaged Luke asks macOS for its own scheme; a live development run gives back a claim stock Electron holds, which would open a bare Electron.
+      // A packaged Fullspin asks macOS for its own scheme; a live development run gives back a claim stock Electron holds, which would open a bare Electron.
       const linkClaim = appLinkClaim({ packaged: config.packaged, live: runMode.sendsNetwork });
       if (linkClaim === APP_LINK_CLAIM.CLAIM) app.setAsDefaultProtocolClient(APP_LINK_SCHEME);
       if (linkClaim === APP_LINK_CLAIM.RELEASE) app.removeAsDefaultProtocolClient(APP_LINK_SCHEME);

@@ -33,7 +33,7 @@ export function App(): React.JSX.Element {
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
       title="A better way to plan with agents."
       titleStyle={PUBLIC_TITLE.HERO}
-      lead="Talk through a feature with Luke. He reads the code while you talk and writes a plan you can paste into Claude Code or Codex."
+      lead="Talk through a feature with Fullspin. He reads the code while you talk and writes a plan you can paste into Claude Code or Codex."
     >
       <PublicSection>
         <div className="flex flex-wrap items-center gap-3">
@@ -45,7 +45,7 @@ export function App(): React.JSX.Element {
             Download for macOS
           </ButtonLink>
           <ButtonLink variant={BUTTON_VARIANT.OUTLINE} href={WEB_APP_URL}>
-            Open Luke on the web
+            Open Fullspin on the web
           </ButtonLink>
           <ButtonLink
             variant={BUTTON_VARIANT.OUTLINE}

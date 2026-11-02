@@ -21,11 +21,11 @@ import { mountPrerenderedPage } from "./mount-page";
 
 /**
  * Where a developer lands once a sign-in to an integration, started from
- * Luke's settings, settles, by way of the service's callback route, which
+ * Fullspin's settings, settles, by way of the service's callback route, which
  * settled it with Vercel Connect and put the provider and one word of status
  * on this page's address. It is drawn as GitHub's landing is, from the same
  * words (`@luke/features/landing-outcome`): the address chooses among them,
- * and nothing it carried is drawn. The way back is Open Luke
+ * and nothing it carried is drawn. The way back is Open Fullspin
  * (`connect-return.ts`).
  */
 
@@ -45,9 +45,9 @@ function landingFromAddress(): Landing {
 }
 
 /**
- * The page opens on the provider's mark, or Luke's where the address named
+ * The page opens on the provider's mark, or Fullspin's where the address named
  * no provider, badged with how the connection settled: the title says so,
- * the description how to go on, and Open Luke goes back.
+ * the description how to go on, and Open Fullspin goes back.
  */
 function IntegrationConnected(): React.JSX.Element {
   const [landing] = useState(landingFromAddress);

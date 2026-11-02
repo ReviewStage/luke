@@ -18,7 +18,7 @@ import { titleAgent } from "../coder-host/title.js";
  * the agent's own model, and named where none stands
  * (`../coder-host/title.ts`), its untitled task with it. An account that
  * saved no API key, as one on a subscription alone, is titled from its
- * opening's first words with no model call. Luke's own key never pays for
+ * opening's first words with no model call. Fullspin's own key never pays for
  * one. Nothing here fails the batch: a title not written is said in the log
  * and asked for again at the next turn's start or end.
  */

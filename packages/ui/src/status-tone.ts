@@ -5,9 +5,9 @@
  * `tokens/status-tone.css`: whatever wears `data-tone` with one of these
  * values reads that tone's ink and tint as `--luke-tone-ink` and
  * `--luke-tone-tint`, so no component keeps a list of the palette's colours
- * of its own. Where Luke shows GitHub's own states, a pull request's or an
+ * of its own. Where Fullspin shows GitHub's own states, a pull request's or an
  * issue's, it takes GitHub's colours (merged, a closed pull request's
- * danger), because people already know them; nothing of Luke's own is
+ * danger), because people already know them; nothing of Fullspin's own is
  * merged.
  */
 

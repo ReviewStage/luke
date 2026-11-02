@@ -36,15 +36,15 @@ export interface BootstrapDependencies {
   openExternal: (url: string) => Promise<void>;
   quit: () => void;
   showMenuBar: (change?: MenuBarChange) => void;
-  /** The Luke links the system hands the app, heard from module scope, before the launch. */
+  /** The Fullspin links the system hands the app, heard from module scope, before the launch. */
   appLinks: AppLinkInbox;
   /**
    * The crash reporter, begun here rather than inside a service: Electron
    * spawns its GPU process during bootstrap, and the reporter has to stand
    * before a child process it is to file a minidump for. The one ordering it
-   * owes is the paths' — it writes its own state under Luke's `userData` — so
+   * owes is the paths' — it writes its own state under Fullspin's `userData` — so
    * it runs immediately after they move and before anything else exists.
-   * It files reports under the environment of the Luke this process is.
+   * It files reports under the environment of the Fullspin this process is.
    */
   initializeCrashReporting: (runMode: RunMode, environment: SentryEnvironment) => void;
 }
@@ -57,14 +57,14 @@ function argumentValue(argv: readonly string[], name: string): string | undefine
 
 /**
  * Everything the launch has to settle before Electron derives anything from
- * it, in the one order: which Luke this process is, where its state lives,
+ * it, in the one order: which Fullspin this process is, where its state lives,
  * and the crash reporter over those paths. What it answers is the config every
  * service below is told, so nothing below reads an Electron global for a fact
  * established here.
  */
 export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopConfig {
   const { app, argv, environment } = dependencies;
-  // Which Luke this process is decides where its state lives and which Keychain
+  // Which Fullspin this process is decides where its state lives and which Keychain
   // entry protects its credentials; see app-identity.ts for why a development
   // run must never share the release's. Applied before anything derives a path.
   // A named development instance (`run.sh --instance`) answers to a name of

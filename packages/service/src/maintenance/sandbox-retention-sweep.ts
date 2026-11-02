@@ -1,7 +1,7 @@
 /**
  * sandbox-retention-sweep.ts -- the scheduled sweep's bound on the snapshot retention of the stopped coding agents' sandboxes no keep-alive reaches.
  *
- * A sandbox opened before Luke bounded its snapshot retention keeps every
+ * A sandbox opened before Fullspin bounded its snapshot retention keeps every
  * snapshot its stops wrote, or the newest for thirty days, as long as it
  * stands (`agents/sandbox-retention.ts`). A running one is brought onto the
  * bound as it is kept alive; a stopped one, an idle agent's or an archived

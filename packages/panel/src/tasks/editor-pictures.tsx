@@ -72,7 +72,7 @@ import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
 /** What a picture's upload says, and what a failed one says by why. */
 const UPLOAD_WORDS = {
   SENDING: "Uploading",
-  NOT_A_PICTURE: "This file is not a picture Luke can keep.",
+  NOT_A_PICTURE: "This file is not a picture Fullspin can keep.",
   TOO_MANY: "This plan already holds as many pictures as it can.",
   TOO_MANY_VIDEOS: "This plan already holds as many videos as it can.",
   NOT_COPIED: "The picture could not be read from its plan.",
