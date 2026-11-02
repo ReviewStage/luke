@@ -58,10 +58,11 @@ const WIDTHS = [undefined, 390, 768] as const;
 /** The narrowest and widest frame an address may ask for, so a typo draws a frame rather than a sliver or a runaway. */
 const WIDTH_RANGE = { min: 240, max: 2560 } as const;
 
-/** The width `value` asks for, if it is a whole number of pixels in range. */
+/** The width `value` asks for, to the nearest pixel, if it is a number of pixels in range. */
 function widthOf(value: string | null): number | undefined {
-  if (value === null || !/^\d+$/.test(value)) return undefined;
-  const width = Number(value);
+  // Note that a fraction is rounded rather than refused, because the browser never checks the field's form.
+  if (value === null || !/^\d+(\.\d+)?$/.test(value)) return undefined;
+  const width = Math.round(Number(value));
   return width >= WIDTH_RANGE.min && width <= WIDTH_RANGE.max ? width : undefined;
 }
 
