@@ -7,13 +7,14 @@
  * scripted sessions it writes its calls down with. Each harness acts for
  * the agent's starter, whose account the script is handed, and a script
  * that writes down whom it acts for names it `harnessFor(account)`; none
- * has a runner up to take a change of model or a halt. Note that the
- * sessions keep the script's own ids, which name no harness, so a cancel or
- * a reset still reaches the script as the caller reaches it, as before.
+ * has a runner up to take a change of model or a halt. A script whose ids
+ * name a harness (`NATIVE_SESSION_PREFIX`) takes a Stop and a retire too,
+ * acting for the caller, as a harness does.
  */
 
 import { randomUUID } from "node:crypto";
 import { Effect, Layer, Option } from "effect";
+import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import {
   NativeAgentSessions,
   type NativeAgentSessionsService,
@@ -68,7 +69,10 @@ export function recordingHarness() {
     open: () =>
       Effect.sync(() => {
         heard.push({ call: "open", account });
-        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` } as const;
+        return {
+          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          sessionId: `${NATIVE_SESSION_PREFIX.claude_code}${randomUUID()}`,
+        } as const;
       }),
     send: (sessionId) =>
       Effect.sync(() => {

@@ -497,7 +497,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
       : mentionedServers(line.serverWords ?? line.text, task?.repository ?? null);
   // Note that a native agent's are written before its harness hears the words too, so the turn its runner
   // opens on them takes them: the hand-over runs in no transaction, so the agent's row a launch writes
-  // through `native-relay.ts` on its own connection is held by nothing meanwhile.
+  // on its own connection is held by nothing meanwhile.
   const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
     Effect.catchCause((cause) =>
       Effect.as(

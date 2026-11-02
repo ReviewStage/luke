@@ -15,8 +15,7 @@
     "functions:rewrites": "tsx scripts/function-rewrites.ts --write",
     "functions:externals": "tsx scripts/function-externals.ts --write",
     "preview": "vite preview",
-    "test": "vitest run && pnpm test:agent",
-    "test:agent": "pnpm --filter @luke/coder run test:agent",
+    "test": "vitest run",
     "test:vitest": "vitest run",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --project tsconfig.json"
   },
