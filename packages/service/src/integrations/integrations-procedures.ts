@@ -154,9 +154,10 @@ interface ToolsRead {
 /** The tools read lately, by user account and then by connection name, for as long as the instance stands. */
 type ToolsCache = Map<string, Map<string, ToolsRead>>;
 
-/** When a provider lately answered no name for an account, asked with its token (`providerAccountName`). */
+/** When a provider lately answered no name for an account, asked with its token (`providerAccountName`), and under which grant: a sign-in completed since names another. */
 interface UnnamedRead {
   readonly at: number;
+  readonly connectedAt: number | undefined;
 }
 
 /**
@@ -402,8 +403,10 @@ const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!unread || status !== INTEGRATION_STATUS.CONNECTED) return row;
   // Note that a reconnect under way is left alone, because the grant it ends with names the account, not the one it replaces.
   if (row.state !== undefined && signInStands(seams, row.stateIssuedAt)) return row;
-  const held = unnamed.get(row.userId);
-  if (ACCOUNT_NAME !== undefined && held?.has(row.connectionName)) return row;
+  const grant = row.connectedAt?.getTime();
+  const held = unnamed.get(row.userId)?.get(row.connectionName);
+  // Note that a hold stands only for the grant it was read under, because an account connected again since may answer.
+  if (ACCOUNT_NAME !== undefined && held !== undefined && held.connectedAt === grant) return row;
   const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: false }));
   if (Result.isFailure(issued)) return row;
   const { accountName, token } = issued.success;
@@ -413,7 +416,8 @@ const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
       : yield* Effect.result(providerAccountName(ACCOUNT_NAME, token));
   const unanswered = Result.isFailure(named) || named.success === undefined;
   if (ACCOUNT_NAME !== undefined && accountName === undefined && unanswered) {
-    unnamed.set(row.userId, (held ?? new Map()).set(row.connectionName, { at: seams.now() }));
+    const read: UnnamedRead = { at: seams.now(), connectedAt: grant };
+    unnamed.set(row.userId, (unnamed.get(row.userId) ?? new Map()).set(row.connectionName, read));
   }
   if (Result.isFailure(named)) return row;
   const label = accountName ?? named.success ?? "";

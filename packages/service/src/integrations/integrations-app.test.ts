@@ -1012,6 +1012,26 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
         yield* TestClock.adjust("2 minutes");
         assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, "dee@gmail.example"]]);
+
+        // A hold is its grant's: an account connected again within it is asked at once.
+        const other = yield* openAccount("dom@google-reconnects.example");
+        const connectOther = (state: string) =>
+          Effect.gen(function* () {
+            yield* beginIntegrationSignIn(other, firstIntegrationAccount(other, GMAIL), state);
+            yield* completeIntegrationSignIn(other, GMAIL, state);
+          });
+        const otherAccounts = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId: other }),
+          ({ body }) => accountsIn(body).map((account) => account.label),
+        );
+        yield* connectOther(`state-gmail-first-${other}`);
+        down = true;
+        assert.deepEqual(yield* otherAccounts, [undefined]);
+        down = false;
+        yield* TestClock.adjust("1 minute");
+        yield* deleteIntegrationConnection(other, GMAIL);
+        yield* connectOther(`state-gmail-again-${other}`);
+        assert.deepEqual(yield* otherAccounts, ["dee@gmail.example"]);
       }),
   );
 

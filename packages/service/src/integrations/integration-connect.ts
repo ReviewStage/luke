@@ -34,6 +34,7 @@
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
+  INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
@@ -53,7 +54,7 @@ import { Config, Context, Data, Effect, Layer, Option, Redacted, Schema } from "
 import { readAccountPerson } from "../accounts/account-person.js";
 import { text } from "../core.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
-import { credentialFreeLine } from "./mcp-tools.js";
+import { credentialFreeLine, namesSecret } from "./mcp-tools.js";
 
 /** Why Connect answered nothing usable. */
 export const INTEGRATION_CONNECT_FAILURE = {
@@ -204,25 +205,23 @@ const VERCEL_CONNECT_SDK: ConnectSdk = {
 };
 
 /** The longest account name a grant's fields or a provider's answer are read as a label for. */
-const ACCOUNT_NAME_MAX = 64;
+const ACCOUNT_NAME_MAX = INTEGRATION_LABEL_MAX;
 
-/** The longest email an account is called by: the longest an address may be. */
-const ACCOUNT_EMAIL_MAX = 254;
-
-/** An email as an account is called by it: a local part, `@`, then a host of at least two labels. */
-const ACCOUNT_EMAIL_PATTERN = /^[^@\s]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+/** An email as an account is called by it: a local part of the characters a mailbox's name is spelled with, `@`, then a host of at least two labels. */
+const ACCOUNT_EMAIL_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 
 /**
  * An account's name at the provider as an account's label keeps it, from a
- * grant's fields or the provider's own answer alike: an email whole, and
- * anything else as a short line shaped like no credential. Note that an
- * email is kept by its shape rather than `credentialFreeLine`, which drops a
- * long run mixing letters and digits, as many a mailbox's name is.
+ * grant's fields or the provider's own answer alike: a short line shaped like
+ * no credential, or a short email that names no secret. Note that an email
+ * is held by its own shape rather than `credentialFreeLine`, which drops a
+ * long run mixing letters and digits, as many a mailbox's name is; and that
+ * every name is held to a label's length, which is what an agent is told.
  */
 export function accountNameLine(candidate: string): string | undefined {
   const name = candidate.trim();
-  if (ACCOUNT_EMAIL_PATTERN.test(name)) return name.length <= ACCOUNT_EMAIL_MAX ? name : undefined;
-  const line = credentialFreeLine(name);
+  const line =
+    ACCOUNT_EMAIL_PATTERN.test(name) && !namesSecret(name) ? name : credentialFreeLine(name);
   return line === undefined || line.length > ACCOUNT_NAME_MAX ? undefined : line;
 }
 
