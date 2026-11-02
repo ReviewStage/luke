@@ -283,7 +283,7 @@ test("a worker's reply is said once whole, under the worker's name", async () =>
   assert.equal(announcedPolitely(), `Reply from ${WORKER_TASK}: The writers quote every field.`);
 });
 
-test("a failed turn's end line reports the service's word for why, and the agent and task it is about", async () => {
+test("a failed turn's end line reports the service's word for why, and the agent and task it is about, once", async () => {
   const reported: Readonly<Record<string, unknown>>[] = [];
   const recording: ShownFailureSentry = {
     captureException: () => "",
@@ -298,14 +298,17 @@ test("a failed turn's end line reports the service's word for why, and the agent
   };
   const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
   try {
-    await runningTab(
+    const failed = { ...AGENT, status: AGENT_STATUS.FAILED };
+    const tab = await runningTab(
       {
         ...page("The retry", AGENT_STATUS.FAILED, "1:1"),
         failureReason: AGENT_FAILURE.PROVIDER_KEY,
       },
       false,
-      { ...AGENT, status: AGENT_STATUS.FAILED },
+      failed,
     );
+    // A tab drawn again, as its row is read anew, reports the same failure no more.
+    await tab.row({ ...failed, title: "Retry audit, renamed" });
   } finally {
     uninstall();
   }
