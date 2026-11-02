@@ -108,10 +108,38 @@
     --luke-list-row-inset-inline: var(--luke-space-16);
   }
 
-  /* Note that a card's row rings inside its press, because the card's
-     corner clips whatever stands past its edge. */
-  .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
-    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+  /* Note that everything in a card rings inside itself, a row's press and
+     its acts alike, because the card's corner clips whatever stands past
+     its edge, as a flush `Card` does (`card.tsx`). */
+  .luke-list[data-variant="card"] {
+    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  }
+
+  /* A card's first and last rows take its corner where they meet it, its
+     round inside its hairline, so the ring the press draws inside them, and
+     a fill or an open menu's ring, follow the card's round rather than
+     cutting square across it. A row's end meets the card only where no act
+     or ⋯ stands beside its press; the press inherits the row's corners. */
+  .luke-list[data-variant="card"] > .luke-list-row {
+    --luke-list-row-card-corner: calc(var(--luke-control-radius) - 1px);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row:first-child {
+    border-start-start-radius: var(--luke-list-row-card-corner);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row:last-child {
+    border-end-start-radius: var(--luke-list-row-card-corner);
+  }
+
+  .luke-list[data-variant="card"]
+    > .luke-list-row:first-child:not(:has(> .luke-list-row-actions, > .luke-list-row-more)) {
+    border-start-end-radius: var(--luke-list-row-card-corner);
+  }
+
+  .luke-list[data-variant="card"]
+    > .luke-list-row:last-child:not(:has(> .luke-list-row-actions, > .luke-list-row-more)) {
+    border-end-end-radius: var(--luke-list-row-card-corner);
   }
 
   /* A compact row keeps its words and gives up some of the room around them. */
