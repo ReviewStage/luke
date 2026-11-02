@@ -144,6 +144,22 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a batch whose account was deleted after its caller was resolved is refused and nothing is forwarded",
+  () =>
+    Effect.gen(function* () {
+      const posthog = upstream();
+      const refusal = yield* Effect.flip(
+        post("user-deleted", { events: [LAUNCH] }, posthog, {
+          readPerson: () => Effect.succeed(undefined),
+        }),
+      );
+
+      assert.equal(refusal, HOSTED_REFUSAL.INVALID_TOKEN);
+      assert.deepEqual(posthog.forwarded, []);
+    }),
+);
+
 it.effect("a user past the brake is refused as over quota and nothing more is forwarded", () =>
   Effect.gen(function* () {
     const posthog = upstream();

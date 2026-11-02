@@ -1,6 +1,6 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import type { productEventsAnswerSchema } from "@luke/features/analytics";
-import { Clock, Effect, type Schema } from "effect";
+import { Clock, Effect, Option, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   PRODUCT_EVENT_MAXIMUM_AGE_MS,
@@ -83,6 +83,7 @@ export interface EventsOptions {
   /**
    * The account's own name and address, for the person record. Omitted by a
    * deployment that would rather PostHog held neither; the counts still land.
+   * Where it finds no row, the account is gone and the batch is refused.
    */
   readPerson?: (
     userId: string,
@@ -191,12 +192,15 @@ export function recordEvents(
     const upstream: PosthogUpstreamOptions = {};
     if (options.host !== undefined) upstream.host = options.host;
     // A failed read costs the person's name, never the counts.
-    const readPerson = options.readPerson;
-    const person = readPerson
-      ? yield* readPerson(userId).pipe(
-          Effect.orElseSucceed((): PosthogPerson | undefined => undefined),
-        )
-      : undefined;
+    const read = options.readPerson
+      ? yield* Effect.option(options.readPerson(userId))
+      : Option.none<PosthogPerson | undefined>();
+    // Note that a read finding no row is an account deleted since its caller
+    // was resolved, whose batch would bring back the person it erased.
+    if (Option.isSome(read) && read.value === undefined) {
+      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    }
+    const person = Option.getOrUndefined(read);
     const response = yield* postBatchEffect(
       batchDocument(events, stamp, options.projectApiKey, userId, now, person),
       upstream,
