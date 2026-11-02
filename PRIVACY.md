@@ -1093,10 +1093,11 @@ workspace's name, as its members see it, and when it was made, and nothing
 else of it; our service sends them beside the workspace's first count on each
 of its servers, again once a day, and when the workspace is renamed. Your own
 first workspace is named with your name, so PostHog holds your name for it
-too. A workspace is never deleted, and PostHog cannot delete a single
-workspace's record, so PostHog keeps a workspace's name and creation date;
-deleting your account leaves them, your first workspace's name among them, as
-the workspace itself stays on our service.
+too. PostHog keeps each workspace's name and creation date for as long as the
+workspace exists, and a workspace is never deleted, so PostHog keeps them for
+good: PostHog cannot delete a single workspace's record, and deleting your
+account leaves them, your first workspace's name among them, as the workspace
+itself stays on our service.
 
 **Screen recordings.** Vespin records what its own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
