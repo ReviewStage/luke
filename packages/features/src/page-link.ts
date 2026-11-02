@@ -38,7 +38,11 @@ export const pageLinkPressSchema = EffectSchema.Struct({
  * a listener of its own to the window for the press's way back, which the
  * window then hears after every listener the page gave it, its own scripts
  * running after this one, so a press the page took for itself
- * (`preventDefault`), on an element or on the window, stays the page's.
+ * (`preventDefault`), on an element or on the window, stays the page's, and
+ * the link is read as the page left it, where the page rewrote it as it was
+ * pressed. The listener goes once that press reaches it, so a press the page
+ * starts inside it is let by, and in any case once the press is done, so one
+ * the page stopped short of the window leaves none behind.
  * A link out is one to a web address on another site than the one the page's
  * links are read against, its own, since its policy refuses it a `<base>`;
  * any other link is left to the frame.
@@ -47,9 +51,10 @@ export const PAGE_LINK_SCRIPT = `(() => {
   "use strict";
   const TYPE = ${JSON.stringify(PAGE_LINK_TYPE)};
   const WEB = new Set(["http:", "https:"]);
+  const LINK = "a[href], area[href]";
 
   const linkOut = (target) => {
-    const link = target instanceof Element ? target.closest("a[href], area[href]") : null;
+    const link = target instanceof Element ? target.closest(LINK) : null;
     if (link === null) return undefined;
     let address;
     try {
@@ -62,13 +67,16 @@ export const PAGE_LINK_SCRIPT = `(() => {
   };
 
   addEventListener("click", (event) => {
-    if (event.button !== 0) return;
-    const href = linkOut(event.target);
-    if (href === undefined) return;
-    addEventListener("click", (back) => {
-      if (back !== event || event.defaultPrevented) return;
+    if (event.button !== 0 || !(event.target instanceof Element) || event.target.closest(LINK) === null) return;
+    const last = (back) => {
+      if (back !== event) return;
+      removeEventListener("click", last);
+      const href = event.defaultPrevented ? undefined : linkOut(event.target);
+      if (href === undefined) return;
       event.preventDefault();
       parent.postMessage({ type: TYPE, href }, "*");
-    }, { once: true });
+    };
+    addEventListener("click", last);
+    setTimeout(() => removeEventListener("click", last), 0);
   }, true);
 })();`;

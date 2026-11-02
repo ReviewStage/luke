@@ -327,7 +327,7 @@ it.effect("the words selected in the page are handed to the panel as the selecti
 );
 
 it.effect(
-  "a link out pressed in the page is handed to the panel and not followed; a link within the page, or one the page took, stays the page's",
+  "a link out pressed in the page is handed to the panel as the page left it, and not followed; a link within the page, or one the page took, stays the page's",
   () =>
     Effect.gen(function* () {
       const { frame, posted } = yield* draw(
@@ -336,6 +336,7 @@ it.effect(
           '<a id="within" href="#totals">Totals</a>',
           '<a id="taken" href="https://example.com/tab">Tab</a>',
           '<a id="delegated" href="https://example.com/preview">Preview</a>',
+          '<a id="rewritten" href="https://example.com/old" onclick="this.href = \'https://example.com/new\'">Moved</a>',
           "<script>document.getElementById('taken').addEventListener('click', (event) => event.preventDefault());</script>",
           "<script>addEventListener('click', (event) => { if (event.target.id === 'delegated') event.preventDefault(); });</script>",
         ].join("\n"),
@@ -347,9 +348,12 @@ it.effect(
         return event.defaultPrevented;
       };
 
-      const prevented = [press("inner"), press("within"), press("taken"), press("delegated")];
+      const prevented = ["inner", "within", "taken", "delegated", "rewritten"].map(press);
 
-      assert.deepEqual(prevented, [true, false, true, true]);
-      assert.deepEqual(posted, [{ type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" }]);
+      assert.deepEqual(prevented, [true, false, true, true, true]);
+      assert.deepEqual(posted, [
+        { type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" },
+        { type: PAGE_LINK_TYPE, href: "https://example.com/new" },
+      ]);
     }),
 );
