@@ -100,7 +100,7 @@ export const STYLE_RULE_IDS: readonly StyleRule[] = Object.values(STYLE_RULE);
 const TOKEN_SHEETS = ["packages/ui/src/tokens/", "packages/ui/src/tailwind/theme.css"];
 
 /** Agents' own tooling, which draws nothing in the app. */
-const TOOLING = [".agents/", ".claude/", ".codex/", ".cursor/", ".opencode/"];
+const TOOLING = [".agents/", ".claude/"];
 
 /**
  * Folders one rule passes whole: `@luke/ui` is where a popover's width is

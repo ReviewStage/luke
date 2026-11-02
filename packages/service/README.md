@@ -16,9 +16,6 @@ named by the group of this README that describes it.
 and it has no subpath: a consumer outside the package names the defining
 package.
 
-`src/run.ts` names the runners the deployment's edge hands a module
-(`WebStoreRun`, `WebAgentRun`), so a module never imports the edge itself.
-
 ## The auth group
 
 `src/auth/auth-app.ts` is the auth route group: Better Auth's own `fetch`

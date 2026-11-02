@@ -4,7 +4,11 @@
   "ignoreBinaries": ["afconvert", "iconutil", "ditto", "shasum", "tiffutil"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/fixtures/discarded-effect/*.ts", "scripts/vercel-deployed-paths.mjs"],
+      "entry": [
+        "scripts/fixtures/discarded-effect/*.ts",
+        "scripts/vercel-deployed-paths.mjs",
+        "scripts/test-durations.mjs"
+      ],
       "project": ["scripts/**"]
     },
     "apps/desktop": {
@@ -25,7 +29,8 @@
       "project": ["src/**", "scripts/**"]
     },
     "apps/catalog": {
-      "project": ["src/**"]
+      "project": ["src/**"],
+      "ignoreDependencies": ["playwright"]
     },
     "apps/web": {
       "entry": [
@@ -38,7 +43,8 @@
         "server/feedback.mjs",
         "server/feedback.d.mts"
       ],
-      "project": ["src/**", "server/**", "scripts/**", "tests/**"]
+      "project": ["src/**", "server/**", "scripts/**", "tests/**"],
+      "ignoreDependencies": ["@luke/brand"]
     },
     "packages/*": {
       "entry": [
@@ -63,8 +69,12 @@
       "project": ["*.ts"]
     },
     "tools/anti-slop": {
-      "entry": ["index.ts"],
+      "entry": ["index.ts", "repository-guard.ts"],
       "project": ["**/*.ts"]
+    },
+    "tools/polish": {
+      "entry": ["polish-shots.ts"],
+      "ignoreDependencies": ["playwright", "vite"]
     },
     "packages/brand": {
       "project": ["src/**", "scripts/**"]

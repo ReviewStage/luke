@@ -3,9 +3,6 @@
   "ignorePatterns": [
     ".agents/**",
     ".claude/**",
-    ".codex/**",
-    ".cursor/**",
-    ".opencode/**",
     "packages/agent-runner/src/codex-protocol/**",
     "tools/anti-slop/**"
   ],
