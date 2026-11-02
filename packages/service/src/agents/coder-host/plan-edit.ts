@@ -91,7 +91,7 @@ const pictureSchema = Schema.Struct({
   path: describeWire(
     trimmedText(PLAN_EDIT.MAX_PATH_CHARS),
     "The picture's file in your sandbox, such as a screenshot you took or a recording you made of " +
-      `a flow, relative to the checkout: a PNG, JPEG, or WebP of at most ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, ` +
+      `a flow, relative to your working folder or absolute: a PNG, JPEG, or WebP of at most ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, ` +
       `or a WebM video of at most ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB, which the plan plays.`,
   ),
   alt: describeWire(
@@ -148,8 +148,8 @@ export const EDIT_PLAN_TOOL = {
     "a Markdown link to its page whose words start with @, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the plan draws it as a chip. " +
     "To add a picture, such as a screenshot of what you built, name its file in your sandbox " +
     "under pictures, with alt text saying what it shows. " +
-    "Every save is recorded in the plan as yours. The developer reads the plan on their next " +
-    `call with ${PRODUCT_NAME}; you do not wait for an answer. A call's notes and pictures land together ` +
+    "Every save is recorded in the plan as yours. The developer reads the plan when they next " +
+    `open it in ${PRODUCT_NAME}; you do not wait for an answer. A call's notes and pictures land together ` +
     "or not at all: where one names text or a heading the plan does not hold exactly once, " +
     "nothing is saved and the call answers the plan as it stands, to retry from. " +
     `A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes, each picture one.`,

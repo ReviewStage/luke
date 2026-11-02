@@ -41,6 +41,16 @@ export const GITHUB_ACCESS = {
 
 export type GitHubAccess = (typeof GITHUB_ACCESS)[keyof typeof GITHUB_ACCESS];
 
+/**
+ * What an agent reads GitHub with, by its access: `gh` on the App's
+ * credential, and GitHub's REST API through `gh api` alone on a member's
+ * token, where `gh pr` commands do not work.
+ */
+export const GITHUB_READER = {
+  [GITHUB_ACCESS.APP]: "`gh`",
+  [GITHUB_ACCESS.TOKEN]: "`gh api`",
+} as const;
+
 /** One repository the App, or the developer's own token, reaches for the developer. */
 export const githubRepositorySchema = EffectSchema.Struct({
   /** The user or organization that owns it. */
