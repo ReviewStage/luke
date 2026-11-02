@@ -132,6 +132,7 @@ describe("a host's daemon", () => {
       uid: 0,
       sandboxed: "1",
       runnerBundle: RUNNER_BUNDLE.LINUX,
+      pnpmConfig: ".config/pnpm",
     },
     {
       os: { ...DARWIN_HOST, deviceName: () => "Studio" },
@@ -140,10 +141,11 @@ describe("a host's daemon", () => {
       uid: 501,
       sandboxed: undefined,
       runnerBundle: RUNNER_BUNDLE.DARWIN,
+      pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Luke refuses its secret",
-    ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle }) =>
+    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Luke refuses its secret",
+    ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -240,6 +242,18 @@ describe("a host's daemon", () => {
           PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
         });
         expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
+        // Note that every agent's settings name the same folders under the host's state, outside any agent's folder.
+        const fileSystem = yield* FileSystem.FileSystem;
+        const pnpmStore = `"${stateRoot}/agent-packages/pnpm-store"`;
+        expect(yield* fileSystem.readFileString(`${folder}/home/${pnpmConfig}/rc`)).toBe(
+          `store-dir=${pnpmStore}\n`,
+        );
+        expect(yield* fileSystem.readFileString(`${folder}/home/${pnpmConfig}/config.yaml`)).toBe(
+          `storeDir: ${pnpmStore}\n`,
+        );
+        expect(yield* fileSystem.readFileString(`${folder}/home/.npmrc`)).toBe(
+          `cache="${stateRoot}/agent-packages/npm-cache"\n`,
+        );
         expect(reports).toContain("Luke host: Connected to Luke.");
 
         removed = true;
