@@ -30,7 +30,7 @@ import * as SqlClient from "effect/sql/SqlClient";
  * Synthetic accounts throughout.
  */
 
-const MIGRATION = "20261102191157_eve_agents_archive";
+const MIGRATION = "20261102192712_eve_agents_archive";
 
 /** A migrations folder holding every migration named before this one, and none after. */
 const foldersBefore = Effect.gen(function* () {
