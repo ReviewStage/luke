@@ -38,6 +38,14 @@ export interface AccountSession {
   readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>;
   /** Reads the account this launch starts with and settles on it, answering it. */
   readonly initialize: Effect.Effect<AccountSnapshot>;
+  /**
+   * Whether this launch is the return of a sign-in that left the window for
+   * the provider, answered once. A source whose sign-in leaves the window (a
+   * browser tab's) comes back on a launch of its own, already signed in, so
+   * no change in either run shows the sign-in; a source whose sign-in lands
+   * in the same run omits it.
+   */
+  readonly returnedFromSignIn?: Effect.Effect<boolean> | undefined;
   readonly beginSignIn: (provider: AccountProvider) => Effect.Effect<AccountSnapshot, Error>;
   /** Signs the same account in again; answers whether a session landed. */
   readonly signInAgain: (provider: AccountProvider) => Effect.Effect<boolean, Error>;

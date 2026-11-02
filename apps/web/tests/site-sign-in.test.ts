@@ -26,7 +26,15 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const PROJECT_KEY = "phc_site_sign_in_test";
 const TRANSFER_PATH = "/api/auth/electron/transfer-user";
 const SESSION_PATH = "/api/auth/get-session";
-const CAPTURE_PATH = "/e/";
+/** Where the library posts events before the project's remote configuration says otherwise. */
+const DEFAULT_CAPTURE_PATH = "/e/";
+/** Where the project's remote configuration routes events, and what it serves beside that. */
+const CAPTURE_PATH = "/i/v0/e/";
+const PROJECT_CONFIG = {
+  analytics: { endpoint: CAPTURE_PATH },
+  supportedCompression: ["gzip", "gzip-js"],
+} as const;
+const CAPTURE_PATHS: ReadonlySet<string> = new Set([DEFAULT_CAPTURE_PATH, CAPTURE_PATH]);
 const BEACON_FIELD = "data=";
 const ACCOUNT = { id: "account-1", name: "Ada", email: "ada@example.com" };
 const STATE = "state-from-the-mac";
@@ -47,13 +55,16 @@ const sent: SentEvent[] = [];
 const reading: Promise<void>[] = [];
 
 /**
- * Notes a request to the capture endpoint, and its events once its body is
- * read: a batch's JSON, which a beacon carries as base64 form data.
+ * Notes a request to a capture endpoint, and its events once its body is
+ * read: a batch's JSON, or the base64 form data a beacon carries when it is
+ * not compressed. Note that `/i/v0/e/` answers that form data `400 failed to
+ * parse request`, as PostHog's does, so its events are not noted as sent.
  */
-function noteSend(body: Promise<string>): void {
+function noteSend(url: URL, body: Promise<string>): void {
   const at = timeline.push("send") - 1;
   reading.push(
     body.then((text) => {
+      if (url.pathname === CAPTURE_PATH && text.startsWith(BEACON_FIELD)) return;
       const json = text.startsWith(BEACON_FIELD)
         ? Buffer.from(decodeURIComponent(text.slice(BEACON_FIELD.length)), "base64").toString()
         : text;
@@ -119,16 +130,17 @@ async function openHandOff(): Promise<void> {
 
 beforeAll(() => {
   vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", PROJECT_KEY);
+  Reflect.set(window, "_POSTHOG_REMOTE_CONFIG", { [PROJECT_KEY]: { config: PROJECT_CONFIG } });
   Object.defineProperty(window.navigator, "sendBeacon", {
     configurable: true,
-    value: (_url: string, body: Blob) => {
-      noteSend(body.text());
+    value: (url: string, body: Blob) => {
+      noteSend(new URL(url, window.location.href), body.text());
       return true;
     },
   });
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
-    if (url.pathname === CAPTURE_PATH) noteSend(Promise.resolve(String(init?.body)));
+    if (CAPTURE_PATHS.has(url.pathname)) noteSend(url, Promise.resolve(String(init?.body)));
     return answer(url, init?.signal);
   });
   // Note that jsdom does not navigate: it reports each attempt on its own
@@ -150,6 +162,7 @@ afterAll(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
   Reflect.deleteProperty(window.navigator, "sendBeacon");
+  Reflect.deleteProperty(window, "_POSTHOG_REMOTE_CONFIG");
 });
 
 test("a sign-in finished on the hand-off is identified and counted before the page leaves", async () => {

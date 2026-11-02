@@ -1564,7 +1564,10 @@ keeps beside it, and whether it may send, under `luke_app_replay` and
 `luke_app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it
-lands on, or the app opened again in that tab, lets go of it. Our service
+lands on, or the app opened again in that tab, lets go of it. A sign-in
+started there keeps in its tab's session storage a mark that it left for the
+provider, until the page it comes back to lets go of it, so that page counts
+the sign-in once. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and an agent's changes are held in a Vercel Sandbox and
