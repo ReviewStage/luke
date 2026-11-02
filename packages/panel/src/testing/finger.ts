@@ -1,16 +1,18 @@
 /**
- * finger.ts -- a test's finger on a touch screen: the window answering `(pointer: coarse)`, and a touch held still past a long press.
+ * finger.ts -- a window worked by a finger: its pointer answering `(pointer: coarse)`, and a long press held on a row as the browser sends it.
  *
- * jsdom answers no media query (`match-media.ts`), so a test of what a
- * finger's surface draws stubs the one query `useCoarsePointer` asks, until
- * `vi.restoreAllMocks()`. A long press is a touch that goes down and stays
- * still past the menu's hold (`@luke/ui`'s `touch-hold.ts`), on fake timers
- * held only for as long as it is down.
+ * A finger's window is stubbed for the one test that asks for it and put
+ * back as that test finishes, so a file's other tests keep the mouse the
+ * suite's setup answers (`match-media.ts`). The long press is held on a
+ * faked clock well past `ListRow`'s hold, then lifted, and the test is put
+ * back on the real clock.
  */
 
 import { act } from "react";
-import { vi } from "vitest";
-import { COARSE_POINTER } from "../coarse-pointer.js";
+import { onTestFinished, vi } from "vitest";
+
+/** How long the finger is held, well past any row's long press. */
+const HELD_MS = 2000;
 
 /** A finger's touch of `type` at the target's corner, as the browser sends it. */
 function touch(type: string): PointerEvent {
@@ -25,19 +27,18 @@ function touch(type: string): PointerEvent {
   });
 }
 
-/** Has the window answer that its main pointer is a finger, and no other query. */
+/** The window answers that its main pointer is a finger until the test finishes. */
 export function underAFinger(): void {
-  const ignore = () => undefined;
-  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
-    matches: query === COARSE_POINTER,
-    media: query,
-    onchange: null,
-    addEventListener: ignore,
-    removeEventListener: ignore,
-    addListener: ignore,
-    removeListener: ignore,
-    dispatchEvent: () => false,
-  }));
+  const stub = vi.spyOn(window, "matchMedia").mockImplementation(
+    (query) =>
+      ({
+        matches: query === "(pointer: coarse)",
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList,
+  );
+  onTestFinished(() => stub.mockRestore());
 }
 
 /** A finger held still on `target` well past a long press, then lifted. */
@@ -48,7 +49,7 @@ export function longPress(target: HTMLElement): void {
       target.dispatchEvent(touch("pointerdown"));
     });
     act(() => {
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(HELD_MS);
     });
   } finally {
     vi.useRealTimers();
