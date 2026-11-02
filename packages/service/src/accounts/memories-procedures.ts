@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
@@ -55,9 +56,17 @@ export function memoriesProcedures(seams: MemoriesProcedureSeams) {
 
     forgetMemory: signedIn.forgetMemory.effect(function* ({ context, input }) {
       const { workspaceId, id } = input.query;
-      return yield* memoriesAnswer(
-        yield* hostedStoreOrUnavailable(forgetWorkspaceMemory(context.userId, workspaceId, id)),
+      const answer = yield* hostedStoreOrUnavailable(
+        forgetWorkspaceMemory(context.userId, workspaceId, id),
       );
+      const answered = yield* memoriesAnswer(answer);
+      // Note that a forget retried after it landed answers the same, so it is counted again; the store cannot tell the two apart.
+      yield* recordServerEvent(
+        SERVER_EVENT.MEMORY_FORGET,
+        { userId: context.userId, workspaceId },
+        {},
+      );
+      return answered;
     }),
   };
 }

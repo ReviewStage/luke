@@ -1078,30 +1078,42 @@ service recorded it. Settings › Account › "Share usage data" turns these
 counts off (see "Your choices").
 
 Our service also counts, under the same account, the work done through it:
-a task or a workspace made (with where it was started from), an agent started (with the model and effort
-it runs on, and whether an automation started it), a message you sent an agent
-(with what runs it, where, what kind of agent it is, and whether it was at
-work), each of an agent's turns ended (with how it ended: answered, failed,
-stopped, or given up on by our service, roughly how long it ran, and what
+a task or a workspace made (with where it was started from), a task finished or
+canceled (by you, or on the merge of its work), an agent started (with the model and effort
+it runs on, who started it (you, another agent, or an automation), and what kind of agent it is),
+an agent whose start failed (with how it failed), a message you sent an agent
+(with what runs it, where, what kind of agent it is, whether it was at
+work, and whether it waited in the agent's queue), each of an agent's turns ended (with how it ended: answered, failed,
+stopped, or given up on by our service, why a failed one failed, roughly how long it ran, and what
 kind of agent it is), an agent stopped or archived (with what kind of agent
-it is), a pull
+it is), an agent's model or effort changed, a pull
 request an agent opened (as you or as Vespin's GitHub App, and whether as a
-draft) and one it opened merged, an Inbox item
-answered, an automation made (with
-what triggers it), a message handed to an agent's runner (with which harness it
+draft), one it opened merged, and one you merged, reviewed, set to merge
+automatically, or closed from Vespin (which of those), an Inbox item
+answered, an automation made (with what triggers it), edited, or deleted (with
+whether you or an agent made the change), a message handed to an agent's runner (with which harness it
 runs, how the message reached it, whether a turn was under way, and how long the
 agent had been idle), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how
 many chapters and parts of the diff they hold, and how long it took). It
 counts how a team comes together and sets up the same way, each under the
 account that did it: an account's first sign-in (with whether it was through
-Google or GitHub), an invitation to a workspace sent (with the role it offers)
-and accepted, a post a member made on a thread (with whether it answered an ask
+Google or GitHub), a GitHub account linked or a GitHub token saved, a model
+provider's key or sign-in added (with which provider), a repository pinned or
+unpinned (never which), an invitation to a workspace sent (with the role it offers)
+and accepted or canceled, a member removed, given another role, or handed the
+workspace, a member who left, a workspace renamed, a post a member made on a thread (with whether it answered an ask
 and whether it carried a picture or a file), a plan a member edited, a comment
 a member wrote on one (with whether it replied on a thread or started one), an
 automation run started (with what fired it: its schedule, GitHub, a webhook, an
 integration, or Run now), counted under the automation's owner, the GitHub App
-connected to a workspace, and a Linux host or this Mac enrolled (with which).
+connected to a workspace, a Linux host or this Mac enrolled (with which), a
+box's pairing approved or denied and a host removed, a channel made, edited, or
+archived and a thread moved into one, a skill installed, turned on or off,
+updated, shared with a workspace, or removed (never which), a workspace memory
+forgotten (never what it held), a clip you dictated (with a rough length, never
+its words), and a terminal or a browser tab you opened in an agent's sandbox, a
+browser tab you took over or handed back, or a file you added to a plan.
 What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
 `platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
@@ -1112,10 +1124,12 @@ with the rest of your usage data.
 Our service's counts are also grouped by workspace, so PostHog can count
 workspaces as well as people: a count of something done in a workspace (a
 task, an agent and its messages and turns, a pull request, a thread, a plan, an
-automation, an invitation, the GitHub App, or the workspace made) carries the
-workspace's id, and a count of your account's own setup (your first sign-in, a
-GitHub account or token, an integration, an API key, a pinned repository, or an
-enrolled host) carries none. For each workspace it counts, PostHog holds that
+automation, an invitation, a member or workspace change, a channel, a memory, a
+tool you opened for an agent, the GitHub App, or the workspace made) carries the
+workspace's id, and a count of your account's own setup and belongings (your
+first sign-in, a GitHub account or token, an integration, an API key, a pinned
+repository, an enrolled host or a pairing, a skill, or a dictated clip) carries
+none. For each workspace it counts, PostHog holds that
 workspace's name, as its members see it, and when it was made, and nothing
 else of it; our service sends them beside the workspace's first count on each
 of its servers, again once a day, and when the workspace is renamed. Your own

@@ -31,7 +31,11 @@ import {
 } from "@luke/features/workspace-invitation-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { Clock, Effect, Option } from "effect";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_WORKSPACE_MEMBER_ACTION,
+} from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
@@ -186,6 +190,11 @@ export function workspaceInvitationsProcedures(seams: WorkspaceInvitationsProced
       }
       yield* pluginCallOrRefused(
         seams.members.cancelInvitation({ headers: context.sessionHeaders, invitationId }),
+      );
+      yield* recordServerEvent(
+        SERVER_EVENT.WORKSPACE_MEMBER_CHANGE,
+        { userId: context.userId, workspaceId: workspace.id },
+        { action: SERVER_WORKSPACE_MEMBER_ACTION.INVITE_CANCEL },
       );
       const invitations = yield* pendingOf(context.request, context.sessionHeaders, workspace.id);
       return { invitations };

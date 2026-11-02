@@ -43,6 +43,7 @@ import {
 import { standingsOf } from "../agents/coder-host/stop.js";
 import {
   recordServerEvent,
+  SERVER_AUTOMATION_CHANGE_ACTION,
   type SERVER_AUTOMATION_SOURCE,
   SERVER_EVENT,
 } from "../events/server-events.js";
@@ -478,6 +479,7 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   standing: Automation,
   asked: typeof automationChangeRequestSchema.Type,
+  source: (typeof SERVER_AUTOMATION_SOURCE)[keyof typeof SERVER_AUTOMATION_SOURCE],
 ): Effect.fn.Return<
   AutomationWritten,
   HostedRefusal,
@@ -492,6 +494,11 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
     updateAutomationCommitted(userId, standing.id, changes, access),
   );
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  yield* recordServerEvent(
+    SERVER_EVENT.AUTOMATION_CHANGE,
+    { userId, workspaceId: standing.organizationId },
+    { action: SERVER_AUTOMATION_CHANGE_ACTION.EDIT, source },
+  );
   return {
     automation: yield* summaryOf(userId, written.value.automation),
     webhookSecret,
@@ -499,13 +506,19 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** One automation the account reads deleted with its history, answering the transaction it went in; one it may not delete is refused as not permitted. */
+/** One automation the account reads deleted with its history, counted as its member's or its agent's, answering the transaction it went in; one it may not delete is refused as not permitted. */
 export const removeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  id: string,
+  standing: Automation,
+  source: (typeof SERVER_AUTOMATION_SOURCE)[keyof typeof SERVER_AUTOMATION_SOURCE],
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
-  const deleted = yield* hostedStoreOrUnavailable(deleteAutomationCommitted(userId, id));
+  const deleted = yield* hostedStoreOrUnavailable(deleteAutomationCommitted(userId, standing.id));
   if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  yield* recordServerEvent(
+    SERVER_EVENT.AUTOMATION_CHANGE,
+    { userId, workspaceId: standing.organizationId },
+    { action: SERVER_AUTOMATION_CHANGE_ACTION.DELETE, source },
+  );
   return deleted.value.txid;
 });
 

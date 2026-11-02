@@ -13,6 +13,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { runRecall, runRemember } from "../agents/memory-tools.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { memoriesProcedures } from "./memories-procedures.js";
@@ -33,6 +34,15 @@ import { memoriesProcedures } from "./memories-procedures.js";
 
 const ORIGIN = "https://luke.test";
 const MEMORIES_PATH = "/api/account/memories";
+
+/** What the procedures counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The workspaces each forget of the account was counted in, in order. */
+const forgetsCountedFor = (userId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.MEMORY_FORGET)
+    .map((event) => event.workspaceId);
 
 const TESTS_RUN = "The web server's store tests run on PGlite through test:store.";
 const DEPLOYS = "Deployments go out from the release branch through Vercel.";
@@ -80,6 +90,7 @@ const answer = (procedures: ReturnType<typeof memoriesProcedures>, request: Requ
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      ANALYTICS.layer,
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
@@ -176,6 +187,9 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         assert.equal(recalled.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(recalled.memories, []);
         assert.deepEqual(wordsOf(byOwner), []);
+        // The refused forget is not counted, and each of the others is, in the workspace and under whoever made it.
+        assert.deepEqual(forgetsCountedFor(owner), [workspaceId]);
+        assert.deepEqual(new Set(forgetsCountedFor(teammate)), new Set([workspaceId]));
       }),
   );
 

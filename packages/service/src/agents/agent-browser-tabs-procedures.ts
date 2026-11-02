@@ -57,6 +57,12 @@ import { DateTime, Duration, Effect, type Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { BROWSER_LIVE_BOUNDS } from "../browser-live/bounds.js";
 import {
+  recordServerEventIn,
+  SERVER_AGENT_TOOL,
+  SERVER_EVENT,
+  type ServerAgentTool,
+} from "../events/server-events.js";
+import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
@@ -210,6 +216,16 @@ function openedPage(sessionId: string, conversationId: string, address: string) 
   );
 }
 
+/** A browser act of the member's counted in the agent's workspace, as the member's own. */
+function browserActed(userId: string, agentId: string, tool: ServerAgentTool) {
+  return recordServerEventIn(
+    SERVER_EVENT.AGENT_TOOL_OPEN,
+    userId,
+    readVisibleAgentWorkspace(userId, agentId),
+    { tool },
+  );
+}
+
 /**
  * The member's open: the agent reached, on the task named where one is, and
  * its sandbox held, the page opened, kept with the member as its opener,
@@ -240,6 +256,7 @@ const openTab = /* @__PURE__ */ Effect.fnUntraced(function* (
   const now = yield* DateTime.nowAsDate;
   const heldUntil = new Date(now.getTime() + BROWSER_TAKEOVER_HOLD_MS);
   yield* hostedStoreOrUnavailable(takeOverBrowserTab(tab.id, userId, heldUntil, now));
+  yield* browserActed(userId, open.agentId, SERVER_AGENT_TOOL.BROWSER);
   return yield* tabAnswer(userId, { agentId: open.agentId }, tab.id);
 });
 
@@ -276,13 +293,19 @@ export function agentBrowserTabsProcedures(seams: AgentBrowserTabsProcedureSeams
       const now = yield* DateTime.nowAsDate;
       const heldUntil = new Date(now.getTime() + BROWSER_TAKEOVER_HOLD_MS);
       // Note that a tab another member drives is answered as it stands, their takeover named, rather than refused.
-      yield* hostedStoreOrUnavailable(takeOverBrowserTab(tab.id, context.userId, heldUntil, now));
+      const taken = yield* hostedStoreOrUnavailable(
+        takeOverBrowserTab(tab.id, context.userId, heldUntil, now),
+      );
+      if (taken) yield* browserActed(context.userId, agent.id, SERVER_AGENT_TOOL.BROWSER_TAKEOVER);
       return yield* tabAnswer(context.userId, place, tabId);
     }),
     handBack: member.handBack.effect(function* ({ input, context }) {
       const { place, tabId } = yield* tabPath(input);
-      const { tab } = yield* reachedTab(context.userId, place, tabId);
-      yield* hostedStoreOrUnavailable(handBackBrowserTab(tab.id, context.userId));
+      const { tab, agent } = yield* reachedTab(context.userId, place, tabId);
+      const released = yield* hostedStoreOrUnavailable(handBackBrowserTab(tab.id, context.userId));
+      if (released) {
+        yield* browserActed(context.userId, agent.id, SERVER_AGENT_TOOL.BROWSER_HANDBACK);
+      }
       return yield* tabAnswer(context.userId, place, tabId);
     }),
   };

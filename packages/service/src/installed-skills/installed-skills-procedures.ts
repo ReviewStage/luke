@@ -57,6 +57,12 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
 import { Data, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_SKILL_ACTION,
+  type ServerSkillAction,
+} from "../events/server-events.js";
+import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
@@ -223,6 +229,11 @@ const refusedWrite = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/** A skill change counted under the account that made it; a skill may be personal, so no workspace is named. */
+function skillChanged(userId: string, action: ServerSkillAction) {
+  return recordServerEvent(SERVER_EVENT.SKILL_CHANGE, { userId }, { action });
+}
+
 /** The installed skills resource: every procedure to a signed-in caller. */
 export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) {
   const skills = hosted.installedSkills.use(accountMiddleware(seams.resolveUserId));
@@ -284,6 +295,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
         ),
         made.length === 1 ? made[0]?.name : undefined,
       );
+      yield* skillChanged(userId, SERVER_SKILL_ACTION.INSTALL);
       return { skills: installed.map((skill) => summaryOf(skill, true)) };
     }),
 
@@ -297,6 +309,10 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
         setInstalledSkillEnabled(userId, id, body.enabled),
       );
       if (Option.isNone(written)) return yield* refusedWrite(userId, id);
+      yield* skillChanged(
+        userId,
+        body.enabled ? SERVER_SKILL_ACTION.ENABLE : SERVER_SKILL_ACTION.DISABLE,
+      );
       return { skill: summaryOf(written.value, true) };
     }),
 
@@ -346,6 +362,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       const revision = yield* revisionAtRef(repository, skill.name, source);
       const written = yield* storeWrite(updateInstalledSkill(userId, id, revision), skill.name);
       if (Option.isNone(written)) return yield* refusedWrite(userId, id);
+      yield* skillChanged(userId, SERVER_SKILL_ACTION.UPDATE);
       return {
         skill: summaryOf(written.value, true),
         changed: written.value.computedHash !== skill.computedHash,
@@ -359,6 +376,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       yield* checkedScope(workspace, INSTALLED_SKILL_SCOPE.WORKSPACE);
       const written = yield* storeWrite(shareInstalledSkill(userId, id, workspace.id), undefined);
       if (Option.isNone(written)) return yield* refusedWrite(userId, id);
+      yield* skillChanged(userId, SERVER_SKILL_ACTION.SHARE);
       return { skill: summaryOf(written.value, true) };
     }),
 
@@ -367,6 +385,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       const id = yield* pathUuid(input.id);
       const removed = yield* hostedStoreOrUnavailable(removeInstalledSkill(userId, id));
       if (!removed) return yield* refusedWrite(userId, id);
+      yield* skillChanged(userId, SERVER_SKILL_ACTION.REMOVE);
       return { id };
     }),
   };

@@ -113,6 +113,7 @@ import {
 import {
   recordingProductAnalytics,
   SERVER_AGENT_STARTER,
+  SERVER_AUTOMATION_CHANGE_ACTION,
   SERVER_AUTOMATION_SOURCE,
   SERVER_EVENT,
   SERVER_TURN_OUTCOME,
@@ -4028,6 +4029,20 @@ test("list_automations, create_automation, update_automation, and delete_automat
   assert.deepEqual(
     await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "delete-again"),
     rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+  // An agent's own edits and delete are counted as its, once each, and a delete that found nothing is not.
+  const automationChanges = countedWith(agents.caller.userId, SERVER_EVENT.AUTOMATION_CHANGE);
+  assert.deepEqual(automationChanges[0], {
+    action: SERVER_AUTOMATION_CHANGE_ACTION.EDIT,
+    source: SERVER_AUTOMATION_SOURCE.AGENT,
+  });
+  assert.deepEqual(automationChanges.at(-1), {
+    action: SERVER_AUTOMATION_CHANGE_ACTION.DELETE,
+    source: SERVER_AUTOMATION_SOURCE.AGENT,
+  });
+  assert.equal(
+    automationChanges.filter((each) => "action" in each && each.action === "delete").length,
+    1,
   );
 });
 
