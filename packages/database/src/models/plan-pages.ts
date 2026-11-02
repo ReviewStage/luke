@@ -25,7 +25,7 @@ import { agentReachableBy, reachableTask, taskReachableBy } from "./workspace-st
  * plan-pages.ts -- the pages shown on a task or on a coding agent with no task: write a page or its next version as who showed it, list an owner's pages, and read one version, by its owner or by the page's id alone.
  *
  * A page stands on its owner (`PageOwner`): a task, whose pages any agent on
- * it and Fullspin write, or a coding agent on no task, whose pages are its own.
+ * it and the brain write, or a coding agent on no task, whose pages are its own.
  * A write is a page's next version, taken under the owner row's own lock, so
  * two writes of one page never take one number and an owner deleted
  * meanwhile reads as gone rather than written back into being. Every

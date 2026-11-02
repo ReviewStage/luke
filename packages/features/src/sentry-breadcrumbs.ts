@@ -135,7 +135,7 @@ function scrubbedWord(word: string): string {
  * A span's name as it may be sent: replaced whole where it names the token,
  * and otherwise each address in it scrubbed as an attribute's is. Note that
  * Sentry's own spans are named by method and host alone when streamed; this
- * holds a name Fullspin gives a span to the same rule.
+ * holds a name we give a span to the same rule.
  */
 function nameWithoutAccessToken(name: string): string {
   if (namesAccessToken([name])) return REDACTED;

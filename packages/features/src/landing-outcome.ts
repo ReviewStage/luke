@@ -28,25 +28,25 @@ export const LANDING_OUTCOME = {
   CONNECTED: "connected",
   /** The provider is connected to the workspace, for everyone in it. */
   WORKSPACE_CONNECTED: "workspace-connected",
-  /** The provider's app was installed and Fullspin reaches its repositories. */
+  /** The provider's app was installed and we reach its repositories. */
   INSTALLED: "installed",
-  /** An installation changed which repositories Fullspin reaches. */
+  /** An installation changed which repositories we reach. */
   UPDATED: "updated",
   /** The developer asked an organization's owner to install the app. */
   REQUESTED: "requested",
-  /** The provider named no installation Fullspin could confirm. */
+  /** The provider named no installation we could confirm. */
   NOT_CONFIRMED: "not-confirmed",
-  /** The sign-in gave Fullspin no grant: declined, cancelled, or refused. */
+  /** The sign-in gave us no grant: declined, cancelled, or refused. */
   NOT_COMPLETED: "not-completed",
-  /** Fullspin could not reach the provider, or the service between them. */
+  /** We could not reach the provider, or the service between them. */
   UNAVAILABLE: "unavailable",
-  /** The connect's link is too old, already used, or not Fullspin's. */
+  /** The connect's link is too old, already used, or not ours. */
   EXPIRED: "expired",
   /** The provider's account already stands for another workspace. */
   ALREADY_CONNECTED: "already-connected",
   /** The page was opened with no connect to carry out. */
   NOTHING_TO_CONNECT: "nothing-to-connect",
-  /** Fullspin's own service gave no answer. */
+  /** Our own service gave no answer. */
   LUKE_UNREACHABLE: "luke-unreachable",
 } as const;
 

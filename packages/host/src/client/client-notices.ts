@@ -16,7 +16,7 @@ import type { AppStateStore } from "./app-state-store.js";
 
 /** Where a notice's click takes the developer, as the platform brings its window forward on it. */
 interface NoticePresenter {
-  /** Brings Fullspin's window forward, where the prompt for a command stands: a command ask's notification's click. */
+  /** Brings the app's window forward, where the prompt for a command stands: a command ask's notification's click. */
   openMacCommandAsk: () => void;
 }
 
@@ -165,7 +165,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
   );
   // A command asked while the window is behind would otherwise wait unseen
   // until its timeout denies it, so each new ask is announced once, the one
-  // notification Fullspin posts, since Ask every time is the developer's own ask
+  // notification the app posts, since Ask every time is the developer's own ask
   // to be asked; the window in front shows the prompt itself.
   const told = new Set<string>();
   yield* Effect.forkScoped(

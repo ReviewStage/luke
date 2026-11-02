@@ -1,5 +1,5 @@
 /**
- * github-install-wire.ts -- where a developer lands once the Fullspin GitHub App is installed, and the one word the landing carries.
+ * github-install-wire.ts -- where a developer lands once our GitHub App is installed, and the one word the landing carries.
  *
  * GitHub returns the browser from an install to the App's Setup URL, which
  * is the service's `GITHUB_INSTALLED` route; that route, or for a

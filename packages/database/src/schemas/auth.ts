@@ -293,8 +293,8 @@ export const oauthClientAssertion = pgTable("oauth_client_assertion", {
 
 /**
  * The organization plugin's tables, as Better Auth's CLI generates them for
- * 1.6.29 with instants through `timestamptz()`. A Fullspin
- * workspace is an organization, its team the `member` rows; `invitation` is
+ * 1.6.29 with instants through `timestamptz()`. A workspace is an
+ * organization, its team the `member` rows; `invitation` is
  * declared because the plugin's schema names it, and stays empty while the
  * invitation endpoints are disabled (`auth-policy.ts`).
  */

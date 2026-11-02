@@ -619,7 +619,7 @@ describe("the host's install script", () => {
         writeFileSync(join(fakes, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
       const app = join(home, "Library/Application Support/Vespin Host");
-      // Note that one smolvm store holds every Vespin install's agents' machines for the user, this one's among them.
+      // Note that one smolvm store holds every install's agents' machines for the user, this one's among them.
       const smolvm = join(app, "state/agent-tools/smolvm/1/smolvm");
       mkdirSync(join(smolvm, ".."), { recursive: true });
       writeFileSync(
@@ -627,7 +627,7 @@ describe("the host's install script", () => {
         `#!/bin/sh\n[ "$1 $2" != "machine delete" ] || echo "$4" >> "${deletes}"\n`,
         { mode: 0o755 },
       );
-      // Note that agent one is this install's, by its daemon's record, and agent two another Vespin install's.
+      // Note that agent one is this install's, by its daemon's record, and agent two another install's.
       mkdirSync(join(app, "state/owned-agents"), { recursive: true });
       writeFileSync(join(app, "state/owned-agents/one"), "");
       for (const place of [home, rootHome]) {
@@ -689,7 +689,7 @@ describe("the host's install script", () => {
       mkdirSync(join(state, "owned-agents"), { recursive: true });
       writeFileSync(join(state, "owned-agents/one"), "");
       writeFileSync(join(state, "device.json"), "{}");
-      // Note that agent one is this install's, by its daemon's record, and agent two another Vespin install's.
+      // Note that agent one is this install's, by its daemon's record, and agent two another install's.
       for (const each of ["agents/one", "agents/two", "clones/acme"]) {
         mkdirSync(join(home, ".vespin", each), { recursive: true });
       }

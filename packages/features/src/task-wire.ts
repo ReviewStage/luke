@@ -34,7 +34,7 @@ import { trimmedText } from "./text-schema.js";
  * and who last changed each section as `sectionEdits`, by heading.
  * A task may name the GitHub repository it is about, `owner/name` as
  * `github-repositories-wire.ts` spells it, which the service confirms the
- * account reaches through the Fullspin GitHub App before it keeps it; null is a
+ * account reaches through our GitHub App before it keeps it; null is a
  * task with no repository yet, and every task from before repositories.
  * A task may be pinned, which the sidebar lists first; the pin is the
  * account's, so it follows it to every Mac it signs in on. Tasks are no
@@ -288,7 +288,7 @@ function relationNamedOnce(request: {
  * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
  * refused, and the service refuses it without a repository, as it refuses
  * an agent's Start on a task with none, before anything is written. A
- * brief is the developer's own words about the task, which Fullspin is handed
+ * brief is the developer's own words about the task, which the app is handed
  * beside the plan to plan from; one left out, or nothing but whitespace,
  * starts the task with none. A brief beside `planning: false` or an `agent`
  * is kept rather than refused, and goes unread until a call is opened on the
@@ -535,7 +535,7 @@ export const TASK_LIST_ARCHIVED = {
 
 /**
  * Who wrote a revision of a plan: the developer, the notetaker on a call
- * (whom the developer knows as Fullspin), a coding agent, or, for the one
+ * (whom the developer knows by the app's name), a coding agent, or, for the one
  * revision a plan from before history starts with, nobody the service can
  * name.
  */
@@ -548,11 +548,11 @@ export const PLAN_ACTOR = {
 
 export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
 
-/** Who made a task: its member by hand, Fullspin on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
+/** Who made a task: its member by hand, the app on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
 export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
 
 /**
- * Who made a task where its member did not make it by hand: Fullspin on their
+ * Who made a task where its member did not make it by hand: the app on their
  * call, or a coding agent acting for them, by the agent's id while its row
  * stands, which the window reads its title, harness, automation, and task
  * from among the agents it already lists.
@@ -627,7 +627,7 @@ const taskSummaryFields = {
   createdBy: EffectSchema.optionalKey(memberRefSchema),
   /**
    * Who made the task for `createdBy`, where they did not make it by hand:
-   * Fullspin on their call, or a coding agent; absent for a task its member made
+   * the app on their call, or a coding agent; absent for a task its member made
    * by hand, and from a service before it was sent.
    */
   origin: EffectSchema.optionalKey(taskOriginSchema),
@@ -834,7 +834,7 @@ export const planLastEditSchema = EffectSchema.Struct({
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** Epoch milliseconds of the revision's latest save. */
   at: countedNumber,
-  /** Always false, since Fullspin takes no calls; a released desktop still requires it. */
+  /** Always false, since the app takes no calls; a released desktop still requires it. */
   duringCall: EffectSchema.Boolean,
 });
 
@@ -1092,7 +1092,7 @@ export const TASK_FILE_BOUNDS = {
  * Why a file of the task's repository was not read for the File tab, or a
  * folder not listed for its tree: a secret file, no regular file (or no
  * folder) at the path, a file too large or not text,
- * a task with no repository, a repository the Fullspin GitHub App does not
+ * a task with no repository, a repository our GitHub App does not
  * reach for the account, or GitHub not answering just now.
  */
 export const TASK_FILE_REFUSAL = {
@@ -1137,8 +1137,8 @@ export type TaskFileRequest = typeof taskFileRequestSchema.Type;
 
 /**
  * A window of a file of the task's repository as it stands now on its
- * default branch, or at the commit the request pinned, read through the
- * Fullspin GitHub App: the path, the repository and the branch or commit read,
+ * default branch, or at the commit the request pinned, read through our
+ * GitHub App: the path, the repository and the branch or commit read,
  * the commit the lines were read at where GitHub named one, the line the first carried line is, how
  * many lines the whole file has, and the lines, each cut to the bound. A
  * window past the file's end carries no lines.
@@ -1222,7 +1222,7 @@ export type TaskTreeEntry = typeof taskTreeEntrySchema.Type;
 
 /**
  * A folder of the task's repository as it stands now on the branch the
- * File tab reads its files on, through the Fullspin GitHub App: the path, the
+ * File tab reads its files on, through our GitHub App: the path, the
  * repository and the branch read, its entries in GitHub's order, and
  * whether there were more than one listing carries. A secret file is
  * listed by name like any other, since it is its contents that are never
@@ -1257,7 +1257,7 @@ export const TASK_SKILL_BOUNDS = {
 
 /**
  * Where a skill the `/` list offers comes from: the task's repository, as
- * GitHub holds it, or a skill a member installed into Fullspin for the whole
+ * GitHub holds it, or a skill a member installed into the app for the whole
  * workspace or for themselves alone (`installed-skill-wire.ts`). Where two
  * share a name the earlier one here is offered and the later one is not,
  * as an agent's session merges them.
@@ -1299,7 +1299,7 @@ const taskSkillSchema = EffectSchema.Struct({
  * or of a workspace's repository (GET `/api/github/repositories/skills`):
  * the repository and the branch read, null where there is no repository,
  * and the skills, the repository's as they stand now on its default branch,
- * read through the Fullspin GitHub App, then the member's enabled installed
+ * read through our GitHub App, then the member's enabled installed
  * skills, the workspace's and then their own, each source in name order and
  * a name an earlier source holds left out. A skill its `SKILL.md` says the
  * model alone loads is not one of them.

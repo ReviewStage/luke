@@ -68,7 +68,7 @@ interface ServiceState {
   /** The preferences the account saved, and when; none for an account that saved none. */
   preferences: Record<string, string>;
   updatedAt?: number;
-  /** Where the account's Vespin links open, a part of its own; none where it never chose. */
+  /** Where the account's app links open, a part of its own; none where it never chose. */
   linkOpen?: string;
   /** Whether the service's sign-out is unreachable. */
   signOutDown?: boolean;
@@ -78,7 +78,7 @@ interface ServiceState {
   heldSignIn?: Promise<void> | undefined;
 }
 
-/** The service's routes over `state`, answered as Better Auth and Vespin's routes answer them. */
+/** The service's routes over `state`, answered as Better Auth and our routes answer them. */
 function respond(
   state: ServiceState,
   request: Pick<RecordedRequest, "method" | "pathname" | "body">,

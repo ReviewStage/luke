@@ -90,7 +90,7 @@ export const CALL_KIND = {
   MOVE_TASK: "move-task",
   /** A task of the workspace changed (`update_task`), its row naming the task once answered; an older transcript's archive of one reads as a change too. */
   UPDATE_TASK: "update-task",
-  /** The workspace's issues listed (`list_issues`, retired with Fullspin's own issues; an older transcript still names it). */
+  /** The workspace's issues listed (`list_issues`, retired with our own issues; an older transcript still names it). */
   LIST_ISSUES: "list-issues",
   /** One issue read (`read_issue`), filed (`create_issue`), or changed (`update_issue`), retired with `list_issues`, its row naming it by its identifier and title once answered. */
   READ_ISSUE: "read-issue",

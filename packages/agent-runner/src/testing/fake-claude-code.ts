@@ -1,5 +1,5 @@
 /**
- * fake-claude-code.ts -- a scripted CLI for the runner's tests: it plays a recorded turn once Vespin's first message arrives, and keeps what the runner handed it.
+ * fake-claude-code.ts -- a scripted CLI for the runner's tests: it plays a recorded turn once the service's first message arrives, and keeps what the runner handed it.
  *
  * It stands at the process boundary the runner drives the real CLI across,
  * so a test sees what the CLI would have: the options it was started with,
@@ -37,7 +37,7 @@ function stopHookOf(options: Options) {
 }
 
 /**
- * A fake CLI that plays `steps` once, from Vespin's first message. `prompted`
+ * A fake CLI that plays `steps` once, from the service's first message. `prompted`
  * holds each prompt as the CLI reads it, for a test that must wait on one.
  * Each `result` names the prompts its turn took, as the CLI's does, but one
  * whose step says it names none. `chain`
@@ -73,7 +73,7 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     // The prompts the running turn has taken, which its `result` names.
     const taken: string[] = [];
 
-    // Note that the prompts are read for as long as Vespin sends them, as the
+    // Note that the prompts are read for as long as the service sends them, as the
     // CLI reads its stdin, while the script plays beside them.
     const prompts = Stream.fromAsyncIterable(params.prompt, (cause) => cause).pipe(
       Stream.tap((prompt) =>
@@ -121,7 +121,7 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
       if ("untilReleased" in step) return Stream.drain(Stream.fromEffect(Deferred.await(released)));
       return Stream.drain(Stream.fromEffect(runHook(step.stopHook)));
     };
-    // The CLI starts its first turn on Vespin's first message.
+    // The CLI starts its first turn on the service's first message.
     const script = Stream.fromIterable<Step>([{ awaitPrompt: true }, ...steps]).pipe(
       Stream.flatMap(play),
     );

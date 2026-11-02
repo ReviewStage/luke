@@ -114,9 +114,9 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
  * it is the account's own and no agent names it or its parent. Note that a
  * conversation an agent names is reached through the workspace alone, even
  * by the member who opened it, because a member who leaves the workspace
- * leaves its agents' conversations with it. A task's own Fullspin's
+ * leaves its agents' conversations with it. The per-task assistant's
  * conversation, and every worker's delegated from one, is reached by no
- * one: the migration that dropped his data stamped each of them deleted
+ * one: the migration that dropped its data stamped each of them deleted
  * (`20261021105816_per_task_luke_data_drop`), and a stamped row is reached
  * by no one.
  */

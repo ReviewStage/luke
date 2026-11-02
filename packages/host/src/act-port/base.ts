@@ -24,7 +24,7 @@ import { ACT_ERROR, actPortContract } from "../contract/index.js";
  */
 export interface ActSender<Sender = unknown> {
   sender: Sender;
-  /** A panel: Fullspin's window, which types asks and presses rows. */
+  /** A panel: the app's window, which types asks and presses rows. */
   panel: boolean;
 }
 

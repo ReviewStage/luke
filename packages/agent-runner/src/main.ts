@@ -2,12 +2,12 @@
  * main.ts -- the runner's process: stdin and the environment in, one launch run, and the process's exit code out; or, started as Codex's token command, the plan's access token out.
  *
  * Bundled with the SDK into one file (`pnpm --filter @luke/agent-runner
- * build`), which Fullspin uploads to the agent's sandbox and starts there as the
- * agent user (P08). Exit 0 is a launch that ended as Fullspin asked or as the
- * turn did; anything else is one Fullspin shows as interrupted.
+ * build`), which the service uploads to the agent's sandbox and starts there as the
+ * agent user (P08). Exit 0 is a launch that ended as the service asked or as the
+ * turn did; anything else is one we show as interrupted.
  *
  * Started as `node <bundle> codex-token <tokenUrl>` by app-server
- * (`codex-token.ts`), it prints the token Fullspin answers on stdout and exits
+ * (`codex-token.ts`), it prints the token the service answers on stdout and exits
  * 0, or says why not on stderr and exits 1.
  */
 
@@ -91,7 +91,7 @@ const token = Effect.gen(function* () {
 const main = mode === CODEX_TOKEN_COMMAND ? token : launch;
 
 // Note that we exit explicitly, even on success, where `runMain` would leave
-// the process to drain, because stdin, which Fullspin may hold open, would keep
+// the process to drain, because stdin, which the service may hold open, would keep
 // it alive after the launch has ended.
 NodeRuntime.runMain(main, {
   teardown: (exit) => process.exit(Exit.isSuccess(exit) ? Number(exit.value) : EXIT.FAILED),

@@ -43,7 +43,7 @@ type TerminalStateKind = (typeof TERMINAL_STATE)[keyof typeof TERMINAL_STATE];
 
 /** Why the tab could not reach its shell. */
 export const TERMINAL_UNREACHED = {
-  /** Fullspin's service could not be reached, or did not answer. */
+  /** Our service could not be reached, or did not answer. */
   SERVICE: "service",
   /** The service answered, and the agent's sandbox did not: Vercel Sandbox's API, or tmux in the sandbox. */
   SANDBOX: "sandbox",
