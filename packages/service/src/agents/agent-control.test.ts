@@ -61,6 +61,7 @@ const openTokenAgent = Effect.gen(function* () {
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return { owner, reader, tokenless, workspace, task, agent: Option.getOrThrow(started).agent };
 });

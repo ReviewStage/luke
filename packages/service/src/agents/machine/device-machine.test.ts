@@ -56,7 +56,12 @@ import {
 import { openLocalAgent } from "../../testing/local-agent.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { wokenOnHub } from "../../testing/sync-woken.js";
-import { checkOutAgentRepository, deepenAgentCheckout } from "../coder-host/checkout.js";
+import {
+  agentDeepenPlan,
+  agentRepositoryRead,
+  cloneAgentRepository,
+  deepenCheckoutWith,
+} from "../coder-host/checkout.js";
 import { ranDirectlyFolderOf } from "../coder-host/status.js";
 import {
   claimedDeviceAgentLine,
@@ -227,15 +232,15 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             .from(deviceAgentLine)
             .where(eq(deviceAgentLine.id, handle.command));
           const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(row?.payload);
-          // The same agent's checkout in a cloud sandbox, deepened as its first write deepens it.
+          // The same agent's checkout in a cloud sandbox, deepened as its launch deepens it.
           const { agent } = opened;
           assert.ok(hasRepository(agent));
           const target = { userId: opened.userId, conversationId: agent.conversationId };
           const sandbox = sandboxDouble(() => undefined);
-          yield* Effect.andThen(
-            checkOutAgentRepository(target, agent, sandbox),
-            deepenAgentCheckout(target, agent, sandbox),
-          ).pipe(Effect.provide(github.layer));
+          yield* Effect.gen(function* () {
+            yield* cloneAgentRepository(agent, sandbox, yield* agentRepositoryRead(target, agent));
+            yield* deepenCheckoutWith(sandbox, yield* agentDeepenPlan(target, agent));
+          }).pipe(Effect.provide(github.layer));
 
           // A member with no GitHub sign-in writes as the App's bot, at the noreply address GitHub links to it.
           const bot = {

@@ -6,6 +6,7 @@ import { createAgent } from "@luke/database/models/agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxMessage } from "@luke/database/schemas/inbox-message";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
@@ -79,6 +80,7 @@ const openAgentIn = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: "# Preview deploys\n",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   const agent = { userId, taskId: task.id, agentId: started.value.agent.id };
@@ -100,6 +102,7 @@ const openTasklessAgent = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: null,
     prompt: "Check the preview.",
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   return { userId, taskId: null, agentId: started.value.agent.id };

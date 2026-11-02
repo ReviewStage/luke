@@ -82,7 +82,7 @@ interface RemoteTool {
 
 /** The integration and account a connection is named for, with a remote tool's own name; nothing where the connection is no integration's or the name no tool's. */
 function remoteToolIn(connection: string, remoteTool: string): RemoteTool | undefined {
-  // Note that a connection is named for its account, the first after its provider (`agent-runtime/connections.ts`).
+  // Note that a connection is named for its account, the first after its provider (`integration-wire.ts`'s `mintIntegrationConnectionName`).
   const account = integrationConnectionOf(connection);
   if (account === undefined || !isRemoteToolWord(remoteTool)) return undefined;
   return { ...account, connection, remoteTool };

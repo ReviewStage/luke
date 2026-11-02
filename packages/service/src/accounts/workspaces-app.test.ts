@@ -18,6 +18,7 @@ import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { invitation, member, organization, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { task } from "@luke/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import {
@@ -1264,6 +1265,7 @@ it.effect(
           repository: "acme/relay",
           planSnapshot: null,
           prompt: "Sweep the flaky tests.",
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agent = { userId: ada, taskId: null, agentId: Option.getOrThrow(started).agent.id };
         const posted = yield* postInboxThread(agent, {

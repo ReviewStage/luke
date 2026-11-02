@@ -945,8 +945,8 @@ export const runnerSessions = <
 
     /**
      * A new place opened under the session given on the agent's machine, the
-     * agent's repository checked out in it, then at once what eve's first
-     * write does (`deepenAgentCheckout`, the machine's `finishCheckout`): the
+     * agent's repository checked out in it, then at once its deepen
+     * (`deepenCheckoutWith`, the machine's `finishCheckout`): the
      * write token at the firewall and the commit identity, since the
      * harness's own shell has no hook for a first write; and the runner
      * launched on the first line. The member's installed skills are read

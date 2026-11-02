@@ -7,6 +7,7 @@ import { readTask, updateTask } from "@luke/database/models/task-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { AGENT_ARCHIVER, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@luke/features/inbox-wire";
@@ -69,6 +70,7 @@ const openAgent = (userId: string, taskId: string) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/relay",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { agent } = Option.getOrThrow(started);
     const now = yield* Clock.currentTimeMillis;

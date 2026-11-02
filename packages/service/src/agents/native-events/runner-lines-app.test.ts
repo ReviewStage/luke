@@ -6,6 +6,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { queueRunnerLine } from "@luke/database/models/runner-line-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -61,6 +62,7 @@ const agentWithLines = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agentId = Option.getOrThrow(started).agent.id;
   const bearer = randomBytes(32).toString("base64url");

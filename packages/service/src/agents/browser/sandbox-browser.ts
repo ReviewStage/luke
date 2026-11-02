@@ -2,7 +2,7 @@
  * sandbox-browser.ts -- the commands that keep a Chromium running in an agent's sandbox, and the bridge that carries its DevTools protocol over a PTY's stdio.
  *
  * The browser is the full Chromium Playwright installs in the image
- * (`agent-runtime/sandbox.ts`), run headful on an Xvfb display of its own,
+ * (`agent-runtime/sandbox-image.ts`), run headful on an Xvfb display of its own,
  * so a site sees an ordinary browser rather than a headless one. Its
  * DevTools port is bound to the sandbox's loopback alone and is never
  * exposed: Vercel Sandbox's exposed ports are public, so the service reaches

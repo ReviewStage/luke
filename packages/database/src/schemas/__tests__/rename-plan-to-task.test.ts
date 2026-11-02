@@ -6,6 +6,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import { createAgent, readAgent } from "../../models/agent-store.js";
 import { createTask, readTask } from "../../models/task-store.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
   agentTablesRename,
   getTestDB,
@@ -53,6 +54,7 @@ const openTask = Effect.gen(function* () {
       repository: "acme/api",
       planSnapshot: null,
       prompt: "Sweep the flaky tests.",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
   );
   return { userId, taskId: task.id, agentId: started.agent.id };

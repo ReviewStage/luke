@@ -17,6 +17,7 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   AGENT_BROWSER_TAB_OPENER,
@@ -148,6 +149,7 @@ const openTask = Effect.gen(function* () {
         effort: "high",
         repository,
         githubAccess,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
       (started) => Option.getOrThrow(started).agent,
     );
@@ -558,6 +560,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
             effort: "high",
             repository: TOKEN_REPOSITORY,
             githubAccess: GITHUB_ACCESS.TOKEN,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const kept = yield* upsertBrowserTab({

@@ -6,6 +6,7 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { createAgent, recordAgentRunnerToken } from "../agent-store.js";
 import {
@@ -36,6 +37,7 @@ const openConversation = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agent = Option.getOrThrow(started).agent;
   assert.equal(yield* recordAgentRunnerToken(userId, agent.id, digest), true);

@@ -14,6 +14,7 @@ import { recordRepositoryReads } from "@luke/database/models/github-repository-r
 import { readGitHubTokenRow, removeGitHubToken } from "@luke/database/models/github-token-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   expectTopicsFire,
@@ -154,6 +155,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
           planSnapshot: null,
           prompt: "Try the checkout.",
           repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agent = Option.getOrThrow(started).agent;
         const params = { userId: owner, taskId: task.id };

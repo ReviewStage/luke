@@ -103,10 +103,10 @@ import { agentStatusOf } from "./status.js";
  * behind a label naming them by their mention link (`attached-files.ts`'s
  * `senderLabel`), which the row leaves out, since its sender is its own
  * column, so the model never reads a teammate's words as the developer's.
- * Who reaches eve is the caller's: the route holds the
+ * Who reaches the agent is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
- * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`). An archived agent takes
+ * deployment for the account; the agent's harness answers the message
+ * either way (`runtime-sessions.ts`). An archived agent takes
  * no message, and is refused as one that names nothing, since every list
  * leaves it out until it is brought back; it is read again under the
  * conversation's dispatch claim just before the send, which is taken under
@@ -121,9 +121,9 @@ import { agentStatusOf } from "./status.js";
  * does a message to an agent whose
  * session never claimed its record, past the grace its Start's session had
  * to come up in or where its Start opened none. The fresh session claims
- * the record forward, so the ended one is refused from then on, and is
- * seeded with what was said (`host.ts`'s `seed`); Continue and fork still
- * start a new agent of their own.
+ * the record forward, so the ended one is refused from then on, and its
+ * harness starts afresh, holding none of what was said; Continue and fork
+ * still start a new agent of their own.
  */
 
 /**
@@ -443,9 +443,9 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),
   };
-  // Note that a session eve no longer runs, or none at all, is no refusal: the words open a fresh
-  // session over the same conversation, which claims its record forward from the one that ended and
-  // is seeded with what was said in it (`host.ts`'s `seed`), so no developer has to press Continue.
+  // Note that a session that no longer runs, or none at all, is no refusal: the words open a fresh
+  // session over the same conversation, which claims its record forward from the one that ended, so
+  // no developer has to press Continue.
   const send = Effect.gen(function* () {
     if (sessionId !== undefined) {
       const sent = yield* eve

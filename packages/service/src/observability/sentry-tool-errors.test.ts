@@ -155,7 +155,7 @@ it.effect("a tool's refusal is not an issue, and a failure beneath a tool still 
     const throwing = (failure: Error) => async (): Promise<string> => {
       throw failure;
     };
-    // Note that a refusal explained in a bare `Error` of its own, as `coder-host/files.ts` explains one, is a refusal still.
+    // Note that a refusal explained in a bare `Error` of its own is a refusal still.
     const tools = {
       write_file: throwing(refused),
       apply_patch: throwing(new Error("Re-read the file.", { cause: refused })),

@@ -51,8 +51,7 @@ export const PLAYWRIGHT_PIN = {
  * Our own browser in an agent's sandbox, as its start (`@luke/service`'s
  * `browser/sandbox-browser.ts`) runs it: Chromium's DevTools port and the X
  * display Xvfb draws it on. Each is started in a session of its own, so the
- * two readers of the sandbox's processes, the runner's (`processes.ts`) and
- * the service's pause probe (`agent-runtime/sandbox-idle.ts`), tell the
+ * runner's reader of the sandbox's processes (`processes.ts`) tells the
  * browser's processes from the agent's by the command line of their
  * session's leader, and a wait after the agent opened its browser can still
  * stop the sandbox, whose stop keeps the browser's profile on its disk.

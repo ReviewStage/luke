@@ -115,7 +115,7 @@ import {
  * harness says nothing, as it may for an hour while a background command
  * runs; it applies nothing but that.
  *
- * As eve's relay does (`../coder-host/host.ts`), the route also keeps what
+ * The route also keeps what
  * the newest model call read on the agent's row for its context ring, the
  * batch's last such reading alone, and once a batch has started or ended a
  * turn, asks for the agent's title where none stands yet

@@ -10,6 +10,7 @@ import {
 } from "@luke/database/models/plan-revisions";
 import { readTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import type { PlanNote } from "@luke/features/plan-template";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/task-wire";
@@ -70,6 +71,7 @@ const startAgent = (userId: string, taskId: string) =>
       planSnapshot: "# Teammate invitations",
       prompt: null,
       repository: "acme/relay",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
     (started) => Option.getOrThrow(started).agent.id,
   );

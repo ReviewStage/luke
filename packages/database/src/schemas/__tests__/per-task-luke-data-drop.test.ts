@@ -15,6 +15,7 @@ import {
   purgeClearedConversations,
 } from "../../models/soft-delete.js";
 import { createTask, deleteTask } from "../../models/task-store.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, migrationStatements, openWorkspace, replayable } from "../../testing/index.js";
 import { user } from "../auth.js";
 import { sessionSandboxCleanup } from "../session-sandbox.js";
@@ -156,6 +157,7 @@ it.layer(getTestDB())("the per-task Vespin's conversations", (it) => {
             repository: "acme/relay",
             planSnapshot: "# Teammate invitations\n",
             prompt: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const agentsChild = yield* openConversation(userId, "child", {

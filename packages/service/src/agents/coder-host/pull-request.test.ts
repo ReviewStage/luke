@@ -9,6 +9,7 @@ import {
   updateAgentBranch,
   type WithRepository,
 } from "@luke/database/models/agent-store";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
@@ -93,6 +94,7 @@ const openAgent = (installationId: number, author: AgentAuthor | null, row?: Git
       planSnapshot: "# Invitations\n",
       prompt: null,
       repository: RELAY_FULL_NAME,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { agent } = Option.getOrThrow(started);
     if (author !== null) yield* settleAgentAuthor(userId, agent.id, author);
@@ -137,6 +139,7 @@ const openTokenAgent = Effect.gen(function* () {
     prompt: null,
     repository: RELAY_FULL_NAME,
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const { agent } = Option.getOrThrow(started);
   yield* settleAgentAuthor(userId, agent.id, AGENT_AUTHOR.TOKEN);

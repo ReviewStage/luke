@@ -288,6 +288,7 @@ async function agentOn(userId: string, taskId: string): Promise<StartedAgent> {
     taskId: taskId,
     planSnapshot: "# Teammate invitations",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
 }
 
@@ -305,6 +306,7 @@ async function tasklessAgentOn(
     planSnapshot: null,
     prompt: "Sweep the flaky tests.",
     automationRunId,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
 }
 
@@ -337,10 +339,9 @@ async function claimed(
   userId: string,
   start: Parameters<typeof createAgent>[1],
 ): Promise<StartedAgent> {
-  // An agent starts on Claude Code on its starter's API key, as a Start's would; none starts on eve.
+  // An agent starts on its starter's API key, as a Start's would, on the harness its start names.
   const started = await database.run(
     createAgent(userId, {
-      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       payer: AGENT_PAYER.API_KEY,
       ...start,
     }),
@@ -707,6 +708,7 @@ test("list_agents from an agent another started names its starter first, ahead o
     planSnapshot: "# Billing",
     prompt: null,
     startedByAgentId: agents.caller.id,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const newer: string[] = [];
   for (let each = 0; each < WORKSPACE_AGENTS_LIST_LIMIT; each += 1) {
@@ -717,6 +719,7 @@ test("list_agents from an agent another started names its starter first, ahead o
         taskId: tasks.billing,
         planSnapshot: "# Billing",
         prompt: null,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
     );
     newer.push(Option.getOrThrow(started).agent.id);
@@ -1531,6 +1534,7 @@ test("start_agent from another agent refuses, in words the model acts on and sta
     organizationId: workspaceId,
     planSnapshot: null,
     prompt: "Talk the release through.",
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   await saidTurnOn(bare, "Talked it through.");
   await refused({ from: { agentId: bare.id } }, R.SOURCE_NO_REPOSITORY);
@@ -1547,6 +1551,7 @@ test("start_agent refuses a coder continuing the pilot that started it, directly
     planSnapshot: "# Teammate invitations",
     prompt: null,
     kind: AGENT_KIND.PILOT,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const coder = await claimed(caller.userId, {
     ...AGENT_CHOICE,
@@ -1555,6 +1560,7 @@ test("start_agent refuses a coder continuing the pilot that started it, directly
     planSnapshot: "# Teammate invitations",
     prompt: null,
     startedByAgentId: pilot.id,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const grandchild = await claimed(caller.userId, {
     ...AGENT_CHOICE,
@@ -1563,6 +1569,7 @@ test("start_agent refuses a coder continuing the pilot that started it, directly
     planSnapshot: "# Teammate invitations",
     prompt: null,
     startedByAgentId: coder.id,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   await saidTurnOn(pilot, "Handed the invitations on.");
   const eve = await fakeCoderEve(workspaceId);
@@ -1597,6 +1604,7 @@ async function agentOnBranch(
     planSnapshot: "# Billing",
     prompt: null,
     startBranch: branch,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
 }
 
@@ -2016,6 +2024,7 @@ test("only a pilot makes a task in pilot mode, as a child of another", async () 
     kind: AGENT_KIND.PILOT,
     planSnapshot: "# Teammate invitations",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const made = await call(await peerCaller(hostOf(true), pilot, eve.services));
   assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
@@ -2747,11 +2756,13 @@ test("message_agent to a pilot a continue took over and archived reaches the pil
     ...start,
     idempotencyKey: randomUUID(),
     kind: AGENT_KIND.PILOT,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const worker = await claimed(agents.caller.userId, {
     ...start,
     idempotencyKey: randomUUID(),
     startedByAgentId: pilot.id,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const continued = await claimed(agents.caller.userId, {
     ...start,
@@ -2759,6 +2770,7 @@ test("message_agent to a pilot a continue took over and archived reaches the pil
     kind: AGENT_KIND.PILOT,
     startedFrom: { agentId: pilot.id, steps: 1, totalSteps: 1 },
     takesOverFrom: pilot.id,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   await database.run(archiveAgent(agents.caller.userId, pilot.id, true));
 

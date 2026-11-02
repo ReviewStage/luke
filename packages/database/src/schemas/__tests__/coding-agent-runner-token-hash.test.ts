@@ -10,6 +10,7 @@ import {
   readRunnerTokenConversation,
 } from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
   agentTablesRename,
   getTestDB,
@@ -57,6 +58,7 @@ const agentHolding = () =>
         repository: null,
         planSnapshot: "# Teammate invitations\n",
         prompt: null,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
     ).agent;
     return { userId, agentId: agent.id, conversationId: agent.conversationId };

@@ -7,6 +7,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import { createAgent } from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
   getTestDB,
   migrationStatements,
@@ -53,6 +54,7 @@ const openAgent = Effect.gen(function* () {
       repository: "acme/relay",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
   );
   return { userId, taskId: task.id, organizationId, agentId: started.agent.id };

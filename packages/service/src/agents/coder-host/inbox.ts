@@ -219,7 +219,7 @@ function postThreadDescription(channels: readonly ListedChannel[]): string {
 }
 
 /**
- * The tools as the model is shown them (`apps/dev/tools/`): each one's name,
+ * The tools as the model is shown them (`../luke-mcp/tools.ts`): each one's name,
  * words, and input. `post_thread`'s words here list no channel; an agent is
  * shown them with its workspace's (`postThreadDescription`).
  */
