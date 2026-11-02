@@ -100,6 +100,7 @@ import { Schema } from "effect";
 import { Fragment, type ReactNode, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -588,6 +589,7 @@ function TasksPageRow({
   assigneeHeld,
   subTasks,
   chosen,
+  more,
   onOpen,
   onStanding,
 }: {
@@ -606,6 +608,8 @@ function TasksPageRow({
   subTasks: ChildTaskCount | undefined;
   /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
+  /** Whether it draws its menu's ⋯, which a finger's List leaves out. */
+  more: boolean;
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -620,6 +624,7 @@ function TasksPageRow({
       assigneeHeld={assigneeHeld}
       subTasks={subTasks}
       chosen={chosen}
+      more={more}
       onOpen={onOpen}
       onStanding={onStanding}
       content={{
@@ -862,6 +867,8 @@ export function TasksList({
   const folds = useListFolds();
   const waitingOn = useTasksWaiting(tasks);
   const narrow = room === SHELL_ROOM.NARROW;
+  // Note that a finger's rows draw no ⋯, as a phone's mail list draws none, so their names keep the room: a long press opens a row's menu.
+  const more = !useCoarsePointer();
   const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
   const subTaskCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
   // The columns its display chose, and the sub-tasks' count beside them where any task has sub-tasks, folded for its own width (`fitted-columns.ts`).
@@ -973,7 +980,9 @@ export function TasksList({
             className="tasks-list grid grid-cols-tasks-list gap-x-block-gap gap-y-section-gap pb-luke-24"
             data-row-drop-scope=""
             {...motionRows()}
-            style={cssCustomProperties({ "--tasks-list-columns": taskRowColumns(properties) })}
+            style={cssCustomProperties({
+              "--tasks-list-columns": taskRowColumns(properties, more),
+            })}
           >
             {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
             {groups.every((group) => group.tasks.length === 0) ? (
@@ -1025,6 +1034,7 @@ export function TasksList({
                         }
                         subTasks={subTaskCounts.get(task.id)}
                         chosen={selection.chosenOf(task.id)}
+                        more={more}
                         onOpen={() => tasks.onSelect(task.id)}
                         onStanding={(standing) => setStanding(task, standing)}
                       />

@@ -24,12 +24,13 @@ import { useLeaveGuard, useTasksTab } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
 
 /**
- * tasks-list-select.test.ts -- the Tasks page's List chooses rows as a Mac's list does: ⌘-click two tasks and the bar's Mark done sets both Done at once, under one toast whose Undo puts both back where they stood; Set status and Move to section act on them all alike; a right-click on a chosen row offers the bar's acts on them all, one on a row not chosen its own menu; and Esc lets the selection go.
+ * tasks-list-select.test.ts -- the Tasks page's List chooses rows as a Mac's list does: ⌘-click two tasks and the bar's Mark done sets both Done at once, under one toast whose Undo puts both back where they stood; Set status and Move to section act on them all alike; a right-click on a chosen row offers the bar's acts on them all, one on a row not chosen its own menu; a finger's row draws no ⋯, its menu a long press away; and Esc lets the selection go.
  *
  * The List stands over the tasks tab itself (`useTasksTab`), so what a
  * press sends is what the service is asked, and what the rows draw is the
@@ -406,6 +407,19 @@ test("right-clicking a task outside the selection offers that task's own menu, a
 
   assert.deepEqual(asked, [["t-36", TASK_STATUS.DONE]]);
   assert.deepEqual(chosen(page), ["ACME-42", "ACME-39"], "the selection stands");
+});
+
+test("under a finger, a task's row draws no ⋯, and a long press on it offers the task's own menu", async () => {
+  underAFinger();
+  const { page } = await mountPage();
+  const press = pressOf(page, "ACME-36");
+
+  assert.ok(
+    press.closest("li")?.querySelector('button[aria-label="Task actions"]') === null,
+    "the row draws no ⋯",
+  );
+  longPress(press);
+  assert.ok(openMenu().items.includes("Rename"), "the task's own menu offers Rename");
 });
 
 test("Esc lets the selection go, and the bar with it", async () => {

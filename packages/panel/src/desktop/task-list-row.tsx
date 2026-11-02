@@ -60,7 +60,9 @@ import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
  * related task's Change relation), whose Rename makes its name its field until
  * the edit ends; chosen among several, its ⋯, right-click, and menu key
  * offer the selection bar's acts on every task chosen, as a Mac's list
- * does, and one not chosen keeps its own menu.
+ * does, and one not chosen keeps its own menu. Its list may leave its ⋯
+ * out (`more`), as both lists do for a finger, its menu then a long press,
+ * a right-click, or the menu key away.
  */
 
 /** A pull request still open on GitHub, a draft or one in its merge queue among them, whose page the service sent, which its chip links to. */
@@ -121,6 +123,7 @@ export function TaskListRow({
   settled,
   menuGroups = [],
   unlisted = false,
+  more = true,
 }: {
   tasks: TasksControl;
   task: TaskSummary;
@@ -149,6 +152,8 @@ export function TaskListRow({
   menuGroups?: readonly (readonly MenuEntry[])[] | undefined;
   /** Whether the window does not list the task yet, so only its name, its list's own cells, and its list's own menu groups stand, none of what its standing would say or change. */
   unlisted?: boolean | undefined;
+  /** Whether it draws its menu's ⋯, as its list says (`TaskRows`'s `more`). */
+  more?: boolean | undefined;
 }): React.JSX.Element {
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -248,6 +253,7 @@ export function TaskListRow({
       }
       note={rename.refused ? RENAME_FAILED_NOTE : undefined}
       menu={menu}
+      more={more}
       disabled={actions.deletion.busy}
       onOpen={onOpen}
       pressRef={press}

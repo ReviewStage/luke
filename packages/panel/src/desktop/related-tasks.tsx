@@ -9,6 +9,7 @@ import {
 import { childTaskCounts } from "@luke/ui/task-list-model";
 import { LIST_COLUMN, type ListColumn, TASK_PROPERTY } from "@luke/ui/tasks-page-model";
 import { type ReactNode, useMemo, useState } from "react";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useFittedColumns } from "./fitted-columns.js";
@@ -29,7 +30,9 @@ import { useTasksSelection } from "./tasks-selection.js";
  * (`fitted-columns.ts`), key first, before a name is squeezed, but the
  * sub-tasks' badge, which a sub-task with sub-tasks of its own always
  * wears, as the pull requests and the end always stand. Its chips change the task where it stands, a press
- * opens it, and its ⋯, a right-click, and the menu key open its menu. Its
+ * opens it, and its ⋯, a right-click, a long press, and the menu key open
+ * its menu, a finger's row drawing no ⋯ and its list keeping it no column,
+ * as the List's. Its
  * rows are one Tab stop that ↑↓ walk, and are chosen together as the List's
  * are, a row chosen among several offering the List's bar's acts on every
  * one chosen. A row may stand nested under another (`depth`), and fold the
@@ -115,6 +118,7 @@ export function RelatedTasks({
     reserved: ownRoom(filled),
   });
   const cells = filled.filter((cell) => !isListColumn(cell) || fitted.includes(cell));
+  const more = !useCoarsePointer();
   return (
     // Note that the list is measured from a box of its own, the width its rows stand in, so its columns fold for the room it has.
     <div ref={setList} className="related-tasks min-w-0">
@@ -122,6 +126,7 @@ export function RelatedTasks({
         id={selection.regionId}
         label={label}
         cells={cells}
+        more={more}
         selection={{ selected: selection.selected, onChange: selection.onChange }}
       >
         {rows.map(({ task, end, depth, fold, settled, menu, unlisted }) => (
@@ -141,6 +146,7 @@ export function RelatedTasks({
             settled={settled}
             menuGroups={menu}
             unlisted={unlisted}
+            more={more}
           />
         ))}
       </TaskRows>
