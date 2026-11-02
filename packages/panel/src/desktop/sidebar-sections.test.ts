@@ -295,7 +295,7 @@ test("a section stands over its tasks, which Tasks leaves out", async () => {
   const sidebar = await mountSidebar([]);
 
   assert.deepEqual(namesIn(sidebar, "Sections"), ["Invite expiry"]);
-  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+  assert.deepEqual(namesIn(sidebar, "My tasks"), ["Retry audit"]);
   const header = sidebar.querySelector('nav[aria-label="Sections"] button[aria-expanded]');
   assert.equal(header === null ? undefined : heardName(header), "Launch");
 });
@@ -373,7 +373,7 @@ test("a filter by person leaves out a section's task it would leave out of the l
   });
 
   assert.deepEqual(namesIn(sidebar, "Sections"), []);
-  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+  assert.deepEqual(namesIn(sidebar, "My tasks"), ["Retry audit"]);
 });
 
 test("the status filter leaves a section's backlog task out as it does the list's, and counts it among those it hides", async () => {
@@ -385,7 +385,7 @@ test("the status filter leaves a section's backlog task out as it does the list'
   });
 
   assert.deepEqual(namesIn(sidebar, "Sections"), []);
-  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+  assert.deepEqual(namesIn(sidebar, "My tasks"), ["Retry audit"]);
   assert.equal(
     sidebar.querySelector(".sidebar-hidden-statuses button")?.textContent,
     "1 more in Backlog",
@@ -469,7 +469,7 @@ test("deleting a section removes it at once with no dialog, and Undo brings it b
 
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing is asked");
   assert.deepEqual(sectionTitles(sidebar), ["Someday"]);
-  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Invite expiry", "Retry audit"]);
+  assert.deepEqual(namesIn(sidebar, "My tasks"), ["Invite expiry", "Retry audit"]);
   assert.match(newestToastSays() ?? "", /Section deleted/u);
 
   act(() => newestToastAction()?.click());
@@ -478,7 +478,7 @@ test("deleting a section removes it at once with no dialog, and Undo brings it b
   assert.deepEqual(stood, ["Someday", "Launch"]);
   assert.deepEqual(sectionTitles(sidebar), stood);
   assert.deepEqual(namesIn(sidebar, "Sections"), ["Invite expiry", "Retry audit"]);
-  assert.deepEqual(namesIn(sidebar, "Tasks"), []);
+  assert.deepEqual(namesIn(sidebar, "My tasks"), []);
   const icon = sectionHeader(sidebar, "Launch").querySelector(".luke-group-header-icon");
   assert.equal(icon?.textContent, "🚀");
 });
@@ -694,7 +694,7 @@ test("Move to section names a section without an icon with no glyph beside it", 
 function newSectionInPlace(sidebar: HTMLElement): HTMLInputElement {
   const button =
     sidebar.querySelector<HTMLButtonElement>(
-      'nav[aria-label="Tasks"] button[aria-label="New section"]',
+      'nav[aria-label="My tasks"] button[aria-label="New section"]',
     ) ?? assert.fail("no New section on the Tasks head");
   act(() => button.click());
   return sectionNameField();
@@ -1593,13 +1593,13 @@ test("an agent kept in a section stands among its tasks in its order, which Task
 
   // Put there last and never dragged, it stands on top.
   assert.deepEqual(namesIn(sidebar, "Sections"), ["Sweep flaky tests", "Invite expiry"]);
-  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+  assert.deepEqual(namesIn(sidebar, "My tasks"), ["Retry audit"]);
 
   await draw(
     applySectionWrite(SWEEP_IN_LAUNCH, { kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }, 9),
   );
   assert.deepEqual(namesIn(sidebar, "Sections"), []);
-  assert.deepEqual(namesIn(sidebar, "Tasks"), [
+  assert.deepEqual(namesIn(sidebar, "My tasks"), [
     "Invite expiry",
     "Retry audit",
     "Sweep flaky tests",

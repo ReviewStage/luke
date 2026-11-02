@@ -139,7 +139,7 @@ test("a folded repository leaves the task that is open standing, and unfolds to 
     }),
   );
   const names = () =>
-    [...sidebar.querySelectorAll('nav[aria-label="Tasks"] .luke-list-row-title')].map(
+    [...sidebar.querySelectorAll('nav[aria-label="My tasks"] .luke-list-row-title')].map(
       (title) => title.firstChild?.textContent,
     );
   assert.deepEqual(names().sort(), ["Invite expiry", "Retry audit"]);
@@ -250,7 +250,7 @@ test("a child task stands under its parent, folded until the parent's chevron op
     ],
   });
   const names = (within: HTMLElement) =>
-    [...within.querySelectorAll('nav[aria-label="Tasks"] .luke-list-row-title')].map(
+    [...within.querySelectorAll('nav[aria-label="My tasks"] .luke-list-row-title')].map(
       (title) => title.firstChild?.textContent,
     );
   const chevron = (within: HTMLElement, name: string) => {
@@ -311,11 +311,11 @@ test("a pinned parent's child tasks stand under it in Pinned, folded until opene
     }),
   );
   assert.deepEqual(rowNames(sidebar, "Pinned"), ["Cleanup"]);
-  assert.deepEqual(rowNames(sidebar, "Tasks"), []);
+  assert.deepEqual(rowNames(sidebar, "My tasks"), []);
 
   act(() => childFold(sidebar, "Cleanup").click());
   assert.deepEqual(rowNames(sidebar, "Pinned"), ["Cleanup", "Probe", "Sweep"]);
-  assert.deepEqual(rowNames(sidebar, "Tasks"), []);
+  assert.deepEqual(rowNames(sidebar, "My tasks"), []);
 });
 
 test("a Done parent stays in the sidebar while a child task under it is open, and leaves with the last of them", () => {
@@ -329,6 +329,6 @@ test("a Done parent stays in the sidebar while a child task under it is open, an
     });
   const open = mountSidebar(listed(TASK_STATUS.IN_PROGRESS));
   act(() => childFold(open, "Shipped").click());
-  assert.deepEqual(rowNames(open, "Tasks"), ["Shipped", "Follow-up", "Other"]);
-  assert.deepEqual(rowNames(mountSidebar(listed(TASK_STATUS.CANCELED)), "Tasks"), ["Other"]);
+  assert.deepEqual(rowNames(open, "My tasks"), ["Shipped", "Follow-up", "Other"]);
+  assert.deepEqual(rowNames(mountSidebar(listed(TASK_STATUS.CANCELED)), "My tasks"), ["Other"]);
 });
