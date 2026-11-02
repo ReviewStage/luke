@@ -193,7 +193,11 @@ test("a run of to-do calls with nothing drawn between them is one row, keyed by 
     ["w1", "w2"],
   );
   // A find and a copy still read the calls the row was joined from.
-  assert.match(drawnMessageWords(turn("turn-1", four)), /Item 1[\s\S]*Item 4/);
+  const said = drawnMessageWords(turn("turn-1", four));
+  assert.match(said, /Item 1[\s\S]*Item 4/);
+  // Each call is read once, however long the run.
+  const times = (words: string) => words.split("Item 1").length - 1;
+  assert.equal(times(said), times(drawnMessageWords(turn("turn-1", [four[0] ?? {}]))));
   // The list the row holds is the one after the run's last call.
   assert.deepEqual(taskTodos([turn("turn-1", four)]).get("c4")?.length, 4);
 });

@@ -2093,7 +2093,9 @@ function isJoinableTodos(part: AgentPart): part is ToolPart {
 
 /** Two to-do calls as one: the second's call, which holds the list as it stood after both, over the calls before it. */
 function joinedTodos(first: ToolPart, second: ToolPart): ToolPart {
-  return { ...second, joined: [...(first.joined ?? []), first] };
+  // Note that the first is kept without the calls it holds, which are listed beside it, so none is read twice.
+  const { joined = [], ...earlier } = first;
+  return { ...second, joined: [...joined, earlier] };
 }
 
 /**
