@@ -11,6 +11,7 @@ import {
   bundlesReaching,
   FUNCTION_METAFILE,
   functionBundlePlan,
+  localOnlyReach,
   undeclaredImports,
 } from "../server/function-bundles.js";
 import {
@@ -79,6 +80,14 @@ const undeclared = undeclaredImports(result.metafile, WEB, task.externalPackages
 if (undeclared.length > 0) {
   throw new Error(
     `bundled routes reach dependencies apps/web does not declare: ${undeclared.join(", ")}`,
+  );
+}
+
+// A route that reaches the local server's own routes would carry a session for anyone into the deploy.
+const localOnly = localOnlyReach(result.metafile, WEB);
+if (localOnly.length > 0) {
+  throw new Error(
+    `bundled routes reach modules only the local server may carry: ${localOnly.join(", ")}`,
   );
 }
 

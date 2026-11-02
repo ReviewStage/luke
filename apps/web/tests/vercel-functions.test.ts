@@ -4,18 +4,34 @@ import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "@luke/runtime/testing";
-import { build, type Plugin } from "esbuild";
+import { build, type Metafile, type Plugin } from "esbuild";
 import { test } from "vitest";
 import {
   expectedExternals,
   externalsByBundle,
   externalsDrift,
+  type FunctionBundlePlan,
   functionBundlePlan,
   INLINE_EXCEPTION,
+  localOnlyReach,
   undeclaredImports,
 } from "../server/function-bundles";
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
+
+/** Bundling every function takes seconds, so the tests that read what the bundles carry share one build. */
+const BUNDLE_TIMEOUT = 60_000;
+
+let bundled: Promise<{ task: FunctionBundlePlan; metafile: Metafile }> | undefined;
+
+/** Every function bundled unwritten, once for the file. */
+function bundledFunctions() {
+  bundled ??= functionBundlePlan(WEB).then(async (task) => ({
+    task,
+    metafile: (await build({ ...task.options, write: false })).metafile,
+  }));
+  return bundled;
+}
 
 /**
  * The whole map, not one package: every bundle's external set is the one the
@@ -26,11 +42,10 @@ const WEB = fileURLToPath(new URL("..", import.meta.url));
  * review moment rather than a silent change to what a function loads.
  */
 test("every function bundle loads exactly the externals the record expects", {
-  timeout: 60_000,
+  timeout: BUNDLE_TIMEOUT,
 }, async () => {
-  const task = await functionBundlePlan(WEB);
-  const result = await build({ ...task.options, write: false });
-  const actual = externalsByBundle(result.metafile, WEB);
+  const { task, metafile } = await bundledFunctions();
+  const actual = externalsByBundle(metafile, WEB);
   assert.deepEqual(Object.keys(actual).sort(), task.functions.map((f) => `${f.file}.js`).sort());
   assert.deepEqual(externalsDrift(await expectedExternals(WEB), actual), []);
   // Inline-first leaves outside a bundle only Node's own modules and the named exceptions; a fourth external is a dependency that stopped inlining.
@@ -45,6 +60,18 @@ test("every function bundle loads exactly the externals the record expects", {
       [],
     );
   }
+});
+
+/**
+ * The local server's own routes answer what no deployment may, the demo's
+ * sign-in a session for anyone, so a route that came to import one, however
+ * deep, is caught here before the deploy's bundle step refuses it.
+ */
+test("no function bundle reaches a module only the local server may carry", {
+  timeout: BUNDLE_TIMEOUT,
+}, async () => {
+  const { metafile } = await bundledFunctions();
+  assert.deepEqual(localOnlyReach(metafile, WEB), []);
 });
 
 test("a module esbuild injects is bundled, not an undeclared dependency", async (t) => {

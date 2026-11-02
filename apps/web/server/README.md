@@ -389,9 +389,19 @@ It refuses to start beside any `VERCEL*` variable or over a database host off
 the loopback (`server/local-server-guard.ts`), and imports no route until it
 has, because the auth service reads the environment as it loads. Where
 `BETTER_AUTH_URL` is unset it names the server's own address there first. A
-route that only the local server answers, such as a local-only sign-in, mounts
-in the entry's `localRoutes` and never under `server/routes/`, so no deployed
-function reaches it.
+route that only the local server answers mounts in the entry's `localRoutes`
+and never under `server/routes/`, so no deployed function reaches it.
+
+The one such route is the demo's sign-in (`server/local-sign-in.ts`), which
+answers `/sign-in.html` in the page's place: it mints a session for the member
+the demo seed writes, sets Better Auth's session cookie, and sends the browser
+back to authorize on the query the provider signed, less `prompt=login`, so the
+desktop's sign-in completes to its loopback with no provider. A bare
+`/sign-in.html` lands on `/app` signed in. Each request reads the environment
+again and is refused where the server would have refused to start, and no
+function's bundle may reach the module: `localOnlyReach`
+(`server/function-bundles.ts`) fails `tests/vercel-functions.test.ts` and the
+deploy's bundle step on one that does.
 
 ## The data layer
 

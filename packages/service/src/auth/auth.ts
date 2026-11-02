@@ -20,6 +20,7 @@ import {
   denyOAuthClientPrivileges,
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
+  LOGIN_PAGE,
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
@@ -96,7 +97,7 @@ export const auth = betterAuth({
     jwt(JWT_KEY_STORAGE),
     lastLoginMethod({ storeInDatabase: true }),
     oauthProvider({
-      loginPage: "/sign-in.html",
+      loginPage: LOGIN_PAGE,
       consentPage: "/consent.html",
       allowDynamicClientRegistration: false,
       clientPrivileges: denyOAuthClientPrivileges,
