@@ -131,7 +131,7 @@ function WidthField({ view }: { view: CatalogView }): React.JSX.Element {
   const [draft, setDraft] = useState(view.width);
   const carried = [...new URLSearchParams(hrefOf({ ...view, width: undefined }))];
   return (
-    <form className="catalog-width" method="get">
+    <form className="catalog-width" method="get" noValidate>
       {carried.map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}

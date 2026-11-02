@@ -33,6 +33,7 @@
     "anti-slop/enforce-delete-with-where": "error",
     "anti-slop/enforce-update-with-where": "error",
     "anti-slop/no-await-drizzle-statement": "error",
+    "anti-slop/no-browser-form-validation": "error",
     "anti-slop/no-direct-view-storage": "error",
     "anti-slop/no-document-press-listener": "error",
     "anti-slop/no-focused-or-skipped-test": "error",

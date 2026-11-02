@@ -42,6 +42,7 @@ export function AddressField({
   return (
     <form
       className="flex min-w-0 flex-1"
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
         onOpen();
