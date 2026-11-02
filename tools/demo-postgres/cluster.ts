@@ -200,11 +200,13 @@ function running(bin: PostgresBinaries, folder: string, port: number) {
       "--wait",
       "--silent",
     ]).pipe(
-      // Note that what went wrong is in the server's log, not in what `pg_ctl` printed.
+      // Note that what went wrong is in the server's log where the server got far enough to
+      // write one, and otherwise in what `pg_ctl` printed, so both are kept.
       Effect.catchTag("StepFailed", (failed) =>
         Effect.gen(function* () {
-          const printed = yield* Effect.orElseSucceed(fileSystem.readFileString(log), () => "");
-          return yield* new StepFailed({ step: failed.step, printed: printed.trim() });
+          const logged = yield* Effect.orElseSucceed(fileSystem.readFileString(log), () => "");
+          const printed = [failed.printed, logged.trim()].filter((text) => text.length > 0);
+          return yield* new StepFailed({ step: failed.step, printed: printed.join("\n") });
         }),
       ),
     );
