@@ -82,10 +82,10 @@ interface SignedUpAccount {
 }
 
 /**
- * Fullspin's own organization policy over a migrated PGlite. Email and password
+ * Vespin's own organization policy over a migrated PGlite. Email and password
  * sign-up is on in this instance alone: it is Better Auth's documented
  * server call that both saves an account and signs it in, which is all the
- * test needs of an account, and Fullspin's own instance signs in through its
+ * test needs of an account, and Vespin's own instance signs in through its
  * social providers instead.
  */
 function organizationAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {

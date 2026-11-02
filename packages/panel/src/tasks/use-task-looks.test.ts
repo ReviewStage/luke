@@ -25,7 +25,7 @@ import {
 
 /**
  * use-task-looks.test.ts -- the sections a reader is shown as changed since
- * they last looked: a teammate's saves, Fullspin's and an agent's, never the
+ * they last looked: a teammate's saves, Vespin's and an agent's, never the
  * reader's own; and a plan read the moment it opens, its changes still lit
  * for that visit.
  */

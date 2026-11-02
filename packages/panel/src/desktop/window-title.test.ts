@@ -8,7 +8,7 @@ import { useWindowTitle } from "./window-title.js";
 
 /**
  * window-title.test.ts -- the window is called by what it shows: the open
- * task and its workspace, the workspace alone at home, and Fullspin while
+ * task and its workspace, the workspace alone at home, and Vespin while
  * nothing is signed in.
  */
 
@@ -29,7 +29,7 @@ function titleFor(input: Parameters<typeof useWindowTitle>[0]): string {
   return title;
 }
 
-test("the window's title names the open plan and its workspace, the workspace alone at home, and Fullspin signed out", () => {
+test("the window's title names the open plan and its workspace, the workspace alone at home, and Vespin signed out", () => {
   const acme = { name: "Acme" };
 
   assert.equal(
@@ -37,5 +37,5 @@ test("the window's title names the open plan and its workspace, the workspace al
     "Teammate invitations — Acme",
   );
   assert.equal(titleFor({ signedIn: true, subject: undefined, workspace: acme }), "Acme");
-  assert.equal(titleFor({ signedIn: false, subject: undefined, workspace: undefined }), "Fullspin");
+  assert.equal(titleFor({ signedIn: false, subject: undefined, workspace: undefined }), "Vespin");
 });

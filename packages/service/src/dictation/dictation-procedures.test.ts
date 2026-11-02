@@ -25,7 +25,7 @@ import { dictationProcedures } from "./dictation-procedures.js";
  * A dictated clip answered by the hosted oRPC router the way the web route answers it, over
  * a real dialect and OpenAI faked at its HTTP door: the clip and its words
  * go to the transcription model on the account's own OpenAI key, never
- * Fullspin's, the text comes back, the account's day is metered, and nothing of
+ * Vespin's, the text comes back, the account's day is metered, and nothing of
  * the clip or the text is logged. An account with no key of its own is
  * refused as missing one.
  *
@@ -260,7 +260,7 @@ it.layer(getTestDB())("the dictation route", (it) => {
   );
 
   it.effect(
-    "a clip past two minutes is refused as too large, and an account without an OpenAI key of its own is refused as missing one, on no key of Fullspin's, before the clip is read at all",
+    "a clip past two minutes is refused as too large, and an account without an OpenAI key of its own is refused as missing one, on no key of Vespin's, before the clip is read at all",
     () =>
       Effect.gen(function* () {
         const { userId, ask, calls } = yield* openAccount();

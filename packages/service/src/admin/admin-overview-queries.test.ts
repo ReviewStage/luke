@@ -218,8 +218,8 @@ const signIn = (userId: string, updatedAt: string) =>
 
 /**
  * Ada joined this week and did one of everything. Bob joined long ago, made a
- * task in the prior week, and this week only had Fullspin's notetaker write on its
- * plan, which is Fullspin's and not a meaningful action of its own. Carol joined
+ * task in the prior week, and this week only had Vespin's notetaker write on its
+ * plan, which is Vespin's and not a meaningful action of its own. Carol joined
  * this week and did nothing. Root is an admin who joined this week and acted.
  */
 const seedService = Effect.gen(function* () {

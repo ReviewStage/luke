@@ -74,7 +74,7 @@ test("the label's id names a control and the description describes it", () => {
   const container = mount(
     createElement(SettingsRow, {
       label: "Launch at login",
-      description: "Fullspin opens with the Mac.",
+      description: "Vespin opens with the Mac.",
       children: (control) =>
         createElement("input", {
           type: "checkbox",
@@ -87,7 +87,7 @@ test("the label's id names a control and the description describes it", () => {
   const box = container.querySelector('input[type="checkbox"]');
   if (box === null) throw new Error("no checkbox");
   expect(wordsOf(box, "aria-labelledby")).toBe("Launch at login");
-  expect(wordsOf(box, "aria-describedby")).toBe("Fullspin opens with the Mac.");
+  expect(wordsOf(box, "aria-describedby")).toBe("Vespin opens with the Mac.");
   expect(box.hasAttribute("aria-invalid")).toBe(false);
 });
 
@@ -182,7 +182,7 @@ test("a control as wide as the row stands under its words, named by the label an
   const container = mount(
     createElement(SettingsRow, {
       label: "Avatar",
-      description: "Who Fullspin appears as on video.",
+      description: "Who Vespin appears as on video.",
       error: { words: "The setting could not be saved.", failure: FAILURE },
       below: (control) =>
         createElement("fieldset", {
@@ -196,7 +196,7 @@ test("a control as wide as the row stands under its words, named by the label an
   if (group === null) throw new Error("no fieldset");
   expect(wordsOf(group, "aria-labelledby")).toBe("Avatar");
   expect(wordsOf(group, "aria-describedby")).toBe(
-    "Who Fullspin appears as on video. The setting could not be saved.",
+    "Who Vespin appears as on video. The setting could not be saved.",
   );
   expect(group.getAttribute("aria-invalid")).toBe("true");
   // It follows the words in reading order, and before the error that describes it.

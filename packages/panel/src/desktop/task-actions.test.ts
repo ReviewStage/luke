@@ -489,7 +489,7 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
   assert.deepEqual(await faces(uncounted, undefined), [["unassigned"], "(unassigned)"]);
 });
 
-test("a sidebar task Fullspin or a coding agent made wears who is on it rather than their square, and its ⋯ says who made it for whom", () => {
+test("a sidebar task Vespin or a coding agent made wears who is on it rather than their square, and its ⋯ says who made it for whom", () => {
   /** Each mark the row wears, by its kind. */
   const marks = (task: TaskSummary) => {
     const { tasks, asked } = openTab();

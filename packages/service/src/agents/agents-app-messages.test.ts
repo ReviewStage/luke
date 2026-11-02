@@ -1342,7 +1342,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent's Fullspin tools read for its starter, and as not found for a member who reaches the agent but not its task",
+    "an agent's Vespin tools read for its starter, and as not found for a member who reaches the agent but not its task",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1497,7 +1497,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
-        // Fullspin's line from a call, an automation's run's, and another coding agent's, written as their sends write them.
+        // Vespin's line from a call, an automation's run's, and another coding agent's, written as their sends write them.
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
@@ -1532,8 +1532,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ["Sweep the flaky tests.", undefined],
           ["Use seven days.", { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
           ["Not five.", { userId: other, name: "Charles Pan", kind: AGENT_SENDER.MEMBER }],
-          // Fullspin and an automation are named by kind, so the window draws each as itself.
-          ["Rebase on main.", { name: "Fullspin", kind: AGENT_SENDER.LUKE }],
+          // Vespin and an automation are named by kind, so the window draws each as itself.
+          ["Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.LUKE }],
           ["Triage the failures.", { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION }],
           // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [

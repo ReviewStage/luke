@@ -1066,10 +1066,10 @@ test("Keep mine in the open editor over a teammate's change to another section l
   ]);
 });
 
-test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Fullspin's", async () => {
-  const lukes = `${BODY}Fullspin's.\n`;
+test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Vespin's", async () => {
+  const lukes = `${BODY}Vespin's.\n`;
   const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: false };
-  const lukesNote = "Fullspin changed this section while you were editing.";
+  const lukesNote = "Vespin changed this section while you were editing.";
   const { container, sent, render } = mount([{ conflict: { current: lukes, by } }]);
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
   act(() => block(container, "Goal").click());

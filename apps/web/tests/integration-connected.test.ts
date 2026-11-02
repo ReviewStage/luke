@@ -17,7 +17,7 @@ import { appTab, closeAppTabs } from "./support/connect-app-tab";
  * integration-connected.test.ts -- an integration's landing says how its
  * sign-in settled and how to go on: a connection says the tab can go, every
  * other ending says how to try again, and the provider's name is said only
- * where the address named one. A landing nothing answered offers Open Fullspin
+ * where the address named one. A landing nothing answered offers Open Vespin
  * for the Mac app on a Mac, and nothing elsewhere. A sign-in the web app's tab
  * handed off is answered by that tab, and by no other, and the page closes
  * where it connected and stays to say why where it did not, unless the
@@ -81,7 +81,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("a connection names the provider and sends the developer back to Fullspin", async () => {
+test("a connection names the provider and sends the developer back to Vespin", async () => {
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
 
   expect(said(page)).toEqual(["Linear is connected", "You can close this tab."]);
@@ -94,29 +94,29 @@ test("every other ending sends the developer back to try again", async () => {
   );
   expect(said(notCompleted)).toEqual([
     "Notion was not connected",
-    "Connect Notion again from Fullspin.",
+    "Connect Notion again from Vespin.",
   ]);
 
   const unavailable = await landing(
     INTEGRATION_PROVIDER.NOTION,
     INTEGRATION_LANDING_STATUS.UNAVAILABLE,
   );
-  expect(said(unavailable)).toEqual(["Fullspin could not reach Notion", "Try again in a moment."]);
+  expect(said(unavailable)).toEqual(["Vespin could not reach Notion", "Try again in a moment."]);
 
   const expired = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.EXPIRED);
   expect(said(expired)).toEqual([
     "This link to connect Notion has expired",
-    "Connect Notion again from Fullspin.",
+    "Connect Notion again from Vespin.",
   ]);
 });
 
 test("an address that names no provider says no name", async () => {
   const connected = await landing(undefined, INTEGRATION_LANDING_STATUS.CONNECTED);
-  expect(said(connected)).toEqual(["Connected to Fullspin", "You can close this tab."]);
+  expect(said(connected)).toEqual(["Connected to Vespin", "You can close this tab."]);
 
   const unavailable = await landing(undefined, INTEGRATION_LANDING_STATUS.UNAVAILABLE);
   expect(said(unavailable)).toEqual([
-    "Fullspin could not finish connecting",
+    "Vespin could not finish connecting",
     "Try again in a moment.",
   ]);
 });
@@ -127,7 +127,7 @@ test("an address with no status it knows reads as an expired link", async () => 
 
     expect(said(page)).toEqual([
       "This connection link has expired",
-      "Connect it again from Fullspin.",
+      "Connect it again from Vespin.",
     ]);
   }
 });
@@ -136,7 +136,7 @@ test("an address with no status it knows reads as an expired link", async () => 
 async function answered(page: HTMLElement): Promise<void> {
   await vi.waitFor(async () => {
     await act(() => new Promise((resolve) => setImmediate(resolve)));
-    expect(wayBack(page)).toEqual([{ words: "Open Fullspin", href: "/app" }]);
+    expect(wayBack(page)).toEqual([{ words: "Open Vespin", href: "/app" }]);
   });
 }
 
@@ -166,7 +166,7 @@ test("a sign-in that did not connect stays to say so, offering the way back", as
   const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
 
   await answered(page);
-  expect(said(page)).toEqual(["Notion was not connected", "Connect Notion again from Fullspin."]);
+  expect(said(page)).toEqual(["Notion was not connected", "Connect Notion again from Vespin."]);
   expect(closed).not.toHaveBeenCalled();
 });
 
@@ -188,7 +188,7 @@ test("a landing no app tab handed off, as the Mac's, opens the Mac app on a Mac"
   const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.UNAVAILABLE);
   await channelTurns();
 
-  expect(wayBack(page)).toEqual([{ words: "Open Fullspin", href: APP_HOME_LINK }]);
+  expect(wayBack(page)).toEqual([{ words: "Open Vespin", href: APP_HOME_LINK }]);
 });
 
 test("a landing the app's tab answered closes back to it on a Mac too, rather than opening the Mac app", async () => {
@@ -254,8 +254,8 @@ test("a sign-in that left this tab offers the way back to where it stood", async
 
   const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
 
-  expect(said(page)).toEqual(["Notion was not connected", "Connect Notion again from Fullspin."]);
-  expect(wayBack(page)).toEqual([{ words: "Open Fullspin", href: "/plan/4f0b6a0e?tab=agents" }]);
+  expect(said(page)).toEqual(["Notion was not connected", "Connect Notion again from Vespin."]);
+  expect(wayBack(page)).toEqual([{ words: "Open Vespin", href: "/plan/4f0b6a0e?tab=agents" }]);
 });
 
 test("a connection that left this tab says nothing of closing it, since the tab is the app's own", async () => {
@@ -264,7 +264,7 @@ test("a connection that left this tab says nothing of closing it, since the tab 
   const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.CONNECTED);
 
   expect(said(page)).toEqual(["Notion is connected"]);
-  expect(wayBack(page)).toEqual([{ words: "Open Fullspin", href: "/plan/4f0b6a0e" }]);
+  expect(wayBack(page)).toEqual([{ words: "Open Vespin", href: "/plan/4f0b6a0e" }]);
 });
 
 test("an address left that is not this origin's is not offered", async () => {

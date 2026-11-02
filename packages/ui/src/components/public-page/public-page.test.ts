@@ -53,7 +53,7 @@ function landing(): ReactElement {
     banner: createElement(
       "nav",
       { "aria-label": "Site" },
-      createElement("a", { href: "/" }, "Fullspin"),
+      createElement("a", { href: "/" }, "Vespin"),
     ),
     footer: createElement("span", null, "Apache-2.0"),
     title: "Plan with agents.",
@@ -68,7 +68,7 @@ function landing(): ReactElement {
 test("the page reads as a banner, a main under its one h1, sections named by their titles, and a footer", async () => {
   const container = await render(landing());
   const main = container.querySelector("main");
-  expect(container.querySelector("header")?.textContent).toBe("Fullspin");
+  expect(container.querySelector("header")?.textContent).toBe("Vespin");
   expect(container.querySelectorAll("h1")).toHaveLength(1);
   expect(main?.contains(heading(container, 1, "Plan with agents.") ?? null)).toBe(true);
   expect(main?.textContent).toContain("Talk a feature through and get a plan.");
@@ -97,11 +97,11 @@ test("a page with no title, banner, or footer draws only its main", async () => 
 test("a lead with no title still opens the page, before content that brings its own heading", async () => {
   const container = await render(
     createElement(PublicPage, {
-      lead: "Read how Fullspin came to be.",
+      lead: "Read how Vespin came to be.",
       children: createElement("h1", null, "About"),
     }),
   );
-  expect(container.querySelector("main")?.textContent).toBe("Read how Fullspin came to be.About");
+  expect(container.querySelector("main")?.textContent).toBe("Read how Vespin came to be.About");
 });
 
 test("a page that is a title alone draws its title and nothing after it", async () => {
@@ -114,13 +114,13 @@ test("a page beneath another names its way back as a link before its title", asy
   const container = await render(
     createElement(PublicPage, {
       back: { href: "/changelog", label: "Changelog" },
-      title: "Fullspin 2.4.0",
+      title: "Vespin 2.4.0",
       sections: PUBLIC_SECTIONS.RULED,
       children: createElement(PublicSection, { children: "Notes" }),
     }),
   );
   const back = container.querySelector("main a");
-  const title = heading(container, 1, "Fullspin 2.4.0");
+  const title = heading(container, 1, "Vespin 2.4.0");
   expect(back?.getAttribute("href")).toBe("/changelog");
   expect(back?.textContent).toBe("← Changelog");
   expect(back?.querySelector("[aria-hidden='true']")?.textContent).toBe("← ");

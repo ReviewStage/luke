@@ -31,7 +31,7 @@ import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-s
  * task, agent, or account, stands open. The
  * act's opposite, the agent brought back or a member moving the task off
  * Done or Canceled, opens again exactly the items that act settled, its asks
- * open again; Fullspin reopening the task as a turn starts on it opens nothing.
+ * open again; Vespin reopening the task as a turn starts on it opens nothing.
  *
  * Synthetic accounts, workspaces, tasks, and agents throughout.
  */
@@ -157,7 +157,7 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
       }),
   );
 
-  it.effect("leaves a task's open notices open when Fullspin finishes its work", () =>
+  it.effect("leaves a task's open notices open when Vespin finishes its work", () =>
     Effect.gen(function* () {
       const dean = yield* openAccount;
       const workspace = yield* openWorkspace(dean);

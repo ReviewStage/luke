@@ -16,8 +16,8 @@ outlive any one release's code.
 - **The account is Dean Stratakos** (`dean@example.com`, GitHub), photo
   `assets/dean-stratakos.jpg`, embedded as a data URL so no capture reaches
   the network. In a plan's history and bylines he is "You".
-- **A mockup inside Fullspin** (a Page tab, a picture an agent took) is acme's own
-  product, so it takes acme's palette rather than Fullspin's: a light, warm
+- **A mockup inside Vespin** (a Page tab, a picture an agent took) is acme's own
+  product, so it takes acme's palette rather than Vespin's: a light, warm
   canvas (`#f3f1ec` behind white cards, `#e2e0da` hairlines, `#1b1d21` text)
   with teal `#0f766e` as its one accent. The product is called Relay
   (`acme.relay.dev`).
@@ -82,7 +82,7 @@ Claude Opus 5.5; PR #209, merged), and "Build the onboarding checklist"
 (Onboarding checklist, GPT-6.1 Sol; PR #131 on acme/web).
 
 Subagents: "Find unfiltered membership reads" (Claude Sonnet 5.5, medium),
-and Fullspin's own "Invite link expiry". The next pull request in this world is
+and Vespin's own "Invite link expiry". The next pull request in this world is
 #217. Model ids come from the release's own model catalog, never invented.
 
 ## People
@@ -119,7 +119,7 @@ members (low), and Other changes (the tests).
 ## Later agents and questions (0.18.0 on)
 
 - **Expire invite links** (Claude Opus 5.5, high), forked from Add teammate
-  invitations at one of its messages, 6 of its 31 steps kept beside Fullspin's
+  invitations at one of its messages, 6 of its 31 steps kept beside Vespin's
   summary of 25, on `luke/expire-invite-links`.
 - The Inbox thread "Who may withdraw a pending invite?": Dean answered "The
   sender or any admin" quoting the agent, with Dana's `member-roles.pdf`

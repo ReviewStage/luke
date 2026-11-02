@@ -72,7 +72,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const saved = { ...TASK, updatedAt: 1_800_000_400_000 };
-      const conflict = { conflict: { current: "- Fullspin's words." } };
+      const conflict = { conflict: { current: "- Vespin's words." } };
       let sent = 0;
       const api = fakeCloudApi({
         [`POST /api/plans/${TASK_ID}/edit`]: {

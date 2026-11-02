@@ -6,7 +6,7 @@ import { electronNoticeDoors } from "./notice-doors";
 
 /**
  * A command ask's notification as macOS meets it: its answer from macOS says
- * whether notifications are on for Fullspin, and its click brings Fullspin forward.
+ * whether notifications are on for Vespin, and its click brings Vespin forward.
  *
  * Note that Electron's module is replaced whole, because it is the operating
  * system's door and answers nothing outside an Electron process.
@@ -72,7 +72,7 @@ test("macOS refusing a notification says notifications are off, and showing one 
   assert.deepEqual(answers, [NOTIFICATIONS_STATUS.OFF, NOTIFICATIONS_STATUS.ON]);
 });
 
-test("a click on a notification brings Fullspin forward", () => {
+test("a click on a notification brings Vespin forward", () => {
   const { surface } = doors();
   let focused = false;
 

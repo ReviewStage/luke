@@ -1,5 +1,5 @@
 /**
- * recorded-stream.ts -- P00's recorded stream, as the runner's tests replay it: the SDK messages of the probe's workflow turn and its stopped turn, cut into the steps the CLI took between Fullspin's lines.
+ * recorded-stream.ts -- P00's recorded stream, as the runner's tests replay it: the SDK messages of the probe's workflow turn and its stopped turn, cut into the steps the CLI took between Vespin's lines.
  *
  * P00 merged with a placeholder live recording, so this is its hermetic
  * stream (`tools/claude-code-probe/tests/verdict.test.ts`'s `firstLaunch`),
@@ -106,7 +106,7 @@ function result(subtype: string) {
 
 /**
  * The `result` the CLI put out resuming a session a Stop interrupted, ahead
- * of the turn on Fullspin's message, as a hand test on a host saw it: its step
+ * of the turn on Vespin's message, as a hand test on a host saw it: its step
  * names no prompt.
  */
 export const STRAY_RESULT = result("success");
@@ -130,12 +130,12 @@ export const WAKEUP: SessionCronSummary = {
   id: "cron_1",
   schedule: "17 12 21 10 *",
   recurring: false,
-  prompt: "Continue Fullspin's probe from step 4.",
+  prompt: "Continue Vespin's probe from step 4.",
 };
 
 /**
  * What the fake CLI does next: emit a message, a `result` naming the prompts
- * its turn took unless it names none, run the Stop hook, take Fullspin's next
+ * its turn took unless it names none, run the Stop hook, take Vespin's next
  * message into the turn, or hold until it is interrupted or the test
  * releases it.
  */
@@ -168,7 +168,7 @@ export const WORKFLOW_TURN: readonly Step[] = [
     emit: toolUse("ScheduleWakeup", {
       delaySeconds: 60,
       reason: "wait",
-      prompt: "Continue Fullspin's probe from step 4.",
+      prompt: "Continue Vespin's probe from step 4.",
       noop: false,
     }),
   },
@@ -181,7 +181,7 @@ export const WORKFLOW_TURN: readonly Step[] = [
   { emit: result("success") },
 ];
 
-/** P00's stopped turn: a long foreground command, held until Fullspin's stop interrupts it. */
+/** P00's stopped turn: a long foreground command, held until Vespin's stop interrupts it. */
 export const STOPPED_TURN: readonly Step[] = [
   { emit: INIT },
   { emit: toolUse("Bash", { command: STOPPED_COMMAND }) },
@@ -190,7 +190,7 @@ export const STOPPED_TURN: readonly Step[] = [
 ];
 
 /**
- * A turn held at work until the test releases it, so Fullspin's second message
+ * A turn held at work until the test releases it, so Vespin's second message
  * arrives while it runs and is left for the next turn, which the CLI starts
  * on that message as soon as the first ends.
  */
@@ -208,7 +208,7 @@ export const FOLLOW_UP_TURNS: readonly Step[] = [
 
 /**
  * P00's workflow turn up to its wakeup, then a wakeup's turn that starts a
- * long foreground command, held until Fullspin's stop interrupts it.
+ * long foreground command, held until Vespin's stop interrupts it.
  */
 export const WAKEUP_STOPPED_TURN: readonly Step[] = [
   { emit: INIT },
@@ -235,7 +235,7 @@ export const SHORT_TURN: readonly Step[] = [
   { emit: result("success") },
 ];
 
-/** A resumed session's stray `result` (`STRAY_RESULT`), then the turn that answers Fullspin's message. */
+/** A resumed session's stray `result` (`STRAY_RESULT`), then the turn that answers Vespin's message. */
 export const STRAY_RESULT_THEN_TURN: readonly Step[] = [
   { emit: INIT },
   { emit: STRAY_RESULT, namesNoPrompt: true },
@@ -251,7 +251,7 @@ export const STRAY_RESULT_THEN_SILENCE: readonly Step[] = [
   { untilReleased: true },
 ];
 
-/** Two turns that each end at their `result` with nothing pending, the second on Fullspin's next message, as a warm launch takes it. */
+/** Two turns that each end at their `result` with nothing pending, the second on Vespin's next message, as a warm launch takes it. */
 export const WARM_TURNS: readonly Step[] = [
   ...SHORT_TURN,
   { awaitPrompt: true },
@@ -290,7 +290,7 @@ export const RECURRING_WAIT: readonly Step[] = [
   { untilReleased: true },
 ];
 
-/** A wait on a background command, the CLI then held up until Fullspin's stop. */
+/** A wait on a background command, the CLI then held up until Vespin's stop. */
 export const BACKGROUND_WAIT: readonly Step[] = [
   { emit: INIT },
   { emit: toolUse("Bash", { command: "sleep 45", run_in_background: true }) },
@@ -299,7 +299,7 @@ export const BACKGROUND_WAIT: readonly Step[] = [
   { untilReleased: true },
 ];
 
-/** A wakeup's wait that a message from Fullspin interrupts: the message's turn runs, held until the test releases it, and ends with nothing pending. */
+/** A wakeup's wait that a message from Vespin interrupts: the message's turn runs, held until the test releases it, and ends with nothing pending. */
 export const WAKEUP_WAIT_THEN_MESSAGE: readonly Step[] = [
   { emit: INIT },
   {

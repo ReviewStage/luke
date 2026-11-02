@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "Fullspin landing page",
+  "description": "Vespin landing page",
   "engines": {
     "node": "24.x"
   },

@@ -1,4 +1,4 @@
-name: Set up the Fullspin workspace
+name: Set up the Vespin workspace
 description: Pin pnpm and Node from .nvmrc, then install the locked dependencies.
 
 runs:

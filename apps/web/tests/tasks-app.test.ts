@@ -103,7 +103,7 @@ import { dispatched } from "./support/platform-landing";
  * the committed rewrites on the hosted oRPC router; the old group's at the
  * path the rewrite hands it, the task id moved from the path into the `id`
  * query. A task's repository is kept only once the
- * Fullspin GitHub App, over a GitHub the test scripts, confirms the
+ * Vespin GitHub App, over a GitHub the test scripts, confirms the
  * installation connected to the task's workspace reaches it.
  *
  * Synthetic accounts, bearers, tokens, and repositories throughout.
@@ -956,7 +956,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a start that names an account, a workspace issue Fullspin no longer keeps, or a repository in no shape GitHub spells, is refused",
+    "a start that names an account, a workspace issue Vespin no longer keeps, or a repository in no shape GitHub spells, is refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -1471,7 +1471,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a document edit keeps what Fullspin wrote meanwhile, answers a line it changed as the text stands, and refuses a text past the bound",
+    "a document edit keeps what Vespin wrote meanwhile, answers a line it changed as the text stands, and refuses a text past the bound",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -1488,7 +1488,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
             }),
           );
 
-        // At the bound alone, but past it once laid over the line Fullspin added.
+        // At the bound alone, but past it once laid over the line Vespin added.
         const padding = "x".repeat(TASK_BOUNDS.MAX_BODY_CHARS - INVITATIONS_TEXT.length);
         const oversized = yield* edit(
           taskId,

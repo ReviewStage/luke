@@ -15,7 +15,7 @@ import {
  * `error=1`, so the code the page draws is the other value.
  */
 
-test("Better Auth's code is read past the page's own error flag and drawn in Fullspin's words", () => {
+test("Better Auth's code is read past the page's own error flag and drawn in Vespin's words", () => {
   const step = connectStepFromSearch("?error=1&error=account_already_linked_to_different_user");
 
   assert.deepEqual(step, {
@@ -25,11 +25,11 @@ test("Better Auth's code is read past the page's own error flag and drawn in Ful
   });
   assert.equal(
     linkErrorWords(LINK_FAILED.CONNECT, "account_already_linked_to_different_user"),
-    "This GitHub account belongs to another Fullspin account. Sign in with GitHub instead.",
+    "This GitHub account belongs to another Vespin account. Sign in with GitHub instead.",
   );
 });
 
-test("a refusal Fullspin has no words for is drawn with Better Auth's own message or code", () => {
+test("a refusal Vespin has no words for is drawn with Better Auth's own message or code", () => {
   assert.equal(
     linkErrorWords(LINK_FAILED.CONNECT, "state_mismatch"),
     "GitHub could not be connected: state_mismatch",

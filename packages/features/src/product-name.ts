@@ -7,4 +7,4 @@
  */
 
 /** The product's own name, as its windows, its tools, its own messages, and a mention of it are named. */
-export const PRODUCT_NAME = "Fullspin";
+export const PRODUCT_NAME = "Vespin";

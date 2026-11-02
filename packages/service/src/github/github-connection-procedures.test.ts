@@ -454,7 +454,7 @@ it.effect(
 );
 
 it.effect(
-  "a refusal Fullspin does not read, or a failure that is not a refusal, is unavailable, never the last sign-in",
+  "a refusal Vespin does not read, or a failure that is not a refusal, is unavailable, never the last sign-in",
   () =>
     Effect.gen(function* () {
       const service = yield* openService;

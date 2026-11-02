@@ -45,11 +45,11 @@ test("every release is an item, newest first, linking to its own page and dated 
     ]),
     [
       [
-        "Fullspin 1.1.0: The Call tab",
+        "Vespin 1.1.0: The Call tab",
         "https://tryluke.dev/changelog/1.1.0",
         "Tue, 13 Oct 2026 00:00:00 GMT",
       ],
-      ["Fullspin 1.0.0", "https://tryluke.dev/changelog/1.0.0", "Thu, 01 Oct 2026 00:00:00 GMT"],
+      ["Vespin 1.0.0", "https://tryluke.dev/changelog/1.0.0", "Thu, 01 Oct 2026 00:00:00 GMT"],
     ],
   );
 });

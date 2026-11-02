@@ -2,7 +2,7 @@
  * integration-mcp-fake.ts -- an integration's hosted MCP server as a suite stands it up: Linear's, at its own address, admitting one member's bearer.
  *
  * The server is the MCP SDK's own, over its web-standard transport with no
- * session, so a client of Fullspin's speaks to it as it speaks to a provider.
+ * session, so a client of Vespin's speaks to it as it speaks to a provider.
  * Its tools answer fixed results: a JSON text, structured content, a
  * picture, and an error of the tool's own; `list_issues` refuses one team
  * with a JSON-RPC error instead. Vercel Connect is a fake that

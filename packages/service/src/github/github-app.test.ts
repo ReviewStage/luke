@@ -42,7 +42,7 @@ import {
 } from "./github-installations.js";
 
 /**
- * The Fullspin GitHub App's server client with GitHub a fake behind the
+ * The Vespin GitHub App's server client with GitHub a fake behind the
  * `HttpClient` and the rows on a real Postgres dialect. What is held here:
  * the App speaks as itself with a JWT its own key signed; an installation is
  * confirmed as the App's own or not at all; a workspace's repositories are
