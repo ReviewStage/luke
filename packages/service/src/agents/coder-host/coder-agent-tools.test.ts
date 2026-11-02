@@ -71,7 +71,7 @@ import {
 } from "@luke/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INBOX_ASK } from "@luke/features/inbox-wire";
+import { INBOX_ASK, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import {
@@ -120,7 +120,7 @@ import {
   SERVER_TURN_OUTCOME,
 } from "../../events/server-events.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
-import { postInboxThread } from "../../inbox/inbox-store.js";
+import { postInboxThread, taskInboxItems } from "../../inbox/inbox-store.js";
 import {
   ModelCatalog,
   ModelCatalogUnavailable,
@@ -2395,13 +2395,14 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   assert.deepEqual(await archive(true, "call-5"), answered(TASK_STATUS.CANCELED, true, assignee));
 });
 
-test("update_task refuses to mark a task done while a thread of it holds an ask open for the developer, which a Done would withdraw, leaving the task and the ask as they stand", async () => {
+test("update_task marks a task done as the member's menu does, withdrawing the asks still open on its threads", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const owner = agents.teammates.userId;
   await database.run(
     postInboxThread(
-      { userId: agents.teammates.userId, taskId: tasks.billing, agentId: agents.teammates.id },
+      { userId: owner, taskId: tasks.billing, agentId: agents.teammates.id },
       {
         key: "try-billing",
         title: "Try seat billing by hand",
@@ -2410,18 +2411,22 @@ test("update_task refuses to mark a task done while a thread of it holds an ask 
       },
     ),
   );
-  const before = Option.getOrThrow(
-    await database.run(readTask(agents.teammates.userId, tasks.billing)),
-  ).task.status;
+  const threadStatus = async () =>
+    (await database.run(taskInboxItems(owner, tasks.billing))).find(
+      ({ key }) => key === "try-billing",
+    )?.status;
+  assert.equal(await threadStatus(), INBOX_STATUS.OPEN);
 
-  assert.deepEqual(
-    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, status: TASK_STATUS.DONE }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_TASK_REFUSAL.OPEN_ASK },
+  const done = await call(CODER_TOOL.UPDATE_TASK, {
+    taskId: tasks.billing,
+    status: TASK_STATUS.DONE,
+  });
+  assert.equal(done.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(done));
+  assert.equal(
+    Option.getOrThrow(await database.run(readTask(owner, tasks.billing))).task.status,
+    TASK_STATUS.DONE,
   );
-  const after = Option.getOrThrow(
-    await database.run(readTask(agents.teammates.userId, tasks.billing)),
-  ).task.status;
-  assert.equal(after, before);
+  assert.equal(await threadStatus(), INBOX_STATUS.CLOSED);
 });
 
 test("update_task renames a task, pins it for the caller's starter alone, sets its repository only where the workspace's installation reaches it and clears it, and renames the caller's own task, as the member's menu does", async () => {
