@@ -19,7 +19,6 @@ import { appStateNow } from "@luke/panel/use-app-state";
 import {
   browserTracingIntegration,
   captureException,
-  eventLoopBlockIntegration,
   getActiveSpan,
   getCurrentScope,
   init,
@@ -28,24 +27,13 @@ import {
   startNewTrace,
   withStreamedSpan,
 } from "@sentry/electron/renderer";
-import {
-  BLANK_WINDOW,
-  type BlankWindow,
-  type DesktopSentry,
-  type DesktopSentryOptions,
-} from "./desktop-sentry";
+import { BLANK_WINDOW, type BlankWindow, type DesktopSentry } from "./desktop-sentry";
 
 /** The mechanism each blank window's report names, so Sentry's issue says which path caught it. */
 const BLANK_WINDOW_MECHANISM = {
   [BLANK_WINDOW.FIRST_READ]: { type: "auto.electron.renderer.first_read", handled: false },
   [BLANK_WINDOW.RENDER]: { type: "auto.electron.renderer.render", handled: false },
 } as const satisfies Record<BlankWindow, { readonly type: string; readonly handled: false }>;
-
-/**
- * How long the panel's page may be held busy before main reports it frozen:
- * a second, past any frame a person would call slow and short of a hang.
- */
-const FREEZE_THRESHOLD_MS = 1_000;
 
 /** The op every span the panel timed is listed under. */
 const PANEL_SPAN_OP = "ui.panel";
@@ -70,20 +58,16 @@ const PANEL_SPAN_OP = "ui.panel";
  *
  * Tracing keeps long animation frames, which name the script that held a
  * slow frame, and Interaction to Next Paint, which the SDK's web vitals
- * report by default. The panel alone also has its page watched for
- * freezes: main's SDK, whose default integrations include the renderer's
- * watchdog, reports a page held busy past the threshold, with its stack.
+ * report by default. A page that hangs is main's to report, from Electron's
+ * own word that it stopped answering (`main/window/renderer-health.ts`).
  */
-export function initDesktopSentry(options: DesktopSentryOptions): DesktopSentry {
+export function initDesktopSentry(): DesktopSentry {
   init({
     integrations: [
       browserTracingIntegration({
         shouldCreateSpanForRequest: sentryTracesRequest,
         enableLongAnimationFrame: true,
       }),
-      ...(options.reportsFreezes
-        ? [eventLoopBlockIntegration({ threshold: FREEZE_THRESHOLD_MS })]
-        : []),
     ],
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
