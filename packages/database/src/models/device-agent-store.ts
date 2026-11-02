@@ -45,6 +45,7 @@ import {
   type DeviceLaunchStep,
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
 import {
   and,
@@ -53,6 +54,7 @@ import {
   desc,
   eq,
   gt,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -67,7 +69,8 @@ import { Database, type DatabaseServices, type StoreFailure } from "../core/quer
 import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
-import { conversations } from "../schemas/storage.js";
+import { conversations, turns } from "../schemas/storage.js";
+import { ENDED_TURN_STATUSES } from "./agent-store.js";
 
 type DeviceAgentEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -781,6 +784,91 @@ const writeLapsedSettled = SqlSchema.findAll({
     ),
 });
 
+/** A warm launch the sweep may retire: its agent's starter, the agent, and the session its conversation runs in, which its place is found by. */
+const WarmLaunchSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  agentId: Schema.String,
+  sessionId: Schema.String,
+});
+
+export type DeviceAgentWarmLaunch = typeof WarmLaunchSchema.Type;
+
+/** A launch line of the same agent queued after another. */
+const newerLaunch = alias(deviceAgentLine, "newer_launch");
+
+const findWarmLaunches = SqlSchema.findAll({
+  Request: Schema.Struct({
+    seenSince: Schema.Date,
+    endedBefore: Schema.Date,
+    waitingEndedBefore: Schema.Date,
+    limit: Schema.Int,
+  }),
+  Result: WarmLaunchSchema,
+  execute: ({ seenSince, endedBefore, waitingEndedBefore, limit }) =>
+    Database.use((db) => {
+      // The conversation's newest turn, as `agent-store.ts`'s `readNativeRunStanding` reads whether its run ended.
+      const newestTurn = db
+        .select({ status: turns.status, settledAt: turns.settledAt })
+        .from(turns)
+        .where(eq(turns.conversationId, conversations.id))
+        .orderBy(desc(turns.queuedAt), desc(turns.id))
+        .limit(1)
+        .as("newest_turn");
+      // Note that an ended turn with no settle time stamped reads as ended long ago, as the run's standing reads it.
+      const endedBy = (instant: Date) =>
+        or(isNull(newestTurn.settledAt), lt(newestTurn.settledAt, instant));
+      return db
+        .select({
+          id: deviceAgentLine.id,
+          userId: deviceAgentLine.userId,
+          agentId: deviceAgentLine.agentId,
+          sessionId: sql<string>`${conversations.runtimeSessionId}`,
+        })
+        .from(deviceAgentLine)
+        .innerJoin(device, eq(device.id, deviceAgentLine.deviceId))
+        .innerJoin(agentTable, eq(agentTable.id, deviceAgentLine.agentId))
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .innerJoinLateral(newestTurn, sql`true`)
+        .where(
+          and(
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            isNull(deviceAgentLine.settledAt),
+            eq(agentTable.machine, AGENT_MACHINE.DEVICE),
+            isNotNull(conversations.runtimeSessionId),
+            gte(device.lastSeenAt, seenSince),
+            inArray(newestTurn.status, [...ENDED_TURN_STATUSES]),
+            or(
+              endedBy(endedBefore),
+              and(eq(device.updatePhase, HOST_UPDATE.WAITING), endedBy(waitingEndedBefore)),
+            ),
+            sql`not exists (${db
+              .select({ one: sql`1` })
+              .from(stopLine)
+              .where(
+                and(
+                  eq(stopLine.agentId, deviceAgentLine.agentId),
+                  eq(stopLine.kind, DEVICE_AGENT_LINE_KIND.STOP),
+                  gt(stopLine.seq, deviceAgentLine.seq),
+                ),
+              )})`,
+            sql`not exists (${db
+              .select({ one: sql`1` })
+              .from(newerLaunch)
+              .where(
+                and(
+                  eq(newerLaunch.agentId, deviceAgentLine.agentId),
+                  eq(newerLaunch.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+                  gt(newerLaunch.seq, deviceAgentLine.seq),
+                ),
+              )})`,
+          ),
+        )
+        .orderBy(asc(deviceAgentLine.seq))
+        .limit(limit);
+    }),
+});
+
 const deleteExpiredRequests = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, before: Schema.Date }),
   execute: ({ userId, before }) =>
@@ -1003,6 +1091,26 @@ export function settleLapsedDeviceAgentLine(
       Option.fromNullishOr(rows[0]),
     ),
   );
+}
+
+/**
+ * The newest launch lines of every account's local agents whose runner may
+ * still be warm, oldest first, at most `limit`: the line open, claimed or
+ * not, with no stop queued after it, as the machine reads a runner live
+ * (`device-machine.ts`'s `findPlaces`), on a device that beat since
+ * `seenSince`, so a device whose lease lapsed is left to the lease sweep;
+ * and the agent's run ended, its newest turn settled, cancelled, or failed
+ * before `endedBefore`, or before `waitingEndedBefore` where its device last
+ * beat that it waits to switch release (`HOST_UPDATE.WAITING`). Read with no
+ * account in hand, because the maintenance sweep reads every account's.
+ */
+export function warmDeviceAgentLaunches(read: {
+  readonly seenSince: Date;
+  readonly endedBefore: Date;
+  readonly waitingEndedBefore: Date;
+  readonly limit: number;
+}): DeviceAgentEffect<readonly DeviceAgentWarmLaunch[]> {
+  return findWarmLaunches(read);
 }
 
 /**

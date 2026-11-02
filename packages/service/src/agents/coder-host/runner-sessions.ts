@@ -1786,6 +1786,40 @@ const runnerMayBeAtWork = (agentId: string, now: Date) =>
     );
   });
 
+/** A warm runner a retire names: the session its place is found by, the agent's starter, whose account its retire line is queued under, the agent, and the machine's session the caller found the place running. */
+interface WarmRunner {
+  readonly sessionId: string;
+  readonly userId: string;
+  readonly agentId: string;
+  readonly running: string;
+}
+
+/**
+ * The retire `retireWarmRunner` makes, its caller holding the agent's
+ * runner lease: the place read again, and the retire line written to the
+ * runner it runs now, where it still runs in the session given.
+ */
+const retiredHolding = (machine: MachineLifecycle, retiring: WarmRunner) =>
+  Effect.gen(function* () {
+    if (yield* runnerMayBeAtWork(retiring.agentId, yield* DateTime.nowAsDate)) return false;
+    const found = yield* firstPlace(machine, retiring.sessionId);
+    if (Option.isNone(found)) return false;
+    const live = yield* liveRunner(machine, found.value);
+    if (live === undefined || live.handle.running !== retiring.running) return false;
+    const retire: InputLine = { type: INPUT_LINE.RETIRE };
+    yield* deliveredTo(machine, retiring.userId, retiring.agentId, live, [retire]);
+    // The runner is told of no longer, before the lease goes, so a message sent while it ends
+    // relaunches it rather than landing behind the retire, which the runner ends on unread.
+    const { launch } = found.value;
+    yield* machine.recordRunner(
+      recordOf(found.value, found.value.agentId ?? retiring.agentId),
+      launch === undefined
+        ? { kind: RUNNER_RECORD.NONE }
+        : { kind: RUNNER_RECORD.LAUNCHED, mark: launch },
+    );
+    return true;
+  });
+
 /**
  * A warm runner asked to end, under the agent's runner lease: its place
  * read again once the lease is held, and the retire line written to the
@@ -1798,35 +1832,31 @@ const runnerMayBeAtWork = (agentId: string, now: Date) =>
  * record, cleared here, would send the next message to a second runner beside
  * it; its next turn's end retires it. Answers whether the line was written.
  */
-export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (retiring: {
-  readonly sessionId: string;
-  /** The agent's starter, whose account its retire line is queued under. */
-  readonly userId: string;
-  readonly agentId: string;
-  readonly running: string;
-}) {
+export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (retiring: WarmRunner) {
   const machine = yield* deploymentLifecycle;
-  return yield* holdingRunner(
+  return yield* holdingRunner(retiring.agentId, retiredHolding(machine, retiring));
+});
+
+/**
+ * A warm runner a sweep found past its machine's window retired as
+ * `retireWarmRunner` retires one, in whatever session its place runs now,
+ * but only where no other call holds the agent's runner lease: whether the
+ * line was written, or none at once where a call holds the lease, so the
+ * sweep passes the agent by until its next minute rather than waiting out
+ * `CODER.RUNNER_LEASE.WAIT` behind a send. A send that holds the lease
+ * either took the runner, which then reads as at work, or found it gone and
+ * relaunched.
+ */
+export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(function* (
+  retiring: Omit<WarmRunner, "running">,
+) {
+  const machine = yield* deploymentLifecycle;
+  const found = yield* firstPlace(machine, retiring.sessionId);
+  const running = Option.getOrUndefined(found)?.running;
+  if (running === undefined) return Option.some(false);
+  return yield* holdingRunnerIfFree(
     retiring.agentId,
-    Effect.gen(function* () {
-      if (yield* runnerMayBeAtWork(retiring.agentId, yield* DateTime.nowAsDate)) return false;
-      const found = yield* firstPlace(machine, retiring.sessionId);
-      if (Option.isNone(found)) return false;
-      const live = yield* liveRunner(machine, found.value);
-      if (live === undefined || live.handle.running !== retiring.running) return false;
-      const retire: InputLine = { type: INPUT_LINE.RETIRE };
-      yield* deliveredTo(machine, retiring.userId, retiring.agentId, live, [retire]);
-      // The runner is told of no longer, before the lease goes, so a message sent while it ends
-      // relaunches it rather than landing behind the retire, which the runner ends on unread.
-      const { launch } = found.value;
-      yield* machine.recordRunner(
-        recordOf(found.value, found.value.agentId ?? retiring.agentId),
-        launch === undefined
-          ? { kind: RUNNER_RECORD.NONE }
-          : { kind: RUNNER_RECORD.LAUNCHED, mark: launch },
-      );
-      return true;
-    }),
+    retiredHolding(machine, { ...retiring, running: running.running }),
   );
 });
 

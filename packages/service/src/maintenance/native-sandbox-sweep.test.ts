@@ -11,6 +11,7 @@ import { runnerLine } from "@luke/database/schemas/runner-line";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
@@ -601,7 +602,9 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const idle = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
           status: TURN_STATUS.SETTLED,
           at: minutesBefore(
-            Duration.toMinutes(Duration.max(CODER.RUNNER_WARM, NATIVE_SANDBOX_SWEEP.GRACE)) + 1,
+            Duration.toMinutes(
+              Duration.max(CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL], NATIVE_SANDBOX_SWEEP.GRACE),
+            ) + 1,
           ),
         });
         const recent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {

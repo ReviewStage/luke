@@ -56,6 +56,7 @@ interface Recorded {
   purged: number[];
   abandoned: number[];
   deviceLeases: number[];
+  deviceWarmRunners: number[];
   sandboxed: number[];
   terminals: number[];
   native: number[];
@@ -76,6 +77,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     purged: [],
     abandoned: [],
     deviceLeases: [],
+    deviceWarmRunners: [],
     sandboxed: [],
     terminals: [],
     native: [],
@@ -108,6 +110,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.deviceLeases.push(now);
         return { lapsed: 1, busy: 0, failed: 0 };
+      }),
+    sweepDeviceWarmRunners: (now) =>
+      Effect.sync(() => {
+        recorded.deviceWarmRunners.push(now);
+        return { retired: 1, left: 0, busy: 0, failed: 0 };
       }),
     sweepSandboxes: (now) =>
       Effect.sync(() => {
@@ -198,6 +205,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       purged: [],
       abandoned: [],
       deviceLeases: [],
+      deviceWarmRunners: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -229,6 +237,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       purged: [],
       abandoned: [],
       deviceLeases: [],
+      deviceWarmRunners: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -247,6 +256,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       purged: [],
       abandoned: [],
       deviceLeases: [],
+      deviceWarmRunners: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -288,6 +298,7 @@ it.effect(
         purged: [instant],
         abandoned: [instant],
         deviceLeases: [instant],
+        deviceWarmRunners: [instant],
         sandboxed: [instant],
         terminals: [instant],
         native: [instant],
