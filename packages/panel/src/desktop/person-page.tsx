@@ -69,6 +69,7 @@ import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { useInboxRowDrafts } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import {
@@ -196,12 +197,13 @@ const AUTOMATION_THING = "Automation";
 
 /**
  * One of their agents as a row: its tile, its name, the task it works on,
- * and when it last moved; a press opens its tab, and its ⋯, right-click and
- * menu key offer the agent's one menu over the doors a row has
+ * and when it last moved; a press opens its tab, and its ⋯, right-click,
+ * long press and menu key offer the agent's one menu over the doors a row has
  * (`agent-actions.tsx`), as a task's summary offers it: Copy link, Rename,
  * which turns the row into its name's field, Archive, asking first while a
  * teammate's agent still works, read again by its own id wherever it
- * stands, and Permanently delete, asked first.
+ * stands, and Permanently delete, asked first. A finger's row draws no ⋯,
+ * as a phone's Inbox row draws none, so its name keeps the room.
  */
 function AgentRow({
   each,
@@ -230,6 +232,7 @@ function AgentRow({
   const { rename } = actions;
   const editing = rename?.editing === true;
   const endedByKey = useRefocusAfterEdit(editing, row);
+  const coarse = useCoarsePointer();
   return (
     <>
       <RowHintOptions card={card}>
@@ -276,6 +279,7 @@ function AgentRow({
               ? undefined
               : rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), tasks.shown)
           }
+          more={!coarse}
         />
       </RowHintOptions>
       {actions.dialog}
@@ -448,7 +452,7 @@ function usePersonAutomations(workspaceId: string | undefined, userId: string): 
   return { ...none, automations: theirs };
 }
 
-/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it, then a failure's mark and when it runs next, hanging its card; a press opens it, and its ⋯, right-click and menu key offer Copy link. */
+/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it, then a failure's mark and when it runs next, hanging its card; a press opens it, and its ⋯, right-click, long press and menu key offer Copy link, a finger's row drawing no ⋯. */
 function AutomationRow({
   automation,
   workspaceName,
@@ -464,6 +468,7 @@ function AutomationRow({
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const nextWords = automationNextText(automation, now);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const coarse = useCoarsePointer();
   return (
     <RowHintOptions card={<AutomationCard automation={automation} workspaceName={workspaceName} />}>
       <ListRow
@@ -495,6 +500,7 @@ function AutomationRow({
         hint={{ Hint: RowHint, label: automation.name }}
         onPress={onOpen}
         menu={copyLink === undefined ? undefined : rowMenu(AUTOMATION_THING, [[copyLink]])}
+        more={!coarse}
       />
     </RowHintOptions>
   );
