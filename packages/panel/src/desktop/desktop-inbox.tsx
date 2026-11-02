@@ -635,7 +635,13 @@ export const DesktopInbox = memo(function DesktopInbox({
               channelName={channel?.name}
               newThread={newThread}
               phone={
-                phone ? { onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle } : undefined
+                phone
+                  ? {
+                      onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
+                      narrowedTask:
+                        narrowedTask === undefined ? undefined : (narrowedTaskName ?? "Task"),
+                    }
+                  : undefined
               }
               doors={{
                 ...paneDoors(tasks, listed.holder, {

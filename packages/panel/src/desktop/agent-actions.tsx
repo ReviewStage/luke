@@ -92,6 +92,8 @@ export interface AgentMenuDoors {
   section?: MenuEntry | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell. */
   onOpenTerminal?: (() => void) | undefined;
+  /** Opens a new tab of the agent's cloud browser in the side panel: a phone's, which lists the panel's tabs nowhere else (`task-pane-switcher.tsx`). */
+  onOpenBrowser?: (() => void) | undefined;
   /** Opens the agent in its full place, its tab on its task, from where it stands apart from it: beside the Inbox. */
   onOpenInTask?: (() => void) | undefined;
   /** Archives the agent, or Unarchive once it is archived (`agent-archive.tsx`). */
@@ -106,7 +108,8 @@ export interface AgentMenuDoors {
  * The agent's menu, built once for every surface that draws it, in the
  * groups every menu of the window keeps: Copy link and the transcript's two
  * copies; Rename and the read mark; Pin and Move to section; Show terminal,
- * and Open in task, for an agent drawn apart from its task; Archive or
+ * Show browser where a phone offers it, and Open in task, for an agent drawn
+ * apart from its task; Archive or
  * Unarchive; and last and alone, Permanently delete. The copies, Show
  * terminal, Open in task, and Permanently delete print ⌥⌘C, ⇧⌥⌘C, ⌘J, ⌘O,
  * and ⌘⌫ only where the menu is the chosen tab's or the agent's page's,
@@ -118,6 +121,7 @@ export interface AgentMenuDoors {
 export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
   const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
     doors;
+  const { onOpenBrowser } = doors;
   const { archive, deletion } = doors;
   const chosen = doors.chosen === true;
   const lettered = chosen || doors.rowKeys === true;
@@ -158,6 +162,9 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
     ...(onOpenTerminal === undefined
       ? []
       : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, chosen)]),
+    ...(onOpenBrowser === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.SHOW_BROWSER, onOpenBrowser, false)]),
     ...(onOpenInTask === undefined
       ? []
       : [commandAction(PANEL_COMMAND.OPEN_IN_TASK, onOpenInTask, chosen)]),
@@ -177,7 +184,7 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
 /** What an agent offers on itself wherever it is drawn: the doors of its menu that are the agent's own, which a surface adds its own to (`read`, `agentPin`, `section`). */
 export type AgentDoors = Pick<
   AgentMenuDoors,
-  "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "deletion" | "copyLink"
+  "onCopy" | "onRename" | "onOpenTerminal" | "onOpenBrowser" | "archive" | "deletion" | "copyLink"
 >;
 
 /**
@@ -189,6 +196,7 @@ export type AgentDoors = Pick<
  */
 const NOT_ON_A_ROW = {
   onOpenTerminal: "The terminal opens in a side panel, and a row has none.",
+  onOpenBrowser: "The browser opens in a side panel, and a row has none.",
   onCopy: "A task's row offers no transcript copy either, so an agent's row offers none.",
 } as const satisfies Partial<Record<keyof AgentDoors, string>>;
 
@@ -324,11 +332,13 @@ export function useAgentActions(
     /** Whether the surface is on screen, which the Archive's question asks on. */
     readonly shown: boolean;
     readonly terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+    /** Opens a new tab of an agent's cloud browser in the side panel; none where the surface offers none, as off a phone. */
+    readonly onOpenBrowser?: ((agentId: string) => void) | undefined;
     /** Closes what shows the agent, its tab or its page, once its delete landed. */
     readonly onDeleted?: (() => void) | undefined;
   },
 ): AgentActions {
-  const { label, shown, terminals, onDeleted } = input;
+  const { label, shown, terminals, onOpenBrowser, onDeleted } = input;
   const copied = useTranscriptCopier();
   const copyLink = useCopyLinkItem()(agentPlace(agent.id));
   const rename = useInlineRename(agent.id, agents.onRename);
@@ -359,6 +369,11 @@ export function useAgentActions(
       onRename: renamable ? rename.begin : undefined,
       // Note that an archived agent's sandbox takes no shell, so it offers no terminal.
       onOpenTerminal: agent.archivedAt !== undefined ? undefined : terminal,
+      // Note that only a cloud sandbox runs a browser, so an agent on a Mac offers none.
+      onOpenBrowser:
+        agent.archivedAt !== undefined || local || onOpenBrowser === undefined
+          ? undefined
+          : () => onOpenBrowser(agent.id),
       archive: luke ? undefined : agent.archivedAt === undefined ? archive.action : unarchive,
       deletion: luke ? undefined : deletion.action,
       copyLink,

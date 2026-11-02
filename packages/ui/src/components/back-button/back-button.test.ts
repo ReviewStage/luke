@@ -56,7 +56,7 @@ function draw(element: ReactElement): void {
 /** A way back to the inbox drawn in `look`, and how many times it went back. */
 function wayBack(
   look: BackButtonLook,
-  keyed: Pick<Parameters<typeof BackButton>[0], "command" | "tabbable" | "keepFocus"> = {},
+  keyed: Pick<Parameters<typeof BackButton>[0], "command" | "tabbable" | "keepFocus" | "name"> = {},
 ): { button: HTMLButtonElement; backs: () => number } {
   let backs = 0;
   draw(
@@ -91,6 +91,12 @@ test.each(LOOKS)("a way back in a %s is named by its words and goes back once pr
   expect(button.textContent).toContain("Inbox");
   act(() => button.click());
   expect(backs()).toBe(1);
+});
+
+test("a way back in a bar given a name says it to a reader, its words still drawn", () => {
+  const { button } = wayBack(BACK_BUTTON_LOOK.HEADER, { name: "Back to Inbox" });
+  expect(button.getAttribute("aria-label")).toBe("Back to Inbox");
+  expect(button.textContent).toContain("Inbox");
 });
 
 test.each(LOOKS)("a way back in a %s hints where it leads, with the key that goes back", (look) => {
