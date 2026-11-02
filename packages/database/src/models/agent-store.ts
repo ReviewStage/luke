@@ -118,14 +118,13 @@ import type { ConversationTarget } from "./writer.js";
  * rather than finding an agent nothing runs. The model, effort, and context
  * window on the row are read at every step, so a change to them is the next
  * step's. The
- * branch is what stood checked out in the agent's sandbox as its last turn
- * ended, written by the session's turn-end hook (`coder-host/host.ts`) and
- * read where the agent's pull request is looked up (`coder-host/published.ts`). A
- * delegation is a child conversation under the agent's, opened ahead of the
- * worker's session (`coder-host/delegation.ts`) with the model and effort
- * the agent chose for it written beside it here, so the worker's steps read
- * the pair under the child and the tabs read the worker's transcript under
- * the agent's; the worker's title stands on its child conversation
+ * branch is the head of the pull request the agent opened, written as it
+ * opens one (`coder-host/pull-request.ts`) and read where the agent's pull
+ * request is looked up (`coder-host/published.ts`). A delegation is a child
+ * conversation under the agent's, which an eve agent's `delegate` opened
+ * ahead of its worker's session with the model and effort the agent chose
+ * for it written beside it here, so the tabs read the worker's transcript
+ * under the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
  * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
  * because the routes bundle this module and the eve host's modules reach
@@ -2717,7 +2716,7 @@ export function takeAgentMentionedServers(
   );
 }
 
-/** The branch checked out in the agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent of a workspace the account is not in. */
+/** The branch the agent opened its pull request from, or null for none; nothing written for an agent of a workspace the account is not in. */
 export function updateAgentBranch(
   userId: string,
   agentId: string,

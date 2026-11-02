@@ -1,11 +1,10 @@
 import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
-import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
+import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
-import { PRODUCT_NAME } from "./product-name.js";
 import {
   mergeMethodSchema,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -1886,45 +1885,6 @@ export function agentMessageWords(text: string): string | undefined {
 
 /** eve's id for a tool call, as the path names a subagent's transcript by it. */
 export const agentCallIdSchema = trimmedText(AGENT_BOUNDS.MAX_CALL_ID_CHARS);
-
-/**
- * What a delegation's tool part carries as its input: the task in the
- * agent's words, and the model and effort the agent chose for the worker,
- * each absent where the agent left it to its own.
- */
-export const agentDelegationInputSchema = EffectSchema.Struct({
-  task: describeWire(
-    EffectSchema.String,
-    "The worker's whole job in Markdown, since it knows nothing else: the goal in one sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
-  ),
-  model: EffectSchema.optionalKey(
-    describeWire(
-      EffectSchema.String,
-      `The id of the model the worker runs on, from ${PRODUCT_NAME}'s catalog; your own where left out.`,
-    ),
-  ),
-  effort: EffectSchema.optionalKey(
-    describeWire(
-      EffectSchema.String,
-      "The reasoning effort the worker runs at, one the model lists; your own where left out.",
-    ),
-  ),
-  // Note that we still accept the field nothing reads, because a session keeps the prompt it
-  // started under for its life, and an older one tells its agent to set it.
-  background: EffectSchema.optionalKey(
-    describeWire(
-      EffectSchema.Boolean,
-      "Ignored: the worker's answer reaches you on its own either way.",
-    ),
-  ),
-});
-
-/** What a settled delegation's tool part carries as its output: the model and effort the worker ran on, and its answer. */
-export const agentDelegationOutputSchema = EffectSchema.Struct({
-  model: EffectSchema.String,
-  effort: EffectSchema.String,
-  result: EffectSchema.String,
-});
 
 /**
  * The tool an agent writes its to-do list with, by the name its tool part
