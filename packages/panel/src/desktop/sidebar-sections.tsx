@@ -55,7 +55,13 @@ import {
   MailOpenIcon,
   SmilePlusIcon,
 } from "@luke/ui/icons";
-import { type DrawnTaskRow, TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
+import {
+  type DrawnTaskRow,
+  type HiddenStatus,
+  TASK_ROW,
+  type TaskRow,
+  taskRowKey,
+} from "@luke/ui/task-list-model";
 import {
   memberSection,
   placeAllWrites,
@@ -78,6 +84,7 @@ import { movedBeside, nestsOf, siblingsAt, useNestedRows } from "./nested-rows.j
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconWell, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { HiddenStatusesLine, NONE_MATCH } from "./sidebar-task-view.js";
 import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag } from "./use-row-drag.js";
@@ -548,6 +555,14 @@ export interface DrawnSection {
   readonly rows: readonly TaskRow[];
 }
 
+/** A section as the view draws it: the rows it leaves standing, and what it leaves out of the rest. */
+export interface ShownSection extends DrawnSection {
+  /** Its rows of the people Assigned to holds that the statuses shown leave out, counted by status, which the section says itself rather than the list's foot. */
+  readonly hidden: readonly HiddenStatus[];
+  /** Whether it holds rows Assigned to leaves out, so that it holds nothing in view is no call to drag tasks in. */
+  readonly othersHeld: boolean;
+}
+
 /** The tasks among a section's rows, in its order. */
 function drawnSectionTasks(drawn: DrawnSection): TaskSummary[] {
   return drawn.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
@@ -575,6 +590,8 @@ interface SectionContext {
   readonly onDropRow: (row: TaskRow, zone: string, at: number) => void;
   /** Hears a row lifted into a drag and that drag ended, while which an empty Pinned stands to take it. */
   readonly onCarried: (carried: boolean) => void;
+  /** Opens the Tasks page, where the tasks a section's view leaves out are browsed. */
+  readonly onOpenBoard: () => void;
 }
 
 /** What a section's actions on all its tasks run through beyond the section's writes: each asks or reaches past the sections. */
@@ -758,13 +775,38 @@ function SectionRows({
   );
 }
 
-/** One section: its header, its menu, and its rows, or a word that tasks are dragged in while it holds none. */
+/**
+ * What a section draws under its rows, or in their place while the view
+ * leaves none standing: how many more its statuses hidden hold, which opens
+ * the Tasks page as the list's foot does; else, holding none, that Assigned
+ * to leaves out what it holds, or a word that tasks are dragged in.
+ */
+function SectionFoot({
+  drawn,
+  onOpenBoard,
+}: {
+  drawn: ShownSection;
+  onOpenBoard: () => void;
+}): React.JSX.Element | null {
+  if (drawn.rows.length > 0 || drawn.hidden.length > 0) {
+    return <HiddenStatusesLine hidden={drawn.hidden} onOpen={onOpenBoard} />;
+  }
+  return (
+    <div className={SIDEBAR_SECTION_SLOT}>
+      <NoteLine look={NOTE_LINE_LOOK.INSET}>
+        {drawn.othersHeld ? NONE_MATCH : "Drag tasks here"}
+      </NoteLine>
+    </div>
+  );
+}
+
+/** One section: its header, its menu, its rows, and what the view leaves out of them. */
 function SidebarSection({
   drawn,
   context,
   place,
 }: {
-  drawn: DrawnSection;
+  drawn: ShownSection;
   context: SectionContext;
   /** Where the section stands among the sections, which its menu moves it from under a finger. */
   place: RowPlace;
@@ -823,7 +865,12 @@ function SidebarSection({
         glyph={glyph}
         label={section.title}
         fold={sidebarFold(folded, () => context.onToggle(section.id))}
-        count={foldedCount(folded, drawn.rows.length, TASK_NOUN)}
+        // Note that a section the view leaves nothing standing in, though it holds rows, counts none, because a 0 would call it empty.
+        count={
+          drawn.rows.length === 0 && (drawn.hidden.length > 0 || drawn.othersHeld)
+            ? undefined
+            : foldedCount(folded, drawn.rows.length, TASK_NOUN)
+        }
         menuOpen={menu.open !== undefined}
         contextMenu={menu.contextMenu(ellipsis)}
         standing={
@@ -840,13 +887,10 @@ function SidebarSection({
           />
         }
       >
-        {drawn.rows.length === 0 ? (
-          <div className={SIDEBAR_SECTION_SLOT}>
-            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
-          </div>
-        ) : (
+        {drawn.rows.length === 0 ? null : (
           <SectionRows drawn={drawn} context={context} rows={drawn.rows} folded={false} />
         )}
+        <SectionFoot drawn={drawn} onOpenBoard={context.onOpenBoard} />
       </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -885,7 +929,7 @@ export function SidebarSections({
   workspaceId,
   context,
 }: {
-  sections: readonly DrawnSection[];
+  sections: readonly ShownSection[];
   /** The listed workspace, in whose sections a new one is named in place. */
   workspaceId: string | undefined;
   context: SectionContext;

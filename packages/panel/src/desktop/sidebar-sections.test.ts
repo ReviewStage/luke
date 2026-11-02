@@ -392,6 +392,22 @@ test("the status filter leaves a section's backlog task out as it does the list'
   );
 });
 
+test("a section whose only task is done says so in place of Drag tasks here, and the Tasks line counts it no more", async () => {
+  const sidebar = await mountSidebar([], SECTIONS, {
+    tasks: [
+      { ...INVITES, status: TASK_STATUS.DONE },
+      { ...RETRIES, status: TASK_STATUS.DONE },
+    ],
+  });
+  const hiddenIn = (label: string) =>
+    sidebar.querySelector(`nav[aria-label="${label}"] .sidebar-hidden-statuses button`)
+      ?.textContent;
+
+  assert.equal(hiddenIn("Sections"), "1 more in Done");
+  assert.ok(!sidebar.textContent?.includes("Drag tasks here"));
+  assert.equal(hiddenIn("Tasks"), "1 more in Done");
+});
+
 test("a task's Move to section puts it on top of the section chosen", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
