@@ -204,6 +204,7 @@ export function AgentMenuTab({
   shown,
   keys,
   terminals,
+  onOpenBrowser,
   slot,
   onShown,
 }: {
@@ -215,6 +216,8 @@ export function AgentMenuTab({
   /** Whether the strip drawing the tab offers its keys, which the chosen agent's copies and delete answer while it does. */
   keys: boolean;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  /** Opens a new tab of the agent's cloud browser in the side panel, by the agent; a phone's alone (`useAgentActions`). */
+  onOpenBrowser?: ((agentId: string) => void) | undefined;
   /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
   slot: HTMLElement | null | undefined;
   /** Hears the tab while it is the one shown, for a phone's header (`DoorsTab`). */
@@ -224,6 +227,7 @@ export function AgentMenuTab({
     label: look.label,
     shown,
     terminals,
+    onOpenBrowser,
     onDeleted: doors.onClose,
   });
   // The chosen agent's ⌥⌘C, ⇧⌥⌘C, and ⌘⌫ while the column has the keys, over the open task's plan and its delete.
@@ -467,17 +471,12 @@ function addEntries(
 }
 
 /**
- * What a phone's row of views offers past the task's agents in place of the
- * column's hidden "+" (`task-pane-switcher.tsx`): New agent on the "+"'s own
- * terms, unavailable with Start's reason under it, `before` run ahead of
- * the draft it opens; and the agents' read again where it never landed, as
- * the strip's Retry offers it.
+ * What a phone's Overview offers after the task's agents in place of the
+ * column's hidden "+" (`plan-agents.tsx`): New agent on the "+"'s own
+ * terms, unavailable with Start's reason under it; and the agents' read
+ * again where it never landed, as the strip's Retry offers it.
  */
-export function phoneAgentStarts(
-  main: MainTabsControl,
-  agents: AgentsControl,
-  before: () => void,
-): MenuAction[] {
+export function phoneAgentStarts(main: MainTabsControl, agents: AgentsControl): MenuAction[] {
   const reason = agents.start.busy ? NEW_AGENT_STARTING : agents.start.reason;
   const starts: MenuAction[] =
     agents.onUnarchive === undefined && startsOwnAgents(agents.mode)
@@ -486,10 +485,7 @@ export function phoneAgentStarts(
             label: tabLook({ kind: TAB_KIND.DRAFT }).label,
             detail: reason,
             disabled: reason !== undefined,
-            onSelect: () => {
-              before();
-              main.onChoose({ draft: agents.onNewDraft() });
-            },
+            onSelect: () => main.onChoose({ draft: agents.onNewDraft() }),
           },
         ]
       : [];
@@ -535,6 +531,7 @@ export function MainTabStrip({
   keys,
   shown,
   onOpenTerminal,
+  onOpenBrowser,
   slot,
   onShown,
   planMenu,
@@ -557,6 +554,8 @@ export function MainTabStrip({
   shown: boolean;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
+  /** Opens a new tab of an agent's cloud browser in the side panel, by the agent; a phone's alone, whose ⋯ offers it beside Show terminal. */
+  onOpenBrowser?: ((agentId: string) => void) | undefined;
   /** The toolbar's slot the chosen agent's ⋯ is drawn into; none where the toolbar keeps none, as a phone's. */
   slot?: HTMLElement | null | undefined;
   /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the agent's ⋯ would (`task-pane-switcher.tsx`); none where the toolbar draws the ⋯. */
@@ -644,6 +643,7 @@ export function MainTabStrip({
               shown={shown}
               keys={keys}
               terminals={{ onOpenTerminal }}
+              onOpenBrowser={onOpenBrowser}
               slot={slot}
               onShown={onShown}
             />

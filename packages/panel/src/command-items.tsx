@@ -122,6 +122,7 @@ export const PANEL_COMMAND = {
   CLOSE_TAB: keyed(APP_COMMAND.CLOSE_TAB, <GLYPH.CLOSE />, NOUN.TAB),
   CLOSE_OTHER_TABS: keyedAs(APP_COMMAND.CLOSE_OTHER_TABS, "Close others", <ListXIcon />),
   SHOW_TERMINAL: keyed(APP_COMMAND.SHOW_TERMINAL, <GLYPH.TERMINAL />),
+  SHOW_BROWSER: unkeyed("Show browser", <GLYPH.WEBSITE />),
   OPEN_IN_TASK: keyed(APP_COMMAND.OPEN_IN_TASK, <GLYPH.TASK />),
   COPY_CONCISE_TRANSCRIPT: keyedAs(
     APP_COMMAND.COPY_CONTENT,
@@ -146,10 +147,7 @@ export const PANEL_COMMAND = {
     "Mark as blocked by",
     <TaskRelationIcon kind={TASK_RELATION_KIND.BLOCKED_BY} />,
   ),
-  MARK_BLOCKING: unkeyed(
-    "Mark as blocking",
-    <TaskRelationIcon kind={TASK_RELATION_KIND.BLOCKS} />,
-  ),
+  MARK_BLOCKING: unkeyed("Mark as blocking", <TaskRelationIcon kind={TASK_RELATION_KIND.BLOCKS} />),
   REMOVE_PARENT: unkeyed("Remove parent", <UnlinkIcon />),
   OPEN_ON_GITHUB: keyed(APP_COMMAND.OPEN_ON_GITHUB, <GLYPH.OPEN_ON_GITHUB />),
   COPY_GITHUB_LINK: unkeyed("Copy GitHub link", <GLYPH.LINK />),

@@ -24,9 +24,15 @@ import {
   useHeadingAway,
   useMinute,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import { agentOfTab, followedAgent, isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
+import {
+  agentOfTab,
+  followedAgent,
+  isDraftTab,
+  sameTab,
+} from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -44,6 +50,7 @@ import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
+import { startCloudDraft } from "../tasks/cloud-browser-tabs.js";
 import { keyedItem } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
@@ -70,6 +77,7 @@ import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
+import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import {
   AgentPane,
@@ -99,13 +107,13 @@ import { tabCard } from "./tab-card.js";
 import { TaskActions, type TaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
-  ACTIVITY_BACK,
+  OVERVIEW_BACK,
+  screenBack,
   TASK_PANE,
   TASKS_BACK,
   TaskHead,
   type TaskHeadBack,
   type TaskPane,
-  TaskPaneBar,
   taskPaneOf,
 } from "./task-pane-switcher.js";
 import { useStandingDoor } from "./task-row-parts.js";
@@ -351,21 +359,19 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
-/**
- * What the tab a phone shows offers on what it shows, as its header's ⋯
- * offers it between the task's views and the task's own actions: each item
- * says under it what it acts on, the tab, so the tab's Copy link is told
- * from the task's beneath it.
- */
-function shownTabGroups(shown: ShownTab | undefined, opener: HTMLElement): MenuEntry[][] {
-  if (shown === undefined) return [];
-  return shown
-    .groups(opener)
-    .map((group) =>
-      group.map((item) =>
-        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
-      ),
-    );
+/** What a phone's header's ⋯ acts on, which names its menu ("Agent actions"), by the screen standing. */
+const PHONE_THING = {
+  [TASK_PANE.OVERVIEW]: "Task",
+  [TASK_PANE.AGENT]: "Agent",
+  [TASK_PANE.PANEL]: "Tab",
+} as const satisfies Record<TaskPane, string>;
+
+/** What a phone's header's ⋯ calls letting a draft go. */
+const DISCARD_DRAFT = "Discard draft";
+
+/** A phone's way to let a draft go, which no strip's close stands for there: its tab closes and its words go, as the strip's close does (`main-tabs.tsx`). */
+function discardDraftItem(onSelect: () => void): MenuEntry {
+  return { label: DISCARD_DRAFT, icon: <GLYPH.DELETE />, onSelect };
 }
 
 /**
@@ -389,25 +395,12 @@ function PlanDocument({
   away: TaskHeadBack;
 }): React.JSX.Element {
   const { region } = tasks;
-  // The tab a phone's panel shows past the plan, which its header is named by, and the tab its column shows, whose menu the header's ⋯ offers on its Agents view (`strip-tabs.tsx`'s `ShownTab`).
+  // The tab a phone's panel shows past the plan, which its header is named by, and the tab its column shows, whose menu the header's ⋯ offers on the agent's screen (`strip-tabs.tsx`'s `ShownTab`).
   const [shownTab, setShownTab] = useState<ShownTab | undefined>(undefined);
   const [shownAgentTab, setShownAgentTab] = useState<ShownTab | undefined>(undefined);
   // The toolbar's slot the chosen agent's ⋯ stands in, as the side panel's bar keeps one for its chosen tab's; a phone's header offers the tab's actions instead.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
-  // A phone's Activity lists the panel's tabs until one is chosen, from it or by anything else, such as
-  // an arrival the panel shows, on the task it was asked on alone (`task-pane-switcher.tsx`).
-  // Asked over a shut panel, it holds whatever tab the panel opens on, which a shut panel with every tab closed chooses as it opens.
-  const [activityAsked, setActivityAsked] = useState<{
-    taskId: string;
-    tab: SidePanelTab | undefined;
-    opening: boolean;
-  }>();
-  const { open: panelOpen, tab: panelTab } = tasks.sidePanel;
   const phone = room === SHELL_ROOM.NARROW;
-  useEffect(() => {
-    if (activityAsked?.opening && panelOpen)
-      setActivityAsked({ ...activityAsked, tab: panelTab, opening: false });
-  }, [activityAsked, panelOpen, panelTab]);
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
   const { act } = useAct();
@@ -745,20 +738,11 @@ function PlanDocument({
     repositoryMenu.request > answeredRequest
       ? repositoryMenu.request
       : undefined;
-  // A phone's Activity lists the panel's tabs over the plan while asked on this task (`task-pane-switcher.tsx`).
-  const activityListed =
-    activityAsked !== undefined &&
-    activityAsked.taskId === openedId &&
-    (activityAsked.opening ||
-      (activityAsked.tab === undefined
-        ? panelTab === undefined
-        : panelTab !== undefined && sameTab(activityAsked.tab, panelTab)));
   // The plan is in sight: the column shows Overview, and no panel fills the window over it, as a phone's always does.
   const planInSight = planShown;
   useEffect(() => {
     if (menuRequest === undefined || planInSight) return;
     showOverview();
-    setActivityAsked(undefined);
   }, [menuRequest, planInSight, showOverview]);
   // Note that the crumb is handed the ask only once the plan is in sight, so its menu never opens behind a list.
   const openRequest = planInSight ? menuRequest : undefined;
@@ -817,7 +801,6 @@ function PlanDocument({
   useEffect(() => {
     if (relationPending === undefined || planInSight) return;
     showOverview();
-    setActivityAsked(undefined);
   }, [relationPending, planInSight, showOverview]);
   const relations = useMemo<TaskRelationsDoor>(
     () => ({
@@ -883,9 +866,34 @@ function PlanDocument({
         folded={false}
         onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
         onOpenPullRequest={openPullRequestDoor}
+        phone={
+          room === SHELL_ROOM.NARROW
+            ? {
+                starts: phoneAgentStarts(mainTabs, agents),
+                archived: <ArchivedAgents agents={agents} shown={tasks.shown} />,
+                waiting: inbox.board.waiting.length,
+                onOpenInbox: () => {
+                  if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId });
+                },
+              }
+            : undefined
+        }
       />
     ),
-    [openedId, agents, views.held, tab, opened?.runsOn, openAgentTab, openPullRequestDoor],
+    [
+      openedId,
+      agents,
+      views.held,
+      tab,
+      opened?.runsOn,
+      openAgentTab,
+      openPullRequestDoor,
+      room,
+      mainTabs,
+      tasks.shown,
+      inbox.board.waiting.length,
+      tasks.onShowInbox,
+    ],
   );
   // The task's sub-tasks and relations stand over its agents, keyed by the task,
   // so another task's sub-tasks start folded rather than as this one's were left.
@@ -1101,45 +1109,52 @@ function PlanDocument({
       />
     </Fill>
   );
-  const onListed = (asked: boolean) =>
-    setActivityAsked(
-      asked ? { taskId: task.id, tab: sidePanel.tab, opening: !sidePanel.open } : undefined,
-    );
   const pane = taskPaneOf({ open: sidePanel.open, column: tab });
-  const choosePane = (chosen: TaskPane) => {
-    if (chosen === TASK_PANE.ACTIVITY) {
-      onListed(true);
-      if (!sidePanel.open) sidePanel.onShowList();
-      return;
-    }
-    onListed(false);
-    // Note that the panel's own toggle shuts it as a step back where the window keeps one, as its Close does.
-    if (sidePanel.open) sidePanel.onToggle();
-    // Agents chooses the agent's tab the column holds first where it stands on Overview.
-    const agentTab = mainTabs.tabs.find((each) => !isOverviewTab(each));
-    if (chosen === TASK_PANE.OVERVIEW) mainTabs.onChoose(MAIN_TAB.OVERVIEW);
-    else if (isOverviewTab(tab) && agentTab !== undefined) mainTabs.onChoose(agentTab);
-  };
-  // A tab chosen from Activity heads the row by its name and leads back to the list; the task's own views name the task and lead out of it.
-  const onTab = pane === TASK_PANE.ACTIVITY && !activityListed ? shownTab : undefined;
-  // What the header's ⋯ offers under the views follows what is on screen: the task's own menu on Overview, the chosen agent's on Agents, and the tab's on one chosen from Activity, the last two each naming what they act on (`shownTabGroups`).
+  // A phone's agent's ⋯ opens a new tab of its cloud browser, as the panel's "+", which a phone draws nowhere, does.
+  const openBrowser = (agentId: string) =>
+    openPanelTab({ cloudBrowser: startCloudDraft({ taskId: task.id }, agentId).id });
+  // What the column shows, by name: the agent's or the draft's screen, and where a tab of the panel goes back to.
+  const columnLabel =
+    tab === undefined || isOverviewTab(tab) ? OVERVIEW_BACK : mainTabLabel(tab, agents);
+  const draftShown =
+    pane === TASK_PANE.AGENT && tab !== undefined && isDraftTab(tab) ? tab : undefined;
+  // Back leaves the task on Overview, and goes back a screen anywhere else: the panel shuts over
+  // the column, and the column goes back to Overview, which lets an empty draft go (`use-main-tabs.ts`).
+  const back =
+    pane === TASK_PANE.OVERVIEW
+      ? away
+      : pane === TASK_PANE.PANEL
+        ? screenBack(columnLabel ?? OVERVIEW_BACK, sidePanel.onToggle)
+        : screenBack(OVERVIEW_BACK, () => mainTabs.onChoose(MAIN_TAB.OVERVIEW));
+  // What the header's ⋯ offers follows what is on screen: the task's own menu on Overview, the
+  // agent's on its screen, Discard draft on a draft's, and the tab's on one of the panel's, each
+  // agent's item left unnamed, since the header names the agent.
   const shownGroups = (opener: HTMLElement): readonly (readonly MenuEntry[])[] =>
     pane === TASK_PANE.OVERVIEW
       ? planMenu.groups()
-      : shownTabGroups(pane === TASK_PANE.AGENTS ? shownAgentTab : onTab, opener);
+      : draftShown !== undefined
+        ? [
+            [
+              discardDraftItem(() => {
+                mainTabs.onClose(draftShown);
+                agents.onDiscardDraft(draftShown.draft);
+              }),
+            ],
+          ]
+        : ((pane === TASK_PANE.AGENT ? shownAgentTab : shownTab)?.groups(opener) ?? []);
   const head = switched ? (
     <TaskHead
-      back={onTab === undefined ? away : { label: ACTIVITY_BACK, onPress: () => onListed(true) }}
-      // Note that the task's Rename opens the task's name in the title's place on a tab too, since the tab hides the plan's own title.
+      back={back}
+      // Note that the task's Rename opens the task's name in the title's place on any screen, since the screen hides the plan's own title.
       // Note that Overview's plan names the task in its own heading, so the row names it only once that heading scrolls away.
       title={
         rename.editing
           ? (rename.asked ?? task.name)
-          : onTab !== undefined
-            ? onTab.label
-            : pane === TASK_PANE.OVERVIEW
-              ? undefined
-              : task.name
+          : pane === TASK_PANE.PANEL
+            ? shownTab?.label
+            : pane === TASK_PANE.AGENT
+              ? columnLabel
+              : undefined
       }
       pickUp={{ name: planHeading.name, shown: planHeading.away }}
       rename={{
@@ -1150,40 +1165,12 @@ function PlanDocument({
       }}
       actions={
         <PlaceMore
-          thing="Task"
+          thing={PHONE_THING[pane]}
           shown={tasks.shown}
           groups={(opener) => shownGroups(opener)}
           ends={() => (pane === TASK_PANE.OVERVIEW ? planMenu : undefined)}
         />
       }
-    />
-  ) : null;
-  // The task's agents as the phone's row of views names them, the one the column shows checked in its list.
-  const paneAgents = (agents.agentIds ?? []).flatMap((agentId) => {
-    const agent = agents.agents?.find((each) => each.id === agentId);
-    return agent === undefined ? [] : [{ id: agentId, name: agentName(agent, agents.models) }];
-  });
-  const chooseAgent = (agentId: string) => {
-    onListed(false);
-    if (sidePanel.open) sidePanel.onToggle();
-    mainTabs.onChoose({ agent: agentId });
-  };
-  const paneBar = switched ? (
-    <TaskPaneBar
-      pane={pane}
-      agents={paneAgents}
-      starts={phoneAgentStarts(mainTabs, agents, () => {
-        onListed(false);
-        if (sidePanel.open) sidePanel.onToggle();
-      })}
-      asked={mainTabs.newTabAsked}
-      onAnswered={mainTabs.onNewTabAnswered}
-      shownAgent={
-        pane === TASK_PANE.AGENTS && tab !== undefined && isAgentTab(tab) ? tab.agent : undefined
-      }
-      shown={tasks.shown}
-      onChoose={choosePane}
-      onChooseAgent={chooseAgent}
     />
   ) : null;
   return (
@@ -1212,7 +1199,6 @@ function PlanDocument({
                     hand={taskMenuHand}
                   />
                   {head}
-                  {paneBar}
                   {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
@@ -1223,7 +1209,7 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        {/* On a phone the row of views stands in the strip's place, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
+                        {/* On a phone no strip stands, Overview listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
                         <div className={switched ? undefined : "contents"} hidden={switched}>
                           <Toolbar
                             start={TOOLBAR_INSET.COLUMN}
@@ -1244,6 +1230,7 @@ function PlanDocument({
                                 keys={!switched && tasks.shown && !sideFocused}
                                 shown={tasks.shown}
                                 onOpenTerminal={terminalDoors.onOpenTerminal}
+                                onOpenBrowser={switched ? openBrowser : undefined}
                                 slot={switched ? null : actionsSlot}
                                 onShown={switched ? setShownAgentTab : undefined}
                                 planMenu={planMenu}
@@ -1358,11 +1345,7 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         task={{ name: task.name, status: listed.status }}
-                        activity={
-                          switched
-                            ? { listed: activityListed, onListed, onShown: setShownTab }
-                            : undefined
-                        }
+                        activity={switched ? { onShown: setShownTab } : undefined}
                       />
                     ) : null}
                     {stranded.dialog}

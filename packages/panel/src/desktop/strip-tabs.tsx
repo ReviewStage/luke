@@ -105,7 +105,14 @@ export interface DocumentMenu extends MenuEnds {
 export interface TabDoors
   extends Pick<
     AgentMenuDoors,
-    "onCopy" | "onRename" | "onOpenTerminal" | "onOpenInTask" | "archive" | "deletion" | "copyLink"
+    | "onCopy"
+    | "onRename"
+    | "onOpenTerminal"
+    | "onOpenBrowser"
+    | "onOpenInTask"
+    | "archive"
+    | "deletion"
+    | "copyLink"
   > {
   /** Whether the tab is the one chosen, which ⌘W closes and ⌘J opens the terminal of. */
   chosen: boolean;
@@ -246,6 +253,7 @@ export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuEntry[
     onCopy,
     onRename,
     onOpenTerminal,
+    onOpenBrowser: doors.onOpenBrowser,
     onOpenInTask,
     archive,
     deletion,

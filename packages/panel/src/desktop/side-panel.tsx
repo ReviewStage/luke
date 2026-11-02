@@ -206,10 +206,10 @@ import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { type CardSubject, tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
 
-/** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
+/** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, none where the panel lists none (a task's), and where the tab shown is handed on. */
 interface StripActivity {
   readonly slot: HTMLElement | null;
-  readonly onListed: (listed: boolean) => void;
+  readonly onListed: ((listed: boolean) => void) | undefined;
   readonly onShown: (shown: ShownTab | undefined) => void;
 }
 
@@ -1343,7 +1343,7 @@ function PanelTabs({
   };
   return (
     <PanelTabsRow>
-      {activity?.slot
+      {activity?.slot && activity.onListed !== undefined
         ? createPortal(
             <ActivityList strip={strip} offers={offers} onListed={activity.onListed} />,
             activity.slot,
@@ -2403,18 +2403,20 @@ export function SidePanel({
   /** What the agent of a transcript's tab opens on its task, which its menu offers; none where no transcript's tab stands. */
   transcriptDoors?: TranscriptDoors | undefined;
   /**
-   * A phone's Activity (`task-pane-switcher.tsx`): whether the panel lists
-   * its tabs rather than showing one, and the way to ask for the list or
-   * leave it. Where it is handed and the panel stands only full screen, the
-   * panel's bar is not drawn, the list standing for its strip and its "+",
-   * and the phone's header for the rest: the way back to the list, the tab's
-   * name, and its ⋯, which the tab shown is handed up for; none beside
-   * anything but a task's page.
+   * A phone's page header standing for the panel's bar: where it is handed
+   * and the panel stands only full screen, the panel's bar is not drawn, and
+   * the page's header names the tab, goes back, and holds its ⋯, which the
+   * tab shown is handed up for. A task's page hands only that, its panel a
+   * tab pushed over its column and listing none (`task-pane-switcher.tsx`);
+   * a page with its own Activity hands whether the panel lists its tabs
+   * rather than showing one, and the way to ask for the list or leave it,
+   * the list standing for its strip and its "+"; none beside anything but a
+   * task's page.
    */
   activity?:
     | {
-        readonly listed: boolean;
-        readonly onListed: (listed: boolean) => void;
+        readonly listed?: boolean | undefined;
+        readonly onListed?: ((listed: boolean) => void) | undefined;
         /** Hands the header the tab shown past the plan, or none (`ShownTab`). */
         readonly onShown: (shown: ShownTab | undefined) => void;
       }
@@ -2442,7 +2444,7 @@ export function SidePanel({
   // Where a phone's Activity lists the tabs, drawn there from the strip, which holds how each tab looks.
   const [activitySlot, setActivitySlot] = useState<HTMLElement | null>(null);
   const switched = activity !== undefined && panel.fullScreenOnly;
-  const listing = switched && activity.listed;
+  const listing = switched && activity.listed === true;
   // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
   const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
   const handTabActions = useCallback((tab: SidePanelTab, actions: TabActionGroups | undefined) => {

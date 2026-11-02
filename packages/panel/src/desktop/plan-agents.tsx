@@ -9,15 +9,18 @@ import {
   RowHint,
   RowHintOptions,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { RunsOnPlace } from "../tasks/runs-on.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
+import type { MenuAction } from "./action-menu.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
@@ -43,13 +46,40 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * tab; it is still a link to its page, so a right-click offers its address.
  * Those at work come first, then the newest started; an archived agent is
  * not listed, and a task with no agent draws no group at all.
+ *
+ * On a phone, Overview is the task's one page, with no strip, summary, or
+ * Inbox tab beside it (`task-pane-switcher.tsx`), so the group holds what
+ * those offer: New agent after the agents, as the strip's "+" offers it,
+ * the archived agents folded under them as the summary folds them
+ * (`ArchivedAgents`), and, after the group, the task's Inbox counting what
+ * waits on the developer, only while something does. The group stands then
+ * even on a task with no agent, for New agent.
  */
+
+/** A phone's additions to the group; see the module's head. */
+interface PlanAgentsPhone {
+  /** What the group offers after its agents: New agent, or the agents' read again (`phoneAgentStarts`). */
+  readonly starts: readonly MenuAction[];
+  /** The archived agents' fold (`ArchivedAgents`), which draws nothing while none is archived. */
+  readonly archived: React.ReactNode;
+  /** How many of the task's Inbox items wait on the developer. */
+  readonly waiting: number;
+  /** Opens the window's Inbox narrowed to the task. */
+  readonly onOpenInbox: () => void;
+}
 
 /** What the group is called, and its list for a reader moving between lists. */
 const AGENTS_LIST = "Agents";
 
 /** What the group's count counts, said to a reader beside the figure. */
 const AGENTS_NOUN = { one: "agent", many: "agents" } as const;
+
+/** What the task's Inbox row says while threads wait on the developer: "1 thread needs you", "3 threads need you". */
+function threadsWaitingWords(waiting: number): string {
+  return waiting === 1
+    ? `1 thread ${NEEDS_YOU.COUNT.one}`
+    : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
+}
 
 /** The agents in the order the list draws them: those still writing first, then the newest started, each group's order otherwise kept. */
 function listedOrder(entries: readonly AddEntry[]): readonly AddEntry[] {
@@ -141,6 +171,7 @@ export function PlanAgents({
   folded = true,
   onOpenAgent,
   onOpenPullRequest,
+  phone,
 }: {
   agents: AgentsControl;
   /** What the tabs hold, which each row's card reads as its tab's does. */
@@ -153,6 +184,8 @@ export function PlanAgents({
   folded?: boolean | undefined;
   onOpenAgent: (agentId: string) => void;
   onOpenPullRequest: (agentId: string) => void;
+  /** A phone's additions; none elsewhere. */
+  phone?: PlanAgentsPhone | undefined;
 }): React.JSX.Element | null {
   // Note that an entry's pick chooses its agent's tab, which a row hands the page as that agent's id.
   const entries = agentEntries(
@@ -165,17 +198,23 @@ export function PlanAgents({
     agents,
     held,
   );
-  if (entries.length === 0) return null;
+  const starts = phone?.starts ?? [];
+  if (entries.length === 0 && starts.length === 0) return null;
   return (
     // Note that the group is pulled out by a row's inset on each side, so its marks stand on the title's edge and its fills hang past it.
     <div className="plan-agents -mx-row-inset mb-block-gap">
       <GroupHeader
         heading={GROUP_HEADING.NONE}
         label={AGENTS_LIST}
-        count={{
-          value: entries.length,
-          noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
-        }}
+        // Note that a phone's group over no agent, standing for New agent, counts none.
+        count={
+          entries.length === 0
+            ? undefined
+            : {
+                value: entries.length,
+                noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
+              }
+        }
         fold={{ defaultOpen: !folded }}
       >
         <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
@@ -191,8 +230,30 @@ export function PlanAgents({
               onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
             />
           ))}
+          {starts.map((start) => (
+            <ListRow
+              key={start.label}
+              leading={start.icon ?? <GLYPH.ADD />}
+              title={start.label}
+              description={start.detail}
+              disabled={start.disabled}
+              chevron
+              onPress={start.onSelect}
+            />
+          ))}
         </List>
+        {phone?.archived}
       </GroupHeader>
+      {phone === undefined || phone.waiting === 0 ? null : (
+        <List label={NEEDS_YOU.LABEL} density={LIST_DENSITY.DENSE}>
+          <ListRow
+            leading={<GLYPH.INBOX />}
+            title={threadsWaitingWords(phone.waiting)}
+            chevron
+            onPress={phone.onOpenInbox}
+          />
+        </List>
+      )}
     </div>
   );
 }

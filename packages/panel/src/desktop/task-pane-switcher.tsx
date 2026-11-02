@@ -1,12 +1,7 @@
 import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { backToWords } from "@luke/features/words";
 import {
   BackButton,
-  CHOICE_BAR_FOLD,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  ChoiceBar,
-  type ChoiceItem,
-  dropBelow,
   InlineEdit,
   type InlineEditEnd,
   NO_BACK_KEY,
@@ -14,183 +9,78 @@ import {
   TEXT_VARIANT,
   Text,
   type ToolbarPickUp,
-  useMenu,
 } from "@luke/ui";
-import { useEffect, useRef } from "react";
 import type { AwayStep } from "../navigation-history.js";
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { PhoneHead } from "./phone-head.js";
 
 /**
  * task-pane-switcher.tsx -- how a phone heads a task: one row of the way
- * back, the title of what is on screen, and one ⋯, and under it one
- * segmented row of the task's three views, its Overview, its agent, and its
- * Activity (`TaskPaneBar`), which stands in the desktop's tab strip's place.
+ * back, the title of what is on screen, and one ⋯, over a task whose
+ * Overview is its one page and whose agents and tabs are screens pushed
+ * over it.
  *
- * Nothing here is held apart from the column and the side panel: the views
- * read what they already hold. Overview is the panel shut over the column on
- * its Overview, the task's plan; Agents is the panel shut over the column on
- * an agent's tab; Activity is the panel open on the list of every tab it
- * holds, or on one of them chosen from that list. So the tabs a phone opens
- * are the same tabs, kept the same way (`use-main-tabs.ts`,
- * `use-side-panel.ts`), and Back walks them as it did.
+ * Nothing here is held apart from the column and the side panel: the
+ * screens read what they already hold. Overview is the panel shut over the
+ * column on its Overview, the task's plan, which leads with the task's
+ * agents (`plan-agents.tsx`); an agent is the panel shut over the column on
+ * its tab, a draft's among them; and a tab of the panel, opened from a link
+ * or an agent's ⋯, is the panel open over either, full screen. So the tabs
+ * a phone opens are the same tabs, kept the same way (`use-main-tabs.ts`,
+ * `use-side-panel.ts`), and Back walks them as it did. The panel lists
+ * none of its tabs here: each is reached from what opens it.
  *
- * The row is a phone's standard header and holds nothing else: the way back,
- * its glyph alone, is named for where it goes, the list the task was opened
- * from on the task's own views, or Activity on a tab chosen there; the
- * title, centred between the two corners, names the task, or the tab shown;
- * and the ⋯ holds the menu of what is on screen: the task's own on Overview
- * (`task-actions.tsx`), the chosen agent's on Agents (`agent-actions.tsx`),
- * and the tab's on one chosen from Activity, as its own ⋯ offers it where a
- * bar stands. The views are the segmented row's alone, a finger's size: the
- * middle one is named for the task's one agent, or counts its agents where
- * it holds several. A press on it drops the list of them, with New agent
- * after them, as the column's hidden "+" offers it, wherever the press does
- * not go straight to the one agent: on a task with none or several, or on
- * the one agent's view pressed again; ⌘T drops the same list.
+ * The row is a phone's standard header and holds nothing else: the way
+ * back, its glyph alone, leads out of the task on Overview, to the list the
+ * task was opened from, and back a screen anywhere else, named for where it
+ * goes ("Back to Overview"); the title, one line centred between the two
+ * equal corners and fading where it is cut, names what is on screen, or
+ * nothing on Overview until the plan's own heading scrolls away; and the ⋯
+ * holds the menu of what is on screen: the task's own on Overview
+ * (`task-actions.tsx`), the agent's on its screen (`agent-actions.tsx`),
+ * and the tab's on one of the panel's.
  */
 
-/** The three views of a task on a phone. */
+/** What stands on a phone's task: its Overview, an agent's screen pushed over it, or a tab of the panel pushed over either. */
 export const TASK_PANE = {
   OVERVIEW: "overview",
-  AGENTS: "agents",
-  ACTIVITY: "activity",
+  AGENT: "agent",
+  PANEL: "panel",
 } as const;
 
 export type TaskPane = (typeof TASK_PANE)[keyof typeof TASK_PANE];
 
-/** What the way back to the Activity list is called, on a tab chosen from it. */
-export const ACTIVITY_BACK = "Activity";
-
 /** What the way out of a task is called where no page stands behind it, and it opens the Tasks page. */
 export const TASKS_BACK = "Tasks";
+
+/** What the way back from an agent's screen is called. */
+export const OVERVIEW_BACK = "Overview";
 
 /** What the way out of a task is called where the page behind it has no name yet. */
 const BACK = "Back";
 
 /**
- * Which view stands: Activity while the panel is open, its list or any tab
- * chosen from it; else Overview while the column shows it, and Agents on any
- * other of its tabs.
+ * Which screen stands: a tab of the panel while it is open; else Overview
+ * while the column shows it, and an agent's on any other of its tabs.
  */
 export function taskPaneOf(input: {
   readonly open: boolean;
   readonly column: MainTab | undefined;
 }): TaskPane {
-  if (input.open) return TASK_PANE.ACTIVITY;
-  return isOverviewTab(input.column) ? TASK_PANE.OVERVIEW : TASK_PANE.AGENTS;
+  if (input.open) return TASK_PANE.PANEL;
+  return isOverviewTab(input.column) ? TASK_PANE.OVERVIEW : TASK_PANE.AGENT;
 }
 
-/** One of the task's agents as the row names it. */
-export interface PaneAgent {
-  readonly id: string;
-  readonly name: string;
-}
-
-/** What the middle view is called: the task's one agent by its name, else Agents, counting them where it holds several. */
-function agentsItem(agents: readonly PaneAgent[]): ChoiceItem<TaskPane> {
-  const [only, ...more] = agents;
-  if (only !== undefined && more.length === 0) return { value: TASK_PANE.AGENTS, label: only.name };
-  return {
-    value: TASK_PANE.AGENTS,
-    label: "Agents",
-    count: more.length > 0 ? String(agents.length) : undefined,
-  };
-}
-
-/**
- * The row of a task's three views under a phone's header; see the module's
- * head. The list the middle view drops checks the agent shown and offers
- * `starts` after the agents, rather than choosing one of them blind.
- */
-export function TaskPaneBar({
-  pane,
-  agents,
-  shownAgent,
-  starts,
-  shown,
-  asked,
-  onAnswered,
-  onChoose,
-  onChooseAgent,
-}: {
-  pane: TaskPane;
-  /** The task's agents, archived ones left out, in the order the column lists them. */
-  agents: readonly PaneAgent[];
-  /** The agent whose tab the column shows, which the list checks; none on Overview, a draft, or Activity. */
-  shownAgent: string | undefined;
-  /** What the list offers after the agents: New agent, or the agents' read again (`phoneAgentStarts`). */
-  starts: readonly MenuAction[];
-  /** Whether the task is on screen, for the list not to outlive it. */
-  shown: boolean;
-  /** Whether ⌘T asks for the list, which the column's "+" answers where it stands. */
-  asked: boolean;
-  onAnswered: () => void;
-  onChoose: (pane: TaskPane) => void;
-  onChooseAgent: (agentId: string) => void;
-}): React.JSX.Element {
-  const row = useRef<HTMLDivElement>(null);
-  const menu = useMenu(shown);
-  const { show } = menu;
-  const listAgents = () => {
-    const opener = row.current;
-    if (opener !== null) show(dropBelow(opener), opener);
-  };
-  // ⌘T's ask, taken once, drops the list.
-  useEffect(() => {
-    if (!asked) return;
-    onAnswered();
-    const opener = row.current;
-    if (opener !== null) show(dropBelow(opener), opener);
-  }, [asked, onAnswered, show]);
-  const choose = (pressed: TaskPane | undefined) => {
-    // Note that the view standing pressed again is undefined, as a clearable bar answers it, and chosen again, as Activity's list asks.
-    const chosen = pressed ?? pane;
-    const [only, ...more] = agents;
-    if (chosen !== TASK_PANE.AGENTS) onChoose(chosen);
-    else if (only !== undefined && more.length === 0 && pressed !== undefined) {
-      onChooseAgent(only.id);
-    } else listAgents();
-  };
-  const agentRows: MenuAction[] = agents.map((agent) => ({
-    label: agent.name,
-    checked: agent.id === shownAgent,
-    onSelect: () => onChooseAgent(agent.id),
-  }));
-  return (
-    <div ref={row} className="task-pane-bar flex flex-none px-luke-12 pb-luke-8">
-      <ChoiceBar<TaskPane>
-        label="Task views"
-        items={[
-          { value: TASK_PANE.OVERVIEW, label: "Overview" },
-          agentsItem(agents),
-          { value: TASK_PANE.ACTIVITY, label: "Activity" },
-        ]}
-        value={pane}
-        clearable
-        onChange={choose}
-        look={CHOICE_BAR_LOOK.SEGMENTED}
-        size={CHOICE_BAR_SIZE.TOUCH}
-        fold={CHOICE_BAR_FOLD.WORDS}
-        stretch
-      />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label="Agents"
-          menu={menu.drawn}
-          groups={[agentRows, starts].filter((group) => group.length > 0)}
-          onClose={menu.close}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Where the way back goes, and what it is called there. */
+/** Where the way back goes, what it is called there, and what a reader is told it does where its glyph stands alone. */
 export interface TaskHeadBack {
   readonly label: string;
+  readonly name?: string | undefined;
   readonly onPress: () => void;
+}
+
+/** The way back a screen to `label`, named for it as its hint names it ("Back to Overview"). */
+export function screenBack(label: string, onPress: () => void): TaskHeadBack {
+  return { label, name: backToWords(label), onPress };
 }
 
 /**
@@ -213,7 +103,8 @@ interface TaskHeadRename {
 /**
  * The row heading a task on a phone; see the module's head. It is a phone's
  * header (`phone-head.tsx`): the way back at its start, the ⋯ at its end,
- * and the title centred between them.
+ * and the title centred between them, words the bar draws on one line that
+ * fades where it is cut, or the task's name as a field while it is renamed.
  */
 export function TaskHead({
   back,
@@ -223,7 +114,7 @@ export function TaskHead({
   actions,
 }: {
   back: TaskHeadBack;
-  /** What is on screen: the task's name, or the tab shown; none on Overview, whose plan names the task in its own heading, which the row then picks up once it scrolls away (`pickUp`). */
+  /** What is on screen: the agent's or the tab's name; none on Overview, whose plan names the task in its own heading, which the row then picks up once it scrolls away (`pickUp`). */
   title: string | undefined;
   /** The plan's heading as the row picks it up where it draws no title. */
   pickUp?: ToolbarPickUp | undefined;
@@ -236,17 +127,20 @@ export function TaskHead({
     <PhoneHead
       place="task"
       start={
-        // Note that it names no key, because the window's Back takes one history step and this leaves the task or its tab.
+        // Note that it names no key, because the window's Back takes one history step and this leaves the task or its screen.
         <BackButton
           label={back.label}
           place={back.label}
+          name={back.name}
           command={NO_BACK_KEY}
           onBack={back.onPress}
         />
       }
       pickUp={pickUp}
       title={
-        title === undefined ? undefined : (
+        title === undefined || rename?.editing !== true ? (
+          title
+        ) : (
           <Text
             as={TEXT_ELEMENT.H1}
             variant={TEXT_VARIANT.TOOLBAR_TITLE}
@@ -256,8 +150,8 @@ export function TaskHead({
               value={title}
               label="Task name"
               maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
-              editing={rename?.editing === true}
-              onEnd={(end) => rename?.onEnd(end)}
+              editing
+              onEnd={(end) => rename.onEnd(end)}
             />
           </Text>
         )

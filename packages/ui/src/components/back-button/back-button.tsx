@@ -47,6 +47,7 @@ export function BackButton({
   look = BACK_BUTTON_LOOK.HEADER,
   label,
   place,
+  name,
   command: named = APP_COMMAND.BACK,
   keepFocus,
   tabbable,
@@ -58,6 +59,8 @@ export function BackButton({
   label: string;
   /** The place it leads to as a sentence names it mid-way, which its hint reads ("inbox", "MCP servers"). */
   place: string;
+  /** Its accessible name in a bar, where it says more than its words, which it holds ("Back to Overview" beside a glyph standing alone). */
+  name?: string | undefined;
   /** The key that goes back here, which its hint says: the window's Back where none is named, and none for `NO_BACK_KEY`. */
   command?: KeyedCommand | typeof NO_BACK_KEY | undefined;
   /** Whether a pointer's press leaves the focus where it is, in a field of the owner's. */
@@ -93,6 +96,7 @@ export function BackButton({
   return (
     <FoldingButton
       label={label}
+      name={name}
       icon={<GLYPH.BACK />}
       keepFocus={keepFocus}
       tabbable={tabbable}
