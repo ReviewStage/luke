@@ -372,5 +372,8 @@ export function hostUpgradeCommand(installScriptUrl: string): string {
   return `curl -fsSL ${installScriptUrl} | sh`;
 }
 
-/** The command that takes our host out of the account the install command set it up in, with no sudo: its service, its agents' folders, its state and its releases (`apps/host/scripts/luke-host.sh`). Note that it names the install's own link, since the account's PATH may not hold `~/.local/bin`. */
-export const HOST_UNINSTALL_COMMAND = "~/.local/bin/luke-host uninstall";
+/** The host's command as the install command set it up in an account, by its link (`apps/web/install/install.sh`), which a person's shell expands. Note that it is named by its path, since the account's PATH may not hold `~/.local/bin`. */
+export const HOST_COMMAND = "~/.local/bin/luke-host";
+
+/** The command that takes our host out of the account the install command set it up in, with no sudo: its service, its agents' folders, its state and its releases (`apps/host/scripts/luke-host.sh`). */
+export const HOST_UNINSTALL_COMMAND = `${HOST_COMMAND} uninstall`;
