@@ -183,9 +183,9 @@ const WEB_ICON = { side: 100 };
   );
 }
 
-// Favicon: the light mode's copper tile with no Dock margin, which reads in
-// a light tab and a dark one alike, under the small cut, so the V still
-// reads at 16 pixels, the disc spanning ICON_MARK of the tile. The site
+// Favicon: the dark mode's tile with no Dock margin, which reads as black in
+// a light tab and a dark one alike, under the copper small cut, so the V
+// still reads at 16 pixels, the disc spanning ICON_MARK of the tile. The site
 // serves it as /favicon.svg, with /favicon.ico cut from it for readers that
 // take no SVG -- see packages/brand/README.md.
 const FAVICON = { side: 240, inset: 8, radius: 52 };
@@ -195,7 +195,7 @@ const FAVICON = { side: 240, inset: 8, radius: 52 };
   const at = (FAVICON.side - disc) / 2;
   emit(
     "icon/luke-favicon.svg",
-    `${svgOpen(FAVICON.side, FAVICON.side)}<rect x="${FAVICON.inset}" y="${FAVICON.inset}" width="${tile}" height="${tile}" rx="${FAVICON.radius}" fill="${TILES.light.tile}"/>${markAt(at, at, disc, TILES.light.ink, MARK.SMALL_PATH)}</svg>`,
+    `${svgOpen(FAVICON.side, FAVICON.side)}<rect x="${FAVICON.inset}" y="${FAVICON.inset}" width="${tile}" height="${tile}" rx="${FAVICON.radius}" fill="${TILES.dark.tile}"/>${markAt(at, at, disc, TILES.dark.ink, MARK.SMALL_PATH)}</svg>`,
     PRODUCT_NAME,
   );
 }
