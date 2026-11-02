@@ -795,7 +795,9 @@ nothing.
 
 The browser half of the funnel is separate and weaker: `VITE_POSTHOG_PROJECT_API_KEY`
 is a build-time variable that lets the site's own pages talk to PostHog
-directly, so PostHog sees a visitor's address there. A build without it never
+through a path of the deployment's own origin (`@luke/features/posthog-proxy`),
+which `vercel.json` passes on to PostHog with the request's cookies taken off,
+so PostHog is still handed a visitor's address there. A build without it never
 loads the library at all.
 
 Use is counted per user per UTC day in the Vespin-owned `hosted_usage` table:

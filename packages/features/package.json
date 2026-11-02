@@ -84,6 +84,7 @@
     "./integration-wire": "./src/integration-wire.js",
     "./integration-status-words": "./src/integration-status-words.js",
     "./model-label": "./src/model-label.js",
+    "./posthog-proxy": "./src/posthog-proxy.js",
     "./product-name": "./src/product-name.js",
     "./models-wire": "./src/models-wire.js",
     "./page-wire": "./src/page-wire.js",

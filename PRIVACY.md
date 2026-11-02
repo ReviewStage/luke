@@ -1161,7 +1161,9 @@ whether it is a released build or a development one, and whether it came
 from the Mac app or the web app; only a released build records at all.
 Each also carries what PostHog's library reports of your device by default:
 its operating system and that system's version, the browser, your language
-and time zone, and the size of your screen.
+and time zone, and the size of your screen. The Mac app sends its recordings
+to PostHog directly; Vespin in a browser sends them through vespin.dev, which
+passes them on to PostHog (see "Our website").
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
 small, downscaled still of a screen you visited, taken by the app as you
@@ -1366,7 +1368,8 @@ only when you press Send.
   recordings from Vespin in a browser, and the counts our service makes of the
   work done through it, grouped by workspace, with each workspace's name and
   creation date. The counts go through our own service; the
-  recordings go from Vespin, on the Mac or in your browser, to PostHog directly.
+  recordings go from the Mac app to PostHog directly, and from your browser
+  through vespin.dev, which passes them on to PostHog.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
   reports, and our service's and Vespin's agents' error, performance, log, and
   agent reports, described above.
@@ -1566,8 +1569,12 @@ is shown, the site names you to PostHog by your account's id, name, and
 email address, which links your earlier visits to your account, and counts
 the sign-in once, remembering in your browser which sign-in it last counted.
 The hand-off page is one of the sign-in pages above: not recorded, its
-address cut to the page itself. Your browser contacts PostHog directly, so
-PostHog sees your network address, as it does for the app's recordings.
+address cut to the page itself. Your browser sends all of this to a path on
+vespin.dev rather than to PostHog, and our hosting passes each request on to
+PostHog as your browser sent it, without the site's cookies. So PostHog still
+sees what the request carries, your browser's user agent among it, and is
+handed your network address beside it; our PostHog project is set to discard
+client IP addresses, so PostHog does not keep it.
 
 Vespin in a browser, the app at vespin.dev/app and at every link to something
 in Vespin, is not one of the site's pages above: it records and reports what the
@@ -1588,9 +1595,10 @@ word for it, such as inline, all using Sentry's default data
 collection and each naming the account signed in in that tab, as described
 under "Crash and performance reports from the Mac app", where the page's
 address, your browser's details, and the addresses of the requests it made
-take the place of the Mac's. Your browser contacts
-PostHog and Sentry (see "Who we send it to") directly, so each sees your
-network address.
+take the place of the Mac's. Your browser contacts Sentry (see "Who we send
+it to") directly, so Sentry sees your network address. It sends the app's
+recordings through vespin.dev as the site's pages do, so PostHog is handed
+your network address too, and does not keep it.
 
 A link to something in Vespin, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Vespin's own card: the Vespin name and logo, the

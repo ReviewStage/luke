@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HOST_WIRE } from "@luke/features/host-wire";
+import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
 import { isRecord, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Schema } from "effect";
 import { functionAliasPath, HAND_WRITTEN_FUNCTIONS } from "./build-output.js";
@@ -24,6 +25,14 @@ import { functionPublicPath, webFunctions } from "./function-layout.js";
 export interface Rewrite {
   readonly src: string;
   readonly dest: string;
+  readonly transforms?: readonly Transform[];
+}
+
+/** A change Vercel makes to a request it passes on: here only a request header taken off it. */
+export interface Transform {
+  readonly type: "request.headers";
+  readonly op: "delete";
+  readonly target: { readonly key: string };
 }
 
 /**
@@ -108,6 +117,34 @@ const PUBLIC_REWRITES: readonly PublicRewrite[] = [
   },
 ];
 
+/**
+ * PostHog's traffic, passed on from a path of our own origin
+ * (`@luke/features/posthog-proxy`) as PostHog's Vercel proxy guide lays it
+ * out: its scripts and its configuration to its assets host, and everything
+ * else under the path to its ingestion host. Each takes the request's
+ * cookies off on the way, because Vercel passes on every header of a request
+ * it rewrites elsewhere, and this origin's cookies carry the visitor's
+ * session, which PostHog never sees.
+ */
+const WITHOUT_COOKIES: readonly Transform[] = [
+  { type: "request.headers", op: "delete", target: { key: "cookie" } },
+];
+
+const POSTHOG_PROXY_PREFIX = `${POSTHOG_PROXY.PATH}/`;
+
+const POSTHOG_REWRITES: readonly Rewrite[] = [
+  ...["static", "array"].map((path) => ({
+    src: `${POSTHOG_PROXY_PREFIX}${path}/(.*)`,
+    dest: `${POSTHOG_PROXY.ASSETS_ORIGIN}/${path}/$1`,
+    transforms: WITHOUT_COOKIES,
+  })),
+  {
+    src: `${POSTHOG_PROXY_PREFIX}(.*)`,
+    dest: `${POSTHOG_PROXY.INGEST_ORIGIN}/$1`,
+    transforms: WITHOUT_COOKIES,
+  },
+];
+
 /** The fallback's pattern: every `/api/` path no rule above it took, its path after `/api/` captured. */
 export const ORPC_FALLBACK_SRC = `${API_ROUTE_PREFIX}(.*)`;
 
@@ -141,8 +178,8 @@ function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly 
 }
 
 /**
- * The generated rewrites, in the order they must stand: the public paths
- * outside `/api/`, the segment rewrites,
+ * The generated rewrites, in the order they must stand: PostHog's, the
+ * public paths outside `/api/`, the segment rewrites,
  * one exact rule per route file a dispatcher holds, the pass-through rules of
  * the functions that answer by their own name, and last the fallback, which
  * lands every other `/api/` path on the hosted oRPC route with its path in
@@ -161,7 +198,7 @@ export function apiRewrites(
   );
   const orpc = functionOf.get(ORPC_ROUTE_KEY);
   if (orpc === undefined) throw new Error("no function holds the hosted oRPC route");
-  const rewrites: Rewrite[] = [];
+  const rewrites: Rewrite[] = [...POSTHOG_REWRITES];
   for (const { path, route } of publics) {
     const definition = functionOf.get(route);
     if (definition === undefined) throw new Error(`no route behind the public path ${path}`);
@@ -199,7 +236,17 @@ export const VERCEL_CONFIG_FILE = join("..", "..", "vercel.json");
 /** The committed generation of the `/api/` rewrites, which the web service's routes are assembled from. */
 export const API_REWRITES_FILE = join("server", "api-rewrites.json");
 
-const RewriteSchema = Schema.Struct({ src: Schema.String, dest: Schema.String });
+const TransformSchema = Schema.Struct({
+  type: Schema.Literal("request.headers"),
+  op: Schema.Literal("delete"),
+  target: Schema.Struct({ key: Schema.String }),
+});
+
+const RewriteSchema = Schema.Struct({
+  src: Schema.String,
+  dest: Schema.String,
+  transforms: Schema.optionalKey(Schema.Array(TransformSchema)),
+});
 
 const decodeApiRewrites = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Array(RewriteSchema)),
@@ -226,7 +273,8 @@ const NOT_FOUND_STATUS = 404;
  * A route of the web service as `vercel.json` writes it: a rewrite, and the
  * response headers a page route sends beside it, as the app's routes send
  * its Content Security Policy, or, held to one host, the status every other
- * path of that host is answered with; a redirect, its status and its
+ * path of that host is answered with, or the request headers it takes off,
+ * as PostHog's rewrites take its cookies; a redirect, its status and its
  * `Location` header, as the app's built file name sends the browser to
  * `/app`; or headers alone, which routing carries on past (`continue`) to
  * whichever later route or built file answers, as every page of the site
@@ -240,6 +288,7 @@ const WebRouteSchema = Schema.Union([
     dest: Schema.String,
     status: Schema.optionalKey(Schema.Literal(NOT_FOUND_STATUS)),
     headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+    transforms: Schema.optionalKey(Schema.Array(TransformSchema)),
   }),
   Schema.Struct({
     src: Schema.String,
@@ -352,9 +401,11 @@ const PUBLIC_REWRITE_SOURCES: ReadonlySet<string> = new Set(
   PUBLIC_REWRITES.map(({ path }) => exactPattern(path)),
 );
 
-/** Whether a route of the web service is one the table generates: an `/api/` rewrite, or a public path's. */
+/** Whether a route of the web service is one the table generates: an `/api/` rewrite, PostHog's, or a public path's. */
 const isTableRewrite = (rewrite: { readonly src: string }) =>
-  rewrite.src.startsWith(API_ROUTE_PREFIX) || PUBLIC_REWRITE_SOURCES.has(rewrite.src);
+  rewrite.src.startsWith(API_ROUTE_PREFIX) ||
+  rewrite.src.startsWith(POSTHOG_PROXY_PREFIX) ||
+  PUBLIC_REWRITE_SOURCES.has(rewrite.src);
 
 const sameRewrites = (a: readonly { readonly src: string }[], b: readonly Rewrite[]) =>
   JSON.stringify(a) === JSON.stringify(b);
