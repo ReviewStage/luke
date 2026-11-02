@@ -503,11 +503,7 @@ function PlanDocument({
   // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
   // Show terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
-  const terminalDoors = useAgentTerminalDoors(
-    tasks.sidePanel,
-    region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
-    showSide,
-  );
+  const terminalDoors = useAgentTerminalDoors(tasks.sidePanel, showSide);
   // A refusal is said beside the chip, under the task it was about and no
   // other. Note that it is held above the states with no document, because
   // a task opened from the list is drawn reading before its read lands, and

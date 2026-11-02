@@ -5,7 +5,6 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { LINK_OPEN } from "@luke/features/link-open";
-import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import {
   type AccountPreferenceField,
@@ -128,8 +127,6 @@ interface PromisedSettingsStore {
   ): Promise<boolean>;
   retireStoredApiKeys(): Promise<void>;
   cacheExperiments(accountEmail: string, choices: ExperimentChoices): Promise<boolean>;
-  macRepositories(): Promise<readonly MacRepository[]>;
-  setMacRepository(entry: MacRepository): Promise<void>;
   lastProductEventDay(
     name: string,
     discriminator: string,
@@ -163,8 +160,6 @@ function awaitedStoreOf(
     retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
     cacheExperiments: (accountEmail, choices) =>
       awaited(store.cacheExperiments(accountEmail, choices)),
-    macRepositories: () => awaited(store.macRepositories()),
-    setMacRepository: (entry) => awaited(store.setMacRepository(entry)),
     lastProductEventDay: (name, discriminator, account) =>
       awaited(store.lastProductEventDay(name, discriminator, account)),
     keepProductEventDay: (kept) => awaited(store.keepProductEventDay(kept)),
@@ -356,6 +351,7 @@ test("the Mac commands switch an earlier build stored reads as a mode: on as Ask
 test.for([
   { setting: "the notifications switch", field: "agentNotifications" },
   { setting: "Run agents on this Mac", field: "localAgents" },
+  { setting: "Each repository's run command", field: "macRepositories" },
 ])(
   "$setting, which an earlier build stored, is let go unread, and the choices beside it stay",
   async ({ field }, t) => {
@@ -403,30 +399,6 @@ test("a stored account and a chosen preference survive each other's writes", asy
     assert.deepEqual(await reopened.readAccount(), replacement, `${field} disturbed the account`);
     assert.deepEqual(await reopened.get(field), SAMPLE_VALUE[field], `${field} did not survive`);
   }
-});
-
-test("a repository's run command on this Mac survives a reopen, by name in any case, and none forgets it", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  const app: MacRepository = { repository: "acme/app", command: "pnpm dev" };
-  const site: MacRepository = { repository: "acme/site", command: "make serve" };
-
-  assert.deepEqual(await store.macRepositories(), []);
-  await store.setMacRepository(app);
-  await store.setMacRepository(site);
-  await store.set("theme", THEME.DARK);
-  const renamed = { repository: "Acme/App", command: "pnpm start" };
-  await store.setMacRepository(renamed);
-
-  const reopened = await storeIn(directory).macRepositories();
-  assert.deepEqual(
-    [...reopened].sort((a, b) => a.repository.localeCompare(b.repository)),
-    [renamed, site],
-  );
-  assert.equal(await storeIn(directory).get("theme"), THEME.DARK);
-
-  await store.setMacRepository({ repository: "acme/site", command: null });
-  assert.deepEqual(await storeIn(directory).macRepositories(), [renamed]);
 });
 
 test("the day a usage count was sent survives a reopen and a sign-out, by account, and only the newest day stays", async (t) => {

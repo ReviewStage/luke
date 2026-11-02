@@ -45,8 +45,8 @@ interface UpdateServiceHostDependencies {
    */
   beforeRestart: () => Promise<void>;
   /**
-   * Asks before Restart to update while a call stands, a panel holds unsaved
-   * work, or a terminal of this Mac is open, answering whether to restart;
+   * Asks before Restart to update while a call stands or a panel holds
+   * unsaved work, answering whether to restart;
    * yes at once while nothing would be lost. It is asked before the install
    * begins, never inside it, because Squirrel's own quit must not be held.
    */

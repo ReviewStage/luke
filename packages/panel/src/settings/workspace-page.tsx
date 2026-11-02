@@ -25,7 +25,6 @@ import {
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
@@ -105,9 +104,7 @@ import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -1857,7 +1854,6 @@ function ShownWorkspace({
 }): React.JSX.Element {
   const members = useMembersRead(workspace);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
-  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   return (
     <>
       <SettingsSection>
@@ -1882,7 +1878,6 @@ function ShownWorkspace({
           <Row key={service} workspace={workspace} />
         ))}
       </SettingsSection>
-      {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup
         workspace={workspace}
         members={members.read}

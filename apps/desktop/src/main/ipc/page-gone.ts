@@ -1,5 +1,5 @@
 /**
- * page-gone.ts -- when the page a window's contents hold is gone, which ends every port main posted to it: the Terminal tab's, a cloud Browser tab's, and a run on this Mac's.
+ * page-gone.ts -- when the page a window's contents hold is gone, which ends every port main posted to it: the Terminal tab's and a cloud Browser tab's.
  */
 
 /** The events of a window's contents that end the page a port was posted to. */

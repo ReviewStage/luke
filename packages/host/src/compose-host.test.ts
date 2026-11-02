@@ -88,14 +88,13 @@ const desktopAccountSource = Layer.provide(
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for a Mac's repositories and an agent's terminals, and which concerns it says it runs. */
+/** What a standing host answers for an agent's terminals and a ChatGPT sign-in, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
-  const repositories = yield* gateway.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ);
   const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
   const chatGptSignIn = yield* gateway.call(GATEWAY_METHOD.CHATGPT_SIGN_IN);
-  return { concerns, repositories, terminals, chatGptSignIn };
+  return { concerns, terminals, chatGptSignIn };
 });
 
 describe("the host's platform concerns", () => {
@@ -119,12 +118,10 @@ describe("the host's platform concerns", () => {
           ok: false,
           error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
         };
-        assert.deepEqual(asked.repositories, notHere);
         assert.deepEqual(asked.terminals, notHere);
         assert.deepEqual(asked.chatGptSignIn, notHere);
         assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.CHATGPT_SIGN_IN), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.MAC_TERMINAL), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
         assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.MICROPHONE]);
@@ -161,7 +158,6 @@ describe("the host's platform concerns", () => {
 
       const asked = yield* Effect.provide(askedOfStandingHost, desktop);
 
-      assert.deepEqual(asked.repositories, { ok: true, result: { repositories: [] } });
       // A fixture run signs no account in, so the terminals concern itself answers, and refuses as signed out.
       assert.deepEqual(asked.terminals, {
         ok: false,
@@ -174,7 +170,6 @@ describe("the host's platform concerns", () => {
       assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
-        HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
         HOST_CAPABILITY.LOCAL_AGENTS,
         HOST_CAPABILITY.CHATGPT_SIGN_IN,

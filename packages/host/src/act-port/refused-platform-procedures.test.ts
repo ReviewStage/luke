@@ -29,9 +29,6 @@ it("every platform kind is refused in its own words, whatever it is sent", async
   assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.MICROPHONE_OPEN_SETTINGS), {
     refused: "Could not open the microphone privacy settings.",
   });
-  assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.MAC_REPOSITORIES), {
-    refused: "Could not read the run commands set on this Mac.",
-  });
   assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.UPDATE_CHECK), {
     refused: "Could not check for updates on this system.",
   });

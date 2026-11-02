@@ -429,9 +429,6 @@ export const GATEWAY_METHOD = {
   SETTINGS_SNAPSHOT: "settings.snapshot",
   SETTINGS_UPDATE: "settings.update",
   SETTINGS_RESET: "settings.reset",
-  /** Each repository's run command on this Mac (`@luke/features/mac-terminal-wire`): read, and one repository's set. */
-  MAC_REPOSITORIES_READ: "macRepositories.read",
-  MAC_REPOSITORY_SET: "macRepositories.set",
   /** The developer's answer to one command an agent asked to run on this Mac (`@luke/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
   /** The device This Mac's host's record names (`@luke/host/contract`'s `ThisMacHostRead`), so Hosts draws This Mac on its row. */

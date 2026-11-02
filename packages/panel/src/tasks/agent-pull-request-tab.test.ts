@@ -398,13 +398,10 @@ function held<A>() {
 function Switching({
   control,
   first,
-  onRun,
 }: {
   control: AgentsControl;
   /** The tab it opens on, as the chip that opened it asked. */
   first: PullRequestView;
-  /** Runs the branch on this Mac, as the side panel offers where the platform has a Mac terminal; none elsewhere. */
-  onRun?: () => void;
 }) {
   const [view, setView] = useState<PullRequestView>(first);
   const [actions, setActions] = useState<TabActionGroups | undefined>(undefined);
@@ -421,7 +418,6 @@ function Switching({
       view,
       onView: setView,
       onActions: setActions,
-      onRun,
     }),
   );
 }
@@ -6153,8 +6149,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
-test("on a phone no Preview or Run stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
-  const ran: string[] = [];
+test("on a phone no Preview stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
   const readChanges: AgentsControl["readChanges"] = () =>
     Promise.resolve({
       pullRequest: {
@@ -6199,13 +6194,12 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
       createElement(Switching, {
         control,
         first: PULL_REQUEST_VIEW.CONVERSATION,
-        onRun: () => ran.push("run"),
       }),
     ),
   );
 
   assert.deepEqual(
-    words(tab, ".pull-request-title-actions button").filter((each) => /Preview|Run/u.test(each)),
+    words(tab, ".pull-request-title-actions button").filter((each) => /Preview/u.test(each)),
     [],
     "beside the title stands the merge alone",
   );
@@ -6214,12 +6208,9 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
-    "Run on this Mac",
   ]);
   await pressToolbar(tab, "Preview – luke-web");
-  await pressToolbar(tab, "Run on this Mac");
   assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
-  assert.deepEqual(ran, ["run"]);
 
   await choose(tab, "Files changed");
   assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");
@@ -6228,7 +6219,6 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
-    "Run on this Mac",
     "Show files",
     "Open files on GitHub",
     "View options",
@@ -6239,7 +6229,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
 
   await choose(tab, "Conversation");
   assert.deepEqual(
-    toolbarItems(tab).slice(5),
+    toolbarItems(tab).slice(4),
     [],
     "Files changed's items go with it once another view is shown",
   );

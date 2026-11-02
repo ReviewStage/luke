@@ -10,7 +10,6 @@
  */
 
 import { PRODUCT_NAME } from "@luke/features/product-name";
-import { countWords, type Noun } from "@luke/features/words";
 
 /** Where the process stands: nothing asked for, a teardown under way, or one finished. */
 export const QUIT_STAGE = {
@@ -144,10 +143,9 @@ export const LEAVE = {
 
 export type Leave = (typeof LEAVE)[keyof typeof LEAVE];
 
-/** What a way out would lose: edits the panel holds unsaved, and the terminals of this Mac the app has open. */
+/** What a way out would lose: edits the panel holds unsaved. */
 export interface AtStake {
   readonly unsavedWork: boolean;
-  readonly macTerminals: number;
 }
 
 /** The sheet a way out asks with: the question, what goes, the act and Cancel, and which of them Return and Esc press. */
@@ -165,29 +163,17 @@ export const LEAVE_ANSWER = 0;
 /** The answer that stays: Cancel, which Return and Esc both press. */
 const STAY_ANSWER = 1;
 
-/** What each way out asks, the act its button names, and whether it closes this Mac's terminals. */
+/** What each way out asks, and the act its button names. */
 const LEAVE_WORDS = {
-  [LEAVE.QUIT]: { message: `Quit ${PRODUCT_NAME}?`, act: "Quit", closesTerminals: true },
-  [LEAVE.RESTART]: {
-    message: `Restart ${PRODUCT_NAME} to update?`,
-    act: "Restart",
-    closesTerminals: true,
-  },
-  [LEAVE.SIGN_OUT]: {
-    message: `Sign out of ${PRODUCT_NAME}?`,
-    act: "Sign out",
-    closesTerminals: false,
-  },
-  [LEAVE.RELOAD]: { message: "Reload this window?", act: "Reload", closesTerminals: false },
-} as const satisfies Record<Leave, { message: string; act: string; closesTerminals: boolean }>;
-
-const MAC_TERMINAL: Noun = { one: "Mac terminal", many: "Mac terminals" };
+  [LEAVE.QUIT]: { message: `Quit ${PRODUCT_NAME}?`, act: "Quit" },
+  [LEAVE.RESTART]: { message: `Restart ${PRODUCT_NAME} to update?`, act: "Restart" },
+  [LEAVE.SIGN_OUT]: { message: `Sign out of ${PRODUCT_NAME}?`, act: "Sign out" },
+  [LEAVE.RELOAD]: { message: "Reload this window?", act: "Reload" },
+} as const satisfies Record<Leave, { message: string; act: string }>;
 
 /** What goes, one sentence for each thing at stake. */
 const STAKE_WORDS = {
   UNSAVED_WORK: "Edits that haven't saved will be lost.",
-  terminals: (count: number) =>
-    `${countWords(count, MAC_TERMINAL)} will close, with what's running in ${count === 1 ? "it" : "them"}.`,
 } as const;
 
 /**
@@ -199,11 +185,7 @@ const STAKE_WORDS = {
  */
 export function leaveQuestion(leave: Leave, atStake: AtStake): LeaveQuestion | undefined {
   const words = LEAVE_WORDS[leave];
-  const terminals = words.closesTerminals ? atStake.macTerminals : 0;
-  const lost = [
-    ...(atStake.unsavedWork ? [STAKE_WORDS.UNSAVED_WORK] : []),
-    ...(terminals > 0 ? [STAKE_WORDS.terminals(terminals)] : []),
-  ];
+  const lost = atStake.unsavedWork ? [STAKE_WORDS.UNSAVED_WORK] : [];
   if (lost.length === 0) return undefined;
   return {
     message: words.message,
@@ -251,9 +233,7 @@ export function leaveGate(options: {
 
 /**
  * The ask a window's reload goes through, on the same terms as a way out of
- * the app: yes at once unless that page holds edits that haven't saved. Note
- * that this Mac's terminals are never at stake, because main keeps them open
- * across a page's reload.
+ * the app: yes at once unless that page holds edits that haven't saved.
  */
 export function reloadGate<Page>(options: {
   holds: (page: Page) => boolean;
@@ -261,8 +241,7 @@ export function reloadGate<Page>(options: {
 }): (page: Page) => Promise<boolean> {
   const { holds, ask } = options;
   const asked = askingOneAtATime(ask);
-  return (page) =>
-    asked(page, leaveQuestion(LEAVE.RELOAD, { unsavedWork: holds(page), macTerminals: 0 }));
+  return (page) => asked(page, leaveQuestion(LEAVE.RELOAD, { unsavedWork: holds(page) }));
 }
 
 /** Which windows say they hold unsaved work. */

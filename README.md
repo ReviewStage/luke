@@ -59,8 +59,6 @@ Claude Code, Codex, or any other agent.
   through each service's own MCP server, for every agent.
 - **Skills** in the repository's `.agents/skills` or `.claude/skills` are
   offered to agents, and `/` in an agent's message box picks one.
-- **Run on this Mac** checks an agent's branch out in a local worktree with
-  your own git login and opens a terminal on it inside Vespin.
 - **Your own keys**: coding agents run on your Claude or ChatGPT subscription
   or on your Anthropic or OpenAI API key, added in Settings › Agents. Vespin
   pays for no model calls.

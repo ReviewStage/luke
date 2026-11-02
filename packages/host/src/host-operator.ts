@@ -215,11 +215,6 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
-import {
-  type MacRepositoriesAnswer,
-  type MacRepository,
-  macRepositoriesAnswerSchema,
-} from "@luke/features/mac-terminal-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   type ChaptersModelAnswerView,
@@ -442,10 +437,6 @@ interface HostSettingsChange {
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
-  /** Every repository with a run command on this Mac; none where the host could not answer. */
-  macRepositories(): Effect.Effect<MacRepositoriesAnswer | undefined>;
-  /** One repository's run command set on this Mac, or forgotten with null; the repositories as they then stand. */
-  setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
   /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
   /** The device This Mac's host's record names; none where the host could not answer. */
@@ -1128,19 +1119,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
-      ),
-    macRepositories: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ),
-        answerOf(macRepositoriesAnswerSchema, undefined),
-      ),
-    setMacRepository: (entry) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MAC_REPOSITORY_SET, {
-          repository: entry.repository,
-          command: entry.command,
-        }),
-        answerOf(macRepositoriesAnswerSchema, undefined),
       ),
     thisMacHost: () =>
       Effect.map(

@@ -438,9 +438,7 @@ export function DesktopAgentPage({
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
   // Show terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
-  const terminalDoors = useAgentTerminalDoors(sidePanel, agentRepository, () =>
-    setFocus(COLUMN.SIDE),
-  );
+  const terminalDoors = useAgentTerminalDoors(sidePanel, () => setFocus(COLUMN.SIDE));
   // The workspace's agents an `@` offers, named by the tasks the window lists.
   const readMentionAgents = useMentionAgentsReader(workspaceId, tasks.tasks, agents.models);
   const listed = tasks.workspaces.find((each) => each.id === workspaceId);

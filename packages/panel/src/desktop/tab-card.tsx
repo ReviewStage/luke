@@ -90,7 +90,6 @@ export type CardSubject =
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
     }
-  | { readonly kind: typeof TAB_KIND.MAC_TERMINAL }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | {
       readonly kind: typeof TAB_KIND.PAGE;
@@ -190,7 +189,6 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
     case TAB_KIND.INBOX:
       return subject.inbox === undefined ? null : <InboxCard inbox={subject.inbox} />;
     case TAB_KIND.DRAFT:
-    case TAB_KIND.MAC_TERMINAL:
       return null;
     case TAB_KIND.AGENT:
       return (

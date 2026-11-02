@@ -4,7 +4,6 @@ import {
   type AccountSnapshot,
   isAccountProvider,
 } from "@luke/credentials/snapshot";
-import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@luke/settings/wire";
 import {
   ACTION_RESULT_STATUS,
@@ -48,7 +47,6 @@ const SETTINGS_FIELD = {
   ACCOUNT: "account",
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   EXPERIMENTS: "experiments",
-  MAC_REPOSITORIES: "macRepositories",
   PRODUCT_EVENT_DAYS: "productEventDays",
   VERSION: "version",
 } as const;
@@ -298,37 +296,6 @@ function storedExperiments(value: UnparsedWireValue): PersistedExperiments | und
   return choices === undefined ? undefined : { accountEmail: held.accountEmail, choices };
 }
 
-/** The most characters a repository's command keeps; a longer one is not read. */
-const MAX_MAC_REPOSITORY_CHARS = 4_096;
-
-/**
- * Each repository's run command on this Mac, by its full name lowercased,
- * which Open on this Mac runs in the agent branch's worktree. This Mac's
- * alone, whoever is signed in, and never sent anywhere.
- */
-type MacRepositories = Readonly<Record<string, MacRepository>>;
-
-/** One entry as the file holds it, or nothing where it is not one. */
-function storedMacRepository(value: UnparsedWireValue): MacRepository | undefined {
-  const held = readWireRecord(value);
-  if (!held || !isWireString(held.repository)) return undefined;
-  const { command } = held;
-  return isWireString(command) && command !== "" && command.length <= MAX_MAC_REPOSITORY_CHARS
-    ? { repository: held.repository, command }
-    : undefined;
-}
-
-function storedMacRepositories(value: UnparsedWireValue): MacRepositories | undefined {
-  const held = readWireRecord(value);
-  if (!held) return undefined;
-  const kept: [string, MacRepository][] = [];
-  for (const [key, entry] of Object.entries(held)) {
-    const read = storedMacRepository(entry);
-    if (read !== undefined) kept.push([key, read]);
-  }
-  return kept.length === 0 ? undefined : Object.fromEntries(kept);
-}
-
 /**
  * One once-a-day usage count as last sent: which event, for what, for which
  * account (the sender's opaque account key), and the UTC day.
@@ -417,7 +384,6 @@ const PersistedSettingsSchema = Schema.Struct({
     settingsField(storedAccountPreferencesSync),
   ),
   [SETTINGS_FIELD.EXPERIMENTS]: Schema.optionalKey(settingsField(storedExperiments)),
-  [SETTINGS_FIELD.MAC_REPOSITORIES]: Schema.optionalKey(settingsField(storedMacRepositories)),
   [SETTINGS_FIELD.PRODUCT_EVENT_DAYS]: Schema.optionalKey(settingsField(storedProductEventDays)),
   ...storedSettingFields,
 });
@@ -709,24 +675,6 @@ export class SettingsStore {
         return { ...persisted, experiments: { accountEmail, choices } };
       });
       return changed;
-    });
-  }
-
-  /** Every repository with a run command on this Mac. */
-  macRepositories(): Effect.Effect<readonly MacRepository[], PlatformError> {
-    return Effect.map(this.#load(), (persisted) => Object.values(persisted.macRepositories ?? {}));
-  }
-
-  /** One repository's run command set, or forgotten where it is null. */
-  setMacRepository(entry: MacRepository): Effect.Effect<void, PlatformError> {
-    return this.#mutate((persisted) => {
-      const { macRepositories: held, ...rest } = persisted;
-      const key = entry.repository.toLowerCase();
-      const others = Object.fromEntries(
-        Object.entries(held ?? {}).filter(([kept]) => kept !== key),
-      );
-      const next = entry.command === null ? others : { ...others, [key]: entry };
-      return Object.keys(next).length === 0 ? rest : { ...rest, macRepositories: next };
     });
   }
 

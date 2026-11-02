@@ -411,19 +411,10 @@ export const BROWSER_LIVE_ACT_KIND = {
 } as const;
 
 /**
- * A coding agent's branch run on this Mac (`@luke/features/mac-terminal-wire`):
- * each repository's run command read and set; a run of the agent's branch
- * started for the asking panel, stopped with Stop, and closed with its tab;
- * and its worktree opened in the Mac's own Terminal. What the run prints
- * travels on the port an open posts to that panel, never on an act.
+ * The Mac's own Terminal opened for a local agent, answered by the platform
+ * shell (`mac-terminals.ts`).
  */
 export const MAC_TERMINAL_ACT_KIND = {
-  MAC_REPOSITORIES: "macRepositories.read",
-  MAC_REPOSITORY_SET: "macRepositories.set",
-  MAC_TERMINAL_OPEN: "macTerminal.open",
-  MAC_TERMINAL_CLOSE: "macTerminal.close",
-  MAC_TERMINAL_STOP: "macTerminal.stop",
-  MAC_TERMINAL_REVEAL: "macTerminal.reveal",
   /** A local agent's own worktree, which the Mac's host made under `~/.vespin/agents`, opened in the Mac's Terminal. */
   MAC_TERMINAL_LOCAL_AGENT: "macTerminal.localAgent",
 } as const;

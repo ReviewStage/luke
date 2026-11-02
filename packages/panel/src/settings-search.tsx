@@ -67,7 +67,7 @@ import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { MAC_REPOSITORIES, settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
+import { settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
 import { experimentPages, settingsPageShown } from "./settings/settings-rows.js";
 
 /**
@@ -368,18 +368,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: [
             WORKSPACE_CONNECTIONS,
             "integrations GitHub repositories connect choose manage disconnect organization",
-          ],
-        }
-      : undefined,
-    // Where each repository is cloned on this Mac, drawn on the Workspace page only where the app can run a terminal there.
-    input.workspace && input.capabilities.includes(HOST_CAPABILITY.MAC_TERMINAL)
-      ? {
-          id: SETTINGS_SECTION.MAC_REPOSITORIES,
-          label: MAC_REPOSITORIES,
-          page: SETTINGS_VIEW.WORKSPACE,
-          haystack: [
-            MAC_REPOSITORIES,
-            "repository repositories clone folder checkout git command run checks terminal path",
           ],
         }
       : undefined,
