@@ -16,6 +16,7 @@ import {
   renewBrowserTabTakeover,
   takeOverBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
+import { readVisibleAgentWorkspace } from "@luke/database/models/agent-store";
 import { standingSessionsNamed } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { Effect, Layer, Option } from "effect";
@@ -24,6 +25,7 @@ import { AgentBrowser, agentBrowserLayer } from "../agents/browser/agent-browser
 import { connectRestoring } from "../agents/browser/restore-tabs.js";
 import { sandboxPtyLayer } from "../agents/sandbox-pty.js";
 import { keepSessionSandboxAlive } from "../agents/session-sandboxes.js";
+import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import type { BrowserLiveDependencies } from "./relay.js";
 
 /** What the live view's dependencies answer over. */
@@ -66,6 +68,15 @@ export const browserLiveDependencies: Effect.Effect<
     renew: (tabId, userId, heldUntil, now) =>
       run(renewBrowserTabTakeover(tabId, userId, heldUntil, now)),
     handBack: (tabId, userId) => run(handBackBrowserTab(tabId, userId)),
+    counted: (userId, agentId, tool) =>
+      run(
+        recordServerEventIn(
+          SERVER_EVENT.AGENT_TOOL_OPEN,
+          userId,
+          readVisibleAgentWorkspace(userId, agentId),
+          { tool },
+        ),
+      ),
     notePage: (tabId, targetId, page) =>
       run(noteBrowserTabPage(tabId, targetId, page)).pipe(
         Effect.catch(() => Effect.logWarning("a watched tab's page was not kept")),
