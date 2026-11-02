@@ -81,7 +81,7 @@ import {
   exactId,
   FENCE_LANGUAGE_MAX_CHARS,
   githubAddress,
-  webAddress,
+  openableAddress,
 } from "../acts.js";
 import { actProcedure, exactInput } from "./base.js";
 import { TASKS_ACT_KIND } from "./kinds.js";
@@ -170,7 +170,7 @@ export const tasksActsContract = {
     .input(exactInput(EffectSchema.Struct({ url: githubAddress })))
     .output(EffectSchema.Void),
   [TASKS_ACT_KIND.WEB_OPEN]: actProcedure("Could not open that link on this system.")
-    .input(exactInput(EffectSchema.Struct({ url: webAddress })))
+    .input(exactInput(EffectSchema.Struct({ url: openableAddress })))
     .output(EffectSchema.Void),
   [TASKS_ACT_KIND.GITHUB_CONNECT]: actProcedure(
     "Could not open GitHub's connection page on this system.",

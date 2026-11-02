@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   ENTER_KEY_HINT,
   FormField,
@@ -282,7 +283,7 @@ function TextFields(): React.JSX.Element {
             {(value, onChange) => (
               <SettingsRow
                 label="Cron"
-                error={inputProblem("That isn't a schedule Luke can read.")}
+                error={inputProblem(`That isn't a schedule ${PRODUCT_NAME} can read.`)}
               >
                 {(control) => (
                   <TextField

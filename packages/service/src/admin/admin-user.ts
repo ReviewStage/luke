@@ -20,7 +20,7 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * One account's own page behind the overview's table, answering the question
- * the aggregates cannot: is this person living in Luke daily, or did one heavy
+ * the aggregates cannot: is this person living in the app daily, or did one heavy
  * afternoon put them on the board? It reads the same rows the overview already
  * aggregates — the user row, its linked provider rows, and the hosted-usage
  * days — behind the same admin gate, and it widens no analytics event: the

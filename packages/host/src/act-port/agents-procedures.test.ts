@@ -77,7 +77,6 @@ const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_STOP]: "Could not stop the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_PIN]: "Could not pin the agent on this system.",
-  [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: "Could not reach Luke on this system.",
   [AGENT_ACT_KIND.AGENTS_DELETE]: "Could not delete the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.AGENTS_SEEN]: "Could not mark the agent as read on this system.",
@@ -88,7 +87,7 @@ const REFUSAL = {
     "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]:
     "Could not read the repository's reviewers and labels on this system.",
-  [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: "Could not read the agent's Luke tools on this system.",
+  [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: "Could not read the agent's Vespin tools on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]:
     "Could not read the pull request's checks on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]:
@@ -178,11 +177,6 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.AGENTS_PIN,
     payload: { agentId: AGENT_ID, pinned: true },
     ask: "agentPin",
-  },
-  {
-    kind: AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR,
-    payload: { workspaceId: WORKSPACE_ID },
-    ask: "agentEnsureOperator",
   },
   {
     kind: AGENT_ACT_KIND.AGENTS_DELETE,
@@ -442,26 +436,6 @@ it("a delete that took the agent reads the plan list again, so its sidebar row g
 
   assert.deepEqual(deleted.asked, [["agentDelete", { agentId: AGENT_ID }], ["tasksRefresh"]]);
   assert.deepEqual(refused.asked, [["agentDelete", { agentId: AGENT_ID }]]);
-});
-
-it("an ensure of the operator that made one reads the plan list again, so its sidebar row stands, and one that found it standing does not", async () => {
-  const made = windowPort(PANEL, {
-    answers: {
-      agentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID, txid: "9103" }),
-    },
-  });
-  const standing = windowPort(PANEL, {
-    answers: { agentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID }) },
-  });
-  const ensure = { workspaceId: WORKSPACE_ID, reset: true };
-
-  assert.deepEqual(await made.call(AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR, ensure), {
-    answer: { agentId: AGENT_ID, txid: "9103" },
-  });
-  await standing.call(AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR, { workspaceId: WORKSPACE_ID });
-
-  assert.deepEqual(made.asked, [["agentEnsureOperator", ensure], ["tasksRefresh"]]);
-  assert.deepEqual(standing.asked, [["agentEnsureOperator", { workspaceId: WORKSPACE_ID }]]);
 });
 
 it("a panel's reads are noted on their way: a task's agents or the task gone, and an agent's status, but a worker's page is no word on the agent", async () => {

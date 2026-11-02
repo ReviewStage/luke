@@ -5,7 +5,7 @@
  */
 export const TURN_TRIGGER = {
   ASK: "ask",
-  /** A child's own run: the delegated task (eve's subagent task, not a Luke task), whose final text is the result its requester is handed. */
+  /** A child's own run: the delegated task (eve's subagent task, not a task of ours), whose final text is the result its requester is handed. */
   CHILD_TASK: "child-task",
 } as const;
 

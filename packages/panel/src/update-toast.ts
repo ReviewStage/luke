@@ -1,5 +1,5 @@
 /**
- * update-toast.ts -- the toast that says Luke was updated, once for each version, on the first launch after the update, with the way to what changed.
+ * update-toast.ts -- the toast that says the app was updated, once for each version, on the first launch after the update, with the way to what changed.
  *
  * Main reports `UPDATED` on the first launch after an install, until its
  * first check overwrites it, which the Settings row words as where the
@@ -31,7 +31,7 @@ function keepAnnounced(version: string): void {
   writeKept(ANNOUNCED_KEY, Schema.String, version);
 }
 
-/** Says, once for each version, that Luke was updated to the version running. */
+/** Says, once for each version, that the app was updated to the version running. */
 export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
   const toast = useToast();
   const { press } = useAct();

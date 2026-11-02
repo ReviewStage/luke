@@ -16,8 +16,8 @@ outlive any one release's code.
 - **The account is Dean Stratakos** (`dean@example.com`, GitHub), photo
   `assets/dean-stratakos.jpg`, embedded as a data URL so no capture reaches
   the network. In a plan's history and bylines he is "You".
-- **A mockup inside Luke** (a Page tab, a picture an agent took) is acme's own
-  product, so it takes acme's palette rather than Luke's: a light, warm
+- **A mockup inside Vespin** (a Page tab, a picture an agent took) is acme's own
+  product, so it takes acme's palette rather than Vespin's: a light, warm
   canvas (`#f3f1ec` behind white cards, `#e2e0da` hairlines, `#1b1d21` text)
   with teal `#0f766e` as its one accent. The product is called Relay
   (`acme.relay.dev`).
@@ -82,7 +82,7 @@ Claude Opus 5.5; PR #209, merged), and "Build the onboarding checklist"
 (Onboarding checklist, GPT-6.1 Sol; PR #131 on acme/web).
 
 Subagents: "Find unfiltered membership reads" (Claude Sonnet 5.5, medium),
-and Luke's own "Invite link expiry". The next pull request in this world is
+and Vespin's own "Invite link expiry". The next pull request in this world is
 #217. Model ids come from the release's own model catalog, never invented.
 
 ## People
@@ -119,7 +119,7 @@ members (low), and Other changes (the tests).
 ## Later agents and questions (0.18.0 on)
 
 - **Expire invite links** (Claude Opus 5.5, high), forked from Add teammate
-  invitations at one of its messages, 6 of its 31 steps kept beside Luke's
+  invitations at one of its messages, 6 of its 31 steps kept beside Vespin's
   summary of 25, on `luke/expire-invite-links`.
 - The Inbox thread "Who may withdraw a pending invite?": Dean answered "The
   sender or any admin" quoting the agent, with Dana's `member-roles.pdf`
@@ -138,6 +138,25 @@ a status and priority and adds twelve: Expire invite links after 7 days
 (ACME-46), Resend an expired invite, Handle Postmark bounces, Rotate webhook
 signing secrets, Retry Postmark sends on a 429, and others across the three
 repositories.
+
+## The Browser tab (0.23.0 on)
+
+The Invite emails agent's cloud browser is on
+`https://acme.relay.dev/invite/7Kq2mWx9`, "Join acme on Relay"
+(`relay-pictures.ts`'s accept page), its pointer on Accept invite.
+
+## Sub-tasks, relations, and the queue (0.24.0 on)
+
+`sub-tasks.ts` in `staging/releases/v0.24.0.patch` breaks Teammate invitations
+(ACME-42) into five sub-tasks, all Dean's: Pending memberships schema
+(ACME-54, done), Invite and accept endpoints (ACME-55, done), Accept page
+(ACME-56, in progress), Invite emails through Postmark (ACME-57, todo, blocked
+by Dana's Verify acme.dev with Postmark, ACME-58), and Expire invite links
+after 7 days (ACME-46), so its ring reads 2/5. Teammate invitations waited on
+Members page empty state (ACME-39, done) and holds up Resend an expired invite
+(ACME-44) and Handle Postmark bounces (ACME-43). The Invite emails agent runs on
+Codex, and while it adds the invite email's plain-text part, Dean has three
+follow-ups queued behind its turn (`queue.ts`).
 
 ## Automations
 

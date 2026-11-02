@@ -19,14 +19,14 @@ import type { StoreFailure } from "../http/store-failure.js";
 /**
  * github-installations.ts -- the GitHub App installations connected to a workspace.
  *
- * A workspace's repositories come from the installations of the Luke GitHub
+ * A workspace's repositories come from the installations of our GitHub
  * App connected to it and from nothing else; an owner or admin connects
  * each, tied to it by a `github_installation` row keyed on GitHub's own ids.
  * A workspace may hold several, one per GitHub account, and an
  * installation, and so its GitHub account, stands for exactly one
  * workspace: connecting another adds it beside those standing, and an
  * installation already standing for another workspace is refused there
- * rather than moved, until Luke is uninstalled from its account, which frees
+ * rather than moved, until our App is uninstalled from its account, which frees
  * the account for any workspace. A connect is an intent first: a random state bound to
  * the account and the workspace, stored only as its SHA-256, carried to
  * GitHub on the install address. At the Setup URL the installation GitHub
@@ -38,7 +38,7 @@ import type { StoreFailure } from "../http/store-failure.js";
  * row's status, by installation, and any read of an installation from
  * GitHub mends a status the webhook missed (`github-app.ts`). Which
  * installations and repositories a workspace holds is managed on GitHub,
- * and Luke deletes no row of its own accord: a row leaves with its
+ * and we delete no row of its own accord: a row leaves with its
  * workspace.
  */
 
@@ -65,7 +65,7 @@ export interface ConnectedInstallation {
 
 /**
  * What a link settles on: linked; refused because the installation's
- * GitHub account already stands for another workspace with Luke still
+ * GitHub account already stands for another workspace with our App still
  * installed on it; or refused because
  * the account linking is no longer an owner or admin of the workspace.
  */
@@ -162,7 +162,7 @@ const deleteIntent = SqlSchema.findOneOption({
  * others; the account's own row, where it stands for this workspace, takes
  * the installation's id, which a reinstall on the account changes, and its
  * login and kind; a row standing for another workspace whose installation
- * GitHub deleted, because Luke was uninstalled from the account, is taken
+ * GitHub deleted, because our App was uninstalled from the account, is taken
  * over by this workspace as if newly linked; and a row standing for another
  * workspace whose installation is still live, active or suspended, is left
  * as it is and answers nothing. The row keeps the moment it was first linked
@@ -363,7 +363,7 @@ export function spendConnectIntent(
 /**
  * The installation linked to the workspace beside any it holds, or the
  * workspace's row for the same GitHub account moved onto it, or another
- * workspace's row for an account Luke was uninstalled from taken over;
+ * workspace's row for an account our App was uninstalled from taken over;
  * refused where that account's live installation stands for another
  * workspace, which keeps it.
  */
@@ -428,7 +428,7 @@ export function mendInstallationStatus(
   );
 }
 
-/** One installation connected to the workspace as Luke last stored it: its account's login, its status, and when the row last moved. */
+/** One installation connected to the workspace as we last stored it: its account's login, its status, and when the row last moved. */
 export interface WorkspaceInstallation {
   readonly installationId: number;
   readonly accountLogin: string;

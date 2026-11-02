@@ -6,7 +6,7 @@ import { TOOLTIP_GAP, TOOLTIP_MARGIN, TOOLTIP_SURFACE } from "./tooltip.js";
  * hover-card.tsx -- shadcn/ui's hover card (style `base-nova`, on Base UI's preview card), vendored and drawn as the light card a hint hangs in its pill's place.
  *
  * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add hover-card` reads as a small diff. Luke's
+ * allows, so a later `shadcn add hover-card` reads as a small diff. Our
  * changes: the card is a small panel of the window's own, the menu's
  * surface, edge, corner, and lift, at a card's width, its words as far in
  * from its sides as a menu's so a row it lists washes off its edge as a

@@ -35,6 +35,7 @@ import {
   ListXIcon,
   MailIcon,
   MailOpenIcon,
+  NetworkIcon,
   ScrollTextIcon,
   UnlinkIcon,
   UserCheckIcon,
@@ -141,6 +142,8 @@ export const PANEL_COMMAND = {
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
   NEW_CHILD_TASK: unkeyed("New sub-task", <GLYPH.ADD />),
+  RELATIONS: unkeyed("Relations", <NetworkIcon />),
+  ADD_RELATION: unkeyed("Add relation", <NetworkIcon />),
   ADD_SUB_TASK: unkeyed("Add sub-task", <TaskRelationIcon kind={TASK_RELATION_KIND.SUB_TASK} />),
   SET_PARENT: unkeyed("Set parent", <TaskRelationIcon kind={TASK_RELATION_KIND.PARENT} />),
   MARK_BLOCKED_BY: unkeyed(

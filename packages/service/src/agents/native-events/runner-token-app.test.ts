@@ -5,11 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import {
-  enrollHost,
-  enrollOwnDevice,
-  mintHostInstallToken,
-} from "@luke/database/models/host-store";
+import { enrollOwnDevice } from "@luke/database/models/host-store";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -310,7 +306,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
             agentId: agent.agentId,
             kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
             payload: {
-              checkoutPath: "/Users/fixture/.luke/agents/a/repository",
+              checkoutPath: "/Users/fixture/.vespin/agents/a/repository",
               repository: null,
               startBranch: null,
               firstSequence: 0,
@@ -464,19 +460,15 @@ const openMember = Effect.gen(function* () {
 /** A host enrolled under the member, and registered running its agents in VMs, as a host does once it starts: its device id and its secret. */
 const enrolledHost = (userId: string) =>
   Effect.gen(function* () {
-    const install = mintHostSecret(HOST_WIRE.INSTALL_TOKEN_PREFIX);
-    yield* mintHostInstallToken(userId, install.hash);
     const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
     const deviceId = randomUUID();
-    const enrolled = yield* enrollHost(install.hash, {
+    const enrolled = yield* enrollOwnDevice(userId, {
       id: deviceId,
-      name: "rack-1",
-      platform: DEVICE_PLATFORM.LINUX,
-      arch: DEVICE_ARCH.X64,
       version: HOST_VERSION.FLOOR,
       secretHash: secret.hash,
+      machine: { name: "rack-1", platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
     });
-    assert.ok("userId" in enrolled, "the host was not enrolled");
+    assert.ok(enrolled, "the host was not enrolled");
     yield* registerDevice(userId, {
       id: deviceId,
       name: "rack-1",
@@ -614,20 +606,27 @@ it.layer(getTestDB())("a Mac's GitHub token", (it) => {
       }),
   );
 
-  it.effect("refuses an agent on a Mac running its agents directly on it", () =>
-    Effect.gen(function* () {
-      const { ask } = yield* hostStanding;
-      const forbidden = {
-        status: HOSTED_HTTP_STATUS.FORBIDDEN,
-        cache: null,
-        body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
-      };
-      const member = yield* openMember;
-      const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
-      assert.deepEqual(
-        yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
-        forbidden,
-      );
-    }),
+  it.effect(
+    "refuses an agent on a Mac running its agents on its own logins, and mints for one running them on the box on Vespin's",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* hostStanding;
+        const forbidden = {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          cache: null,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        };
+        const member = yield* openMember;
+        const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
+        assert.deepEqual(
+          yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
+          forbidden,
+        );
+        const direct = yield* enrolledMac(member.userId, DEVICE_ISOLATION.DIRECT);
+        assert.equal(
+          (yield* ask(direct.secret, yield* agentOnDevice(member, direct.deviceId))).status,
+          HOSTED_HTTP_STATUS.OK,
+        );
+      }),
   );
 });

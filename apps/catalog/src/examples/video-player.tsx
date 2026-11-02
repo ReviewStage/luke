@@ -1,5 +1,5 @@
 /**
- * video-player.tsx -- a recording played in place of a picture under Luke's
+ * video-player.tsx -- a recording played in place of a picture under our
  * own bar, with its Expand, and as the file viewer plays it, both on a
  * short WebM the page records from a canvas as it opens, since the catalog
  * fetches nothing. While it records it says so, and where the browser can
@@ -92,7 +92,7 @@ function canRecord(): boolean {
 }
 
 /** The stand-in recording once made, that it is being made, or that this browser cannot make one. */
-function useStandIn(): StandIn {
+export function useStandIn(): StandIn {
   const [standIn, setStandIn] = useState<StandIn>(() =>
     canRecord() ? STAND_IN.RECORDING : STAND_IN.UNSUPPORTED,
   );

@@ -8,7 +8,6 @@ import {
   IDLE_ARCHIVE,
   latestTurnsOfReached,
   nativeRuntimesOfReached,
-  operatorReplaced,
   pinAgent,
   RUNNING_TURN_STATUSES,
   readAgent,
@@ -34,9 +33,10 @@ import {
   readTask,
   type StoredTask,
   setTaskParent,
+  type TaskArchivedAgent,
   type TaskChanges,
   taskHoldsOpenQuestion,
-  updateTask,
+  updateTaskCommitted,
 } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/agent";
@@ -68,9 +68,10 @@ import {
   githubRepositoryFullNameSchema,
 } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { agentGivenName, agentName, modelLabel } from "@luke/features/model-label";
+import { agentName, modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import {
   TASK_BOUNDS,
@@ -138,17 +139,14 @@ import {
   lineAwaitsTurn,
   startedBlank,
 } from "./coder-host/status.js";
-import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
+import {
+  cancelledTurn,
+  idleStandingAgents,
+  standingsOf as turnStandingsOf,
+} from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { discardedOrLogged } from "./device-discard.js";
 import type { AgentSessions } from "./eve-host/eve-sessions.js";
-import {
-  STEWARD_ACT,
-  type StewardAct,
-  stewardContinuedRefusal,
-  stewardRefusal,
-  stewardTaskRefusal,
-} from "./steward.js";
 import {
   assigneeIdOf,
   assigneeMentionOf,
@@ -169,7 +167,7 @@ import {
   type AgentTask,
   type AgentTaskReading,
   agentTaskOf,
-  listedTask,
+  listedFilter,
   taskReading,
   WORKSPACE_AGENTS_LIST_LIMIT,
   workspaceAgent,
@@ -202,8 +200,8 @@ import {
  * transcript's turn journals, rendered as a short tail of what the agent
  * said and did; a read of one agent also asks GitHub what that branch
  * published, as the agent's tab does (`coder-host/published.ts`), and says
- * nothing of it where GitHub could not be asked. Luke summarises a read
- * aloud, so his tail's entries are cut close and his words for the tool say
+ * nothing of it where GitHub could not be asked. The app's voice summarises a read
+ * aloud, so its tail's entries are cut close and its words for the tool say
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
  * tail, to a bound. One agent messages another with `message_agent`
@@ -216,8 +214,10 @@ import {
  * refusal lists and `list_models` answers from the same read, so a choice it
  * lists is one a start takes, with its checkout cloned at the branch named
  * where one is, which GitHub must hold. An agent a
- * coding agent starts is told in that note which agent started it and how
- * to report back, with `message_agent`, and its choice leaves the member's default as it stood.
+ * coding agent starts is told in that note which agent started it, that its
+ * final message reaches that agent by itself once its turn ends
+ * (`coder-host/starter-report.ts`), and how to reach it before then, with
+ * `message_agent`, and its choice leaves the member's default as it stood.
  * A start may name a new task instead, which is made as the member the
  * caller acts for would make it from the sidebar: in the caller's workspace,
  * owned by that member, with an empty plan, on the repository the caller
@@ -230,7 +230,7 @@ import {
  * one another agent already continued among them, whose earlier
  * continuations its answer names, and with one of its messages
  * it forks it there, which leaves it going on; either is handed the
- * source's brief, its replay with Luke's summary of what does not fit, a
+ * source's brief, its replay with our summary of what does not fit, a
  * copy of its work, and the note, and takes no prompt and no branch. A read
  * names the message each entry of the tail stands in, which a fork names.
  * An archive takes the rule the Archive agent menu's does for the member
@@ -293,7 +293,6 @@ const AGENT_TOOL_BOUNDS = {
 /** Why a call ran nothing, or sent nothing, in words the model can act on. */
 export const AGENT_TOOL_REFUSAL = {
   UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
-  UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
     "Not run: narrow the tasks by words of their name, by a status " +
     `(${Object.values(TASK_STATUS).join(", ")}), and by an assignee as a member's mention link ` +
@@ -324,7 +323,7 @@ export const UPDATE_TASK_REFUSAL = {
     "Not run: a thread of that task still holds an ask open for the developer, which marking " +
     `it done would withdraw. Withdraw each ask of yours it no longer needs with ${AGENT_TOOL.WITHDRAW_ASK} ` +
     `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands until ` +
-    "they are answered: Luke then marks a task whose pull request merged done by itself, and " +
+    `they are answered: ${PRODUCT_NAME} then marks a task whose pull request merged done by itself, and ` +
     "you mark any other done once the answer reaches you.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
@@ -425,8 +424,7 @@ export const START_AGENT_REFUSAL = {
     "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or its starter chooses the API key in Settings.",
   PLAN_INELIGIBLE:
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
-  CREDENTIAL_MISSING:
-    "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
+  CREDENTIAL_MISSING: `Not started: no subscription or API key of its starter's pays for that model, and ${PRODUCT_NAME}'s key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.`,
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
   DEVICE_REMOVED:
@@ -492,16 +490,15 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
-  [LOCAL_AGENT_REFUSAL.MAC_AWAY]:
-    "Not started: the device this task runs its agents on is away, asleep or with Luke closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.MAC_AWAY]: `Not started: the device this task runs its agents on is away, asleep or with ${PRODUCT_NAME} closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.`,
   [LOCAL_AGENT_REFUSAL.CODEX]:
     "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
     "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.PREPARING]:
-    "Not started: the device this task runs its agents on is still getting ready for local agents, downloading its sandbox. Try again in a few minutes.",
+    "Not started: the device this task runs its agents on is still getting ready for local agents, downloading Claude Code, Codex, and GitHub's CLI. Try again in a few minutes.",
   [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
-    "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to choose Retry under This Mac in Settings › Hosts on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
+    "Not started: the device this task runs its agents on couldn't set up local agents, since its download of Claude Code, Codex, or GitHub's CLI failed. Ask the member to choose Retry under This Mac in Settings › Hosts on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
 } as const satisfies Record<
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string
@@ -699,7 +696,7 @@ const START_AGENT_INPUT = Schema.Struct({
       }),
       "Another agent of your workspace to take over from, on its own task, or on no " +
         "task where it has none: the new " +
-        "agent is handed its brief and its transcript (with Luke's summary of the steps that " +
+        `agent is handed its brief and its transcript (with ${PRODUCT_NAME}'s summary of the steps that ` +
         "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
         "the note after them; it takes no prompt and no branch. Without messageId it continues " +
         "the agent, which is stopped; with one it forks the agent at that message, which goes on.",
@@ -778,7 +775,7 @@ const UPDATE_TASK_CALL = Schema.Struct({
 
 const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_CALL);
 /**
- * A start as a call carries it: one Luke made under the tool's earlier words
+ * A start as a call carries it: one the app made under the tool's earlier words
  * names its prompt `task`, and one made before `create_task` may name a
  * `newTask`, which is read only to be refused with where to go now.
  */
@@ -790,20 +787,24 @@ const START_AGENT_CALL = Schema.Struct({
 
 const readStart = Schema.decodeUnknownResult(START_AGENT_CALL);
 
-/** The tools as Luke and every coding agent are offered them: each its name, its words, and its input schema. */
+/** The tools as the app and every coding agent are offered them: each its name, its words, and its input schema. */
 export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
     "List the agents of your workspace, on any task or none and started by any member, " +
-    "yourself left out: each with its id, its title (how the developer sees it named; a member's operator is named Luke instead), the model " +
+    "yourself left out: each with its id, its title (how the developer sees it named), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
     "sandbox is on if a turn " +
     "has ended, one line of what it last did, its task (id and name; null for " +
     "an agent on no task) and whether that is the task you work on, and whether the agent is " +
-    "archived, and its mention, the `[@title](link)` to name it by in your words, " +
-    `the newest started first and at most ${WORKSPACE_AGENTS_LIST_LIMIT}. Pass thisTask ` +
-    "for only your task's agents, or a taskId for another task's. Call it to find the agent you " +
+    "archived, and its mention, the `[@title](link)` to name it by in your words. The agents " +
+    "that matter to you come first: the agent that started you and the agents you started, " +
+    "then those on your task; then the rest of the workspace, the newest started first, at most " +
+    `${WORKSPACE_AGENTS_LIST_LIMIT} a page, with nextOffset where more stand, which offset ` +
+    "reads the next page by. Pass words to search the whole workspace by words of an agent's " +
+    "title or its task's name, thisTask for only your task's agents, or a taskId for another " +
+    "task's. Call it to find the agent you " +
     "or the developer mean. Failed covers a session that ended for good, which no message " +
     "reaches again: tell the developer, or start a new agent to go on from its work. An agent " +
     "still running long after its last activity may have lost its session; a message to it " +
@@ -857,8 +858,7 @@ export const START_AGENT_TOOL = {
     "that failed, ended, or ran out of context, which is handed over and stopped, or fork one " +
     "at a messageId to try another direction while it goes on. An agent already continued may " +
     "be continued again, and the answer then names the earlier continuations by their id and " +
-    "mention (earlierContinuations); the developer's operator continues an agent once, and a " +
-    "second continuation of it is refused. A start from another agent " +
+    "mention (earlierContinuations). A start from another agent " +
     "copies its work and summarizes its transcript, so it may take a minute to answer.",
   inputSchema: START_AGENT_INPUT,
 } as const;
@@ -884,14 +884,15 @@ export const UPDATE_TASK_TOOL = {
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
     "of the developer you work for: rename it, set or clear its repository, set where it stands " +
     "(its status) or how much it matters (its priority), assign it to a member of the " +
-    "workspace or to no one, pin or unpin it in their sidebar, put it under a parent task or " +
+    "workspace or to no one, pin or unpin it in their sidebar, move it into one of their sidebar " +
+    "sections or back out of it (sectionId), put it under a parent task or " +
     "take it out from under one, or add and take away the tasks " +
     "it is blocked by and the tasks it blocks; name at least one change, " +
     "and several go in one call. Mark a task whose work is " +
     "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
-    "merged, or one the developer asked you to clean up; never a teammate's " +
-    "task still in use unless the developer asked for it, and as the developer's operator never " +
-    "a teammate's task at all, which is refused. A task is never archived: a settled " +
+    "merged, or one the developer asked you to clean up; it is refused while a thread of the task " +
+    `holds an ask open, so withdraw those you no longer need with ${AGENT_TOOL.WITHDRAW_ASK} first; never a teammate's ` +
+    "task still in use unless the developer asked for it. A task is never archived: a settled " +
     `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. A block is ` +
     "Linear's: the blocker's work comes first and the task it blocks waits on it, as one child " +
     "task builds on another. It is advice, never a lock, so nothing refuses to start a blocked " +
@@ -913,7 +914,7 @@ export const STOP_AGENT_TOOL = {
     "available, its transcript and branch kept, and a later message starts a new turn. Stop " +
     "an agent you or the developer started that is going the wrong way, or one the developer " +
     "asked you to stop; never a teammate's agent still in use unless the developer asked for " +
-    "it, and as the developer's operator never a teammate's agent at all, which is refused. No " +
+    "it. No " +
     "agent stops itself, and an archived one is refused. Answers `accepted` with the " +
     "agent's status now and whether it was stopped, `stopped` false for an agent already " +
     "idle, which changes nothing, or `rejected` and why. Then say which agent you stopped and why.",
@@ -961,9 +962,6 @@ export const UPDATE_AGENT_REFUSAL = {
   WORKING:
     "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
     "Wait until it is idle, or ask the developer, who can stop and archive it. Nothing else asked was changed.",
-  REPLACED_OPERATOR:
-    "Not unarchived: that agent is an operator its member has since replaced with a fresh one, " +
-    "which stands in its place; its transcript is kept, and it stays archived.",
   REARCHIVED:
     "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
@@ -1075,7 +1073,7 @@ export const UPDATE_AGENT_TOOL = {
     "whose pull request merged, or one the developer asked you to clean up, with a short reason " +
     "its archived banner shows beside your name; one still starting or working is refused, and " +
     "no agent archives itself. Change a teammate's agent still in use only where the developer " +
-    "asked for it, and as the developer's operator never, which is refused. Answers `accepted` " +
+    "asked for it. Answers `accepted` " +
     "with the agent as it then stands, whether archived among " +
     "it, or `rejected` and why; a rejected model or effort lists the choices. Then say which " +
     "agent you changed and how.",
@@ -1162,12 +1160,10 @@ interface AgentReading {
   /** Whether the agent works on the call's own task. */
   readonly onYourTask: boolean;
   readonly archived: boolean;
-  /** The name the agent goes by apart from its title, as its tab shows it and its mention names it: Luke for an operator, none for any other agent. */
-  readonly name?: string;
   /** The agent's title, what it works on, which update_agent renames; the model's id where it has none yet. */
   readonly title: string;
   readonly model: string;
-  /** The model as Luke says it and the screen shows it, without the maker's word (`modelLabel`). */
+  /** The model as the app says it and the screen shows it, without the maker's word (`modelLabel`). */
   readonly modelName: string;
   readonly effort: string;
   readonly status: AgentStatus;
@@ -1239,7 +1235,6 @@ const readAgentReading = (
       id: agent.id,
       ...task,
       archived: agent.archivedAt !== null,
-      ...givenNameOf(agent),
       title: agent.title ?? agent.model,
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
@@ -1324,27 +1319,6 @@ export function agentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** Why the caller may not act on the agent under Steward (`steward.ts`): an operator acts only on its member's own agents. */
-function stewardRefused(caller: AgentCaller, agent: Agent, act: StewardAct): string | undefined {
-  return stewardRefusal(caller.agent, agent, act);
-}
-
-/** Why the caller may not change the task under Steward (`steward.ts`): an operator changes only its member's own tasks. */
-function stewardTaskRefused(
-  caller: AgentCaller,
-  task: { readonly ownerId: string },
-): string | undefined {
-  return stewardTaskRefusal(caller.agent, task);
-}
-
-/** Why the caller may not continue the agent again under Steward (`steward.ts`): an operator continues an agent once. */
-function stewardContinuedRefused(
-  caller: AgentCaller,
-  continuedBefore: boolean,
-): string | undefined {
-  return stewardContinuedRefusal(caller.agent, continuedBefore);
-}
-
 /** A refusal's words, with when a plan's reached limit resets where the provider said, and which harness to connect where a credential is missing. */
 function withReset(words: string, refusal: HostedRefusal): string {
   if (refusal.provider !== undefined) {
@@ -1383,12 +1357,6 @@ export function choiceRefusal(
   return `${lead}: ${refused}. The choices are: ${choices}.`;
 }
 
-/** The name an answer names an agent by apart from its title: Luke for an operator, none for any other agent. */
-function givenNameOf(agent: Agent): { name?: string } {
-  const name = agentGivenName(agent);
-  return name === undefined ? {} : { name };
-}
-
 /** The agent's mention under the workspace's step, by the agent whichever task it works on, named as its tab is. */
 function agentMention(agent: Agent, workspace: string): string {
   return writtenMention(
@@ -1406,16 +1374,20 @@ function agentIntroduction(agent: Agent): string {
 
 /**
  * The note an agent a coding agent starts is handed: which agent started it,
- * that it reports back with `message_agent` by that agent's id, as every
- * word between two agents goes (`coder-host/agent-message.ts`), and that
- * the threads the developer reads are its starter's to post, so what it
- * would post in one goes to its starter, who relays what the developer must
- * see, then the note it was given.
+ * that its final message reaches that agent by itself once its turn ends
+ * (`coder-host/starter-report.ts`), that it messages it before then with
+ * `message_agent` by that agent's id, as every word between two agents goes
+ * (`coder-host/agent-message.ts`), and that the threads the developer reads
+ * are its starter's to post, so what it would post in one goes to its
+ * starter, who relays what the developer must see, then the note it was
+ * given.
  */
 function startedByNote(starter: Agent, note: string | undefined): string {
   const lead =
     `You were started by another agent of your workspace, ${agentIntroduction(starter)}, ` +
-    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}. ` +
+    "not by the developer. Your final message reaches it by itself once your turn ends, so make " +
+    "that message your report: what you did, what you published, and what you need of it. To " +
+    `reach it before then, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}. ` +
     "Threads to the developer are that agent's to post: post none yourself, and send that agent what " +
     "you would have posted in one instead, a pull request ready for review, a decision, a question, " +
     "or something only the developer can do by hand.";
@@ -1429,7 +1401,6 @@ const startedReading = (agent: Agent, offered: readonly OfferedModel[], ownTask:
     const workspace = yield* workspaceStepOf(agent.userId, agent.organizationId);
     return {
       id: agent.id,
-      ...givenNameOf(agent),
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
       effort: agent.effort,
@@ -1492,27 +1463,25 @@ function readingRecord(reading: AgentReading): WireRecord {
   return { ...reading, task: reading.task === null ? null : { ...reading.task } };
 }
 
-/** One call of `list_agents`: every agent of the caller's workspace, or of one task of it, the calling agent left out, archived ones marked, newest first. */
+/** One call of `list_agents`: a page of the agents of the caller's workspace, or of one task of it, or those the words name, the calling agent left out, archived ones marked, the caller's own first and then the newest, and the next page's offset where more stand. */
 export function runListAgents(
   call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const { caller } = call;
   const ownTask = callerTask(caller);
-  const narrowed = listedTask(input, ownTask);
-  if (Result.isFailure(narrowed)) {
-    return Effect.succeed(
-      agentToolRejected(narrowed.failure ?? AGENT_TOOL_REFUSAL.UNREADABLE_FILTER),
-    );
-  }
+  const narrowed = listedFilter(input, ownTask);
+  if (Result.isFailure(narrowed)) return Effect.succeed(agentToolRejected(narrowed.failure));
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
       if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
-      const { agents, taskOf } = yield* workspaceAgentsOf(callerUserId(caller), workspace.value, {
-        taskId: narrowed.success,
-        except: caller.agent.id,
-      });
+      const { agents, taskOf, nextOffset } = yield* workspaceAgentsOf(
+        callerUserId(caller),
+        workspace.value,
+        caller.agent,
+        narrowed.success,
+      );
       const standing = yield* standingsOf(agents);
       const offered = yield* offeredModels;
       const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
@@ -1525,7 +1494,11 @@ export function runListAgents(
           step,
         ),
       );
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, agents: readings.map(readingRecord) };
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        agents: readings.map(readingRecord),
+        nextOffset,
+      };
     }),
   );
 }
@@ -1663,8 +1636,6 @@ const sourceLanding = (
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_AGENT_REFUSAL.NO_SOURCE);
     const { agent: source, workspaceId } = found.value;
-    const steward = stewardRefused(caller, source, STEWARD_ACT.START_FROM);
-    if (steward !== undefined) return Result.fail(steward);
     if (!controlsAgent(callerUserId(caller), source)) {
       return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
     }
@@ -1688,16 +1659,13 @@ const sourceLanding = (
     }
     // A continue takes over work that has ended; one already continued is
     // continued again, since a continuation may itself fail or go wrong, and
-    // the answer names the earlier ones so the caller knows they stand; an
-    // operator alone is refused the second (`steward.ts`).
+    // the answer names the earlier ones so the caller knows they stand.
     const { status } = (yield* standingsOf([source]))(source);
     if (status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING) {
       return Result.fail(START_AGENT_REFUSAL.SOURCE_RUNNING);
     }
     const at = { userId: callerUserId(caller), workspaceId, taskId: source.taskId };
     const continuedBy = yield* earlierContinuationsOf(at, source.id);
-    const continued = stewardContinuedRefused(caller, continuedBy.length > 0);
-    if (continued !== undefined) return Result.fail(continued);
     return Result.succeed({ place, continuedBy });
   });
 
@@ -1736,7 +1704,7 @@ function forwarderOf(caller: AgentCaller): ImageForwarder {
 /**
  * The caller's own place, which a start on no task lands in: its
  * workspace, with no task, and the repository named, or the caller's own
- * where none is, which is none for the member's operator.
+ * where none is.
  */
 function ownPlaceOf(
   agent: Pick<Agent, "organizationId" | "repository">,
@@ -1963,8 +1931,6 @@ const archiveChange = (
       return undefined;
     }
     if (agent.archivedAt === null) return undefined;
-    // An operator a Reset replaced stays archived while the fresh one stands.
-    if (yield* operatorReplaced(userId, agent.id)) return UPDATE_AGENT_REFUSAL.REPLACED_OPERATOR;
     if (yield* unarchiveAgentFrom(userId, agent.id, agent.archivedAt)) return undefined;
     const now = yield* readAgent(userId, agent.id);
     return Option.isSome(now) && now.value.archivedAt === null
@@ -2125,9 +2091,12 @@ export const reachedRepository = (
  * runs), for the member the caller acts for, its repository confirmed first
  * as the PATCH confirms one, or why not. Note that the task is read first, on
  * that member's standing, both to hold it to the caller's workspace and to
- * tell a change already standing, which the store keeps as it stood; that an
- * operator is refused a teammate's task under Steward (`../steward.ts`); and
- * that the caller never archives the task it works on.
+ * tell a change already standing, which the store keeps as it stood; and
+ * that the caller never archives the task it works on. A move to Done
+ * archives the task's idle agents with it as the caller, for its member, and
+ * lets each go on its device; one still at work is archived as its turn ends
+ * (`tasks/task-finish.ts`), and the caller, where the task is its own, never
+ * is, since it is still answering whoever asked.
  */
 export function runUpdateTask(
   call: AgentCall,
@@ -2168,8 +2137,6 @@ export function runUpdateTask(
       ) {
         return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       }
-      const steward = stewardTaskRefused(caller, read.value);
-      if (steward !== undefined) return agentToolRejected(steward);
       // Where it is asked to stand in the sidebar is read before anything is written.
       const placing =
         sectionId === undefined
@@ -2178,11 +2145,9 @@ export function runUpdateTask(
       if (placing !== undefined && Result.isFailure(placing)) {
         return agentToolRejected(placing.failure);
       }
-      // So are the tasks its blocks name, each held to the workspace and to Steward as the task itself is.
+      // So are the tasks its blocks name, each held to the workspace as the task itself is.
       const blocking = blockChangesNamed(blockChanges)
-        ? yield* blockWritesAsked(userId, workspace.value, taskId, blockChanges, (other) =>
-            stewardTaskRefused(caller, other),
-          )
+        ? yield* blockWritesAsked(userId, workspace.value, taskId, blockChanges)
         : undefined;
       if (blocking !== undefined && Result.isFailure(blocking)) {
         return agentToolRejected(blocking.failure);
@@ -2206,7 +2171,7 @@ export function runUpdateTask(
               read.value.task.status ?? TASK_STATUS.TODO,
               archived,
             );
-      // Note that an agent's Done waits on the task's open asks, as Luke's own finish does, because a Done withdraws them (`inbox-settle.ts`).
+      // Note that an agent's Done waits on the task's open asks, as the app's own finish does, because a Done withdraws them (`inbox-settle.ts`).
       if (
         status === TASK_STATUS.DONE &&
         read.value.task.status !== TASK_STATUS.DONE &&
@@ -2235,10 +2200,15 @@ export function runUpdateTask(
       // refused, its section deleted meanwhile, a parent refused, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
         if (locking.length > 0) yield* lockTasksForBlocks(userId, locking);
-        const task =
+        // A move to Done archives the task's idle agents with it, as this agent for its member.
+        const updated =
           Object.keys(asWritten).length === 0
-            ? Option.some(read.value.task)
-            : yield* updateTask(userId, taskId, asWritten);
+            ? Option.some({ task: read.value.task, archived: [], statusMoved: false })
+            : yield* updateTaskCommitted(userId, taskId, asWritten, undefined, {
+                archivedBy: archiverOf(caller, undefined),
+                idle: idleStandingAgents,
+              });
+        const task = Option.map(updated, (written) => written.task);
         if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
           // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
           const placed = yield* writeTaskSections(userId, {
@@ -2264,6 +2234,10 @@ export function runUpdateTask(
           task: parented === undefined ? task : Option.map(parented, (written) => written.task),
           parentChanged: parented !== undefined && Option.getOrThrow(parented).txid !== undefined,
           blocksChanged,
+          doneArchived: Option.match(updated, {
+            onNone: () => [],
+            onSome: (written) => written.archived,
+          }),
         };
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -2277,6 +2251,7 @@ export function runUpdateTask(
               task: Option.Option<StoredTask["task"]>;
               parentChanged: boolean;
               blocksChanged: boolean;
+              doneArchived: readonly TaskArchivedAgent[];
             },
             string
           > => Result.succeed(written),
@@ -2305,7 +2280,9 @@ export function runUpdateTask(
         ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
-      const { task, parentChanged, blocksChanged } = changed.success;
+      const { task, parentChanged, blocksChanged, doneArchived } = changed.success;
+      // The agents its Done archived are let go of on their devices once it commits, as an agent's archive lets one go.
+      yield* Effect.forEach(doneArchived, discardedOrLogged, { discard: true });
       if (Option.isNone(task)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       return yield* taskUpdateAnswer(userId, task.value, {
         already: stands && !parentChanged && !blocksChanged,
@@ -2387,8 +2364,6 @@ export function runStopAgent(
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
-      const steward = stewardRefused(caller, agent, STEWARD_ACT.STOP);
-      if (steward !== undefined) return agentToolRejected(steward);
       if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
       if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
         return agentToolRejected(
@@ -2408,7 +2383,6 @@ export function runStopAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
           id: agent.id,
-          ...givenNameOf(agent),
           title: agent.title ?? agent.model,
           task: task.task === null ? null : { ...task.task },
           onYourTask: task.onYourTask,
@@ -2499,8 +2473,6 @@ export function runUpdateAgent(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
-      const steward = stewardRefused(caller, found.value.agent, STEWARD_ACT.CHANGE);
-      if (steward !== undefined) return agentToolRejected(steward);
       const { task, workspaceId } = found.value;
       const choices = yield* Effect.result(accountModelChoices(userId));
       if (Result.isFailure(choices)) return agentToolRejected(UPDATE_AGENT_REFUSAL.UNAVAILABLE);
@@ -2561,7 +2533,6 @@ export function runUpdateAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
           id: agent.id,
-          ...givenNameOf(agent),
           title: agent.title ?? agent.model,
           model: agent.model,
           modelName: modelLabel(agent.model, offered),

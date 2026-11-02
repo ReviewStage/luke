@@ -157,7 +157,7 @@ it.effect(
       list.set(listOf(appRow()));
       yield* call(GATEWAY_METHOD.CHANNELS_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       list.set(listOf(appRow()), ["1"]);
       yield* nextPoll;
 

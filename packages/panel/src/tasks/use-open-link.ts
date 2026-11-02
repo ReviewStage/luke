@@ -1,6 +1,6 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { isGitHubAddress, isOpenableAddress } from "@luke/host/acts";
 import {
   createContext,
   createElement,
@@ -27,14 +27,14 @@ import { useSteadyDoor } from "../steady-door.js";
 /**
  * use-open-link.ts -- how a link in written words opens: a transcript's, an agent tab's, or an Inbox item's.
  *
- * A Luke link, the address of a task, a section, an agent, an Inbox item,
- * or any other place in Luke (`@luke/features/link-grammar`), opens in the
+ * An app link, the address of a task, a section, an agent, an Inbox item,
+ * or any other place in the app (`@luke/features/link-grammar`), opens in the
  * window, on that place, never the browser, as Linear's and Slack's own
  * links open in their apps; one written before the link was settled
  * (`luke://plan/<id>`) still opens its task. The window's opener for a
  * place (`App`'s) is handed down on a context, as Settings' is
  * (`../open-settings.tsx`); outside the window, as in a test of one
- * surface, there is none, and a Luke link opens in the browser as any
+ * surface, there is none, and an app link opens in the browser as any
  * other web page does.
  *
  * A page on GitHub, such as the pull request an agent opened, goes through
@@ -64,10 +64,10 @@ import { useSteadyDoor } from "../steady-door.js";
 
 const OpenLinkContext = createContext<((link: ReadLink) => void) | undefined>(undefined);
 
-/** Hands the window's opener for a place in Luke to everything under it. */
+/** Hands the window's opener for a place in the app to everything under it. */
 export const OpenLinkProvider = OpenLinkContext.Provider;
 
-/** The window's opener for a place in Luke as a link reads it, for a place that opens some of them itself before handing them on; nothing outside the window. */
+/** The window's opener for a place in the app as a link reads it, for a place that opens some of them itself before handing them on; nothing outside the window. */
 export function useReadLinkOpener(): ((link: ReadLink) => void) | undefined {
   return useContext(OpenLinkContext);
 }
@@ -190,7 +190,7 @@ export function placeOfMention(mention: PlanMention): LinkPlace {
     : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor };
 }
 
-/** Opens an address where the place it is pressed on opens it, else where the window does (`route.ts`): a place in Luke there, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser. */
+/** Opens an address where the place it is pressed on opens it, else where the window does (`route.ts`): a place in the app there, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser. */
 function openAddress(
   address: Address,
   doors: {
@@ -227,7 +227,7 @@ export function useOpenTask(): ((mention: PlanMention) => void) | undefined {
   );
 }
 
-/** The opener for a place in Luke a part names rather than a link writes, as a link to it would open it, one of an agent's messages among them: where the place it is pressed on opens it, else in the window; nothing outside the window. */
+/** The opener for a place in the app a part names rather than a link writes, as a link to it would open it, one of an agent's messages among them: where the place it is pressed on opens it, else in the window; nothing outside the window. */
 export function useOpenPlace(): ((place: LinkPlace) => void) | undefined {
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);
@@ -247,13 +247,13 @@ export function useOpenPlace(): ((place: LinkPlace) => void) | undefined {
 /**
  * Whether a link is one the window opens. Note that it asks the two acts'
  * own schemas, because an address both refuse would be drawn as a press
- * that opens nothing; a Luke link is a web address, and both take it.
+ * that opens nothing; an app link is a web address, and both take it.
  */
 export function opensAsLink(href: string): boolean {
-  return isGitHubAddress(href) || isWebAddress(href);
+  return isGitHubAddress(href) || isOpenableAddress(href);
 }
 
-/** Opens a link {@link opensAsLink} admits: where the place it is pressed on opens it, else a Luke link in the window where it can be, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser, over the capability it belongs to (`route.ts`). */
+/** Opens a link {@link opensAsLink} admits: where the place it is pressed on opens it, else an app link in the window where it can be, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser, over the capability it belongs to (`route.ts`). */
 export function useOpenLink(): (href: string) => void {
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);

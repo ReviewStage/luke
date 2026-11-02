@@ -27,7 +27,7 @@ import { TAB_KIND } from "./tab-look.js";
 /**
  * thing-card.tsx -- the card a chip hangs for each kind of thing it names, one entry per kind (`@luke/features/thing-kind`).
  *
- * A mention's chip and a Luke link's chip both hang their thing's card
+ * A mention's chip and an app link's chip both hang their thing's card
  * through `thingCard`, so a plan's chip hangs the plan's card whichever way
  * it was written. The table is keyed by every `THING_KIND` and typed over
  * each kind's own `Thing`, so a kind added there fails to compile until it

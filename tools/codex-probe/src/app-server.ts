@@ -45,10 +45,10 @@ export const CHATGPT_PROVIDER = {
 
 /**
  * Who the app-server says the client is. OpenAI's guide asks that the name
- * match the `agent_name_hint` the sign-in sent, so it is `Luke` rather than
+ * match the `agent_name_hint` the sign-in sent, so it is `Vespin` rather than
  * the plan's `luke`; P20 takes whichever Gate A2 settles.
  */
-export const CLIENT_INFO = { name: "Luke", title: "Luke", version: "0.19.0" } as const;
+export const CLIENT_INFO = { name: "Vespin", title: "Vespin", version: "0.19.0" } as const;
 
 /** The fake MCP server's name in Codex's config, and the one tool it serves. */
 export const PROBE_MCP = {
@@ -100,7 +100,7 @@ function providerOverrides(baseUrl: string = CHATGPT_PROVIDER.BASE_URL): readonl
  * What keeps the token with Codex: commands inherit only the core variables
  * (`PATH`, `HOME`, and the like) with `ACCESS_TOKEN` excluded by name beside
  * Codex's own default `*TOKEN*` exclusion, and the fake MCP server, the
- * stand-in for Luke's, is configured with no environment of ours. Note that
+ * stand-in for Vespin's, is configured with no environment of ours. Note that
  * the policy filters only what a command inherits: a command running as the
  * same user can still read the app-server's own `/proc/<pid>/environ`, so
  * the token stays with Codex only where its bwrap sandbox puts commands in

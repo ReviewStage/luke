@@ -9,7 +9,6 @@ import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
-  EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -61,16 +60,13 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * window's choice, draw it a frame later rather than holding up the thread.
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), every one of them whoever it is addressed to, since a
- * channel is everyone's threads on one topic, and offers no view choices.
- * Its order, the latest first, is the Inbox's own.
+ * (`channelGroups`), under the Inbox's own view choices, so a scope turned
+ * in a channel stands in every channel and in the Inbox, and across a
+ * launch. Its order, the latest first, is the Inbox's own.
  *
  * Narrowed to a task instead, it lists and counts that task's items alone
  * (`taskGroups`), under the Inbox's own view.
  */
-
-/** What a channel lists: every item in it, open or settled, whoever it is addressed to. */
-const CHANNEL_LISTS = { show: INBOX_SHOW.ALL, whose: EVERYONES } as const;
 
 /**
  * The tasks the list holds items of, in main's order: each holding one that
@@ -175,9 +171,8 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
   const { channelId, taskId: narrowedTask } = narrowing;
   const view = tasks.inboxView;
   const { act } = useAct();
-  // Note that a channel lists everything, so the Inbox's kept choices stand only while it lists every channel.
-  const kept = useInboxViewChoices();
-  const choices = channelId === undefined ? kept : undefined;
+  // Note that a channel lists under the Inbox's kept choices, so one scope stands wherever the page is narrowed.
+  const choices = useInboxViewChoices();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
   const openAutomation = useCallback(
@@ -329,7 +324,7 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
   const [query, setQuery] = useState("");
   const search = useMemo(() => searchTokens(query), [query]);
   const me = tasks.me;
-  const { show, whose } = choices ?? CHANNEL_LISTS;
+  const { show, whose } = choices;
   const counts = useMemo(() => inboxCounts(standing, me, whose), [standing, me, whose]);
   const filter = useMemo(() => ({ show, whose, search, readerId: me }), [show, whose, search, me]);
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,

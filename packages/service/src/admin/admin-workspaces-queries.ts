@@ -74,7 +74,7 @@ const PERSONAL = sql<boolean>`exists(select 1 from ${personalWorkspace} where ${
 
 const MEMBER_COUNT = sql<number>`(select count(*)::int from ${member} where ${member.organizationId} = ${organization.id})`;
 
-/** Two or more members and nobody's personal workspace: a team using Luke together. */
+/** Two or more members and nobody's personal workspace: a team using the app together. */
 const SHARED = sql<boolean>`(not ${PERSONAL} and ${MEMBER_COUNT} >= ${SHARED_MEMBERS})`;
 
 /**
@@ -110,7 +110,7 @@ function agentsSince(since: Date): SQL<number> {
   return sql<number>`(select count(*)::int from ${agentTable} where ${and(eq(agentTable.organizationId, organization.id), gte(agentTable.createdAt, since))})`;
 }
 
-/** Revisions written on the workspace's plans since the instant, by a member, Luke, or an agent alike. */
+/** Revisions written on the workspace's plans since the instant, by a member, the app, or an agent alike. */
 function revisionsSince(since: Date): SQL<number> {
   return sql<number>`(select count(*)::int from ${planRevision} inner join ${task} on ${task.id} = ${planRevision.taskId} where ${and(eq(task.organizationId, organization.id), gte(planRevision.at, since))})`;
 }

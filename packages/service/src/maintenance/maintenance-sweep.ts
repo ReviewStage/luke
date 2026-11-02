@@ -13,14 +13,12 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
-import type { AgentStateSweepOutcome } from "./agent-state-sweep.js";
 import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
+import type { DeviceWarmSweepOutcome } from "./device-warm-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
-import type { OperatorWakeSweepOutcome } from "./operator-wake-sweep.js";
 import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js";
-import type { StarterNoticeSweepOutcome } from "./starter-notice-sweep.js";
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
@@ -28,23 +26,21 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * will. A task deleted seven days ago has its conversation purged, a
  * turn whose end eve never told the relay is settled as
  * abandoned, a local agent's open run is taken from a device that stopped
- * beating for its lease, its turn ended naming the device, the Vercel
- * Sandboxes of the eve sessions Luke let go of are deleted, a coding agent's
+ * beating for its lease, its turn ended naming the device, a local agent's
+ * runner left warm past its device's window is retired, the Vercel
+ * Sandboxes of the eve sessions we let go of are deleted, a coding agent's
  * sandbox no developer's terminal holds any more is stopped, a native
  * agent's sandbox whose run ended and no terminal holds is stopped where the
  * run's own end did not stop it, an eve agent's sandbox left running with
  * no turn and no terminal to hold it is stopped where its turn's end did
  * not stop it, the wakeups a native agent's released wait left are
- * delivered once due, an operator whose member's agent failed is woken, at
- * most once an hour for each agent, an agent's starter is told when the agent
- * it started fails, is stopped, or is archived, a developer's line whose hand-over
+ * delivered once due, a developer's line whose hand-over
  * answered nothing and that no turn took within a coding agent's turn
  * bound is deleted, the automations whose schedule is due are fired, a picture pasted into a
  * plan a day ago that no save ever named is deleted, and the pull requests of
  * agents on a member's own GitHub token, which no webhook reaches, are polled
  * for what their agents are told of, and the native agents' image template
- * is moved on and the templates of older images deleted, the device agents' saved
- * state no launch will restore again is deleted from its store, and the hosts' pairings
+ * is moved on and the templates of older images deleted, and the hosts' pairings
  * whose code lapsed are deleted with the address each kept. Each is bounded on its own, and the
  * sweep runs them in turn, each kept from the others, so one that fails is
  * logged and the rest still run.
@@ -53,7 +49,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The twenty sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The eighteen sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -61,6 +57,8 @@ interface MaintenanceSweeps {
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Takes every open launch of the devices that have not beaten within their lease from them, a sweep's worth, its turn ended naming the device. */
   sweepDeviceLeases: (now: number) => SweepRead<DeviceLeaseSweepOutcome>;
+  /** Retires the local agents' runners left warm past their device's window, or past its grace on a host waiting to update, a sweep's worth. */
+  sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
   /** Deletes the Vercel Sandboxes of the next eve sessions queued for it, a sweep's worth. */
   sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
   /** Stops the coding agents' sandboxes whose terminal lease lapsed past its grace, a sweep's worth. */
@@ -71,12 +69,8 @@ interface MaintenanceSweeps {
   sweepEveSandboxes: (now: number) => SweepRead<EveSandboxSweepOutcome>;
   /** Bounds the snapshot retention of the stopped agents' sandboxes opened before it was bounded, a bucket's worth. */
   sweepSandboxRetention: (now: number) => SweepRead<SandboxRetentionSweepOutcome>;
-  /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from Luke. */
+  /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
-  /** Wakes the operators whose member's agents failed with no wake in the hour before, a sweep's worth. */
-  sweepOperatorWakes: (now: number) => SweepRead<OperatorWakeSweepOutcome>;
-  /** Tells the starters of the agents whose run ended without finishing, a sweep's worth, each ending once. */
-  sweepStarterNotices: (now: number) => SweepRead<StarterNoticeSweepOutcome>;
   /** Deletes the withdrawn lines no turn took within a coding agent's turn bound, a sweep's worth, answering how many went. */
   purgeWithdrawnLines: (now: number) => SweepRead<number>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
@@ -91,14 +85,12 @@ interface MaintenanceSweeps {
   sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
-  /** Deletes the device agents' saved state superseded, of an agent gone, or past its retention, and the uploads no commit named, blob then row, a sweep's worth. */
-  sweepAgentStates: (now: number) => SweepRead<AgentStateSweepOutcome>;
   /** Deletes the hosts' pairings whose code lapsed, a sweep's worth, and the hosts approved whose boxes never collected their secret, answering how many pairings went. */
   sweepHostPairings: (now: number) => SweepRead<number>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the twenty sweeps once
+ * How a run is told to the sweep's cron monitor: around the eighteen sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -121,6 +113,8 @@ interface MaintenanceSweepAnswer {
   abandoned: Swept<number>;
   /** What the sweep over the devices whose lease lapsed did. */
   deviceLeases: Swept<DeviceLeaseSweepOutcome>;
+  /** What the sweep over the local agents' warm runners did. */
+  deviceWarmRunners: Swept<DeviceWarmSweepOutcome>;
   /** What the sweep over the queued sessions' sandboxes did. */
   sandboxes: Swept<SessionSandboxSweepOutcome>;
   /** What the sweep over the lapsed terminal leases did. */
@@ -133,10 +127,6 @@ interface MaintenanceSweepAnswer {
   sandboxRetention: Swept<SandboxRetentionSweepOutcome>;
   /** What the delivery of the native agents' wakeups due did. */
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
-  /** What the wake of the operators whose member's agents failed did. */
-  operatorWakes: Swept<OperatorWakeSweepOutcome>;
-  /** What the lines to the starters of the agents whose run ended without finishing did. */
-  starterNotices: Swept<StarterNoticeSweepOutcome>;
   /** Withdrawn lines no turn took in time, deleted. */
   withdrawnLines: Swept<number>;
   /** What the sweep over the automations due did. */
@@ -151,8 +141,6 @@ interface MaintenanceSweepAnswer {
   repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
-  /** What the sweep over the device agents' saved state did. */
-  agentStates: Swept<AgentStateSweepOutcome>;
   /** Hosts' pairings whose code lapsed, deleted. */
   hostPairings: Swept<number>;
 }
@@ -183,7 +171,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The twenty sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The eighteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -192,14 +180,16 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     purged: yield* isolated("purgeCleared", sweeps.purgeCleared(now)),
     abandoned: yield* isolated("sweepAbandonedTurns", sweeps.sweepAbandonedTurns(now)),
     deviceLeases: yield* isolated("sweepDeviceLeases", sweeps.sweepDeviceLeases(now)),
+    deviceWarmRunners: yield* isolated(
+      "sweepDeviceWarmRunners",
+      sweeps.sweepDeviceWarmRunners(now),
+    ),
     sandboxes: yield* isolated("sweepSandboxes", sweeps.sweepSandboxes(now)),
     terminals: yield* isolated("sweepTerminalLeases", sweeps.sweepTerminalLeases(now)),
     nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),
     eveSandboxes: yield* isolated("sweepEveSandboxes", sweeps.sweepEveSandboxes(now)),
     sandboxRetention: yield* isolated("sweepSandboxRetention", sweeps.sweepSandboxRetention(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
-    operatorWakes: yield* isolated("sweepOperatorWakes", sweeps.sweepOperatorWakes(now)),
-    starterNotices: yield* isolated("sweepStarterNotices", sweeps.sweepStarterNotices(now)),
     withdrawnLines: yield* isolated("purgeWithdrawnLines", sweeps.purgeWithdrawnLines(now)),
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
     purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
@@ -213,7 +203,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       sweeps.sweepRepositorySnapshots(now),
     ),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
-    agentStates: yield* isolated("sweepAgentStates", sweeps.sweepAgentStates(now)),
     hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
   };
 });

@@ -6,7 +6,7 @@ import {
 import { type HostPairingAnswer, shownHostUserCode } from "@luke/features/host-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { momentText } from "@luke/features/time-format";
-import { readingWords } from "@luke/features/words";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ANNOUNCE,
@@ -65,8 +65,8 @@ const WORDS = {
   HELD_TITLE: "Too many codes tried",
   HELD: "Your account tried too many codes that match no host.",
   HELD_SOON: "Try again in a few minutes.",
-  UNREAD: "Could not read the code.",
-  UNANSWERED: "Luke could not reach the service. Try again.",
+  UNREAD: readFailedWords("the code"),
+  UNANSWERED: "Could not reach the service. Try again.",
 } as const;
 
 /** Where the dialog stands: reading the pairing, unable to, asking, or done in one of the ways it ends. */

@@ -42,7 +42,7 @@ const RUN_DASH = "–";
 
 /**
  * The window's own shortcuts rather than keys taken from the machine: each
- * answers only while Luke's window has the keyboard, so they are fixed and
+ * answers only while the app's window has the keyboard, so they are fixed and
  * listed here to be found, not chosen, under the groups the table keeps
  * (`APP_SHORTCUT_GROUPS`), by what they act on: each row the command's name
  * and its chord, then the group's keys that answer in place, where focus or

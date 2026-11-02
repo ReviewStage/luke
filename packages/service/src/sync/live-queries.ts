@@ -1,7 +1,7 @@
 /**
- * live-queries.ts -- every live read Luke Sync wakes, by its name, as one registry the registry test reads.
+ * live-queries.ts -- every live read Sync wakes, by its name, as one registry the registry test reads.
  *
- * A read is moved onto Luke Sync by defining it (`defineLiveQuery`), adding
+ * A read is moved onto Sync by defining it (`defineLiveQuery`), adding
  * it here, and answering its procedure from the definition
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.
@@ -30,6 +30,7 @@ import {
   channelLookSync,
   channelSync,
   conversationsSync,
+  deviceAgentLineSync,
   deviceSync,
   githubInstallationSync,
   githubPersonalTokenSync,
@@ -144,8 +145,8 @@ export const sidebarLive = defineLiveQuery({
  * starting or settling names the workspace; the account's pins, its
  * memberships, and what admits it to a repository name the account. Note
  * that a message wakes no task list, because a streamed step rewrites one
- * every moment and names only its conversation: an awaiting line or an
- * operator's quiet reply that moves with no turn starting or settling shows
+ * every moment and names only its conversation: an awaiting line that moves
+ * with no turn starting or settling shows
  * at the hold's end, as do the rename of someone the list names who has left
  * every workspace and a Mac's last beat, which wakes nothing.
  */
@@ -601,7 +602,8 @@ export const agentBrowserTabsLive = defineLiveQuery({
  * read by `readerId` while it is a member of the agent's workspace
  * (`transcript-live.ts`). It is woken by a write to the transcript's
  * messages, turns, or conversation, to a worker's conversation or
- * delegation under the agent's, to the agent itself, and to what admits the
+ * delegation under the agent's, to the agent itself, its queue, or a line
+ * queued for its device, and to what admits the
  * reader to its workspace or repository; the agent's task is read for the
  * reader's reach of it (`agentVisibleTo`) and wakes nothing, as a task's
  * reach moves with what admits the reader.
@@ -638,6 +640,7 @@ export const agentTranscriptLive = defineLiveQuery({
     githubPersonalTokenSync,
     githubRepositoryReadSync,
     agentQueueSync,
+    deviceAgentLineSync,
   ],
   topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
     const parent: readonly SyncTopic[] =

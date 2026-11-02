@@ -5,13 +5,93 @@
    neighbours, so its ring is drawn whole. A quick add's draft fills the
    name's room with its title, so the caret's line reaches the row's end as a
    plan's line reaches its page's; an add still out stands muted until its
-   row draws. */
+   row draws.
+
+   The ⋯ stands out of the row's columns in its end inset, centred on the
+   row's middle, and comes in there while the row is in hand, holds the
+   keyboard, or has its menu open (`row-menu.css` fades it), as a
+   `NavItem`'s and a `ListRow`'s acts do, nothing else in the row moving.
+   Where the row's last cell only says something, the time on the Tasks
+   page, the ⋯ keeps no column, so that cell ends at the row's end inset,
+   and gives way under the ⋯ by its opacity while it stands (`data-under-
+   more`); where the last cell holds a control, or the name is the last, the
+   list keeps the ⋯ a narrow column of its own (`taskRowColumns`), so
+   neither is ever covered. Note that the cell gives way by its opacity,
+   never its visibility, so a reader reaching the row still hears it, and
+   takes no press while it is gone, so a press there is the ⋯'s. A screen
+   with no hover never has a row in hand, so there the ⋯ stands at rest,
+   and, where it would stand over the last cell, the cells after the name
+   step aside for it on transform alone, rather than that cell standing
+   hidden for good. At rest the ⋯ takes no press, so a press at the row's
+   end opens the task. */
 
 @layer components {
   .luke-task-row:has(:focus-visible),
   .luke-task-row[data-menu-open="true"],
   .luke-task-row:has([aria-expanded="true"]) {
     z-index: 2;
+  }
+
+  .luke-task-row {
+    --luke-task-row-more-room: calc(var(--luke-space-24) + var(--luke-icon-gap));
+    --luke-task-row-aside: calc(-1 * var(--luke-task-row-more-room));
+  }
+
+  .luke-task-row:dir(rtl) {
+    --luke-task-row-aside: var(--luke-task-row-more-room);
+  }
+
+  .luke-task-row-more {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--luke-row-inset);
+    pointer-events: none;
+  }
+
+  .luke-task-row-cell[data-under-more="true"] {
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-task-row:is(:has(:focus-visible), [data-menu-open="true"]) .luke-task-row-more {
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    .luke-task-row:hover .luke-task-row-more {
+      pointer-events: auto;
+    }
+
+    .luke-task-row:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(
+        .luke-task-row-more:not(:empty)
+      )
+      > .luke-task-row-cell[data-under-more="true"] {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+
+  @media (hover: none) {
+    .luke-task-row-after {
+      transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+    }
+
+    .luke-task-row-more {
+      pointer-events: auto;
+    }
+
+    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
+        > .luke-task-row-cell[data-under-more="true"]
+      )
+      .luke-task-row-after {
+      transform: translateX(var(--luke-task-row-aside));
+    }
+
+    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
+        > .luke-task-row-cell[data-under-more="true"]
+      )
+      > [data-cell="name"] {
+      padding-inline-end: var(--luke-task-row-more-room);
+    }
   }
 
   .luke-task-row-draft .luke-task-row-press {

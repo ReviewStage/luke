@@ -1,5 +1,5 @@
 /**
- * socket-origin.ts -- the socket form of an origin, which every socket a desktop opens to Luke's service is addressed from.
+ * socket-origin.ts -- the socket form of an origin, which every socket a desktop opens to our service is addressed from.
  */
 
 const WEB_SOCKET_SCHEME = {

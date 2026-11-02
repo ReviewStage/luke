@@ -693,7 +693,7 @@ test("a task opened from a tab pinned to the sidebar is open still, so its row w
 /** The workspace New task starts its tasks in. */
 const WORKSPACE = "workspace-personal";
 
-/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one, as a build from before Luke kept no issues kept them. */
+/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one, as a build from before the app kept no issues kept them. */
 function newTaskEntry(workspaceId: string, issueId?: string) {
   return {
     accountId: null,

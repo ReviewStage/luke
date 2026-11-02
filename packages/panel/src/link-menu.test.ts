@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { INLINE_REF_LOOK, InlineRef, ListRow, useMenu } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -14,9 +15,9 @@ import { TextLink } from "./text-link.js";
 
 /**
  * link-menu.test.ts -- a right-click on a link anywhere in the window hangs
- * Open link and Copy link: on a link in words and on a row that opens an
- * address alike, never over a menu of the clicked thing's own, and never on
- * what is no link.
+ * Open link and Copy link, and Open in browser for an agent's page: on a
+ * link in words and on a row that opens an address alike, never over a menu
+ * of the clicked thing's own, and never on what is no link.
  */
 
 const ADDRESS = "https://github.com/ReviewStage/luke/pull/42";
@@ -116,6 +117,26 @@ test("a right-click on a row that opens an address offers the same menu, opening
   choose("Copy link");
   await act(async () => undefined);
   assert.deepEqual(copied, [ADDRESS]);
+});
+
+test("a right-click on a row naming an agent's page offers Open in browser, which opens the page's own Vespin link flagged to stay on the web", () => {
+  const page = `${LINK_ORIGIN}/acme/plan/7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10/page/5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f`;
+  const opened: string[] = [];
+  mount(
+    createElement(
+      "ul",
+      null,
+      createElement(ListRow, { title: "Invite funnel", onPress: () => undefined, linkHref: page }),
+    ),
+  );
+  fakeAppPlatform({ ...QUIET_PANEL, openWeb: (url) => opened.push(url) });
+  const title = document.querySelector(".luke-list-row-title");
+  assert.ok(title);
+
+  rightClick(title);
+  assert.deepEqual(menuItems(), ["Open link", "Open in browser", "Copy link"]);
+  choose("Open in browser");
+  assert.deepEqual(opened, [`${page}?stay=web`]);
 });
 
 /** Words being edited, as a plan's body holds them, with a link in them. */

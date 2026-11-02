@@ -501,7 +501,7 @@ test("a display kept before the completed window reads its Done and Canceled swi
     ).completed,
   ).toBe(COMPLETED_WINDOW.ALL);
 });
-test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Luke made on a call, a task from before origins as made by hand", () => {
+test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Vespin made on a call, a task from before origins as made by hand", () => {
   const tasks = [
     task("By hand"),
     { ...task("By an agent"), origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-1" } },
@@ -674,7 +674,7 @@ test("a List narrowing folds its columns away one by one, creator, agents, sub-t
   const { SUB_TASKS } = LIST_COLUMN;
 
   expect(drawn(1100)).toEqual(every);
-  expect(drawn(900)).toEqual([
+  expect(drawn(910)).toEqual([
     PRIORITY,
     KEY,
     STATUS,
@@ -685,7 +685,7 @@ test("a List narrowing folds its columns away one by one, creator, agents, sub-t
     SUB_TASKS,
     UPDATED,
   ]);
-  expect(drawn(800)).toEqual([
+  expect(drawn(810)).toEqual([
     PRIORITY,
     KEY,
     STATUS,

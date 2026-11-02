@@ -1,11 +1,10 @@
 /**
  * standing-context.ts -- the task as it stands, handed to an agent's turn beside its instructions.
  *
- * What the brain is handed every turn and a coding agent on each spoken
- * turn, and on a typed one where its plan changed since its last turn
- * (`../coder-host/turn-context.ts`): the developer's own time, the task's
- * name and brief, its saved document, the agents' recent notes on it, the
- * sections the developer wrote, and the open comment threads. It is data,
+ * What a coding agent is handed on a turn where its plan changed since its
+ * last turn (`../coder-host/turn-context.ts`): the developer's own time, the
+ * task's name and brief, its saved document, the agents' recent notes on it,
+ * and the open comment threads. It is data,
  * read again as each turn opens and remembered by none, so a turn reads
  * what was saved since the last one rather than a stale copy.
  */
@@ -15,7 +14,6 @@ import { dateLabel } from "@luke/features/date-mention";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import { NOTE_KIND, type PlanAgentEdit } from "@luke/features/plan-template";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 
@@ -25,8 +23,6 @@ const DEVELOPER_TIME_MARKER = "[the developer's time]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by agents]";
 const BRIEF_MARKER = "[the developer's brief for the task]";
-/** The marker the sections the developer last wrote ride behind, which the brain is told to keep as written. */
-const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
 /** The most agents' saves the model is told of, the newest; the journal keeps more. */
 const RECENT_AGENT_EDITS = 5;
@@ -66,16 +62,6 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
   ];
 }
 
-/** The sections the developer wrote last, by heading, each with when; nothing where the developer wrote none. */
-function developerFieldsText(stored: StoredTask): readonly string[] {
-  const written = stored.sectionWriters.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
-  if (written.length === 0) return [];
-  return [
-    DEVELOPER_FIELDS_MARKER,
-    ...written.map((writer) => `- ${writer.section}, ${new Date(writer.at).toISOString()}`),
-  ];
-}
-
 /** The developer's own words about the task as they started it, as a JSON string; nothing for a task started with none. */
 function briefText(stored: StoredTask): readonly string[] {
   if (stored.brief === undefined) return [];
@@ -100,7 +86,7 @@ export interface TurnClock {
 /**
  * The developer's own time as the turn opens: the weekday, the date, and the
  * time in their zone, the zone's name and offset, and the time in UTC beside
- * them, then today as the date mention the plan writes it, so Luke counts
+ * them, then today as the date mention the plan writes it, so the agent counts
  * "Friday" from their today rather than UTC's and spells a time at their
  * offset. A turn whose window named no zone, a desktop released before it
  * sent one, reads UTC and says so.
@@ -143,11 +129,10 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * What a turn about a task is handed beside its instructions: the
  * developer's own time and today (`developerTimeText`), the plan's name, the
  * developer's brief where they wrote one as they started it, the saved
- * document as JSON, the newest saves coding agents made on it (so Luke can
- * raise what an agent asked or decided), the sections the developer last
- * wrote themselves (so Luke treats them as decided), and the plan's open
- * comment threads (so Luke can raise what a member asked), each read again
- * every turn so what Luke saved is what the next turn reads. A task that no
+ * document as JSON, the newest saves coding agents made on it (so the agent can
+ * raise what an agent asked or decided), and the plan's open comment threads
+ * (so the agent can raise what a member asked), each read again
+ * every turn so what the agent saved is what the next turn reads. A task that no
  * longer stands gets the heading and the developer's time alone.
  */
 export function standingContext(
@@ -168,7 +153,6 @@ export function standingContext(
     DOCUMENT_MARKER,
     JSON.stringify(task.document),
     ...agentEditsText(stored.agentEdits),
-    ...developerFieldsText(stored),
     ...openThreadsText(comments),
   ].join("\n");
 }

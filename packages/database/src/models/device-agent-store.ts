@@ -16,6 +16,10 @@
  * (`../schemas/device-agent.ts`). The secrets are opaque here: the service
  * seals them before the queue and opens them after the claim.
  *
+ * A launch line's step (`DEVICE_LAUNCH_STEP`) is kept only while its Mac
+ * holds it claimed and unsettled, and only ever moved forward in the order
+ * a launch passes them, so a report that lands late never takes it back.
+ *
  * A line of a kind that needs a capability (`DEVICE_AGENT_LINE_CAPABILITY`)
  * is queued only where the agent's Mac registered it, since a follower that
  * predates the kind fails its whole held read on one.
@@ -33,12 +37,15 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_CAPABILITY,
+  DEVICE_LAUNCH_STEPS,
   type DeviceAgentAnswer,
   type DeviceAgentLineKind,
   type DeviceAgentObject,
   type DeviceAgentRequestKind,
+  type DeviceLaunchStep,
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
 import {
   and,
@@ -47,6 +54,7 @@ import {
   desc,
   eq,
   gt,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -61,7 +69,8 @@ import { Database, type DatabaseServices, type StoreFailure } from "../core/quer
 import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
-import { conversations } from "../schemas/storage.js";
+import { conversations, turns } from "../schemas/storage.js";
+import { ENDED_TURN_STATUSES } from "./agent-store.js";
 
 type DeviceAgentEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -145,10 +154,20 @@ const DeviceAgentPinSchema = Schema.Struct({
 
 export type DeviceAgentPin = typeof DeviceAgentPinSchema.Type;
 
-/** An agent's newest launch line as its machine reads it: whether its Mac settled it, with what exit, and whether a stop line followed it. */
+/**
+ * An agent's newest launch line as its machine and its transcript read it:
+ * when it was queued, whether its Mac claimed it and which step it reported
+ * its launch has reached, whether it settled it and with what exit, and
+ * whether a stop line followed it. Note that the step is read as the row
+ * holds it, any word at all, because a row a newer build wrote must not
+ * fail the read a runner's every line is queued by.
+ */
 const DeviceAgentLaunchSchema = Schema.Struct({
   id: Schema.String,
   payload: deviceAgentObjectSchema,
+  createdAt: Schema.Date,
+  claimed: Schema.Boolean,
+  step: Schema.NullOr(Schema.String),
   settled: Schema.Boolean,
   exitCode: Schema.NullOr(Schema.Number),
   stopped: Schema.Boolean,
@@ -212,8 +231,60 @@ const findPin = SqlSchema.findOneOption({
     ),
 });
 
+const findAwaitsUpdate = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: device.id })
+        .from(agentTable)
+        .innerJoin(device, eq(device.id, agentTable.deviceId))
+        .where(and(pinnedAgent(userId, agentId), eq(device.updatePhase, HOST_UPDATE.WAITING))),
+    ),
+});
+
 /** A stop line queued for the agent after its launch line. */
 const stopLine = alias(deviceAgentLine, "stop_line");
+
+/** A line queued for the agent after its launch line. */
+const laterLine = alias(deviceAgentLine, "later_line");
+
+const findQueuedAfter = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    launchId: Schema.String,
+    kind: LineKindSchema,
+    payload: deviceAgentObjectSchema,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, launchId, kind, payload }) =>
+    Database.use((db) =>
+      db
+        .select({ id: laterLine.id })
+        .from(deviceAgentLine)
+        .innerJoin(
+          laterLine,
+          and(
+            eq(laterLine.agentId, deviceAgentLine.agentId),
+            gt(laterLine.seq, deviceAgentLine.seq),
+          ),
+        )
+        .where(
+          and(
+            eq(deviceAgentLine.id, launchId),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            eq(laterLine.userId, userId),
+            eq(laterLine.kind, kind),
+            // Note that the payload is matched as the queue writes it, in the database, so no
+            // message's words or pictures are read back to find it.
+            sql`${laterLine.payload} = ${JSON.stringify(payload)}::jsonb`,
+          ),
+        )
+        .limit(1),
+    ),
+});
 
 const findLatestLaunch = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
@@ -224,6 +295,9 @@ const findLatestLaunch = SqlSchema.findOneOption({
         .select({
           id: deviceAgentLine.id,
           payload: deviceAgentLine.payload,
+          createdAt: deviceAgentLine.createdAt,
+          claimed: sql<boolean>`${deviceAgentLine.claimedAt} is not null`,
+          step: deviceAgentLine.launchStep,
           settled: sql<boolean>`${deviceAgentLine.settledAt} is not null`,
           exitCode: deviceAgentLine.exitCode,
           stopped: sql<boolean>`exists (${db
@@ -397,6 +471,49 @@ const findClaimedUnder = SqlSchema.findOneOption({
             isNull(deviceAgentLine.settledAt),
           ),
         ),
+    ),
+});
+
+/** A launch's steps in the order a launch passes them, as Postgres reads a step's place among them. */
+const LAUNCH_STEP_ORDER = sql`array[${sql.join(
+  DEVICE_LAUNCH_STEPS.map((step) => sql`${step}`),
+  sql`, `,
+)}]::text[]`;
+
+const writeLaunchStep = SqlSchema.findAll({
+  Request: Schema.Struct({
+    ...DeviceRowKeySchema.fields,
+    step: Schema.Literals(DEVICE_LAUNCH_STEPS),
+  }),
+  Result: Schema.Struct({ agentId: Schema.String }),
+  execute: ({ userId, deviceId, id, step }) =>
+    Database.use((db) =>
+      db
+        .update(deviceAgentLine)
+        .set({
+          // Note that a step at or behind the one the line holds leaves it as it stands, because a report that lands late must never take the launch back,
+          // and so does a step held that this build cannot place, which a newer build wrote, since this build cannot tell whether it is behind.
+          launchStep: sql<DeviceLaunchStep>`case
+            when ${deviceAgentLine.launchStep} is not null and coalesce(
+              array_position(${LAUNCH_STEP_ORDER}, ${deviceAgentLine.launchStep})
+                >= array_position(${LAUNCH_STEP_ORDER}, ${step}::text),
+              true
+            )
+            then ${deviceAgentLine.launchStep}
+            else ${step}::text
+          end`,
+        })
+        .where(
+          and(
+            eq(deviceAgentLine.id, id),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            isNotNull(deviceAgentLine.claimedAt),
+            isNull(deviceAgentLine.settledAt),
+          ),
+        )
+        .returning({ agentId: deviceAgentLine.agentId }),
     ),
 });
 
@@ -719,6 +836,91 @@ const writeLapsedSettled = SqlSchema.findAll({
     ),
 });
 
+/** A warm launch the sweep may retire: its agent's starter, the agent, and the session its conversation runs in, which its place is found by. */
+const WarmLaunchSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  agentId: Schema.String,
+  sessionId: Schema.String,
+});
+
+export type DeviceAgentWarmLaunch = typeof WarmLaunchSchema.Type;
+
+/** A launch line of the same agent queued after another. */
+const newerLaunch = alias(deviceAgentLine, "newer_launch");
+
+const findWarmLaunches = SqlSchema.findAll({
+  Request: Schema.Struct({
+    seenSince: Schema.Date,
+    endedBefore: Schema.Date,
+    waitingEndedBefore: Schema.Date,
+    limit: Schema.Int,
+  }),
+  Result: WarmLaunchSchema,
+  execute: ({ seenSince, endedBefore, waitingEndedBefore, limit }) =>
+    Database.use((db) => {
+      // The conversation's newest turn, as `agent-store.ts`'s `readNativeRunStanding` reads whether its run ended.
+      const newestTurn = db
+        .select({ status: turns.status, settledAt: turns.settledAt })
+        .from(turns)
+        .where(eq(turns.conversationId, conversations.id))
+        .orderBy(desc(turns.queuedAt), desc(turns.id))
+        .limit(1)
+        .as("newest_turn");
+      // Note that an ended turn with no settle time stamped reads as ended long ago, as the run's standing reads it.
+      const endedBy = (instant: Date) =>
+        or(isNull(newestTurn.settledAt), lt(newestTurn.settledAt, instant));
+      return db
+        .select({
+          id: deviceAgentLine.id,
+          userId: deviceAgentLine.userId,
+          agentId: deviceAgentLine.agentId,
+          sessionId: sql<string>`${conversations.runtimeSessionId}`,
+        })
+        .from(deviceAgentLine)
+        .innerJoin(device, eq(device.id, deviceAgentLine.deviceId))
+        .innerJoin(agentTable, eq(agentTable.id, deviceAgentLine.agentId))
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .innerJoinLateral(newestTurn, sql`true`)
+        .where(
+          and(
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            isNull(deviceAgentLine.settledAt),
+            eq(agentTable.machine, AGENT_MACHINE.DEVICE),
+            isNotNull(conversations.runtimeSessionId),
+            gte(device.lastSeenAt, seenSince),
+            inArray(newestTurn.status, [...ENDED_TURN_STATUSES]),
+            or(
+              endedBy(endedBefore),
+              and(eq(device.updatePhase, HOST_UPDATE.WAITING), endedBy(waitingEndedBefore)),
+            ),
+            sql`not exists (${db
+              .select({ one: sql`1` })
+              .from(stopLine)
+              .where(
+                and(
+                  eq(stopLine.agentId, deviceAgentLine.agentId),
+                  eq(stopLine.kind, DEVICE_AGENT_LINE_KIND.STOP),
+                  gt(stopLine.seq, deviceAgentLine.seq),
+                ),
+              )})`,
+            sql`not exists (${db
+              .select({ one: sql`1` })
+              .from(newerLaunch)
+              .where(
+                and(
+                  eq(newerLaunch.agentId, deviceAgentLine.agentId),
+                  eq(newerLaunch.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+                  gt(newerLaunch.seq, deviceAgentLine.seq),
+                ),
+              )})`,
+          ),
+        )
+        .orderBy(asc(deviceAgentLine.seq))
+        .limit(limit);
+    }),
+});
+
 const deleteExpiredRequests = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, before: Schema.Date }),
   execute: ({ userId, before }) =>
@@ -784,7 +986,36 @@ export function deviceAgentPin(agentId: string): DeviceAgentEffect<Option.Option
   return findPin({ agentId });
 }
 
-/** The account's agent's newest launch line, as its machine reads whether its runner runs; nothing where none stands. */
+/**
+ * Whether the account's local agent's device last beat that it waits to
+ * switch release (`HOST_UPDATE.WAITING`); false for an agent in a sandbox,
+ * one pinned to no device of the account's, and another account's agent.
+ */
+export function deviceAgentAwaitsUpdate(
+  userId: string,
+  agentId: string,
+): DeviceAgentEffect<boolean> {
+  return Effect.map(findAwaitsUpdate({ userId, agentId }), (rows) => rows.length > 0);
+}
+
+/**
+ * Whether a line of the kind and payload given was queued after the
+ * account's launch line named, for the same agent: what a later call reads
+ * of what was written to the runner that launch started. False where no
+ * such launch line of the account's stands.
+ */
+export function deviceAgentLineQueuedAfter(
+  userId: string,
+  launchId: string,
+  line: { readonly kind: DeviceAgentLineKind; readonly payload: DeviceAgentObject },
+): DeviceAgentEffect<boolean> {
+  return Effect.map(
+    findQueuedAfter({ userId, launchId, kind: line.kind, payload: line.payload }),
+    (rows) => rows.length > 0,
+  );
+}
+
+/** The account's agent's newest launch line, as its machine reads whether its runner runs and its transcript where its launch stands; nothing where none stands. */
 export function latestDeviceAgentLaunch(
   userId: string,
   agentId: string,
@@ -839,6 +1070,23 @@ export function claimDeviceAgentLine(
       secretsGone: line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH,
     }));
   });
+}
+
+/**
+ * Keeps the step the account's Mac reported its launch of a launch line it
+ * claimed and has not settled has reached, where it moves the line's step
+ * forward, and leaves it as it stands where it does not, or where the line
+ * holds a step a newer build wrote that this build cannot place; whether the Mac
+ * holds such a line, which is false for another Mac's or account's line, a
+ * line of any other kind, one waiting, and one settled.
+ */
+export function stepDeviceAgentLaunch(
+  userId: string,
+  deviceId: string,
+  id: string,
+  step: DeviceLaunchStep,
+): DeviceAgentEffect<boolean> {
+  return Effect.map(writeLaunchStep({ userId, deviceId, id, step }), (rows) => rows.length > 0);
 }
 
 /**
@@ -924,6 +1172,26 @@ export function settleLapsedDeviceAgentLine(
       Option.fromNullishOr(rows[0]),
     ),
   );
+}
+
+/**
+ * The newest launch lines of every account's local agents whose runner may
+ * still be warm, oldest first, at most `limit`: the line open, claimed or
+ * not, with no stop queued after it, as the machine reads a runner live
+ * (`device-machine.ts`'s `findPlaces`), on a device that beat since
+ * `seenSince`, so a device whose lease lapsed is left to the lease sweep;
+ * and the agent's run ended, its newest turn settled, cancelled, or failed
+ * before `endedBefore`, or before `waitingEndedBefore` where its device last
+ * beat that it waits to switch release (`HOST_UPDATE.WAITING`). Read with no
+ * account in hand, because the maintenance sweep reads every account's.
+ */
+export function warmDeviceAgentLaunches(read: {
+  readonly seenSince: Date;
+  readonly endedBefore: Date;
+  readonly waitingEndedBefore: Date;
+  readonly limit: number;
+}): DeviceAgentEffect<readonly DeviceAgentWarmLaunch[]> {
+  return findWarmLaunches(read);
 }
 
 /**

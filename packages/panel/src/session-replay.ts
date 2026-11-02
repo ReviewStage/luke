@@ -6,9 +6,11 @@
  * declared; this client is the analytics library posting straight to the
  * processor, and a recording is the rendered panel. What keeps a session
  * title, a branch, an error line, a caption, or the account's own name out of
- * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
- * every input is masked, the attributes that carry words or an image are
- * asterisked, and autocapture is off. What leaves is layout, pointer
+ * it is `SESSION_REPLAY_MASKING` below, not a declared list of events: every
+ * text node and every input is masked, every attribute but the few the replay
+ * lays out by is asterisked, and autocapture is off; and the stylesheets the
+ * panel builds from a person's words are emptied before a recording leaves
+ * (`withoutWithheldSheets`). What leaves is layout, pointer
  * positions, and asterisks of the right length. The surfaces that hold the
  * most of a person's words also block their whole subtree with the library's
  * fixed `ph-no-capture` class as a second line, each named where it is drawn
@@ -44,13 +46,14 @@
 
 import type { ProductPlatform } from "@luke/features/analytics";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import { opensWithheldSheet } from "@luke/ui/session-replay-marks";
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
 import type { BundleImporter } from "./bundle-loader.js";
 import { sessionRecorderLoaded } from "./session-recorder/contract.js";
 
 /**
- * Where everything here posts. The processor's own address rather than Luke's
+ * Where everything here posts. The processor's own address rather than our
  * origin: nothing forwards on the user's behalf, so the processor sees the
  * address a request arrives from. Each shell's connect policy names it, and
  * the assets host beside it.
@@ -58,36 +61,222 @@ import { sessionRecorderLoaded } from "./session-recorder/contract.js";
 const POSTHOG_HOST = "https://us.i.posthog.com";
 
 /**
+ * The panel's own `data-*` attributes its styles select on by their value,
+ * each holding a keyword or a flag, never an id or a person's words: a
+ * button's variant, the window's theme, a pane's state. One the styles come
+ * to select on by value joins here, or the replay draws it as if it were
+ * absent; an id such as `data-threads` never does.
+ */
+const LAYOUT_DATA = `
+  above action actions actions-shown active aligned arrival at axis band
+  brightens busy capture carried cell chart closable columns corner current
+  current-look cut default denied density detail disabled disclosure done
+  dot dragging drop-after drop-before drop-target dropping edge editing
+  empty enabled end expanding extent fade fade-inset fill finger-tall fixed
+  fold folded folds font frame full full-screen gap-control glide gone
+  ground gutter-buffer height held here hold hover hug icon-only idle image
+  inbox-comment inbox-shown indent indeterminate indicators inherit ink
+  inset issue-state item-section item-selected keyboard kind labels-control
+  landed late layer layout lead leaving legible level lifted lights line
+  lines lit loaded look luke-boot-sidebar luke-density luke-profile
+  luke-room luke-theme marked measure menu-open meta min-width mobile-bar
+  mode motion move moves muted name narrow narrowest nudge numbered open
+  opened orientation overflow page pane-beside pane-over panel-open
+  panel-toggle pending picked place placed placement playing pointer-opens
+  preview primary priority pull-request-state pulse rail-beside reach
+  read-only refused removable repeat review-state risk roll room ruled
+  sections selected separator shown side sidebar-collapsed sidebar-overlay
+  single size slot stand start state status style submit surface swiped
+  thumb tone truncate-container truncate-group-container turn turned type
+  under under-more unread variant whole wide width worded wrap-heading
+  wrapped zoom
+`
+  .trim()
+  .split(/\s+/u)
+  .map((name) => `data-${name}`);
+
+/**
+ * The attributes the replay lays a page out by, whose values leave as they
+ * stand: every other attribute's value is asterisked, so an attribute nobody
+ * named here is masked from the day it is first drawn. An attribute masked
+ * this way still stands, empty where it was empty, so a selector that asks
+ * only whether it is there still draws; what is listed is what draws by its
+ * value. That is an element's classes and its own style, the sizes and
+ * shapes an element takes from its attributes, the kind and the state a
+ * control is drawn in, which the panel's styles select on, and what the
+ * recorder writes for itself: the rules of a stylesheet it copied in, and
+ * where a box left out of the recording stands. Each is a keyword, a number,
+ * a colour, or a path, and never a person's words. Note that an element's own
+ * style leaves whole, so nothing may write a person's words into one: the one
+ * style built from a config, a chart's series colours (`@luke/ui/chart`), is
+ * drawn from a module's constants, and only on the admin page, which the
+ * recording leaves out. Names are lowercase, since the recorder hands an SVG
+ * attribute over in the case it was written.
+ */
+const LAYOUT = new Set([
+  "class",
+  "style",
+  "type",
+  "role",
+  "dir",
+  "rel",
+  "media",
+  "tabindex",
+  "contenteditable",
+  "draggable",
+  "width",
+  "height",
+  "colspan",
+  "rowspan",
+  "span",
+  "cols",
+  "rows",
+  "size",
+  // The state a control is drawn in, which the panel's styles select on.
+  "aria-busy",
+  "aria-checked",
+  "aria-current",
+  "aria-disabled",
+  "aria-expanded",
+  "aria-haspopup",
+  "aria-invalid",
+  "aria-pressed",
+  "aria-selected",
+  ...LAYOUT_DATA,
+  // An SVG's geometry and paint.
+  "viewbox",
+  "preserveaspectratio",
+  "xmlns",
+  "d",
+  "x",
+  "y",
+  "x1",
+  "y1",
+  "x2",
+  "y2",
+  "cx",
+  "cy",
+  "r",
+  "rx",
+  "ry",
+  "fx",
+  "fy",
+  "points",
+  "pathlength",
+  "transform",
+  "transform-origin",
+  "offset",
+  "gradientunits",
+  "gradienttransform",
+  "spreadmethod",
+  "clippathunits",
+  "maskunits",
+  "patternunits",
+  "fill",
+  "fill-opacity",
+  "fill-rule",
+  "stroke",
+  "stroke-width",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-miterlimit",
+  "stroke-dasharray",
+  "stroke-dashoffset",
+  "stroke-opacity",
+  "stop-color",
+  "stop-opacity",
+  "opacity",
+  "clip-path",
+  "clip-rule",
+  "mask",
+  "filter",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+  "vector-effect",
+  "shape-rendering",
+  "overflow",
+  "visibility",
+  "display",
+  "color",
+  "font-size",
+  "font-weight",
+  "text-anchor",
+  "dominant-baseline",
+  // What the recorder writes for itself.
+  "_csstext",
+  "rr_width",
+  "rr_height",
+  "rr_left",
+  "rr_top",
+  "rr_position",
+  "rr_transform",
+  "rr_display",
+  "rr_mediastate",
+  "rr_open_mode",
+]);
+
+/** Where a link's address is layout rather than a destination: a stylesheet's, and an icon's symbol. */
+const LAYOUT_HREFS = new Set(["link", "use"]);
+
+/** The SVG elements another element draws through by id, whose ids are the panel's own: an icon's symbol, a gradient, a clip, a mask. */
+const SVG_RESOURCES = new Set([
+  "symbol",
+  "lineargradient",
+  "radialgradient",
+  "clippath",
+  "mask",
+  "pattern",
+  "filter",
+  "marker",
+]);
+
+/** The id the window's page mounts the panel on, whose box every pane's height is laid out from. */
+const MOUNT_ID = "root";
+
+/** Whether an attribute's value lays the replay out, and leaves as it stands. */
+function laysOut(name: string, value: string, element: Element | undefined): boolean {
+  const tag = element?.localName.toLowerCase() ?? "";
+  if (name === "href") return LAYOUT_HREFS.has(tag);
+  if (name === "id") return value === MOUNT_ID || SVG_RESOURCES.has(tag);
+  return LAYOUT.has(name);
+}
+
+/**
  * What keeps the words out of the recording: every text node masked (there is
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
- * bundle), inputs masked by the library's default, the attributes that carry
- * words or an image asterisked (a `<meta>`'s `content` among them, which the
- * web app's document carries its description in) while `class` and `style`
- * still lay out, every
- * `href` among them but the two the replay lays out by (a stylesheet's and an
- * icon's symbol), because a link in a transcript or an Inbox item may go to
- * any page and its address can carry a token, autocapture off, since a click event carries the text of what was clicked,
- * and canvas recording off, since a canvas carries its words as pixels. Note
- * that the canvas option is set here rather than left to the library's
- * default, because the library reads it before the remote configuration and a
- * project that switched canvas recording on would otherwise turn it on here.
- * The console and the network are kept out on the same terms, because a
- * request's address or a console line can carry a token as freely as a link.
+ * bundle), every input masked, every attribute but those the replay lays out
+ * by (`LAYOUT`) asterisked, autocapture off, since a click event carries the
+ * text of what was clicked, and canvas recording off, since a canvas carries
+ * its words as pixels.
+ *
+ * An allowlist rather than a list of the attributes that carry words,
+ * because that list kept missing one: an element's `id` and the ids that
+ * point at it, a `name`, a `value` off a field, a link's address written as
+ * `xlink:href`, and every `data-*` attribute, where a row keeps its
+ * repository's name and a list its options' ids. A link's address is masked
+ * like the rest, because a link in a transcript or an Inbox item may go to
+ * any page and its address can carry a token, but for the two the replay
+ * lays out by: a stylesheet's and an icon's symbol. So is an `id`, but the
+ * one the page mounts the panel on and those of an icon's symbol and the
+ * gradients, clips, and masks an icon draws through, which are the panel's
+ * own.
+ *
+ * Note that inputs are masked by name rather than by the library's default,
+ * because the project's setting would otherwise decide; and that the
+ * recorder masks no radio's, checkbox's, or file input's value at all,
+ * whatever this says, so those are kept out where they are drawn
+ * (`@luke/ui/session-replay-marks`, and the file picker's `ph-no-capture`).
+ * The canvas option is set here rather than left to the library's default
+ * on the same terms, because the library reads it before the remote
+ * configuration and a project that switched canvas recording on would
+ * otherwise turn it on here. The console and the network are kept out on the
+ * same terms, because a request's address or a console line can carry a
+ * token as freely as a link. A request's headers and body are off by name
+ * too: the library sends them where this says so or the project does, and the
+ * remote configuration this window preloads names neither.
  */
-const WORDS = new Set([
-  "title",
-  "aria-label",
-  "aria-description",
-  "aria-roledescription",
-  "aria-valuetext",
-  "aria-placeholder",
-  "alt",
-  "placeholder",
-  "src",
-  "content",
-]);
-const LAYOUT_HREFS = new Set(["link", "use"]);
 const SESSION_REPLAY_MASKING = {
   autocapture: false,
   capture_dead_clicks: false,
@@ -96,11 +285,12 @@ const SESSION_REPLAY_MASKING = {
   mask_all_text: true,
   session_recording: {
     captureCanvas: { recordCanvas: false },
+    maskAllInputs: true,
     maskTextSelector: "*",
     maskAttributeFn: (name: string, value: string, element?: Element): string =>
-      WORDS.has(name) || (name === "href" && !LAYOUT_HREFS.has(element?.localName ?? ""))
-        ? "*".repeat(value.length)
-        : value,
+      laysOut(name.toLowerCase(), value, element) ? value : "*".repeat(value.length),
+    recordHeaders: false,
+    recordBody: false,
   },
 } as const;
 
@@ -209,7 +399,39 @@ function addressless(
 }
 
 /**
- * The bridge between the library's own property bag and the parser above.
+ * Empties every withheld sheet (`@luke/ui/session-replay-marks`) in what a
+ * recording sends: the panel built it from a person's words, which its
+ * selectors name in clear, since no masking reaches CSS.
+ *
+ * The recorder sends a sheet a document adopts as its list of rules, and a
+ * sheet written again as its whole text, and the mark opens either: a list
+ * holding the mark is sent empty, and a text opening with it is sent as
+ * none. Anything else is passed back exactly as it came. Note that the
+ * recorder sends a rule added on its own compressed, where no mark can be
+ * read, which is why a withheld sheet is only ever written whole.
+ */
+function withoutWithheldSheets(value: WireValue): WireValue {
+  const asText = text(value);
+  if (asText !== undefined) return opensWithheldSheet(asText) ? "" : value;
+  if (Array.isArray(value)) return value.map(withoutWithheldSheets);
+  if (!isRecord(value)) return value;
+  const rules = value.rules;
+  if (Array.isArray(rules) && rules.some((each) => isRecord(each) && withheldRule(each.rule))) {
+    return { ...value, rules: [] };
+  }
+  const scrubbed: Record<string, WireValue> = {};
+  for (const [key, entry] of Object.entries(value)) scrubbed[key] = withoutWithheldSheets(entry);
+  return scrubbed;
+}
+
+/** Whether a rule, as the recorder copied it, is a withheld sheet's mark. */
+function withheldRule(rule: UnparsedWireValue): boolean {
+  const asText = rule === undefined ? undefined : text(rule);
+  return asText !== undefined && opensWithheldSheet(asText);
+}
+
+/**
+ * The bridge between the library's own property bag and the parsers above.
  * `Properties` types its values as `any`, which is what an unvalidated wire
  * value is; this is the one place that is said out loud.
  */
@@ -217,8 +439,9 @@ function scrubbedProperties(properties: Properties, shell: SessionReplayShell): 
   const scrubbed: Properties = {};
   for (const [key, value] of Object.entries(properties)) {
     // SAFETY: the library built this bag, so its values are unvalidated wire
-    // values by construction; the parser establishes any shape it acts on.
-    scrubbed[key] = withoutOwnAddress(value as UnparsedWireValue, shell);
+    // values by construction; the parsers establish any shape they act on.
+    const addressless = withoutOwnAddress(value as UnparsedWireValue, shell);
+    scrubbed[key] = addressless === undefined ? undefined : withoutWithheldSheets(addressless);
   }
   return scrubbed;
 }
@@ -238,7 +461,7 @@ function scrubbedProperties(properties: Properties, shell: SessionReplayShell): 
  * truthiness alone, so an empty object turns recording on and supplies no
  * masking: `init`'s `session_recording` is read first and this response
  * second, so `SESSION_REPLAY_MASKING` stands. `hasFeatureFlags: false`
- * declines the flag fetch Luke has no use for.
+ * declines the flag fetch we have no use for.
  */
 function preloadRemoteConfig(key: string): void {
   window._POSTHOG_REMOTE_CONFIG = {
@@ -443,7 +666,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
         return;
       }
       // The "no-external" client: the full build without the surveys, product
-      // tours, web vitals, and the rest Luke never turns on, and without the
+      // tours, web vitals, and the rest we never turn on, and without the
       // recorder, which is a bundle of its own.
       void import("posthog-js/dist/module.no-external").then((module) => {
         loading = false;

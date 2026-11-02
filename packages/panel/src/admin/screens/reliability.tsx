@@ -16,6 +16,7 @@ import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { formatDate } from "@luke/features/time-format";
 import { readFailedWords } from "@luke/features/words";
@@ -227,7 +228,7 @@ function attentionColumns(
 const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "luke-turns",
-    label: () => "Luke turns failed",
+    label: () => `${PRODUCT_NAME} turns failed`,
     value: ({ headline }) => formatPercent(share(headline.lukeTurns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.lukeTurns, "turns", windowDays),
   },

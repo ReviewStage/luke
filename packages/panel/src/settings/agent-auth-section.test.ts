@@ -436,7 +436,7 @@ test("editing a saved API key shows Saved where the key would be, never the key,
   await press(keyCard, "Edit key");
   const field = labelled(keyCard, "Anthropic API key");
   assert.equal(field.placeholder, "Saved");
-  assert.match(keyCard.textContent ?? "", /Saving replaces the key Luke holds\./u);
+  assert.match(keyCard.textContent ?? "", /Saving replaces the key Vespin holds\./u);
   assert.equal(field.value, "");
   assert.equal(field.type, "password");
   assert.equal(button(keyCard, "Show").disabled, true, "there is nothing in the window to show");
@@ -535,7 +535,7 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   await press(plan, "Replace token");
   const field = labelled(plan, "Claude setup-token");
   assert.equal(field.placeholder, "Saved", "a saved token is said, not shown");
-  assert.match(plan.textContent ?? "", /Saving replaces the token Luke holds\./u);
+  assert.match(plan.textContent ?? "", /Saving replaces the token Vespin holds\./u);
   assert.equal(field.value, "");
 });
 

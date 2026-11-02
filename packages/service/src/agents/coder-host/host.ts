@@ -4,7 +4,6 @@ import {
   type Agent,
   hasRepository,
   lineSendersOf,
-  readAgentContext,
   readAgentOfConversation,
   readDelegation,
   recordAgentCompaction,
@@ -17,7 +16,7 @@ import { listRecentMessages, type StoredMessageRecord } from "@luke/database/mod
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind, reportUnexpected } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -34,7 +33,7 @@ import {
 } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import type { PictureLookResult } from "../../tasks/picture-look.js";
-import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
+import { reopenTaskForWork, settleTaskAfterTurn } from "../../tasks/task-finish.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
@@ -57,11 +56,9 @@ import {
   StreamRelay,
 } from "../eve-host/relay.js";
 import { rotationSeedText } from "../eve-host/seed.js";
-import { newestLineIsAutomation } from "../memory-provenance.js";
-import { memoryOnFor, seedMemoryText } from "../memory-tools.js";
+import { memoryOnFor } from "../memory-tools.js";
 import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
-import { isOperator } from "../steward.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import {
@@ -101,13 +98,8 @@ import type { PullRequestToolResult } from "./pull-request.js";
 import { agentSkills } from "./skills.js";
 import { titleAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
-import { flushDue, type TurnHanded } from "./turn-context.js";
-import {
-  type CoderTurn,
-  type CoderTurnMessage,
-  coderTurnMessage,
-  deskHandedRead,
-} from "./turn-message.js";
+import type { TurnHanded } from "./turn-context.js";
+import { type CoderTurn, type CoderTurnMessage, coderTurnMessage } from "./turn-message.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
@@ -246,9 +238,7 @@ export interface CoderHost extends HostAdmission {
    * a session opened afresh after its last one retired remembers what was
    * said. A line awaiting its turn is left out, since it is the message the
    * session opens with; nothing for a conversation with nothing else said.
-   * An operator's is followed by the workspace's memory as a recall with no
-   * query answers it (`../memory-tools.ts`'s `seedMemoryText`), where its
-   * member has Memory on. No compaction summary leads it, since Luke keeps
+   * No compaction summary leads it, since we keep
    * none of a coding agent's history.
    */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
@@ -368,13 +358,7 @@ export interface CoderHost extends HostAdmission {
    * a line naming the turn's kind where it changed; the developer's time on
    * every turn; the task as it stands where someone other than the agent saved
    * the plan since its previous turn started, or the rest of it is not what
-   * the session last handed (`handed`); and an operator's desk, its
-   * member's open work (`../operator-desk.ts`), where its standing work is
-   * not what was last handed or it carries notices of what its member's
-   * agents did since, which are marked read once handed; and, once an
-   * operator's newest step passed the flush mark and it was not told since
-   * eve last compacted it, the line telling it to keep what is durable before
-   * its history is summarised, where its member has Memory on. Answers what the session has
+   * the session last handed (`handed`). Answers what the session has
    * handed once this message is, for the session to keep; nothing to hand
    * where the conversation is no agent's. A read that fails is logged and
    * leaves its part out, so the turn still opens.
@@ -619,35 +603,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     return written.pipe(Effect.catch(logStoreFailure));
   };
 
-  /**
-   * Whether an operator's turn opens with the line telling it its history
-   * will soon be summarised (`turn-context.ts`'s `flushDue`), read against
-   * the window the catalog lists for what it runs on now; never for any
-   * other agent, nor where its member has Memory off, nor on a turn an
-   * automation's line opens, its heartbeat's among them, which may keep
-   * nothing and so leaves the line to the member's next turn; and not where
-   * a read failed, which is logged, so the turn still opens.
-   */
-  const flushOf = (
-    agent: Agent,
-    handed: TurnHanded,
-  ): Effect.Effect<boolean, never, DatabaseServices | ModelCatalog> =>
-    !isOperator(agent) || handed.opened !== true || handed.flushTold === true
-      ? Effect.succeed(false)
-      : Effect.gen(function* () {
-          if (!(yield* memoryOnFor(agent.userId))) return false;
-          // A turn an automation opens may keep nothing, so it is not told, and a member's later turn is.
-          if (yield* newestLineIsAutomation(agent)) return false;
-          const context = yield* readAgentContext(agent.userId, agent.id);
-          if (Option.isNone(context)) return false;
-          const { model, contextWindow } = context.value;
-          const windowTokens = contextWindowOf(yield* catalogNow, model, contextWindow);
-          return flushDue(context.value, windowTokens, handed);
-        }).pipe(
-          Effect.tapError(logStoreFailure),
-          Effect.orElseSucceed(() => false),
-        );
-
   /** One event relayed through the shared relay. */
   const relayEvent = (event: MessageStreamEvent, standing: RelayStanding) =>
     Effect.gen(function* () {
@@ -761,14 +716,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         const records = read.ok ? read.value.filter((record) => !awaitsTurn(record)) : [];
         const speakers = yield* teammateSpeakers(admitted.target, records);
-        const said = rotationSeedText(records.map(messageOf), seams.now(), speakers);
-        // An operator's rotated session is seeded with the workspace's memory after what was said.
-        // Note that Luke keeps no compaction summary of a coding agent's history, so none leads it.
-        if (said === undefined) return undefined;
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found) || !isOperator(found.success)) return said;
-        const memory = yield* seedMemoryText(found.success);
-        return memory === undefined ? said : `${said}\n\n${memory}`;
+        // Note that we keep no compaction summary of a coding agent's history, so none leads it.
+        return rotationSeedText(records.map(messageOf), seams.now(), speakers);
       }),
 
     checkOut: (admitted, sandbox) =>
@@ -903,18 +852,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           Effect.orElseSucceed(() => Result.fail(CODER_REFUSAL.NO_AGENT)),
         );
         if (Result.isFailure(found)) return { text: undefined, handed };
-        const agent = found.success;
-        const message = yield* coderTurnMessage(
-          admitted,
-          agent,
-          turn,
-          handed,
-          seams.now(),
-          flushOf(agent, handed),
-        );
-        // The turn has started, so the message is delivered, and the desk's notices are read.
-        yield* deskHandedRead(agent, message);
-        return { text: message.text, handed: message.handed };
+        return yield* coderTurnMessage(admitted, found.success, turn, handed, seams.now());
       }),
 
     showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),
@@ -966,17 +904,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (agent === undefined) return;
         yield* recordContext(event, admitted.target.userId, agent, prompt);
         // A turn starting takes up the task, reopening one settled; a turn's end, its row settled by
-        // the relay above, may have finished the task's work. Neither is the relay's failure.
+        // the relay above, may have finished the task's work, or archives the agent with a task moved
+        // to Done while it worked. Neither is the relay's failure.
         if (agent.taskId !== null && event.type === "turn.started") {
           yield* reopenTaskForWork(admitted.target.userId, agent.taskId);
         }
         if (agent.taskId !== null && endsTurn(event)) {
-          yield* settleTaskIfFinished(admitted.target.userId, agent.taskId);
+          yield* settleTaskAfterTurn(admitted.target.userId, agent.taskId, agent.id);
         }
-        // An operator goes by Luke and is never titled, so no title model is asked for one.
-        if (agent.title !== null || agent.kind === AGENT_KIND.OPERATOR || !asksTitle(event)) {
-          return;
-        }
+        if (agent.title !== null || !asksTitle(event)) return;
         // Note that the title is awaited here rather than forked, because eve's step, and the
         // function instance under it, end when the hook returns and take a detached call with them.
         // No model, as for an account that saved no API key, titles the agent from its opening's first words.

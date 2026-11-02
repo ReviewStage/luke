@@ -21,12 +21,12 @@ describe("the site's pages", () => {
     ).toHaveLength(2);
   });
 
-  it("name a pasted link's card that leaves Luke's name or the landing page's image", () => {
+  it("name a pasted link's card that leaves Vespin's name or the landing page's image", () => {
     const landing = '<meta property="og:image" content="/card.png" />';
     const app = [
-      '<meta property="og:title" content="Luke" />',
-      '<meta name="twitter:title" content="Luke" />',
-      '<meta property="og:site_name" content="Luke" />',
+      '<meta property="og:title" content="Vespin" />',
+      '<meta name="twitter:title" content="Vespin" />',
+      '<meta property="og:site_name" content="Vespin" />',
       '<meta property="og:image" content="/other.png" />',
       '<meta name="twitter:image" content="/card.png" />',
       '<meta name="twitter:card" content="summary_large_image" />',

@@ -32,7 +32,7 @@ export const GATEWAY_METHOD = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  /** The repositories the account reaches through the Luke GitHub App, read from the service now. */
+  /** The repositories the account reaches through our GitHub App, read from the service now. */
   TASKS_REPOSITORIES: "tasks.repositories",
   /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
@@ -116,11 +116,11 @@ export const GATEWAY_METHOD = {
   WORKSPACES_RENAME: "workspaces.rename",
   /** A workspace's photo set or removed on the service by an owner or admin; the view's workspaces are read again. */
   WORKSPACES_PHOTO_SET: "workspaces.photoSet",
-  /** A GitHub organization's connection to a workspace begun on the service: the Luke GitHub App's install address, for the caller to open. */
+  /** A GitHub organization's connection to a workspace begun on the service: our GitHub App's install address, for the caller to open. */
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
+  /** Whether the deployment holds our Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_SENTRY: "workspaces.sentry",
   /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
   WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
@@ -186,10 +186,6 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE: "hosts.presence",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
-  /** An install token kept by its SHA-256 alone, the token itself staying in the window that minted it; its id and expiry, or why not. */
-  HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
-  /** One of the account's install tokens revoked; done, or why not. */
-  HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */
@@ -232,8 +228,6 @@ export const GATEWAY_METHOD = {
   AGENTS_ARCHIVE: "agents.archive",
   /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
   AGENTS_PIN: "agents.pin",
-  /** The account's operator in a workspace ensured, or reset and ensured afresh; its id, or why there is none. */
-  AGENTS_ENSURE_OPERATOR: "agents.ensureOperator",
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
@@ -305,7 +299,7 @@ export const GATEWAY_METHOD = {
   AGENTS_CHANGES: "agents.changes",
   /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it now; or why there are none. */
   AGENTS_CHAPTERS: "agents.chapters",
-  /** One agent's pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
+  /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
   AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
   /** The Claude model the account's Generate chapters runs on, read from the service now. */
   CHAPTERS_MODEL_READ: "chapters.modelRead",
@@ -341,7 +335,7 @@ export const GATEWAY_METHOD = {
   PULL_REQUESTS_VIEWED: "pullRequests.viewed",
   /** The workspace's newest chapters of that pull request; the read generates none. */
   PULL_REQUESTS_CHAPTERS: "pullRequests.chapters",
-  /** That pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
+  /** That pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
   PULL_REQUESTS_CHAPTERS_GENERATE: "pullRequests.chaptersGenerate",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
@@ -351,7 +345,7 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** A ChatGPT sign-in for Luke's hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
+  /** A ChatGPT sign-in for our hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
   CHATGPT_SIGN_IN: "chatGpt.signIn",
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
   CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
@@ -361,7 +355,7 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_SAVE: "githubToken.save",
   /** The member's GitHub token removed on the service; none then stands. */
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /** The memories Luke's agents kept in a workspace, read from the service now. */
+  /** The memories our agents kept in a workspace, read from the service now. */
   MEMORIES_READ: "memories.read",
   /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
   MEMORIES_FORGET: "memories.forget",
@@ -460,7 +454,7 @@ export const GATEWAY_METHOD = {
   MAC_COMMAND_ANSWER: "macCommands.answer",
   /** Where This Mac's `luke-host` stands (`@luke/host/contract`'s `THIS_MAC_HOST_STANDING`), as the host last found it. */
   THIS_MAC_HOST_READ: "thisMacHost.read",
-  /** This Mac's `luke-host` turned on by the member's own act, enrolling the Mac again where Luke removed it or the last turn-on failed; where it then stands. */
+  /** This Mac's `luke-host` turned on by the member's own act, enrolling the Mac again where the service removed it or the last turn-on failed; where it then stands. */
   THIS_MAC_HOST_TURN_ON: "thisMacHost.turnOn",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",

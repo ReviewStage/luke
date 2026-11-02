@@ -11,12 +11,15 @@
  * served at, so both render the same view.
  */
 
+import { LINK_ORIGIN } from "@luke/features/link-home";
+import { PRODUCT_NAME } from "@luke/features/product-name";
+
 export const CHANGELOG_PATH = "/changelog";
 /** The changelog's RSS feed, every release an item linking to its own page. */
 export const CHANGELOG_FEED_PATH = "/changelog/rss.xml";
-const CHANGELOG_FEED_TITLE = "Luke changelog";
+const CHANGELOG_FEED_TITLE = `${PRODUCT_NAME} changelog`;
 const CHANGELOG_PAGE_SIZE = 10;
-const SITE_ORIGIN = "https://tryluke.dev";
+const SITE_ORIGIN = LINK_ORIGIN;
 
 /** What a changelog address shows: a page of releases, or one release alone. */
 export const CHANGELOG_VIEW = {
@@ -27,7 +30,7 @@ export const CHANGELOG_VIEW = {
 /** The longest description a share card is given before it is cut at a word. */
 const DESCRIPTION_LIMIT = 200;
 
-const PAGE_DESCRIPTION = "What changed in each Luke release.";
+const PAGE_DESCRIPTION = `What changed in each ${PRODUCT_NAME} release.`;
 
 const RELEASE_PATH = /^\/changelog\/(\d+\.\d+\.\d+)$/;
 const PAGE_PATH = /^\/changelog\/page\/(\d+)$/;
@@ -153,8 +156,8 @@ export function changelogViewForPath(
 /** A release's name where it stands alone: its version, and its first feature when it has one. */
 function releaseTitle(release: Release): string {
   return release.headline === undefined
-    ? `Luke ${release.version}`
-    : `Luke ${release.version}: ${release.headline}`;
+    ? `${PRODUCT_NAME} ${release.version}`
+    : `${PRODUCT_NAME} ${release.version}: ${release.headline}`;
 }
 
 function releaseHead(release: Release): PageHead {
@@ -168,7 +171,7 @@ function releaseHead(release: Release): PageHead {
 
 function pageHead(page: number): PageHead {
   return {
-    title: page === 1 ? "Changelog — Luke" : `Changelog, page ${page} — Luke`,
+    title: page === 1 ? `Changelog — ${PRODUCT_NAME}` : `Changelog, page ${page} — ${PRODUCT_NAME}`,
     description: PAGE_DESCRIPTION,
     url: `${SITE_ORIGIN}${changelogPagePath(page)}`,
     image: undefined,

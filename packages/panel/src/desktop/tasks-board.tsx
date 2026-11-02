@@ -52,6 +52,8 @@ import {
   motionKey,
   PAGE_FRAME,
   PAGE_WIDTH,
+  PROGRESS_COUNT_LOOK,
+  ProgressCount,
   SCROLL_FADE,
   SCROLL_GUTTER,
   SCROLL_OVERSCROLL,
@@ -80,7 +82,13 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
-import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
+import {
+  type ChildTaskCount,
+  childTaskCounts,
+  repositoryLabel,
+  TASK_ORDER,
+  taskTime,
+} from "@luke/ui/task-list-model";
 import { RENAME_FAILED_NOTE, repositoryPageUrl } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
@@ -94,9 +102,10 @@ import {
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { unreadShown } from "../failure-report.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -158,7 +167,9 @@ import { useRowDrag } from "./use-row-drag.js";
  * status's chip and its whole name, then a row that wraps rather than
  * running past the card's edge: the chips that change its priority and its
  * assignee where it stands, their marks alone as the List draws them, the
- * assignee's left off under an assignee's column, its repository, the one
+ * assignee's left off under an assignee's column, its repository, how many
+ * of its sub-tasks are finished ("1/3") where it has any, as the List's row
+ * says it, the one
  * icon of how its agents stand (`TaskAgentsMark`), and a ⋯ at their end dropping the task's own menu, the sidebar
  * row's, which a right-click and the menu key drop too (`useRowMenu`) and
  * whose Rename makes the card's name its field. A press anywhere else opens the task. A card hangs no
@@ -268,14 +279,14 @@ const BOARD_CARD_KEY =
 const BOARD_CARD_FOOT =
   "tasks-board-card-foot pointer-events-none relative z-1 flex min-w-0 items-end gap-tight-gap";
 
-/** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon, which is no press and lets one through to the card's. */
+/** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon and its sub-tasks' count, which are no presses and let one through to the card's. */
 const BOARD_CARD_PILLS =
-  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark)]:pointer-events-auto";
+  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark,.luke-progress-count)]:pointer-events-auto";
 
 /**
  * A card's repository as a pill: its owner's picture and its own name, its
- * whole name in its hint, and a press that opens it on GitHub, as the
- * task's menu does.
+ * whole name in its hint, and a press that opens it on GitHub, as its
+ * sidebar header's menu does.
  */
 function TaskBoardRepository({
   tasks,
@@ -312,10 +323,13 @@ function TaskBoardRepository({
  * onto as many lines as they take, so nothing is cut off at the card's edge:
  * its priority's and its assignee's marks, drawn as the List draws them, then
  * a pill for its repository, a press of its own
- * hanging its own card, and the icon of
+ * hanging its own card, a badge of how many of its sub-tasks are finished
+ * where it has any, and the icon of
  * how its agents stand, rather than one card for the whole task, which
  * says nothing the card does not. Its ⋯ stands at the pills' end, dropping
- * the task's own menu, which a right-click opens too. One press, under its
+ * the task's own menu, which a right-click and a long press open too; a
+ * finger's card draws no ⋯ and keeps it no room, as a phone's mail list
+ * draws none, so its pills have the foot's whole width. One press, under its
  * pills, opens it. Renamed from that menu, its name is its field until the
  * edit ends.
  */
@@ -325,6 +339,7 @@ function TaskBoardCard({
   workspaceName,
   properties,
   waiting,
+  subTasks,
   now,
   chosen,
   onOpen,
@@ -337,6 +352,8 @@ function TaskBoardCard({
   properties: readonly TaskProperty[];
   /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
+  /** How many of its sub-tasks are finished, of all of them; none where it has none. */
+  subTasks: ChildTaskCount | undefined;
   now: number;
   /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
@@ -354,6 +371,7 @@ function TaskBoardCard({
     surface: TASK_MENU_SURFACE.ROW,
   });
   const press = useRef<HTMLButtonElement | null>(null);
+  const coarse = useCoarsePointer();
   const nameId = useId();
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   const repository = task.repository === null ? undefined : repositoryLabel(task.repository, []);
@@ -368,7 +386,7 @@ function TaskBoardCard({
       : chosen === undefined
         ? own
         : chosenRowMenu(own.thing, chosen, tasks.shown),
-    { disabled: actions.deletion.busy, opener: press },
+    { disabled: actions.deletion.busy, opener: press, more: !coarse },
   );
   const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
@@ -471,13 +489,23 @@ function TaskBoardCard({
           {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
             <TaskBoardRepository tasks={tasks} repository={task.repository} />
           )}
+          {subTasks === undefined ? null : (
+            <ProgressCount
+              done={subTasks.finished}
+              total={subTasks.total}
+              label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
+              look={PROGRESS_COUNT_LOOK.BADGE}
+            />
+          )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
             <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
         </div>
-        <span className="tasks-board-card-more pointer-events-auto flex flex-none">
-          {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
-        </span>
+        {menu.moreDrawn ? (
+          <span className="tasks-board-card-more pointer-events-auto flex flex-none">
+            {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
+          </span>
+        ) : null}
       </div>
       {menu.popup}
       {actions.dialog}
@@ -591,6 +619,7 @@ function TaskBoardColumnView({
   properties,
   people,
   waitingOn,
+  subTasksOf,
   now,
   chosenOf,
   onOpen,
@@ -609,6 +638,8 @@ function TaskBoardColumnView({
   people: ColumnPeople;
   /** How many of a task's questions wait on the reader, by its id (`useTasksWaiting`). */
   waitingOn: ReadonlyMap<string, number>;
+  /** How many of a task's sub-tasks are finished, of all of them, by its id; none for a task with none. */
+  subTasksOf: ReadonlyMap<string, ChildTaskCount>;
   now: number;
   /** The selection a card of the task stands in, where it is one of several chosen (`useTasksSelection`). */
   chosenOf: (taskId: string) => ChosenTasks | undefined;
@@ -710,6 +741,7 @@ function TaskBoardColumnView({
                   workspaceName={workspaceName}
                   properties={drawn(task)}
                   waiting={waitingOn.get(task.id) ?? 0}
+                  subTasks={subTasksOf.get(task.id)}
                   now={now}
                   chosen={chosenOf(task.id)}
                   onOpen={() => onOpen(task)}
@@ -747,6 +779,8 @@ export function TasksBoard({
   const crossing = useRovingColumns<HTMLDivElement>();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
+  // Note that a card counts every sub-task listed, as the List's row does, whatever the filter leaves on the board.
+  const subTasksOf = useMemo(() => childTaskCounts(listed), [listed]);
   const { filter, display } = frame;
   const directory = useMemberDirectory();
   const people: ColumnPeople = {
@@ -877,6 +911,7 @@ export function TasksBoard({
                 properties={display.properties}
                 people={people}
                 waitingOn={waitingOn}
+                subTasksOf={subTasksOf}
                 now={now}
                 chosenOf={selection.chosenOf}
                 onOpen={(task) => tasks.onSelect(task.id)}

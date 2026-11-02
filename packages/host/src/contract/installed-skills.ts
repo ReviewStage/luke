@@ -22,7 +22,7 @@ import { actProcedure, exactInput } from "./base.js";
 import { INSTALLED_SKILL_ACT_KIND } from "./kinds.js";
 
 /**
- * installed-skills.ts -- Settings' Skills page's asks of the host about the skills the account installs into Luke, as procedures.
+ * installed-skills.ts -- Settings' Skills page's asks of the host about the skills the account installs, as procedures.
  *
  * Each output is its view schema flipped, so oRPC's output check encodes the
  * page's value into what crosses the port, the convention the hosted contract

@@ -82,7 +82,7 @@ const CODER_SHOW_PAGE_INPUT = Schema.Struct({
   ),
   path: describeWire(
     Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1_024)),
-    "A file in your sandbox holding the page as one whole HTML document, relative to the checkout.",
+    "A file in your sandbox holding the page as one whole HTML document, relative to your working folder or absolute.",
   ),
   page: Schema.optionalKey(
     describeWire(
@@ -103,7 +103,9 @@ export const CODER_SHOW_PAGE_TOOL = {
     "sort, a mockup of a screen, or a comparison they can click through, when it says more than " +
     "a diagram or words would. Write the page as one self-contained HTML file in your sandbox, " +
     "its scripts and styles inline and libraries only from https://cdnjs.cloudflare.com, then " +
-    "pass its `path`. It runs sealed off: it cannot " +
+    "pass its `path`. Make it read well on a phone as on a desktop: a viewport meta tag, a " +
+    "layout that reflows to one column, wide tables, code, and charts that scroll inside their " +
+    "own box, and text and tap targets big enough for a finger. It runs sealed off: it cannot " +
     "fetch, post, open links or windows, store anything, or load images from the web, so put its " +
     "data in the page. Never put a secret in a page. Call it again with the `page` it answered to " +
     "replace that page with a new version rather than making another. Answers `accepted` with the " +

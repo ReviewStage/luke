@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Moves every account's stored provider key, GitHub token, and agent state
-# key onto the newest key-encryption key, the second step of a rotation of
+# Moves every account's stored provider key and GitHub token onto the newest
+# key-encryption key, the second step of a rotation of
 # PROVIDER_KEY_ENCRYPTION_KEYS.
 #
-#   CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
+#   CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://vespin.dev
 #
 # Run it once the new version heads the list on that deployment and the
 # deployment has been redeployed with it. The rewrap runs on the deployment

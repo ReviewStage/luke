@@ -1,5 +1,5 @@
 /**
- * tables.ts -- every table Luke Sync captures, as one list the drift check and the migration writer read.
+ * tables.ts -- every table Sync captures, as one list the drift check and the migration writer read.
  *
  * A table is synced by declaring it here (`defineSyncTable`) and writing
  * its capture into a migration (`pnpm --filter @luke/database sync:render`);
@@ -53,13 +53,15 @@ import { defineSyncTable, type SyncTable } from "./sync-table.js";
  * and the agents' journal of saves are ignored, because every save rewrites
  * both and no view reads them live: a save moves `updated_at` beside them,
  * which the task list and the task's record read, so a save still notifies.
+ * Who moved it to Done is ignored too, since no view reads it and it moves
+ * only with the status, which notifies.
  */
 export const taskSync = defineSyncTable(task, {
   topics: [
     { kind: TOPIC.TASK, column: task.id },
     { kind: TOPIC.WORKSPACE, column: task.organizationId },
   ],
-  ignore: [task.document, task.agentEdits],
+  ignore: [task.document, task.agentEdits, task.doneBy],
 });
 
 /**
@@ -159,6 +161,8 @@ export const deviceSync = defineSyncTable(device, {
     device.capabilities,
     device.setup,
     device.setupFailure,
+    device.updatePhase,
+    device.updateFailure,
     device.secretHash,
     device.version,
     device.removedAt,
@@ -265,13 +269,17 @@ export const agentQueueSync = defineSyncTable(agentQueue, {
 /**
  * A line queued for a local agent's runner, on its account's topic, which
  * the account's Macs' held read of their lines and a wait for a runner's
- * exit are woken on. Note that what the line says is ignored, because it is
- * written once as the line is queued and never changed, and an update
- * comparing it would weigh a files line's every file at its claim and its
- * settle.
+ * exit are woken on, and on its agent's, which the agent's transcript is
+ * woken on as its launch is claimed, steps, and settles. Note that what the
+ * line says is ignored, because it is written once as the line is queued
+ * and never changed, and an update comparing it would weigh a files line's
+ * every file at its claim and its settle.
  */
-const deviceAgentLineSync = defineSyncTable(deviceAgentLine, {
-  topics: [{ kind: TOPIC.ACCOUNT, column: deviceAgentLine.userId }],
+export const deviceAgentLineSync = defineSyncTable(deviceAgentLine, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: deviceAgentLine.userId },
+    { kind: TOPIC.AGENT, column: deviceAgentLine.agentId },
+  ],
   ignore: [deviceAgentLine.payload],
 });
 

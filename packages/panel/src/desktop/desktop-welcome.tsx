@@ -5,7 +5,7 @@ import { freshAccount } from "../tasks/resting-page.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 
 /**
- * desktop-welcome.tsx -- a new account's welcome, the page the window rests on with no task open while the account has nothing yet: Luke's face, one line, and New task's composer under them.
+ * desktop-welcome.tsx -- a new account's welcome, the page the window rests on with no task open while the account has nothing yet: the app's face, one line, and New task's composer under them.
  *
  * An account with tasks, or a question waiting on it, rests on the Inbox
  * instead (`resting-page.ts`), so this page draws the welcome only for an account
@@ -16,7 +16,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  *
  * The composer starts the task in the listed workspace, as the dialog
  * would: in Agent mode a task with a coding agent on the words, opened on
- * its tab, and in Plan mode the plan and a call with Luke. The dialog stays
+ * its tab, and in Plan mode the plan and a call with the app. The dialog stays
  * for ⌘N and every other New task press; only the welcome holds the card
  * inline. Its words take the caret as the page shows, unless the developer
  * is typing in a field elsewhere, as an agent's box decides, and Escape there

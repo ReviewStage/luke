@@ -457,15 +457,15 @@ test("a box that opens again after a send leaves the caret on a press of its own
   typeInComposer(box.container, "Fix the bug");
   pressInComposer(box.container, "Enter");
   await settle();
-  const servers = box.container.querySelector<HTMLButtonElement>(
-    'button[aria-label="Integrations"]',
+  const plus = box.container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Add files and more"]',
   );
-  assert.ok(servers);
-  servers.focus();
+  assert.ok(plus);
+  plus.focus();
 
   box.answer(TAKEN);
   await settle();
-  assert.equal(document.activeElement === servers, true);
+  assert.equal(document.activeElement === plus, true);
 });
 
 test("an Enter an input method is composing sends nothing, and Shift+Enter is a new line", async () => {

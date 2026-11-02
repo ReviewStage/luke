@@ -1,5 +1,7 @@
 import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
+import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
@@ -23,8 +25,8 @@ export const CODER = {
    * idle rather than by this: an eve turn's end stops it at once, and so
    * does a pause from `SLEEP_STOPS_AT` on; a native runner keeps its sandbox
    * alive by its heartbeat for as long as it runs, and its end stops it,
-   * which comes `RUNNER_WARM` after the agent's turn is over, or two minutes
-   * into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
+   * which comes the sandbox's `RUNNER_WARM` after the agent's turn is over,
+   * or two minutes into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
    * whose process table tells the harness's own processes from the
    * agent's). A shorter timeout would stop none of those sooner, so this is
    * only the backstop for one nothing stopped, which bills its memory until
@@ -66,7 +68,7 @@ export const CODER = {
   /**
    * The repositories whose agents' sandboxes open larger than
    * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
-   * them; a repository asks for more by a row here. Luke's own is four,
+   * them; a repository asks for more by a row here. This repository's own is four,
    * because its typecheck needs about 5 GB of real memory. Measured on a
    * fresh checkout: `pnpm typecheck` takes 83 seconds at four vCPUs and peaks
    * near 5.2 GB, and at two vCPUs (4 GB) it is killed out of memory at a
@@ -76,25 +78,32 @@ export const CODER = {
    * with JS plugins it reserves about 6 GiB per thread, which the kernel's
    * default overcommit refuses at 4 GB, but it uses under one, and
    * `vm.overcommit_memory=1`, set on every boot, since a resumed sandbox
-   * boots with the default, lets it lint there in 36 seconds.
+   * boots with the default, lets it lint there in 36 seconds. It is named
+   * under its name now and the one it is being renamed to, since an agent's
+   * repository follows GitHub's rename (`models/github-repositories.ts`).
    */
-  SANDBOX_VCPUS_BY_REPOSITORY: new Map([["reviewstage/luke", 4]]) as ReadonlyMap<string, number>,
+  SANDBOX_VCPUS_BY_REPOSITORY: new Map([
+    ["reviewstage/luke", 4],
+    ["reviewstage/vespin", 4],
+  ]) as ReadonlyMap<string, number>,
   /**
    * The snapshots Vercel keeps of the agent's sandbox: the newest alone, which
    * is all a resume reads, so snapshot storage stays flat however many turns
-   * stop it. An evicted one is deleted at once, and the kept one expires a
-   * week after it was last used, named here because Vercel's own pages
-   * disagree on the default. A week, because the storage is billed for as long
-   * as a snapshot is kept and an agent left idle longer is rarely picked up
-   * again. The cost: an agent resumed after 7 idle days finds no snapshot and
-   * starts from a fresh clone of its repository, so its uncommitted and
-   * unpushed work is gone. An eve agent's sandbox opens anew through its
-   * root's selector, checkout and all, where its sandbox or its snapshot is
+   * stop it. An evicted one is deleted at once, and the kept one expires
+   * three days after it was last used, named here because Vercel's own pages
+   * disagree on the default. Three days, because the storage is billed for as
+   * long as a snapshot is kept, flat by the day, and an agent left idle longer
+   * is rarely picked up again. The cost: an agent resumed after 3 idle days
+   * finds no snapshot and starts from a fresh clone of its repository, so its
+   * uncommitted and unpushed work is gone, and an agent archived while its
+   * sandbox ran keeps its for a day alone (`session-sandboxes.ts`). An eve
+   * agent's sandbox opens anew through its root's selector, checkout and
+   * all, where its sandbox or its snapshot is
    * gone (`patches/eve@0.74.0.patch`, held by
    * `agent-runtime/sandbox-resume.test.ts`), and a native agent's resume does
    * the same (`runner-sessions.ts`).
    */
-  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(7), deleteEvicted: true },
+  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(3), deleteEvicted: true },
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@luke/features/host-wire`). */
   GITHUB_TOKEN_REFRESH,
   /**
@@ -125,13 +134,6 @@ export const CODER = {
    * own default, written down so the two cannot drift apart.
    */
   COMPACTION_THRESHOLD_SHARE: 0.9,
-  /**
-   * The share of the context window past which an operator's next turn is
-   * told its history will soon be summarised, so it keeps what is durable
-   * first (`turn-context.ts`'s `FLUSH_LINE`): below eve's own mark, so the
-   * turn it is told on still runs before eve compacts.
-   */
-  FLUSH_THRESHOLD_SHARE: 0.8,
   /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing. */
@@ -204,23 +206,43 @@ export const CODER = {
   },
   /**
    * How long a native agent's runner stays warm once its turn is over, for
-   * the next message to reach it as a line on its stdin rather than through
-   * a resumed sandbox and a relaunched CLI; past it, the sweep retires the
-   * runner (`retireWarmRunner`) and its END stops the sandbox. Zero, so the
-   * events route retires a runner as its IDLE lands (`runnerIdled`), under
-   * the runner lease, and its END stops the sandbox within seconds: ten warm
-   * minutes kept a 4 vCPU, 8 GB sandbox up for up to 62 sandbox-hours a day
-   * over Oct 23–24, about $5–10 a day, for the 636 of 1,536 finished turns a
-   * follow-up reached within three minutes. Those now resume from the stop's
-   * snapshot. Note that the runner is still launched warm and retired rather
-   * than launched to end on its own, because a runner ending by itself stops
-   * reading its stdin while its END is still posted, and a message written
-   * then would be taken as delivered and never run; a runner that reads its
-   * lines from Luke leaves such a message waiting instead, and its END hands
-   * it on (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line
-   * here: raise it, and the sweep retires runners past it again.
+   * the next message to reach it as a line rather than through a relaunched
+   * CLI, one window per machine: read by the machine the runner's place is on
+   * (`FoundPlace.machine`), never by a flag. Past its window, a sweep retires
+   * the runner (`retireWarmRunner`): a sandbox's in
+   * `../../maintenance/native-sandbox-sweep.ts`, whose END then stops the
+   * sandbox, and a device's in `../../maintenance/device-warm-sweep.ts`.
+   *
+   * The sandbox's is zero, so the events route retires its runner as its
+   * IDLE lands (`runnerIdled`), under the runner lease, and its sweep retries
+   * only a retire that failed. Zero because ten warm minutes kept a 4 vCPU,
+   * 8 GB sandbox up for up to 62 sandbox-hours a day over Oct 23–24, about
+   * $5–10 a day, for the 636 of 1,536 finished turns a follow-up reached
+   * within three minutes. Those now resume from the stop's snapshot.
+   *
+   * The device's is thirty minutes, because nothing is billed on a host, and
+   * every message within it goes into the running session rather than
+   * through a relaunched CLI, a new GitHub token, and the last runner's
+   * grace. Thirty, half the runner's own cap (`@luke/agent-runner`'s
+   * `RUNNER_WARM.IDLE_CAP_MS`, sixty minutes), because the window is closed
+   * by our retire under the lease and never by the runner ending itself,
+   * whose stdin a message its host writes in that instant is lost on: the
+   * sweep retires it past the window, a message sent past it ends the
+   * runner and relaunches whether or not the sweep ran (`sendHolding`), and
+   * a host waiting to switch release has its runner retired at its IDLE.
+   *
+   * Note that the runner is launched warm and retired rather than launched
+   * to end on its own, because a runner ending by itself stops reading its
+   * stdin while its END is still posted, and a message written then would be
+   * taken as delivered and never run; a runner that reads its lines from
+   * the service leaves such a message waiting instead, and its END hands it on
+   * (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line here:
+   * raise it, and its sweep retires runners past it.
    */
-  RUNNER_WARM: Duration.zero,
+  RUNNER_WARM: {
+    [AGENT_MACHINE.VERCEL]: Duration.zero,
+    [AGENT_MACHINE.DEVICE]: Duration.minutes(30),
+  } satisfies Record<AgentMachineKind, Duration.Duration>,
   /**
    * How long a message to a runner that reads its lines waits on that
    * runner's exit, its liveness in place of the 404 a write to an exited
@@ -275,13 +297,11 @@ export const CODER_MODEL_FIXTURE = {
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
-  UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
+  UNKNOWN_PROVIDER: `Not run: the agent's model is outside the providers ${PRODUCT_NAME} runs agents on.`,
   NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
-  NO_FAST_VERSION:
-    "Not run: Luke cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
+  NO_FAST_VERSION: `Not run: ${PRODUCT_NAME} cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.`,
   /** No step is refused this way since Fast runs on an account's own key; kept for the turns that were refused so before, which still read as this. */
-  FAST_ON_OWN_KEY:
-    "Not run: Fast isn't available on your own API key; Luke runs Fast on its own Anthropic key alone. Choose the model with Fast off.",
+  FAST_ON_OWN_KEY: `Not run: Fast isn't available on your own API key; ${PRODUCT_NAME} runs Fast on its own Anthropic key alone. Choose the model with Fast off.`,
   /** No step fails this way since a refused fast call runs at standard speed; kept for the turns that failed so before, which still read as this. */
   FAST_NOT_ENABLED:
     "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",

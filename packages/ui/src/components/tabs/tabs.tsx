@@ -23,6 +23,7 @@ import { cssCustomProperties } from "../../css.js";
 import { CloseIcon } from "../../face/glyphs.js";
 import { joinRefs } from "../../join-refs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
+import type { StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import { ANNOUNCE, announce } from "../announcer/announcer.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
@@ -101,7 +102,7 @@ const ANCHORED = '[data-anchored="true"]';
 /*
  * The strip's plain looks, in Tailwind over the theme as shadcn/ui's tabs
  * draw theirs: each box's layout, type, and the inks no state changes. Note
- * that the strip is Luke's own rather than Base UI's tabs, because an
+ * that the strip is our own rather than Base UI's tabs, because an
  * editor's strip chooses with Return, closes with Delete, reorders, and
  * holds each tab's choice in the tab, which Base UI's tabs, owning the
  * value and their roving focus, are not for; and that what a state, a
@@ -433,7 +434,9 @@ export function Tabs({
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
  * one that always stands. `detail`, while given, follows the label in the
  * muted secondary colour, parted from it by a space and no mark, as a
- * model's effort follows its name. `endMark`, while given, stands at the
+ * model's effort follows its name, or in the needs-you tone
+ * (`STATUS_TONE.ATTENTION`, `detailTone`) where it counts what waits on the
+ * reader, as a NavItem's count does. `endMark`, while given, stands at the
  * tab's end in its ×'s place, with room kept for it, and gives way to the ×
  * under the pointer, as an editor's tab trades its unsaved dot for its ×.
  * `editor`, while given, is drawn in the label's place as a field of its
@@ -458,6 +461,7 @@ export function Tab({
   icon,
   label,
   detail,
+  detailTone,
   endMark,
   selected,
   unread = false,
@@ -482,6 +486,8 @@ export function Tab({
   label: string;
   /** Words after the label, dimmed: a count, as an Inbox tab's. */
   detail?: string | undefined;
+  /** The detail's status tone, muted where absent: attention for a count of what waits on the reader, as an Inbox tab's. */
+  detailTone?: StatusTone | undefined;
   /** A mark at the tab's end, in its ×'s place until the pointer comes over it: a failed run's. */
   endMark?: React.JSX.Element | undefined;
   selected: boolean;
@@ -559,7 +565,12 @@ export function Tab({
         {detail === undefined ? null : (
           <>
             {" "}
-            <span className="luke-tab-detail text-muted-foreground">{detail}</span>
+            <span
+              className="luke-tab-detail text-muted-foreground data-tone:text-tone-ink"
+              data-tone={detailTone}
+            >
+              {detail}
+            </span>
           </>
         )}
       </span>

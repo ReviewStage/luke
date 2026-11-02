@@ -21,13 +21,13 @@ import {
 import { SentryApp } from "./sentry-app-config.js";
 
 /**
- * sentry-trigger-source.ts -- Luke's Sentry integration's webhook as a trigger source: a delivery verified under the client secret, an uninstall marked, and an alert or a new issue read as the catalog's event.
+ * sentry-trigger-source.ts -- our Sentry integration's webhook as a trigger source: a delivery verified under the client secret, an uninstall marked, and an alert or a new issue read as the catalog's event.
  *
  * Sentry signs every delivery with the integration's client secret, the
  * HMAC-SHA256 of the body's own bytes in hex under `Sentry-Hook-Signature`,
  * names what it is about in `Sentry-Hook-Resource` beside the body's
  * `action`, and names the delivery itself in `Request-ID`, which a run is
- * recorded under. An issue alert whose action is the Luke integration
+ * recorded under. An issue alert whose action is our integration
  * (`event_alert`, `triggered`) is `alert-triggered`, and a new issue
  * (`issue`, `created`) is `issue-created`; every other resource and action
  * is read as nothing. An uninstall (`installation`, `deleted`) marks the

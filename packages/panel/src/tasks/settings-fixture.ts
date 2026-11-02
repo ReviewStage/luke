@@ -5,7 +5,7 @@
  * every page that reads the account, and Admin and Automations stand nowhere.
  * Under one of these profiles the window's document holds a synthetic
  * account instead, the owner of the fixture's first workspace and an admin of
- * Acme, signed in and an admin of Luke, with the experiments its pages stand
+ * Acme, signed in and an admin of the service, with the experiments its pages stand
  * behind turned on; the window opens on the page the profile names; and each
  * read those pages ask is answered here, through the act door (`act.ts`), as
  * main would answer it with the service behind it. The workspaces' members
@@ -34,7 +34,12 @@ import {
   adminMetricsWindow,
 } from "@luke/features/admin-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_ARCH,
+  DEVICE_PLATFORM,
+  DEVICE_SETUP,
+  HOST_UPDATE,
+} from "@luke/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
@@ -76,7 +81,7 @@ const ACCOUNT: AccountSnapshot = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 
-/** An admin of Luke, read, so Admin stands rather than waiting on the read. */
+/** An admin of the service, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
 /** The experiments the staged pages stand behind: Hosts' page, Skills', and Memory's. */
@@ -86,14 +91,16 @@ const STAGED_EXPERIMENTS = {
   [EXPERIMENT.MEMORY]: true,
 } as const;
 
-/** The staged hosts and install token, by id. */
+/** The staged hosts, by id. */
 const FIXTURE_HOST = {
   ONLINE: "7d3c2a10-0000-4000-8000-000000000001",
   OLD: "7d3c2a10-0000-4000-8000-000000000002",
   OFFLINE: "7d3c2a10-0000-4000-8000-000000000003",
-  TOKEN: "7d3c2a10-0000-4000-8000-000000000004",
   MAC: "7d3c2a10-0000-4000-8000-000000000005",
   SETUP_FAILED: "7d3c2a10-0000-4000-8000-000000000006",
+  UPDATE_WAITING: "7d3c2a10-0000-4000-8000-000000000007",
+  UPDATING: "7d3c2a10-0000-4000-8000-000000000008",
+  UPDATE_FAILED: "7d3c2a10-0000-4000-8000-000000000009",
 } as const;
 
 /** The staged hosts that beat just now, so they read online: every one but the one staged offline. */
@@ -102,6 +109,9 @@ const BEATING_HOSTS = [
   FIXTURE_HOST.OLD,
   FIXTURE_HOST.MAC,
   FIXTURE_HOST.SETUP_FAILED,
+  FIXTURE_HOST.UPDATE_WAITING,
+  FIXTURE_HOST.UPDATING,
+  FIXTURE_HOST.UPDATE_FAILED,
 ] as const;
 
 /** Where the staged install commands fetch their script. */
@@ -371,7 +381,6 @@ function memory(
     text,
     keptBy,
     forgettable: true,
-    private: false,
     createdAt: NOW - agoDays * DAY,
     updatedAt: NOW - agoDays * DAY,
     ...patch,
@@ -384,13 +393,7 @@ const { ADA, MAYA, THEO } = FIXTURE_PERSON;
 const MEMORIES: readonly MemorySummary[] = [
   memory(1, "Migrations are generated with `pnpm db:generate`, never written by hand.", MAYA, 1),
   memory(2, "Invite links expire after 7 days; an accepted one is never reused.", ADA, 2),
-  memory(
-    3,
-    "I review pull requests in the morning, so a review request after noon waits a day.",
-    ADA,
-    4,
-    { private: true },
-  ),
+  memory(3, "Pull requests are reviewed in the morning; one asked after noon waits a day.", ADA, 4),
   memory(4, "The billing export runs nightly at 02:00 UTC and must finish by 04:00.", THEO, 9),
   memory(5, "Feature flags live in `src/flags.ts`, one constant per flag.", null, 30),
 ];
@@ -589,7 +592,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
-  // Note that a kept install token is answered without one, since the window mints the token and only its hash travels.
   [ACT_KIND.HOSTS_PRESENCE]: () => ({
     devices: BEATING_HOSTS.map((deviceId) => ({ deviceId, ageMs: 0 })),
   }),
@@ -610,7 +612,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
         version: "0.1.0",
         upgradeNeeded: false,
         setup: DEVICE_SETUP.PREPARING,
-        loginName: "charles",
       },
       {
         id: FIXTURE_HOST.SETUP_FAILED,
@@ -627,6 +628,31 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
         seenAt: NOW,
         version: "0.0.9",
         upgradeNeeded: true,
+      },
+      {
+        id: FIXTURE_HOST.UPDATE_WAITING,
+        name: "ams-01",
+        seenAt: NOW,
+        version: "0.2.1",
+        upgradeNeeded: false,
+        update: HOST_UPDATE.WAITING,
+      },
+      {
+        id: FIXTURE_HOST.UPDATING,
+        name: "ord-01",
+        seenAt: NOW,
+        version: "0.2.1",
+        upgradeNeeded: false,
+        update: HOST_UPDATE.UPDATING,
+      },
+      {
+        id: FIXTURE_HOST.UPDATE_FAILED,
+        name: "nrt-01",
+        seenAt: NOW,
+        version: "0.2.0",
+        upgradeNeeded: false,
+        update: HOST_UPDATE.FAILED,
+        updateFailure: "the download did not match its checksum",
       },
       {
         id: FIXTURE_HOST.OFFLINE,
@@ -646,11 +672,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     ip: "203.0.113.24",
     expiresAt: NOW + 15 * MINUTE,
   }),
-  [ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: () => ({
-    id: FIXTURE_HOST.TOKEN,
-    expiresAt: NOW + 24 * HOUR,
-    installScriptUrl: STAGED_INSTALL_SCRIPT,
-  }),
   [ACT_KIND.INTEGRATIONS_STATUS]: () => ({
     integrations: integrationStatuses(),
     accounts: INTEGRATION_ACCOUNTS,
@@ -665,7 +686,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
             email: "sam@example.com",
             role: WORKSPACE_ROLE.MEMBER,
             expiresAt: new Date(NOW + 5 * DAY).toISOString(),
-            acceptUrl: "https://tryluke.dev/invite/fixture",
+            acceptUrl: "https://vespin.dev/invite/fixture",
           },
         ]
       : [],
@@ -709,7 +730,7 @@ export function settingsLaunchLink(profile: string): SettingsLink | undefined {
 
 /**
  * Main's document as these profiles draw it: the account signed in, an
- * admin of Luke, with the staged pages' experiments on. The same document,
+ * admin of the service, with the staged pages' experiments on. The same document,
  * the very object, under any other profile. Each slice laid over is one
  * object across deliveries, but the settings, which carry main's own, so a
  * delivery that moves nothing of them draws nothing again.

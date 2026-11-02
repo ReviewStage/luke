@@ -1,25 +1,25 @@
 /**
- * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab for a web address, the host's event count, the masked session recording, a cloud Browser tab's socket from the page, the Mac app on a Mac, and nothing for the Mac's menus or bundles.
+ * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab for a web address, the host's event count, the masked session recording, a cloud Browser tab's socket from the page, an agent's page through the service's frame of it, the Mac app on a Mac, and nothing for the Mac's menus or bundles.
  *
  * The web client's shell beside the host in the tab (`web-host.ts`), which
- * hands it where a surface event is counted. An agent's page has no
- * sandboxed origin of its own on the web yet, so every page's frame shows
- * one static page saying it opens in the Mac app.
+ * hands it where a surface event is counted. An agent's page is framed
+ * through the service's frame of its version on the tab's own origin, which
+ * sends the frame on to a link on the sandbox's own site, minted for the
+ * account as the frame loads, or to the page saying pages open in the Mac app
+ * where the deployment has no sandbox (`@luke/features/page-frame`).
  */
 
 import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
 import { APP_HOME_LINK } from "@luke/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
 import { openTargetOf } from "@luke/features/open-address";
-import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { hostedPageFramePath } from "@luke/features/page-frame";
+import { isGitHubAddress, isMailAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
 import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
 import { openBrowserLiveOverWebSocket } from "./web-browser-live";
-
-/** What every agent's page frame shows until pages have a sandboxed origin of their own (`public/page-in-mac-app.html`). */
-const PAGE_IN_MAC_APP = "/page-in-mac-app.html";
 
 const ignore = (): void => undefined;
 
@@ -77,6 +77,19 @@ export function openTab(url: string): void {
   window.open(url, "_blank", "noopener");
 }
 
+/**
+ * Opens a link outside the window, as the desktop's `web.open` takes it: a
+ * mail address in the mail app, as the site's Contact link does, and a web
+ * address in a tab of its own (`openTab`).
+ */
+function openLink(url: string): void {
+  if (isMailAddress(url)) {
+    location.assign(url);
+    return;
+  }
+  openTab(url);
+}
+
 /** Opens a GitHub page in a tab of its own, where its address is GitHub's, as the desktop's `github.open` takes it; any other opens nothing. */
 function openGitHubTab(url: string): void {
   if (!isGitHubAddress(url)) {
@@ -88,7 +101,7 @@ function openGitHubTab(url: string): void {
 
 /**
  * The link that opens the Mac app on what the tab's address names, or on
- * Luke's home where it names nothing, which still brings the app forward.
+ * the app's home where it names nothing, which still brings the app forward.
  */
 function macAppLink(): string {
   return openTargetOf(location.pathname, location.hash, location.search)?.appLink ?? APP_HOME_LINK;
@@ -149,12 +162,12 @@ export function webPlatform(
     copyImage: copyPng,
     saveFile: downloadText,
     focusPanel: () => window.focus(),
-    pageFrameUrl: () => new URL(PAGE_IN_MAC_APP, location.origin).href,
+    pageFrameUrl: (page) => new URL(hostedPageFramePath(page), location.origin).href,
     assetBase: () => new URL(PANEL_ASSET_BASE, location.origin).href,
     onMenuCommand: () => ignore,
     recordSurfaceEvent: shell.recordSurfaceEvent,
     openGitHub: openGitHubTab,
-    openWeb: openTab,
+    openWeb: openLink,
     // The dashboard is served on the tab's own origin, so the Admin row links to it there.
     adminDashboard: () => ({ href: new URL(ADMIN_PAGE_PATH, location.origin).href }),
     applySessionReplay: lazySessionReplay(),

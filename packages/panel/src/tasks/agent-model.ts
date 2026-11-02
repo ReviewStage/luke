@@ -13,7 +13,7 @@ import {
   AGENT_ARCHIVER,
   AGENT_DELEGATE_TOOL,
   AGENT_FAILURE,
-  AGENT_KIND,
+  AGENT_LAUNCH,
   AGENT_PAYER,
   AGENT_RUNTIME,
   AGENT_SENDER,
@@ -21,7 +21,7 @@ import {
   type AgentArchivedBy,
   type AgentAttachment,
   type AgentFailure,
-  type AgentKind,
+  type AgentLaunch,
   type AgentPayer,
   type AgentPullRequest,
   type AgentPullRequestAnswer,
@@ -35,7 +35,7 @@ import {
   type ContextWindow,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
-  OPERATOR_QUIET_REPLY,
+  type NativeAgentRuntime,
   PART_CUT_FIELD,
   type PartCut,
   PULL_REQUEST_STATE,
@@ -58,6 +58,7 @@ import {
   type ModelProvider,
 } from "@luke/features/models-wire";
 import { formatCompact, formatUsd } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -209,7 +210,7 @@ const ACTOR_STATE_OF_GLYPH = {
 
 /** Who archived an agent, and why, as its card and its archived banner say it. */
 export interface ArchivedByReading {
-  /** "Archived by Dean", "Archived by Luke for you", "Archived by Bill by seat for Dean", "Archived with its task by Dean". */
+  /** "Archived by Dean", "Archived by ${PRODUCT_NAME} for you", "Archived by Bill by seat for Dean", "Archived with its task by Dean". */
   readonly words: string;
   readonly reason: string | undefined;
 }
@@ -219,7 +220,7 @@ const UNNAMED_ARCHIVER = "another agent";
 
 /**
  * Who archived an agent, as the reader reads it: the member who did, or
- * Luke or the archiving agent and the member they acted for, "you" for the
+ * the app or the archiving agent and the member they acted for, "you" for the
  * reader's own account, the member left out once their account is gone;
  * and the reason they gave. An agent archived along with its task says so.
  */
@@ -234,7 +235,7 @@ export function archivedByReading(
     by.by === AGENT_ARCHIVER.MEMBER
       ? member
       : by.by === AGENT_ARCHIVER.LUKE
-        ? `Luke${forMember}`
+        ? `${PRODUCT_NAME}${forMember}`
         : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
   const archived = by.withTask === true ? "Archived with its task" : "Archived";
   return {
@@ -263,15 +264,13 @@ export function agentActorState(status: AgentStatus): ActorState {
 }
 
 /**
- * An agent as its tile draws it: its harness, read off its model, or Luke's
- * face for a member's operator, known by its kind, wearing where it stands
+ * An agent as its tile draws it: its harness, read off its model, wearing where it stands
  * (at rest where that is not known), under the name it goes by.
  */
 export function agentActor(
   agent: {
     readonly model: string;
     readonly status?: AgentStatus | undefined;
-    readonly kind?: AgentKind | undefined;
   },
   name: string,
 ): Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }> {
@@ -279,7 +278,6 @@ export function agentActor(
     kind: ACTOR_KIND.AGENT,
     name,
     provider: providerOf(agent.model),
-    ...(agent.kind === AGENT_KIND.OPERATOR ? { operator: true } : undefined),
     state:
       agent.status === undefined
         ? ACTOR_STATE.REST
@@ -290,7 +288,7 @@ export function agentActor(
 /**
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
- * face, a former member, Luke, an automation, another coding agent of the
+ * face, a former member, the app, an automation, another coding agent of the
  * workspace by its name on its harness's mark, read off the model the
  * service answers it runs on, and the mark of no known harness where it
  * answers none, or the GitHub login GitHub
@@ -298,7 +296,7 @@ export function agentActor(
  * square by whether the login is a bot's (`githubLoginActor`); none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
  * id, for the reason `teammateStarter` gives. A service older than the
- * sender's kind names Luke, an automation, and a former member alike by a
+ * sender's kind names the app, an automation, and a former member alike by a
  * name with no account, which the window cannot tell apart, so such a
  * sender stands by its name on the outline of someone it cannot place.
  */
@@ -342,6 +340,8 @@ export function lineSender(
 export interface EndLineParts {
   readonly words: string;
   readonly failed: boolean;
+  /** Why a failed turn failed, as the service's word, which the failure it reports names; none for a stop, or a failure that said no reason. */
+  readonly failure?: AgentFailure | undefined;
 }
 
 /**
@@ -368,10 +368,14 @@ export function endLineParts(
       return { words: "Stopped", failed: false };
     case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
-        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true };
+        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true, failure };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
-      return { words: `Failed: ${words ?? "the run ended without saying why"}`, failed: true };
+      return {
+        words: `Failed: ${words ?? "the run ended without saying why"}`,
+        failed: true,
+        failure,
+      };
     }
     case AGENT_STATUS.STARTING:
     case AGENT_STATUS.RUNNING:
@@ -427,10 +431,10 @@ export function agentStateWords(status: AgentStatus): string | undefined {
 export const START_NEEDS_REPOSITORY = "Choose a repository";
 
 /** What a call refused for a repository out of the workspace's reach says, wherever it is refused. */
-export const REPOSITORY_UNREACHED_NOTE = "Luke cannot reach this task's repository on GitHub.";
+export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task's repository on GitHub.`;
 
 /** What a message no answer came back for says, which may have reached the agent all the same. */
-const NOT_HEARD_BACK = "Luke didn't hear back.";
+const NOT_HEARD_BACK = "No answer came back.";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
@@ -662,13 +666,13 @@ const UNNAMED_DEVICE = "Your device";
 /** The way out every device refusal ends on, since the cloud takes any agent. */
 const RUN_IN_CLOUD = "or set this task to run in the cloud";
 
-/** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own Luke started. */
+/** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own host started. */
 const DEVICE_WAKE = {
   [DEVICE_PLATFORM.DARWIN]: "Wake it and log in on it",
-  [DEVICE_PLATFORM.LINUX]: "Start Luke on that host",
+  [DEVICE_PLATFORM.LINUX]: `Start ${PRODUCT_NAME} on that host`,
 } as const satisfies Record<DevicePlatform, string>;
 
-/** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own Luke started again. */
+/** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own host started again. */
 const SETUP_RETRY = {
   [DEVICE_PLATFORM.DARWIN]: "Choose Retry under This Mac in Settings › Hosts on it",
   [DEVICE_PLATFORM.LINUX]: "Run sudo systemctl restart luke-host on that host",
@@ -693,7 +697,7 @@ export function localAgentRefusalWords(
     case LOCAL_AGENT_REFUSAL.NO_HARNESS:
       return `${name} can't run this model's agents. Choose a Claude or Codex model, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.PREPARING:
-      return `${name} is still getting ready for local agents (downloading its sandbox). Try again in a few minutes.`;
+      return `${name} is still getting ready for local agents. Try again in a few minutes.`;
     case LOCAL_AGENT_REFUSAL.SETUP_FAILED:
       return `${name} couldn't set up local agents. ${SETUP_RETRY[devicePlatformOf(device ?? {})]} to try again, ${RUN_IN_CLOUD}.`;
     // Note that no way out is offered, because the cloud is the owner's to set and a teammate can change nothing here.
@@ -752,8 +756,8 @@ export function unrunnableChoice(
   return model === undefined ? undefined : modelConnectFailure(model);
 }
 
-/** What an agent Luke's key paid for says to a message, since it never moves to another payer. */
-const LUKE_PAID_REFUSAL = "Luke's key no longer runs agents. Continue in a new one.";
+/** What an agent our key paid for says to a message, since it never moves to another payer. */
+const LUKE_PAID_REFUSAL = `${PRODUCT_NAME}'s key no longer runs agents. Continue in a new one.`;
 
 /** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
 function credentialMissingWords(
@@ -918,13 +922,13 @@ function callFailure(text: string): Failure {
 /**
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
- * Settings; the repository given to Luke's GitHub App; another repository
+ * Settings; the repository given to our GitHub App; another repository
  * chosen; the task moved to the workspace whose GitHub reaches it; or the
  * member's own token replaced in Settings › Profile, or authorized on
  * GitHub for the organization's SAML SSO. A service that said nothing more
  * says the bare sentence, which Retry answers, and so does an agent with no
  * task wherever the remedy is pressed on the task: only giving the
- * repository to Luke's GitHub App, and a token's remedies, are not.
+ * repository to our GitHub App, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -933,7 +937,7 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
     return {
       reason: FAILURE_REASON.ADD_REPOSITORY,
-      text: `Luke's GitHub App doesn't have access to ${unreached.repository}.`,
+      text: `${PRODUCT_NAME}'s GitHub App doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
     };
@@ -978,13 +982,13 @@ function unreachedFailure(
     case REPOSITORY_UNREACHED.NOT_CONNECTED:
       return {
         reason: FAILURE_REASON.CONNECT_GITHUB,
-        text: `This workspace isn't connected to GitHub, so Luke cannot reach ${repository}.`,
+        text: `This workspace isn't connected to GitHub, so ${PRODUCT_NAME} cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
       return {
         reason: FAILURE_REASON.RECONNECT_GITHUB,
-        text: `This workspace's GitHub connection was removed or suspended, so Luke cannot reach ${repository}.`,
+        text: `This workspace's GitHub connection was removed or suspended, so ${PRODUCT_NAME} cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.OTHER_OWNER:
@@ -1089,7 +1093,7 @@ export function messageFailureNote(
       ),
     );
   }
-  // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
+  // Note that an agent our key paid for is refused whatever is connected now, so Settings mends nothing.
   if (
     refused.failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
     payer === AGENT_PAYER.LUKE
@@ -1195,7 +1199,7 @@ export { agentName, modelLabel };
  * The provider whose harness runs a model, read from its catalog id, whose
  * prefix is the provider's word (`models-wire.ts`), so a tab wears its
  * harness's mark before the catalog itself is read; none for a provider
- * Luke runs no agent on.
+ * we run no agent on.
  */
 export function providerOf(modelId: string): ModelProvider | undefined {
   const prefix = modelId.slice(0, Math.max(0, modelId.indexOf(CATALOG_ID_SEPARATOR)));
@@ -1942,8 +1946,8 @@ export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOO
 }
 
 /**
- * Whether a delegation is a native harness's subagent, whose own work Luke
- * keeps no transcript of yet, so its row opens no worker's tab.
+ * Whether a delegation is a native harness's subagent, whose own work we
+ * keep no transcript of yet, so its row opens no worker's tab.
  */
 export function nativeSubagent(
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>,
@@ -2165,9 +2169,6 @@ export function agentRows(
     running: (part) =>
       AGENT_READING.running(part) ||
       (part.kind === AGENT_PART.TOOL && workers.get(part.callId) === TOOL_STATE.INPUT_AVAILABLE),
-    failed: (part) =>
-      part.kind === AGENT_PART.TOOL &&
-      (workers.get(part.callId) ?? part.state) === TOOL_STATE.OUTPUT_ERROR,
     kept: (part) =>
       (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) ||
       isShownSet(part) ||
@@ -2181,13 +2182,6 @@ export interface PlacedMessage {
   readonly message: AgentTranscriptMessage;
   /** The lines its turn took in under way (`arrivedIn`), oldest first; none on any row but a turn's journal. */
   readonly arrived: readonly AgentTranscriptMessage[];
-}
-
-/** Whether a turn's reply is the operator's quiet reply alone, a heartbeat that found nothing, which leaves the developer nothing to read. */
-function isQuietReply(message: AgentTranscriptMessage): boolean {
-  return (
-    message.role === MESSAGE_ROLE.ASSISTANT && messageWords(message).trim() === OPERATOR_QUIET_REPLY
-  );
 }
 
 /**
@@ -2224,20 +2218,12 @@ function steeringPlaced(
  * order the service keeps, where the journal closed behind it. A line whose
  * journal is not among the rows, as when its page is still to land, stands
  * where the order puts it, as every line does from a service older than it.
- * In a member's operator's transcript (`quiet`), a turn whose reply is its
- * quiet reply alone is left out, so a heartbeat that found nothing draws no
- * reply, and a line it took in stands where the order puts it; every other
- * agent's reply is placed whatever it says.
  */
 export function placedMessages(
   messages: readonly AgentTranscriptMessage[],
-  quiet = false,
   unsent: (id: string) => boolean = () => false,
 ): readonly PlacedMessage[] {
-  const shown = steeringPlaced(
-    quiet ? messages.filter((message) => !isQuietReply(message)) : messages,
-    unsent,
-  );
+  const shown = steeringPlaced(messages, unsent);
   const journals = new Set(
     shown.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
   );
@@ -2291,12 +2277,60 @@ const WORKING_PHASE = {
 export type WorkingPhase = (typeof WORKING_PHASE)[keyof typeof WORKING_PHASE];
 
 /** What the working line says in each phase. */
-export const WORKING_PHASE_WORDS = {
+const WORKING_PHASE_WORDS = {
   [WORKING_PHASE.REWINDING]: "Rewinding…",
   [WORKING_PHASE.STARTING]: "Starting…",
   [WORKING_PHASE.THINKING]: "Thinking…",
   [WORKING_PHASE.WORKING]: "Working…",
 } as const satisfies Record<WorkingPhase, string>;
+
+/** What the working line says while a local agent's launch stands at a step that names neither its host nor its harness. */
+const LAUNCH_STEP_WORDS = {
+  [AGENT_LAUNCH.PREPARING]: "Preparing the folder…",
+  [AGENT_LAUNCH.FETCHING]: "Fetching the repository…",
+} as const;
+
+/** What the working line says as a local agent's harness starts, by the harness. */
+const HARNESS_START_WORDS = {
+  [AGENT_RUNTIME.CLAUDE_CODE]: "Starting Claude Code…",
+  [AGENT_RUNTIME.CODEX]: "Starting Codex…",
+} as const satisfies Record<NativeAgentRuntime, string>;
+
+/** Who a launch waits on where its host's name is not to hand. */
+const UNNAMED_HOST = "the host";
+
+/** Where a local agent's launch stands as its page said, with what its words name: the host it runs on and the harness it runs. */
+export interface StartingLaunch {
+  readonly launch: AgentLaunch;
+  /** The host's name, as the agent's Runs on chip shows it (`agent-place.tsx`); none where none is to hand. */
+  readonly host?: string | undefined;
+  /** The harness the agent runs, as its summary says; none where unsaid. */
+  readonly runtime?: NativeAgentRuntime | undefined;
+}
+
+/**
+ * What the working line says in a phase. While the agent starts, a local
+ * agent whose page said where its launch stands (`AGENT_LAUNCH`) says what
+ * its start waits on: its host, by the name its Runs on chip shows, taking
+ * the launch, the folder, the repository, or its harness by name. With no
+ * launch said, as for a cloud agent, an older host, or an older service, it
+ * says "Starting…" as before. Note that a launch said once the turn has
+ * opened says nothing, since the phase has left starting.
+ */
+export function workingLineWords(phase: WorkingPhase, starting?: StartingLaunch): string {
+  if (phase !== WORKING_PHASE.STARTING || starting === undefined) {
+    return WORKING_PHASE_WORDS[phase];
+  }
+  const { launch, host, runtime } = starting;
+  switch (launch) {
+    case AGENT_LAUNCH.WAITING:
+      return `Waiting for ${host ?? UNNAMED_HOST}…`;
+    case AGENT_LAUNCH.STARTING:
+      return runtime === undefined ? WORKING_PHASE_WORDS[phase] : HARNESS_START_WORDS[runtime];
+    default:
+      return LAUNCH_STEP_WORDS[launch];
+  }
+}
 
 /**
  * What a working agent is doing, as far as its transcript shows it, which
@@ -2421,17 +2455,14 @@ const SENTENCE_END = /[.!?](?=\s|$)/u;
  * What a turn that finished replied, as a reader hears it: its newest
  * reply's last stretch of words, after the turn's last call, cut to its
  * first sentence, or to its first words where that runs on. Nothing where
- * there is no reply, no words follow its last call, as a turn that ended on
- * a call, or it is an operator's quiet reply (`quiet`), which leaves its
- * member nothing to read.
+ * there is no reply, or no words follow its last call, as a turn that ended
+ * on a call.
  */
 export function finishedReplyLead(
   messages: readonly AgentTranscriptMessage[],
-  quiet: boolean,
 ): { readonly messageId: string; readonly lead: string } | undefined {
   const reply = messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);
   if (reply === undefined) return undefined;
-  if (quiet && isQuietReply(reply)) return undefined;
   // Note that only words after the turn's last call are its reply, because words before it were the turn under way.
   const parts = agentParts(reply);
   const lastCall = parts.findLastIndex((part) => part.kind === AGENT_PART.TOOL);

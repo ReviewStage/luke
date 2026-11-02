@@ -171,7 +171,7 @@ test("a member's line handed behind the label naming them is matched by eve's re
     words,
     [],
     mentioned,
-    senderLabel("[@Dean](https://tryluke.dev/acme/person/user-1)"),
+    senderLabel("[@Dean](https://vespin.dev/acme/person/user-1)"),
   );
   assert.ok(Array.isArray(handed));
   const receipt = receivedMessage({
@@ -340,6 +340,16 @@ test("the servers the words mention, by themselves or by a tool, are named each 
     [INTEGRATION_PROVIDER.LINEAR],
   );
   assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`, TASK.repository), []);
+});
+
+test("a Google Doc's page names Google Drive's server, and is handed as a page to read through it", () => {
+  const words = "Read [@the proposal](https://docs.google.com/document/d/abc/edit).";
+
+  assert.deepEqual(mentionedServers(words, TASK.repository), [INTEGRATION_PROVIDER.GOOGLE_DRIVE]);
+  assert.match(
+    mentionedContext(words, TASK) ?? "",
+    /https:\/\/docs\.google\.com\/document\/d\/abc\/edit, a page of the Google Drive MCP server \(connection `google-drive`\)/u,
+  );
 });
 
 test("a Google Maps page names no server and hands no note, since its address is in the words", () => {

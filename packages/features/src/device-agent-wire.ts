@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { checkoutIdentitySchema } from "./checkout-identity.js";
+import { HOST_TARGET } from "./host-release.js";
 import { wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -20,7 +21,8 @@ import { wireUuidSchema } from "./service-wire.js";
  * so a new agent's paths follow the account and the CLI follows each app
  * update; it beats its presence while it runs local agents, which is what
  * offers This Mac at Start; it holds a read for its lines and one for its
- * requests, each answered as soon as one waits, claims each by its id, and
+ * requests, each answered as soon as one waits, claims each by its id, says
+ * which step a launch it claimed has reached (`DEVICE_LAUNCH_STEP`), and
  * settles a line or answers a request. Its register and its beats say which
  * harnesses the Mac is signed in to itself (`deviceSignedInSchema`), which a
  * local agent's launch prefers to the account's saved credential. Claiming a launch line hands its
@@ -29,7 +31,7 @@ import { wireUuidSchema } from "./service-wire.js";
  *
  * Every path the service hands out is absolute, under the agent's own
  * folder in the Mac's home (`deviceAgentLayout`): its worktree, the files a
- * message carries, and the skills its member installed into Luke, never
+ * message carries, and the skills its member installed into the app, never
  * the user's own `~/.claude`.
  */
 
@@ -39,12 +41,6 @@ export const DEVICE_AGENT_BOUNDS = {
    * (`SANDBOX_DOOR_MAX_BYTES`), past every bound a tool holds a file to.
    */
   MAX_ANSWER_BYTES: 8 * 1024 * 1024,
-  /**
-   * The most bytes of one agent's saved state, encrypted, as the device
-   * uploads it to the store in one PUT: the store's upload takes no more,
-   * and a commit naming more is refused.
-   */
-  MAX_STATE_BYTES: 500 * 1024 * 1024,
 } as const;
 
 /** What one line to a local runner is. */
@@ -66,6 +62,29 @@ export const DEVICE_AGENT_LINE_KIND = {
 export type DeviceAgentLineKind =
   (typeof DEVICE_AGENT_LINE_KIND)[keyof typeof DEVICE_AGENT_LINE_KIND];
 
+/**
+ * Where a host's launch of a local agent stands, as the host reports it on
+ * the launch line it claimed (`deviceAgentStepRequestSchema`), in the order
+ * a launch passes them, which is the order a report moves the line's step
+ * along and never back. The agent's transcript words what it waits on from
+ * it until the harness's first event opens its turn. A step travels as one
+ * word of this set and never as free text, so no path, command's output, or
+ * credential rides with it.
+ */
+export const DEVICE_LAUNCH_STEP = {
+  /** The agent's folder made, its GitHub token fetched, and its Git set up. */
+  PREPARING: "preparing",
+  /** The agent's repository being made, where its folder holds none. */
+  FETCHING: "fetching",
+  /** The runner, and the harness it runs, Claude Code or Codex, starting. */
+  STARTING: "starting",
+} as const;
+
+export type DeviceLaunchStep = (typeof DEVICE_LAUNCH_STEP)[keyof typeof DEVICE_LAUNCH_STEP];
+
+/** A launch's steps in the order a launch passes them. */
+export const DEVICE_LAUNCH_STEPS: readonly DeviceLaunchStep[] = Object.values(DEVICE_LAUNCH_STEP);
+
 /** What one of an agent's tools asks of its Mac. */
 export const DEVICE_AGENT_REQUEST_KIND = {
   /** Read one file, confined to the agent's worktree and temp folder. */
@@ -85,16 +104,18 @@ export type DeviceAgentRequestKind =
 export const DEVICE_CAPABILITY = {
   /** It takes a discard line (`DEVICE_AGENT_LINE_KIND.DISCARD`). */
   DISCARD: "discard",
-  /**
-   * It saves each of its agents' state at its turn's end
-   * (`deviceAgentStateSaveRequestSchema`) and restores the newest at a cold
-   * launch, so its launch's secrets carry that state
-   * (`deviceAgentLaunchStateSchema`) and its payload names its generation.
-   */
-  AGENT_STATE: "agent-state",
 } as const;
 
 export type DeviceCapability = (typeof DEVICE_CAPABILITY)[keyof typeof DEVICE_CAPABILITY];
+
+/**
+ * The capabilities named that this build knows, in `DEVICE_CAPABILITY`'s
+ * order: a newer follower's register, and a device row a build since
+ * retired a capability from, pass over the rest rather than fail on them.
+ */
+export function knownDeviceCapabilities(named: readonly string[]): DeviceCapability[] {
+  return Object.values(DEVICE_CAPABILITY).filter((capability) => named.includes(capability));
+}
 
 /** The capability a device must have registered to be queued a line of the kind, for each kind that needs one. */
 export const DEVICE_AGENT_LINE_CAPABILITY: Partial<Record<DeviceAgentLineKind, DeviceCapability>> =
@@ -104,7 +125,7 @@ export const DEVICE_AGENT_LINE_CAPABILITY: Partial<Record<DeviceAgentLineKind, D
 
 /** What program a device ran local agents through when its row was written, which nothing reads since every device runs the host program; still on the wire for clients that decode it. */
 export const DEVICE_KIND = {
-  /** The Luke desktop app, on the Mac its member is signed in at. */
+  /** The desktop app, on the Mac its member is signed in at. */
   DESKTOP: "desktop",
   /** A headless host a member added, with nobody signed in at it. */
   HOST: "host",
@@ -114,29 +135,34 @@ export type DeviceKind = (typeof DEVICE_KIND)[keyof typeof DEVICE_KIND];
 
 /**
  * How a device runs its local agents. A sandboxed agent runs in a Linux
- * microVM of its own, booted from Luke's sandbox image, with its folder
+ * microVM of its own, booted from our sandbox image, with its folder
  * mounted in at the same absolute path it has on the device, so every path
- * the service hands out (`deviceAgentLayout`) stands in both modes; it
- * reaches none of the device's own tools, services, or logins.
+ * the service hands out (`deviceAgentLayout`) stands in every mode; it
+ * reaches none of the device's own tools, services, or logins. A direct
+ * agent runs on the device itself, as the device's own user, with full
+ * access to what that user reaches, but on the sign-ins saved in the app and
+ * the GitHub token we hand the device, as a sandboxed one does; a bare
+ * one ran on the developer's own logins.
  */
 export const DEVICE_ISOLATION = {
   /** Each agent in a microVM of its own. */
   SANDBOX: "sandbox",
   /** Each agent directly on the device, with its installed tools and its own logins. */
   BARE: "bare",
+  /** Each agent directly on the device, in a folder of its own, on the sign-ins saved in the app and the GitHub token we hand it. */
+  DIRECT: "direct",
 } as const;
 
 export type DeviceIsolation = (typeof DEVICE_ISOLATION)[keyof typeof DEVICE_ISOLATION];
 
 /**
  * Where a device stands in setting itself up to run agents, as it registers
- * while it is not ready to take one: a Mac fetching its pinned smolvm and
- * pulling the sandbox image the first time, or one whose fetch or pull
- * failed. A device registers with none once it is ready, as every device
+ * while it is not ready to take one: a device fetching the pinned agent CLIs
+ * the first time, or one whose fetch failed. A device registers with none once it is ready, as every device
  * from before the field does, and only a device with none takes an agent.
  */
 export const DEVICE_SETUP = {
-  /** It is still fetching what its VMs run on. */
+  /** It is still fetching what its agents run on. */
   PREPARING: "preparing",
   /** Its fetch failed, for the reason it registered beside it. */
   FAILED: "failed",
@@ -148,6 +174,29 @@ export const deviceSetupSchema = EffectSchema.Literals(Object.values(DEVICE_SETU
 
 /** The most characters of the words a device says its setup failed for. */
 export const DEVICE_SETUP_FAILURE_MAX_CHARS = 200;
+
+/**
+ * Where a host stands in updating itself to the newer release a beat's
+ * answer named (`deviceAgentBeatAnswerSchema`), as its beats say it: holding
+ * the release, checked, until its agents finish, switching to it, or failed.
+ * A host beats with none while no update is under way, as every host from
+ * before the field does.
+ */
+export const HOST_UPDATE = {
+  /** It holds the release, checked, and waits for its agents to finish before it switches. */
+  WAITING: "waiting",
+  /** It is switching to the release now. */
+  UPDATING: "updating",
+  /** Its update failed, for the reason it beat beside it. */
+  FAILED: "failed",
+} as const;
+
+export type HostUpdate = (typeof HOST_UPDATE)[keyof typeof HOST_UPDATE];
+
+export const hostUpdateSchema = EffectSchema.Literals(Object.values(HOST_UPDATE));
+
+/** The most characters of the words a host says its update failed for. */
+export const HOST_UPDATE_FAILURE_MAX_CHARS = 200;
 
 /** A device's operating system, as Node's `process.platform` names it. */
 export const DEVICE_PLATFORM = {
@@ -192,16 +241,16 @@ export type DeviceAgentAnswer = typeof deviceAgentAnswerSchema.Type;
 /** The folders under a Mac's home its local agents' things stand in (`deviceAgentLayout`). */
 export const DEVICE_AGENT_FOLDER = {
   /** Every local agent's folder, one per agent under its id. */
-  ROOT: ".luke/agents",
+  ROOT: ".vespin/agents",
   /** The agent's worktree, which the Mac makes as it takes the launch line. */
   REPOSITORY: "repository",
   /** The files a message carries, one folder per line, made `0700`. */
   ATTACHMENTS: "attachments",
-  /** The skills the member installed into Luke, as the harness's local plugin. */
+  /** The skills the member installed into the app, as the harness's local plugin. */
   INSTALLED_SKILLS: "installed-skills",
   /** The agent's own `gh` sign-in on a host (`GH_CONFIG_DIR`), which no read of the agent's tools answers from. */
   GITHUB_CONFIG: "gh",
-  /** The agent's temp folder (`TMPDIR`), made `0700`, which its runner and its commands write to, and where it saves what Luke reads back. */
+  /** The agent's temp folder (`TMPDIR`), made `0700`, which its runner and its commands write to, and where it saves what we read back. */
   TEMP: "tmp",
 } as const;
 
@@ -261,13 +310,6 @@ export const deviceAgentLaunchPayloadSchema = EffectSchema.Struct({
    * repository, and from a service before the field, whose launch sets none.
    */
   identity: EffectSchema.optionalKey(checkoutIdentitySchema),
-  /**
-   * The generation of the agent's saved state the launch restores, whose
-   * read and key its secrets carry (`deviceAgentLaunchStateSchema`); absent
-   * where the agent has none, and for a device that did not register
-   * `DEVICE_CAPABILITY.AGENT_STATE`, whose launch carries no state.
-   */
-  stateGeneration: EffectSchema.optionalKey(EffectSchema.Int),
 });
 
 export type DeviceAgentLaunchPayload = typeof deviceAgentLaunchPayloadSchema.Type;
@@ -289,52 +331,16 @@ export const deviceAgentFilesPayloadSchema = EffectSchema.Struct({
 
 export type DeviceAgentFilesPayload = typeof deviceAgentFilesPayloadSchema.Type;
 
-/** Lowercase hex of a SHA-256, as a saved bundle's digest is named. */
-const sha256Schema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u));
-
-/** A git commit's id, SHA-1 or SHA-256, in lowercase hex. */
-const commitIdSchema = EffectSchema.String.check(
-  EffectSchema.isPattern(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u),
-);
-
-/** A generation of an agent's saved state, which rises by one from 1 with each commit. */
-const stateGenerationSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
-
-/**
- * The saved state a launch restores, carried in its secrets alone: the
- * generation, a URL its bundle is read from by a plain GET until
- * `expiresAt` (epoch milliseconds), which needs no credential beside it and
- * is one, the bundle's size and digest as committed, which the device
- * checks before it decrypts, the commit its work applies to, null for an
- * agent with no repository, and the agent's state key the bundle is
- * encrypted under, as standard base64 of its 32 bytes. None of it is ever
- * written to a file, an argument, or a log.
- */
-const deviceAgentLaunchStateSchema = EffectSchema.Struct({
-  generation: stateGenerationSchema,
-  url: EffectSchema.String,
-  expiresAt: EffectSchema.Int,
-  bytes: EffectSchema.Int,
-  sha256: sha256Schema,
-  baseCommit: EffectSchema.NullOr(EffectSchema.String),
-  key: EffectSchema.String,
-});
-
-export type DeviceAgentLaunchState = typeof deviceAgentLaunchStateSchema.Type;
-
 /**
  * A launch's secrets, as the claim of its line hands them over once: the
  * runner's environment, every value secret (its bearer and its harness's
  * credential), set on the runner's process alone and never written to a
  * file, an argument, or a log; its first lines, written to its stdin
- * before anything else; and, for a device that registered
- * `DEVICE_CAPABILITY.AGENT_STATE`, the agent's newest saved state, absent
- * where it has none.
+ * before anything else.
  */
 export const deviceAgentLaunchSecretsSchema = EffectSchema.Struct({
   env: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
   stdin: EffectSchema.String,
-  state: EffectSchema.optionalKey(deviceAgentLaunchStateSchema),
 });
 
 export type DeviceAgentLaunchSecrets = typeof deviceAgentLaunchSecretsSchema.Type;
@@ -382,9 +388,9 @@ export const deviceAgentReadArgsSchema = EffectSchema.Struct({
  * Which harnesses the Mac is signed in to by itself, by the harness's own
  * login on the Mac, never the credential: a local agent on a harness its Mac
  * is signed in to launches on that login rather than the plan or key the
- * account saved in Luke. A key absent is a harness the Mac did not check.
- * A sandboxed device says none, since its agents cannot reach its logins,
- * so each launches on the account's saved credential.
+ * account saved in the app. A key absent is a harness the Mac did not check.
+ * A sandboxed or direct device says none, since its agents run on none of
+ * its logins, so each launches on the account's saved credential.
  */
 export const deviceSignedInSchema = EffectSchema.Struct({
   /** Claude Code's own login on the Mac, as `claude auth status` answers it for the CLI the Mac bundles. */
@@ -407,7 +413,7 @@ const deviceField = { deviceId: wireUuidSchema };
  * A register: the Mac's id, its name, its home folder, and the CLI it
  * bundles, both absolute, the Codex binary it runs, absent until it has one,
  * which harnesses it is signed in to (neither, from a device that
- * runs its agents in VMs, on the sign-ins saved in Luke), its platform and architecture, and
+ * runs its agents in VMs or directly on the sign-ins saved in the app), its platform and architecture, and
  * how it runs its agents, absent for one that runs them bare, as every
  * desktop from before the field does, and the capabilities its follower has
  * (`DEVICE_CAPABILITY`), absent for none, as every desktop from before the
@@ -415,8 +421,9 @@ const deviceField = { deviceId: wireUuidSchema };
  * beyond the default, so a service from before it, which refuses a key it
  * does not know, never sees it from a device that has none; a capability
  * this service does not know is passed over rather than refused, so a newer
- * device's list never fails its register. A sandboxed device names each
- * executable by its path where its agents run, inside the VM. A device not
+ * device's list never fails its register. A device names each executable
+ * by its path where its agents run: a sandboxed one's inside the VM, a
+ * direct one's the CLIs it keeps on the device. A device not
  * ready to take an agent yet registers where its setup stands
  * (`DEVICE_SETUP`), and for one that failed, in words of its own naming no
  * secret, why; it names none once ready, so a service from before the
@@ -449,10 +456,24 @@ export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
 /** A held read of lines or requests: the device alone. */
 export const deviceAgentDeviceRequestSchema = EffectSchema.Struct(deviceField);
 
-/** A beat: the device, and which harnesses it is signed in to now, where it checked. */
+/**
+ * A beat: the device, which harnesses it is signed in to now, where it
+ * checked, and where its update stands (`HOST_UPDATE`), with why for one
+ * that failed, while one is under way. A beat naming no update clears the
+ * last one; a host sends the key only while it names one, so a service from
+ * before the field, which refuses it, never sees it from a host updating
+ * nothing.
+ */
 export const deviceAgentBeatRequestSchema = EffectSchema.Struct({
   ...deviceField,
   signedIn: EffectSchema.optionalKey(deviceSignedInSchema),
+  update: EffectSchema.optionalKey(hostUpdateSchema),
+  updateFailure: EffectSchema.optionalKey(
+    EffectSchema.String.check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(HOST_UPDATE_FAILURE_MAX_CHARS),
+    ),
+  ),
 });
 
 /** One line or request claimed by its id. */
@@ -474,10 +495,8 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
  * one the service words for the agent's reader.
  */
 export const DEVICE_LAUNCH_REFUSAL = {
-  /** The agent ran directly on the device before, which now runs every agent in a VM, so its session cannot be reached again there. */
+  /** The agent ran directly on the device before we kept each agent's repository and sessions in its own folder, on the developer's own logins, so its session cannot be reached again there. */
   RAN_DIRECTLY: "ran-directly",
-  /** The agent's saved state could not be brought back onto a device that held none of it; nothing was deleted, and its next launch tries again. */
-  STATE_NOT_RESTORED: "state-not-restored",
 } as const;
 
 export type DeviceLaunchRefusal =
@@ -489,6 +508,19 @@ export const deviceAgentSettleRequestSchema = EffectSchema.Struct({
   exitCode: EffectSchema.optionalKey(EffectSchema.Int),
   /** Why a launch was settled unstarted, where the device names why; a device from before it names none. */
   refusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_LAUNCH_REFUSAL))),
+});
+
+/**
+ * A launch line's step reported: its id, and where the host's launch of it
+ * stands now (`DEVICE_LAUNCH_STEP`). The service keeps it only on a launch
+ * line of the device's it claimed and has not settled, and only where it
+ * moves the line's step forward, so a report that lands late never takes it
+ * back.
+ */
+export const deviceAgentStepRequestSchema = EffectSchema.Struct({
+  ...deviceField,
+  id: wireUuidSchema,
+  step: EffectSchema.Literals(DEVICE_LAUNCH_STEPS),
 });
 
 /** A request answered: its id, and the answer of its kind, a read's bytes in base64. */
@@ -505,73 +537,31 @@ export const deviceAgentAnswerRequestSchema = EffectSchema.Struct({
   }),
 });
 
-/**
- * A device's ask to save one of its agents' state, at the end of the
- * agent's turn: the agent, and the generation its state was restored from
- * or last committed as, null where it has none. The service refuses it as
- * stale where that is no longer the agent's newest, before the device
- * uploads anything.
- */
-export const deviceAgentStateSaveRequestSchema = EffectSchema.Struct({
-  ...deviceField,
-  agentId: wireUuidSchema,
-  fromGeneration: EffectSchema.NullOr(stateGenerationSchema),
-});
-
-/**
- * What a save is granted: the fresh path its bundle goes to, which its
- * commit names; one upload to that path, the bundle's bytes sent as the
- * body of a PUT to `upload.url` with `upload.headers` until
- * `upload.expiresAt` (epoch milliseconds), at most `upload.maxBytes` and
- * never over a blob already there, which needs no credential beside it and
- * is one; and the agent's state key the bundle is encrypted under, as
- * standard base64 of its 32 bytes, the same on every save of the agent's.
- * None of it is ever written to a file, an argument, or a log.
- */
-export const deviceAgentStateSaveAnswerSchema = EffectSchema.Struct({
-  path: EffectSchema.String,
-  upload: EffectSchema.Struct({
-    url: EffectSchema.String,
-    headers: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
-    expiresAt: EffectSchema.Int,
-    maxBytes: EffectSchema.Int,
-  }),
-  key: EffectSchema.String,
-});
-
-export type DeviceAgentStateSaveAnswer = typeof deviceAgentStateSaveAnswerSchema.Type;
-
-/**
- * A save the device uploaded, committed: the agent, the generation the save
- * started from, as its ask named it, the path it was granted, the bundle's
- * size and digest as uploaded, and the commit its work applies to, null for
- * an agent with no repository. The service keeps it as the agent's next
- * generation only where the generation it started from is still the
- * newest, and refuses it as stale otherwise.
- */
-export const deviceAgentStateCommitRequestSchema = EffectSchema.Struct({
-  ...deviceField,
-  agentId: wireUuidSchema,
-  fromGeneration: EffectSchema.NullOr(stateGenerationSchema),
-  path: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(256)),
-  bytes: EffectSchema.Int.check(
-    EffectSchema.isBetween({ minimum: 1, maximum: DEVICE_AGENT_BOUNDS.MAX_STATE_BYTES }),
-  ),
-  sha256: sha256Schema,
-  baseCommit: EffectSchema.NullOr(commitIdSchema),
-});
-
-export type DeviceAgentStateCommitRequest = typeof deviceAgentStateCommitRequestSchema.Type;
-
-/** The generation a commit was kept as. */
-export const deviceAgentStateCommitAnswerSchema = EffectSchema.Struct({
-  generation: stateGenerationSchema,
-});
-
 /** That the service kept what the Mac said. */
 export const deviceAgentDoneAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
 });
+
+/** A tarball's SHA-256, in lower-case hex. */
+const sha256HexSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u));
+
+/**
+ * A release of the host program, as a beat's answer names it (`HostRelease`):
+ * its version, and each target's tarball by its SHA-256 in hex, a Mac's
+ * absent from a release with no Mac package. No address rides with it,
+ * since the host builds each from the version (`hostTarballUrl`), so no
+ * answer can send a host to download from elsewhere.
+ */
+export const deviceAgentReleaseSchema = EffectSchema.Struct({
+  version: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(32)),
+  sha256: EffectSchema.Struct({
+    [HOST_TARGET.LINUX_X64]: sha256HexSchema,
+    [HOST_TARGET.LINUX_ARM64]: sha256HexSchema,
+    [HOST_TARGET.DARWIN_ARM64]: EffectSchema.optionalKey(sha256HexSchema),
+  }),
+});
+
+export type DeviceAgentRelease = typeof deviceAgentReleaseSchema.Type;
 
 /**
  * That the service took a beat, and the launches it holds the device to:
@@ -579,17 +569,21 @@ export const deviceAgentDoneAnswerSchema = EffectSchema.Struct({
  * them, claimed or not, read after the beat was written. The device stops a
  * runner whose launch it does not name and settles a named launch it runs
  * nothing for; a service from before the field names none, and a build from
- * before it ignores it.
+ * before it ignores it. Where the service publishes a release newer than
+ * the version the host called with (`HOST_WIRE.VERSION_HEADER`), it names
+ * that release, which a host updates itself to; a host on it or past it is
+ * named none, and a build from before the field drops it unread.
  */
 export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
   openLaunches: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+  release: EffectSchema.optionalKey(deviceAgentReleaseSchema),
 });
 
 /**
  * The ids of the account's agents that should still stand on this Mac:
  * those pinned to it and not archived, whatever their task's status. A
- * device removes the folder and VM of any agent of Luke's it holds that is
+ * device removes the folder of any agent of ours it holds that is
  * not named, so the list is what stands rather than a discard it could miss.
  */
 export const deviceAgentLiveAgentsAnswerSchema = EffectSchema.Struct({

@@ -1,5 +1,5 @@
 {
-  "instead": "Luke no longer draws calls; nothing replaces their controls.",
+  "instead": "Vespin no longer draws calls; nothing replaces their controls.",
   "classes": [
     { "class": "call-bar", "allow": [] },
     { "class": "call-controls", "allow": [] },

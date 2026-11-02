@@ -1,8 +1,8 @@
 /**
- * codex.ts -- one launch of Codex for a Luke agent: `codex app-server` spawned with the ChatGPT plan's provider, the thread started or resumed, Luke's lines turned into turns, steers, interrupts and restarts, every notification posted out, and the launch ended, or kept warm, once the agent's turn is over.
+ * codex.ts -- one launch of Codex for an agent: `codex app-server` spawned with the ChatGPT plan's provider, the thread started or resumed, the service's lines turned into turns, steers, interrupts and restarts, every notification posted out, and the launch ended, or kept warm, once the agent's turn is over.
  *
  * One controller fiber owns the launch's state and acts on one signal at a
- * time: a line Luke wrote, or what app-server reported (a message a turn
+ * time: a line the service wrote, or what app-server reported (a message a turn
  * took, a turn completed, the process gone). Notifications are posted by the
  * reader as Codex writes them, so their order is Codex's own; the controller
  * only decides. A request it sends is awaited where it is sent, and whatever
@@ -12,9 +12,9 @@
  *
  * When the agent's turn is over (Codex's end-of-run rule). It is over at
  * the `turn/completed` of the turn the launch is running, on its own thread,
- * once no message Luke sent is left unanswered. Each `turn/start` and `turn/steer`
+ * once no message the service sent is left unanswered. Each `turn/start` and `turn/steer`
  * carries a `clientUserMessageId`, which Codex echoes as the `clientId` of
- * the `userMessage` item a turn takes it in, and which is Luke's own id for
+ * the `userMessage` item a turn takes it in, and which is the service's own id for
  * the line where a message goes alone. As app-server takes a line (its
  * `turn/start` or `turn/steer` answered), the launch posts ACCEPTED naming
  * the line, as Claude Code's launch does, once for each line a merged turn
@@ -27,18 +27,18 @@
  * turn, as P16 found), so nothing outlives `turn/completed` the way Claude
  * Code's background work outlives a `result`. A turn that is over ends the
  * launch as `turn_ended`, or, where the config asks it to stay `warm`, posts
- * IDLE and keeps the launch up (`RUNNER_WARM`) for Luke's next message,
- * until Luke retires it or its cap ends it as `idled`. One interrupted
- * after Luke's stop ends the launch as `stopped`; a
+ * IDLE and keeps the launch up (`RUNNER_WARM`) for the service's next message,
+ * until the service retires it or its cap ends it as `idled`. One interrupted
+ * after the service's stop ends the launch as `stopped`; a
  * failed turn, or one interrupted without a stop, as `failed`, with the
  * turn's error, so it shows as interrupted and Continue resumes the thread. A
  * stop with no turn running ends the launch at once; so does stdin closing
- * with none, while one running is let finish. App-server exiting, or Luke
+ * with none, while one running is let finish. App-server exiting, or the service
  * refusing the events, ends it as `failed`.
  *
  * Tokens. App-server takes its token from a command, Codex's provider
  * `auth`: the runner's own bundle as `codex-token` (`codex-token.ts`), which
- * asks Luke at the config's `tokenUrl` under the runner's bearer. Codex keeps
+ * asks the service at the config's `tokenUrl` under the runner's bearer. Codex keeps
  * what the command printed for the refresh interval, and runs it again past
  * that and after a 401, so a turn outlives any one token, and no token sits
  * in app-server's environment; what the command prints reaches app-server
@@ -51,10 +51,10 @@
  * `workspace-write` with approval `never` (https://learn.chatgpt.com/docs/sandboxing),
  * set as the thread starts and again as the `sandboxPolicy` of each
  * `turn/start`, as app-server documents: the checkout writable, its Git
- * directory, and the folders the machine grants, with the network on. In a
- * local agent's VM (`runsOnHost`) Codex runs no sandbox of its own,
- * `danger-full-access`, since the VM is the boundary and Landlock would keep
- * a command from `/dev/kvm`; its commands still inherit no bearer or key
+ * directory, and the folders the machine grants, with the network on. On a
+ * host (`runsOnHost`) Codex runs no sandbox of its own,
+ * `danger-full-access`, since an agent there has full access to the box it
+ * runs on; its commands still inherit no bearer or key
  * (`shell_environment_policy`).
  */
 
@@ -112,31 +112,31 @@ const CHATGPT_PROVIDER = {
 } as const;
 
 /**
- * How app-server runs the token command: given long enough for a cold Luke
+ * How app-server runs the token command: given long enough for the service's cold start
  * and a renewal at OpenAI behind it, and run again once what it printed is
- * five minutes old, well inside the margin Luke's route answers a token with.
+ * five minutes old, well inside the margin the service's route answers a token with.
  */
 const TOKEN_COMMAND = {
   TIMEOUT_MS: 30_000,
   REFRESH_INTERVAL_MS: 300_000,
 } as const;
 
-/** The name the Luke MCP server is registered under in Codex's config. */
+/** The name our MCP server is registered under in Codex's config. */
 const MCP_SERVER = "luke";
 
 /**
- * How long Codex waits on one Luke tool call, in seconds: the Luke MCP
+ * How long Codex waits on one of our tool calls, in seconds: our MCP
  * function's own duration (`luke-mcp/app.ts`'s `LUKE_MCP_FUNCTION`, the
  * longest `run_on_mac` and two minutes around it), so Codex never gives up
- * on a call Luke is still running. Note that Codex's default is 60 s, past
- * which it fails the call while Luke carries it out, and the agent retries a
+ * on a call the service is still running. Note that Codex's default is 60 s, past
+ * which it fails the call while the service carries it out, and the agent retries a
  * call that already ran.
  */
 const MCP_TOOL_TIMEOUT_SECONDS = 600;
 
 /**
  * How long Codex waits on an integration's server to start, in seconds:
- * past the bound Luke lists a provider's tools within
+ * past the bound the service lists a provider's tools within
  * (`connection-door.ts`'s `LIST_TIMEOUT`, ten seconds), so a slow provider's
  * server answers no tools rather than being failed by Codex at its default
  * of ten (https://learn.chatgpt.com/docs/extend/mcp, `startup_timeout_sec`).
@@ -145,13 +145,13 @@ const INTEGRATION_STARTUP_TIMEOUT_SECONDS = 20;
 
 /**
  * Who the runner tells app-server it is. OpenAI asks that the name match the
- * `agent_name_hint` the sign-in sent, which is `Luke`. The version is the
+ * `agent_name_hint` the sign-in sent, which is the product's name. The version is the
  * package's, which the bundle's build writes in (`--define`); an unbundled
  * runner, such as the tests', says `dev`.
  */
 const CLIENT_INFO = {
-  name: "Luke",
-  title: "Luke",
+  name: "Vespin",
+  title: "Vespin",
   version: process.env.LUKE_RUNNER_VERSION ?? "dev",
 } as const;
 
@@ -198,9 +198,9 @@ type Signal =
   | { readonly kind: typeof SIGNAL.UNDELIVERED };
 
 /**
- * A message Luke sent, as Codex takes it, under the id Codex echoes when a
- * turn takes it: Luke's own id for the line where it goes alone. `lines` are
- * the ids of Luke's lines it carries, one for a line, several for a merged
+ * A message the service sent, as Codex takes it, under the id Codex echoes when a
+ * turn takes it: the service's own id for the line where it goes alone. `lines` are
+ * the ids of the service's lines it carries, one for a line, several for a merged
  * next turn.
  */
 interface Outgoing {
@@ -269,7 +269,7 @@ const API_KEY_PROVIDER = {
 
 /** Which credential a launch's app-server runs on. */
 const CODEX_AUTH = {
-  /** The account's ChatGPT plan, its token asked of Luke through the runner's token command. */
+  /** The account's ChatGPT plan, its token asked of the service through the runner's token command. */
   TOKEN_COMMAND: "token_command",
   /** The account's OpenAI API key, in the launch's environment. */
   API_KEY: "api_key",
@@ -280,7 +280,7 @@ type CodexAuth =
   | { readonly kind: typeof CODEX_AUTH.API_KEY };
 
 /**
- * How Luke's provider is handed its token: from the runner's token command
+ * How our provider is handed its token: from the runner's token command
  * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
  * key; and its own name.
  */
@@ -346,11 +346,11 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
 }
 
 /**
- * App-server's argv: Luke's provider and its credential where the launch
- * runs on one of Luke's (`providerOverrides`), the Luke MCP
+ * App-server's argv: our provider and its credential where the launch
+ * runs on one of ours (`providerOverrides`), our MCP
  * server and each integration's beside it with the bearer read from the environment and their tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
- * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and its
+ * every MCP call, as P16 found) and given as long as the service runs a call, the sandbox with network on and its
  * writable roots (`sandboxPolicy`), and commands inheriting the core variables
  * without the bearer or the key, and handed the image's tools' own
  * (`SANDBOX_TOOL_ENV`). Nothing in argv is secret.
@@ -364,7 +364,7 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
  */
 function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPolicy): string[] {
   const mcp = `mcp_servers.${MCP_SERVER}`;
-  // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as Luke's are.
+  // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as ours are.
   const integrations = (config.integrations ?? [])
     .filter((integration) => integration.name !== MCP_SERVER)
     .flatMap((integration): (readonly [string, string])[] => {
@@ -457,7 +457,7 @@ interface CodexLaunch {
   readonly sent: Map<string, Outgoing>;
   /** Messages for the next turn. */
   waiting: Outgoing[];
-  /** Luke's lines this launch has said app-server took, each said once. */
+  /** The service's lines this launch has said app-server took, each said once. */
   readonly accepted: Set<string>;
   /** The credential app-server runs on. */
   readonly auth: CodexAuth;
@@ -539,6 +539,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
         [RUNNER_ENV.CLAUDE_TOKEN]: undefined,
         [RUNNER_ENV.API_KEY]: undefined,
       },
+      inRunnerGroup: runsOnHost(env),
     },
     listenerFor(seen),
   ).pipe(Scope.provide(serverScope));
@@ -618,8 +619,8 @@ const revertedBefore = Effect.fn("agent-runner/codex/revertedBefore")(function* 
 });
 
 /**
- * Says each of Luke's lines a message carries was taken by app-server, as
- * Claude Code's launch says a line was handed to the SDK, so Luke ties the
+ * Says each of the service's lines a message carries was taken by app-server, as
+ * Claude Code's launch says a line was handed to the SDK, so the service ties the
  * line to the turn that runs it. A line said once is not said again when a
  * message is sent again in the next turn.
  */
@@ -673,7 +674,7 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
   yield* accepted(launch, outgoing);
 });
 
-/** One of Luke's lines, acted on; answers the launch's outcome where the line ends it. */
+/** One of the service's lines, acted on; answers the launch's outcome where the line ends it. */
 const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   launch: CodexLaunch,
   text: string,
@@ -688,7 +689,7 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
       launch.warm = false;
-      // Note that Luke's id for the line is the id Codex echoes, so a turn that takes it names it.
+      // Note that our id for the line is the id Codex echoes, so a turn that takes it names it.
       const uuid = value.uuid ?? randomUUID();
       const outgoing: Outgoing = { clientId: uuid, input: userInput(value.content), lines: [uuid] };
       if (launch.turnId === undefined) {
@@ -774,7 +775,7 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
     yield* startTurn(launch, unanswered);
     return undefined;
   }
-  // What Luke wrote before the turn completed, still queued behind the
+  // What the service wrote before the turn completed, still queued behind the
   // completion, is acted on before the launch is called over, so a
   // follow-up already sent starts the next turn rather than being dropped.
   for (;;) {
@@ -785,7 +786,8 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
   }
   if (launch.turnId !== undefined) return undefined;
   if (launch.context.config.warm !== true) return ended(RUNNER_END.TURN_ENDED);
-  // The agent's turn is over: the launch stays warm for Luke's next message rather than ending.
+  // The agent's turn is over: the launch stays warm for the service's next message
+  // rather than ending.
   launch.warm = true;
   yield* launch.context.sink.emit({ type: RUNNER_EVENT.IDLE });
   return undefined;
@@ -902,7 +904,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     warm: false,
   };
 
-  // Luke's lines join the signals in a loop of their own, so a line is
+  // The service's lines join the signals in a loop of their own, so a line is
   // never held up behind what the controller is waiting on.
   yield* Stream.fromQueue(context.lines).pipe(
     Stream.runForEach((text) => Queue.offer(signals, { kind: SIGNAL.LINE, text })),

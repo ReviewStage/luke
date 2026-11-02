@@ -198,19 +198,23 @@ function drawn(
         });
   // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
   const registry = AtomRegistry.make();
-  const tree = createElement(
-    PlanCommentsProvider,
-    { value: control },
-    createElement(CommentFocusScope, {
-      reveal,
-      children:
-        mentions === undefined
-          ? page
-          : createElement(TaskMentions, { value: mentions, children: page }),
-    }),
-  );
-  act(() => root.render(onRegistry(registry, tree)));
-  return { container, asked, started, documentsShown, notes };
+  const treeOf = (value: PlanCommentsControl) =>
+    createElement(
+      PlanCommentsProvider,
+      { value },
+      createElement(CommentFocusScope, {
+        reveal,
+        children:
+          mentions === undefined
+            ? page
+            : createElement(TaskMentions, { value: mentions, children: page }),
+      }),
+    );
+  act(() => root.render(onRegistry(registry, treeOf(control))));
+  /** Draws the page again on the threads the service now lists. */
+  const rethread = (next: readonly PlanCommentThread[]) =>
+    act(() => root.render(onRegistry(registry, treeOf({ ...control, threads: next }))));
+  return { container, asked, started, documentsShown, notes, rethread };
 }
 
 /** What `draw` drew with the column stood wide enough for its margin, since jsdom lays nothing out. */
@@ -288,6 +292,41 @@ test("a press on a thread's words opens it beside them, its ✓ resolving it and
       [ID.OPEN, PLAN_COMMENT_ACTION.RESOLVE, undefined],
     ],
   );
+});
+
+test("a thread resolved fades out of the margin where its card stood, out of reach, and goes once its fade has played", () => {
+  const motion = new EventTarget();
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.dataset.leaving === "true" ? [motion] : [];
+    },
+  });
+  try {
+    const { container, rethread } = wide(() => drawn("page"));
+    const slot = () =>
+      container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`)?.closest(".comment-slot");
+    const standing = slot();
+    assert.ok(standing);
+
+    wide(() =>
+      rethread(
+        THREADS.map((thread) =>
+          thread.id === ID.OPEN ? { ...thread, status: PLAN_COMMENT_STATUS.RESOLVED } : thread,
+        ),
+      ),
+    );
+
+    assert.equal(slot(), standing, "the card it had fades, rather than going at once");
+    assert.equal(standing.getAttribute("data-leaving"), "true");
+    assert.equal(standing.hasAttribute("inert"), true);
+    act(() => {
+      motion.dispatchEvent(new Event("finish"));
+    });
+    assert.equal(standing.isConnected, false, "and goes once its fade has played");
+  } finally {
+    Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+  }
 });
 
 test("a thread whose words were deleted stays in the margin, saying so over its quote", () => {
@@ -687,7 +726,7 @@ test("a failed send says why in the foot under the box, and no note stands over 
   act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
   act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
   const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
-  typeInto(pending()?.querySelector("textarea"), "Ask Luke about retries");
+  typeInto(pending()?.querySelector("textarea"), "Ask Vespin about retries");
 
   act(() => {
     pending()
@@ -823,7 +862,7 @@ test("on a plan's page a reply is written in the agent box's editor, its words p
           actor: PLAN_COMMENT_ACTOR.MEMBER,
           by: { userId: "u-charles", name: "Charles Pan" },
         },
-        words: `See [@Goal](https://tryluke.dev/acme/plan/${PLAN.id}#goal) first.`,
+        words: `See [@Goal](https://vespin.dev/acme/plan/${PLAN.id}#goal) first.`,
         at: 1,
       },
     ],
@@ -906,7 +945,7 @@ test("a thread at rest draws its comment's mentions as their chips, as it does o
           actor: PLAN_COMMENT_ACTOR.MEMBER,
           by: { userId: "u-charles", name: "Charles Pan" },
         },
-        words: `See [@Goal](https://tryluke.dev/acme/plan/${PLAN.id}#goal) first.`,
+        words: `See [@Goal](https://vespin.dev/acme/plan/${PLAN.id}#goal) first.`,
         at: 1,
       },
     ],
@@ -1123,7 +1162,7 @@ test("in the Comments tab a thread's quote shows its words in the plan, and a de
   assert.equal(documentsShown.length, 2);
 });
 
-test("a comment's field offers no Luke among the agents, since no task has one, and no Send to beside it", async () => {
+test("a comment's field offers no Vespin among the agents, since no task has one, and no Send to beside it", async () => {
   installEditorLayout();
   const { container } = drawn("page", THREADS, () => true, PLAN, undefined, PAGE_MENTIONS);
   act(() =>
@@ -1142,8 +1181,8 @@ test("a comment's field offers no Luke among the agents, since no task has one, 
     (row) => row.textContent ?? "",
   );
   assert.ok(
-    rows.every((row) => !row.startsWith("Luke")),
-    `no Luke is offered: ${rows.join(" | ")}`,
+    rows.every((row) => !row.startsWith("Vespin")),
+    `no Vespin is offered: ${rows.join(" | ")}`,
   );
   assert.equal(card.querySelector(".comment-send-to"), null);
 });
@@ -1241,7 +1280,7 @@ test("a thread being started keeps its card through a press away while its words
   assert.ok(field);
   act(() => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(field, "Ask Luke about retries");
+    setter?.call(field, "Ask Vespin about retries");
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
@@ -1254,7 +1293,7 @@ test("a thread being started keeps its card through a press away while its words
   await act(async () => undefined);
   assert.equal(
     pending()?.querySelector<HTMLTextAreaElement>("textarea")?.value,
-    "Ask Luke about retries",
+    "Ask Vespin about retries",
     "and takes them back where the send fails",
   );
 });

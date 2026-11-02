@@ -156,7 +156,7 @@ export const channelThreadsQuerySchema = EffectSchema.Struct({
  * threads, and a task's row names only its first few agents.
  */
 export const channelThreadAgentSchema = EffectSchema.Struct({
-  /** The name it goes by, Luke for a member's operator, else its title; null where it has neither. */
+  /** Its title; null where it has none. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,

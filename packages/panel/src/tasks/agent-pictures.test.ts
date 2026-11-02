@@ -606,7 +606,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
-      "under Luke's own bar, with an Expand into the viewer",
+      "under Vespin's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
@@ -631,19 +631,24 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
-      "under Luke's own bar",
+      "under Vespin's own bar",
     );
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
     assert.equal(viewerPlace(document), "1 of 2");
-    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM, CONVERSATION_MEDIA_TYPE.WEBM]);
+    // Note that the viewer's strip makes a third, for the video's first frame its thumb shows.
+    assert.deepEqual(created, [
+      CONVERSATION_MEDIA_TYPE.WEBM,
+      CONVERSATION_MEDIA_TYPE.WEBM,
+      CONVERSATION_MEDIA_TYPE.WEBM,
+    ]);
 
     const root = roots.pop();
     assert.ok(root);
     act(() => root.unmount());
     assert.deepEqual(
       revoked.sort(),
-      ["blob:video-1", "blob:video-2"],
+      ["blob:video-1", "blob:video-2", "blob:video-3"],
       "each address is let go of as its video goes",
     );
   } finally {
@@ -780,7 +785,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
-      "under Luke's own bar, with an Expand into the viewer",
+      "under Vespin's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.ok(inline.closest(".ph-no-capture"));
@@ -803,7 +808,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
-      "under Luke's own bar",
+      "under Vespin's own bar",
     );
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
   } finally {

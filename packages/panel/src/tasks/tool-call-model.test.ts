@@ -138,11 +138,11 @@ test("a command run on the Mac is the command it ran, described as a command is,
   assert.deepEqual(failed.output, { kind: TOOL_BLOCK.TEXT, text: "missing script: dev\nexit 1" });
   const refused = ran({
     status: "not-run",
-    reason: "Not run: Luke is not running on the developer's Mac.",
+    reason: "Not run: Vespin is not running on the developer's Mac.",
   });
   assert.deepEqual(refused.output, {
     kind: TOOL_BLOCK.TEXT,
-    text: "Not run: Luke is not running on the developer's Mac.",
+    text: "Not run: Vespin is not running on the developer's Mac.",
   });
 });
 
@@ -150,11 +150,11 @@ test("a file read and a search say the path and the pattern, and answer with the
   const read = toolCallView({
     tool: "read_file",
     input: { filePath: "/workspace/repository/README.md", limit: 20 },
-    output: { content: "# Luke\n" },
+    output: { content: "# Vespin\n" },
   });
   assert.equal(read.kind, CALL_KIND.READ_FILE);
   assert.equal(read.subject, "/workspace/repository/README.md");
-  assert.deepEqual(read.output, { kind: TOOL_BLOCK.TEXT, text: "# Luke\n" });
+  assert.deepEqual(read.output, { kind: TOOL_BLOCK.TEXT, text: "# Vespin\n" });
 
   const grep = toolCallView({
     tool: "grep",
@@ -559,7 +559,7 @@ test("a plan edit or a comment call opens the task it named, and one made before
 test("a look at a plan's picture says it looked and opens the task its address names, and one refused shows why and opens nothing", () => {
   const input = {
     address:
-      "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
+      "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
   };
   const looked = { tool: "look_at_picture", callId: "call-1", input, output: { status: "looked" } };
   const refused = {
@@ -633,7 +633,7 @@ test("a task's change says it updated the task its answer names, an older transc
     task: {
       id: "task-2",
       name: "Seat billing",
-      mention: "[@Seat billing](https://tryluke.dev/acme/plan/task-2)",
+      mention: "[@Seat billing](https://vespin.dev/acme/plan/task-2)",
     },
     already: false,
   };
@@ -857,6 +857,10 @@ test("the issue calls read as theirs, an issue by the identifier and title its a
 test("what a start or a message sent another agent is read whole: a message's words, a start's prompt or its earlier task and its note, and nothing for a start on the plan or another call", () => {
   const long = "Add the refund export.\n\nKeep the CSV columns as they are.";
   assert.deepEqual(sentWords("message_agent", { agentId: "a", text: long }), {
+    words: long,
+    note: undefined,
+  });
+  assert.deepEqual(sentWords("message_agent", { agentId: "a", message: long }), {
     words: long,
     note: undefined,
   });

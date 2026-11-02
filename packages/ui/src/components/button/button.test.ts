@@ -74,9 +74,9 @@ test("a press on a ButtonLink is heard, and the link is still followed", () => {
   const presses: boolean[] = [];
   const container = mount(
     createElement(ButtonLink, {
-      href: "tryluke://tryluke.dev/acme",
+      href: "vespin://vespin.dev/acme",
       onClick: (event) => presses.push(event.defaultPrevented),
-      children: "Open in Luke",
+      children: "Open in Vespin",
     }),
   );
   const link = container.querySelector("a");
@@ -277,7 +277,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       createElement(IconButtonLink, {
         href: "https://github.com/example/luke",
         icon: createElement("svg", { "aria-hidden": true }),
-        label: "Luke on GitHub",
+        label: "Vespin on GitHub",
       }),
       createElement(IconButtonLink, {
         href: "https://x.com/example",
@@ -296,7 +296,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       link.getAttribute("target"),
     ]),
   ).toEqual([
-    ["Luke on GitHub", "https://github.com/example/luke", null],
+    ["Vespin on GitHub", "https://github.com/example/luke", null],
     ["Example on X", "https://x.com/example", "_blank"],
   ]);
   expect(container.querySelector("button")).toBeNull();
@@ -471,12 +471,14 @@ test("a done button wears its check in its words' place, refuses its press, and 
   expect(heard).toEqual(["done", "done"]);
 });
 
-test("a busy button whose press succeeded wears a check where its ring stood, refusing a press, until the check's hold finishes, then its words come back; one that failed just stops", () => {
+test("a busy button whose press succeeded wears a check where its ring stood, refusing a press, until the check's hold finishes, then its words come back as the check fades; one that failed just stops", () => {
   const hold = new EventTarget();
+  const fade = new EventTarget();
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
     value(this: HTMLElement) {
-      return this.classList.contains("luke-button-done") ? [hold] : [];
+      if (!this.classList.contains("luke-button-done")) return [];
+      return this.dataset.leaving === "true" ? [fade] : [hold];
     },
   });
   let pressed = 0;
@@ -515,6 +517,10 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
   }));
   act(() => save?.click());
   act(() => hold.dispatchEvent(new Event("finish")));
+  const fading = [save, upload].map(
+    (button) => button?.querySelector<HTMLElement>(".luke-button-done")?.dataset.leaving,
+  );
+  act(() => fade.dispatchEvent(new Event("finish")));
   Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
 
   expect(landed).toEqual([
@@ -522,6 +528,7 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
     { check: true, busy: null, disabled: false },
   ]);
   expect(pressed).toBe(0);
+  expect(fading).toEqual(["true", "true"]);
   expect(save?.querySelector(".luke-button-done")).toBeNull();
   expect(upload?.querySelector(".luke-button-done")).toBeNull();
   expect(save?.disabled).toBe(true);

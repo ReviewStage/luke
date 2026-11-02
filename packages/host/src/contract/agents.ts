@@ -29,8 +29,6 @@ import {
   agentMessagesAnswerViewSchema,
   agentMessagesParamsSchema,
   agentModelsAnswerSchema,
-  agentOperatorEnsureAnswerViewSchema,
-  agentOperatorEnsureParamsSchema,
   agentOverviewChecksAnswerViewSchema,
   agentOverviewConversationAnswerViewSchema,
   agentOverviewPullRequestAnswerViewSchema,
@@ -60,8 +58,6 @@ import {
   devicePresenceAnswerViewSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
-  hostInstallTokenAnswerViewSchema,
-  hostInstallTokenParamsSchema,
   hostsAnswerViewSchema,
 } from "@luke/features/agent-view";
 import {
@@ -70,6 +66,7 @@ import {
   hostPairingParamsSchema,
   hostPairingViewSchema,
 } from "@luke/features/host-pairing-view";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -113,16 +110,6 @@ export const agentActsContract = {
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(devicePresenceAnswerViewSchema)),
   [AGENT_ACT_KIND.HOSTS_REMOVE]: actProcedure("Could not remove the host on this system.")
-    .input(exactInput(hostIdParamsSchema))
-    .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
-  [AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: actProcedure(
-    "Could not make an install command on this system.",
-  )
-    .input(exactInput(hostInstallTokenParamsSchema))
-    .output(EffectSchema.flip(hostInstallTokenAnswerViewSchema)),
-  [AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN]: actProcedure(
-    "Could not revoke the install command on this system.",
-  )
     .input(exactInput(hostIdParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
   [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actProcedure("Could not read the code on this system.")
@@ -192,9 +179,6 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
     .input(exactInput(agentPinParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actProcedure("Could not reach Luke on this system.")
-    .input(exactInput(agentOperatorEnsureParamsSchema))
-    .output(EffectSchema.flip(agentOperatorEnsureAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
     .input(exactInput(agentStopParamsSchema))
     .output(EffectSchema.flip(agentDeleteAnswerViewSchema)),
@@ -228,7 +212,7 @@ export const agentActsContract = {
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.flip(agentReviewOptionsAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: actProcedure(
-    "Could not read the agent's Luke tools on this system.",
+    `Could not read the agent's ${PRODUCT_NAME} tools on this system.`,
   )
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.flip(agentLukeToolsAnswerViewSchema)),

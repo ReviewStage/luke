@@ -20,7 +20,7 @@ import { underWebAdminDoors } from "./support/admin-doors";
  * in the page under that toolbar, with Retry, rather than in a page of its
  * own that drops the title and the controls, and an account no row carries
  * says it was not found under the same toolbar, its way back still there.
- * The network, the HTTP boundary to Luke, is a fake that refuses each read,
+ * The network, the HTTP boundary to the service, is a fake that refuses each read,
  * or leaves it hanging.
  */
 

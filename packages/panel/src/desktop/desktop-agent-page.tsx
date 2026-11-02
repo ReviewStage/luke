@@ -1,6 +1,5 @@
 import {
   AGENT_BOUNDS,
-  AGENT_KIND,
   type AgentStatus,
   type AgentSummary,
   type TasklessAgent,
@@ -87,7 +86,7 @@ import {
   useAutomationRunPlace,
 } from "./automation-agent-run.js";
 import { AgentPane } from "./main-tabs.js";
-import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
+import { PhoneBack, PhoneHead, phoneBar, phoneFindGroups } from "./phone-head.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -116,8 +115,8 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
  * them (`tasklessMentions`), the pages the agent showed and the pull request
- * it opened, and the workspace's agents, Luke's box among
- * them, though he works in no repository; a skill a message names is its
+ * it opened, and the workspace's agents, the app's box among
+ * them, though it works in no repository; a skill a message names is its
  * chip, which opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox on the
@@ -135,8 +134,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * has a row of its own among the sidebar's tasks, what that row offers too:
  * Mark as unread or Mark as read, through a task's marks
  * (`agent-read-marks.ts`), and Pin or Unpin and Move to section, the
- * reader's own, while the agent is not archived, and never for Luke, who
- * has a row of his own kind; ⌘J and New terminal open its terminal as on a
+ * reader's own, while the agent is not archived; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
  * Archive's place, and it is not renamed. An agent the service will not hand the reader,
@@ -253,9 +251,8 @@ function AgentPageBar({
           unread: unseen || reads.markedUnread(agent.id),
           onMark: (next: boolean) => reads.mark(listed, next),
         };
-  // Note that an archived agent offers neither a pin nor a section, as an archived task, and Luke never does.
-  const own =
-    listed !== undefined && agent.archivedAt === undefined && agent.kind !== AGENT_KIND.OPERATOR;
+  // Note that an archived agent offers neither a pin nor a section, as an archived task.
+  const own = listed !== undefined && agent.archivedAt === undefined;
   const agentPin = own
     ? {
         pinned: listed.pinnedAt !== undefined,
@@ -263,12 +260,7 @@ function AgentPageBar({
       }
     : undefined;
   const section = own
-    ? moveToSectionEntry(
-        tasks,
-        { agent: true, id: agent.id },
-        listed.workspaceId,
-        sectionDialogs.askNew,
-      )
+    ? moveToSectionEntry(tasks, { agent: true, id: agent.id }, listed.workspaceId, sectionDialogs)
     : undefined;
   const groups = agentMenuGroups({ chosen: true, ...actions.doors, read, agentPin, section });
   const { rename } = actions;
@@ -295,12 +287,24 @@ function AgentPageBar({
         <ActionMenu
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
+          // A phone's ⋯ also stands in for ⌘F, and for the panel's toggle it has no room for.
           groups={
-            phone?.onShowPanel === undefined
+            phone === undefined
               ? groups
               : [
+                  ...phoneFindGroups(),
                   ...groups,
-                  [{ label: SHOW_PANEL, icon: <SidePanelIcon />, onSelect: phone.onShowPanel }],
+                  ...(phone.onShowPanel === undefined
+                    ? []
+                    : [
+                        [
+                          {
+                            label: SHOW_PANEL,
+                            icon: <SidePanelIcon />,
+                            onSelect: phone.onShowPanel,
+                          },
+                        ],
+                      ]),
                 ]
           }
           onClose={menu.close}
@@ -588,7 +592,7 @@ export function DesktopAgentPage({
     });
     return card ?? undefined;
   });
-  // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: Luke works in none.
+  // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: the app works in none.
   const mentionWorkspace = listed?.slug ?? workspaceId;
   const { onShowMention } = tasks;
   // An agent on no task offers the pages it showed and the pull request it opened, as a task offers its own.

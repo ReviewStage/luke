@@ -6,9 +6,7 @@
  *
  * - Claude Code, paid for by the account's Claude plan, on any Claude model,
  *   a fast version running with Claude Code's own fast mode on, where the
- *   account keeps a Claude setup-token and this function reaches a harness
- *   (`NativeAgentSessions`: a web function's own, or the eve app's relay to
- *   one, so a Start from an eve agent decides as the panel's does).
+ *   account keeps a Claude setup-token.
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
  *   GPT model; Codex runs no fast mode on the plan, so an account whose
  *   ChatGPT plan pays is offered no GPT fast version (`accountFastOffer`), where the account
@@ -17,10 +15,10 @@
  *
  * Settings' choice for that harness decides: the plan where its row's
  * `forAgents` is on (Subscription) and the plan is offered, the account's
- * own API key for the model's provider otherwise: where this function
- * reaches a harness, on Claude Code, as its documented `ANTHROPIC_API_KEY`,
- * for a Claude model, and on Codex, as its provider's `env_key`, for a GPT
- * model; on eve where it reaches none. Luke's own key
+ * own API key for the model's provider otherwise: on Claude Code, as its
+ * documented `ANTHROPIC_API_KEY`, for a Claude model, and on Codex, as its
+ * provider's `env_key`, for a GPT model. No new agent runs on eve, whose
+ * agents are refused as ended (`runtime-sessions.ts`). Our own key
  * pays for no coding agent: an account with neither is refused by name
  * (`AgentCredentialMissing`, which names the provider), and connects one in
  * Settings › Agents. A brand-new account starts no coding agent until it
@@ -39,7 +37,7 @@
  * Codex on a Mac with none, or on no harness at all, is refused by name. A
  * local agent whose Mac is signed in to the model's harness itself, Claude
  * Code for a Claude model or Codex for a GPT model, runs on that login
- * (`localAgentRuntimeChoice`), whatever the account saved in Luke, and that
+ * (`localAgentRuntimeChoice`), whatever the account saved in the app, and that
  * Mac offers the harness's models whether or not the account could pay for
  * them.
  */
@@ -75,7 +73,7 @@ import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "ef
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { type AccountFastOffer, providerModelOf } from "../../providers/model-catalog.js";
-import { NativeAgentSessions } from "./runtime-sessions.js";
+import { isNativeRuntime, type NativeRuntime } from "./native-runtime.js";
 
 /** No credential of the account's pays for a coding agent on the provider's models: neither its subscription, selected in Settings, nor its API key. */
 export class AgentCredentialMissing extends Data.TaggedError("AgentCredentialMissing")<{
@@ -106,16 +104,11 @@ const IN_A_SANDBOX: AgentMachineChoice = {
   deviceId: undefined,
 };
 
-/** What a new agent runs on, and who pays for it. The type keeps no payer readable for a row from before payers were recorded; a new agent always names one. */
+/** What a new agent runs on, a native harness and never eve, and who pays for it. The type keeps no payer readable for a row from before payers were recorded; a new agent always names one. */
 export interface AgentRuntimeChoice {
-  readonly runtime: ConversationRuntime;
+  readonly runtime: NativeRuntime;
   readonly payer: AgentPayer | undefined;
 }
-
-const ON_API_KEY: AgentRuntimeChoice = {
-  runtime: CONVERSATION_RUNTIME.EVE,
-  payer: AGENT_PAYER.API_KEY,
-};
 
 const ON_CLAUDE_CODE: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -211,7 +204,7 @@ function keptPlan(
 const onPlanOf = (provider: string): AgentRuntimeChoice =>
   provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
 
-/** Whether the account saved its own API key for the provider among `rows`, which pays for its agents on eve. */
+/** Whether the account saved its own API key for the provider among `rows`, which pays for its agents on the provider's harness. */
 function keepsApiKey(provider: ModelProvider, rows: AccountKeyRows): boolean {
   return rows.some((row) => row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === provider);
 }
@@ -236,13 +229,11 @@ const providerRuntimeChoice = Effect.fnUntraced(function* (
   provider: ModelProvider,
   rows: AccountKeyRows,
 ): Effect.fn.Return<AgentRuntimeChoice, AgentCredentialMissing> {
-  const harness = Option.isSome(yield* Effect.serviceOption(NativeAgentSessions));
-  const plan = harness ? keptPlan(userId, provider, yield* deploymentRing, rows) : undefined;
+  const plan = keptPlan(userId, provider, yield* deploymentRing, rows);
   if (plan?.forAgents === true) return onPlanOf(provider);
-  // Luke's key pays for no coding agent, so an account with no API key of the provider's is refused by name.
+  // Our key pays for no coding agent, so an account with no API key of the provider's is refused by name.
   if (!keepsApiKey(provider, rows))
     return yield* Effect.fail(new AgentCredentialMissing({ provider }));
-  if (!harness) return ON_API_KEY;
   return provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE_API_KEY : ON_CODEX_API_KEY;
 });
 
@@ -268,7 +259,7 @@ const runsCodex = (device: Device): boolean => device.codexExecutable !== null;
 /**
  * Whether the Mac runs a Start of the provider's models: Claude Code's
  * anywhere, Codex's where it checked a Codex; where the account pays for the
- * harness in Luke (`paid`), or the Mac is signed in to it itself.
+ * harness in the app (`paid`), or the Mac is signed in to it itself.
  */
 function macRunsProvider(
   device: Device,
@@ -285,19 +276,12 @@ function macRunsProvider(
 const RUNTIME_PROVIDER = {
   [CONVERSATION_RUNTIME.CLAUDE_CODE]: MODEL_PROVIDER.ANTHROPIC,
   [CONVERSATION_RUNTIME.CODEX]: MODEL_PROVIDER.OPENAI,
-} as const;
-
-/** The native runtime that runs a provider's models: the harness a Mac launches for it. */
-const RUNTIME_OF = {
-  [MODEL_PROVIDER.ANTHROPIC]: CONVERSATION_RUNTIME.CLAUDE_CODE,
-  [MODEL_PROVIDER.OPENAI]: CONVERSATION_RUNTIME.CODEX,
-} as const satisfies Record<ModelProvider, ConversationRuntime>;
+} as const satisfies Record<NativeRuntime, ModelProvider>;
 
 /**
  * The providers a Start on any of the account's Macs runs, as the account
- * can pay for them: each of `MAC_PROVIDERS` whose model a Start of the
- * account's would run on that provider's own harness, on a plan or a key
- * it keeps in Luke, and none it cannot pay for.
+ * can pay for them: each of `MAC_PROVIDERS` a Start of the account's would
+ * run, on a plan or a key it keeps in the app, and none it cannot pay for.
  */
 const paidMacProviders = Effect.fnUntraced(function* (
   userId: string,
@@ -306,9 +290,7 @@ const paidMacProviders = Effect.fnUntraced(function* (
   const paid: ModelProvider[] = [];
   for (const provider of MAC_PROVIDERS) {
     const choice = yield* Effect.result(providerRuntimeChoice(userId, provider, rows));
-    if (Result.isSuccess(choice) && choice.success.runtime === RUNTIME_OF[provider]) {
-      paid.push(provider);
-    }
+    if (Result.isSuccess(choice)) paid.push(provider);
   }
   return paid;
 });
@@ -328,7 +310,7 @@ const freshMacs = (userId: string) =>
  * Claude Code for a Claude model, Codex for a GPT model on a Mac that
  * checked a Codex; otherwise as any agent's (`agentRuntimeChoice`), on the
  * account's saved credential. So an account that saved no credential of the
- * provider's in Luke still starts one on a Mac signed in to its harness.
+ * provider's in the app still starts one on a Mac signed in to its harness.
  * Note that the Mac read here is the one the Start pins (`agentMachineChoice`),
  * by its id, so the payer and the pin are of the same Mac.
  */
@@ -339,8 +321,7 @@ export const localAgentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(functio
   rows?: AccountKeyRows,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
   const provider = yield* providerOfModel(model);
-  const harness = Option.isSome(yield* Effect.serviceOption(NativeAgentSessions));
-  if (harness && deviceId !== undefined) {
+  if (deviceId !== undefined) {
     const named = (yield* freshMacs(userId)).find((device) => device.id === deviceId);
     if (provider === MODEL_PROVIDER.ANTHROPIC && named?.signedIn.claudeCode === true) {
       return ON_MAC_CLAUDE_CODE;
@@ -412,8 +393,7 @@ export const freshOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Start asks: a sandbox where it asks for none, or the Mac it names, where
  * that Mac is one the account is offered and there now (`freshOffer`) and lists the
  * provider the runtime runs; refused by name otherwise: a Mac that is
- * another account's or is not there as away, Codex on a Mac that runs none,
- * and a runtime with no harness.
+ * another account's or is not there as away, and Codex on a Mac that runs none.
  */
 export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -421,12 +401,9 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly machine?: AgentMachineKind | undefined;
     readonly deviceId?: string | undefined;
   },
-  runtime: ConversationRuntime,
+  runtime: NativeRuntime,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
   if (asked.machine !== AGENT_MACHINE.DEVICE) return IN_A_SANDBOX;
-  if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE && runtime !== CONVERSATION_RUNTIME.CODEX) {
-    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
-  }
   const offer = yield* freshOffer(userId, asked.deviceId);
   if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
@@ -499,23 +476,18 @@ export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The provider whose credential an agent standing on eve lacks to take a
- * message, or none where it may: one recorded as paid for by Luke's key is
- * refused whatever its starter keeps now, since an agent never moves to
- * another payer, and any other agent on eve (its own API key, or from
- * before payers were recorded) needs its starter's API key for its model's
- * provider, which its steps run on (`account-keys.ts`). An agent on a native
- * harness on its starter's API key needs that key as one on eve does; one
- * on its plan is the plan's, which refuses by its own words.
+ * The provider whose credential an agent lacks to take a message, or none
+ * where it may: an agent on a native harness on its starter's API key needs
+ * that key for its model's provider; one on its plan is the plan's, which
+ * refuses by its own words. An agent on eve lacks nothing here, since it
+ * takes no message at all (`runtime-sessions.ts`).
  */
 export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: { readonly userId: string; readonly model: string },
   routing: { readonly runtime: ConversationRuntime; readonly payer: AgentPayer | null },
 ): Effect.fn.Return<ModelProvider | undefined, StoreFailure, DatabaseServices> {
-  const onKey = routing.payer === AGENT_PAYER.API_KEY;
-  if (routing.runtime !== CONVERSATION_RUNTIME.EVE && !onKey) return undefined;
+  if (!isNativeRuntime(routing.runtime) || routing.payer !== AGENT_PAYER.API_KEY) return undefined;
   const provider = yield* providerOfModel(agent.model);
-  if (routing.payer === AGENT_PAYER.LUKE) return provider;
   const rows = yield* keyRowsOf(agent.userId, undefined);
   return keepsApiKey(provider, rows) ? undefined : provider;
 });

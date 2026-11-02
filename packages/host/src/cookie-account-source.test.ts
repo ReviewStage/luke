@@ -68,7 +68,7 @@ interface ServiceState {
   /** The preferences the account saved, and when; none for an account that saved none. */
   preferences: Record<string, string>;
   updatedAt?: number;
-  /** Where the account's Luke links open, a part of its own; none where it never chose. */
+  /** Where the account's app links open, a part of its own; none where it never chose. */
   linkOpen?: string;
   /** Whether the service's sign-out is unreachable. */
   signOutDown?: boolean;
@@ -78,7 +78,7 @@ interface ServiceState {
   heldSignIn?: Promise<void> | undefined;
 }
 
-/** The service's routes over `state`, answered as Better Auth and Luke's routes answer them. */
+/** The service's routes over `state`, answered as Better Auth and our routes answer them. */
 function respond(
   state: ServiceState,
   request: Pick<RecordedRequest, "method" | "pathname" | "body">,
@@ -164,6 +164,7 @@ function scene(initial: Partial<ServiceState> = {}) {
   const door: CookieSessionDoor = {
     currentAddress: () => "/plan/task-1?tab=inbox",
     navigate: (url) => Effect.sync(() => void navigated.push(url)),
+    returnedFromSignIn: Effect.succeed(false),
     revisits: Stream.unwrap(Effect.map(revisits, Stream.fromQueue)),
   };
   /** The person coming back to the tab. */
@@ -1026,6 +1027,7 @@ const until = (holds: () => Effect.Effect<boolean>) =>
 const STILL_DOOR: CookieSessionDoor = {
   currentAddress: () => "/",
   navigate: () => Effect.void,
+  returnedFromSignIn: Effect.succeed(false),
   revisits: Stream.never,
 };
 
@@ -1134,11 +1136,11 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
 
     // Another tab signs in as someone else; a switch pressed here for the first account is sent for no one.
     state.user = { ...USER, id: "user-2", email: "other@example.com" };
-    const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.OPERATOR, on: true }, CONTEXT));
+    const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.PILOT, on: true }, CONTEXT));
     assert.ok(isRecord(stale));
     assert.equal(stale.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(stale.reason, EXPERIMENT_ACCOUNT_CHANGED);
-    assert.equal(state.experiments[EXPERIMENT.OPERATOR], undefined);
+    assert.equal(state.experiments[EXPERIMENT.PILOT], undefined);
     assert.equal(yield* account.token.readAccountKey?.() ?? Effect.void, "other@example.com");
     // The first account's choices are no longer drawn for the one now signed in.
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], undefined);

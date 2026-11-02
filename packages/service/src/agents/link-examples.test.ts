@@ -9,7 +9,7 @@ import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
 
 /**
  * link-examples.test.ts -- the link every author is shown how to write a
- * file, a pull request, or an issue with is one Luke draws as a chip: the
+ * file, a pull request, or an issue with is one the app draws as a chip: the
  * coding agent's instructions, which show every kind it names as a mention,
  * and its inbox and plan tools; the coding agent's last example is another
  * agent's. An example spelled with `<owner>/<name>` and `<path>` is
@@ -31,7 +31,7 @@ const FILLED: ReadonlyMap<string, string> = new Map([
 ]);
 
 /** The task the coding agent works on, whose link its instructions are handed. */
-const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
+const TASK_ADDRESS = "https://vespin.dev/acme/plan/pl_1";
 
 /** Every Markdown link to a web page the words show, its label and its target, the placeholders filled in as an author would. */
 function linksIn(words: string): { label: string; target: string }[] {
@@ -49,14 +49,14 @@ function examplesIn(words: string): string[] {
   return linksIn(words).map(({ target }) => target);
 }
 
-/** What each example link is drawn as: the kind of mention its chip names, else the kind of place in Luke it names, or nothing where it stays a link. */
+/** What each example link is drawn as: the kind of mention its chip names, else the kind of place in the app it names, or nothing where it stays a link. */
 function drawnAs(words: string): (string | undefined)[] {
   return examplesIn(words).map(
     (target) => decodeMention(target, REPOSITORY)?.kind ?? readLink(target)?.place.kind,
   );
 }
 
-test("a coding agent is shown to name each kind as a mention Luke draws as its chip, its task's own under its task's link and only where it has a task, and one on no task its own pages under its own link", () => {
+test("a coding agent is shown to name each kind as a mention Vespin draws as its chip, its task's own under its task's link and only where it has a task, and one on no task its own pages under its own link", () => {
   const shared = [MENTION_KIND.FILE, MENTION_KIND.FILE, MENTION_KIND.LINK, MENTION_KIND.LINK];
   const own = [MENTION_KIND.TASK, MENTION_KIND.SECTION, MENTION_KIND.PAGE];
   for (const brief of Object.values(AGENT_BRIEF)) {
@@ -82,7 +82,7 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
   }
 });
 
-test("the thread post tool and the plan's edit tool show a file's link Luke draws as its chip, written as a mention", () => {
+test("the thread post tool and the plan's edit tool show a file's link Vespin draws as its chip, written as a mention", () => {
   for (const description of [INBOX_TOOLS.POST.description, EDIT_PLAN_TOOL.description]) {
     assert.deepEqual(drawnAs(description), [MENTION_KIND.FILE]);
     assert.ok(
@@ -102,7 +102,7 @@ function appMentionsIn(words: string): { kind: string | undefined; mention: bool
   );
 }
 
-test("a coding agent is shown to name an MCP server as a mention Luke draws as its chip, a second account's among them", () => {
+test("a coding agent is shown to name an MCP server as a mention Vespin draws as its chip, a second account's among them", () => {
   for (const onTask of [true, false]) {
     const words = coderInstructions(
       REPOSITORY,
@@ -124,7 +124,7 @@ function datesIn(words: string): (string | undefined)[] {
   );
 }
 
-test("a coding agent is shown a day, a time, and a range, each a date Luke draws as its chip", () => {
+test("a coding agent is shown a day, a time, and a range, each a date Vespin draws as its chip", () => {
   const words = coderInstructions(REPOSITORY, AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
   assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
 });

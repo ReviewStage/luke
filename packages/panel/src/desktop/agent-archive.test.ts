@@ -144,7 +144,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy):
   ].map((note) => note.textContent ?? "");
 }
 
-test("an archived agent's card says who archived it, an agent or Luke for a member, the reader as you, the reason given, and an archive made with its task", () => {
+test("an archived agent's card says who archived it, an agent or Vespin for a member, the reader as you, the reason given, and an archive made with its task", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const byAgent = archivedCardNotes("user-sam", {
     by: AGENT_ARCHIVER.AGENT,
@@ -171,7 +171,7 @@ test("an archived agent's card says who archived it, an agent or Luke for a memb
     "Archived by Bill by seat for Dean Stratakos",
     "Its pull request merged.",
   ]);
-  assert.deepEqual(byLuke, ["Archived by Luke for you"]);
+  assert.deepEqual(byLuke, ["Archived by Vespin for you"]);
   assert.deepEqual(withTask, ["Archived with its task by Dean Stratakos"]);
 });
 

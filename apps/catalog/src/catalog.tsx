@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
@@ -182,7 +183,7 @@ export function Catalog({ view }: { view: CatalogView }): React.JSX.Element {
   return (
     <div className="catalog">
       <nav className="catalog-index" aria-label="Examples">
-        <p className="catalog-index-title">Luke catalog</p>
+        <p className="catalog-index-title">{PRODUCT_NAME} catalog</p>
         <ul>
           {EXAMPLES.map((entry) => (
             <li key={entry.id}>

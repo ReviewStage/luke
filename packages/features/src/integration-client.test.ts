@@ -18,7 +18,7 @@ import {
  */
 
 const client = new HostedIntegrationsClient({
-  serviceBaseUrl: "https://tryluke.dev",
+  serviceBaseUrl: "https://vespin.dev",
   credential: accountBearer({
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
@@ -89,9 +89,9 @@ it.effect(
 
                 status: "pending",
               },
-              { provider: "gmail", connection: "gmail", status: "connected" },
+              { provider: "outlook", connection: "outlook", status: "connected" },
             ],
-            addable: ["notion", "gmail"],
+            addable: ["notion", "outlook"],
           }),
         },
         "POST /api/account/integrations/notion/connect": {
@@ -145,7 +145,7 @@ it.effect(
 
 /** A browser tab's credential: no header at all, the cookie riding the request. */
 const cookieClient = new HostedIntegrationsClient({
-  serviceBaseUrl: "https://tryluke.dev",
+  serviceBaseUrl: "https://vespin.dev",
   credential: { holder: () => Effect.succeed("user-1") },
 });
 

@@ -15,7 +15,11 @@ test("the installed bundles still know every name the masking and the recorder r
   const names = [
     "maskTextSelector",
     "maskAttributeFn",
+    "maskAllInputs",
+    "recordHeaders",
+    "recordBody",
     "ph-no-capture",
+    "ph-ignore-input",
     "_POSTHOG_REMOTE_CONFIG",
     "captureCanvas",
     "recordCanvas",

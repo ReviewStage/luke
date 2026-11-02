@@ -6,14 +6,15 @@ import { useEffect, useState } from "react";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
 import { openLukeFromMac } from "./open-luke";
 import "./styles.css";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { mountPrerenderedPage } from "./mount-page";
 
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 /**
- * The page opens on Luke's mark, unbadged while the consent goes through,
- * badged as failed where it could not, when the title says so and Open
- * Luke goes back to start again.
+ * The page opens on the app's mark, unbadged while the consent goes through,
+ * badged as failed where it could not, when the title says so and the Open
+ * link goes back to start again.
  */
 function Consent(): React.JSX.Element {
   const [failure, setFailure] = useState(false);
@@ -36,8 +37,8 @@ function Consent(): React.JSX.Element {
   return (
     <AuthPage
       mark={<AuthMark tone={failure ? LANDING_TONE.DANGER : undefined} />}
-      title={failure ? "Luke could not continue" : "Continuing to Luke…"}
-      description={failure ? "Start sign-in again." : "This window will close soon."}
+      title={failure ? `${PRODUCT_NAME} could not continue` : `Continuing to ${PRODUCT_NAME}…`}
+      description={failure ? "Start sign-in again." : undefined}
       action={failure ? openLukeFromMac() : undefined}
     />
   );

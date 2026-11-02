@@ -1,5 +1,5 @@
 /**
- * sentry-install-app.ts -- the Redirect URL Sentry returns the browser to after Luke's Sentry integration is installed.
+ * sentry-install-app.ts -- the Redirect URL Sentry returns the browser to after our Sentry integration is installed.
  *
  * `GET /api/triggers/sentry/installed` is a browser navigation that carries
  * no bearer. The install it settles is begun, and the workspace's

@@ -1,6 +1,6 @@
 # Agent guide
 
-Luke is a macOS Electron app, with a web app beside it, for working through a
+Vespin is a macOS Electron app, with a web app beside it, for working through a
 task with coding agents: the developer works a task through with them in typed
 conversations, and they write its plan down as they go and open its pull
 requests.
@@ -27,8 +27,8 @@ PR says nothing about the Mac and there is no macOS check to wait for.
 Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
-`apps/web/server/routes/`, the deployment shell beside them, the agents' eve
-apps, `apps/dev`, and build and release scripts. A React component, control, or
+`apps/web/server/routes/`, the deployment shell beside them, and build and
+release scripts. A React component, control, or
 repeated UI shape must live in `packages/ui` whatever app mounts it, even one
 app alone, with no exceptions, and a duplicate is folded into one; an app or
 `packages/panel` must compose those components and never hand-builds a control
@@ -86,12 +86,11 @@ component, factored out of the surface where it builds the box by hand.
   terminal relay (`apps/web/server/terminal/`) and the host to that panel's
   window, never into a trace, a counted event, a fixture, or app state. And a
   webhook body an automation's caller sends, or an
-  integration trigger's event (a Sentry issue or alert as Luke's Sentry
+  integration trigger's event (a Sentry issue or alert as Vespin's Sentry
   integration delivers it), may reach that run's agent task, transcript and
   traces. And an automation webhook secret may be shown once, in the window that
-  minted it, at creation or rotation; never anywhere else. And a host install
-  token may be shown once, in the window that minted it, inside the install
-  command; never anywhere else. And an agent's cloud browser, a
+  minted it, at creation or rotation; never anywhere else. And an agent's cloud
+  browser, a
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
   frames, address, title, screenshots, and text snapshots to that agent and its
   workers, the model, the agent's transcript, and the panels of the workspace
@@ -177,7 +176,6 @@ reader alone. Move a rule from `[review]` to a check wherever one can hold it.
 pnpm exec vitest run <path>              # the file you changed
 pnpm check:affected                      # what changed since origin/main, from cache
 ./scripts/check.sh                       # everything CI runs bar Postgres
-pnpm --filter @luke/web test:agent       # the coder's offline eval, by hand
 ```
 
 - `[review]` Run the test files you touched, then push: CI runs the rest and
@@ -341,10 +339,9 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   end this row is an Effect transaction in TanStack DB.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `packages/database/src/testing/hosted-store-database.ts`,
-  `apps/dev/evals/coder.eval.ts`, and
+  `packages/database/src/testing/hosted-store-database.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
-  `ManagedRuntime` over a throwaway database) so a suite or an offline eval still written on `node:assert` or a
+  `ManagedRuntime` over a throwaway database) so a suite still written on `node:assert` or a
   plain fixture can hold a promise where an effect is described; a test body is
   its own edge.
 

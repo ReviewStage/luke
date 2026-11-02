@@ -10,7 +10,6 @@ import {
   type WithRepository,
 } from "@luke/database/models/agent-store";
 import type { StoredPullRequest } from "@luke/database/schemas/agent";
-import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
 import {
   type AgentPullRequest,
   type AgentPullRequestAnswer,
@@ -38,7 +37,6 @@ import {
 import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { settleTaskIfFinished } from "../../tasks/task-finish.js";
-import { noticedForOperator } from "../operator-notice.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -72,9 +70,7 @@ import { CODER } from "./bounds.js";
  * that first finds the pull request merged, the row having kept it
  * unmerged or not at all, is one of the moments that may finish the
  * agent's task, so the task is asked to settle once the row is written
- * (`tasks/task-finish.ts`); and a read that first finds it merged or
- * closed is told the agent's member's operator as a notice
- * (`../operator-notice.ts`), the webhook's read and the token sweep's alike.
+ * (`tasks/task-finish.ts`).
  *
  * The row also keeps when that read was and of which branch, so the kept
  * answers answer from the row rather than GitHub where it will not have
@@ -188,12 +184,6 @@ function firstSeenEnd(
   return seen ? undefined : found.state;
 }
 
-/** The operator's notice of each end. */
-const END_NOTICE = {
-  [PULL_REQUEST_STATE.MERGED]: OPERATOR_NOTICE_KIND.PR_MERGED,
-  [PULL_REQUEST_STATE.CLOSED]: OPERATOR_NOTICE_KIND.PR_CLOSED,
-} as const satisfies Record<PullRequestEnd, OperatorNoticeKind>;
-
 /** Nothing published: neither a branch GitHub holds nor a pull request. */
 function nothing(agent: Agent): Published {
   return {
@@ -275,8 +265,6 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   // A merge first seen may have finished the task's work; the task is asked once the row says merged.
   const merged = ended === PULL_REQUEST_STATE.MERGED;
   if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
-  // An end first seen is told the agent's member's operator, whoever's read saw it.
-  if (ended !== undefined) yield* noticedForOperator(agent.id, END_NOTICE[ended]);
   return answer;
 });
 

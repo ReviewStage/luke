@@ -2,16 +2,15 @@ import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { useCallback, useRef, useState } from "react";
 import { useAgentRead } from "./agent-changes-tab.js";
 import type { PullRequestSource } from "./pull-request-source.js";
 
 /**
- * chapters-read.ts -- a pull request's chapters as its Pull request tab holds them: the read, this window's own Generate, and the count the Chapters tab wears.
+ * chapters-read.ts -- a pull request's chapters as its Pull request tab holds them: the read and this window's own Generate.
  *
- * The tab holds them, rather than the Chapters view, so its row counts the
- * chapters while the view, a chunk of its own (`agent-chapters-tab.tsx`),
+ * The tab holds them, rather than the Chapters view, so its row says where
+ * the chapters stand while the view, a chunk of its own (`agent-chapters-tab.tsx`),
  * is loaded only the first time it is shown.
  */
 
@@ -40,8 +39,8 @@ export interface ChaptersRead {
 }
 
 /**
- * The agent's pull request's chapters, read as the Chapters view is first
- * shown, again the moment the agent ends, since its last push is when the
+ * The agent's pull request's chapters, read as the Pull request tab is
+ * shown, so its Chapters tab says where they stand, again the moment the agent ends, since its last push is when the
  * head settles (`useAgentRead`), and again after a Generate. A read names the
  * number the tab's own read of the pull request found, so the service
  * answers from what it keeps rather than asking GitHub for the pull request
@@ -91,14 +90,4 @@ export function useChaptersRead(
   const answer =
     generated !== undefined && generated.of === read.answer ? generated.answer : read.answer;
   return { answer, head: held?.head, out: read.out, ask: read.ask, generate, generating };
-}
-
-/** How many chapters the Chapters tab counts: those ready, stale or not; none before then. */
-export function chaptersCount(read: ChaptersRead): number | undefined {
-  const { answer } = read;
-  if (answer === undefined || "failure" in answer || answer.pullRequest === null) return undefined;
-  const { chapters } = answer.pullRequest;
-  return chapters.status === PULL_REQUEST_CHAPTERS_STATE.READY
-    ? chapters.chapters.length
-    : undefined;
 }

@@ -411,6 +411,9 @@ test("a provider the deployment does not offer the account has no row, and every
   assert.deepEqual(rowNames(page), [
     "Executor",
     "GitHub",
+    "Gmail",
+    "Google Calendar",
+    "Google Drive",
     "Granola",
     "Linear",
     "Mercury",
@@ -426,7 +429,7 @@ test("a provider the deployment does not offer the account has no row, and every
   assert.equal(
     [...page.querySelectorAll("button")].filter((button) => button.textContent === "Connect")
       .length,
-    13,
+    16,
   );
 });
 
@@ -561,6 +564,20 @@ test("a connection that works stands quiet, with Reconnect in its ⋯ beside Dis
       .filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT)
       .map((request) => request.payload),
     [{ provider: INTEGRATION_PROVIDER.LINEAR }],
+  );
+});
+
+test("Disconnect on a lone account says what goes before it disconnects", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.LINEAR,
+  );
+  standing.set(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_STATUS.CONNECTED);
+  const page = await mount();
+  await choose(rowNamed(page, "Linear"), "Disconnect");
+
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /Agents lose Linear until you connect it again\./u,
   );
 });
 

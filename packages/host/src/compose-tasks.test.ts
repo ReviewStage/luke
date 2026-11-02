@@ -215,7 +215,7 @@ interface FakeService extends TasksClient {
   sectionRefused: TaskSectionWrite["kind"] | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
-  /** The Luke GitHub App install address a connection answers. */
+  /** Our GitHub App's install address a connection answers. */
   installUrl: string;
   /** Whether the workspaces are not sealed, as a service that did not answer. */
   workspacesFail: boolean;
@@ -569,7 +569,7 @@ function fakeService(tasks: Task[]): FakeService {
         }),
       connect: () =>
         Effect.sync(() => {
-          const url = `https://tryluke.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
+          const url = `https://vespin.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
           service.connectPages.push(url);
           return { ok: true as const, answer: { url } };
         }),
@@ -765,7 +765,7 @@ function fakeService(tasks: Task[]): FakeService {
             email,
             role: role === WORKSPACE_ROLE.ADMIN ? WORKSPACE_ROLE.ADMIN : WORKSPACE_ROLE.MEMBER,
             expiresAt: "2026-10-16T12:00:00.000Z",
-            acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${email}`,
+            acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${email}`,
           };
           service.invitations[workspaceId] = [...(service.invitations[workspaceId] ?? []), made];
           return { ok: true, answer: made } as const;
@@ -1366,6 +1366,53 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a quiet start draws its task's row as the service answered it, blocked where a blocker is open, and holds it until the list carries the start",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      const { call, last, settled, listed } = yield* subject(service);
+      const listedIds = () => last()?.tasks.map((row) => row.id);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      // An answer Sync woke hands the follow its wait for a write's transaction.
+      service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-earlier"]);
+      yield* nextPoll(settled);
+      const made: Task = {
+        ...task(INVITES, "Invitation expiry", "", 30),
+        createdAt: 3_000,
+        ownerId: "user-dana",
+        createdBy: { userId: "user-dana", name: "Dana" },
+        status: TASK_STATUS.TODO,
+        priority: TASK_PRIORITY.NONE,
+        number: 2,
+        // Started blocked by a task still open, which the answer names rather than marks.
+        blockedBy: [BILLING],
+      };
+      service.createAnswer = { ok: true, answer: { task: made, txid: "tx-start" } };
+
+      const start = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
+      );
+      yield* settled;
+      const drawn = listedIds();
+      const drawnBlocked = last()?.tasks.find((row) => row.id === INVITES)?.blocked;
+      // A list read from before the start answers without it.
+      service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-other"]);
+      yield* nextPoll(settled);
+      const throughStale = listedIds();
+      service.live.list.set({ plans: [rowOfTask(made), rowOfTask(billing)] }, ["tx-start"]);
+      yield* nextPoll(settled);
+
+      assert.deepEqual(yield* Fiber.join(start), { planId: INVITES });
+      assert.deepEqual(drawn, [INVITES, BILLING], "the row is drawn before the list carries it");
+      assert.equal(drawnBlocked, true, "a task started blocked by an open one is drawn blocked");
+      assert.deepEqual(throughStale, [INVITES, BILLING]);
+      assert.deepEqual(listedIds(), [INVITES, BILLING]);
+    }),
+);
+
 it.effect("a start answered after another task was opened answers its task and opens nothing", () =>
   Effect.gen(function* () {
     const billing = task(BILLING, "Billing export", "# Billing", 20);
@@ -1912,7 +1959,7 @@ it.effect(
         view?.repositoryPins?.map((pin) => pin.repository) ?? [];
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.sidebar.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -1993,7 +2040,7 @@ it.effect(
         view?.tasks.find((row) => row.id === INVITES)?.pinnedAt !== undefined;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2045,7 +2092,7 @@ it.effect(
       const repositoryOf = () => last()?.tasks.find((row) => row.id === INVITES)?.repository;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2671,7 +2718,7 @@ it.effect(
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
         expiresAt: "2026-10-16T12:00:00.000Z",
-        acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com",
+        acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
       };
       assert.deepEqual(made, { invitation });
       assert.deepEqual(pending, { invitations: [invitation] });

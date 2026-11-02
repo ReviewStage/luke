@@ -289,10 +289,6 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   await settle();
 
   const body = container.querySelector("[data-replay-card] .luke-disclosure-body");
-  assert.match(
-    body?.textContent ?? "",
-    /What this agent was handed of Wire the start from field's work/u,
-  );
   assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u);
   assert.doesNotMatch(body?.textContent ?? "", /left out/u);
   const steps = [...container.querySelectorAll("[data-replay-step]")];
@@ -405,7 +401,7 @@ test("on an agent's own page, which lists no source, the card names the source a
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: SOURCE.id }]);
 });
 
-test("a replay holding Luke's summary of the oldest steps opens on one folded row naming it as his, which opens onto the summary", async () => {
+test("a replay holding Vespin's summary of the oldest steps opens on one folded row naming it as its, which opens onto the summary", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: AGENT_BRIEF.PLAN,
@@ -425,7 +421,7 @@ test("a replay holding Luke's summary of the oldest steps opens on one folded ro
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
   const row = container.querySelector("[data-replay-summary]");
-  assert.equal(row?.textContent, "Summary of 174 earlier steps (written by Luke)");
+  assert.equal(row?.textContent, "Summary of 174 earlier steps (written by Vespin)");
   // The summary stands for the steps it summarized, so none is said to be left out.
   assert.doesNotMatch(
     container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
@@ -439,7 +435,7 @@ test("a replay holding Luke's summary of the oldest steps opens on one folded ro
   assert.match(row.textContent ?? "", /Read the invite code and its tests\./u);
 });
 
-test("a replayed line is named under its sender as a transcript names one: Luke, an automation, GitHub, and a teammate by their own marks, the reader's own by nobody, and a line from before senders were marked by its name", async () => {
+test("a replayed line is named under its sender as a transcript names one: Vespin, an automation, GitHub, and a teammate by their own marks, the reader's own by nobody, and a line from before senders were marked by its name", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: AGENT_BRIEF.PLAN,
@@ -451,7 +447,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
     ...(sender === undefined ? undefined : { sender }),
   });
   const steps: Replay["steps"] = [
-    line("Luke: Go.", { kind: REPLAY_SENDER.LUKE }),
+    line("Vespin: Go.", { kind: REPLAY_SENDER.LUKE }),
     line("Nightly: deploy: Go.", { kind: REPLAY_SENDER.AUTOMATION }),
     line("octocat: Go.", { kind: REPLAY_SENDER.GITHUB }),
     line("The developer: Go.", { kind: REPLAY_SENDER.DEVELOPER }),
@@ -474,7 +470,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
     return [ref?.dataset.kind ?? "", name ?? ""];
   });
   assert.deepEqual(senders, [
-    [ACTOR_KIND.LUKE, "Luke"],
+    [ACTOR_KIND.LUKE, "Vespin"],
     [ACTOR_KIND.AUTOMATION, "Nightly: deploy"],
     [ACTOR_KIND.GITHUB, "octocat"],
     null,
@@ -572,7 +568,7 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
   );
 });
 
-test("Luke's summary and the steps left out stand over the earlier-steps row, which pages only the steps the replay kept", async () => {
+test("Vespin's summary and the steps left out stand over the earlier-steps row, which pages only the steps the replay kept", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: AGENT_BRIEF.PLAN,
@@ -615,7 +611,7 @@ test("Luke's summary and the steps left out stand over the earlier-steps row, wh
   // Every kept step drawn, the summary and the line saying what was left out still stand as they did.
   assert.equal(
     body?.querySelector("[data-replay-summary]")?.textContent,
-    "Summary of 100 earlier steps (written by Luke)",
+    "Summary of 100 earlier steps (written by Vespin)",
   );
   assert.match(body?.textContent ?? "", /10 earlier steps were left out/u);
 });

@@ -2,10 +2,10 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { cn } from "../cn.js";
 
 /**
- * tooltip.tsx -- shadcn/ui's tooltip (style `base-nova`, on Base UI), vendored and drawn as Luke's dark pill.
+ * tooltip.tsx -- shadcn/ui's tooltip (style `base-nova`, on Base UI), vendored and drawn as our dark pill.
  *
  * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add tooltip` reads as a small diff. Luke's
+ * allows, so a later `shadcn add tooltip` reads as a small diff. Our
  * changes: the pill is the palette's tooltip ink with its hairline, corner,
  * and lift, at the caption's type, held inside the window however long its
  * words; it takes no presses, fades and grows in on the motion tokens from

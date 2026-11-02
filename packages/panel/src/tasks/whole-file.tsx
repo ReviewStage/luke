@@ -214,7 +214,7 @@ function useWholeFileFind(
       state.at = matchFrom(state.matches, read.current.from);
       go();
     };
-    // Note that matches are read again where the text or the notes changed under an open find, as a note Luke adds, the find kept at the match it was at where that still stands, and nothing scrolled.
+    // Note that matches are read again where the text or the notes changed under an open find, as a note the app adds, the find kept at the match it was at where that still stands, and nothing scrolled.
     const refresh = () => {
       if (state.query.length === 0) return;
       const { text } = read.current;

@@ -8,7 +8,7 @@ import {
 /**
  * terminal-view.ts -- a coding agent's terminals as the host answers the desktop for them: what each call takes and answers, why one could not be done, and the events an attached shell's connection is heard through.
  *
- * The host speaks Luke's own relay for each attached shell
+ * The host speaks our own relay for each attached shell
  * (`terminal-wire.ts`) and answers the desktop through the Gateway: the
  * calls carry ids, sizes, and names; what a shell printed is heard as the
  * connection's own events, named by a connection id the desktop minted for

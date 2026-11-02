@@ -1,8 +1,8 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { SMOLVM_MAC_PIN } from "@luke/agent-runner/pins";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
+import { HOST_TARGET } from "@luke/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
@@ -20,10 +20,9 @@ import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { Environment, reporterLayer } from "../effect/seams.js";
 import { readHostDevice } from "../host-device-record.js";
-import { fakeClis } from "../testing/fake-sandbox.js";
+import { fakeClis } from "../testing/fake-clis.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
-import { enrollHostDevice } from "./host-device.js";
 import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js";
 import { connectHostDevice, HOST_CONNECT_OUTCOME, type HostPairingCode } from "./host-pairing.js";
 import { hostPlatform } from "./host-platform.js";
@@ -33,7 +32,6 @@ const VERSION = "0.1.0";
 const DEVICE_ID = "6bbcb1b9-6706-4c97-9197-374756ceee07";
 const AGENT_ID = "0b6f9a4e-1c1d-4d2e-9f3a-5b7c8d9e0f12";
 const LINE_ID = "d1c2b3a4-0000-4000-8000-000000000001";
-const INSTALL_TOKEN = `lkh_${"b".repeat(40)}`;
 const DEVICE_SECRET = `lkd_${"a".repeat(43)}`;
 const POLL_SECRET = `lkp_${"c".repeat(43)}`;
 /** What a pairing's start answers beside its poll secret: the service's own numbers, ten minutes and five seconds. */
@@ -47,8 +45,18 @@ const PAIRING_CODE: Omit<HostPairingStartAnswer, "pollSecret"> = {
 type HostPairingPollStatus =
   (typeof HOST_PAIRING_POLL_STATUS)[keyof typeof HOST_PAIRING_POLL_STATUS];
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
-const SMOLVM = "/usr/local/bin/smolvm";
-/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's, which its VMs mount. */
+/** A release newer than the daemon's, as a beat's answer names one. */
+const NEWER_RELEASE = {
+  version: "0.2.0",
+  sha256: {
+    [HOST_TARGET.LINUX_X64]: "a".repeat(64),
+    [HOST_TARGET.LINUX_ARM64]: "b".repeat(64),
+    [HOST_TARGET.DARWIN_ARM64]: "c".repeat(64),
+  },
+};
+/** The Node the daemon runs on, which its runners run on too. */
+const NODE = "/opt/luke-host/node/bin/node";
+/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's. */
 const RUNNER_BUNDLE = {
   LINUX: "/opt/luke-host/lib/agent-runner.mjs",
   DARWIN: "/opt/agent-runner/agent-runner.mjs",
@@ -57,23 +65,22 @@ const RUNNER_BUNDLES: ReadonlySet<string> = new Set(Object.values(RUNNER_BUNDLE)
 const HTTP = {
   OK: 200,
   UNAUTHORIZED: 401,
-  CONFLICT: 409,
   UPGRADE_REQUIRED: 426,
   SERVER_ERROR: 500,
 } as const;
 
-/** A Linux box named fra-01, with no `/dev/kvm`. */
-const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => false };
+/** A Linux box named fra-01. */
+const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01" };
 
-/** A box's platform on the OS given, as its daemon builds it. */
-const platformOn = (os: HostOs, stateRoot: string) =>
+/** A box's platform on the OS given, as its daemon builds it, running as the user given. */
+const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
   hostPlatform({
     os,
     installFolder: "/opt/luke-host",
     arch: DEVICE_ARCH.X64,
     stateRoot,
-    smolvm: SMOLVM,
-    user: { uid: 990, gid: 990 },
+    node: NODE,
+    user: { uid, gid: uid },
     clis: fakeClis(),
   });
 
@@ -94,25 +101,17 @@ const box = Effect.gen(function* () {
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
-/** Whether a spawn is the runner, started in its agent's VM. */
+/** Whether a spawn is the runner, started straight on the box on the daemon's own Node. */
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
-  each.program === SMOLVM && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
+  each.program === NODE && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
 
-/** What smolvm prints for a machine it has not made. */
-const NOT_FOUND = JSON.stringify({ error: { code: "NOT_FOUND", message: "machine not found" } });
-
-/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH, whose smolvm makes each machine the first time it is started and whose runners run, and the reports it makes. */
+/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
-  const made = new Set<string>();
   const spawner = scriptedSpawner((program, args) => {
     if (program === "/bin/bash" && args[0] === "-l")
       return { stdout: "/usr/bin:/bin", exitCode: 0 };
-    if (program !== SMOLVM) return undefined;
     if (isRunner({ program, args })) return {};
-    const [, verb, , machine = ""] = args;
-    if (verb === "create") made.add(machine);
-    if (verb === "start" && !made.has(machine)) return { stderr: NOT_FOUND, exitCode: 1 };
-    return { exitCode: 0 };
+    return undefined;
   });
   const layer = Layer.mergeAll(
     NodeFileSystem.layer,
@@ -125,68 +124,28 @@ const world = (home: string, reports: string[]) => {
 };
 
 describe("a host's daemon", () => {
-  it.effect(
-    "enrolls on its install token as its OS, under an id it keeps, readable by its user alone, and keeps that enrollment where the box is still enrolled",
-    () =>
-      Effect.gen(function* () {
-        const { stateRoot } = yield* box;
-        const fileSystem = yield* FileSystem.FileSystem;
-        let enrolled = false;
-        const http = recordingHttpClient(() => {
-          if (enrolled) return jsonResponse({ error: "host-still-enrolled" }, HTTP.CONFLICT);
-          enrolled = true;
-          return jsonResponse({ deviceId: DEVICE_ID, deviceSecret: DEVICE_SECRET });
-        });
-        const enroll = enrollHostDevice({
-          stateRoot,
-          serviceOrigin: SERVICE,
-          installToken: INSTALL_TOKEN,
-          name: "fra-01",
-          platform: DARWIN_HOST.platform,
-          arch: DEVICE_ARCH.ARM64,
-          version: VERSION,
-        }).pipe(Effect.provide(http.layer));
-
-        expect((yield* enroll).outcome).toBe("enrolled");
-        expect((yield* enroll).outcome).toBe("still-enrolled");
-
-        const [first, second] = http.requests;
-        expect(first?.pathname).toBe(HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL);
-        expect(first?.authorization).toBe(`Bearer ${INSTALL_TOKEN}`);
-        expect(first?.headers.get(HOST_WIRE.VERSION_HEADER)).toBe(VERSION);
-        const firstBody = JSON.parse(first?.body ?? "{}");
-        expect(firstBody).toMatchObject({ name: "fra-01", platform: "darwin", arch: "arm64" });
-        expect(JSON.parse(second?.body ?? "{}").deviceId).toBe(firstBody.deviceId);
-        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))).toEqual({
-          deviceId: firstBody.deviceId,
-          deviceSecret: DEVICE_SECRET,
-          serviceOrigin: SERVICE,
-        });
-        expect(
-          ((yield* fileSystem.stat(`${stateRoot}/device.json`)).mode & 0o777).toString(8),
-        ).toBe("600");
-        expect(((yield* fileSystem.stat(stateRoot)).mode & 0o777).toString(8)).toBe("700");
-      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
-  );
-
   it.effect.each([
     {
-      os: { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => true },
+      os: { ...LINUX_HOST, deviceName: () => "fra-01" },
       name: "fra-01",
       platform: "linux",
-      nested: true,
+      uid: 0,
+      sandboxed: "1",
       runnerBundle: RUNNER_BUNDLE.LINUX,
+      pnpmConfig: ".config/pnpm",
     },
     {
       os: { ...DARWIN_HOST, deviceName: () => "Studio" },
       name: "Studio",
       platform: "darwin",
-      nested: false,
+      uid: 501,
+      sandboxed: undefined,
       runnerBundle: RUNNER_BUNDLE.DARWIN,
+      pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, hands a launch to its VM, nested where its OS allows, with the claim's secrets, and stops its runner and ends once Luke refuses its secret",
-    ({ os, name, platform: devicePlatform, nested, runnerBundle }) =>
+    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
+    ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -219,7 +178,7 @@ describe("a host's daemon", () => {
                   seq: 1,
                   kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
                   payload: {
-                    checkoutPath: `${home}/.luke/agents/${AGENT_ID}/repository`,
+                    checkoutPath: `${home}/.vespin/agents/${AGENT_ID}/repository`,
                     repository: null,
                     startBranch: null,
                     firstSequence: 1,
@@ -229,11 +188,13 @@ describe("a host's daemon", () => {
               });
             case `GET ${HOSTED_SERVICE_PATH.DEVICE_AGENT_REQUESTS}`:
               return jsonResponse({}, HTTP.SERVER_ERROR);
+            case `POST ${HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE}`:
+              return jsonResponse({ done: true, release: NEWER_RELEASE });
             default:
               return jsonResponse({ done: true });
           }
         });
-        const platform = platformOn(os, stateRoot);
+        const platform = platformOn(os, stateRoot, uid);
 
         const daemon = yield* hostDaemon({
           stateRoot,
@@ -242,6 +203,9 @@ describe("a host's daemon", () => {
           platform,
         }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
         yield* settled(() => spawner.spawned.some(isRunner));
+        yield* settled(
+          () => at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE).length > 0,
+        );
 
         const [register] = at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES);
         expect(JSON.parse(register?.body ?? "{}")).toMatchObject({
@@ -250,6 +214,9 @@ describe("a host's daemon", () => {
           platform: devicePlatform,
           arch: "x64",
           home: home,
+          isolation: "direct",
+          claudeExecutable: fakeClis().paths.claude,
+          codexExecutable: fakeClis().paths.codex,
           signedIn: { claudeCode: false, codex: false },
         });
         expect(new Set(http.requests.map((request) => request.authorization))).toEqual(
@@ -258,36 +225,56 @@ describe("a host's daemon", () => {
         expect(
           new Set(http.requests.map((request) => request.headers.get(HOST_WIRE.VERSION_HEADER))),
         ).toEqual(new Set([VERSION]));
-        const created = spawner.spawned.find(
-          (each) => each.program === SMOLVM && each.args[1] === "create",
-        );
-        expect(created?.args.includes("--nested")).toBe(nested);
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
-        const folder = `${home}/.luke/agents/${AGENT_ID}`;
-        expect(runner?.args.slice(0, 4)).toEqual(["machine", "exec", "--name", `luke-${AGENT_ID}`]);
-        expect(runner?.args).toContain(runnerBundle);
-        expect(runner?.args).toContain(`${folder}/repository`);
-        expect(runner?.args).toContain(`HOME=${folder}/home`);
+        const folder = `${home}/.vespin/agents/${AGENT_ID}`;
+        expect(runner?.args).toEqual([runnerBundle]);
+        expect(runner?.cwd).toBe(`${folder}/repository`);
+        expect(runner?.extendEnv).toBe(false);
         expect(runner?.env).toMatchObject({
           CLAUDE_CODE_OAUTH_TOKEN: RUNNER_TOKEN,
           LUKE_RUNNER_PLACE: "host",
+          HOME: `${folder}/home`,
+          XDG_CACHE_HOME: `${folder}/cache`,
+          PNPM_HOME: `${folder}/home/.local/share/pnpm`,
+          NPM_CONFIG_PREFIX: `${folder}/home/.npm-global`,
+          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
         });
-        expect(reports).toContain("Luke host: Connected to Luke.");
+        expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
+        // Note that every agent's settings name the same folders under the host's state, outside any agent's folder.
+        const fileSystem = yield* FileSystem.FileSystem;
+        const pnpmStore = `"${stateRoot}/agent-packages/pnpm-store"`;
+        expect(yield* fileSystem.readFileString(`${folder}/home/${pnpmConfig}/rc`)).toBe(
+          `store-dir=${pnpmStore}\n`,
+        );
+        expect(yield* fileSystem.readFileString(`${folder}/home/${pnpmConfig}/config.yaml`)).toBe(
+          `storeDir: ${pnpmStore}\n`,
+        );
+        expect(yield* fileSystem.readFileString(`${folder}/home/.npmrc`)).toBe(
+          `cache="${stateRoot}/agent-packages/npm-cache"\n`,
+        );
+        expect(reports).toContain("Vespin host: Connected to Vespin.");
 
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
-        // Note that the runner, which never exits here, is signalled in its VM and given its grace before it is ended.
-        yield* settled(() => spawner.spawned.some((each) => each.args.includes("-e")));
-        yield* TestClock.adjust(Duration.seconds(5));
         yield* Fiber.join(daemon);
-        expect(runner?.ended).not.toBe("running");
+        // Note that a daemon handed no releases, as This Mac's copy inside the app, neither fetches the release named nor says it updates.
+        expect(http.requests.filter((request) => new URL(request.url).origin !== SERVICE)).toEqual(
+          [],
+        );
+        expect(
+          at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE).some(
+            (request) => "update" in JSON.parse(request.body ?? "{}"),
+          ),
+        ).toBe(false);
+        // Note that the runner, which never exits here, has its group ended under the grace it was started with.
+        expect(runner?.ended).toEqual({ killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 
   it.effect(
-    "refused as needing an upgrade, says so once with the command to run and asks Luke nothing until its quiet spell has passed",
+    "refused as needing an upgrade, says so once with the command to run and asks Vespin nothing until its quiet spell has passed",
     () =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -318,7 +305,7 @@ describe("a host's daemon", () => {
 
         const upgrade = reports.filter((line) => line.includes("upgrade needed"));
         expect(upgrade).toEqual([
-          `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sudo sh`,
+          `Vespin host: upgrade needed: Vespin no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
         ]);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
@@ -412,6 +399,7 @@ describe("a host's connect with a code", () => {
         expect(
           ((yield* fileSystem.stat(`${stateRoot}/device.json`)).mode & 0o777).toString(8),
         ).toBe("600");
+        expect(((yield* fileSystem.stat(stateRoot)).mode & 0o777).toString(8)).toBe("700");
 
         const again = yield* connectOn(stateRoot, http, shown);
         expect(again).toEqual({
@@ -447,23 +435,20 @@ describe("hostRuntime", () => {
       platform: "darwin",
       home: "/Users/ada",
       os: DARWIN_HOST,
-      stateRoot: "/Users/ada/Library/Application Support/Luke",
-      smolvm: { kind: "pin", pin: SMOLVM_MAC_PIN },
+      stateRoot: "/Users/ada/Library/Application Support/Vespin",
     },
     {
       platform: "linux",
       home: "/var/lib/luke-host",
       os: LINUX_HOST,
       stateRoot: "/var/lib/luke-host/state",
-      smolvm: { kind: "path", variable: "LUKE_HOST_SMOLVM" },
     },
   ])(
-    "runs $platform as its own OS, with its state where its app or service keeps it and its smolvm from where that OS takes it",
-    ({ platform, home, os, stateRoot, smolvm }) => {
+    "runs $platform as its own OS, with its state where its app or service keeps it",
+    ({ platform, home, os, stateRoot }) => {
       const runtime = hostRuntime({ platform, home, app: { developerIdSigned: true } });
       expect(runtime?.os).toBe(os);
       expect(runtime?.stateRoot).toBe(stateRoot);
-      expect(runtime?.os.smolvm).toEqual(smolvm);
     },
   );
 });

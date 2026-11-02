@@ -59,9 +59,10 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
  * weight are `revert-layer`, which hands them back to the engine's own for an
  * input (no `base` layer rule, `@luke/panel`'s base.css included, sets an
  * input's), because the input's `text-body` and `font-text` would set them
- * where the hand-written rule never did.
+ * where the hand-written rule never did. A group head's editor
+ * (`GroupHeaderEditor`) draws its field in the well look too.
  */
-const INLINE_EDIT =
+export const INLINE_EDIT_FIELD =
   "luke-inline-edit pointer-coarse:data-[look]:text-touch " +
   "data-[look=field]:inline-block data-[look=field]:h-auto data-[look=field]:w-auto data-[look=field]:rounded-inline-edit data-[look=field]:border-0 data-[look=field]:bg-ground data-[look=field]:focus:bg-ground data-[look=field]:px-luke-4 data-[look=field]:py-px data-[look=field]:shadow-selected-edge data-[look=field]:text-body-size data-[look=field]:[font-family:inherit] data-[look=field]:[font-weight:revert-layer] data-[look=field]:[line-height:revert-layer] " +
   "data-[look=input]:-my-inline-edit-lift data-[look=input]:ms-inline-edit-reach data-[look=input]:h-luke-24 data-[look=input]:border-border data-[look=input]:px-luke-8 data-[look=input]:tracking-normal data-[look=input]:[font:inherit] " +
@@ -109,7 +110,7 @@ function InlineEditField({
     <ShadcnInput
       ref={field}
       type="text"
-      className={INLINE_EDIT}
+      className={INLINE_EDIT_FIELD}
       data-look={look}
       aria-label={label}
       defaultValue={value}

@@ -31,7 +31,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-installed-skills.ts -- the skills the account installs into Luke, asked of the service on the window's behalf: listed, one read, a paste previewed and installed, a previewed skill's `SKILL.md` read, one toggled, checked for an update, updated, shared with a workspace, or removed.
+ * compose-installed-skills.ts -- the skills the account installs, asked of the service on the window's behalf: listed, one read, a paste previewed and installed, a previewed skill's `SKILL.md` read, one toggled, checked for an update, updated, shared with a workspace, or removed.
  *
  * Nothing is held here. Every ask is one call of the service answered whole,
  * as the window's view of it: the service's answer, or the failure with the

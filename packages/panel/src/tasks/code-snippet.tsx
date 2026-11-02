@@ -13,7 +13,7 @@ import {
 import { PierreDiff, useDiffLook } from "./file-diff.js";
 
 /**
- * code-snippet.tsx -- a snippet of a file as Luke draws every line of one: Pierre's diff (`../diff-view/`) holding the snippet's lines as a hunk that changes nothing, numbered from where they sit in the file, the lines pointed at lit; an inbox item's code.
+ * code-snippet.tsx -- a snippet of a file as the app draws every line of one: Pierre's diff (`../diff-view/`) holding the snippet's lines as a hunk that changes nothing, numbered from where they sit in the file, the lines pointed at lit; an inbox item's code.
  *
  * The lines follow View settings as a File tab's and a diff's do: the
  * theme, the type, wrap and the numbers, drawn unified with no marks and no

@@ -1,3 +1,4 @@
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   PAGE_FIND_ACT,
   PAGE_FIND_KEY,
@@ -5,6 +6,7 @@ import {
   type PageFindAsk,
   pageFindAnswerSchema,
 } from "@luke/features/page-find";
+import { pageLinkPressSchema } from "@luke/features/page-link";
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
@@ -31,6 +33,7 @@ import { Option, Schema } from "effect";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
+import { useLinkWorkspace } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { unreadShown } from "../failure-report.js";
@@ -42,7 +45,9 @@ import {
   useFindPress,
   useFindSource,
 } from "../find-in-tab.js";
+import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
@@ -51,22 +56,28 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  *
  * The page is HTML an agent wrote, so it is drawn in a frame from an address
  * the shell names (`appPlatform().pageFrameUrl`: on the desktop, the
- * `luke-page:` scheme main serves under a policy of its own) and
- * sandboxed to its scripts alone: no same origin, so it holds an opaque
+ * `luke-page:` scheme main serves under a policy of its own; on the web, the
+ * service's frame of the version, which sends it on to the sandbox's own
+ * site) and sandboxed to its scripts alone: no same origin, so it holds an opaque
  * origin with no storage and no reach into this window; no popups, forms,
  * top navigation, or modals; and no permission to delegate. The frame's
  * address names the version, so stepping to another loads that version,
  * and the newest is followed until the developer steps back from it. A
- * link the page follows goes nowhere, since this window may frame nothing
- * but a page, and Reload draws the page again. What the page draws is the
+ * link out of the page is not followed in the frame, which may draw nothing
+ * but a page: the frame hands its press to the pane
+ * (`@luke/features/page-link`), which opens it as any link of the window
+ * opens (`useOpenLink`), a site in the browser and a link of ours in the
+ * window. Reload draws the page again. What the page draws is the
  * task's, so the pane is left out of the screen recording (`ph-no-capture`);
  * the recording could not see into the frame in any case.
  *
  * The bar's code toggle shows the version's HTML in the frame's place, as a
  * File tab draws a file (`file-tab.tsx`): the same numbered, coloured lines
  * under the same settings, and ⌘F over them. The tab's one ⋯, the strip's,
- * offers its Copy link, then Copy source while the source is shown, then
- * Reload page, which the page hands up on every screen (`useTabActions`).
+ * offers its Copy link, then Open in browser, then Copy source while the
+ * source is shown, then Reload page, which the page hands up on every
+ * screen (`useTabActions`). Open in browser opens the page's own app
+ * link, never the address the frame is drawn from (`open-in-browser-item.tsx`).
  * The frame's own read is the frame's alone, so the source is read again,
  * once a version, through main, which colours it as HTML
  * (`ACT_KIND.TASKS_PAGE_SOURCE`), and is held by the tab until Reload.
@@ -74,7 +85,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  *
  * ⌘F over the page itself finds in the frame: no find of this window reaches
  * the page's words, so the find bar asks the frame, whose page is served
- * with a find of Luke's own ahead of it (`@luke/features/page-find`), and
+ * with a find of our own ahead of it (`@luke/features/page-find`), and
  * hears back its tally and its selection, from that frame alone and only
  * in the find's own shape.
  */
@@ -114,6 +125,9 @@ const CHORD_OF_KEY = {
 
 /** Reads a message the frame posted as the find's answer, nothing for anything else the page posts. */
 const readFindAnswer = Schema.decodeUnknownOption(pageFindAnswerSchema);
+
+/** Reads a message the frame posted as a link pressed, nothing for anything else the page posts. */
+const readLinkPress = Schema.decodeUnknownOption(pageLinkPressSchema);
 
 /** The source's lines as the page's text. */
 function sourceText(lines: CodeLines): string {
@@ -183,6 +197,29 @@ function useFrameFind(frame: RefObject<HTMLIFrameElement | null>) {
 }
 
 /**
+ * Opens the link out the frame says was pressed, as any link of the window
+ * opens. Note that the press is taken only from the frame drawn, only for an
+ * address the window opens from any link, and only while the window holds a
+ * press of the developer's, which a press in the frame hands it, because the
+ * page's own scripts can post the same message without one.
+ */
+function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
+  const open = useOpenLink();
+  useEffect(() => {
+    const hear = (event: MessageEvent) => {
+      const framed = frame.current?.contentWindow;
+      if (framed === null || framed === undefined || event.source !== framed) return;
+      const press = readLinkPress(event.data);
+      if (Option.isNone(press) || !opensAsLink(press.value.href)) return;
+      if (navigator.userActivation?.isActive !== true) return;
+      open(press.value.href);
+    };
+    window.addEventListener("message", hear);
+    return () => window.removeEventListener("message", hear);
+  }, [frame, open]);
+}
+
+/**
  * Says the focus went into the frame where this window hears it: a click
  * in a frame stirs no event of this document's but the window's blur, so
  * the focus the frame took is told as a `focusin` on the frame, which
@@ -203,7 +240,8 @@ function useFrameFocus(frame: RefObject<HTMLIFrameElement | null>): void {
 }
 
 /**
- * The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`).
+ * The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`), its links
+ * out opened outside it (`useFrameLinks`).
  * Note that the frame stands from the start, its ring over it until `onLoad` of the `src` it
  * shows, because the page reads only as the frame loads it, a version stepped to included, and a
  * frame left blank says nothing of that.
@@ -212,6 +250,7 @@ function PageFrame({ title, src }: { title: string; src: string }): React.JSX.El
   const frame = useRef<HTMLIFrameElement>(null);
   const [framedSrc, setFramedSrc] = useState<string>();
   const found = useFrameFind(frame);
+  useFrameLinks(frame);
   useFrameFocus(frame);
   return (
     <div className="page-view-room relative flex min-h-0 flex-1">
@@ -440,6 +479,19 @@ export function PagePane({
     onSelect: reload,
   };
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES });
+  const workspace = useLinkWorkspace();
+  // None where the surface hands down no workspace to write the page's link under, as Copy link stands nowhere there.
+  const inBrowser =
+    workspace === undefined
+      ? []
+      : [
+          openPageInBrowserItem(
+            "taskId" in place
+              ? { kind: LINK_PLACE.PAGE, planId: place.taskId, pageId: page.id }
+              : { kind: LINK_PLACE.PAGE, agentId: place.agentId, pageId: page.id },
+            workspace,
+          ),
+        ];
   const phone = usePhoneRoom();
   const versionWords = `Version ${version} of ${page.version}`;
   useTabActions(
@@ -468,9 +520,12 @@ export function PagePane({
             reloadAction,
           ],
           showingSource ? [settings.action, copySource] : [],
+          inBrowser,
         ].filter((group) => group.length > 0)
       : // Note that the strip's one ⋯ for the tab offers these after its Copy link, so the bar draws no ⋯ of its own.
-        [showingSource ? [copySource] : [], [reloadAction]].filter((group) => group.length > 0),
+        [inBrowser, showingSource ? [copySource] : [], [reloadAction]].filter(
+          (group) => group.length > 0,
+        ),
   );
   return (
     <FindScope

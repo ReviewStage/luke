@@ -1,7 +1,12 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
+  type IntegrationProvider,
+} from "@luke/features/integration-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
+import { LINK_SITE, type LinkSite } from "@luke/features/link-site";
 import {
   handedMentionsIn,
   linkMention,
@@ -131,6 +136,17 @@ export const NO_MENTIONED_READS: MentionedReads = {
 
 /** The room an excerpt leaves in the part for the closing line saying what was left out, which never names a heading. */
 const LEFT_OUT_ROOM = 120;
+
+/**
+ * The integration whose server reads a well-known site's page, for a site
+ * that is not an integration's own: a Google Doc, Sheet, or Slides deck is a
+ * file Google Drive's server reads, though its chip stays the site's.
+ */
+const SITE_READ_BY: Readonly<Partial<Record<LinkSite, IntegrationProvider>>> = {
+  [LINK_SITE.GOOGLE_DOCS]: INTEGRATION_PROVIDER.GOOGLE_DRIVE,
+  [LINK_SITE.GOOGLE_SHEETS]: INTEGRATION_PROVIDER.GOOGLE_DRIVE,
+  [LINK_SITE.GOOGLE_SLIDES]: INTEGRATION_PROVIDER.GOOGLE_DRIVE,
+};
 
 /** How much of the text is kept when it is cut on a line to the bound: all of it where it fits. */
 function keptLength(text: string, bound: number): number {
@@ -348,14 +364,19 @@ function handedMention(
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
       return mention;
-    // A well-known site's page has no server to read it through, and its address is in the words already.
-    case MENTION_KIND.LINK:
-      return "provider" in mention ? mention : undefined;
+    // A well-known site's page has no server to read it through, and its address is in the words already, unless an integration reads it.
+    case MENTION_KIND.LINK: {
+      if ("provider" in mention) return mention;
+      const reader = SITE_READ_BY[mention.site];
+      return reader === undefined
+        ? undefined
+        : { kind: mention.kind, provider: reader, url: mention.url };
+    }
     // A whole file is the agent's to read; only lines the developer picked are handed a note.
     case MENTION_KIND.FILE:
       return mention.lines === undefined ? undefined : mention;
     case MENTION_KIND.FOLDER:
-    // Luke named in words is a comment's ask of him, which hands an agent nothing.
+    // The app named in words is a comment's ask of it, which hands an agent nothing.
     case MENTION_KIND.LUKE:
     // A date's words are the date in full, which is all there is to hand.
     case MENTION_KIND.DATE:
@@ -465,8 +486,11 @@ export function mentionedServers(words: string, repository: string | null): read
     if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
       return [mention.connection ?? mention.provider];
     }
+    if (mention.kind !== MENTION_KIND.LINK) return [];
     // A page names its provider and no account, so it brings in the provider's first.
-    return mention.kind === MENTION_KIND.LINK && "provider" in mention ? [mention.provider] : [];
+    if ("provider" in mention) return [mention.provider];
+    const reader = SITE_READ_BY[mention.site];
+    return reader === undefined ? [] : [reader];
   });
   return [...new Set(connections)];
 }

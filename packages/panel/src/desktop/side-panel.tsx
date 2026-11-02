@@ -177,10 +177,10 @@ import {
 import { useCapability } from "../use-app-state.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
-import { AgentMenuTab } from "./main-tabs.js";
+import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming, pastRightEdge } from "./pane-motion.js";
-import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
+import { PhoneBack, PhoneHead, PlaceMore, phoneFindGroups } from "./phone-head.js";
 import {
   type AddEntry,
   AddTabButton,
@@ -1278,7 +1278,7 @@ function PanelTabs({
   };
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
-  // ⌥⌘W, ⌥⌘C, ⇧⌥⌘C, and ⇧⌘O act on the chosen tab while the panel holds the keys, the copies and Open on GitHub over the open task's own.
+  // ⌥⌘W, ⌥⌘C, ⇧⌥⌘C, and ⇧⌘O act on the chosen tab while the panel holds the keys, the copies over the open task's own.
   const closeOthers =
     chosen === undefined ? undefined : closeOthersOf(chosen, strip.indexOf(chosen));
   useAppCommand(APP_COMMAND.CLOSE_OTHER_TABS, keys ? closeOthers : undefined);
@@ -1472,7 +1472,15 @@ export function ActivityList({
                 <ListRow
                   leading={entry.look.icon}
                   title={entry.look.label}
-                  meta={entry.look.detail}
+                  meta={
+                    entry.look.detailTone === undefined ? (
+                      entry.look.detail
+                    ) : (
+                      <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
+                        {entry.look.detail}
+                      </span>
+                    )
+                  }
                   unread={entry.look.unread}
                   hint={
                     entry.look.card === undefined
@@ -1612,8 +1620,7 @@ interface DrawnSubagent {
 
 /**
  * A subagent as its tab draws it, `status` saying where the delegated
- * worker stands; nothing for a tab no delegation started, which a task's
- * own Luke's worker was.
+ * worker stands; nothing for a tab no delegation started.
  */
 function drawnSubagent(
   tab: SubagentStripTab,
@@ -1744,7 +1751,7 @@ export interface TaskCards {
 /**
  * The cards a transcript's rows hang, each the card the tab the row opens
  * hangs, drawn as that tab draws it (`tab-card.tsx`): an agent's, code
- * shown the file's with Luke's note on the lines, a page's previewing it,
+ * shown the file's with the app's note on the lines, a page's previewing it,
  * the plan's or another task's the task's card, and a subagent's row its
  * worker's, read as its tab reads its own, `chosen` telling whether that
  * tab is the one shown, whose transcript follows the run; a tab that hangs
@@ -2090,7 +2097,7 @@ function TabContent({
         />
       );
     }
-    // A tab no delegation started, a task's own Luke's worker's, stands only until the panel moves back to the board, a render away.
+    // A tab no delegation started stands only until the panel moves back to the board, a render away.
     return <SpinnerRegion delay label={readingWords("the worker")} />;
   }
   switch (tab) {
@@ -2914,6 +2921,7 @@ function PanelPhoneHead({
                       },
                     ]),
               ],
+              ...phoneFindGroups(),
               ...tabActions,
             ].filter((group) => group.length > 0);
           }}

@@ -29,8 +29,6 @@ import {
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
   type AgentModelsAnswer,
-  type AgentOperatorEnsureAnswerView,
-  type AgentOperatorEnsureParams,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -61,7 +59,6 @@ import {
   type AgentWorkspaceListParams,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
   type HostsAnswerView,
   TRANSCRIPT_KIND,
 } from "@luke/features/agent-view";
@@ -86,8 +83,6 @@ export interface AgentProceduresDependencies {
     hostsList(): Effect.Effect<HostsAnswerView>;
     hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
-    hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
-    hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
     hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
     hostsPairingDeny(code: string): Effect.Effect<HostPairingDenyView>;
@@ -111,9 +106,6 @@ export interface AgentProceduresDependencies {
     agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
     agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
     agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
-    agentEnsureOperator(
-      params: AgentOperatorEnsureParams,
-    ): Effect.Effect<AgentOperatorEnsureAnswerView>;
     agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
@@ -279,18 +271,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsRemove(input.id);
     }),
-    [AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: actPort[
-      AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.hostsKeepInstallToken(input.tokenHash);
-    }),
-    [AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN]: actPort[
-      AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.hostsRevokeInstallToken(input.id);
-    }),
     [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actPort[AGENT_ACT_KIND.HOSTS_PAIRING_READ].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -453,15 +433,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* notedAgent(host.agentPin(input));
     }),
-    [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actPort[AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that an ensure that wrote a row made the operator, or a fresh one in a reset's place, so the plan list, which carries it, is read again.
-        return yield* Effect.tap(host.agentEnsureOperator(input), (answer) =>
-          "txid" in answer ? host.tasksRefresh() : Effect.void,
-        );
-      },
-    ),
     [AGENT_ACT_KIND.AGENTS_DELETE]: actPort[AGENT_ACT_KIND.AGENTS_DELETE].effect(function* ({
       input,
       context,

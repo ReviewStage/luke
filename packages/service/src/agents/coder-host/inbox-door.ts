@@ -2,7 +2,7 @@
  * inbox-door.ts -- the door every runtime's call of a coding agent's thread and channel tools goes through: the agent the conversation is, then the tool.
  *
  * eve's tool files reach it through the coder host (`host.ts`'s `inbox`),
- * and a native harness's runner through Luke's MCP server
+ * and a native harness's runner through our MCP server
  * (`../luke-mcp/tools.ts`), so both run one implementation. It imports no
  * eve runtime, because the web function that serves the MCP server bundles
  * no sandbox.

@@ -5,6 +5,7 @@ import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import { LINK_ORIGIN } from "../link-home.js";
 import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
@@ -14,11 +15,11 @@ const FEEDBACK_ENVIRONMENT = {
 
 const FEEDBACK_DEFAULTS = {
   /**
-   * The one place a submission goes: a small endpoint on Luke's own site that
+   * The one place a submission goes: a small endpoint on our own site that
    * forwards it as email to the founders. Fixed here rather than passed in, so
    * the renderer names an intent and never an address.
    */
-  URL: "https://tryluke.dev/api/feedback",
+  URL: `${LINK_ORIGIN}/api/feedback`,
   // Generous next to the evaluator's timeout, because a submission can carry
   // screenshots and a send that dies mid-upload costs the user a retry.
   REQUEST_TIMEOUT_MS: 30_000,

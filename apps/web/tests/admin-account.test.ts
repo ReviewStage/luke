@@ -25,7 +25,7 @@ import { underWebAdminDoors } from "./support/admin-doors";
  * what a maintainer supports it from (its work, agents, workspaces, keys and
  * connections, defaults, and failures), and leads its toolbar with the way
  * back to the users, which moves in place, loading or loaded. The network,
- * the HTTP boundary to Luke, is a fake that answers the account's read.
+ * the HTTP boundary to the service, is a fake that answers the account's read.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);

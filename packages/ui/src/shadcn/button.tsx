@@ -3,10 +3,10 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../cn.js";
 
 /**
- * button.tsx -- shadcn/ui's button (style `base-nova`, on Base UI), vendored and drawn at Luke's control roles.
+ * button.tsx -- shadcn/ui's button (style `base-nova`, on Base UI), vendored and drawn at our control roles.
  *
  * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add button` reads as a small diff. Luke's
+ * allows, so a later `shadcn add button` reads as a small diff. Our
  * changes: the sizes are the control's roles (`control`, `compact`, `icon`,
  * `icon-compact`, and a menu's `row`) and a `shape` that rounds them; the
  * looks are not here, because a look is a set of `--luke-button-*` inks a
@@ -15,7 +15,7 @@ import { cn } from "../cn.js";
  * shadcn's outline or ring utilities, because the window's own focus ring
  * (`@luke/panel`'s base.css) draws the keyboard's ring and a utility would
  * outrank it (`anti-slop/no-shadcn-focus-ring`); none of its press translate, which
- * Luke's button answers by its face (`button.css`); and the desktop's arrow
+ * our button answers by its face (`button.css`); and the desktop's arrow
  * cursor. `@luke/ui`'s `Button` and `IconButton`
  * (`components/button/button.tsx`) are what an app draws; this is their
  * inside, and `buttonVariants` dresses a link as a button, as shadcn's does.

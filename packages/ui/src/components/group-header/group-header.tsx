@@ -1,5 +1,14 @@
-import { type ReactNode, useId } from "react";
+import {
+  type ReactNode,
+  type Ref,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+} from "react";
+import { isComposingKey } from "../../composing-key.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import { ShadcnInput } from "../../shadcn/input.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import {
   DisclosureChevron,
@@ -7,6 +16,7 @@ import {
   DisclosureScope,
   useDisclosureFold,
 } from "../disclosure/disclosure.js";
+import { INLINE_EDIT_FIELD, INLINE_EDIT_LOOK } from "../inline-edit/inline-edit.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { NAV_COUNT_SHOWN, type NavCount } from "../nav-item/nav-item.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
@@ -68,6 +78,15 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * A label is words, or a placeholder block while the group is read, so a
  * skeleton draws through the head its loaded state draws.
+ *
+ * A head is named or renamed in place (`editing`): its editor
+ * (`GroupHeaderEditor`) stands where the head stood, over the same rows, the
+ * control that changes the group's glyph in the glyph's cell and a bare field
+ * in the head's own type where the label stood, so the name being typed
+ * stands where it will be drawn. Return keeps what was typed and Escape lets
+ * it go; the focus leaving the head keeps it too, unless it went into a layer
+ * the glyph's control hung (`holding`), a picker drawn in a portal outside
+ * the head.
  *
  * It is drawn in Tailwind utilities over the theme with no shadcn base,
  * since shadcn has no group head and the fold is the Disclosure's. Its
@@ -158,6 +177,15 @@ const PART = {
   ACTIONS: "luke-group-header-actions flex flex-none items-center gap-luke-4",
 } as const;
 
+/** An editing head's lead, laid out as a head's lead with nothing to press, and its field, bare in the group role's type in the label's place. */
+const EDITOR = {
+  LEAD: "luke-group-header-editor-lead flex h-control min-w-0 flex-auto items-center gap-icon-gap px-row-inset text-group font-group text-foreground",
+  /* The glyph's control is a compact button, a step wider than the glyph, so it overhangs the cell by that step and the field stands where the label stood. */
+  GLYPH:
+    "luke-group-header-editor-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:-m-luke-4",
+  FIELD: `${INLINE_EDIT_FIELD} data-[look=well]:min-w-0 data-[look=well]:flex-auto`,
+} as const;
+
 /** A head that folds is pressed as a row is, so it wears a row's hover; and it gives the one press cursor, the Mac's arrow on the desktop as a Mac's list does, the hand on the web. */
 const PRESSED_AS_ROW = {
   HEAD: "[&:hover]:bg-muted",
@@ -169,8 +197,10 @@ const PRESSED_AS_ROW = {
  * group, and out of the desktop window's drag region, so a press on it is
  * the head's.
  */
-const HEAD =
-  "luke-group-header-head group/head flex min-w-0 items-center gap-luke-2 rounded-control pr-luke-4 transition-[background-color] duration-(--luke-duration-hover) ease-plain data-[menu-open=true]:shadow-menu-open-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
+const HEAD_BOX =
+  "group/head flex min-w-0 items-center gap-luke-2 rounded-control pr-luke-4 transition-[background-color] duration-(--luke-duration-hover) ease-plain data-[menu-open=true]:shadow-menu-open-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
+
+const HEAD = `luke-group-header-head ${HEAD_BOX}`;
 
 /** A head that sticks stands at the top of its scroller while its rows scroll beneath it, on the page's ground so they do not show through. */
 const STICKS = "sticky top-0 z-3 bg-ground";
@@ -251,6 +281,116 @@ function Lead({
   );
 }
 
+/** How an edit of a head ended: kept or let go, the words typed, trimmed, and whether a key ended it. */
+export interface GroupHeaderEditEnd {
+  readonly kept: boolean;
+  readonly value: string;
+  readonly byKey: boolean;
+}
+
+/** What a head's editor answers its owner: `leave` ends the edit as the focus leaving the head would, unless the focus stands in the head. */
+export interface GroupHeaderEditorHandle {
+  leave: () => void;
+}
+
+/**
+ * A head being named in place: `glyph`, the control that changes the
+ * group's glyph, in the glyph's cell, and a field named `label` opened over
+ * `value` with every word selected. It ends once: Return keeps what was
+ * typed and Escape lets it go, each taken by the field alone so nothing
+ * behind it answers the key, and the focus leaving the head keeps it, unless
+ * a layer the glyph's control hung is up (`holding`). Note that whether one
+ * is up is read as the focus leaves, from the render it last drew, so a
+ * press away that puts the layer away and takes the focus out of it ends the
+ * edit too. A press away that puts the layer away after the focus has left,
+ * as Base UI's popover does on the press's click, says no blur again, so
+ * its owner calls `leave` (`ref`) when the layer says a press away put it
+ * away. It is laid out as the head is but not named as one, so a list
+ * that drags its groups by their heads (`.luke-group-header-head`) never
+ * takes a press in the field for a drag.
+ */
+export function GroupHeaderEditor({
+  value,
+  label,
+  placeholder,
+  maxLength,
+  glyph,
+  holding = false,
+  onEnd,
+  ref,
+}: {
+  value: string;
+  label: string;
+  placeholder?: string | undefined;
+  maxLength?: number | undefined;
+  /** What stands in the glyph's cell: the control that changes the group's glyph. */
+  glyph: ReactNode;
+  /** Whether a layer the glyph's control hung stands, which the focus may go into and out of without ending the edit. */
+  holding?: boolean | undefined;
+  onEnd: (end: GroupHeaderEditEnd) => void;
+  ref?: Ref<GroupHeaderEditorHandle> | undefined;
+}): React.JSX.Element {
+  const field = useRef<HTMLInputElement | null>(null);
+  const root = useRef<HTMLDivElement | null>(null);
+  const ended = useRef(false);
+  const held = useRef(holding);
+  held.current = holding;
+  useLayoutEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+  const end = (kept: boolean, byKey: boolean) => {
+    if (ended.current) return;
+    ended.current = true;
+    onEnd({ kept, value: field.current?.value.trim() ?? "", byKey });
+  };
+  const inHead = (target: EventTarget | null) =>
+    target instanceof Node && root.current?.contains(target) === true;
+  useImperativeHandle(ref, () => ({
+    leave: () => {
+      if (!inHead(document.activeElement)) end(true, false);
+    },
+  }));
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the head takes nothing itself; it hears the focus leave its field, its glyph's control, and the layer that control hangs in a portal, which only React carries back up to it.
+    <div
+      ref={root}
+      className={`luke-group-header-editor ${HEAD_BOX}`}
+      onBlur={(event) => {
+        const next = event.relatedTarget;
+        if (held.current || inHead(next)) return;
+        end(true, false);
+      }}
+    >
+      <div className={EDITOR.LEAD}>
+        <span className={EDITOR.GLYPH}>{glyph}</span>
+        <ShadcnInput
+          ref={field}
+          type="text"
+          className={EDITOR.FIELD}
+          data-look={INLINE_EDIT_LOOK.WELL}
+          aria-label={label}
+          defaultValue={value}
+          placeholder={placeholder}
+          maxLength={maxLength}
+          spellCheck={false}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!isComposingKey(event)) end(false, true);
+            }
+            if (event.key === "Enter" && !isComposingKey(event)) {
+              event.preventDefault();
+              end(true, true);
+            }
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * One of a head's actions, the button and the menu it drops, which stands at
  * rest while it is on, a filter leaving rows out, wearing the accent's dot,
@@ -290,6 +430,7 @@ export function GroupHeader({
   heading = GROUP_HEADING.H2,
   menuOpen = false,
   contextMenu,
+  editing,
   children,
 }: {
   /** The group's name, or a placeholder block while it is read. */
@@ -323,6 +464,8 @@ export function GroupHeader({
   menuOpen?: boolean;
   /** The menu a right-click or a long press opens on the head (`useMenu`'s `contextMenu`). */
   contextMenu?: ContextMenuProps | undefined;
+  /** The head's editor (`GroupHeaderEditor`), standing in the head's place while the group is named in place. */
+  editing?: ReactNode;
   /** The group's rows. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -384,23 +527,27 @@ export function GroupHeader({
         data-rows={subgrid ? rowsStand : undefined}
         data-disclosure={folds ? details["data-disclosure"] : undefined}
       >
-        <div
-          className={[
-            HEAD,
-            folds ? PRESSED_AS_ROW.HEAD : "",
-            head === GROUP_HEAD.STICKS ? STICKS : "",
-            subgrid ? SUBGRID.HEAD : "",
-          ].join(" ")}
-          data-menu-open={menuOpen ? "true" : undefined}
-          {...withContextMenu<HTMLDivElement>(contextMenu, {})}
-        >
-          {named}
-          {said(actions) ? (
-            <span className={PART.ACTIONS} data-shown={actionsShown}>
-              {actions}
-            </span>
-          ) : null}
-        </div>
+        {said(editing) ? (
+          editing
+        ) : (
+          <div
+            className={[
+              HEAD,
+              folds ? PRESSED_AS_ROW.HEAD : "",
+              head === GROUP_HEAD.STICKS ? STICKS : "",
+              subgrid ? SUBGRID.HEAD : "",
+            ].join(" ")}
+            data-menu-open={menuOpen ? "true" : undefined}
+            {...withContextMenu<HTMLDivElement>(contextMenu, {})}
+          >
+            {named}
+            {said(actions) ? (
+              <span className={PART.ACTIONS} data-shown={actionsShown}>
+                {actions}
+              </span>
+            ) : null}
+          </div>
+        )}
         {/* Note that the rows are the root's own child, the body disclosure.css unrolls and fades. */}
         {rows ? (
           <div

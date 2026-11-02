@@ -139,7 +139,7 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
  * that holds the panel; none for a tab whose thing has no link of its own:
  * a file's, the Inbox, the comments, a terminal, the plan's of old,
  * whose task is the column's Overview and linked as the task, a pull request
- * the agent did not open, and a worker of Luke's own, which is drawn
+ * the agent did not open, and a worker of the app's own, which is drawn
  * nowhere a link opens. Note that a Changes or a
  * worker's tab is the agent's, so it is linked by the agent alone, on a
  * task's panel as on the agent's page.

@@ -17,6 +17,5 @@ export {
   worktreeFolder,
   worktreesRoot,
 } from "./open-on-mac.js";
-export { smolvmSandbox } from "./smolvm-sandbox.js";
 export { reportToStderr, tolerateClosedStderr } from "./stderr-report.js";
 export { openTerminalSocketOverWs } from "./terminal-socket-over-ws.js";

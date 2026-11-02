@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   TASK_STATUS,
   type Task,
@@ -8,6 +9,7 @@ import {
   type RepositoryCallFailure,
   type StartCallFailure,
   TASK_CALL_FAILURE,
+  TASK_PARENT_FAILURE,
   TASKS_READ,
   type TasksView,
 } from "@luke/features/tasks-view";
@@ -155,20 +157,18 @@ export function repositoryOwnerPictureUrl(repository: string): string {
 }
 
 /** What the New task dialog says when the service answered no task, beside its Retry. */
-const START_FAILED_NOTE = "Luke's service did not answer.";
+const START_FAILED_NOTE = "The service did not answer.";
 
 /** What a call that named a repository says when the service refused it, by its reason, beside a Retry. */
 const REPOSITORY_FAILURE_NOTES = {
   [TASK_CALL_FAILURE.UNANSWERED]: START_FAILED_NOTE,
-  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke cannot see that repository on GitHub. Choose which repositories Luke can see.",
+  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: `${PRODUCT_NAME} cannot see that repository on GitHub. Choose which repositories ${PRODUCT_NAME} can see.`,
 } as const satisfies Record<RepositoryCallFailure, string>;
 
 /** The same refusals of a change of the task's repository, said under its chip with no Retry beside them. */
 const REPOSITORY_CHANGE_FAILURE_NOTES = {
-  [TASK_CALL_FAILURE.UNANSWERED]: "Luke's service did not answer. Try again.",
-  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke cannot see that repository on GitHub. Choose which repositories Luke can see, then try again.",
+  [TASK_CALL_FAILURE.UNANSWERED]: "The service did not answer. Try again.",
+  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: `${PRODUCT_NAME} cannot see that repository on GitHub. Choose which repositories ${PRODUCT_NAME} can see, then try again.`,
 } as const satisfies Record<RepositoryCallFailure, string>;
 
 /** The sentence the page shows beside its Retry for a start or a read of repositories the service refused. */
@@ -181,18 +181,35 @@ export function repositoryChangeFailureNote(failure: RepositoryCallFailure): str
   return REPOSITORY_CHANGE_FAILURE_NOTES[failure];
 }
 
-/** What a start says when the workspace it named is gone, or no longer the account's. */
-const WORKSPACE_START_FAILED_NOTE = "That workspace is gone, or you're no longer a member of it.";
-
 /** What a start says when the device it named for the task's agents would not take them, where the page knows no more of why. */
 const DEVICE_START_FAILED_NOTE =
   "That device can't take this task's agents right now. Choose another, or Cloud.";
 
+/** What a start says when the workspace it named is gone, or no longer the account's, or the task it was to relate to is neither. */
+const RELATION_START_FAILED_NOTE =
+  "That workspace or task is gone, or you're no longer a member of the workspace.";
+
+/** What a start says when it named another repository than the one the task it joins a tree with works in. */
+const TREE_REPOSITORY_START_FAILED_NOTE =
+  "A task works in its tree's repository, so the two must share one.";
+
+/** What a start says when the task it was to be the parent of has a parent already. */
+const PARENT_HELD_START_FAILED_NOTE = "That task already has a parent. Choose another relation.";
+
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
-  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return WORKSPACE_START_FAILED_NOTE;
-  if (failure === TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED) return DEVICE_START_FAILED_NOTE;
-  return repositoryFailureNote(failure);
+  switch (failure) {
+    case TASK_CALL_FAILURE.NOT_FOUND:
+      return RELATION_START_FAILED_NOTE;
+    case TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED:
+      return DEVICE_START_FAILED_NOTE;
+    case TASK_PARENT_FAILURE.REPOSITORY_DIFFERS:
+      return TREE_REPOSITORY_START_FAILED_NOTE;
+    case TASK_PARENT_FAILURE.HELD:
+      return PARENT_HELD_START_FAILED_NOTE;
+    default:
+      return repositoryFailureNote(failure);
+  }
 }
 
 /** What a task's name says, where it was edited, when the service refused the rename. */

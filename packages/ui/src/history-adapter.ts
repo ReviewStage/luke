@@ -1,7 +1,7 @@
 /**
  * history-adapter.ts -- a window's back-and-forward history behind one interface, so the desktop keeps it in memory and a browser can keep it in its URL.
  *
- * Each entry is an address, the path of the place's Luke link, and a state
+ * Each entry is an address, the path of the place's app link, and a state
  * the window reopens the place from, the way a browser's `history.state`
  * sits beside its URL. The window decides what a visit is
  * and which entries it can still go to; the adapter only holds the entries

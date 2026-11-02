@@ -25,6 +25,7 @@ import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
+  AGENT_FAILURE,
   AGENT_KIND,
   AGENT_PAYER,
   type AgentPayer,
@@ -42,7 +43,7 @@ import { sentLineId } from "@luke/wire/host-ids";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Effect, ErrorReporter, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -56,6 +57,7 @@ import { type AfterResponse, keptAfterResponse } from "../../http/after-response
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { CODER } from "../coder-host/bounds.js";
+import { agentFailureOf } from "../coder-host/status.js";
 import { titleAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
@@ -796,7 +798,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         yield* recordNativeTurnHanded(agent.target, {
           task: "task-key",
           spoken: true,
-          opened: true,
         });
 
         yield* post(agent.bearer, events);
@@ -849,7 +850,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a released wait ends its turn as done and keeps its wakeups for Luke to deliver, and a later Stop deletes them",
+    "a released wait ends its turn as done and keeps its wakeups for Vespin to deliver, and a later Stop deletes them",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -911,7 +912,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a Luke tool's pictures stay out of its stored answer, and a CLI tool's stand in for theirs",
+    "a Vespin tool's pictures stay out of its stored answer, and a CLI tool's stand in for theirs",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1069,7 +1070,7 @@ interface RecordedLine {
 /**
  * P16's recording cut into the launches P20's runner makes of it, each as
  * the events it posts: the notifications app-server sent, an ACCEPTED for
- * each of Luke's lines where the runner's `turn/start` or `turn/steer` hands
+ * each of our lines where the runner's `turn/start` or `turn/steer` hands
  * one over, and the launch's END. The first launch runs the workflow turn
  * (steered once), the second the `sleep 600` turn it stops, and the third,
  * after a restart, the resumed thread's turn.
@@ -1216,6 +1217,62 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       }),
   );
 
+  it.effect(
+    "Claude Code's TaskStop and SendMessage and Codex's view_image are each kept as a call",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const called = (id: string, name: string, input: WireRecord, text: string) => [
+          { type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } },
+          {
+            type: "user",
+            message: {
+              role: "user",
+              content: [
+                { type: "tool_result", tool_use_id: id, content: [{ type: "text", text }] },
+              ],
+            },
+          },
+        ];
+        const claude = yield* agentOn(HARNESS.CLAUDE_CODE, ["Stop the server."]);
+        const claudeTurn: WireValue[] = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: claude.lineId },
+          ...[
+            { type: "system", subtype: "init" },
+            ...called("toolu_stop", "TaskStop", { task_id: "b7k2" }, "Stopped b7k2"),
+            ...called("toolu_send", "SendMessage", { to: "worker", message: "Also" }, "Sent"),
+            { type: "result", subtype: "success", is_error: false, usage: {} },
+          ].map((message) => ({ ...message, ...envelope })),
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        const codex = yield* agentOn(HARNESS.CODEX, ["Look at the screenshot."]);
+        const view = { type: "imageView", id: "call_view", path: "/tmp/luke/home.png" };
+        const codexTurn: WireValue[] = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: codex.lineId },
+          notification("turn/started", { turn: { id: "turn-1" } }),
+          notification("item/completed", { item: view }),
+          notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.
+        const events = (turn: readonly WireValue[]) =>
+          turn.map((message, sequence) => ({ sequence, message }) as RunnerEvent);
+        yield* post(claude.bearer, events(claudeTurn));
+        yield* post(codex.bearer, events(codexTurn));
+        const calls = (conversationId: string) =>
+          Effect.map(transcriptOf(conversationId), ({ rows }) =>
+            rows.flatMap((row) => row.parts.map((part) => part.type)),
+          );
+
+        const claudeCalls = yield* calls(claude.target.conversationId);
+        const codexCalls = yield* calls(codex.target.conversationId);
+        assert.ok(claudeCalls.includes("tool-TaskStop"), String(claudeCalls));
+        assert.ok(claudeCalls.includes("tool-SendMessage"), String(claudeCalls));
+        assert.ok(codexCalls.includes("tool-imageView"), String(codexCalls));
+      }),
+  );
+
   it.effect("a file change's completed changes replace the empty ones it started with", () =>
     Effect.gen(function* () {
       const post = yield* standing;
@@ -1247,7 +1304,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "a Luke tool keeps its own name without its pictures, a subagent's thread folds under its interrupted call, and a plan's usage limit fails the turn saying so",
+    "a Vespin tool keeps its own name without its pictures, a subagent's thread folds under its interrupted call, and a plan's usage limit fails the turn saying so",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1765,6 +1822,77 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "an API key of the starter's that OpenAI refused as expired is marked invalid and opens no issue, where Vespin's own key refused so opens one",
+    () =>
+      Effect.gen(function* () {
+        const reported: Readonly<Record<string, unknown>>[] = [];
+        const reporting = ErrorReporter.layer([
+          ErrorReporter.make(({ attributes }) => {
+            reported.push(attributes);
+          }),
+        ]);
+        const post = yield* standingWith(
+          {},
+          Layer.merge(Layer.empty as Layer.Layer<AfterResponse>, reporting),
+        );
+        // As Codex said the expired key of LUKE-WEB-2R: a connection failed, its 401 in its info.
+        const expired = {
+          message:
+            "unexpected status 401 Unauthorized: Your API key has expired. Create a new API key to continue.",
+          codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 401 } },
+          additionalDetails: null,
+        };
+
+        const onKey = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.API_KEY }, [
+          "Fix the test.",
+        ]);
+        yield* saveProviderKey(
+          onKey.userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.API_KEY,
+          { keyVersion: 1, sealedDataKey: "sealed-data-key", sealedKey: "sealed-api-key" },
+          "sk-proj…fake",
+          null,
+          new Date(0),
+        );
+        yield* post(onKey.bearer, refusedLaunch(onKey.lineId, 0, expired));
+
+        const onLuke = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.LUKE }, [
+          "Fix the test.",
+        ]);
+        yield* post(onLuke.bearer, refusedLaunch(onLuke.lineId, 0, expired));
+
+        const keyRows = yield* listProviderKeyRows(onKey.userId, PROVIDER_KEY_KIND.API_KEY);
+        assert.deepEqual(
+          keyRows.map((row) => row.status),
+          [PROVIDER_KEY_STATUS.INVALID],
+        );
+        assert.deepEqual(
+          reported.map((attributes) => attributes.agentId),
+          [onLuke.agentId],
+        );
+        // The starter's own key reads as a key to replace; Fullspin's own key refused is no key of theirs.
+        const db = yield* Database;
+        const failureOf = (conversationId: string) =>
+          Effect.map(
+            db
+              .select({
+                status: turns.status,
+                failure: turns.failure,
+                failureDetail: turns.failureDetail,
+              })
+              .from(turns)
+              .where(eq(turns.conversationId, conversationId)),
+            (ended) => ended.map((turn) => agentFailureOf(turn)),
+          );
+        assert.deepEqual(yield* failureOf(onKey.target.conversationId), [
+          AGENT_FAILURE.PROVIDER_KEY,
+        ]);
+        assert.deepEqual(yield* failureOf(onLuke.target.conversationId), [AGENT_FAILURE.MODEL]);
       }),
   );
 

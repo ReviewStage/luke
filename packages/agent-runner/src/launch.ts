@@ -1,7 +1,7 @@
 /**
  * launch.ts -- what every harness's launch is handed once the runner has read its config, and what it answers when it ends.
  *
- * The runner reads the bearer, the config line and Luke's events route the
+ * The runner reads the bearer, the config line and the service's events route the
  * same way for either harness (`runner.ts`), then hands the rest of stdin and
  * the event sink to Claude Code's launch or Codex's (`codex.ts`). Each
  * answers why it ended once it has stopped its harness, and the runner posts
@@ -37,7 +37,7 @@ export interface RunnerSelf {
 /** What a harness's launch is handed. */
 export interface LaunchContext<Config> {
   readonly config: Config;
-  /** Luke's lines after the config: stdin's, ended when Luke closes stdin, and those read from Luke where the config names the read (`lines.ts`). */
+  /** The service's lines after the config: stdin's, ended when the service closes stdin, and those read from the service where the config names the read (`lines.ts`). */
   readonly lines: Queue.Dequeue<string, Cause.Done>;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly bearer: Redacted.Redacted;
@@ -54,9 +54,9 @@ export interface LaunchOutcome {
 }
 
 /**
- * The path under the installed skills' folder a config names, where Luke
+ * The path under the installed skills' folder a config names, where the service
  * wrote it; none where the config names no folder or the member installed
- * no skills, since Luke writes the folder only where there are some. Read
+ * no skills, since the service writes the folder only where there are some. Read
  * as each launch starts, so a relaunch finds what the sandbox's disk kept.
  */
 export function installedSkillsPath(folder: string | undefined, entry: string): string | undefined {

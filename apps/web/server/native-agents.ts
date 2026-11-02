@@ -2,11 +2,11 @@
  * native-agents.ts -- the native harnesses a web function launches and writes to, provided beside the deployment's services.
  *
  * A coding agent whose conversation runs on a native harness (Claude Code)
- * is answered by a runner Luke launches in its sandbox
+ * is answered by a runner the service launches in its sandbox
  * (`packages/service/src/agents/coder-host/runtime-sessions.ts`). The
  * functions whose routes reach an agent's session provide the harnesses
  * here: the default function's oRPC router and its GitHub and automation
- * webhooks, the scheduled sweep, Luke's MCP server, and the runner's events
+ * webhooks, the scheduled sweep, our MCP server, and the runner's events
  * route. Importing this module is what reaches `runner-bundle.ts`, so the web
  * build ships the runner's bundle in each of those functions' `.func`
  * (`scripts/bundle-functions.ts`), where the bundle is read beside the

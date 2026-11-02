@@ -2,6 +2,7 @@
  * reload-dialog.ts -- the question the panel asks once its renderer gave up loading: reload once more, or quit.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { app, type BrowserWindow, dialog, type MessageBoxOptions } from "electron";
 import { MAXIMUM_REVIVALS_PER_LOAD } from "./renderer-revival";
 
@@ -10,9 +11,9 @@ const RELOAD_ANSWER = 0;
 
 const RELOAD_OR_QUIT: MessageBoxOptions = {
   type: "error",
-  message: "Luke's window stopped working",
-  detail: `It reloaded ${MAXIMUM_REVIVALS_PER_LOAD} times and still couldn't load. Reload to try again, or quit Luke.`,
-  buttons: ["Reload", "Quit Luke"],
+  message: `${PRODUCT_NAME}'s window stopped working`,
+  detail: `It reloaded ${MAXIMUM_REVIVALS_PER_LOAD} times and still couldn't load.`,
+  buttons: ["Reload", `Quit ${PRODUCT_NAME}`],
   defaultId: RELOAD_ANSWER,
   cancelId: RELOAD_ANSWER,
 };

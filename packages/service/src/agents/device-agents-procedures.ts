@@ -1,21 +1,15 @@
 /**
  * device-agents-procedures.ts -- a local agent's Mac registers and beats, takes its agents' lines and its tools' requests, and says what came of each; a box pairs with a code.
  *
- * Every procedure but the enrolls reads the device's bearer alone, never a
- * browser's session cookie (`deviceMiddleware`), since a line carries a
- * runner's secrets and an answer is the word of the device that ran it, and
- * names the device's id: the machine's device secret, which acts for its
- * own device alone and answers not found for any other. A desktop's own
- * sign-in, which released desktop builds followed the queue on, is refused
- * there as needing an upgrade.
- * The enroll's bearer is an install token instead (`installTokenMiddleware`),
- * which it trades for a host and the secret it calls on from then on
- * (`@luke/features/host-wire`), answered this once; it refuses an unknown,
- * revoked, or expired token as an invalid token, and the id of one of the
- * token's member's standing hosts as still enrolled. The own enroll's
- * bearer is the desktop's sign-in alone (`bearerOnlyMiddleware`, never a
- * browser's cookie, since it mints a credential), and it converts a device
- * the member's account registered in place under its id, or creates one
+ * Every procedure but the own enroll and the pairing's reads the device's
+ * bearer alone, never a browser's session cookie (`deviceMiddleware`), since
+ * a line carries a runner's secrets and an answer is the word of the device
+ * that ran it, and names the device's id: the machine's device secret, which
+ * acts for its own device alone and answers not found for any other. A
+ * desktop's own sign-in, which released desktop builds followed the queue
+ * on, is refused there as needing an upgrade. The own enroll's bearer is the
+ * desktop's sign-in alone (`bearerOnlyMiddleware`, never a browser's cookie,
+ * since it mints a credential), and it converts a device the member's account registered in place under its id, or creates one
  * under the account with the name, platform and architecture the enroll
  * sends where the account never registered the id, answering its new
  * secret this once; it answers not found for another account's id, and
@@ -23,22 +17,27 @@
  * machine, and refuses an enroll naming only some of the machine's fields
  * as invalid. A host's every call,
  * the enroll's included, is refused as needing an upgrade where its daemon
- * is below the floor (`auth/device-secret.ts`). Every one but the enrolls
+ * is below the floor (`auth/device-secret.ts`). Every one but the enroll
  * and the register answers not found where the account holds no such Mac
  * (`agents/device-agent.ts`); a
  * register under an id another account holds writes nothing and answers
  * not found too, and a register keeps only the capabilities this service
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
+ * A beat keeps where the host's update stands, cleared by one naming none,
+ * and answers the release published (`HOST_RELEASE`) where the host's
+ * daemon is below it, which the host updates itself to.
  * The live agents' read answers the ids of the account's agents pinned to
  * that Mac and not archived (`GET /api/device-agents/live-agents`), which
- * the Mac keeps and removes everything else of Luke's it holds against.
+ * the Mac keeps and removes everything else of ours it holds against.
  * A held read answers what waits for that Mac (`GET /api/device-agents/lines`,
  * `GET /api/device-agents/requests`), a claim takes one row by its id, a
  * launch line's secrets with it, a line's claim asked again under the
- * token it first carried answers that line again, and a settle or an answer keeps what the
+ * token it first carried answers that line again, a step keeps where the
+ * Mac's launch of a launch line it claimed and has not settled stands, only
+ * ever moved forward, answering not found for any other line, and a settle or an answer keeps what the
  * Mac said of a row it claimed.
  *
- * A box may pair with a code instead of a token. Its start
+ * A box pairs with a code. Its start
  * (`POST /api/device-agents/pairing`) reads no credential, only its
  * daemon's version against the floor (`pairingHostMiddleware`), and is
  * braked per address in this instance, since a start costs little and
@@ -49,39 +48,16 @@
  * bearer alone (`pollSecretMiddleware`), and answers where the pairing
  * stands (`@luke/database/models/host-pairing-store`): once a member
  * approved it, the host's id and a device secret minted for it, this once,
- * counted as an install as an enroll is.
- *
- * A save of an agent's state (`POST /api/device-agents/state/save`) is
- * granted one upload to a fresh path of the store (`./agent-state-blobs.ts`),
- * the grant kept, and the agent's state key, minted where it has none, and
- * its commit (`POST /api/device-agents/state/commit`) keeps what the device
- * uploaded as the agent's next generation, through the model's check-and-set
- * (`@luke/database/models/agent-state-store`), then deletes the blob of the
- * generation it replaced, which the sweep deletes in its stead where that
- * fails. Each answers not found for an agent not the account's or not
- * pinned to the device, and refuses as stale a save from a generation no
- * longer the agent's newest; a commit naming a path no upload was granted
- * for its agent is refused as invalid, and one asked again after its
- * answer was lost is answered the generation it was kept as. A deployment without a
- * store or a key ring answers both unavailable. The key travels in the
- * save's answer alone, and no log names more of a save than its generation
- * and its size.
+ * counted as an install as an own enroll is.
  */
 
 import { isIP } from "node:net";
-import {
-  type AgentStateGeneration,
-  commitAgentState,
-  ensureAgentStateKey,
-  grantAgentStateUpload,
-  newestAgentState,
-  pinnedAgentState,
-} from "@luke/database/models/agent-state-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
   liveDeviceAgents,
   openDeviceAgentLaunches,
+  stepDeviceAgentLaunch,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import {
@@ -90,25 +66,18 @@ import {
   openHostPairing,
   pollHostPairing,
 } from "@luke/database/models/host-pairing-store";
-import {
-  enrollHost,
-  enrollOwnDevice,
-  HOST_ENROLL_REFUSAL,
-  hostsOf,
-} from "@luke/database/models/host-store";
-import { openAgentStateKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
-import {
-  DEVICE_CAPABILITY,
-  type deviceAgentStateCommitRequestSchema,
-} from "@luke/features/device-agent-wire";
+import { enrollOwnDevice, hostsOf } from "@luke/database/models/host-store";
+import { type DeviceAgentRelease, knownDeviceCapabilities } from "@luke/features/device-agent-wire";
+import { HOST_RELEASE } from "@luke/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   hostConnectPath,
+  hostVersionMeets,
   type OwnDeviceEnrollRequest,
   shownHostUserCode,
 } from "@luke/features/host-wire";
-import { Clock, Duration, Effect, Option, Redacted, Result } from "effect";
+import { Duration, Effect, Option } from "effect";
 import {
   admittedHostVersion,
   hostSecretHash,
@@ -116,11 +85,9 @@ import {
   mintHostUserCode,
   presentedHostVersion,
 } from "../auth/device-secret.js";
-import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_HOST_KIND } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
-  type HostedRefusal,
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -131,11 +98,9 @@ import {
   type DeviceCaller,
   deviceMiddleware,
   hosted,
-  installTokenMiddleware,
   pairingHostMiddleware,
   pollSecretMiddleware,
 } from "../orpc/base.js";
-import { AgentStateBlobs, freshAgentStatePath } from "./agent-state-blobs.js";
 import {
   claimedDeviceAgentLine,
   deviceAgentDeviceOf,
@@ -220,68 +185,26 @@ const enrollingMachine = ({ name, platform, arch }: OwnDeviceEnrollRequest) => {
     : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 };
 
-/** The store of agents' saved state, or unavailable where the deployment has none. */
-const stateStore = Effect.gen(function* () {
-  const blobs = yield* AgentStateBlobs;
-  return blobs.configured ? blobs : yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-});
-
-/** The deployment's key ring, which every agent's state key is sealed under; unavailable where it has none. */
-const keyRing = Effect.gen(function* () {
-  const keys = (yield* HostedEnvironment).providerKeyEncryptionKeys;
-  const ring = keys === undefined ? undefined : parseKeyRing(keys);
-  return ring === undefined || Result.isFailure(ring)
-    ? yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
-    : ring.success;
-});
-
-/** What a commit came to: the generation it was kept as, or the refusal it is answered. */
-type CommitOutcome = Result.Result<AgentStateGeneration, HostedRefusal>;
-
-/**
- * The generation a commit was kept as, through the model's check: a stale
- * one answered the newest where that is this very save, asked again after
- * its answer was lost, since its path was fresh; refused as stale
- * otherwise, and not found for an agent not the account's on this device.
- */
-const committed = (userId: string, commit: typeof deviceAgentStateCommitRequestSchema.Type) =>
-  Effect.gen(function* () {
-    const { agentId, fromGeneration, path, bytes, sha256, baseCommit, deviceId } = commit;
-    const now = new Date(yield* Clock.currentTimeMillis);
-    const kept = { agentId, fromGeneration, path, bytes, sha256, baseCommit, deviceId };
-    const outcome = yield* hostedStoreOrUnavailable(
-      commitAgentState(userId, kept, now).pipe(
-        Effect.map((generation): CommitOutcome => Result.succeed(generation)),
-        Effect.catchTag("AgentStateStale", () =>
-          Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.AGENT_STATE_STALE)),
-        ),
-        Effect.catchTag("AgentStateUnreachable", () =>
-          Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.NOT_FOUND)),
-        ),
-        Effect.catchTag("AgentStateUngranted", () =>
-          Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
-        ),
-      ),
-    );
-    if (Result.isSuccess(outcome)) return outcome.success;
-    if (outcome.failure !== HOSTED_REFUSAL.AGENT_STATE_STALE) {
-      return yield* Effect.fail(outcome.failure);
-    }
-    const newest = yield* hostedStoreOrUnavailable(newestAgentState(userId, agentId));
-    return Option.isSome(newest) && newest.value.path === path
-      ? newest.value
-      : yield* Effect.fail(HOSTED_REFUSAL.AGENT_STATE_STALE);
-  });
-
 /** Kept, or not found where the account holds no such row. */
 const keptOrNotFound = (kept: boolean) =>
   kept ? Effect.succeed(DONE) : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
 
-/** The device-agents resource: the enroll on an install token, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
+/**
+ * The release a beat names, where one is published and the request's
+ * daemon is below it (`HOST_RELEASE`); none otherwise, so a host on it or
+ * past it, a Preview's ahead of it among them, is told of nothing.
+ */
+function newerReleaseFor(request: Request): DeviceAgentRelease | undefined {
+  const version = presentedHostVersion(request);
+  if (HOST_RELEASE === undefined || version === undefined) return undefined;
+  if (hostVersionMeets(version, HOST_RELEASE.VERSION)) return undefined;
+  return { version: HOST_RELEASE.VERSION, sha256: HOST_RELEASE.SHA256 };
+}
+
+/** The device-agents resource: the own enroll on the desktop's sign-in, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
 export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
   const deviceAgents = hosted.deviceAgents.use(deviceMiddleware(seams.resolveUserId));
   // Note that each caller middleware is used on the resource rather than its procedure, so it refuses before the input is read, as every procedure's does.
-  const enrolling = hosted.deviceAgents.use(installTokenMiddleware);
   const signedIn = hosted.deviceAgents.use(bearerOnlyMiddleware(seams.resolveUserId));
   const pairing = hosted.deviceAgents.use(pairingHostMiddleware);
   const polling = hosted.deviceAgents.use(pollSecretMiddleware);
@@ -319,30 +242,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       });
       return { status: polled.status, deviceId: polled.deviceId, deviceSecret: minted.secret };
     }),
-    enroll: enrolling.enroll.effect(function* ({ context, input }) {
-      const { deviceId, ...box } = input;
-      const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
-      const enrolled = yield* hostedStoreOrUnavailable(
-        enrollHost(hostSecretHash(context.installToken), {
-          id: deviceId,
-          ...box,
-          version: context.hostVersion,
-          secretHash: minted.hash,
-        }),
-      );
-      if ("refused" in enrolled) {
-        return yield* Effect.fail(
-          enrolled.refused === HOST_ENROLL_REFUSAL.STILL_ENROLLED
-            ? HOSTED_REFUSAL.HOST_STILL_ENROLLED
-            : HOSTED_REFUSAL.INVALID_TOKEN,
-        );
-      }
-      // Note that a box already enrolled is refused above, so every enroll that gets here is a first connect.
-      yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, enrolled.userId, {
-        kind: SERVER_HOST_KIND.LUKE_HOST,
-      });
-      return { deviceId, deviceSecret: minted.secret };
-    }),
     enrollOwn: signedIn.enrollOwn.effect(function* ({ context, input }) {
       const { userId } = context;
       const version = yield* admittedHostVersion(presentedHostVersion(context.request));
@@ -370,9 +269,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       yield* ownDevice(context, input.deviceId);
       const { userId } = context;
       const { deviceId, capabilities, ...device } = input;
-      const known = Object.values(DEVICE_CAPABILITY).filter((capability) =>
-        capabilities?.includes(capability),
-      );
+      const known = knownDeviceCapabilities(capabilities ?? []);
       return yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(
           registerDevice(userId, { id: deviceId, ...device, capabilities: known }),
@@ -381,14 +278,18 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
+      const { deviceId, signedIn, update, updateFailure } = input;
       yield* keptOrNotFound(
-        yield* hostedStoreOrUnavailable(beatDevice(context.userId, input.deviceId, input.signedIn)),
+        yield* hostedStoreOrUnavailable(
+          beatDevice(context.userId, deviceId, signedIn, { update, updateFailure }),
+        ),
       );
       // Note that the launches are read after the beat is written, so a claim the device finished before it sent the beat is among them.
       const openLaunches = yield* hostedStoreOrUnavailable(
-        openDeviceAgentLaunches(context.userId, input.deviceId),
+        openDeviceAgentLaunches(context.userId, deviceId),
       );
-      return { ...DONE, openLaunches };
+      const release = newerReleaseFor(context.request);
+      return { ...DONE, openLaunches, ...(release === undefined ? undefined : { release }) };
     }),
     liveAgents: deviceAgents.liveAgents.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
@@ -411,6 +312,14 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       );
       if (Option.isNone(claimed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return claimed.value;
+    }),
+    lineStep: deviceAgents.lineStep.effect(function* ({ context, input }) {
+      yield* followed(context, input.deviceId);
+      return yield* keptOrNotFound(
+        yield* hostedStoreOrUnavailable(
+          stepDeviceAgentLaunch(context.userId, input.deviceId, input.id, input.step),
+        ),
+      );
     }),
     settleLine: deviceAgents.settleLine.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
@@ -448,71 +357,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
           answerDeviceAgentRequest(context.userId, input.deviceId, input.id, input.answer),
         ),
       );
-    }),
-    saveState: deviceAgents.saveState.effect(function* ({ context, input }) {
-      yield* followed(context, input.deviceId);
-      const { userId } = context;
-      const { agentId } = input;
-      const [blobs, ring] = yield* Effect.all([stateStore, keyRing]);
-      const pinned = yield* hostedStoreOrUnavailable(
-        pinnedAgentState(userId, agentId, input.deviceId),
-      );
-      if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      // Note that a stale save is refused before its device uploads, since its commit would be refused after.
-      if (pinned.value.newest !== input.fromGeneration) {
-        return yield* Effect.fail(HOSTED_REFUSAL.AGENT_STATE_STALE);
-      }
-      const sealed = yield* hostedStoreOrUnavailable(ensureAgentStateKey(ring, userId, agentId));
-      if (Option.isNone(sealed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const key = openAgentStateKey(ring, { userId, agentId }, sealed.value);
-      if (Result.isFailure(key)) {
-        yield* Effect.logError("an agent's state key did not open under the key ring");
-        return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      }
-      const path = freshAgentStatePath(agentId);
-      // Note that the grant is kept before the upload is minted, so no upload stands that the sweep could not find.
-      const now = new Date(yield* Clock.currentTimeMillis);
-      const grant = { agentId, deviceId: input.deviceId, path };
-      if (!(yield* hostedStoreOrUnavailable(grantAgentStateUpload(userId, grant, now)))) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      }
-      const upload = yield* blobs.mintUpload(path).pipe(
-        Effect.tapError((failure) => Effect.logWarning(failure.message)),
-        Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-      );
-      return {
-        path,
-        upload: {
-          url: upload.url,
-          headers: upload.headers,
-          expiresAt: upload.expiresAt.getTime(),
-          maxBytes: upload.maxBytes,
-        },
-        key: Redacted.value(key.success),
-      };
-    }),
-    commitState: deviceAgents.commitState.effect(function* ({ context, input }) {
-      yield* followed(context, input.deviceId);
-      const { userId } = context;
-      const { agentId, fromGeneration, path } = input;
-      const blobs = yield* stateStore;
-      // Note that the newest is read before the commit, because once it lands this read answers the commit itself.
-      const replaced = yield* hostedStoreOrUnavailable(newestAgentState(userId, agentId));
-      const kept = yield* committed(userId, input);
-      yield* Effect.logInfo(`kept an agent's state as generation ${kept.generation}`).pipe(
-        Effect.annotateLogs({ generation: kept.generation, bytes: kept.bytes }),
-      );
-      // A blob whose delete fails here is the sweep's to delete, since its generation is superseded.
-      const superseded = Option.filter(
-        replaced,
-        (generation) => generation.generation === fromGeneration && generation.path !== path,
-      );
-      if (Option.isSome(superseded) && kept.generation !== superseded.value.generation) {
-        yield* blobs
-          .remove([superseded.value.path])
-          .pipe(Effect.catch((failure) => Effect.logWarning(failure.message)));
-      }
-      return { generation: kept.generation };
     }),
   };
 }

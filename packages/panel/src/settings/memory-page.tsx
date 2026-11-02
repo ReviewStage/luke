@@ -1,4 +1,5 @@
 import type { MemorySummary } from "@luke/features/memory-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   countWords,
@@ -15,10 +16,8 @@ import {
   Button,
   CardPress,
   CHIP_LOOK,
-  CHOICE_BAR_LOOK,
   Chip,
   ChipName,
-  ChoiceBar,
   CONFIRM_LOSS,
   Comment,
   CommentSkeleton,
@@ -30,6 +29,8 @@ import {
   GAP,
   IconButton,
   Inline,
+  LIST_MOTION_WAY,
+  ListMotion,
   MoreButton,
   SELECT_BOX_PLACE,
   SETTINGS_SECTION_FRAME,
@@ -43,12 +44,10 @@ import {
   SkeletonRegion,
   Stack,
   selectionMenu,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   Tooltip,
   TrashIcon,
   useConfirmDialog,
+  useLeaving,
   useMenu,
   VisuallyHidden,
 } from "@luke/ui";
@@ -62,7 +61,7 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { confirmFailure, unreadShown } from "../failure-report.js";
+import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
@@ -71,16 +70,11 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
  * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, and forgotten one at a time or several at once.
  *
  * A coding agent keeps a memory as it works without asking, and corrects one
- * in place when its developer says otherwise. Most are the workspace's: every
+ * in place when its developer says otherwise. They are the workspace's: every
  * member's agents in it recall them, and nothing crosses into another
- * workspace. A private one is the reader's alone, recalled only by their own
- * agents. So the page splits them as Automations splits its owners, the
- * workspace's and the reader's, but switched by a segmented bar at the top
- * rather than stacked, so the reader's own are one press away however many
- * the workspace keeps; each side counts what the search and the filter leave
- * of it, so a search says at once which side holds its matches.
+ * workspace.
  *
- * Under the bar, a search over the words and their keeper's name
+ * At the top, a search over the words and their keeper's name
  * (`searchTokens`), lit where it landed, and the Tasks page's Filter, its
  * glyph alone with a dot while it keeps anything, whose one field is Kept by,
  * each keeper with their face and how many they kept, and everyone who left
@@ -94,7 +88,7 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
  * press on it only marks where a run of ⇧-clicks starts. Its ⋯ and a
  * right-click offer Copy words and Forget, which stands unavailable, saying
  * who may, on a memory the reader may not forget: its words are theirs, or
- * they own or administer the workspace, or for a private one, it is theirs.
+ * they own or administer the workspace.
  *
  * Memories are chosen together as the Tasks page's rows are (#5761): the box
  * in a row's gutter under the pointer, X, ⌘- and ⇧-clicks, ⌘A, and Esc. A
@@ -111,25 +105,14 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
 
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  FAILED: readFailedWords("Luke's memory"),
+  FAILED: readFailedWords(`${PRODUCT_NAME}'s memory`),
   WORKSPACES_FAILED: readFailedWords("your workspaces"),
   SIGNED_OUT: SIGNED_OUT_WORDS,
-  EMPTY: "Luke hasn't remembered anything yet.",
+  EMPTY: `${PRODUCT_NAME} hasn't remembered anything yet.`,
   FORGET_FAILED: "The memory could not be forgotten. Try again.",
   NO_MATCH: "No memories match",
   CLEAR: "Clear search and filter",
 } as const;
-
-/** Whose memories the page shows: the workspace's, which every member's agents recall, or the reader's own. */
-const MEMORY_SCOPE = {
-  WORKSPACE: "workspace",
-  PERSONAL: "personal",
-} as const;
-
-type MemoryScope = (typeof MEMORY_SCOPE)[keyof typeof MEMORY_SCOPE];
-
-/** What the reader's own side is called, as Automations calls the reader's own automations. */
-const PERSONAL_NAME = "Only you";
 
 /** What the Filter is called, on its tooltip and its menu, and its one field. */
 const FILTER = "Filter";
@@ -147,17 +130,12 @@ const FORMER_KEY = "former";
 /** What everyone who left is called in the filter. */
 const FORMER_WORDS = "Former members";
 
-/** What the page says the memories are for, and who shares them. */
-function noteFor(workspace: Workspace): string {
-  return `Luke's agents keep what you settle in ${workspace.name} and recall it in later tasks.`;
-}
-
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
 
 /** What the skeletons say to a reader who cannot see them. */
 const READING_LABEL = {
-  MEMORY: readingWords("Luke's memory"),
+  MEMORY: readingWords(`${PRODUCT_NAME}'s memory`),
   WORKSPACES: readingWords("your workspaces"),
 } as const;
 
@@ -213,11 +191,6 @@ interface WordsNode {
 function wordsIn(node: WordsNode): string {
   if (typeof node.value === "string") return node.value;
   return (node.children ?? []).map((child) => wordsIn(child)).join("");
-}
-
-/** The side a memory stands on. */
-function scopeOf(memory: MemorySummary): MemoryScope {
-  return memory.private ? MEMORY_SCOPE.PERSONAL : MEMORY_SCOPE.WORKSPACE;
 }
 
 /** Whom the Kept by filter files a memory under: its keeper, or everyone who left as one. */
@@ -418,47 +391,76 @@ function KeptByFilter({
   );
 }
 
-/** What the filter keeps, a chip for each keeper, its × lifting them, and Clear. */
-function KeptByChips({
+/** The keeper a chip stands for, by which its chip leaves. */
+const keeperChipKey = (keeper: Keeper): string => keeper.key;
+
+/** The filter's chips and Clear, a chip lifted scaling out where it stood. */
+function KeptByLine({
+  line,
   keepers,
   kept,
   onKept,
 }: {
+  line: React.RefObject<HTMLElement | null>;
   keepers: readonly Keeper[];
   kept: ReadonlySet<string>;
   onKept: (kept: ReadonlySet<string>) => void;
 }): React.JSX.Element | null {
-  if (kept.size === 0) return null;
+  // Note that the keepers are read again on every render, so the list the chips leave by is kept until another keeper is kept.
+  const listed = keepers.filter((keeper) => kept.has(keeper.key));
+  const [stable, setStable] = useState(listed);
+  const same =
+    stable.length === listed.length &&
+    stable.every(
+      (keeper, at) => keeper.key === listed[at]?.key && keeper.label === listed[at]?.label,
+    );
+  if (!same) setStable(listed);
+  const drawn = useLeaving(same ? stable : listed, keeperChipKey);
+  if (drawn.length === 0) return null;
   return (
-    <Inline gap={GAP.TIGHT}>
-      {keepers
-        .filter((keeper) => kept.has(keeper.key))
-        .map((keeper) => (
-          <Chip
-            key={keeper.key}
-            look={CHIP_LOOK.FILTER}
-            removeLabel={`Show memories kept by anyone, not only ${keeper.label}`}
-            onRemove={() => onKept(toggled(kept, keeper.key))}
-          >
-            {keeper.face}
-            <ChipName>{`${KEPT_BY} ${keeper.label === PEOPLE_FILTER_WORDS.ME ? "me" : keeper.label}`}</ChipName>
-          </Chip>
-        ))}
-      <Button variant={BUTTON_VARIANT.QUIET} onClick={() => onKept(new Set())}>
-        Clear
-      </Button>
+    <Inline gap={GAP.TIGHT} ref={line} moves>
+      {drawn.map(({ key, value: keeper, leaving }) => (
+        <Chip
+          key={key}
+          look={CHIP_LOOK.FILTER}
+          motionKey={key}
+          removeLabel={`Show memories kept by anyone, not only ${keeper.label}`}
+          onRemove={() => {
+            if (!leaving) onKept(toggled(kept, keeper.key));
+          }}
+        >
+          {keeper.face}
+          <ChipName>{`${KEPT_BY} ${keeper.label === PEOPLE_FILTER_WORDS.ME ? "me" : keeper.label}`}</ChipName>
+        </Chip>
+      ))}
+      {kept.size === 0 ? null : (
+        <Button variant={BUTTON_VARIANT.QUIET} onClick={() => onKept(new Set())}>
+          Clear
+        </Button>
+      )}
     </Inline>
+  );
+}
+
+/** What the filter keeps, a chip for each keeper, its × lifting them, and Clear, under a motion that scales a chip in and out (`ListMotion`). */
+function KeptByChips(props: {
+  keepers: readonly Keeper[];
+  kept: ReadonlySet<string>;
+  onKept: (kept: ReadonlySet<string>) => void;
+}): React.JSX.Element {
+  const line = useRef<HTMLElement | null>(null);
+  return (
+    <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
+      <KeptByLine line={line} {...props} />
+    </ListMotion>
   );
 }
 
 /** What Forget asks, of one memory or of several, and what it says of those the reader may not forget. */
 function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   const one = asked.length === 1;
-  const mine = asked.every((memory) => memory.private);
   const them = one ? "it" : "them";
-  const body = mine
-    ? `Your Luke will not recall ${them} again in this workspace.`
-    : `No agent will recall ${them} in any later task in this workspace, for anyone.`;
+  const body = `No agent will recall ${them} in any later task in this workspace, for anyone.`;
   const kept =
     left === 0
       ? ""
@@ -472,16 +474,12 @@ function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   };
 }
 
-/** What the list says where it holds nothing: a search or the filter that leaves nothing, or a side that holds nothing yet. */
+/** What the list says where it holds nothing: a search or the filter that leaves nothing, or a workspace that has kept nothing yet. */
 function NothingShown({
   narrowed,
-  scope,
-  total,
   onClear,
 }: {
   narrowed: boolean;
-  scope: MemoryScope;
-  total: number;
   onClear: () => void;
 }): React.JSX.Element {
   if (narrowed) {
@@ -493,25 +491,16 @@ function NothingShown({
       />
     );
   }
-  if (total === 0) return <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>;
-  return (
-    <SettingsLine>
-      {scope === MEMORY_SCOPE.PERSONAL
-        ? "Nothing only your agents recall yet."
-        : "Nothing every member's agents recall yet."}
-    </SettingsLine>
-  );
+  return <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>;
 }
 
-/** The memories as read: the switcher, the search and the filter, the list, and the bar over what is chosen. */
+/** The memories as read: the search and the filter, the list, and the bar over what is chosen. */
 function MemoryList({
-  workspace,
   readerId,
   memories,
   forgetting,
   onForget,
 }: {
-  workspace: Workspace;
   /** The signed-in account, whose own memories read as You and Me. */
   readerId: string | undefined;
   memories: readonly MemorySummary[];
@@ -522,7 +511,6 @@ function MemoryList({
   const { members, former } = useMemberDirectory();
   const copy = useCopyToast();
   const regionId = useId();
-  const [scope, setScope] = useState<MemoryScope>(MEMORY_SCOPE.WORKSPACE);
   const [query, setQuery] = useState("");
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -534,13 +522,10 @@ function MemoryList({
     return { memory, actor, keeper };
   });
   const searched = all.filter((each) => matchesTokens([each.memory.text, each.keeper], found));
-  const narrowed = searched.filter(
+  const listed = searched.filter(
     (each) => kept.size === 0 || kept.has(keeperKey(each.memory, each.actor)),
   );
-  const listed = narrowed.filter((each) => scopeOf(each.memory) === scope);
-  const countOf = (side: MemoryScope) =>
-    String(narrowed.filter((each) => scopeOf(each.memory) === side).length);
-  // Note that a memory no longer drawn leaves the selection for good, as a task does, so one a search or the other side hid is not chosen again unasked.
+  // Note that a memory no longer drawn leaves the selection for good, as a task does, so one a search hid is not chosen again unasked.
   const drawn = new Set(listed.map((each) => each.memory.id));
   const standing: ReadonlySet<string> = new Set([...selected].filter((id) => drawn.has(id)));
   if (standing.size !== selected.size) setSelected(standing);
@@ -574,29 +559,11 @@ function MemoryList({
     setQuery("");
     setKept(new Set());
   };
-  const keepers = keepersOf(searched.filter((each) => scopeOf(each.memory) === scope));
+  const keepers = keepersOf(searched);
   return (
     <SettingsSection anchor={SETTINGS_SEARCH_ROW.MEMORY} frame={SETTINGS_SECTION_FRAME.NONE}>
       <Stack gap={GAP.SECTION}>
         <Stack gap={GAP.CONTROL}>
-          <ChoiceBar<MemoryScope>
-            label="Whose memories"
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            value={scope}
-            onChange={setScope}
-            items={[
-              {
-                value: MEMORY_SCOPE.WORKSPACE,
-                label: workspace.name,
-                count: countOf(MEMORY_SCOPE.WORKSPACE),
-              },
-              {
-                value: MEMORY_SCOPE.PERSONAL,
-                label: PERSONAL_NAME,
-                count: countOf(MEMORY_SCOPE.PERSONAL),
-              },
-            ]}
-          />
           <div className={SEARCH_LINE}>
             <SearchField
               label="Search memories"
@@ -612,12 +579,7 @@ function MemoryList({
           <KeptByChips keepers={keepersOf(all)} kept={kept} onKept={setKept} />
         </Stack>
         {listed.length === 0 ? (
-          <NothingShown
-            narrowed={found.length > 0 || kept.size > 0}
-            scope={scope}
-            total={memories.length}
-            onClear={clear}
-          />
+          <NothingShown narrowed={found.length > 0 || kept.size > 0} onClear={clear} />
         ) : (
           <SelectionRegion id={regionId} selection={{ selected: standing, onChange: setSelected }}>
             <ul className={MEMORY_LIST}>
@@ -674,7 +636,10 @@ export function MemorySection({
 }): React.JSX.Element {
   const { act } = useAct();
   const [memories, setMemories] = useState<readonly MemorySummary[] | undefined>(undefined);
-  const [readFailed, setReadFailed] = useState(false);
+  /** What the last read failed with, its answer or its error, which its failure is reported as; absent while none failed. */
+  const [readFailure, setReadFailure] = useState<{ readonly cause: unknown } | undefined>(
+    undefined,
+  );
   const [attempt, setAttempt] = useState(0);
   const [forgetting, setForgetting] = useState<string | undefined>(undefined);
   // Note that every change of workspace or reader starts a new scope, because a forget still out
@@ -715,16 +680,16 @@ export function MemorySection({
     const forgottenBefore = forgotten.current;
     // Nothing of an earlier read, an earlier account, or another workspace stands while this one is out.
     setMemories(undefined);
-    setReadFailed(false);
+    setReadFailure(undefined);
     act(ACT_KIND.MEMORIES_READ, { workspaceId }).then(
       (answer) => {
         if (!live) return;
-        if ("failure" in answer) setReadFailed(true);
+        if ("failure" in answer) setReadFailure({ cause: answer });
         else if (forgotten.current !== forgottenBefore) setAttempt((count) => count + 1);
         else draw(request, answer.memories);
       },
-      () => {
-        if (live) setReadFailed(true);
+      (error: unknown) => {
+        if (live) setReadFailure({ cause: error });
       },
     );
     return () => {
@@ -794,35 +759,33 @@ export function MemorySection({
     );
   }
   return (
-    <>
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-        {noteFor(workspace)}
-      </Text>
-      <div className={NO_CAPTURE}>
-        {memories !== undefined ? (
-          // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
-          <MemberDirectory workspace={workspace} readerId={readerId}>
-            <MemoryList
-              workspace={workspace}
-              readerId={readerId}
-              memories={memories}
-              forgetting={forgetting !== undefined}
-              onForget={forgetAll}
-            />
-          </MemberDirectory>
-        ) : readFailed ? (
-          <SettingsLine>
-            <ErrorState
-              failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ)}
-              onRetry={() => setAttempt((count) => count + 1)}
-            >
-              {PAGE_LINE.FAILED}
-            </ErrorState>
-          </SettingsLine>
-        ) : (
-          <MemoriesSkeleton label={READING_LABEL.MEMORY} />
-        )}
-      </div>
-    </>
+    <div className={NO_CAPTURE}>
+      {memories !== undefined ? (
+        // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
+        <MemberDirectory workspace={workspace} readerId={readerId}>
+          <MemoryList
+            readerId={readerId}
+            memories={memories}
+            forgetting={forgetting !== undefined}
+            onForget={forgetAll}
+          />
+        </MemberDirectory>
+      ) : readFailure !== undefined ? (
+        <SettingsLine>
+          <ErrorState
+            failure={failureShown({
+              surface: FAILURE_SURFACE.MEMORIES_READ,
+              cause: readFailure.cause,
+              about: { workspaceId: workspace.id },
+            })}
+            onRetry={() => setAttempt((count) => count + 1)}
+          >
+            {PAGE_LINE.FAILED}
+          </ErrorState>
+        </SettingsLine>
+      ) : (
+        <MemoriesSkeleton label={READING_LABEL.MEMORY} />
+      )}
+    </div>
   );
 }

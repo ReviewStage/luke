@@ -9,7 +9,7 @@ export {
 
 /**
  * Where an integration's installation on a workspace stands, as its
- * provider last said: active until the provider tells Luke it was
+ * provider last said: active until the provider tells us it was
  * uninstalled, and then deleted, kept so a late delivery under it is known
  * and refused rather than unknown.
  */

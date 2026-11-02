@@ -1,0 +1,319 @@
+/**
+ * invitation-mail.ts -- a workspace invitation emailed to the address it was made for, through Resend.
+ *
+ * An invitation an owner or an admin makes from Settings is mailed to the
+ * invited address as it is made (`workspace-invitations-procedures.ts`), as
+ * ReviewStage/stage mailed its teammate invitations: one POST to Resend's
+ * `/emails` (https://resend.com/docs/api-reference/emails/send-email) from
+ * the sender the deployment names, to the invited address alone, saying who
+ * invited them to which workspace, the role they join as, and the day the
+ * link stops working, with a button and the bare link to the accept page. Nothing is mailed when an invitation is canceled, and an
+ * address already invited is refused before anything is sent, as stage did.
+ *
+ * The deployment holds the Resend key (`RESEND_API_KEY`, the one the
+ * feedback form sends with) and the sender (`INVITE_FROM`, such as
+ * `Name <invites@…>` on a domain Resend has verified). Without either,
+ * nothing is mailed and the invitation is made as before, its link copied by
+ * hand; the build says so once, by the variables' names. A send Resend
+ * refuses or never answers leaves the invitation standing, since the link
+ * the owner can copy is the one the email carries, and is logged by its
+ * status alone: the key is revealed into the bearer header alone, and
+ * nothing of the letter, the address least of all, is logged.
+ */
+
+import { PRODUCT_NAME } from "@luke/features/product-name";
+import {
+  INVITATION_ROLE,
+  type WorkspaceInvitation,
+} from "@luke/features/workspace-invitation-wire";
+import { HTTP_METHOD } from "@luke/wire";
+import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { accountCall, callAnswered, fixedBearer } from "../core.js";
+
+/** The deployment's variables the sender is read from: the feedback form's Resend key, and the address invitations come from. */
+export const INVITATION_MAIL_ENVIRONMENT = {
+  RESEND_API_KEY: "RESEND_API_KEY",
+  FROM: "INVITE_FROM",
+} as const;
+
+const RESEND = {
+  BASE_URL: "https://api.resend.com",
+  EMAILS_PATH: "/emails",
+  /** Inside the Mac's own wait for the invite's answer, so a slow Resend still answers the invitation made. */
+  REQUEST_TIMEOUT_MS: 5_000,
+} as const;
+
+/** The app's icon on the service's own site, which the email shows beside the product's name above its card. */
+const ICON_PATH = "/app-icon-192.png";
+
+/** What the build says once where a variable is unset, by the variables' names alone. */
+const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATION_MAIL_ENVIRONMENT.FROM} is not set, so workspace invitations are not emailed: each one's link is copied by hand.`;
+
+/**
+ * The email's colours, light and dark: the one place the letter names a
+ * colour, so a change of palette is a change here alone. Each stands for a
+ * role of the site's palette (`--luke-color-*`), spelled as a plain hex
+ * because an email client reads no custom property. The button is the
+ * accent's fill under its own words, and the link the accent's text ink.
+ */
+const MAIL_PALETTE = {
+  LIGHT: {
+    GROUND: "#f4f4f3",
+    SURFACE: "#ffffff",
+    WELL: "#f9f9f8",
+    EDGE: "#e4e3e1",
+    TEXT: "#161615",
+    TEXT_MUTED: "#646361",
+    TEXT_FAINT: "#8a8987",
+    ACCENT: "#161615",
+    ON_ACCENT: "#ffffff",
+    ACCENT_TEXT: "#161615",
+  },
+  DARK: {
+    GROUND: "#121211",
+    SURFACE: "#1a1918",
+    WELL: "#121211",
+    EDGE: "#2a2a29",
+    TEXT: "#f3f2ef",
+    TEXT_MUTED: "#a3a3a2",
+    ACCENT: "#f3f2ef",
+    ON_ACCENT: "#121211",
+    ACCENT_TEXT: "#f3f2ef",
+  },
+} as const;
+
+const LIGHT = MAIL_PALETTE.LIGHT;
+const DARK = MAIL_PALETTE.DARK;
+
+/**
+ * The email's look, inline, since an email client takes inline styles alone:
+ * a light letter by default, which the dark-mode block below turns dark where
+ * the client honours `prefers-color-scheme`. The layout is tables, which
+ * every client, Outlook's Word engine among them, draws the same.
+ */
+const EMAIL_STYLE = {
+  BODY: `background-color:${LIGHT.GROUND};margin:0;padding:0;-webkit-text-size-adjust:100%`,
+  OUTER: `background-color:${LIGHT.GROUND};padding:40px 16px`,
+  BRAND_CELL: "padding:0 4px 20px",
+  MARK: "display:block;width:28px;height:28px;border:0;outline:none;border-radius:7px",
+  WORDMARK: `color:${LIGHT.TEXT};font-size:17px;font-weight:600;letter-spacing:-0.02em;line-height:28px;padding-left:10px`,
+  CARD: `background-color:${LIGHT.SURFACE};border:1px solid ${LIGHT.EDGE};border-radius:14px`,
+  CARD_CELL: "padding:36px 36px 28px",
+  FONT: "font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif",
+  HEADING: `color:${LIGHT.TEXT};font-size:24px;font-weight:700;letter-spacing:-0.03em;line-height:1.25;margin:0 0 12px`,
+  HEADING_FONT:
+    "font-family:'Bricolage Grotesque',Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif",
+  LEAD: `color:${LIGHT.TEXT_MUTED};font-size:15px;line-height:1.6;margin:0 0 24px`,
+  PLACE: `background-color:${LIGHT.WELL};border:1px solid ${LIGHT.EDGE};border-radius:10px`,
+  PLACE_CELL: "padding:14px 16px",
+  TILE: `background-color:${LIGHT.TEXT};border-radius:8px;color:${LIGHT.SURFACE};font-size:16px;font-weight:600;line-height:36px;text-align:center;width:36px;height:36px`,
+  PLACE_NAME: `color:${LIGHT.TEXT};font-size:15px;font-weight:600;line-height:20px;padding-left:12px`,
+  PLACE_ROLE: `color:${LIGHT.TEXT_MUTED};font-size:13px;font-weight:400;line-height:18px;padding-left:12px`,
+  BUTTON_ROW: "padding:24px 0 0",
+  BUTTON_CELL: `background-color:${LIGHT.ACCENT};border-radius:10px`,
+  BUTTON: `display:inline-block;color:${LIGHT.ON_ACCENT};font-size:15px;font-weight:600;line-height:20px;padding:12px 22px;text-decoration:none;border-radius:10px`,
+  EXPIRY: `color:${LIGHT.TEXT_MUTED};font-size:13px;line-height:1.6;margin:16px 0 0`,
+  FALLBACK_LABEL: `color:${LIGHT.TEXT_MUTED};font-size:13px;line-height:1.6;margin:20px 0 2px`,
+  FALLBACK_LINK: `color:${LIGHT.ACCENT_TEXT};font-size:13px;line-height:1.6;text-decoration:underline;word-break:break-all`,
+  RULE: `border:0;border-top:1px solid ${LIGHT.EDGE};margin:28px 0 18px`,
+  FOOTNOTE: `color:${LIGHT.TEXT_MUTED};font-size:12px;line-height:1.6;margin:0`,
+  SIGNATURE: `color:${LIGHT.TEXT_FAINT};font-size:12px;line-height:1.6;padding:20px 0 0;text-align:center`,
+  SIGNATURE_LINK: `color:${LIGHT.TEXT_FAINT};text-decoration:none`,
+} as const;
+
+/**
+ * The same letter where the reader's client is dark: classes the light inline
+ * styles carry, overridden here, which a client that ignores `<style>` never
+ * reads and so leaves light.
+ */
+const DARK_STYLE = [
+  "@media (prefers-color-scheme: dark) {",
+  `.v-body, .v-outer { background-color:${DARK.GROUND} !important; }`,
+  `.v-card { background-color:${DARK.SURFACE} !important; border-color:${DARK.EDGE} !important; }`,
+  `.v-place { background-color:${DARK.WELL} !important; border-color:${DARK.EDGE} !important; }`,
+  `.v-tile { background-color:${DARK.TEXT} !important; color:${DARK.GROUND} !important; }`,
+  `.v-heading { color:${DARK.TEXT} !important; }`,
+  `.v-muted { color:${DARK.TEXT_MUTED} !important; }`,
+  `.v-link { color:${DARK.ACCENT_TEXT} !important; }`,
+  `.v-button-cell { background-color:${DARK.ACCENT} !important; }`,
+  `.v-button { color:${DARK.ON_ACCENT} !important; }`,
+  `.v-rule { border-top-color:${DARK.EDGE} !important; }`,
+  "}",
+].join("\n");
+
+/** One invitation as its email tells it. */
+export interface InvitationLetter {
+  /** The address invited, the email's one recipient. */
+  readonly email: string;
+  /** The accept page's address for this invitation, on the service's own origin. */
+  readonly acceptUrl: string;
+  readonly workspaceName: string;
+  /** Who invited them: their name, or their address where their account has no name. */
+  readonly inviterLabel: string;
+  /** The role they join as. */
+  readonly role: WorkspaceInvitation["role"];
+  /** When the link stops working, as the invitation's ISO time. */
+  readonly expiresAt: string;
+}
+
+interface InvitationMailValues {
+  /** Emails one invitation to its address; never fails, since the invitation stands either way. */
+  readonly send: (letter: InvitationLetter) => Effect.Effect<void>;
+}
+
+/** The deployment's sender of invitation emails. Read optionally, so a runtime without one emails nothing. */
+export class InvitationMail extends Context.Service<InvitationMail, InvitationMailValues>()(
+  "InvitationMail",
+) {}
+
+/** Text set into the email's HTML, its markup characters spelled as entities. */
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+/** How the letter names the role an invitee joins as. */
+const ROLE_WORDS = {
+  [INVITATION_ROLE.MEMBER]: "a member",
+  [INVITATION_ROLE.ADMIN]: "an admin",
+} as const satisfies Record<WorkspaceInvitation["role"], string>;
+
+/** The day an invitation expires, in words that name no time zone, since the reader's is unknown. */
+const EXPIRY_DAY = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** A presentation table: one row of cells, no spacing of its own. */
+function table(cells: string, style = ""): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"${style === "" ? "" : ` style="${style}"`}><tr>${cells}</tr></table>`;
+}
+
+/** The email for one invitation: its subject, its HTML, and the plain text that says the same. */
+function invitationEmail(letter: InvitationLetter) {
+  const { email, acceptUrl, workspaceName, inviterLabel, role, expiresAt } = letter;
+  const subject = `You're invited to join ${workspaceName} on ${PRODUCT_NAME}`;
+  const heading = `${inviterLabel} invited you to join ${workspaceName}`;
+  const lead = `${PRODUCT_NAME} is where your team works each task through with coding agents, from the plan to the merged pull request.`;
+  const joinAs = `You'll join as ${ROLE_WORDS[role]}`;
+  const expiry = `This invitation expires on ${EXPIRY_DAY.format(Date.parse(expiresAt))}.`;
+  const fallback = "Or paste this link into your browser:";
+  const footnote = `This invitation was sent to ${email}. If you weren't expecting it, you can ignore this email.`;
+  const font = EMAIL_STYLE.FONT;
+  const link = escapeHtml(acceptUrl);
+  const site = new URL("/", acceptUrl);
+  const icon = escapeHtml(new URL(ICON_PATH, acceptUrl).href);
+  const initial = escapeHtml(Array.from(workspaceName.trim())[0]?.toUpperCase() ?? "");
+  const html = [
+    "<!DOCTYPE html>",
+    '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">',
+    `<title>${escapeHtml(subject)}</title><style>${DARK_STYLE}</style></head>`,
+    `<body class="v-body" style="${EMAIL_STYLE.BODY}">`,
+    `<div style="display:none;max-height:0;overflow:hidden">${escapeHtml(heading)} on ${escapeHtml(PRODUCT_NAME)}.</div>`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="v-outer" style="${EMAIL_STYLE.OUTER}"><tr><td align="center">`,
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px">',
+    `<tr><td style="${EMAIL_STYLE.BRAND_CELL}">${table(
+      `<td><img src="${icon}" alt="" width="28" height="28" style="${EMAIL_STYLE.MARK}"></td><td class="v-heading" style="${EMAIL_STYLE.WORDMARK};${font}">${escapeHtml(PRODUCT_NAME)}</td>`,
+    )}</td></tr>`,
+    `<tr><td class="v-card" style="${EMAIL_STYLE.CARD}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="${EMAIL_STYLE.CARD_CELL};${font}">`,
+    `<h1 class="v-heading" style="${EMAIL_STYLE.HEADING};${EMAIL_STYLE.HEADING_FONT}">${escapeHtml(heading)}</h1>`,
+    `<p class="v-muted" style="${EMAIL_STYLE.LEAD};${font}">${escapeHtml(lead)}</p>`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="v-place" style="${EMAIL_STYLE.PLACE}"><tr><td style="${EMAIL_STYLE.PLACE_CELL}">`,
+    table(
+      `<td class="v-tile" width="36" style="${EMAIL_STYLE.TILE};${font}">${initial}</td><td><div class="v-heading" style="${EMAIL_STYLE.PLACE_NAME};${font}">${escapeHtml(workspaceName)}</div><div class="v-muted" style="${EMAIL_STYLE.PLACE_ROLE};${font}">${escapeHtml(joinAs)}</div></td>`,
+    ),
+    "</td></tr></table>",
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="${EMAIL_STYLE.BUTTON_ROW}">`,
+    table(
+      `<td class="v-button-cell" style="${EMAIL_STYLE.BUTTON_CELL}"><a href="${link}" class="v-button" style="${EMAIL_STYLE.BUTTON};${font}">Accept invitation</a></td>`,
+    ),
+    "</td></tr></table>",
+    `<p class="v-muted" style="${EMAIL_STYLE.EXPIRY};${font}">${escapeHtml(expiry)}</p>`,
+    `<p class="v-muted" style="${EMAIL_STYLE.FALLBACK_LABEL};${font}">${fallback}</p>`,
+    `<a href="${link}" class="v-link" style="${EMAIL_STYLE.FALLBACK_LINK};${font}">${link}</a>`,
+    `<hr class="v-rule" style="${EMAIL_STYLE.RULE}">`,
+    `<p class="v-muted" style="${EMAIL_STYLE.FOOTNOTE};${font}">${escapeHtml(footnote)}</p>`,
+    "</td></tr></table></td></tr>",
+    `<tr><td class="v-muted" style="${EMAIL_STYLE.SIGNATURE};${font}">${escapeHtml(PRODUCT_NAME)} · <a href="${escapeHtml(site.href)}" class="v-muted" style="${EMAIL_STYLE.SIGNATURE_LINK}">${escapeHtml(site.host)}</a></td></tr>`,
+    "</table></td></tr></table></body></html>",
+  ].join("\n");
+  const text = [
+    `${heading} on ${PRODUCT_NAME}.`,
+    "",
+    lead,
+    "",
+    `${joinAs}.`,
+    "",
+    `Accept invitation: ${acceptUrl}`,
+    "",
+    expiry,
+    "",
+    footnote,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+/** Resend's send-email body for one invitation, from `from`. */
+function resendBody(letter: InvitationLetter, from: string): string {
+  return JSON.stringify({ from, to: [letter.email], ...invitationEmail(letter) });
+}
+
+/** A variable as the deployment holds it, trimmed, and nothing where it is unset or blank. */
+function presentText(value: Option.Option<string>): string | undefined {
+  const trimmed = Option.getOrUndefined(value)?.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/**
+ * The sender over Resend, once the deployment names both its key and its
+ * address, read as the services are built; one that sends nothing otherwise.
+ */
+export const invitationMailFromEnvironment: Layer.Layer<
+  InvitationMail,
+  never,
+  HttpClient.HttpClient
+> = Layer.effect(
+  InvitationMail,
+  Effect.gen(function* () {
+    const read = yield* Config.all({
+      key: Config.option(Config.Redacted(INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY)),
+      from: Config.option(Config.String(INVITATION_MAIL_ENVIRONMENT.FROM)),
+    }).pipe(Effect.orElseSucceed(() => ({ key: Option.none(), from: Option.none() })));
+    const key = presentText(Option.map(read.key, Redacted.value));
+    const from = presentText(read.from);
+    if (key === undefined || from === undefined) {
+      yield* Effect.logWarning(MAIL_UNSET);
+      return { send: () => Effect.void };
+    }
+    const client = yield* HttpClient.HttpClient;
+    const call = accountCall({
+      baseUrl: RESEND.BASE_URL,
+      credential: fixedBearer(key),
+      requestTimeoutMs: RESEND.REQUEST_TIMEOUT_MS,
+    });
+    return {
+      send: (letter: InvitationLetter) =>
+        Effect.gen(function* () {
+          const answer = yield* call.send({
+            method: HTTP_METHOD.POST,
+            path: RESEND.EMAILS_PATH,
+            body: resendBody(letter, from),
+          });
+          if (callAnswered(answer) && answer.response.ok) return;
+          // Note that the status alone is logged, because the letter carries the invitee's address.
+          yield* Effect.logWarning(
+            callAnswered(answer)
+              ? `Invitation email refused with status ${answer.response.status}`
+              : "Invitation email did not reach Resend",
+          );
+        }).pipe(Effect.provideService(HttpClient.HttpClient, client)),
+    };
+  }),
+);

@@ -5,8 +5,8 @@ import { grantWindowPermissions } from "./window-permissions";
 
 /**
  * What a page is answered as it asks Chromium for a permission: a window of
- * Luke's own may take the microphone and full screen, and nothing else, and
- * a page that is no window of Luke's is refused everything.
+ * the app's own may take the microphone and full screen, and nothing else, and
+ * a page that is no window of the app's is refused everything.
  */
 
 type CheckHandler = Parameters<Session["setPermissionCheckHandler"]>[0];
@@ -60,13 +60,13 @@ function grantedSession() {
   return { asked, checked };
 }
 
-test("a window of Luke's own may fill the screen, as a video's Full screen asks", () => {
+test("a window of Vespin's own may fill the screen, as a video's Full screen asks", () => {
   const { asked, checked } = grantedSession();
   assert.equal(asked(own, "fullscreen"), true);
   assert.equal(checked(own, "fullscreen"), true);
 });
 
-test("a window of Luke's own takes the microphone, never the camera", () => {
+test("a window of Vespin's own takes the microphone, never the camera", () => {
   const { asked, checked } = grantedSession();
   assert.equal(asked(own, "media", { mediaTypes: ["audio"] }), true);
   assert.equal(asked(own, "media", { mediaTypes: ["audio", "video"] }), false);
@@ -75,14 +75,14 @@ test("a window of Luke's own takes the microphone, never the camera", () => {
   assert.equal(checked(own, "media", "video"), false);
 });
 
-test("a window of Luke's own is refused every other permission", () => {
+test("a window of Vespin's own is refused every other permission", () => {
   const { asked, checked } = grantedSession();
   assert.equal(asked(own, "notifications"), false);
   assert.equal(asked(own, "pointerLock"), false);
   assert.equal(checked(own, "geolocation"), false);
 });
 
-test("a page that is no window of Luke's is refused full screen and the microphone alike", () => {
+test("a page that is no window of Vespin's is refused full screen and the microphone alike", () => {
   const { asked, checked } = grantedSession();
   assert.equal(asked(foreign, "fullscreen"), false);
   assert.equal(asked(foreign, "media", { mediaTypes: ["audio"] }), false);

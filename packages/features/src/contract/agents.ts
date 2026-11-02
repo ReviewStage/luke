@@ -12,10 +12,7 @@
  * agent rather than a task (`POST /api/agents/{id}/agents`), so an agent with
  * no task is continued and forked as one on a task is; its body is a Start's,
  * whose `from` names the path's agent. A delete (`DELETE /api/agents/{id}`)
- * takes the agent for good, as a task's delete takes a task. The asking
- * member's operator is ensured by its workspace
- * (`PUT /api/workspaces/{id}/operator`), since a member holds one there and
- * names it by no id before it stands. An agent with no task is started in
+ * takes the agent for good, as a task's delete takes a task. An agent with no task is started in
  * its workspace (`POST /api/workspaces/{id}/agents`), its body a Start's
  * with the repository it works in, where it works in one. Outputs are the
  * wire schemas flipped (`packages/service/src/orpc/base.ts`).
@@ -42,8 +39,6 @@ import {
   agentStartRequestFields,
   agentStartRequestSchema,
   MAXIMUM_START_BODY_BYTES,
-  operatorEnsureAnswerSchema,
-  operatorEnsureRequestSchema,
   startBrief,
 } from "../agent-wire.js";
 import { githubRepositoryFullNameSchema } from "../github-repositories-wire.js";
@@ -181,18 +176,6 @@ export const agentsContract = {
     )
     .input(exactBodyInput(idParams, workspaceStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
-  /** The asking member's operator in the workspace the path names, ensured, or reset and ensured afresh. */
-  ensureOperator: hostedProcedure
-    .meta(bodyCap(CHOICE_BODY_BYTES))
-    .meta(
-      openapi({
-        method: HTTP_METHOD.PUT,
-        path: `${HOSTED_SERVICE_PATH.WORKSPACES}/{id}/operator`,
-        inputStructure: "detailed",
-      }),
-    )
-    .input(exactBodyInput(idParams, operatorEnsureRequestSchema))
-    .output(EffectSchema.flip(operatorEnsureAnswerSchema)),
   /** One agent as its own page. */
   read: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: AGENT_PATH }))
@@ -241,7 +224,7 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
-  /** Which of Luke's own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
+  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
   lukeTools: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/luke-tools` }))
     .input(idParams)

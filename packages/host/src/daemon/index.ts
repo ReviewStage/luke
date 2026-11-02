@@ -1,10 +1,9 @@
 /**
- * index.ts -- a host's door (`@luke/host/daemon`): what a host's daemon (`apps/host`) composes on every OS, each OS's description, the platform, the box's device record, its enroll and its connect with a code, and the daemon run on them, kept out of the main barrel and every door a browser loads.
+ * index.ts -- a host's door (`@luke/host/daemon`): what a host's daemon (`apps/host`) composes on every OS, each OS's description, the platform, the box's device record, its connect with a code, and the daemon run on them, kept out of the main barrel and every door a browser loads.
  */
 
 export { readHostDevice } from "../host-device-record.js";
-export { hostDaemon } from "./host-daemon.js";
-export { enrollHostDevice } from "./host-device.js";
+export { HOST_DAEMON_END, hostDaemon } from "./host-daemon.js";
 export {
   DARWIN_HOST,
   type HostRuntime,
@@ -17,5 +16,5 @@ export {
   HOST_CONNECT_OUTCOME,
   type HostPairingCode,
 } from "./host-pairing.js";
-export { type HostPlatformOptions, hostPlatform } from "./host-platform.js";
-export { hostSmolvm } from "./host-smolvm.js";
+export { hostPlatform } from "./host-platform.js";
+export type { HostReleases } from "./host-update.js";

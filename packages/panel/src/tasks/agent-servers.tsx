@@ -21,7 +21,7 @@ import {
   type RunOnMacReason,
   runOnMacDetail,
 } from "@luke/features/luke-tools-model";
-import { OPERATOR_NAME } from "@luke/features/model-label";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   AnchoredPopover,
@@ -37,7 +37,6 @@ import {
   GearIcon,
   GLYPH_INK,
   GlyphSlot,
-  IconButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
@@ -45,6 +44,7 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  type MenuPanel,
   MenuSection,
   NO_BACK_KEY,
   OneLine,
@@ -114,17 +114,19 @@ import { type LukeToolsDoor, type LukeToolsRead, useLukeTools } from "./agent-lu
 import { ServerCard } from "./server-card.js";
 
 /**
- * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
+ * agent-servers.tsx -- the MCP servers row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
  *
- * Between the model chip and the context ring stands the MCP mark. A press
- * opens a popover from the button's trailing edge, as the model menu and
- * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover` and
- * `PopoverPanel`, a menu's), drawn as the searchable menu is: a search field first, then, for a
- * started agent, Luke's own tools under Built in, then the servers under
+ * The agent box's + opens a menu whose MCP servers row opens the popover
+ * beside the menu as its submenu (`serversMenuPanel`, `@luke/ui`'s
+ * `MenuPanel`), the menu standing behind it; an automation's form opens the
+ * same popover from its field's chip, hung from the chip's trailing edge
+ * (`AgentServersButton`, `@luke/ui`'s `AnchoredPopover`). Either way it is
+ * a `PopoverPanel`, a menu's, drawn as the searchable menu is: a search field first, then, for a
+ * started agent, our own tools under Built in, then the servers under
  * Connected, which counts how many this agent has on, and Not connected
  * (`agent-servers-model.ts`), each section under `@luke/ui`'s `MenuSection`,
- * and Manage in Settings pinned at the foot. Luke's row is his face, his
- * name, how many of his tools the agent is offered (`agent-luke-tools.ts`),
+ * and Manage in Settings pinned at the foot. The app's row is its face, its
+ * name, how many of its tools the agent is offered (`agent-luke-tools.ts`),
  * `run_on_mac off` in the attention tone where it is, and Always on in a
  * switch's place, since his tools cannot be turned off; pressing it turns
  * the popover into his page, his tools under their groups, each its name and
@@ -161,11 +163,12 @@ import { ServerCard } from "./server-card.js";
  * the developer comes back from the browser, so the popover stays open
  * while the window is away. A draft agent keeps its choice until its first
  * message starts it. Escape goes back one level, from a tool's page or a
- * server's, and otherwise closes the popover, and stops there so the panel behind stays open; a
- * second press of the button, and focus leaving it for another part of the
- * window, close it too. The button, the back, a row's switch and its
- * Connect, Reopen, Cancel or Retry are `@luke/ui`'s, each pressed
- * without taking the focus from the field.
+ * server's, and otherwise closes the popover, or, standing as the + menu's
+ * submenu, goes back to its row, and stops there so the panel behind stays
+ * open; Manage in Settings closes the + menu with it. A second press of the
+ * chip, and focus leaving it for another part of the window, close it too.
+ * The chip, the back, a row's switch and its Connect, Reopen, Cancel or
+ * Retry are `@luke/ui`'s, each pressed without taking the focus from the field.
  */
 
 /** The servers an agent is handed, as the button changes them. */
@@ -176,7 +179,7 @@ export interface AgentServersControl {
   readonly onSwitch: (next: readonly string[]) => void;
   /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
-  /** The started agent whose own tools, Luke's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
+  /** The started agent whose own tools, the app's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
   readonly luke?: LukeToolsDoor | undefined;
 }
 
@@ -206,6 +209,9 @@ const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
 export const SERVER_PAGE_HEAD_CLASS =
   "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--luke-fold:folded]";
 
+/** What the + menu's row that opens the popover is named. */
+const SERVERS_ROW = "MCP servers";
+
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
@@ -224,19 +230,19 @@ const PAGE = {
   NONE: "No tools match",
 } as const;
 
-/** What Luke's own row and pages say. */
+/** What the app's own row and pages say. */
 const LUKE_WORDS = {
   SECTION: "Built in",
   ALWAYS_ON: "Always on",
   ON: "On",
   OFF: "Off",
-  READ_FAILED: `${OPERATOR_NAME}'s tools could not be read`,
-  TOOLS: `${OPERATOR_NAME}'s tools`,
-  READING: `Reading ${OPERATOR_NAME}'s tools…`,
+  READ_FAILED: `${PRODUCT_NAME}'s tools could not be read`,
+  TOOLS: `${PRODUCT_NAME}'s tools`,
+  READING: `Reading ${PRODUCT_NAME}'s tools…`,
   RUN_ON_MAC_OFF: `${AGENT_TOOL.RUN_ON_MAC} off`,
 } as const;
 
-/** Where the home's highlight stands while Luke's row heads it: before every server's row. */
+/** Where the home's highlight stands while the app's row heads it: before every server's row. */
 const LUKE_PICK = 0;
 
 /** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
@@ -298,7 +304,7 @@ function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
  * The hint over a row's problem: its whole words where the row cut them,
  * and where the server or the sign-in said words of its own, those after
  * ours, quoted and named, whether cut or not. Note that the row's one line
- * holds our sentence alone, because their words are no sentence of Luke's.
+ * holds our sentence alone, because their words are no sentence of ours.
  */
 function problemHint(problem: string, said: string | undefined): OneLineHint {
   if (said === undefined) return wholeWordsHint(problem);
@@ -399,7 +405,7 @@ interface PageKeys {
 }
 
 /**
- * What a key in a page's field does, a server's or Luke's: Left or
+ * What a key in a page's field does, a server's or the app's: Left or
  * Backspace on an empty filter goes back, the arrows step the highlight,
  * and Enter, or Right with the caret at the end, opens the highlighted row.
  */
@@ -463,7 +469,7 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
   );
 }
 
-/** Luke's face, at a provider mark's seat. */
+/** The app's face, at a provider mark's seat. */
 function LukeMark(): React.JSX.Element {
   return (
     <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
@@ -472,7 +478,7 @@ function LukeMark(): React.JSX.Element {
   );
 }
 
-/** What stands at the end of Luke's row and his page's head in a switch's place: his tools cannot be turned off. */
+/** What stands at the end of the app's row and its page's head in a switch's place: its tools cannot be turned off. */
 function AlwaysOn(): React.JSX.Element {
   return (
     <span className={SERVER_END_CLASS}>
@@ -481,11 +487,11 @@ function AlwaysOn(): React.JSX.Element {
   );
 }
 
-/** What Luke's row says between his face and its end: his name, how many tools he offers once read, and whether `run_on_mac` is off. */
+/** What the app's row says between its face and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
 function LukeRowWords({ luke }: { luke: LukeToolsRead }): React.JSX.Element {
   return (
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
-      <ServerName name={OPERATOR_NAME} />
+      <ServerName name={PRODUCT_NAME} />
       {luke.answer !== undefined ? (
         <span className={SERVER_COUNT_CLASS}>{toolsCount(luke.answer.tools.length)}</span>
       ) : null}
@@ -517,15 +523,15 @@ function RunOnMacBadge({ luke }: { luke: LukeToolsRead }): React.JSX.Element | n
   return <Badge tone={STATUS_TONE.COMPLETE}>{LUKE_WORDS.ON}</Badge>;
 }
 
-/** Whether a row of Luke's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
+/** Whether a row of the app's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
 function opensLukeTool(tool: LukeToolRow): boolean {
   return tool.name === AGENT_TOOL.RUN_ON_MAC;
 }
 
-/** Whether a search finds Luke: by his name, or by a tool's name or what it does. */
+/** Whether a search finds the app's row: by its name, or by a tool's name or what it does. */
 function lukeFound(names: readonly string[], tokens: readonly string[]): boolean {
   return (
-    matchesTokens([OPERATOR_NAME], tokens) ||
+    matchesTokens([PRODUCT_NAME], tokens) ||
     names.some((name) => matchesTokens([name, lukeToolSummary(name) ?? ""], tokens))
   );
 }
@@ -559,6 +565,8 @@ function ServersPopover({
   servers,
   statuses,
   onClose,
+  onBack = onClose,
+  takesFocus = true,
   onLeave,
   onExited,
 }: {
@@ -567,8 +575,12 @@ function ServersPopover({
   id: string;
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
-  /** Closes the popover and hands focus back to the button. */
+  /** Closes the popover, and the menu it stands beside, handing focus back to what opened it. */
   onClose: () => void;
+  /** Escape on the home: back to the menu row that opened it, where it stands as a submenu; the close otherwise. */
+  onBack?: (() => void) | undefined;
+  /** Whether its field takes the focus as it opens: not where the pointer resting on the + menu's row opened it, which leaves the keyboard in the menu until the pointer arrives. */
+  takesFocus?: boolean | undefined;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
   onExited: () => void;
@@ -596,7 +608,7 @@ function ServersPopover({
   const [lukeFilter, setLukeFilter] = useState("");
   const [lukeHighlight, setLukeHighlight] = useState(0);
 
-  // Luke's page stands only while the popover draws an agent's; his tool's page only over his.
+  // The app's page stands only while the popover draws an agent's; its tool's page only over its.
   const lukeNames = luke.answer?.tools ?? [];
   const onLuke = servers.luke !== undefined && lukeOpen;
   const onRunOnMac = onLuke && lukeTool === AGENT_TOOL.RUN_ON_MAC;
@@ -631,7 +643,7 @@ function ServersPopover({
     ...groups.flatMap((group) => group.rows).filter((row) => row.kind !== SERVER_ROW.QUIET),
     ...found.tools,
   ].map((each) => ("tool" in each ? each : { row: each }));
-  // Luke's row heads the home's picks while it stands: for an agent, and found by the search.
+  // The app's row heads the home's picks while it stands: for an agent, and found by the search.
   const homeTokens = searchTokens(query);
   const lukeShown = servers.luke !== undefined && lukeFound(lukeNames, homeTokens);
   const lukeOffset = lukeShown ? 1 : 0;
@@ -644,12 +656,17 @@ function ServersPopover({
     ? query
     : "";
 
-  // The field takes focus as the popover opens and as any page with one is
-  // drawn, and a tool's page its body, so the keys and focus leaving it are heard.
+  // The field takes focus as the popover opens, unless its owner leaves the
+  // keyboard where it was, and as any page with one is drawn, and a tool's
+  // page its body, so the keys and focus leaving it are heard.
+  const opening = useRef(true);
   useEffect(() => {
+    const first = opening.current;
+    opening.current = false;
+    if (first && !takesFocus) return;
     if (tool !== undefined || onRunOnMac) toolBody.current?.focus({ preventScroll: true });
     else field.current?.focus();
-  }, [page?.connection, tool, onLuke, onRunOnMac]);
+  }, [page?.connection, tool, onLuke, onRunOnMac, takesFocus]);
 
   useLayoutEffect(() => {
     if (tool !== undefined || onRunOnMac) return;
@@ -720,7 +737,7 @@ function ServersPopover({
     setLukeTool(name);
   };
 
-  /** Back from a tool's page to Luke's, the filter and the highlight as they were. */
+  /** Back from a tool's page to the app's, the filter and the highlight as they were. */
   const closeLukeTool = () => setLukeTool(undefined);
 
   /**
@@ -815,7 +832,7 @@ function ServersPopover({
     else if (onLuke) backFromLuke();
     else if (tool !== undefined) closeTool();
     else if (page !== undefined) back();
-    else onClose();
+    else onBack();
   };
 
   /** A row's button while its server waits on an act: busy if it started that act, off if the other did. */
@@ -902,7 +919,7 @@ function ServersPopover({
     }
   };
 
-  /** A row's place among the home's picks, after Luke's where it stands, which names its id and its highlight; a quiet row is none. */
+  /** A row's place among the home's picks, after the app's where it stands, which names its id and its highlight; a quiet row is none. */
   const pickIndex = (row: ServerRow, tool?: IntegrationTool) => {
     const index = picks.findIndex((pick) => pick.row === row && pick.tool === tool);
     return index < 0 ? index : index + lukeOffset;
@@ -990,7 +1007,7 @@ function ServersPopover({
       onPress: () => open(row, query),
     });
 
-  /** Luke's own row, heading the home: his face, his name, his count, `run_on_mac` where it is off, and Always on, opening his page. */
+  /** The app's own row, heading the home: its face, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
   const lukeRow = (
     <RowHighlight.Provider value={at === LUKE_PICK ? undefined : () => setHighlight(LUKE_PICK)}>
       <ListRow
@@ -1003,7 +1020,7 @@ function ServersPopover({
         keepFocus
         tabbable={false}
         onPress={() => openLuke(lukeSearch)}
-        hint={{ Hint: PointerHighlight, label: OPERATOR_NAME }}
+        hint={{ Hint: PointerHighlight, label: PRODUCT_NAME }}
       />
     </RowHighlight.Provider>
   );
@@ -1118,7 +1135,7 @@ function ServersPopover({
     );
   };
 
-  /** One of Luke's tools on his page: its name in mono and what it does, `run_on_mac` with whether it is on and, where it is off, why. */
+  /** One of the app's tools on its page: its name in mono and what it does, `run_on_mac` with whether it is on and, where it is off, why. */
   const lukeToolRow = (shown: LukeToolRow) => {
     const index = lukeRows.indexOf(shown);
     const runOnMac = shown.name === AGENT_TOOL.RUN_ON_MAC;
@@ -1158,7 +1175,7 @@ function ServersPopover({
     );
   };
 
-  /** Luke's page in the popover's place: back, his face and name, his count, Always on, a filter, and his tools under their groups. */
+  /** The app's page in the popover's place: back, its face and name, its count, Always on, a filter, and its tools under their groups. */
   const lukePage = (
     <>
       <div className={SERVER_PAGE_HEAD_CLASS}>
@@ -1169,7 +1186,7 @@ function ServersPopover({
           onBack={backFromLuke}
         />
         <LukeMark />
-        <ServerPageTitle name={OPERATOR_NAME} />
+        <ServerPageTitle name={PRODUCT_NAME} />
         {luke.answer !== undefined ? (
           <span className={SERVER_COUNT_CLASS}>{toolsCount(lukeNames.length)}</span>
         ) : null}
@@ -1210,7 +1227,7 @@ function ServersPopover({
     </>
   );
 
-  /** `run_on_mac`'s page over Luke's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
+  /** `run_on_mac`'s page over the app's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
   const runOnMacPage = (reason: RunOnMacReason | undefined) => {
     const detail = reason === undefined ? undefined : runOnMacDetail(reason, luke.answer?.runOnMac);
     return (
@@ -1306,6 +1323,7 @@ function ServersPopover({
                 ? `${page.name} tools`
                 : SERVERS_LABEL
       }
+      takesFocus={takesFocus}
       onDismiss={dismiss}
       onLeave={onLeave}
       onExited={onExited}
@@ -1340,29 +1358,75 @@ function ServersPopover({
   );
 }
 
+/** The popover as a menu's submenu, drawn while it stands and gone at once as it goes back. */
+function ServersMenuPanel({
+  servers,
+  statuses,
+  entered,
+  onBack,
+  onClose,
+}: {
+  servers: AgentServersControl;
+  statuses: IntegrationStatuses;
+  /** Whether a press or a key opened it, which takes the keyboard into its field. */
+  entered: boolean;
+  onBack: () => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const id = useId();
+  // Note that focus leaving the popover is the menu's to hear, which closes unless it went to the menu itself.
+  return (
+    <ServersPopover
+      open
+      id={id}
+      servers={servers}
+      statuses={statuses}
+      onClose={onClose}
+      onBack={onBack}
+      takesFocus={entered}
+      onLeave={() => undefined}
+      onExited={() => undefined}
+    />
+  );
+}
+
+/**
+ * The + menu's MCP servers row, which opens the popover beside the menu as
+ * its submenu: the same popover the chip hangs, Escape on its home going
+ * back to the row.
+ */
+export function serversMenuPanel(
+  servers: AgentServersControl,
+  statuses: IntegrationStatuses,
+): MenuPanel {
+  return {
+    label: SERVERS_ROW,
+    icon: <McpIcon />,
+    panel: ({ back, close, entered }) => (
+      <ServersMenuPanel
+        servers={servers}
+        statuses={statuses}
+        entered={entered}
+        onBack={back}
+        onClose={close}
+      />
+    ),
+  };
+}
+
+/** The popover hung from a form's field chip, as an automation's servers are picked. */
 export function AgentServersButton({
   servers,
   statuses,
   face,
-  open: heldOpen,
-  onOpenChange,
 }: {
   servers: AgentServersControl;
-  /** Where every connection stands, as the composer around the button reads it. */
+  /** Where every connection stands, as the form around the chip reads it. */
   statuses: IntegrationStatuses;
-  /**
-   * What a form row's button shows in place of the MCP mark, which draws it
-   * as a Settings picker's field chip, chevron and all; the composer's
-   * button leaves it out.
-   */
-  face?: React.ReactNode;
-  /** Whether the popover stands, where the owner holds it, as the composer does so its ⋯ menu can open it; the button's own otherwise. */
-  open?: boolean | undefined;
-  onOpenChange?: ((open: boolean) => void) | undefined;
+  /** What the chip shows, as a Settings picker's field chip draws it, chevron and all. */
+  face: React.ReactNode;
 }): React.JSX.Element {
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = heldOpen ?? ownOpen;
-  const setOpen = onOpenChange ?? setOwnOpen;
+  const [open, setOpen] = useState(false);
   const popoverId = useId();
   const labelId = useId();
   const faceId = useId();
@@ -1372,46 +1436,32 @@ export function AgentServersButton({
   const [drawn, setDrawn] = useState(open);
   if (open && !drawn) setDrawn(true);
 
-  // Note that we hand focus back to the button, as a menu returns it to its
+  // Note that we hand focus back to the chip, as a menu returns it to its
   // trigger, because closing takes the focused popover away with it.
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
   };
-  const press = {
-    ref: trigger,
-    "aria-haspopup": "dialog",
-    "aria-expanded": open,
-    "aria-controls": open ? popoverId : undefined,
-    onClick: () => setOpen(!open),
-  } as const;
 
   return (
     <div className="agent-servers relative flex min-w-0" ref={root}>
-      {face === undefined ? (
-        // Note that the box, not the button, wears the class the composer's ⋯ finds the press by (`agent-composer.tsx`).
-        <span className="agent-servers-button flex">
-          <Tooltip label={SERVERS_LABEL}>
-            <IconButton icon={<McpIcon />} label={SERVERS_LABEL} {...press} />
-          </Tooltip>
-        </span>
-      ) : (
-        // A face is a form's field, at least the column its pickers share.
-        <>
-          <VisuallyHidden id={labelId}>{SERVERS_LABEL}</VisuallyHidden>
-          {/* Note that the chip is named by its field's name and then the words its face draws ("None", "+2"), through its own id, because a name that left them out would not match the screen. */}
-          <Chip
-            look={CHIP_LOOK.FIELD}
-            width={CHIP_WIDTH.MIN_FIELD}
-            chevron
-            id={faceId}
-            aria-labelledby={`${labelId} ${faceId}`}
-            {...press}
-          >
-            {face}
-          </Chip>
-        </>
-      )}
+      {/* A face is a form's field, at least the column its pickers share. */}
+      <VisuallyHidden id={labelId}>{SERVERS_LABEL}</VisuallyHidden>
+      {/* Note that the chip is named by its field's name and then the words its face draws ("None", "+2"), through its own id, because a name that left them out would not match the screen. */}
+      <Chip
+        ref={trigger}
+        look={CHIP_LOOK.FIELD}
+        width={CHIP_WIDTH.MIN_FIELD}
+        chevron
+        id={faceId}
+        aria-labelledby={`${labelId} ${faceId}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? popoverId : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        {face}
+      </Chip>
       <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
         {drawn ? (
           <ServersPopover

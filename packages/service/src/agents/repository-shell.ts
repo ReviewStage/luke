@@ -13,7 +13,7 @@ import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-c
 /**
  * repository-shell.ts -- an agent's checkout of the task's GitHub repository in its session's sandbox: the clone, its deepening, and the commit identity set in it.
  *
- * A checkout reads the repository through the Luke GitHub App, or the
+ * A checkout reads the repository through our GitHub App, or the
  * member's own token: the token is set as a header at the sandbox's
  * firewall for the clone and withdrawn after it. It never enters the
  * sandbox's filesystem or environment, so no command, and no output of one,
@@ -428,7 +428,7 @@ export const markDeepened = /* @__PURE__ */ Effect.fn("web/markDeepened")(functi
 /**
  * The commit identity set in the standing checkout's own config, never the
  * sandbox's global one, by the step a device's checkout sets it with too
- * (`CHECKOUT_IDENTITY_SCRIPT`): the developer's GitHub account or the Luke
+ * (`CHECKOUT_IDENTITY_SCRIPT`): the developer's GitHub account or our
  * GitHub App's bot, as the coding agent's checkout settled it
  * (`coder-host/checkout.ts`), and the agent's instructions tell it to leave
  * it alone.

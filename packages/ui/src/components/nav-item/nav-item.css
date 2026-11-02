@@ -77,6 +77,12 @@
     gap: var(--luke-space-6);
   }
 
+  /* The count gives way to the actions on their own fade, so the two swap
+     as one gesture rather than one snapping as the other fades. */
+  .luke-nav-item-rest {
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
   .luke-nav-item-count {
     color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
@@ -92,12 +98,6 @@
      rows it counts are (`tokens/status-tone.css`); a tally keeps the muted ink. */
   .luke-nav-item-count[data-tone]:not([data-tone="neutral"]) {
     color: var(--luke-tone-ink);
-  }
-
-  /* A count of what the reader has yet to look at or finish is in the unread
-     dot's ink (`unread-mark.tsx`), which no status tone names. */
-  .luke-nav-item-count[data-tone="unread"] {
-    --luke-tone-ink: var(--luke-color-accent-text);
   }
 
   .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {

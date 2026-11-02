@@ -8,9 +8,9 @@ import { type MarkProvider, PROVIDER_MARK_SIZE, ProviderMark } from "../../marks
 void React;
 
 /**
- * auth-mark.tsx -- the artwork an auth page opens with: one provider's mark, or Luke's, in a ring, with a badge on its corner once the flow has ended.
+ * auth-mark.tsx -- the artwork an auth page opens with: one provider's mark, or the app's, in a ring, with a badge on its corner once the flow has ended.
  *
- * The ring holds the provider the page is about, or Luke's own face where it
+ * The ring holds the provider the page is about, or the app's own face where it
  * names none. A page that has settled wears a check, and one that failed a
  * cross in the danger red every failure is drawn in, each cut out of the card
  * it stands on; a page still on
@@ -39,12 +39,12 @@ const BADGE_GLYPH = {
   [LANDING_TONE.DANGER]: CloseIcon,
 } as const satisfies Record<LandingTone, () => React.JSX.Element>;
 
-/** `provider`'s mark, or Luke's where it is left out, in a ring, badged where `tone` says how the flow ended. */
+/** `provider`'s mark, or the app's where it is left out, in a ring, badged where `tone` says how the flow ended. */
 export function AuthMark({
   provider,
   tone,
 }: {
-  /** The provider the page is about; Luke's own face where it names none. */
+  /** The provider the page is about; the app's own face where it names none. */
   provider?: MarkProvider | undefined;
   /** How the flow ended; no badge while it is still on its way. */
   tone?: LandingTone | undefined;

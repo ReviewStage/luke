@@ -122,16 +122,18 @@ test("a pick on Parent sets the task's parent to it, and on Sub-task sets its pa
   ]);
 });
 
-test("on Sub-task a task above this one or in another repository says why and takes no pick, and New sub-task opens the composer", () => {
-  let composed = 0;
+/** The pinned New task row, which opens New task related to this task. */
+function newTaskRow(): HTMLElement {
+  return (
+    [...document.querySelectorAll<HTMLElement>('[data-steered="true"]')].find(
+      (each) => each.textContent === "New task",
+    ) ?? assert.fail("no New task row")
+  );
+}
+
+test("on Sub-task a task above this one or in another repository says why and takes no pick", () => {
   const parents: string[] = [];
-  const ask = head({
-    ...DOOR,
-    onSetParent: (taskId) => parents.push(taskId),
-    onNewSubTask: () => {
-      composed += 1;
-    },
-  });
+  const ask = head({ ...DOOR, onSetParent: (taskId) => parents.push(taskId) });
 
   ask({ kind: TASK_RELATION_KIND.SUB_TASK, request: 1 });
 
@@ -140,12 +142,22 @@ test("on Sub-task a task above this one or in another repository says why and ta
   act(() => row("Ship login").click());
   act(() => row("API rate limit").click());
   assert.deepEqual(parents, []);
-  const create =
-    [...document.querySelectorAll<HTMLElement>('[data-steered="true"]')].find(
-      (each) => each.textContent === "New sub-task",
-    ) ?? assert.fail("no New sub-task row");
-  act(() => create.click());
-  assert.equal(composed, 1);
+});
+
+test("New task opens New task from the new task's side: on Sub-task as a sub-task of this task, on Blocked by as one blocking it", () => {
+  const asked: string[] = [];
+  const ask = head({
+    ...DOOR,
+    onSetParent: () => undefined,
+    onNewTask: (kind) => asked.push(kind),
+  });
+
+  ask({ kind: TASK_RELATION_KIND.SUB_TASK, request: 1 });
+  act(() => newTaskRow().click());
+  ask({ kind: TASK_RELATION_KIND.BLOCKED_BY, request: 2 });
+  act(() => newTaskRow().click());
+
+  assert.deepEqual(asked, ["sub-task-of", "blocks"]);
 });
 
 test("a task from a service before statuses, which draws no chips, still opens the add menu on an ask", () => {

@@ -1,7 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { AgentKind } from "@luke/features/agent-wire";
 import type { WorkspaceChannels } from "@luke/features/channel-live";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
@@ -39,7 +38,7 @@ export const RUN_PROFILE = {
   TASKS_COMMENTS: "tasks-comments",
   /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
   INBOX: "inbox",
-  /** Channels on, signed in as a member of a synthetic Luke workspace whose channels hold threads of every kind (`channels-fixture.ts`). */
+  /** Channels on, signed in as a member of a synthetic workspace whose channels hold threads of every kind (`channels-fixture.ts`). */
   CHANNELS: "channels",
   /** The same workspace's channels, read as the member's teammate. */
   CHANNELS_TEAMMATE: "channels-teammate",
@@ -184,14 +183,11 @@ export interface AppInboxTaskHolding {
  * the developer: the item as a task's are, the agent as its row names it
  * now, and the automation and repository standing where a task would; the
  * automation, and its name, null where the reader may not read it or none
- * stands, and the repository null for an agent that works in none, the
- * member's operator above all.
+ * stands, and the repository null for an agent that works in none.
  */
 export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   /** When the item last changed, by the service's clock, which a follow of its agent's inbox is current once it holds. */
   updatedAt: number;
-  /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
-  agentKind?: AgentKind;
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;
@@ -221,7 +217,6 @@ interface AppInboxAutomationHolding {
 export type AppInboxAgentHolding = Pick<
   AppInboxTasklessItem,
   | "agentId"
-  | "agentKind"
   | "agentTitle"
   | "agentModel"
   | "automationId"
@@ -353,8 +348,8 @@ interface AppMacCommandsSlice {
 }
 
 /**
- * What macOS answered the last notification Luke posted, which is the only
- * word Electron gives of notifications being off for Luke in System Settings:
+ * What macOS answered the last notification the app posted, which is the only
+ * word Electron gives of notifications being off for the app in System Settings:
  * unknown until one is shown or refused, and kept for the launch alone.
  */
 interface AppNotificationsSlice {

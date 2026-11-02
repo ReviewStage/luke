@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import type { pageFindAnswerSchema } from "@luke/features/page-find";
 import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageLine } from "@luke/features/page-wire";
+import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { HandTabActionsContext, type TabActionGroups } from "../desktop/strip-tabs.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -27,6 +29,7 @@ import { PagePane, type ReadPageSource } from "./page-pane.js";
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const AGENT = "0c4e2b1d-9f3a-4e6b-8d7c-1a2b3c4d5e6f";
 
 const FUNNEL: PageLine = {
   id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
@@ -53,8 +56,13 @@ function sourceOf(version: number): CodeLines {
 
 const readSource: ReadPageSource = (version) => Promise.resolve({ lines: sourceOf(version) });
 
-/** Mounts the pane over the page as the task lists it, answering what it draws and a way to list it again. */
-function mount(page: PageLine, read: ReadPageSource = readSource, findActive = true) {
+/** Mounts the pane over the page as the task lists it, its links written under `acme`, answering what it draws and a way to list it again. */
+function mount(
+  page: PageLine,
+  read: ReadPageSource = readSource,
+  findActive = true,
+  place: PagePlace = { taskId: TASK },
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -62,22 +70,26 @@ function mount(page: PageLine, read: ReadPageSource = readSource, findActive = t
   // What the tab hands the strip's one ⋯, as its groups' names.
   let held: TabActionGroups | undefined;
   const handed = () => (held ?? []).map((group) => group.map((each) => each.label));
+  const chooseHanded = (label: string) => {
+    const item = held?.flat().find((each) => each.label === label);
+    assert.ok(item !== undefined && "onSelect" in item, `the ⋯ is handed ${label}`);
+    act(() => item.onSelect());
+  };
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
         createElement(
-          HandTabActionsContext.Provider,
-          {
-            value: (actions) => {
-              held = actions;
+          LinkWorkspaceProvider,
+          { value: "acme" },
+          createElement(
+            HandTabActionsContext.Provider,
+            {
+              value: (actions) => {
+                held = actions;
+              },
             },
-          },
-          createElement(PagePane, {
-            place: { taskId: TASK },
-            page: listed,
-            readSource: read,
-            findActive,
-          }),
+            createElement(PagePane, { place, page: listed, readSource: read, findActive }),
+          ),
         ),
       ),
     );
@@ -97,7 +109,7 @@ function mount(page: PageLine, read: ReadPageSource = readSource, findActive = t
     await wholeFileDrawn(container);
     return wholeFileLines(container);
   };
-  return { container, frame, press, render, sourceLines, handed };
+  return { container, frame, press, render, sourceLines, handed, chooseHanded };
 }
 
 const versionUrl = (version: number) => pageFrameUrl({ taskId: TASK, pageId: FUNNEL.id, version });
@@ -178,7 +190,7 @@ test("the page's Reload hangs a hint in the words it is named by", () => {
 
 test("over the source, View settings offers the settings its lines follow, and the tab's one ⋯ is handed Copy source before Reload page", async () => {
   const { container, press, handed } = mount(FUNNEL);
-  assert.deepEqual(handed(), [["Reload page"]]);
+  assert.deepEqual(handed(), [["Open in browser"], ["Reload page"]]);
   assert.equal(container.querySelector('button[aria-label="View options"]'), null);
 
   await press("View source");
@@ -207,8 +219,24 @@ test("over the source, View settings offers the settings its lines follow, and t
     null,
     "the bar draws no ⋯ of its own beside the strip's",
   );
-  assert.deepEqual(handed(), [["Copy source"], ["Reload page"]]);
+  assert.deepEqual(handed(), [["Open in browser"], ["Copy source"], ["Reload page"]]);
 });
+
+test.each([
+  { holder: "a task's page", place: { taskId: TASK }, path: `plan/${TASK}` },
+  { holder: "a page of an agent on no task", place: { agentId: AGENT }, path: `agent/${AGENT}` },
+])(
+  "Open in browser on $holder opens its own Vespin link, flagged to stay on the web, never the address it is framed from",
+  ({ place, path }) => {
+    const opened: string[] = [];
+    fakeAppPlatform({ pageFrameUrl, openWeb: (url) => opened.push(url) });
+    const { chooseHanded } = mount(FUNNEL, readSource, true, place);
+
+    chooseHanded("Open in browser");
+
+    assert.deepEqual(opened, [`${LINK_ORIGIN}/acme/${path}/page/${FUNNEL.id}?stay=web`]);
+  },
+);
 
 test("the source stays shown while the versions are stepped, each version's own", async () => {
   const { press, sourceLines, container } = mount(FUNNEL);

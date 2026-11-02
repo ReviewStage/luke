@@ -332,6 +332,8 @@ interface Answers {
   readonly viewed?: readonly string[];
   /** The head GitHub holds as each read of the overview and the files asks; theirs where none is named, the overview's merge box saying none. */
   readonly head?: () => string;
+  /** Whether the files' read names no head, as where the service could not read the pull request's commits. */
+  readonly filesHeadless?: boolean;
 }
 
 /** The agent's control, its overview, files, and chapters answering as given. */
@@ -381,7 +383,12 @@ function controlAnswering(answers: Answers): AgentsControl {
       // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
       const files = head === HEAD ? FILES : [];
       return Promise.resolve({
-        pullRequest: { url: PAGE, headSha: head, truncated: false, files },
+        pullRequest: {
+          url: PAGE,
+          ...(answers.filesHeadless === true ? {} : { headSha: head }),
+          truncated: false,
+          files,
+        },
       });
     },
     readPullRequestViewed: () =>
@@ -421,11 +428,14 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Draws the agent's tab on its Chapters view, its reads landed. */
-async function draw(control: AgentsControl): Promise<HTMLElement> {
+/** Draws the agent's tab on its Chapters view, or the view given, its reads landed. */
+async function draw(
+  control: AgentsControl,
+  first: PullRequestView = PULL_REQUEST_VIEW.CHAPTERS,
+): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  const tab = createElement(Switching, { control, first: PULL_REQUEST_VIEW.CHAPTERS });
+  const tab = createElement(Switching, { control, first });
   act(() =>
     root?.render(
       onRegistry(
@@ -457,6 +467,15 @@ function tabNames(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[role="tab"]')].map((each) => each.textContent ?? "");
 }
 
+/** What the Chapters tab says, its glyph's words among them. */
+function chaptersTabWords(tab: HTMLElement): string {
+  const chapters =
+    [...tab.querySelectorAll('[role="tab"]')].find((each) =>
+      each.textContent?.startsWith("Chapters"),
+    ) ?? assert.fail("the Chapters tab stands");
+  return drawnWords(chapters);
+}
+
 /** The button whose words are as given, where one stands outside a hidden view. */
 function button(container: HTMLElement, words: string): HTMLButtonElement {
   return (
@@ -466,11 +485,29 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
   );
 }
 
-/** The rail's rows, as a reader hears each. */
+/** The rail's rows' presses, in order. */
+function railPresses(container: Element | null): HTMLButtonElement[] {
+  return [...(container?.querySelectorAll<HTMLButtonElement>(".luke-list-row-main") ?? [])];
+}
+
+/** The rail's rows, as a reader hears each's title: its place, its title, and its risk. */
 function railRows(tab: HTMLElement): string[] {
-  return [...tab.querySelectorAll(".chapter-rail [aria-label]")]
-    .filter((each) => each.tagName === "BUTTON")
-    .map((each) => each.getAttribute("aria-label") ?? "");
+  return railPresses(tab.querySelector(".chapter-rail")).map(
+    (each) => each.querySelector(".luke-list-row-title")?.textContent ?? "",
+  );
+}
+
+/** A rail row's press, by its place among them. */
+function railRow(container: Element | null, at: number): HTMLButtonElement {
+  return railPresses(container)[at] ?? assert.fail(`row ${at + 1} stands`);
+}
+
+/** A key change's lines, by the press a reader hears. */
+function linesPress(tab: HTMLElement, label: string): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(`button[aria-label="Show ${label} in the diff"]`) ??
+    assert.fail(`a press on ${label} stands`)
+  );
 }
 
 /** What a row draws, word by word, a glyph by the words it carries. */
@@ -529,14 +566,7 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
   );
   act(() => button(tab, "Generate chapters").click());
   await settle();
-  assert.match(
-    tab.querySelector(".chapters-generating-line")?.textContent ?? "",
-    /^Generating chapters/u,
-  );
-  assert.ok(
-    tab.querySelectorAll('[aria-busy="true"] nav[aria-label] li .luke-skeleton').length > 0,
-    "the rows' blocks stand in the rail's own pane, where the chapters' rows land",
-  );
+  assert.match(tab.textContent ?? "", /Generating chapters/u);
 
   generated.resolve(answering(ready()));
   await settle();
@@ -571,10 +601,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
   );
   assert.ok(listed()[0]?.[1].includes("+B"), "the read's hunk is drawn");
   assert.ok(!listed()[0]?.[1].includes("+k"), "the write's hunk is not");
-  const sweepRow =
-    [...tab.querySelectorAll<HTMLButtonElement>(".chapter-rail button")].find((each) =>
-      each.getAttribute("aria-label")?.startsWith("2."),
-    ) ?? assert.fail("the sweep's row stands");
+  const sweepRow = railRow(tab.querySelector(".chapter-rail"), 1);
   assert.match(drawnWords(sweepRow), /threads 1$/u, "the thread on the write is the sweep's");
 
   act(() => sweepRow.click());
@@ -610,7 +637,7 @@ test("← and → step through the chapters, held at either end, and a key chang
   await settle();
   assert.equal(heading(tab), "Read the expiry");
 
-  act(() => button(tab, "src/store.ts · L1–2").click());
+  act(() => linesPress(tab, "src/store.ts · L1–2").click());
   await settle();
   assert.deepEqual(listReveals, ["src/store.ts:additions:1-2"]);
 });
@@ -641,9 +668,9 @@ test("a key change's press scrolls to its first lines in the chapter's file orde
   await settle();
   assert.equal(heading(tab), "Sweep what expired");
 
-  act(() => button(tab, "src/sweep.ts · L1").click());
+  act(() => linesPress(tab, "src/sweep.ts · L1").click());
   await settle();
-  act(() => button(tab, "src/store.ts · L5–6").click());
+  act(() => linesPress(tab, "src/store.ts · L5–6").click());
   await settle();
   assert.deepEqual(listReveals, ["src/sweep.ts:additions:1-1", STORE.path]);
 });
@@ -656,8 +683,10 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and �
     }),
   );
 
-  assert.match(railRows(tab)[0] ?? "", /, viewed$/u, "the read's one file is viewed");
-  assert.doesNotMatch(railRows(tab)[1] ?? "", /viewed/u, "the sweep's new file is not");
+  const rail = () => tab.querySelector(".chapter-rail");
+  assert.match(drawnWords(railRow(rail(), 0)), /viewed$/u, "the read's one file is viewed");
+  assert.equal(chaptersTabWords(tab), "Chapters 1/3 viewed", "the tab counts the chapters viewed");
+  assert.doesNotMatch(drawnWords(railRow(rail(), 1)), /viewed/u, "the sweep's new file is not");
 
   press(tab, { key: "ArrowRight" });
   const viewedBox = () =>
@@ -671,7 +700,8 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and �
   press(tab, { key: "V", shiftKey: true });
   await settle();
   assert.deepEqual(marked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: SWEEP.path }]);
-  assert.match(railRows(tab)[1] ?? "", /, viewed$/u);
+  assert.match(drawnWords(railRow(rail(), 1)), /viewed$/u);
+  assert.equal(chaptersTabWords(tab), "Chapters 2/3 viewed");
 
   const box =
     tab.querySelector<HTMLInputElement>('.chapter-viewed input[type="checkbox"]') ??
@@ -683,6 +713,33 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and �
     { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: SWEEP.path },
     { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: STORE.path },
   ]);
+});
+
+test("the Chapters tab says where the chapters stand before their view is opened: out of date under a clock once the pull request moved on from their head", async () => {
+  const tab = await draw(
+    controlAnswering({
+      head: () => HEAD,
+      readChapters: () => Promise.resolve(answering(ready(OLDER))),
+    }),
+    PULL_REQUEST_VIEW.CONVERSATION,
+  );
+
+  assert.equal(tab.querySelector(".chapters-view"), null, "the view was never opened");
+  assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
+});
+
+test("the Chapters tab counts none viewed where the files' read names no head, since the view takes the chapters as out of date then", async () => {
+  const tab = await draw(
+    controlAnswering({
+      head: () => HEAD,
+      filesHeadless: true,
+      readChapters: () => Promise.resolve(answering(ready())),
+      viewed: [STORE.path],
+    }),
+  );
+
+  assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
+  assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
 });
 
 /** The Chapters tab answering ready chapters, made by `model` for `headSha`. */
@@ -730,16 +787,18 @@ test("chapters made for an older head stand under a line saying new commits came
   assert.match(tab.textContent ?? "", /Is the expiry read in the member's time zone\?/u);
   assert.deepEqual(listed(), [], "no diff is drawn for the chapter");
   assert.match(tab.textContent ?? "", /Regenerate the chapters to see this chapter's changes\./u);
-  const sweepRow =
-    [...tab.querySelectorAll<HTMLButtonElement>(".chapter-rail button")].find((each) =>
-      each.getAttribute("aria-label")?.startsWith("2."),
-    ) ?? assert.fail("the sweep's row stands");
+  const sweepRow = railRow(tab.querySelector(".chapter-rail"), 1);
   assert.doesNotMatch(drawnWords(sweepRow), /threads|\+/u, "no lines or threads are counted");
   assert.equal(tab.querySelector(".chapter-viewed"), null, "no Viewed box stands");
   assert.equal(
-    [...tab.querySelectorAll("button")].some((each) => each.textContent === "src/store.ts · L1–2"),
-    false,
+    tab.querySelector('button[aria-label^="Show src/store.ts"]'),
+    null,
     "a key change's lines are named, not pressed",
+  );
+  assert.match(
+    tab.textContent ?? "",
+    /src\/store\.ts · L1–2/u,
+    "a key change's lines are named, its file and its lines apart",
   );
   act(() => button(tab, "Regenerate").click());
   await settle();
@@ -816,10 +875,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
       },
     }),
   );
-  assert.match(
-    elsewhere.querySelector(".chapters-generating-line")?.textContent ?? "",
-    /^Chapters are being generated/u,
-  );
+  assert.match(elsewhere.textContent ?? "", /Generating chapters/u);
   act(() => button(elsewhere, "Refresh").click());
   await settle();
   assert.equal(reads, 2);
@@ -863,9 +919,7 @@ test("Refresh on chapters someone else is making shows busy once the read has wa
   );
   const refresh = () => button(elsewhere, "Refresh");
   const busy = () =>
-    [...elsewhere.querySelectorAll<HTMLButtonElement>('button[aria-busy="true"]')].find(
-      (each) => each.closest(".chapters-generating-line") !== null,
-    );
+    elsewhere.querySelector<HTMLButtonElement>('button[aria-busy="true"]') ?? undefined;
   const ring = () => busy()?.querySelector(".luke-spinner-ring") != null;
   assert.equal(busy(), undefined);
 
@@ -947,10 +1001,7 @@ test("Escape in the rail floated over the chapter puts it away and gives the key
 test("a chapter chosen in the rail floated over the chapter takes the rail down", async () => {
   const tab = await narrowChapters();
   act(() => railToggle(tab).click());
-  const sweep =
-    [...(floatedRail(tab)?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((each) =>
-      each.getAttribute("aria-label")?.startsWith("2."),
-    ) ?? assert.fail("the sweep's row stands");
+  const sweep = railRow(floatedRail(tab) ?? null, 1);
   act(() => sweep.click());
   await settle();
   assert.equal(heading(tab), "Sweep what expired");

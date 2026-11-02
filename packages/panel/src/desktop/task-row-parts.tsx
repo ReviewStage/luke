@@ -281,7 +281,7 @@ export function WaitingBadge({ count }: { count: number }): React.JSX.Element | 
 }
 
 /**
- * Who made a task, by their face: the member's, or the square of Luke or the
+ * Who made a task, by their face: the member's, or the square of the app or the
  * agent that made it for them with the member's face on its corner, as every
  * task surface draws it. It hangs their card, and a press opens the member's
  * page where the window offers one, else the task, so it is never a press
@@ -297,7 +297,7 @@ export function CreatorFace({
   const creator = creatorActor(task, useMemberDirectory(), undefined);
   const maker = useTaskMaker(task);
   const shown = maker?.actor ?? creator;
-  // Note that the face opens the member it stands for, whoever made the task for them, since Luke and an agent have no page.
+  // Note that the face opens the member it stands for, whoever made the task for them, since the app and an agent have no page.
   const door = useActorDoor(creator);
   return (
     <Tooltip label={actorName(shown)} card={actorCard(shown)}>

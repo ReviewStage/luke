@@ -7,13 +7,14 @@
  * pending invitations, each with its accept link, `POST` makes one through
  * the plugin's `createInvitation`
  * (https://www.better-auth.com/docs/plugins/organization#send-invitation),
- * the owner alone inviting an admin, and `POST
+ * the owner alone inviting an admin, and emails its link to the invited
+ * address where the deployment names a sender (`invitation-mail.ts`), and `POST
  * /api/workspaces/invitations/cancel` cancels one through
  * `cancelInvitation`, answering those still pending. `GET
  * /api/workspaces/invitations/offer` answers one invitation as its
  * recipient is offered it (`invitation-offers.ts`): the workspace's name,
  * the role, and the inviter while they are still a member, or why there is
- * none to offer. Luke's own rules stand in front of the plugin's, which
+ * none to offer. Our own rules stand in front of the plugin's, which
  * checks the caller's role and membership again itself.
  *
  * The session is resolved before the input is read, by the middleware on
@@ -29,7 +30,7 @@ import {
   type WorkspaceInvitation,
 } from "@luke/features/workspace-invitation-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
@@ -37,11 +38,16 @@ import {
   type SessionUserIdResolver,
 } from "../http/http-effect.js";
 import { hosted, sessionMiddleware } from "../orpc/base.js";
+import { readAccountPerson } from "./account-person.js";
+import { InvitationMail } from "./invitation-mail.js";
 import { invitationOffer } from "./invitation-offers.js";
 import { managedWorkspace, pluginCallOrRefused } from "./workspace-access.js";
 
 /** The plugin's word for an invitation not yet accepted, rejected, or canceled. */
 const INVITATION_PENDING = "pending";
+
+/** Who an invitation's email says invited them where the inviter's account cannot be read. */
+const INVITER_UNKNOWN = "A teammate";
 
 export interface WorkspaceInvitationsProcedureSeams {
   /** The account the Better Auth session names, the Mac's or the browser's. */
@@ -57,7 +63,7 @@ function expiryOf(invitation: PluginInvitation): Date {
     : new Date(invitation.expiresAt);
 }
 
-/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of Luke's. */
+/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of ours. */
 function invitationRoleOf(role: string): WorkspaceInvitation["role"] | undefined {
   return Object.values(INVITATION_ROLE).find((one) => one === role);
 }
@@ -89,6 +95,31 @@ function pendingInvitations(
       ];
     });
 }
+
+/**
+ * The invitation made, emailed to its address from the deployment's sender
+ * (`invitation-mail.ts`), naming the inviter by their name, or their address
+ * where their account has none, as stage did. A runtime without a sender
+ * emails nothing, and an inviter whose row cannot be read is "A teammate",
+ * since the invitation already stands.
+ */
+const emailInvitation = Effect.fn("web/emailWorkspaceInvitation")(function* (
+  invitation: WorkspaceInvitation,
+  workspaceName: string,
+  inviterId: string,
+) {
+  const mail = yield* Effect.serviceOption(InvitationMail);
+  if (Option.isNone(mail)) return;
+  const inviter = yield* readAccountPerson(inviterId).pipe(Effect.orElseSucceed(() => undefined));
+  yield* mail.value.send({
+    email: invitation.email,
+    acceptUrl: invitation.acceptUrl,
+    workspaceName,
+    inviterLabel: inviter?.name.trim() || inviter?.email || INVITER_UNKNOWN,
+    role: invitation.role,
+    expiresAt: invitation.expiresAt,
+  });
+});
 
 /** The workspace invitations resource: the list, the make, and the cancel to an owner or an admin, and the offer to its recipient. */
 export function workspaceInvitationsProcedures(seams: WorkspaceInvitationsProcedureSeams) {
@@ -136,6 +167,7 @@ export function workspaceInvitationsProcedures(seams: WorkspaceInvitationsProced
         yield* Clock.currentTimeMillis,
       );
       if (invitation === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      yield* emailInvitation(invitation, workspace.name, context.userId);
       return { invitation };
     }),
     cancel: resource.cancel.effect(function* ({ input, context }) {

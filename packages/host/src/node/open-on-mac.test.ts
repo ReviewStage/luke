@@ -22,7 +22,7 @@ import {
 
 /**
  * Open on this Mac's script over real Git and bash, an origin on disk
- * standing in for GitHub: the first run clones it into Luke's own folder
+ * standing in for GitHub: the first run clones it into the app's own folder
  * and makes a worktree on the agent's branch, tracking GitHub's; a later run after the agent pushes more, or
  * force-pushes, brings the worktree to the branch's new head and keeps what
  * Git ignores there; a worktree with the developer's own changes, or
@@ -33,15 +33,15 @@ import {
  * with no command says where to set one; a branch GitHub
  * deleted once its pull request merged opens at that pull request's last
  * head; a worktree folder deleted by hand is made again; one an earlier
- * Luke kept under its application data is left there and said; two opens of
- * the shared clone at once each bring in their own branch, none taking the
- * lock from an open that took it after the holder it read let go; one waits on a
- * clone another holds while it lives, and takes the lock over once it is
- * gone; an open tidies the worktrees, this Luke's and an earlier one's,
- * whose branch is gone from GitHub, unless one is in use, was opened in the
- * last day, or holds the developer's own, and an earlier Luke's clone once
- * it holds none; and no two
- * branches share a worktree or reach outside its repository's folder.
+ * version of the app kept under its application data is left there and said;
+ * two opens of the shared clone at once each bring in their own branch, none
+ * taking the lock from an open that took it after the holder it read let go;
+ * one waits on a clone another holds while it lives, and takes the lock over
+ * once it is gone; an open tidies the worktrees, this version's and an earlier
+ * one's, whose branch is gone from GitHub, unless one is in use, was opened in
+ * the last day, or holds the developer's own, and an earlier version's clone
+ * once it holds none; and no two branches share a worktree or reach outside
+ * its repository's folder.
  */
 
 const GIT_ENVIRONMENT = {
@@ -62,7 +62,7 @@ function git(folder: string, args: readonly string[]): string {
   return execFileSync("git", args, { cwd: folder, env: GIT_ENVIRONMENT, encoding: "utf8" }).trim();
 }
 
-/** An origin with `main` and an agent's branch pushed to it, and the state root Luke keeps its clone in. */
+/** An origin with `main` and an agent's branch pushed to it, and the state root the app keeps its clone in. */
 async function fixture(t: Parameters<typeof temporaryDirectory>[0]) {
   const scratch = await temporaryDirectory(t, "luke-open-on-mac-");
   const origin = path.join(scratch, "origin");
@@ -107,7 +107,7 @@ function run(scratch: string, shell: string, script: string): string {
 }
 
 test(
-  "the first open clones into Luke's folder and makes the branch's worktree; a later one moves it forward and keeps what was made there",
+  "the first open clones into Vespin's folder and makes the branch's worktree; a later one moves it forward and keeps what was made there",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const first = push("first\n");
@@ -310,7 +310,7 @@ test(
 );
 
 test(
-  "a worktree from before Luke marked its head, detached with a commit of the developer's own, is left as it stands",
+  "a worktree from before Vespin marked its head, detached with a commit of the developer's own, is left as it stands",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
@@ -341,7 +341,7 @@ test(
 );
 
 test(
-  "a branch the developer committed to in Luke's clone is left as it stands",
+  "a branch the developer committed to in Vespin's clone is left as it stands",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
@@ -459,15 +459,15 @@ test(
 );
 
 test(
-  "a worktree an earlier Luke kept under its application data is left there and said, and a fresh one made",
+  "a worktree an earlier Vespin kept under its application data is left there and said, and a fresh one made",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Vespin Dev");
     const earlier = path.join(earlierRoot, "worktrees", "acme", "app", "luke%2Ffix-relay");
     mkdirSync(path.join(earlier, ".git"), { recursive: true });
     writeFileSync(path.join(earlier, "mine.txt"), "");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
 
     const printed = run(
@@ -499,7 +499,7 @@ test(
     writeFileSync(path.join(origin, "README.md"), "other\n");
     git(origin, ["commit", "--quiet", "-am", "other"]);
     const other = git(origin, ["rev-parse", "HEAD"]);
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const opening = (branch: string, name: string) => {
       const file = path.join(scratch, `${name}.sh`);
       writeFileSync(
@@ -558,7 +558,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const clone = cloneFolder(root, "acme/app");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
     const holder = spawn("sleep", ["60"]);
@@ -602,7 +602,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const clone = cloneFolder(root, "acme/app");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
     const lock = `${clone}.lock`;
@@ -733,7 +733,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const trash = path.join(root, "trash");
     const branches = ["luke/merged", "luke/changed", "luke/recent", "luke/running", "luke/open"];
     for (const branch of branches) git(origin, ["branch", branch]);
@@ -782,12 +782,12 @@ test(
 );
 
 test(
-  "an open tidies an earlier Luke's worktree whose branch is gone, and its clone once it holds none",
+  "an open tidies an earlier Vespin's worktree whose branch is gone, and its clone once it holds none",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
     git(origin, ["branch", "luke/merged"]);
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Vespin Dev");
     const earlierClone = cloneFolder(earlierRoot, "acme/app");
     const earlierWorktree = worktreeFolder(earlierRoot, "acme/app", "luke/merged");
     run(
@@ -808,7 +808,7 @@ test(
     const then = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     utimesSync(opened, then, then);
     git(origin, ["branch", "-D", "luke/merged"]);
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
 
     const printed = run(
       scratch,
@@ -825,7 +825,7 @@ test(
     );
 
     assert.match(printed, /Removed the worktree of luke\/merged/u);
-    assert.match(printed, /Removed the clone an earlier Luke kept/u);
+    assert.match(printed, /Removed the clone an earlier Vespin kept/u);
     assert.equal(existsSync(earlierWorktree), false);
     assert.equal(existsSync(earlierClone), false);
   },
@@ -833,12 +833,12 @@ test(
 );
 
 test.for(["notes.txt", ".git\n"])(
-  "an earlier Luke's clone holding a file of the developer's, %j, is kept",
+  "an earlier Vespin's clone holding a file of the developer's, %j, is kept",
   { timeout: GIT_DEADLINE },
   async (file: string, t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Vespin Dev");
     const earlierClone = cloneFolder(earlierRoot, "acme/app");
     run(
       scratch,
@@ -859,7 +859,7 @@ test.for(["notes.txt", ".git\n"])(
     ]);
     // Note that a name ending in a newline, beside the `.git` it imitates, is the developer's as much as any.
     writeFileSync(path.join(earlierClone, file), "mine\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
 
     run(
       scratch,
@@ -933,7 +933,7 @@ test(
     push("first\n");
     const head = push("second\n");
     const clone = cloneFolder(state, "acme/app");
-    const own = path.join(scratch, "agents", "vm", "repository");
+    const own = path.join(scratch, "agents", "agent", "repository");
 
     run(
       scratch,
@@ -946,7 +946,7 @@ test(
         remotes: { https: origin, ssh: origin },
       }),
     );
-    // Note that the VM mounts the agent's folder alone, so the shared clone is moved out of reach.
+    // Note that the agent's repository stands on its own, so the shared clone is moved out of reach.
     rmSync(clone, { recursive: true, force: true });
 
     assert.equal(git(own, ["rev-parse", "HEAD"]), head);
@@ -959,35 +959,7 @@ test(
 );
 
 test(
-  "an agent whose saved state is restored gets a repository of its own at the commit its work was saved on, though its branch moved on since",
-  async (t) => {
-    const { scratch, origin, push, shell, state } = await fixture(t);
-    const base = push("first\n");
-    push("second\n");
-    const own = path.join(scratch, "agents", "restored", "repository");
-
-    run(
-      scratch,
-      shell,
-      agentWorktreeScript({
-        repository: "acme/app",
-        clone: cloneFolder(state, "acme/app"),
-        worktree: own,
-        branch: "luke/fix-relay",
-        base,
-        remotes: { https: origin, ssh: origin },
-      }),
-    );
-
-    assert.equal(git(own, ["rev-parse", "HEAD"]), base);
-    assert.equal(readFileSync(path.join(own, "README.md"), "utf8"), "first\n");
-    assert.equal(git(own, ["remote", "get-url", "origin"]), origin);
-  },
-  GIT_DEADLINE,
-);
-
-test(
-  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, or has files and no repository",
+  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, on a branch left checked out or not, stashed, or has files and no repository",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
@@ -1029,7 +1001,13 @@ test(
 
     git(worktree, ["checkout", "--quiet", "-b", "unpublished", "origin/luke/fix-relay"]);
     git(worktree, ["branch", "--unset-upstream"]);
+    assert.match(found(), /a branch with commits/u, "a branch left for another keeps its commits");
+    git(worktree, ["branch", "--quiet", "-D", "mine"]);
     assert.equal(found(), "", "a branch with no upstream and no commits of its own holds nothing");
+    writeFileSync(path.join(worktree, "README.md"), "stashed\n");
+    git(worktree, ["stash", "--quiet"]);
+    assert.match(found(), /stashed/u);
+    git(worktree, ["stash", "drop", "--quiet"]);
     commit("local.md");
     assert.match(found(), /no remote branch/u);
 

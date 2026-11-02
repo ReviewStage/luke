@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -76,7 +77,7 @@ function RefusedOnce(): React.JSX.Element {
       label="Delete key…"
       question={{
         title: "Delete the OpenAI key?",
-        body: "Luke stops using it at once. Agents that are running finish on it.",
+        body: `${PRODUCT_NAME} stops using it at once. Agents that are running finish on it.`,
         verb: "Delete",
         running: "Deleting",
         loss: CONFIRM_LOSS.IRREVERSIBLE,

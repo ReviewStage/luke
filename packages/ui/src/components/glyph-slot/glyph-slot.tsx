@@ -14,7 +14,7 @@ import { ICON_SIZE, type IconSize } from "../../icons/icon-size.js";
  *
  * Its ink says how the glyph reads beside its words: muted, as a call's or
  * a list's glyph is; the full ink, for the one that stands out; the ink its
- * holder sets; or Luke's own blue, the colour his voice and face answer in.
+ * holder sets; or the app's own blue, the colour its voice and face answer in.
  * A glyph that only repeats its words is hidden from a reader; one that says
  * something its words do not is named by `label`.
  *

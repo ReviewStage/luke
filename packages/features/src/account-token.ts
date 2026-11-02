@@ -10,7 +10,7 @@ export class AccountRefreshFailed extends Data.TaggedError("AccountRefreshFailed
   readonly message: string;
 }> {}
 /**
- * Who a call to Luke's own service is on behalf of. Every client that speaks
+ * Who a call to our own service is on behalf of. Every client that speaks
  * to the service on the signed-in account — the brain's transports, the voice
  * mint, the key vault, the event sender — is handed these rather than the
  * account itself: the token is read fresh for every attempt, so a client
@@ -39,7 +39,7 @@ export interface AccountToken {
 }
 
 /**
- * The Mac's own Better Auth session, for the calls Luke's service makes
+ * The Mac's own Better Auth session, for the calls our service makes
  * through Better Auth's organization endpoints, which take a session rather
  * than an OAuth token. A session is not refreshed the way a token is: a new
  * one comes only through the browser's hand-off, so asking for one is

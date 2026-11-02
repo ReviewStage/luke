@@ -18,12 +18,11 @@ import {
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { INTEGRATION_LABEL, pasteCutWords } from "@luke/features/words";
+import { pasteCutWords } from "@luke/features/words";
 import type { ShortcutChord } from "@luke/settings/shortcuts";
 import {
   ComposerBody,
   ComposerFoot,
-  McpIcon,
   MicrophoneIcon,
   MoreButton,
   moreLabel,
@@ -46,19 +45,19 @@ import {
 } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { ActionMenu, type PanelMenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
-import { AgentContextRing } from "./agent-context.js";
+import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
-import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
-import { AttachFilesButton, type AttachPicker } from "./attach-files-button.js";
+import { type AgentServersControl, serversMenuPanel } from "./agent-servers.js";
+import { AttachFilesButton, type AttachPicker, attachmentRow } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
@@ -78,8 +77,11 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
  * at its default type, its files over its words and its foot as every message
  * box's (`@luke/ui`'s `ComposerBody` and `ComposerFoot`). Its foot is laid
- * out as ChatGPT's and Codex's are: at the left the "+" that attaches
- * files and, once the agent has pushed a branch with no pull request yet,
+ * out as ChatGPT's and Codex's are: at the left the "+", which raises a
+ * menu of Attachment, which attaches files, and MCP servers, which opens
+ * the servers popover beside the menu as its submenu, where the agent is
+ * handed a switch for each server (`agent-servers.tsx`); and,
+ * once the agent has pushed a branch with no pull request yet,
  * the branch's chip, which opens it on GitHub (`agent-published.tsx`); a
  * pull request, once one stands, is the row pinned over the card rather
  * than a chip here (`agent-tab.tsx`); at the right,
@@ -111,7 +113,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * that (`closedRemedy`); a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
  * the agent has on whose sign-in expired is offered to reconnect, in place, as
- * the MCP popover reconnects it; an editor bundle that could not be loaded
+ * the servers popover reconnects it; an editor bundle that could not be loaded
  * says so there too. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan, and a message sent
@@ -127,8 +129,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * first message of its still empty conversation, and its model chip once
  * the choice it starts on is known.
  *
- * Files go with a message the way every chat takes them: the "+" at the
- * foot's left opens the system's file picker, an image pasted into the box
+ * Files go with a message the way every chat takes them: the "+" menu's
+ * Attachment opens the system's file picker, an image pasted into the box
  * is taken, and files dropped on the card are, each drawn as a chip over
  * the foot's bar with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the bar while the rest still come
@@ -172,9 +174,10 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * The foot answers the card's own width, not the window's, so the box
  * holds in the main column and the side panel alike, the way Cursor's and
  * ChatGPT's narrow panes do (planning.css's `composer` container). As the
- * card narrows, the branch's chip draws its mark alone; then a ⋯ takes in, in this order, the MCP
- * servers, the context ring, and the microphone; then the model chip draws
- * its harness's mark alone; and last the + goes into the ⋯ too. The field
+ * card narrows, the branch's chip draws its mark alone; then a ⋯ takes in, in this order, the
+ * context ring and the microphone; then the model chip draws
+ * its harness's mark alone; and last the + goes into the ⋯ too, the ⋯
+ * offering the + menu's rows in its place. The field
  * and the round Send or Stop always stand whole. The chips drawing their
  * marks alone are `FOLD_WIDTH`'s, read off the card's width here; what the
  * ⋯ takes in is the stylesheet's, which it offers as it opens, read off the
@@ -187,7 +190,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
- * switches, so the box draws no servers' button.
+ * switches, so its "+" opens the file picker itself, as every box that
+ * takes nothing but files does (`attach-files-button.tsx`).
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */
@@ -214,6 +218,7 @@ const BUTTON = {
   STOPPING: "Stopping",
   SENDING: "Sending",
   ATTACH: "Attach files",
+  ADD: "Add files and more",
   MORE_THING: "Composer",
   QUEUE: "Queue",
   STEER: "Steer",
@@ -242,17 +247,16 @@ const FOLD_LINES = Object.values(FOLD_WIDTH).toSorted((a, b) => a - b);
 /** The presses a narrow card's ⋯ takes in, by the class each wears on the foot. */
 const OVERFLOW_PRESS = {
   ATTACH: "agent-composer-attach",
-  SERVERS: "agent-servers-button",
   CONTEXT: "agent-context-button",
   DICTATE: "dictate-button",
 } as const;
 
 type OverflowPress = (typeof OVERFLOW_PRESS)[keyof typeof OVERFLOW_PRESS];
 
-/** A press the ⋯ may take in, and what the menu offers in its place. */
+/** A press the ⋯ may take in, and the rows the menu offers in its place. */
 interface OverflowOffer {
   press: OverflowPress;
-  action: MenuAction;
+  entries: readonly PanelMenuEntry[];
 }
 
 /** The presses standing on the card's foot that the stylesheet hid for want of room. */
@@ -343,7 +347,7 @@ export function ComposerAttach({ children }: { children: ReactNode }): React.JSX
   return <span className="agent-composer-attach flex">{children}</span>;
 }
 
-/** The owner's presses at the foot's right, before Send: the model chip, the servers, the context ring, the microphone, and the ⋯. */
+/** The owner's presses at the foot's right, before Send: the model chip, the context ring, the microphone, and the ⋯. */
 export function ComposerActions({ children }: { children: ReactNode }): React.JSX.Element {
   // It may narrow, so a long model name is cut short before the presses are.
   return (
@@ -382,7 +386,9 @@ function ComposerMore({
     observer.observe(box);
     return () => observer.disconnect();
   }, [standing, close, card]);
-  const actions = offers.filter((offer) => taken.includes(offer.press)).map((each) => each.action);
+  const actions = offers
+    .filter((offer) => taken.includes(offer.press))
+    .flatMap((each) => each.entries);
   return (
     <>
       <span className="agent-composer-more hidden">
@@ -480,7 +486,7 @@ export function AgentComposer({
   usage: AgentUsage | undefined;
   /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
   payer?: AgentPayer | undefined;
-  /** The MCP servers the agent is handed and their switches; none where the box offers none, as New task's does. */
+  /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, as New task's does, whose + opens the file picker itself. */
   servers: AgentServersControl | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: AgentContext | undefined;
@@ -532,8 +538,7 @@ export function AgentComposer({
   const picker = useRef<AttachPicker>(null);
   const footFold = useFootFold(card);
   const folds = (below: FoldWidth) => footFold !== undefined && footFold <= below;
-  // The popovers the ⋯ may open in place of their hidden presses.
-  const [serversOpen, setServersOpen] = useState(false);
+  // The popover the ⋯ may open in place of its hidden press.
   const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   // Note that a Stop the service took reads Stopping until the agent offers none, because the task
@@ -616,7 +621,7 @@ export function AgentComposer({
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
               text:
                 reconnectFailed === lapsed.connection
-                  ? `${lapsed.name}'s sign-in expired, and Luke could not start reconnecting it.`
+                  ? `${lapsed.name}'s sign-in expired, and reconnecting it could not start.`
                   : `${lapsed.name}'s sign-in expired.`,
               provider: lapsed.provider,
               ...(lapsed.connection === lapsed.provider
@@ -656,7 +661,7 @@ export function AgentComposer({
           repositoryRemedy(note, () => {
             if (latest.current.note === note) latest.current.retry();
           });
-  // Note that a remedy finished where Luke cannot watch keeps Retry beside it, since the same send goes once it is done.
+  // Note that a remedy finished where we cannot watch keeps Retry beside it, since the same send goes once it is done.
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
   // Note that a closed box asks for nothing, since it takes nothing.
   const placeholder = closed
@@ -801,44 +806,43 @@ export function AgentComposer({
     }
   };
 
+  // What the + offers beside files, its menu's rows after Attachment: the servers' popover, where the box hands servers.
+  const plusRows: readonly PanelMenuEntry[] =
+    servers === undefined ? [] : [serversMenuPanel(servers, statuses)];
+  const openPicker = () => picker.current?.open();
   const offers: OverflowOffer[] = [
     {
       press: OVERFLOW_PRESS.ATTACH,
-      action: {
-        label: BUTTON.ATTACH,
-        icon: <PlusIcon />,
-        disabled: held,
-        onSelect: () => picker.current?.open(),
-      },
+      // Note that a + folded away hands the ⋯ its menu's rows, or its own press where it opens the picker itself.
+      entries:
+        plusRows.length === 0
+          ? [{ label: BUTTON.ATTACH, icon: <PlusIcon />, disabled: held, onSelect: openPicker }]
+          : [attachmentRow(openPicker, held), ...plusRows],
     },
-    ...(servers === undefined
-      ? []
-      : [
-          {
-            press: OVERFLOW_PRESS.SERVERS,
-            action: {
-              label: INTEGRATION_LABEL.many,
-              icon: <McpIcon />,
-              onSelect: () => setServersOpen(true),
-            },
-          },
-        ]),
     ...(context === undefined
       ? []
       : [
           {
             press: OVERFLOW_PRESS.CONTEXT,
-            action: { label: contextHint(context), onSelect: () => setContextOpen(true) },
+            entries: [
+              {
+                label: contextHint(context),
+                icon: <ContextRingIcon context={context} />,
+                onSelect: () => setContextOpen(true),
+              },
+            ],
           },
         ]),
     {
       press: OVERFLOW_PRESS.DICTATE,
-      action: {
-        label: dictation.keyMissing ? OPENAI_KEY_MISSING_NOTE : "Dictate",
-        icon: <MicrophoneIcon />,
-        disabled: held || module === undefined,
-        onSelect: dictation.start,
-      },
+      entries: [
+        {
+          label: dictation.keyMissing ? OPENAI_KEY_MISSING_NOTE : "Dictate",
+          icon: <MicrophoneIcon />,
+          disabled: held || module === undefined,
+          onSelect: dictation.start,
+        },
+      ],
     },
   ];
 
@@ -904,10 +908,11 @@ export function AgentComposer({
             <>
               <ComposerAttach>
                 <AttachFilesButton
-                  label={BUTTON.ATTACH}
+                  label={plusRows.length === 0 ? BUTTON.ATTACH : BUTTON.ADD}
                   disabled={held}
                   picker={picker}
                   onFiles={files.attach}
+                  more={plusRows}
                 />
               </ComposerAttach>
               <BranchChip
@@ -931,14 +936,6 @@ export function AgentComposer({
                   usage={usage}
                   payer={payer}
                   narrow={folds(FOLD_WIDTH.MODEL)}
-                />
-              )}
-              {servers === undefined ? null : (
-                <AgentServersButton
-                  servers={servers}
-                  statuses={statuses}
-                  open={serversOpen}
-                  onOpenChange={handBack(setServersOpen)}
                 />
               )}
               <AgentContextRing

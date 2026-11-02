@@ -186,11 +186,13 @@ const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
-/** The refusals a start can answer with: a repository out of reach, a workspace none of the account's, or a device that would not take its agents. */
+/** The refusals a start can answer with: a repository out of reach, a workspace or a related task none of the account's, a device that would not take its agents, or a relation the tree's rules refuse. */
 const START_REFUSALS = {
   ...REPOSITORY_REFUSALS,
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+  [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
+  [HOSTED_API_ERROR.TASK_PARENT_HELD]: TASK_PARENT_FAILURE.HELD,
 } as const;
 
 /** The refusals a move can answer with: the task or the workspace not the account's, or the workspace not reaching its repository. */
@@ -443,7 +445,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * The repositories the account reaches through the Luke GitHub App, or
+   * The repositories the account reaches through our GitHub App, or
    * only those of the installation the workspace given stands for, with
    * whether the App is installed anywhere for it and where to install it;
    * or why there is none: the service did not answer.

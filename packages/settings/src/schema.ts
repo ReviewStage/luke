@@ -1,4 +1,5 @@
 import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
@@ -155,9 +156,9 @@ export const APP_SETTING_SCHEMA = {
   openAtLogin: toggleSetting({
     field: "openAtLogin",
     id: APP_SETTING_ID.OPEN_AT_LOGIN,
-    label: "Open Luke at login",
+    label: `Open ${PRODUCT_NAME} at login`,
     default: true,
-    // Note that the Mac starts Luke, so the switch stands on This Mac and
+    // Note that the Mac starts the app, so the switch stands on This Mac and
     // under no page's reset: Appearance's Reset to defaults once flipped it.
     // The field and its id are unmoved, so a choice already made is kept.
     page: SETTINGS_PAGE.THIS_MAC,
@@ -181,8 +182,8 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   /*
-   * Where a Luke link opened in a browser goes: it stays on the web, or the
-   * web hands it to Luke for Mac (`@luke/features/link-open`). The account's,
+   * Where an app link opened in a browser goes: it stays on the web, or the
+   * web hands it to the Mac app (`@luke/features/link-open`). The account's,
    * so the web reads it on a signed-in load; it rides the preferences
    * snapshot as a part of its own rather than the shared one, so a build
    * that predates it neither refuses the snapshot nor clears the choice.
@@ -190,8 +191,8 @@ export const APP_SETTING_SCHEMA = {
   linkOpen: choiceSetting({
     field: "linkOpen",
     id: APP_SETTING_ID.LINK_OPEN,
-    label: "Open Luke links in",
-    detail: "Luke for Mac takes the links you open in a browser on a Mac with Luke installed.",
+    label: `Open ${PRODUCT_NAME} links in`,
+    detail: `${PRODUCT_NAME} for Mac takes the links you open in a browser on a Mac with ${PRODUCT_NAME} installed.`,
     values: LINK_OPEN_LIST,
     token: (choice) => choice,
     optionLabel: (choice) => LINK_OPEN_LABEL[choice],
@@ -222,7 +223,7 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   /*
-   * Whether this Luke sends its counts of how features are used. On by
+   * Whether this copy of the app sends its counts of how features are used. On by
    * default in a packaged build, the app people download, and off in a
    * development one, so a run from source counts nothing until its
    * developer turns it on. Kept on this device rather than with the account,
@@ -233,7 +234,7 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.USAGE_DATA,
     label: "Share usage data",
     detail:
-      "Counts of which Luke features you use, sent under your account. " +
+      `Counts of which ${PRODUCT_NAME} features you use, sent under your account. ` +
       "Never what you type or say.",
     default: true,
     unpackagedDefault: false,
@@ -249,10 +250,10 @@ export const APP_SETTING_SCHEMA = {
     label: "Prefer the Mac's microphone",
     detail:
       "When the input is a Bluetooth headset, so the headset keeps its full sound quality. " +
-      "With the lid shut, Luke uses the headset's microphone anyway.",
+      `With the lid shut, ${PRODUCT_NAME} uses the headset's microphone anyway.`,
     default: true,
-    // Note that it stands on This Mac, under no page's reset, as Open Luke at
-    // login does; the field and its id are unmoved, so a choice already made is kept.
+    // Note that it stands on This Mac, under no page's reset, as the switch to
+    // open at login does; the field and its id are unmoved, so a choice already made is kept.
     page: SETTINGS_PAGE.THIS_MAC,
     section: SETTING_SECTION.MICROPHONE,
     order: 110,
@@ -345,7 +346,7 @@ export const APP_SETTING_SCHEMA = {
     field: "inlineDiff",
     id: APP_SETTING_ID.DIFF_INLINE,
     label: "Changed words",
-    detail: "What a changed line marks within itself; Off tints the line alone.",
+    detail: "Off tints the line alone.",
     values: INLINE_DIFF_LIST,
     token: (inline) => inline,
     optionLabel: (inline) => INLINE_DIFF_LABEL[inline],

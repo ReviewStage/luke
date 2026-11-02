@@ -25,7 +25,7 @@ import {
 } from "../integrations/integration-connect.js";
 import type { IntegrationAccountKey } from "../integrations/integration-store.js";
 
-/** The first account a Luke account holds at a provider, as its first sign-in begins it: named after the provider, under the account's own user id. */
+/** The first account a user account holds at a provider, as its first sign-in begins it: named after the provider, under the account's own user id. */
 export function firstIntegrationAccount(
   userId: string,
   provider: IntegrationProvider,

@@ -1,5 +1,5 @@
 /**
- * Where Luke's hosted service answers, rooted at the service origin. The
+ * Where our hosted service answers, rooted at the service origin. The
  * addresses alone: what each endpoint takes and answers with is declared in
  * the wire module for its own domain, and a client that only needs to know
  * where to knock imports nothing else.
@@ -26,15 +26,15 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /**
-   * The account's ChatGPT sign-in for Luke's hosted runtime, as the desktop
+   * The account's ChatGPT sign-in for our hosted runtime, as the desktop
    * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
    * its kind. The answer is the provider keys' and never carries a token.
    */
   ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
-  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
+  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for our hosted runtime under (GET). */
   ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /**
-   * The memories Luke's agents kept in a workspace the account is a member
+   * The memories our agents kept in a workspace the account is a member
    * of, named in the query: read them (GET), or forget one by its id (DELETE).
    * `memory-wire.ts` declares both.
    */
@@ -145,18 +145,14 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_LINES: "/api/device-agents/lines",
   /** One waiting line, named by its id, claimed for the Mac, a launch line's secrets with it (POST). */
   DEVICE_AGENT_LINE_CLAIM: "/api/device-agents/lines/claim",
+  /** The step a claimed launch line's launch has reached on the Mac, named by the line's id (POST). */
+  DEVICE_AGENT_LINE_STEP: "/api/device-agents/lines/step",
   /** The requests of a Mac's local agents' tools, held open while none waits (GET), and one claimed request answered (POST). */
   DEVICE_AGENT_REQUESTS: "/api/device-agents/requests",
   /** One waiting request, named by its id, claimed for the Mac (POST). */
   DEVICE_AGENT_REQUEST_CLAIM: "/api/device-agents/requests/claim",
   /** The ids of the account's agents that should still stand on a Mac: pinned to it and not archived (GET). */
   DEVICE_AGENT_LIVE_AGENTS: "/api/device-agents/live-agents",
-  /** One of a device's agents asking to save its state: one upload to a fresh path of the store, and the agent's state key (POST). */
-  DEVICE_AGENT_STATE_SAVE: "/api/device-agents/state/save",
-  /** A save the device uploaded, committed as the agent's next generation (POST). */
-  DEVICE_AGENT_STATE_COMMIT: "/api/device-agents/state/commit",
-  /** A host's enroll: an install token traded for a device of kind host and its device secret, answered once (POST). `host-wire.ts` declares the bodies. */
-  DEVICE_AGENT_ENROLL: "/api/device-agents/enroll",
   /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL_OWN: "/api/device-agents/devices/enroll",
   /** A box's pairing started with no credential: its poll secret, the code it shows and the link that opens it, how long the code lasts, and how often to poll (POST). `host-wire.ts` declares the bodies. */
@@ -169,10 +165,6 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_PRESENCE: "/api/hosts/presence",
   /** One of the account's hosts removed, its secret refused at once (POST). */
   HOST_REMOVE: "/api/hosts/remove",
-  /** An install token of the account's kept by its hash, to enroll its hosts (POST). */
-  HOST_INSTALL_TOKENS: "/api/hosts/install-tokens",
-  /** One of the account's install tokens revoked, so it enrolls no box again (POST). */
-  HOST_INSTALL_TOKEN_REVOKE: "/api/hosts/install-tokens/revoke",
   /** A pending pairing read by its code, as the approve screen shows it (POST, so the code rides in the body). `host-wire.ts` declares the bodies. */
   HOST_PAIRING: "/api/hosts/pairing",
   /** A pending pairing approved by its code, which makes the account's host (POST). */
@@ -203,7 +195,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   AUTOMATIONS: "/api/automations",
   /**
-   * The skills members install into Luke: the ones the account sees in a
+   * The skills members install into the app: the ones the account sees in a
    * workspace under `?workspaceId=` (GET), or skills installed from a
    * paste (POST); `/preview` reads a paste as an install would (POST), and
    * `/{id}` turns one on or off (PATCH) or removes it (DELETE), and its
@@ -253,7 +245,7 @@ export const HOSTED_SERVICE_PATH = {
   /** A page of a channel's threads the reader may read (GET), each with its channel, older ones before the thread `?before=` names. */
   CHANNELS_THREADS: "/api/channels/threads",
   /**
-   * The repositories the signed-in account reaches through the Luke GitHub
+   * The repositories the signed-in account reaches through our GitHub
    * App, most recently updated first (GET), with whether the App is
    * installed anywhere for them and where to install it.
    * `github-repositories-wire.ts` declares the answer, and the
@@ -298,7 +290,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
   /**
-   * Sends the browser to GitHub to install the Luke GitHub App, or to change
+   * Sends the browser to GitHub to install our GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.
    */
@@ -361,20 +353,20 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES: "/api/workspaces",
   /**
    * Where an owner or admin connects a GitHub organization to a workspace
-   * (POST): answers the Luke GitHub App's install address, carrying a
+   * (POST): answers our GitHub App's install address, carrying a
    * single-use intent GitHub returns to `GITHUB_INSTALLED` with.
    */
   WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /**
-   * Where an owner or admin installs Luke's Sentry integration for a
+   * Where an owner or admin installs our Sentry integration for a
    * workspace (POST): answers Sentry's install address, carrying a
    * single-use intent Sentry returns to `SENTRY_INSTALLED` with
    * (`sentry-install-wire.ts`).
    */
   WORKSPACE_SENTRY_INSTALL: "/api/workspaces/sentry/install",
-  /** Whether the deployment holds Luke's Sentry integration, and a workspace's active installations of it, to a member (GET, `WORKSPACE_SENTRY_QUERY`). */
+  /** Whether the deployment holds our Sentry integration, and a workspace's active installations of it, to a member (GET, `WORKSPACE_SENTRY_QUERY`). */
   WORKSPACE_SENTRY_INSTALLATIONS: "/api/workspaces/sentry/installations",
   /** One of a workspace's Sentry installations disconnected by an owner or admin (POST), answering the installations as they then stand. */
   WORKSPACE_SENTRY_DISCONNECT: "/api/workspaces/sentry/disconnect",

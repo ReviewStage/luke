@@ -1,3 +1,4 @@
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { MENTION_KIND, memberMentionOf } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { describeWire } from "@luke/wire/effect";
@@ -23,7 +24,7 @@ const MAX_ASSIGNEE_CHARS = 2_000;
 const TASK_ASSIGNEE_WORDS =
   "The member the task is assigned to, who is on it now, by their mention link as " +
   `${AGENT_TOOL.LIST_TASKS} or another read names them, ` +
-  "`[@Name](https://tryluke.dev/<workspace>/person/<id>)`, or its " +
+  `\`[@Name](${LINK_ORIGIN}/<workspace>/person/<id>)\`, or its ` +
   "address alone; a member of the task's workspace. null for no one.";
 
 /** An assignee as a call writes one: a person's mention link, or null for no one. */

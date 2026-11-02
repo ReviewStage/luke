@@ -351,7 +351,7 @@ test("at the door the deployment is admitted for the named account's own convers
   );
 });
 
-test("at the door the deployment's typed ask of Luke, which a comment sent from a browser hands over, is minted as the named account's own principal, the identity that account's bearer is admitted as, with the deployment named only as its carrier, on a conversation and a session that account reaches alone: a teammate's as the teammate's, never the owner's; another account named, or none, is refused", async () => {
+test("at the door the deployment's typed ask of Vespin, which a comment sent from a browser hands over, is minted as the named account's own principal, the identity that account's bearer is admitted as, with the deployment named only as its carrier, on a conversation and a session that account reaches alone: a teammate's as the teammate's, never the owner's; another account named, or none, is refused", async () => {
   const bearers = new Map([
     ["Bearer token-a", "user-a"],
     ["Bearer token-c", "user-c"],

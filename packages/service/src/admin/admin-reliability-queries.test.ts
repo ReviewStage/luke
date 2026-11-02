@@ -162,7 +162,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         const maintainer = yield* openAccount("admin");
         const workspace = yield* openWorkspace(developer);
 
-        // Luke's own turns: two of six failed, one of them abandoned by the sweep.
+        // The app's own turns: two of six failed, one of them abandoned by the sweep.
         const main = yield* openConversation(developer, CONVERSATION_KIND.MAIN);
         for (const status of [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED, TURN_STATUS.SETTLED]) {
           yield* endTurn(developer, main, status, at(16));

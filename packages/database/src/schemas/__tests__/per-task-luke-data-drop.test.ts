@@ -21,7 +21,7 @@ import { sessionSandboxCleanup } from "../session-sandbox.js";
 import { conversations } from "../storage.js";
 
 /**
- * The migration that drops the per-task Luke's data: his conversations,
+ * The migration that drops the per-task assistant's data: its conversations,
  * stamped deleted with every child under them so the sweep purges them, and
  * `task.conversation_id`. Each test
  * stands its own database where it stood before the migration, the migration
@@ -38,7 +38,7 @@ const UNDO = [
   `ALTER TABLE "task" ADD CONSTRAINT "plan_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE set null`,
 ];
 
-/** The per-task Luke's conversation kind, as old rows store it; no code names it now. */
+/** The per-task assistant's conversation kind, as old rows store it; no code names it now. */
 const OLD_KIND = { CONVERSATION: "plan" } as const;
 
 /** The database stood where it was before the migration. */
@@ -98,7 +98,7 @@ const stampsOf = (ids: readonly string[]) =>
 
 it.layer(getTestDB())("a task deleted after the migration", (it) => {
   it.effect(
-    "leaves nothing of its old Luke's conversation unstamped, and the purge takes it, its child, and its session's sandbox seven days on",
+    "leaves nothing of its old Vespin's conversation unstamped, and the purge takes it, its child, and its session's sandbox seven days on",
     () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -134,7 +134,7 @@ it.layer(getTestDB())("a task deleted after the migration", (it) => {
   );
 });
 
-it.layer(getTestDB())("the per-task Luke's conversations", (it) => {
+it.layer(getTestDB())("the per-task Vespin's conversations", (it) => {
   it.effect(
     "are stamped, every child under one with them and the ones already stamped as they were, no other kind is, and a second run changes nothing",
     () =>
@@ -174,7 +174,7 @@ it.layer(getTestDB())("the per-task Luke's conversations", (it) => {
   );
 });
 
-it.layer(getTestDB())("the per-task Luke's conversations, once stamped", (it) => {
+it.layer(getTestDB())("the per-task Vespin's conversations, once stamped", (it) => {
   it.effect(
     "are reached by no one, their opener included, with every worker's under them, while the opener's own conversation and its worker's stay theirs",
     () =>

@@ -196,7 +196,7 @@ test("a token's expiry is one unbreakable unit and no fact on the row's line car
 
 test("with no token the row says what the token is for, and with one it says the token's facts instead", async () => {
   await mountAndOpen(false);
-  const purpose = /Lets agents work in repositories Luke's GitHub App does not reach/u;
+  const purpose = /Lets agents work in repositories Vespin's GitHub App does not reach/u;
   assert.match(document.body.textContent ?? "", purpose);
 
   stored = KEPT;
@@ -244,7 +244,7 @@ test("a saved token's Manage opens it with Remove, which asks at the dialog's fo
   const question = asked() ?? assert.fail("no question at the foot");
   assert.match(question.textContent ?? "", /Remove your GitHub token\?/u);
   // The question has a one-line body saying what goes.
-  assert.match(question.textContent ?? "", /Luke deletes the token he holds/u);
+  assert.match(question.textContent ?? "", /Vespin deletes the token it holds/u);
   assert.doesNotMatch(dialog().textContent ?? "", /Create token|Done/u, "the foot is the question");
   assert.ok(document.activeElement === button("Cancel", question), "Cancel takes focus");
 
@@ -281,9 +281,9 @@ test("each refused save says why and what to do next, and keeps the field", asyn
     invalid: "GitHub rejected this token. Check that you copied all of it, or create a new one.",
     no_repo_scope: "This token is missing the repo scope. Create a new token with repo ticked.",
     no_github_account:
-      "No GitHub account is connected to your Luke account. Connect GitHub in Integrations settings, then save the token again.",
+      "No GitHub account is connected to your Vespin account. Connect GitHub in Integrations settings, then save the token again.",
     other_user:
-      "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.",
+      "This token belongs to a different GitHub account than the one connected to Vespin. Create it while signed in to the connected account.",
     unreachable: "GitHub could not be reached. Try again.",
     too_many_tries: "Too many tokens tried in the last hour. Try again later.",
   });
@@ -311,7 +311,7 @@ test("a saved token GitHub rejected says to remove it and add a new one", async 
   );
 });
 
-test("a saved token Luke can no longer read says to remove it and add it again", async () => {
+test("a saved token Vespin can no longer read says to remove it and add it again", async () => {
   stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.UNREADABLE };
   await mountAndOpen();
 

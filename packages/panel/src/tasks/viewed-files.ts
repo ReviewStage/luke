@@ -19,7 +19,7 @@ import { noteOf, type WriteNote } from "./pull-request-writes.js";
  *
  * The marks are GitHub's own, the ones its Viewed box sets, so they are read
  * and written by the service on the member's own GitHub sign-in and never on
- * the Luke GitHub App (`pull-request-write-wire.ts`): the read
+ * our GitHub App (`pull-request-write-wire.ts`): the read
  * (`AGENTS_PULL_REQUEST_VIEWED`) each time the changes are read, so
  * the two describe the same push, and a mark or an unmark as one of the
  * pull request's changes (`AGENTS_PULL_REQUEST_ACTION`). A file marked

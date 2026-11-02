@@ -16,7 +16,7 @@
  * `REMOVE_REACTION`) the row sends itself, as a review thread's controls do
  * (`pull-request-thread-actions.tsx`), on the agent the tab names: made on
  * GitHub by the service as the member pressing it, on their own GitHub
- * sign-in and never the Luke GitHub App's. While it is out, the reaction
+ * sign-in and never our GitHub App's. While it is out, the reaction
  * it is on says so, one being given that nobody had given yet standing as
  * a pill of its own, and the row's other presses wait; the state pill
  * says nothing of it. Once GitHub answers the tab reads the conversation

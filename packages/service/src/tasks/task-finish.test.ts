@@ -2,20 +2,22 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createAgent, recordAgentPublished } from "@luke/database/models/agent-store";
-import { readTask } from "@luke/database/models/task-store";
+import { createAgent, readAgent, recordAgentPublished } from "@luke/database/models/agent-store";
+import { readTask, updateTask } from "@luke/database/models/task-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { AGENT_ARCHIVER, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@luke/features/inbox-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
+import { idleStandingAgents } from "../agents/coder-host/stop.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
-import { reopenTaskForWork, settleTaskIfFinished } from "./task-finish.js";
+import { reopenTaskForWork, settleTaskAfterTurn, settleTaskIfFinished } from "./task-finish.js";
 
 /**
  * A task's status following its agents' work, through the one check the
@@ -28,6 +30,12 @@ import { reopenTaskForWork, settleTaskIfFinished } from "./task-finish.js";
  *
  * Synthetic accounts, tasks, and words throughout.
  */
+
+/** What the finishes counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+const countedFor = (userId: string) =>
+  ANALYTICS.recorded.filter((event) => event.userId === userId);
 
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
@@ -127,6 +135,10 @@ const awaitingLine = (agent: { readonly userId: string; readonly conversationId:
 const statusOf = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (read) => Option.getOrThrow(read).task.status);
 
+/** Whether the agent stands archived. */
+const archived = (userId: string, agentId: string) =>
+  Effect.map(readAgent(userId, agentId), (read) => Option.getOrThrow(read).archivedAt !== null);
+
 it.layer(getTestDB())("a task's work finishing", (it) => {
   it.effect(
     "an agent at work, its turn running or a line awaiting one, keeps the task; its turn settled with its pull request merged finishes it",
@@ -160,11 +172,19 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         );
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+        // Only the check that moved the task counted, and as the merge's own finish.
+        assert.deepEqual(countedFor(userId), [
+          {
+            name: SERVER_EVENT.TASK_FINISH,
+            userId,
+            properties: { status: TASK_STATUS.DONE, by: "merge" },
+          },
+        ]);
 
         // A turn starting on the task takes it up again.
         yield* reopenTaskForWork(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
-      }),
+      }).pipe(Effect.provide(ANALYTICS.layer)),
   );
 
   it.effect(
@@ -207,6 +227,89 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         assert.equal(Option.getOrThrow(answered).outcome, INBOX_ASK_ANSWER.TAKEN);
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+      }),
+  );
+
+  it.effect(
+    "a task moved to Done archives its idle agent at once, and one whose turn still runs, its Stop on the way, only once that turn ends",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const idle = yield* openAgent(userId, task.id);
+        const stopping = yield* openAgent(userId, task.id);
+        yield* turnOf(idle, TURN_STATUS.SETTLED);
+        const running = yield* turnOf(stopping, TURN_STATUS.RUNNING);
+        const now = yield* Clock.currentTimeMillis;
+        yield* Database.use((db) =>
+          db
+            .update(turns)
+            .set({ cancelRequestedAt: new Date(now) })
+            .where(eq(turns.id, running)),
+        );
+
+        yield* updateTask(userId, task.id, { status: TASK_STATUS.DONE }, undefined, {
+          archivedBy: { by: AGENT_ARCHIVER.MEMBER, userId },
+          idle: idleStandingAgents,
+        });
+        assert.equal(yield* archived(userId, idle.id), true);
+        assert.equal(yield* archived(userId, stopping.id), false);
+
+        yield* settle(running);
+        yield* settleTaskAfterTurn(userId, task.id, stopping.id);
+        assert.equal(yield* archived(userId, stopping.id), true);
+      }),
+  );
+
+  it.effect(
+    "an agent of a task Vespin finished stands, and still stands once messaged, its turn taking the task up and its reply finishing it again",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const agent = yield* openAgent(userId, task.id);
+        yield* recordAgentPublished(userId, agent.id, pullRequestIn(PULL_REQUEST_STATE.MERGED));
+        yield* turnOf(agent, TURN_STATUS.SETTLED);
+
+        // Its pull request merged and its turn ended: the service finishes the task and leaves the
+        // agent standing.
+        yield* settleTaskAfterTurn(userId, task.id, agent.id);
+        assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+        assert.equal(yield* archived(userId, agent.id), false);
+
+        // Messaged, its turn takes the task up, and its reply ends the turn, at whose end the
+        // service finishes it again.
+        yield* reopenTaskForWork(userId, task.id);
+        assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
+        yield* turnOf(agent, TURN_STATUS.SETTLED);
+        yield* settleTaskAfterTurn(userId, task.id, agent.id);
+        assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+        assert.equal(yield* archived(userId, agent.id), false);
+      }),
+  );
+
+  it.effect(
+    "an agent moving its own task to Done archives its idle teammate, and stands itself once its turn ends",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const pilot = yield* openAgent(userId, task.id);
+        const teammate = yield* openAgent(userId, task.id);
+        yield* turnOf(teammate, TURN_STATUS.SETTLED);
+        const answering = yield* turnOf(pilot, TURN_STATUS.RUNNING);
+
+        // The pilot's update_task moves the task to Done as the pilot, for its member.
+        yield* updateTask(userId, task.id, { status: TASK_STATUS.DONE }, undefined, {
+          archivedBy: { by: AGENT_ARCHIVER.AGENT, userId, agentId: pilot.id, agentName: "Pilot" },
+          idle: idleStandingAgents,
+        });
+        assert.equal(yield* archived(userId, teammate.id), true);
+        assert.equal(yield* archived(userId, pilot.id), false);
+
+        yield* settle(answering);
+        yield* settleTaskAfterTurn(userId, task.id, pilot.id);
+        assert.equal(yield* archived(userId, pilot.id), false);
       }),
   );
 });

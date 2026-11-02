@@ -29,7 +29,6 @@ import {
   type AgentMessageAnswerView,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
-  type AgentOperatorEnsureAnswerView,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -48,7 +47,6 @@ import {
   type GitHubTokenSaveParams,
   githubImageTypeSchema,
   type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
   type HostsAnswerView,
   type MemoriesAnswerView,
   type MemoriesReadParams,
@@ -78,7 +76,6 @@ import {
   agentServersRequestSchema,
   agentStartRequestOnWire,
   type LocalAgentRefusal,
-  type OperatorEnsureRequest,
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
 } from "./agent-wire.js";
@@ -549,23 +546,6 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.hosts.remove, { id }), ROW_REFUSALS);
   }
 
-  /** An install token kept by its SHA-256 alone; the token itself stays with the window that minted it. */
-  keepHostInstallToken(
-    tokenHash: string,
-  ): Effect.Effect<HostInstallTokenAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.hosts.keepInstallToken, { tokenHash }),
-      ROW_REFUSALS,
-    );
-  }
-
-  /** One of the account's install tokens revoked, so it enrolls no box again. */
-  revokeHostInstallToken(
-    id: string,
-  ): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.hosts.revokeInstallToken, { id }), ROW_REFUSALS);
-  }
-
   /** A box's pending pairing by the code its link named, as the approve screen shows it: the box and the address its start came from. */
   readHostPairing(code: string): Effect.Effect<HostPairingView, never, HttpClient.HttpClient> {
     return pairingAnswer(askHosted(this.#hosted.hosts.readPairing, { code }));
@@ -617,7 +597,7 @@ export class HostedAgentClient {
     );
   }
 
-  /** The memories Luke's agents kept in a workspace the account is a member of, most recently kept first. */
+  /** The memories our agents kept in a workspace the account is a member of, most recently kept first. */
   readMemories(
     params: MemoriesReadParams,
   ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
@@ -658,7 +638,7 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
-  /** The account's `ext_agent_host_id` for Luke's hosted runtime, which a ChatGPT sign-in names as its host. */
+  /** The account's `ext_agent_host_id` for our hosted runtime, which a ChatGPT sign-in names as its host. */
   chatGptHost(): Effect.Effect<ChatGptHostAnswer | Failed, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.account.chatGptHost, undefined), {});
   }
@@ -1060,17 +1040,6 @@ export class HostedAgentClient {
   }
 
   /** One change of an agent, answering it as it then stands. */
-  /** Ensures the account's operator in a workspace, Luke, or with `reset` archives the one standing and makes a fresh one: its id, or why there is none. */
-  ensureOperator(
-    workspaceId: string,
-    request: OperatorEnsureRequest,
-  ): Effect.Effect<AgentOperatorEnsureAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agents.ensureOperator, { params: { id: workspaceId }, body: request }),
-      START_REFUSALS,
-    );
-  }
-
   #change(
     agentId: string,
     body: AgentChangeRequest,
@@ -1151,7 +1120,7 @@ export class HostedAgentClient {
     );
   }
 
-  /** Which of Luke's own tools one agent is offered, and whether its `run_on_mac` would run now. */
+  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now. */
   lukeTools(
     agentId: string,
   ): Effect.Effect<AgentLukeToolsAnswerView, never, HttpClient.HttpClient> {

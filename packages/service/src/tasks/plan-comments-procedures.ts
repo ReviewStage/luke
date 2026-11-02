@@ -48,7 +48,7 @@ import {
  *
  * `GET /api/plans/{id}/comments` reads every thread of the plan, held while
  * nothing moved since the cursor `after` names (`http/held-read.ts`), as the
- * Inbox is read, and woken by Luke Sync on the plan's topic, so a window
+ * Inbox is read, and woken by Sync on the plan's topic, so a window
  * hears a teammate's or an agent's comment the moment it lands; `POST`
  * starts a thread with its first comment, anchored to words of the plan's
  * text (`@luke/database/models/plan-comments`).
@@ -151,10 +151,11 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The thread handed to each of the task's standing agents a member's words
  * mention with \`@\`; an agent of another task, or an archived one, is a
- * reference, which asks no one, and so is Luke, whom no task has any more. Each ask is written under a key drawn from the words' own, so the
- * words sent again ask no one twice. A hand-over that does not land is taken
- * back, the words posted all the same. Answers the ones asked who could not
- * take it.
+ * reference, which asks no one, and so is the app's own assistant, which no
+ * task has any more. Each ask is written under a key drawn from the words'
+ * own, so the words sent again ask no one twice. A hand-over that does not
+ * land is taken back, the words posted all the same. Answers the ones asked
+ * who could not take it.
  */
 const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: PlanCommentsProcedureSeams,

@@ -2,7 +2,7 @@ import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, STATUS_TONE } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import type { ReactNode } from "react";
@@ -134,7 +134,7 @@ function PlanCard({
 
 /**
  * The Inbox's card: its name, how many items wait on the developer at its
- * right, and under them the title of the newest that waits, or of the
+ * right, in the needs-you tone its tab's count wears, and under them the title of the newest that waits, or of the
  * latest settled where none does.
  */
 function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
@@ -146,6 +146,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
         glyph={tabLook({ kind: TAB_KIND.INBOX }).icon}
         name={TAB_WORDS.INBOX}
         corner={waiting === 0 ? NEEDS_YOU.NONE : needsYouWords(waiting)}
+        cornerTone={waiting === 0 ? undefined : STATUS_TONE.ATTENTION}
       />
       {latest === undefined ? null : <HoverCardNote>{latest.title}</HoverCardNote>}
     </HoverCard>

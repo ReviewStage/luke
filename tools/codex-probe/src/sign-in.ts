@@ -54,7 +54,7 @@ const DIRECTORY_MODE = 0o700;
 
 /** What the browser is shown once the callback is read. */
 const DONE_PAGE =
-  "<!doctype html><title>Luke probe</title><p>Signed in. You can close this tab.</p>";
+  "<!doctype html><title>Vespin probe</title><p>Signed in. You can close this tab.</p>";
 
 /** A listener on 127.0.0.1, on the preferred port where it is free and on any free port otherwise. */
 async function listenOnLoopback(preferredPort: number): Promise<Server> {

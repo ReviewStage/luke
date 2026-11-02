@@ -1,10 +1,4 @@
-import {
-  AGENT_KIND,
-  type AgentKind,
-  type AgentStatus,
-  type AgentSummary,
-  type TasklessAgent,
-} from "@luke/features/agent-wire";
+import type { AgentStatus, AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
 import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
@@ -119,7 +113,6 @@ export function agentCardReading(
           title: label,
           messages,
           brief: agent.brief,
-          quiet: agent.kind === AGENT_KIND.OPERATOR,
         }),
       startedBy: teammateRef(agent.startedBy, agents.me),
       automationId: agent.automationId,
@@ -195,8 +188,8 @@ export function tasklessRowSubject(
 }
 
 /**
- * An agent with no task as the Inbox names it (`TasklessInboxAgent`): Luke
- * for the member's operator, else its title, else the name of the automation
+ * An agent with no task as the Inbox names it (`TasklessInboxAgent`): its
+ * title, else the name of the automation
  * the reader may read that started it, else its model (`agentName`), its
  * harness's tile at rest, and that automation. Note that the line says
  * nothing of where the agent stands, so its card's corner says nothing
@@ -204,7 +197,6 @@ export function tasklessRowSubject(
  */
 export function tasklessSubject(
   line: {
-    readonly agentKind?: AgentKind | undefined;
     readonly agentTitle: string | null;
     readonly agentModel: string;
     readonly automationId: string | null;
@@ -214,7 +206,6 @@ export function tasklessSubject(
 ): AgentSubject {
   const name = agentName(
     {
-      kind: line.agentKind,
       title: line.agentTitle,
       model: line.agentModel,
       automationName: line.automationId === null ? null : line.automationName,
@@ -244,7 +235,6 @@ export function tasklessSubject(
 
 /** An agent as a line read beside its thread names it: its task's row, or its channel thread; where it stands, where the line says so. */
 export type AgentLine = ChannelThreadAgent & {
-  readonly kind?: AgentKind | undefined;
   readonly status?: AgentStatus | undefined;
 };
 

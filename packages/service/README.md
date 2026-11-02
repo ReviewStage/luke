@@ -26,7 +26,7 @@ handler on the path set the root `vercel.json` routes here, and the hosted
 vocabulary's `not-found` on any other path, which nothing routes to this
 function. The handler is held as a passthrough rather than described as
 endpoints — an `HttpApi` declaring them would be a second copy of a contract
-Better Auth already versions, and the first to drift would be the one Luke
+Better Auth already versions, and the first to drift would be the one Vespin
 ships. The request handed over is the very `Request` the function was invoked
 with, and the answer travels back as a raw body, so the status, the headers,
 every `set-cookie`, and the bytes are the handler's own. Nothing is mirrored
@@ -47,7 +47,7 @@ write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
 because a workspace is adopted by its slug, and a session free to create an
 organization or rename its own could take a team's slug first. That covers
 create, update, delete, check-slug, set-active, member removal, role changes,
-leave, every invitation endpoint (Luke sends no invitation mail), and the
+leave, every invitation endpoint (Vespin sends no invitation mail), and the
 team and role endpoints this deployment does not mount. `disabledPaths` is
 read by the HTTP router alone, so the server-only `auth.api` calls a hosted
 route makes still run, and a create that names a `userId` and carries no
@@ -55,9 +55,9 @@ session passes the creation rule as a system action.
 `src/auth/auth-database.test.ts` holds both sides with an account signed up through
 `auth.api.signUpEmail`.
 
-## The Luke GitHub App
+## The Vespin GitHub App
 
-"Sign in with GitHub" is the Luke GitHub App's user authorization: the
+"Sign in with GitHub" is the Vespin GitHub App's user authorization: the
 provider's client is the App's (`GITHUB_APP_CLIENT_ID`,
 `GITHUB_APP_CLIENT_SECRET`, read by `authSecrets` in `src/auth/auth-deployment.ts`;
 the admin dashboard's "GitHub sign-in" row reads the same client), so the
@@ -128,7 +128,7 @@ GitHub spells it. `repositoryReadToken(organizationId, "owner/name")` is the
 same check followed by the one token the App mints for that repository:
 naming it alone and `contents: read`, answered sealed beside the repository
 as GitHub spells it, or none where the installation does not reach it. It is
-what the checkout in Luke's sandbox reads through
+what the checkout in Vespin's sandbox reads through
 (`src/agents/repository-shell.ts`), and the File tab, the tree, and the skills
 beside it. `repositoryPullRequestToken` adds `pull_requests: read` and
 `repositoryWriteToken` cuts contents and pull requests write, each with CI
@@ -177,7 +177,7 @@ none carrying an account bearer. `GET /api/github/install` sends the browser
 to `https://github.com/apps/<slug>/installations/new`, where the developer
 installs the App on an account or organization and chooses its repositories.
 The App's registered Setup URL, with "Redirect on update", is
-`https://tryluke.dev/api/github/installed`: GitHub lands the browser there
+`https://vespin.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
 (`@luke/features`). Without a `state`, the route confirms the installation
@@ -190,7 +190,7 @@ never trusts `installation_id` alone: GitHub's guidance is that anyone can
 put any id on the Setup URL, so a user access token for the user who
 installed the App must show the installation is theirs
 ([About the setup URL](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)).
-Luke keeps no user's token for that, so the route writes the installation's
+Vespin keeps no user's token for that, so the route writes the installation's
 id and a random PKCE code verifier (Better Auth's `generateRandomString`, as
 its own flows make one) on the intent, and sends the browser through
 GitHub's web application flow
@@ -219,7 +219,7 @@ GitHub's "Request user authorization (OAuth) during installation" stays off:
 it disables the Setup URL and returns the code to the App's first callback
 URL, the sign-in's, and GitHub's docs say to run the full web flow with
 `redirect_uri` to choose the callback instead. So the App lists
-`https://tryluke.dev/api/github/installed/authorized` among its callback
+`https://vespin.dev/api/github/installed/authorized` among its callback
 URLs, beside the sign-in's.
 
 The page draws a fixed card per status and interpolates nothing the address
@@ -243,8 +243,25 @@ whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
 task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
-A redelivery reads the same again. GitHub's `ping` and any other event are
-answered and ignored. An `installation` delivery, which GitHub sends every
+A redelivery reads the same again. Before any of that, the repository a
+delivery names is recorded by GitHub's id under the name it carries
+(`github_repository`, `@luke/database/models/github-repositories`); where
+GitHub gives the id another name than it was last seen under, every stored
+name of it (tasks, agents, automations, pins, token reads, chapters, and
+workspace token repositories) moves to the new one in the same transaction,
+so the agents and tasks the delivery is matched to are found after a rename
+or a transfer. A delivery older than the one the id was last seen in, by the
+repository's own `updated_at`, moves nothing back, since GitHub delivers
+late and redelivers. Every reach records the id under the name it reached,
+too, so a delivery under a new name finds what a start or a turn wrote under
+the old one. A `repository` delivery is read for that alone: its `renamed`
+and `transferred` actions name the name it had, so a repository renamed
+before the service ever saw it is relabeled too. The App must subscribe to
+the Repository event for those, a setting of the App on GitHub; without it,
+the next reach of the old name, which GitHub answers with a redirect to the
+new one on whichever of the workspace's installations reaches it now
+(`github-app.ts`), does the same. GitHub's `ping` and any other event are answered and
+ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,
@@ -254,7 +271,7 @@ delivery, which GitHub also sends every App unsubscribed
 with action `revoked` clears the sealed tokens, which no longer reach
 anything, from the `account` rows of provider `github` whose `accountId` is
 the delivery's `sender.id`, and keeps the rows: GitHub's MCP server then
-asks for a new sign-in, and that sign-in finds the same Luke account
+asks for a new sign-in, and that sign-in finds the same Vespin account
 through the kept row even where GitHub's address has changed since, and
 writes fresh tokens onto it. Every other way the account signs in is kept.
 That is a write to Better Auth's own table, since a webhook carries no
@@ -269,11 +286,11 @@ while production's `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`
 hold the App's client id and secret, a Vercel project setting rather than anything in
 this repository. Nothing on the branch is Preview-specific.
 
-## The Luke Sentry integration
+## The Vespin Sentry integration
 
-Automations fire on Sentry's events (an issue alert whose action is Luke, a
-new issue) through Luke's own Sentry public integration, which a Sentry
-organization's owner installs on one Luke workspace; a delivery fires only
+Automations fire on Sentry's events (an issue alert whose action is Vespin, a
+new issue) through Vespin's own Sentry public integration, which a Sentry
+organization's owner installs on one Vespin workspace; a delivery fires only
 the automations of the workspace its installation stands for
 (`integration_installation`, `@luke/database/models/integration-installation-store`).
 `src/triggers/sentry/sentry-app-config.ts`'s `SentryApp` is the integration
@@ -289,10 +306,10 @@ Custom Integrations › Create New Integration, choose a public integration and 
 
 - **Webhook URL**: `https://<deployment>/api/triggers/sentry`.
 - **Redirect URL**: `https://<deployment>/api/triggers/sentry/installed`.
-- **Verify Installation**: on, so an install completes only once Luke has exchanged its code.
+- **Verify Installation**: on, so an install completes only once Vespin has exchanged its code.
 - **Permissions**: Issue & Event › Read, and Project › Read; nothing else.
 - **Webhooks**: Issue on.
-- **Alert Rule Action**: on, so an alert rule can name Luke as its action.
+- **Alert Rule Action**: on, so an alert rule can name Vespin as its action.
 
 Then copy the integration's slug, client id, and client secret into the three
 variables above for every environment that receives its deliveries.
@@ -423,7 +440,7 @@ up to fifty words the desktop expects to hear (the repository, the task's
 title, the paths it names), each on one line. `src/dictation/transcription.ts`
 sends the clip and the words to OpenAI's `gpt-transcribe` on the caller's own
 OpenAI API key (`src/accounts/own-api-key.ts`, the key saved in Settings ›
-Agents, never Luke's) as one
+Agents, never Vespin's) as one
 multipart `POST /v1/audio/transcriptions`, the words as its `keywords[]`
 ([OpenAI's speech-to-text guide](https://developers.openai.com/api/docs/guides/speech-to-text)).
 Nothing of the clip or the text is stored, logged, traced, or counted as an
@@ -537,7 +554,7 @@ A rotation is two steps. First put a new version at the head of the list,
 rows on version 1 still open. Then ask that deployment for the rewrap:
 
 ```
-CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
+CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://vespin.dev
 ```
 
 The script is a `POST /api/maintenance/provider-keys-rewrap` under the
@@ -557,13 +574,16 @@ whose ring it would need.
 
 ## Integrations
 
-Every agent Luke runs — the agent and its declared worker —
+Every agent Vespin runs — the agent and its declared worker —
 can use the signed-in account's integrations, each
 through the provider's own hosted MCP server with every tool it lists, the
 ones that write and the ones that answer a credential among them (`AGENTS.md`'s
-carve-out for integrations), and no approval step of Luke's: Executor
+carve-out for integrations), and no approval step of Vespin's: Executor
 (`https://mcp.executor.sh/mcp`, the apps the developer set up in Executor),
-GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
+GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Gmail
+(`https://gmailmcp.googleapis.com/mcp/v1`), Google Calendar
+(`https://calendarmcp.googleapis.com/mcp/v1`), Google Drive
+(`https://drivemcp.googleapis.com/mcp/v1`), Granola
 (`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
 (`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
 (`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
@@ -590,8 +610,8 @@ grant is the account's own GitHub sign-in.
 
 **GitHub's grant** (`src/integrations/github-integration.ts`). GitHub's MCP
 server takes a GitHub App user token, and an account that signed in with
-GitHub already holds one: the Luke GitHub App's, which `GitHubApp.userToken`
-reads off the `account` row and refreshes ("The Luke GitHub App" above). So
+GitHub already holds one: the Vespin GitHub App's, which `GitHubApp.userToken`
+reads off the `account` row and refreshes ("The Vespin GitHub App" above). So
 GitHub has no connector, no `integration_connection` row, and no Connect or
 Disconnect (`INTEGRATION_GRANT_OF` in `@luke/features/integration-wire`): the
 statuses route answers it `connected` while that token reads, `disconnected`
@@ -608,7 +628,7 @@ alone. The grant ends with the account's GitHub, when the developer
 disconnects or revokes the App or deletes the account.
 
 **Who holds what.** Vercel Connect holds each grant, encrypted, and refreshes
-it; Luke never stores a token. Luke holds one row per account and provider
+it; Vespin never stores a token. Vespin holds one row per account and provider
 in `integration_connection` (`schemas/integration.ts`), which is its own word
 on whether its agents may use the grant: `connected` lets them, anything else
 or no row does not. Connect has no way to ask whether a sign-in finished and
@@ -617,10 +637,10 @@ take effect regardless of any cache. The migration that made the table copied
 every row of Linear's own table in as Linear's, and the one after it dropped
 that table.
 
-**More than one account at a provider.** A Luke account may hold more than
+**More than one account at a provider.** A Vespin account may hold more than
 one account at a provider (two Notion workspaces), each its own row and its
 own grant. Connect keys a grant by connector and subject, so each row keeps
-the subject it asks under (`connect_subject`): the Luke account's own user
+the subject it asks under (`connect_subject`): the Vespin account's own user
 id for the first account at a provider, as every ask was before a second
 was possible, and a minted `luke_acct_…` id for another. Each row also keeps
 the one name the account goes by everywhere (`connection_name`): the
@@ -648,7 +668,7 @@ same user and client; at most `INTEGRATION_ACCOUNTS_MAX` (five) per provider,
 counting an account connected or expired and a sign-in still within its
 window. A sign-in left past its window holds no place, and adding an account
 lets it go, so its name is free again.
-Deleting the Luke account reads every row's subject before the cascade and
+Deleting the Vespin account reads every row's subject before the cascade and
 revokes each.
 
 **The routes** (the hosted procedures in
@@ -661,7 +681,7 @@ more than one sees exactly what it saw before:
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
   status }, accounts?: [{ provider, connection, label?, status }],
   addable?: [provider] }`: each provider's first account's word, every
-  account the Luke account holds but one whose first sign-in ended without
+  account the Vespin account holds but one whose first sign-in ended without
   a grant, and the providers it may add another account at; each status
   `connected`, `pending`, `expired`, `disconnected`, or `unavailable` (no
   connector for it on this deployment). For a caller that carries a bearer,
@@ -707,7 +727,7 @@ more than one sees exactly what it saw before:
   row's subject; every other account at the provider stands. A failed revoke is logged and
   the account is disconnected all the same. Connect revokes at the provider
   where the provider allows it; otherwise its token stands until it expires,
-  though Luke no longer uses it. Deleting the account revokes every
+  though Vespin no longer uses it. Deleting the account revokes every
   provider's grant the same way.
 - `GET /api/account/integrations/{provider}/tools` answers the tools the
   provider's server offers the account's agents, `{ tools: [{ name, title?,
@@ -734,7 +754,7 @@ more than one sees exactly what it saw before:
   `not-completed` ends the sign-in, so the desktop's next read finds it no
   longer pending and says it failed, unless Connect's result names it
   `canceled` or `error`: that one is left for the next statuses read, which
-  says why as it ends it. The callback carries the state Luke put on it and
+  says why as it ends it. The callback carries the state Vespin put on it and
   nothing of Connect's: no error and no reason. A sign-in that fails on
   Connect's own page ("Connection Failed", a token exchange the provider
   refused) never sends the browser back here at all, and the statuses read
@@ -791,7 +811,7 @@ wrapper's own result. Both the names and that envelope are the wire's
 `integrationRemoteCallSchema`), because the desktop draws the nested call as
 the provider's tool, under the provider's mark, and leaves its wrapper's row
 out. A Claude Code or Codex agent has no wrapper: each connection it is
-handed is an MCP server of its own at Luke
+handed is an MCP server of its own at Vespin
 (`/api/agents/mcp/integrations/<connection>`, `src/agents/luke-mcp/app.ts`
 over `src/integrations/connection-door.ts`), and its call of one
 (`mcp__linear__list_issues`, or Codex's `mcpToolCall` on server `linear`) is
@@ -821,6 +841,7 @@ vercel connect create vercel --target mcp --name vercel        # Vercel, through
 vercel connect create api.ycombinator.com/v1/mcp --name ycombinator   # Y Combinator's Bookface
 vercel connect attach <connector-uid> --yes                    # each of the above: production, preview, and development
 # Slack: an OAuth connector against Slack's MCP authorization server, created and attached below
+# Gmail, Google Calendar, Google Drive: Google OAuth connectors over our own client, below
 ```
 
 Each of those is a server that publishes its OAuth discovery and registers
@@ -877,7 +898,7 @@ connector is a plain OAuth connector over it, with Neon's two scopes
 (Neon's consent page still asks whether to allow writes):
 
 ```
-(umask 077; curl -s https://mcp.neon.tech/api/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"client_secret_post","scope":"read write"}' > ~/neon-client.json)
+(umask 077; curl -s https://mcp.neon.tech/api/register -H 'content-type: application/json' -d '{"client_name":"Vespin","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"client_secret_post","scope":"read write"}' > ~/neon-client.json)
 # ~/neon.json, from its client_id and client_secret, written under the same umask:
 # {"serverUrl":"https://mcp.neon.tech","clientId":"…","clientSecret":"…","tokenEndpointAuthMethod":"client_secret_post","pkceRequired":true,"userAuthorization":{"enabled":true,"scopes":["read","write"]},"refreshTokens":{"enabled":true}}
 vercel connect create mcp.neon.tech --name neon --connector-type oauth --data @"$HOME/neon.json" --json
@@ -900,12 +921,61 @@ is. Each grant belongs to the one Executor organization the developer picks
 on its consent page.
 
 ```
-(umask 077; curl -s https://app.executor.sh/api/auth/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","scope":"mcp offline_access"}' > ~/executor-client.json)
+(umask 077; curl -s https://app.executor.sh/api/auth/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Vespin","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","scope":"mcp offline_access"}' > ~/executor-client.json)
 jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,codeChallengeMethod:"S256",defaultResource:"https://mcp.executor.sh/mcp",userAuthorization:{enabled:true,scopes:["mcp","offline_access"]}}}' ~/executor-client.json > ~/executor-patch.json
 (umask 077; vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/executor-before.json)   # the backup
 vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/executor-patch.json
 rm ~/executor-client.json ~/executor-patch.json
 ```
+
+**Google's connectors.** Gmail, Google Calendar, and Google Drive are
+Google's own Workspace MCP servers, in Google's Developer Preview
+(https://developers.google.com/workspace/guides/configure-mcp-servers).
+Google registers no client for Connect, and its servers take only a client
+its Cloud project marks as an agent's, so all three connectors share one
+client of ours:
+
+1. A Google Cloud project, enrolled in the Workspace Developer Preview
+   Program, with the Gmail, Google Calendar, and Google Drive APIs and each
+   one's MCP service enabled.
+2. Its OAuth consent screen. While Google is offered only to the team's own
+   accounts (`*_ALLOWED_ACCOUNTS`, below), either user type serves without
+   Google's verification: Internal, for a project inside the team's
+   Workspace organization, which admits every account of it; or External,
+   published unverified, which shows an "unverified app" warning on the
+   consent page and admits at most 100 accounts over the project's life. An
+   External screen left in Testing admits only its listed test users, and
+   Google expires their refresh tokens after seven days, so a grant stands
+   expired each week. Opening it to customers means Google's verification,
+   and Gmail's and Drive's restricted scopes add an annual CASA security
+   assessment.
+3. A Web application OAuth client with "Use this client for an AI-powered
+   agent" ticked and `https://connect.vercel.com/callback` among its
+   redirect URIs.
+4. One connector per product, each `vercel connect create google` over that
+   client's ID and secret, asking for its product's scopes alone, so
+   connecting Calendar never asks for mail:
+   - `gmail`: `https://www.googleapis.com/auth/gmail.readonly` and
+     `https://www.googleapis.com/auth/gmail.compose`. The server lists no send
+     tool, so none of `gmail.send` is asked for.
+   - `google-calendar`: `https://www.googleapis.com/auth/calendar.calendarlist.readonly`,
+     `https://www.googleapis.com/auth/calendar.events.freebusy`, and
+     `https://www.googleapis.com/auth/calendar.events`. Google's guide names
+     `calendar.events.readonly` in the last one's place, but the server's
+     `create_event`, `update_event`, `delete_event`, and `respond_to_event`
+     need `calendar.events` to write.
+   - `google-drive`: `https://www.googleapis.com/auth/drive.readonly` and
+     `https://www.googleapis.com/auth/drive.file`.
+
+   Each connector must hold a refresh token: Google issues one only to an
+   authorization that asks for `access_type=offline`, and without one a
+   grant lapses within the hour. Sign in once, and if the connection stands
+   expired an hour later, the connector is not asking for offline access.
+
+Set `GMAIL_ALLOWED_ACCOUNTS`, `GOOGLE_CALENDAR_ALLOWED_ACCOUNTS`, and
+`GOOGLE_DRIVE_ALLOWED_ACCOUNTS` to the team's `@domain`s, comma separated,
+until the app is verified, so no other account is offered a sign-in Google
+would refuse or count against the unverified cap.
 
 **Granola's, PostHog's, Supabase's, and Y Combinator's connectors.** Each
 is created as above and then corrected in place, its UID unchanged, because
@@ -946,7 +1016,7 @@ provider connects, the one way back if it does not
 Granola's, for example:
 
 ```
-(umask 077; curl -s https://mcp-auth.granola.ai/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}' > ~/granola-client.json)
+(umask 077; curl -s https://mcp-auth.granola.ai/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Vespin","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}' > ~/granola-client.json)
 jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,codeChallengeMethod:"S256"}}' ~/granola-client.json > ~/granola-patch.json
 (umask 077; vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/granola-before.json)   # the backup
 vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/granola-patch.json
@@ -959,7 +1029,8 @@ organization to grant before it returns, and a sign-in that waited there
 came back to Connect as "Callback state not found or expired"; signing in
 again straight through connects.
 
-Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
+Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID`,
+`GOOGLE_CALENDAR_CONNECTOR_UID`, `GOOGLE_DRIVE_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
@@ -1121,8 +1192,8 @@ store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `rea
 `write_file`, and `glob`, its own `apply_patch` and `grep`
 (`apps/dev/tools/`), eve's provider-run `web_search` (Anthropic's server
 search on a Claude model, OpenAI's on a GPT one, inside the agent's own model
-call and so on its own key), Luke's own `read_web_page`
-(`public-research.ts`: refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
+call and so on its own key), Vespin's own `read_web_page`
+(`public-research.ts`: refusing any address off the public internet), and two of Vespin's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), which takes notes
 (`@luke/features/plan-template`'s `planNotesSchema`)
 into the plan of the task the call names, the agent's own or any other of
@@ -1137,8 +1208,7 @@ notes. Every agent is offered `edit_plan`, `show_page`, `look_at_picture`,
 and the comment tools, one on no task among them, as an automation's run
 starts one: its pages stand on the agent itself, a look names its plan by
 the picture's address, and every `edit_plan` and comment call names its
-task, any of its workspace, an operator's change held to its member's own
-tasks (`steward.ts`).
+task, any of its workspace.
 Beside them stand
 the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its
@@ -1194,7 +1264,7 @@ a write answers the start of the prompt, as the list does, and a
 switched-off connection named by no connection's name is refused; a run now
 records a manual firing under a key drawn from the call's and acts on it
 through the same guards and start a Run now takes, reaching eve as the
-deployment acting for the starter; an operator is offered no delete; and `list_models`, the models and efforts the agent's starter may
+deployment acting for the starter; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1205,7 +1275,7 @@ task's link, so its replies, Inbox items, and plan notes draw them as chips.
 A line from another agent hands the agent it reaches no MCP server it
 mentions, since an agent's servers are its developer's to switch. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
-Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
+Gateway model and its `gh` tool on Vercel Connect, and Vespin runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
 session's input tokens are uncapped and compaction is eve's default.
 
@@ -1269,7 +1339,7 @@ The key a step runs on is read at every step too
 holds no model key of its own. A provider it saved no
 key for refuses the step with `NO_PROVIDER_KEY`, and a row the deployment's
 ring cannot open, or a deployment holding no ring, with
-`ACCOUNT_KEY_UNREADABLE`, so nothing is quietly billed to Luke. A step on the account's key goes through a middleware that keeps the
+`ACCOUNT_KEY_UNREADABLE`, so nothing is quietly billed to Vespin. A step on the account's key goes through a middleware that keeps the
 row's status as the provider answers: a 401 marks it `invalid`, OpenAI's
 429 `insufficient_quota` or Anthropic's "credit balance" refusal marks it
 `quota_exceeded`, and a call that goes through marks it `verified` again,
@@ -1279,7 +1349,7 @@ first two fail the step with `ACCOUNT_KEY_REFUSED` or
 refusals read as the agent's failure `provider_key`, which the desktop
 words as a key to replace in Settings. The calls beside an account's agents
 run on its own key too, through `ownKeyOf`, the provider they prefer first
-and the other where it saved only that, and never on Luke's: an agent's or
+and the other where it saved only that, and never on Vespin's: an agent's or
 a worker's title on the provider's small model (Haiku, or OpenAI's
 `gpt-6-luna`), and a Continue's or Fork's replay summary on the new agent's
 own model, or the other provider's balanced model. An account that saved
@@ -1417,24 +1487,12 @@ the starter of the agent that kept it, or of the one that last corrected it.
 Like the workspace's git history it outlives that member: leaving keeps it,
 and deleting the account sets `user_id` null, read as a former member.
 
-A memory kept with `remember`'s `private` is the one exception: `private_to`
-names the one member whose operator recalls it and who reads and forgets it
-in Settings, and to every other member, an owner or admin included, its id
-names nothing. Only the member's operator keeps or recalls one
-(`MemoryCall.readsPrivate`), because an operator's transcript is its member's
-alone (`agentNoTeammatesOperator`) while a coder's is read by every member, so
-a coder's recall reads the shared memories alone and its `private` is
-refused. It is that member's, not the workspace's, so its foreign key cascades
-and it leaves with their account. Recall and Settings read through
-`listMemories(workspaceId, readerId)`, which answers the shared memories and
-the reader's own private ones; the same words stand once only within one
-visibility, and a correction keeps the visibility of the memory it corrects.
-The operator is told to keep the member's own preferences and what they are
-juggling private (`coder-host/instructions.ts`'s `PRIVATE_MEMORY_WORDS`).
+Recall and Settings read through `listMemories(workspaceId)`, and the same
+words stand once.
 
-The agent keeps and searches it through `remember` and `recall`
+The agent keeps and searches it through `save_memory` and `search_memory`
 (`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a
-worker, on both the eve tool files and Luke's MCP server through the shared
+worker, on both the eve tool files and Vespin's MCP server through the shared
 agent door (`coder-host/agent-doors.ts`). The workspace and the starter are
 read from the service's record of the agent (`callerWorkspace`,
 `callerUserId`), never from the model. `packages/database/src/models/memory-store.ts`
@@ -1466,7 +1524,7 @@ out, and closes the story with "Other changes": the files a reader reads past,
 those with no hunk, and whatever is still outside. The model is a seam: the
 route hands in `chaptersModelOf(own, modelId)` on the API key the member who
 pressed Generate saved (`ownKeyOf`), the Claude model they chose on an
-Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Luke's
+Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Vespin's
 key; a member who saved none reads `generatable: false`. A test hands in a
 scripted one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
 call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is
@@ -1784,7 +1842,7 @@ the addresses, `@luke/features/contract`'s `automations.ts` the procedures;
 `src/automations/automations-procedures.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
 
-A GitHub trigger fires on the Luke App's own webhook
+A GitHub trigger fires on the Vespin App's own webhook
 (`src/github/github-webhook-app.ts`, through `src/automations/automation-github.ts`): a
 pull request opened or labelled, a pull request ready for review opened,
 reopened, marked ready, or pushed to (`pull-request-updated`; a draft fires
@@ -1803,7 +1861,7 @@ repositories; a run whose automation no longer lists that repository by the
 time the sweep acts on it is skipped as `repository-changed`. A run is queued under the delivery's `X-GitHub-Delivery`, which a
 redelivery carries again, so each automation records one run per
 delivery, and the sweep starts its agent within the minute rather than
-inside GitHub's ten seconds. Each event is read with who sent it: Luke's
+inside GitHub's ten seconds. Each event is read with who sent it: Vespin's
 agents where the sender is the App's own bot (`<slug>[bot]`), another bot,
 or a person; and, for a pull request, its moment (opened or reopened, marked
 ready, pushed to), whether it is a draft, and whether it comes from a fork
@@ -1811,7 +1869,7 @@ ready, pushed to), whether it is a draft, and whether it comes from a fork
 among them (`senders`, `moments`, `drafts`, `forks` in
 `@luke/features/automation-wire`): people's events alone, every moment, and
 no draft or fork where it names none. An automation cannot fire itself
-whatever its settings say: a push by Luke's agents, to a branch or to a pull
+whatever its settings say: a push by Vespin's agents, to a branch or to a pull
 request, fires nothing, and neither does a failed check on a `luke/` branch,
 where an agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
@@ -1844,7 +1902,7 @@ teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its agents go with it, and
 `DELETE /api/plans/{id}` deletes it, its agents' rows going with it
-and their conversations stamped deleted, with the one the task's own Luke
+and their conversations stamped deleted, with the one the task's own Vespin
 kept where the row still names it (`deleteTask`),
 the id read from the path by the hosted oRPC router.
 Each row of the list carries `agents` where the task has an agent
@@ -1878,7 +1936,7 @@ next segment is a task's id.
 `src/accounts/workspaces-app.ts` answers the account's workspaces
 (`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
-repositories come only from the Luke GitHub App installations an owner or
+repositories come only from the Vespin GitHub App installations an owner or
 admin connects to it, one per GitHub account. Every request resolves the bearer first and ensures the
 account's first workspace.
 
@@ -2011,7 +2069,7 @@ a task deleted meanwhile, which a save never recreates because it is an
 each leaving the prior document in place.`src/tasks/tasks.test.ts` and `apps/web/tests/tasks-app.test.ts` hold both halves
 against a real dialect.
 **One tool registry** (`src/agents/agent-runtime/tools.ts`). Every tool
-Luke offers either of its two agents is named once there, with the roles it
+Vespin offers either of its two agents is named once there, with the roles it
 serves: the agent and its worker.
 What each is offered is derived from it: the agent's files under
 `apps/dev/tools/` name its set; each role's
@@ -2031,7 +2089,7 @@ a read that fails offers none.
 The page read (`src/agents/public-research.ts`) is `read_web_page`, one
 public HTTPS page fetched and reduced to its text, with no credential of the
 account's, the result going back only to the call that asked. A search is no
-tool of Luke's: it is eve's provider-run `web_search`, paid for by the agent's
+tool of Vespin's: it is eve's provider-run `web_search`, paid for by the agent's
 own model call. A page read refuses any host whose address, resolved before
 each request and again on every redirect hop it follows by hand, is private,
 loopback, link-local, CGNAT, unique-local, or reserved; the check is a lookup
@@ -2072,7 +2130,7 @@ tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
 conversation row names its kind (`coding_agent`, which
 `packages/database/src/models/agent-store.ts` opens, is the one any
-code still opens; `plan`, a task's own Luke's, is opened no more), the
+code still opens; `plan`, a task's own Vespin's, is opened no more), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
 metadata as plain `jsonb`, unique on `(conversation_id, client_id)` as its
@@ -2115,8 +2173,8 @@ nothing will answer it now, and closes the row; a writer that dies between
 the call and its result leaves the part in `input-available`, which is what
 a resume reads. Only a refusal — a call the tool or the host's admission
 refused — is an `output-error` part; an unknown outcome is an
-`output-available` part carrying its envelope, so the record can tell "Luke
-declined" from "Luke does not know", which are opposite claims. Because any
+`output-available` part carrying its envelope, so the record can tell "Vespin
+declined" from "Vespin does not know", which are opposite claims. Because any
 call may answer with that envelope, a tool's declared output schema has to
 admit it, and the writer holds the catalog to that once, when it is
 composed, refusing to exist over a catalog that fails it rather than leaving
@@ -2204,7 +2262,7 @@ value is read as unset (`environment.ts`), as a blank one is: the build logs
 that once, by the two names, and the admin dashboard's Reliability screen
 shows it as not configured.
 
-## Luke Sync
+## Vespin Sync
 
 `src/sync/` is what a wait on the database waits through. A reader opens a
 watch on the topics its rows notify (`src/sync/watch.ts`; the topics and the
@@ -2225,7 +2283,7 @@ replacement each wake every watch, so its reader reads again.
 
 `webServices` always provides the hub. While no listener stands, as while one
 reconnects or where the deployment has no `DATABASE_URL_UNPOOLED`, every
-`next` waits its caller's own poll, as every held read did before Luke Sync;
+`next` waits its caller's own poll, as every held read did before Vespin Sync;
 a watch on no topics always does, and a runtime that provides no hub, as a
 test may, stands on the clock. The hub's metrics (`luke.sync.*`) count
 notifications, wakes, fallback wakes, reconnects, and the milliseconds the

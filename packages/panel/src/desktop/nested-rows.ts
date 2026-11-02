@@ -15,10 +15,12 @@
  * siblings as they are drawn, the rows under the same parent or at the
  * top, and lands its entry beside the sibling's, which is all that orders
  * them; and a row let go at a slot lands before the row at the top drawn
- * after it, never inside another's child tasks.
+ * after it, never inside another's child tasks. A reader hears each row's
+ * level and its place among its siblings (`nestsOf`), since the rows stand
+ * flat in one list.
  */
 
-import type { ListRowFold } from "@luke/ui";
+import type { ListRowFold, ListRowNest } from "@luke/ui";
 import { type DrawnTaskRow, drawnTaskRows, TASK_ROW, type TaskRow } from "@luke/ui/task-list-model";
 import { useRef } from "react";
 
@@ -60,6 +62,26 @@ export function siblingsAt(nested: readonly Depth[], at: number): number[] {
   const parents = parentsOf(nested);
   const parent = parents[at];
   return nested.flatMap((_, each) => (parents[each] === parent ? [each] : []));
+}
+
+/**
+ * Each drawn row's place among its siblings, which a reader hears with its
+ * level, as a nested list's items are read; none for every row of a list
+ * that nests none, which reads as the plain list it is.
+ */
+export function nestsOf(nested: readonly Depth[]): (ListRowNest | undefined)[] {
+  if (nested.every(({ depth }) => depth === 0)) return nested.map(() => undefined);
+  const parents = parentsOf(nested);
+  const sizes = new Map<number, number>();
+  const positions = parents.map((parent) => {
+    const position = (sizes.get(parent) ?? 0) + 1;
+    sizes.set(parent, position);
+    return position;
+  });
+  return parents.map((parent, at) => ({
+    position: positions[at] ?? 1,
+    size: sizes.get(parent) ?? 1,
+  }));
 }
 
 /**

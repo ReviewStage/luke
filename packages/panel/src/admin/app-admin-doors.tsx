@@ -9,7 +9,7 @@
  * drops any read it aborted. The app is signed in before it
  * draws, so nothing is held at the gate up front, and a refusal stands in
  * the page as the app's centred failure rather than a sign-in card. The app
- * keeps its places in its own history, whose step for each view has a Luke
+ * keeps its places in its own history, whose step for each view has an app
  * link of its own (`links-at-hand.ts`), so a screen here keeps its search
  * to itself and an account opens on a press, as a step of that history.
  */

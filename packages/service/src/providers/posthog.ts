@@ -41,7 +41,7 @@ const POSTHOG_DEFAULTS = {
 /**
  * One project's console page, on the app host the private API lives on —
  * never the ingestion host, which serves no pages. This is an address for a
- * maintainer's browser, not an endpoint Luke calls, and it honors the same
+ * maintainer's browser, not an endpoint we call, and it honors the same
  * host override the erasure call does, so an EU project links to its own
  * console.
  */

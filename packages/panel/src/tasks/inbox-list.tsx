@@ -101,6 +101,7 @@ import {
   type MenuAsk,
   PhoneHead,
   PlaceMore,
+  phoneFindGroups,
   useAskedMenu,
   useMenuAsk,
 } from "../desktop/phone-head.js";
@@ -195,8 +196,9 @@ import { cardTitle } from "./tool-call-model.js";
  * item listed, the list says so in the Inbox's empty state, offering the
  * view that holds something, as a mail app's empty unread view does; the
  * item the pane shows keeps its place there, though no row. A channel
- * and a task's own Inbox list every item they hold, with no view's menu,
- * and say "Nothing here" where they hold none. Either list
+ * offers the same menu, on the Inbox's own scope; a task's own
+ * Inbox lists every item it holds, with no view's menu. Either says
+ * "Nothing here" where it holds none. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
  * draws its list the whole Inbox wide, with no edge, and hides it while an
@@ -278,8 +280,8 @@ function whoseWords(whose: InboxWhose): string {
  * The list's region's name, saying what it lists, since the head names the
  * Inbox alone: Needs you where it holds only what needs the reader, whose
  * rows leave it unsaid (`needsYouShown`), so a reader hears it once; else
- * the window's Inbox's scope and whom Addressed to names. A channel and a
- * task's own Inbox list everything, so their region is named alone.
+ * the scope and whom Addressed to names. A task's own Inbox lists
+ * everything, so its region is named alone.
  */
 function regionLabel(head: InboxListHead): string {
   const { view } = head;
@@ -288,7 +290,7 @@ function regionLabel(head: InboxListHead): string {
   return `${INBOX_ITEMS} · ${SCOPE_WORDS[view.show].label} · ${whoseWords(view.whose)}`;
 }
 
-/** What a channel or a task's own Inbox says holding nothing, since it lists everything it holds. */
+/** What a channel or a task's own Inbox says holding nothing at all. */
 export const NOTHING_HERE = "Nothing here";
 
 /**
@@ -569,7 +571,7 @@ function whoseEntries(
 }
 
 /**
- * The window's Inbox's head's button that drops the view's menu: first what
+ * The window's Inbox's head's button, and a channel's, that drops the view's menu: first what
  * it shows, Open or All, the one shown checked; then Addressed to, a
  * submenu of Anyone, Me, or a teammate by face and name, its choice checked.
  */
@@ -916,9 +918,10 @@ function ListSearch({
  * with its search, on the window's top row as a task's tabs stand, ended by
  * the view's menu, which chooses the scope and whom the items are addressed
  * to; the sidebar's row names the Inbox. A channel names itself in a bar
- * over the list, its purpose or when it was archived after its name, and a
- * task's own Inbox in its tab's bar; each lists everything it holds, and
- * offers no menu, its search under its bar (`ListSearch`).
+ * over the list, its purpose or when it was archived after its name, the
+ * same menu ending it on the Inbox's own scope; a task's own Inbox names
+ * itself in its tab's bar, lists everything it holds, and offers no menu.
+ * Each draws its search under its bar (`ListSearch`).
  */
 function ListHead({
   head,
@@ -979,6 +982,7 @@ function ListHead({
                           onSelect: () => asked.onAsk(opener),
                         },
                       ],
+                  ...phoneFindGroups(),
                   readAll === undefined ? [] : [markAllAction(readAll)],
                 ].filter((group) => group.length > 0)
               }
@@ -1216,7 +1220,7 @@ export function InboxListNote({
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
-  /** The window's Inbox's view choices, and the presses that change them; none on a channel or a task's own, which list every item they hold. */
+  /** The window's Inbox's view choices, or a channel's, and the presses that change them; none on a task's own, which lists every item it holds. */
   readonly view: InboxViewChoices | undefined;
   /** The list's search, under its head, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;

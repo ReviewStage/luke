@@ -7,7 +7,7 @@ import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import type { MenuAction } from "./desktop/action-menu.js";
 
 /**
- * copy-link-item.tsx -- Copy link as any menu offers it: the one item every thing's ⋯ and right-click menu holds, copying the thing's Luke link and saying Link copied.
+ * copy-link-item.tsx -- Copy link as any menu offers it: the one item every thing's ⋯ and right-click menu holds, copying the thing's app link and saying Link copied.
  *
  * A menu names its thing by place (`@luke/features/link-grammar`), and the
  * item writes it under the workspace the surface's links are written in,
@@ -48,10 +48,10 @@ export function useChordLinks(): readonly string[] {
 }
 
 /**
- * Copy link, copying `link`, a Luke link, through `copy`, the window's menu
+ * Copy link, copying `link`, an app link, through `copy`, the window's menu
  * copy (`useCopyToast`): the one item every Copy link in a menu draws,
  * printing ⇧⌘C where the chord copies the same link, one of `chord`
- * (`useChordLinks`). Note that a GitHub address is no Luke link and is
+ * (`useChordLinks`). Note that a GitHub address is no app link and is
  * offered as Copy GitHub link (`PANEL_COMMAND.COPY_GITHUB_LINK`), and a
  * link's own right-click keeps its browser's Copy link (`link-menu.tsx`).
  */

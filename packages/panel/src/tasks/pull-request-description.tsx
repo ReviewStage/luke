@@ -65,7 +65,7 @@ const DESCRIPTION_WORDS = {
 /** What Reload asks first, since it drops the draft. */
 const RELOAD_QUESTION: DialogQuestion = {
   title: "Reload the description?",
-  body: `Your changes are discarded, and the description opens as it stands on GitHub now. ${IRREVERSIBLE_WORDS}`,
+  body: `Your changes are discarded. ${IRREVERSIBLE_WORDS}`,
   verb: "Reload",
   running: "Reloading",
   loss: CONFIRM_LOSS.IRREVERSIBLE,

@@ -1,4 +1,5 @@
 import { LANDING_TONE } from "@luke/features/landing-outcome";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   AuthMark,
   AuthPage,
@@ -20,13 +21,13 @@ import { CatalogSection } from "../section";
 /**
  * auth-page.tsx -- the sign-in page with its provider choices, a landing's
  * ringed mark on its way, settled, and failed, with and
- * without Open Luke, and a form with an error on a phone's width, each in a
+ * without its Open link, and a form with an error on a phone's width, each in a
  * frame the size of the screen it stands for. Every name and address is
  * made up.
  */
 
-/** Open Luke as a page offers it; the catalog goes nowhere. */
-const OPEN_LUKE = { label: "Open Luke", href: "#" } as const;
+/** The Open link as a page offers it; the catalog goes nowhere. */
+const OPEN_LUKE = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
 
 function Face(): React.JSX.Element {
   return (
@@ -49,7 +50,7 @@ function EmailForm(): React.JSX.Element {
   const [email, setEmail] = useState("someone@acme-corporation.example");
   return (
     <>
-      <FormField label="Work email" description="Luke sends a sign-in link to it.">
+      <FormField label="Work email" description={`${PRODUCT_NAME} sends a sign-in link to it.`}>
         {(control) => (
           <TextField
             field={control}
@@ -71,8 +72,8 @@ function AuthPages(): React.JSX.Element {
         <div className="catalog-screen">
           <AuthPage
             mark={<Face />}
-            title="Sign in to Luke"
-            footnote="You can close this window after Luke confirms the sign-in."
+            title={`Sign in to ${PRODUCT_NAME}`}
+            footnote={`You can close this window after ${PRODUCT_NAME} confirms the sign-in.`}
           >
             <ProviderChoices />
           </AuthPage>
@@ -83,7 +84,7 @@ function AuthPages(): React.JSX.Element {
           <div className="catalog-screen catalog-screen-phone">
             <SocialSignInCard
               mark={<Face />}
-              title="Luke admin"
+              title={`${PRODUCT_NAME} admin`}
               pending={undefined}
               onPress={() => undefined}
             />
@@ -119,7 +120,7 @@ function AuthPages(): React.JSX.Element {
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.DANGER} />}
-              title="Luke could not reach Notion"
+              title={`${PRODUCT_NAME} could not reach Notion`}
               description="Try again in a moment."
               action={OPEN_LUKE}
             />
@@ -128,20 +129,20 @@ function AuthPages(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection
         id="auth-luke"
-        title="Luke's own mark, on its way and failed, with no Open Luke"
+        title={`${PRODUCT_NAME}'s own mark, on its way and failed, with no Open ${PRODUCT_NAME}`}
       >
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark />}
-              title="Continuing to Luke…"
+              title={`Continuing to ${PRODUCT_NAME}…`}
               description="This window will close soon."
             />
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark tone={LANDING_TONE.DANGER} />}
-              title="Luke could not continue"
+              title={`${PRODUCT_NAME} could not continue`}
               description="Start sign-in again."
             />
           </div>

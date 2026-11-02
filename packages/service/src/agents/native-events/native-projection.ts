@@ -15,6 +15,7 @@ import {
   TURN_FAILURE,
   type TurnFailure,
 } from "../../core.js";
+import { CODER_REFUSAL } from "../coder-host/bounds.js";
 import { EVE_HOST_TURN, EVE_HOST_TURN_KIND } from "../eve-host/bounds.js";
 import {
   NATIVE_ENDING,
@@ -30,7 +31,7 @@ import {
  * native-projection.ts -- a native harness's moments folded into the store writer's events, as eve's relay folds eve's stream.
  *
  * A coding agent on a native harness runs one turn per launch of its runner:
- * the turn opens at the first sign of work (the line Luke handed it, the
+ * the turn opens at the first sign of work (the line we handed it, the
  * harness's start, or its first words) and ends with the launch, so a model
  * turn that ends with background work or a wakeup still to come leaves the
  * agent's turn running, as eve's parked turn does. Inside it each model call
@@ -53,6 +54,12 @@ import {
 
 /** The harness's own tools a call of which the record leaves out without reporting it. */
 const UNRECORDED_TOOLS: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_UNRECORDED_TOOL));
+
+/** How a turn may find the credential that paid refused: a key or sign-in not accepted, or a plan not eligible. */
+const REFUSED_STATUSES: ReadonlySet<PlanStatus> = new Set([
+  PLAN_STATUS.INVALID,
+  PLAN_STATUS.INELIGIBLE,
+]);
 
 /** A step's words: those it completed, those still forming, and how much of them the writer was told. */
 const DraftSchema = Schema.Struct({
@@ -110,6 +117,8 @@ const TurnSchema = Schema.Struct({
   failure: Schema.optionalKey(Schema.String),
   /** Whether the plan's limit refused the turn, a failure its user expects. */
   limited: Schema.optionalKey(Schema.Boolean),
+  /** Whether the provider refused the credential that paid, such as a key expired or a plan signed out. */
+  refused: Schema.optionalKey(Schema.Boolean),
   /** The MCP servers mentioned to the agent that this turn took as it started, which its calls are handed whatever the switches say. */
   servers: Schema.optionalKey(Schema.Array(Schema.String)),
 });
@@ -172,7 +181,7 @@ export const NATIVE_WRITE = {
   COMPACTED: "compacted",
   /** Record how a turn found the plan that pays for the agent, on its row. */
   PLAN_STATUS: "plan_status",
-  /** Replace the wakeups Luke delivers to the agent once due (`agent-wakeups.ts`). */
+  /** Replace the wakeups we deliver to the agent once due (`agent-wakeups.ts`). */
   WAKEUPS: "wakeups",
   /** Record what the newest model call read on the agent's row, which its context ring reads. */
   CONTEXT: "context",
@@ -199,6 +208,8 @@ export type NativeWrite =
       readonly detail: string;
       /** Whether the turn failed as its user expects, on the plan's limit, which opens no issue. */
       readonly expected: boolean;
+      /** Whether the provider refused the credential that paid, which opens no issue where the credential is the starter's own. */
+      readonly refused: boolean;
     }
   | {
       readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
@@ -215,6 +226,8 @@ export interface NativeProjectionContext {
   readonly sequence: number;
   readonly now: number;
   readonly model: string | undefined;
+  /** Whether the starter's own API key pays for the agent, so a refusal of it is theirs to replace in Settings. */
+  readonly ownKey: boolean;
   /** Whether the stored tool set holds a call of this name; a call of any other is left out, its answer with it. */
   readonly registered: (name: string) => boolean;
   /** Where a moment the record leaves out is said. */
@@ -453,7 +466,10 @@ class Fold {
     const turn = this.#closed(held);
     const status = statusOf(moment.ending, turn.failure);
     const failed = status === RUN_STATUS.FAILED;
-    const detail = [moment.detail, turn.failure, this.state.rateLimit]
+    // Note that a refusal of the starter's own key leads with the coder's word for it, so the window reads the failure as a key to replace rather than a model call failed.
+    const ownKeyRefused =
+      turn.refused === true && this.#context.ownKey ? CODER_REFUSAL.ACCOUNT_KEY_REFUSED : undefined;
+    const detail = [ownKeyRefused, moment.detail, turn.failure, this.state.rateLimit]
       .filter((word) => word !== undefined)
       .join("; ");
     const model = this.#context.model;
@@ -476,6 +492,7 @@ class Fold {
         failure: TURN_FAILURE.MODEL,
         detail,
         expected: turn.limited === true || this.state.rateLimit !== undefined,
+        refused: turn.refused === true,
       });
     }
     this.#setTurn(undefined);
@@ -594,6 +611,8 @@ class Fold {
         const turn = this.state.turn;
         if (turn !== undefined && moment.status === PLAN_STATUS.LIMIT_REACHED) {
           this.#setTurn({ ...turn, limited: true });
+        } else if (turn !== undefined && REFUSED_STATUSES.has(moment.status)) {
+          this.#setTurn({ ...turn, refused: true });
         }
         this.writes.push({
           kind: NATIVE_WRITE.PLAN_STATUS,

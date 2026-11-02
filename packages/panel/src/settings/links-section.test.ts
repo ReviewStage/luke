@@ -22,7 +22,7 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
 /**
  * Settings › Profile's Links group as the panel draws it: where the
- * account's Luke links open, a pop-up naming the browser until the account
+ * account's app links open, a pop-up naming the browser until the account
  * chooses, whose choice is written as the setting; and nothing of it while
  * signed out, since the choice is the account's.
  */
@@ -111,11 +111,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("Profile asks where Luke links open, the browser until chosen, and a choice writes the setting", async () => {
+test("Profile asks where Vespin links open, the browser until chosen, and a choice writes the setting", async () => {
   const page = draw(SIGNED_IN);
   assert.equal(page.textContent?.includes("Links"), true);
   const choice =
-    page.querySelector<HTMLButtonElement>('button[aria-label="Open Luke links in: Browser"]') ??
+    page.querySelector<HTMLButtonElement>('button[aria-label="Open Vespin links in: Browser"]') ??
     assert.fail("the row is drawn, naming the browser");
   // Note that the browser is the default, so a row that never chose wears no mark of a change.
   assert.equal(page.textContent?.includes("Modified"), false);
@@ -123,8 +123,8 @@ test("Profile asks where Luke links open, the browser until chosen, and a choice
   act(() => choice.click());
   const app =
     [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (item) => item.textContent === "Luke for Mac",
-    ) ?? assert.fail("the menu offers Luke for Mac");
+      (item) => item.textContent === "Vespin for Mac",
+    ) ?? assert.fail("the menu offers Vespin for Mac");
   act(() => app.click());
   await act(async () => undefined);
 
@@ -133,5 +133,5 @@ test("Profile asks where Luke links open, the browser until chosen, and a choice
 
 test("signed out, Profile asks nothing about links", () => {
   const page = draw({ status: ACCOUNT_STATUS.SIGNED_OUT });
-  assert.equal(page.querySelector('button[aria-label^="Open Luke links in"]'), null);
+  assert.equal(page.querySelector('button[aria-label^="Open Vespin links in"]'), null);
 });

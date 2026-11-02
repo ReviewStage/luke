@@ -32,7 +32,7 @@ import { Fold, type FoldProps } from "./fold.js";
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.
  *
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
- * to Luke's tokens and folded on `fold.tsx`. The row is one line, and
+ * to our tokens and folded on `fold.tsx`. The row is one line, and
  * the whole of it opens the call: the tool's icon, what the call did in
  * a few words, and where it stands, trailing the words so that only their
  * cut moves when the mark goes: the working mark while it runs and the

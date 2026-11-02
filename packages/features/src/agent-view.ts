@@ -28,8 +28,6 @@ import {
   agentStartRequestFields,
   agentSummarySchema,
   localAgentRefusalSchema,
-  operatorEnsureAnswerSchema,
-  operatorEnsureRequestSchema,
   refusedDeviceSchema,
 } from "./agent-wire.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
@@ -45,8 +43,6 @@ import {
   devicePresenceAnswerSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
-  hostInstallTokenAnswerSchema,
-  hostInstallTokenRequestSchema,
   hostsAnswerSchema,
 } from "./host-wire.js";
 import {
@@ -130,7 +126,7 @@ export const AGENT_CALL_FAILURE = {
   NOT_PERMITTED: "not-permitted",
   /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
   AGENT_IMAGE_PREPARING: "agent-image-preparing",
-  /** The agent runs on Claude Code or Codex, which this part of Luke cannot reach yet. */
+  /** The agent runs on Claude Code or Codex, which this part of the app cannot reach yet. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
   AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
@@ -196,23 +192,12 @@ export const devicePresenceAnswerViewSchema = EffectSchema.Union([
 
 export type DevicePresenceAnswerView = typeof devicePresenceAnswerViewSchema.Type;
 
-/** An install token kept by its hash, as the window hears it: its id, expiry, and the install script's address, or why it was not kept. */
-export const hostInstallTokenAnswerViewSchema = EffectSchema.Union([
-  hostInstallTokenAnswerSchema,
-  failed,
-]);
-
-export type HostInstallTokenAnswerView = typeof hostInstallTokenAnswerViewSchema.Type;
-
-/** A host removed or an install token revoked, as the window hears it: done, or why not. */
+/** A host removed, as the window hears it: done, or why not. */
 export const hostDoneAnswerViewSchema = EffectSchema.Union([hostDoneAnswerSchema, failed]);
 
 export type HostDoneAnswerView = typeof hostDoneAnswerViewSchema.Type;
 
-/** What keeping an install token names: the token's SHA-256 alone, since the window that minted it keeps the token. */
-export const hostInstallTokenParamsSchema = hostInstallTokenRequestSchema;
-
-/** What removing a host or revoking an install token names: its id. */
+/** What removing a host names: its id. */
 export const hostIdParamsSchema = hostIdRequestSchema;
 
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
@@ -369,14 +354,6 @@ export const agentDeleteAnswerViewSchema = EffectSchema.Union([agentDeleteAnswer
 
 export type AgentDeleteAnswerView = typeof agentDeleteAnswerViewSchema.Type;
 
-/** The account's operator in a workspace ensured, as the window hears it: its id, or why there is none. */
-export const agentOperatorEnsureAnswerViewSchema = EffectSchema.Union([
-  operatorEnsureAnswerSchema,
-  failed,
-]);
-
-export type AgentOperatorEnsureAnswerView = typeof agentOperatorEnsureAnswerViewSchema.Type;
-
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const agentMessagesParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -516,14 +493,6 @@ export const agentPinParamsSchema = EffectSchema.Struct({
 
 export type AgentPinParams = typeof agentPinParamsSchema.Type;
 
-/** The account's operator in a workspace ensured, as the window asks it: the workspace, and whether a fresh one replaces the one standing. */
-export const agentOperatorEnsureParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  ...operatorEnsureRequestSchema.fields,
-});
-
-export type AgentOperatorEnsureParams = typeof agentOperatorEnsureParamsSchema.Type;
-
 /** One agent, as the window names it to stop or to delete. */
 export const agentStopParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -622,7 +591,7 @@ export const agentOverviewConversationAnswerViewSchema = EffectSchema.Union([
 export type AgentOverviewConversationAnswerView =
   typeof agentOverviewConversationAnswerViewSchema.Type;
 
-/** Which of Luke's own tools an agent is offered and where its `run_on_mac` stands, as the window hears it: the answer, or why there is none. */
+/** Which of our own tools an agent is offered and where its `run_on_mac` stands, as the window hears it: the answer, or why there is none. */
 export const agentLukeToolsAnswerViewSchema = EffectSchema.Union([lukeToolsAnswerSchema, failed]);
 
 export type AgentLukeToolsAnswerView = typeof agentLukeToolsAnswerViewSchema.Type;

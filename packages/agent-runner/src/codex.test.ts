@@ -1,5 +1,5 @@
 /**
- * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake Luke: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on the plan, the runner's token command run again mid-turn, every notification out in order, and the launch's end at the turn's.
+ * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake service: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on the plan, the runner's token command run again mid-turn, every notification out in order, and the launch's end at the turn's.
  */
 
 import assert from "node:assert/strict";
@@ -122,7 +122,7 @@ const CONFIG: CodexConfig = {
   executable: "/opt/luke-codex/bin/codex",
   model: "gpt-5.5",
   effort: CODEX_EFFORT.HIGH,
-  developerInstructions: "You are a Luke coding agent.",
+  developerInstructions: "You are a Vespin coding agent.",
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://luke.test/runner/mcp",
@@ -130,7 +130,7 @@ const CONFIG: CodexConfig = {
   tokenUrl: TOKEN_URL,
 };
 
-/** A message line of text alone, under Luke's id for the line where one is given. */
+/** A message line of text alone, under the service's id for the line where one is given. */
 function message(text: string, uuid?: string): InputLine {
   const line = { type: INPUT_LINE.MESSAGE, content: [{ type: "text" as const, text }] };
   return uuid === undefined ? line : { ...line, uuid };
@@ -165,7 +165,7 @@ function notified(exchanges: readonly Exchange[]): string[] {
   );
 }
 
-/** Luke's ids for the lines a test writes, as the service sends them. */
+/** The service's ids for the lines a test writes, as it sends them. */
 const LINE = {
   FIRST: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e01",
   STEERED: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e02",
@@ -183,7 +183,7 @@ function kinds(events: readonly RunnerEvent[]): string[] {
   return events.map(({ message: posted }) => ("method" in posted ? posted.method : posted.type));
 }
 
-/** One Codex launch over stdin lines the test writes, against scripted app-servers and a fake Luke. */
+/** One Codex launch over stdin lines the test writes, against scripted app-servers and a fake service. */
 function launch(
   scripts: readonly Script[],
   luke: ReturnType<typeof makeFakeLuke>,
@@ -228,7 +228,7 @@ function fakeLuke(watchFor?: string) {
 }
 
 it.effect(
-  "sets the member's installed skills as an extra skills root before the thread opens, and none where Luke wrote none",
+  "sets the member's installed skills as an extra skills root before the thread opens, and none where Vespin wrote none",
   () =>
     Effect.gen(function* () {
       const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
@@ -368,7 +368,7 @@ it.effect(
         kinds(luke.applied).filter((kind) => kind !== RUNNER_EVENT.ACCEPTED),
         [...notified(WORKFLOW.exchanges), RUNNER_EVENT.END],
       );
-      // Each line is said taken once, under Luke's own id, which Codex is handed to echo.
+      // Each line is said taken once, under the service's own id, which Codex is handed to echo.
       assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
       assert.deepEqual(
         luke.applied.map(({ sequence }) => sequence),
@@ -424,7 +424,7 @@ it.effect(
       assert.ok(!process?.args.some((arg) => arg.includes(BEARER)));
 
       assert.deepEqual(received(process, "initialize"), [
-        { clientInfo: { name: "Luke", title: "Luke", version: "dev" }, capabilities: null },
+        { clientInfo: { name: "Vespin", title: "Vespin", version: "dev" }, capabilities: null },
       ]);
       assert.deepEqual(received(process, "thread/start"), [
         {
@@ -460,7 +460,7 @@ it.effect(
 );
 
 it.effect(
-  "keeps a warm launch up past its completed turn, posting IDLE, and ends it as idled on Luke's retire",
+  "keeps a warm launch up past its completed turn, posting IDLE, and ends it as idled on Vespin's retire",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -704,7 +704,7 @@ it.effect("ends an idle launch at once on a stop, and on stdin closing, with no 
   }),
 );
 
-it.effect("starts the next turn for a message Luke sent just before the turn completed", () =>
+it.effect("starts the next turn for a message Vespin sent just before the turn completed", () =>
   Effect.gen(function* () {
     const luke = fakeLuke("turn/completed");
     const release = yield* Deferred.make<void>();
@@ -757,7 +757,7 @@ function override(process: Spawned | undefined, key: string): string | undefined
 }
 
 /**
- * Luke's token route as the runner's token command reaches it: each ask under
+ * The service's token route as the runner's token command reaches it: each ask under
  * the runner's bearer answers the next fresh token, `plan-token-1`, `-2`, ….
  */
 function fakeTokenRoute() {
@@ -850,24 +850,26 @@ it.effect(
     }),
 );
 
-it.effect("the token command says only Luke's status when Luke refuses it, never the bearer", () =>
-  Effect.gen(function* () {
-    const http = fakeHttpClientLayer(async () => new Response(null, { status: 409 }));
-    const refused = yield* askCodexToken(TOKEN_URL, ENV).pipe(Effect.provide(http), Effect.flip);
-    assert.equal(refused.detail, "Luke refused the token: 409");
+it.effect(
+  "the token command says only Vespin's status when Vespin refuses it, never the bearer",
+  () =>
+    Effect.gen(function* () {
+      const http = fakeHttpClientLayer(async () => new Response(null, { status: 409 }));
+      const refused = yield* askCodexToken(TOKEN_URL, ENV).pipe(Effect.provide(http), Effect.flip);
+      assert.equal(refused.detail, "The service refused the token: 409");
 
-    const unset = yield* askCodexToken(TOKEN_URL, {}).pipe(Effect.provide(http), Effect.flip);
-    assert.equal(unset.detail, "LUKE_RUNNER_TOKEN is not set");
+      const unset = yield* askCodexToken(TOKEN_URL, {}).pipe(Effect.provide(http), Effect.flip);
+      assert.equal(unset.detail, "LUKE_RUNNER_TOKEN is not set");
 
-    const unreachable = fakeHttpClientLayer(async () => {
-      throw new Error(`connection reset for ${BEARER}`);
-    });
-    const failed = yield* askCodexToken(TOKEN_URL, ENV).pipe(
-      Effect.provide(unreachable),
-      Effect.flip,
-    );
-    assert.equal(failed.detail, "Luke did not answer");
-  }),
+      const unreachable = fakeHttpClientLayer(async () => {
+        throw new Error(`connection reset for ${BEARER}`);
+      });
+      const failed = yield* askCodexToken(TOKEN_URL, ENV).pipe(
+        Effect.provide(unreachable),
+        Effect.flip,
+      );
+      assert.equal(failed.detail, "The service did not answer");
+    }),
 );
 
 it.effect("never starts app-server on the plan when it does not know its own bundle", () =>

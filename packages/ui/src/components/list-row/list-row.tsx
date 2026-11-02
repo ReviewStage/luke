@@ -143,7 +143,9 @@ export type { ListSelection } from "../selection/list-selection.js";
  * mark gives way to it while the pointer rests on the row or the keyboard
  * is on the chevron, as a group's head gives its glyph way (`GroupHeader`),
  * standing at rest on a screen with no hover. → and ← pressed on the row
- * open and fold them, as a tree's keys do.
+ * open and fold them, as a tree's keys do. A reader hears how deep it stands
+ * and its place among its siblings (`nest`), where its list nests rows, as
+ * a nested list's items are read, though every row stands flat in one list.
  *
  * A row may carry attachments (`attachments`), what its thing holds drawn
  * small on a line of their own over its words, as a message's files stand
@@ -155,7 +157,13 @@ export type { ListSelection } from "../selection/list-selection.js";
  * app's is (`LIST_ROW_META.TITLE`), at the end of its first line, its
  * title's or its lead's where that stands over the title, the lines under
  * it running the row's whole width and its leading mark level with the
- * first. A row's acts stand beside it, or, in a list
+ * first; or, in a rail whose rows count what each holds
+ * (`LIST_ROW_META.LAST`), at the end of its last line, the description's,
+ * on that line's baseline, the title over both running the row's whole
+ * width and its leading mark level with the title's first line. A row
+ * whose names run long may let its title run to a second line before it
+ * is cut short (`LIST_ROW_TITLE_LINES.TWO`), ending then in an ellipsis
+ * rather than a fade. A row's acts stand beside it, or, in a list
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
  * its metadata's place while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
@@ -169,10 +177,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn
- * whole ends on its last letter. A dense
- * row's description, a label beside its title, fades the same way, and so
- * does the name of what a row belongs to (`lead`), while a fuller row's
- * description, a preview's prose, and its metadata end in an ellipsis.
+ * whole ends on its last letter. A row's description, a dense row's label
+ * beside its title or a fuller row's preview under it, fades the same way,
+ * unless it alerts, which keeps its words whole, and so does the name of
+ * what a row belongs to (`lead`), while its metadata ends in an ellipsis.
  *
  * A row may lead its description with what it belongs to (`lead`), a
  * thread's task, say, in a list grouped by something else: a small chip
@@ -215,13 +223,22 @@ export const LIST_ROW_CURRENT_LOOK = {
 
 export type ListRowCurrentLook = (typeof LIST_ROW_CURRENT_LOOK)[keyof typeof LIST_ROW_CURRENT_LOOK];
 
-/** Where a row's metadata stands: at the row's middle, or at the end of its title's line. */
+/** Where a row's metadata stands: at the row's middle, at the end of its title's line, or at the end of its last line, its description's. */
 export const LIST_ROW_META = {
   MIDDLE: "middle",
   TITLE: "title",
+  LAST: "last",
 } as const;
 
 export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
+
+/** How many lines a row's title may run to before it is cut short: one, or two, as a rail of long names reads them. */
+export const LIST_ROW_TITLE_LINES = {
+  ONE: "one",
+  TWO: "two",
+} as const;
+
+export type ListRowTitleLines = (typeof LIST_ROW_TITLE_LINES)[keyof typeof LIST_ROW_TITLE_LINES];
 
 /** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
@@ -272,30 +289,25 @@ export interface ListRowFold {
   readonly label: string;
 }
 
+/** Where a row stands among the rows nested under the same parent as it, or among the rows at the top: its place, from 1, of how many. */
+export interface ListRowNest {
+  readonly position: number;
+  readonly size: number;
+}
+
 /**
- * How many of the things a row holds are settled, of all of them, as a row
- * says it at its end ("2/5"), before its time: figures in the muted ink,
- * whose words a screen reader hears whole (`label`, "2 of 5 child tasks
- * finished") in place of the figures.
+ * What a reader hears of a row's nesting, spread on its item: its level, 1
+ * at the top, and its place among its siblings, in a list that nests rows;
+ * nothing for a row at the top of a list that nests none. Note that the
+ * rows stand flat in one list, as their motion, their drag, and a grid's
+ * columns need, so the place is said rather than left to the list to count.
  */
-export function ListRowCount({
-  settled,
-  total,
-  label,
-}: {
-  readonly settled: number;
-  readonly total: number;
-  /** What the figures count, said whole to a reader who hears no figures. */
-  readonly label: string;
-}): React.JSX.Element {
-  return (
-    <span className="luke-list-row-count me-tight-gap flex-none tabular-nums">
-      <span aria-hidden="true">
-        {settled}/{total}
-      </span>
-      <VisuallyHidden>{label}</VisuallyHidden>
-    </span>
-  );
+export function nestedItem(
+  depth: number,
+  nest: ListRowNest | undefined,
+): { "aria-level"?: number; "aria-posinset"?: number; "aria-setsize"?: number } {
+  if (nest === undefined) return depth === 0 ? {} : { "aria-level": depth + 1 };
+  return { "aria-level": depth + 1, "aria-posinset": nest.position, "aria-setsize": nest.size };
 }
 
 /** How a list stands: its rows apart on the ground, or edge to edge in a card. */
@@ -355,7 +367,7 @@ const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, Ar
 
 /** The press spans the mark, the words, and the end, its parts standing in the row's own tracks. */
 const MAIN_CLASS =
-  "luke-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center rounded-inherit border-0 bg-transparent text-start text-inherit [font:inherit]";
+  "luke-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center border-0 bg-transparent text-start text-inherit [font:inherit]";
 
 /** A press that is a button, pressed as a Mac's list is on the desktop, without the web's pointing hand. */
 const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-press disabled:cursor-default`;
@@ -524,6 +536,7 @@ export function ListRow({
   attachmentsOpen = false,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
+  titleLines = LIST_ROW_TITLE_LINES.ONE,
   actions,
   actionsAt = LIST_ROW_ACTIONS.ALWAYS,
   onPress,
@@ -549,6 +562,7 @@ export function ListRow({
   menu,
   more = true,
   depth = 0,
+  nest,
   fold,
   describedAs,
   unreadWords,
@@ -571,6 +585,8 @@ export function ListRow({
   meta?: ReactNode;
   /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
   metaAt?: ListRowMeta;
+  /** How many lines its title may run to before it is cut short. */
+  titleLines?: ListRowTitleLines;
   /** The row's own acts (an IconButton, a Button), each a control beside the row's press. */
   actions?: ReactNode;
   /** When the acts stand: always, beside the row, or over its metadata's end while the row is hovered or holds the keyboard. */
@@ -621,6 +637,8 @@ export function ListRow({
   more?: boolean | undefined;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
+  /** Where it stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
   /** What a reader hears of its description, cut to what the eye reads first, which names the press by its other words and describes it by these; none where the press is named by its words as drawn. */
@@ -675,24 +693,12 @@ export function ListRow({
     onTitleClipped?.(titleClipped);
   }, [onTitleClipped, titleClipped]);
   const [descriptionMeasured, descriptionClipped] = useClipped(plainWords(description));
-  // Note that only a dense row's description fades, so a fuller row's prose
-  // is never measured; the row is dense by its own density, else its list's,
-  // as the stylesheet reads it, so a list made dense or regular again
-  // measures its rows' descriptions or lets them go.
   const listDensity = useContext(ListDensityContext);
   const pressPulse =
     useContext(ListVariantContext) === LIST_VARIANT.CARD ? PRESS_PULSE.FLUSH : PRESS_PULSE.QUIET;
-  const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
   const selecting = useContext(ListSelectionContext);
   const choosable = selecting !== undefined && selectKey !== undefined;
   const chosen = choosable && selecting.selected.has(selectKey);
-  const described = useCallback(
-    (element: HTMLElement | null) => {
-      if (element === null || !describedDense) return undefined;
-      return descriptionMeasured(element);
-    },
-    [descriptionMeasured, describedDense],
-  );
   const [leadMeasured, leadClipped] = useClipped(plainWords(lead?.label));
   const heading = (
     <span
@@ -700,6 +706,7 @@ export function ListRow({
       id={moreDrawn || said(actions) || describedAs !== undefined ? titleId : undefined}
       className="luke-list-row-title"
       data-overflow={String(titleClipped)}
+      data-lines={titleLines === LIST_ROW_TITLE_LINES.ONE ? undefined : titleLines}
     >
       {unread === true && unreadWords !== undefined ? (
         <VisuallyHidden>{unreadWords}</VisuallyHidden>
@@ -785,9 +792,9 @@ export function ListRow({
         {above ? heading : null}
         {said(description) || (!above && lead !== undefined) ? (
           <span
-            ref={described}
+            ref={descriptionMeasured}
             className="luke-list-row-description"
-            data-overflow={describedDense ? String(descriptionClipped) : undefined}
+            data-overflow={String(descriptionClipped)}
           >
             {above ? null : leadMark}
             {leadAt === LIST_ROW_LEAD.INLINE && lead !== undefined && said(description)
@@ -796,8 +803,9 @@ export function ListRow({
             {description}
           </span>
         ) : null}
+        {metaAt === LIST_ROW_META.LAST ? end : null}
       </span>
-      {metaAt === LIST_ROW_META.TITLE ? null : end}
+      {metaAt === LIST_ROW_META.MIDDLE ? end : null}
     </>
   );
   const press = onPress ? (
@@ -905,9 +913,10 @@ export function ListRow({
         id={id}
         {...(followedBy === undefined ? {} : motionKey(followedBy))}
         {...placed}
+        {...nestedItem(depth, nest)}
         ref={place === undefined ? (onPress ? undefined : ref) : itemRef}
         className={ROW_CLASS}
-        data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+        data-meta={metaAt === LIST_ROW_META.MIDDLE ? undefined : metaAt}
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
         data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}

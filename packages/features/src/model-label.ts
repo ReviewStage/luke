@@ -1,4 +1,3 @@
-import { AGENT_KIND, type AgentKind } from "./agent-wire.js";
 import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
@@ -6,7 +5,7 @@ import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
  *
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
- * the brain's coding-agent tools, whose answers Luke says aloud, so
+ * the brain's coding-agent tools, whose answers the app says aloud, so
  * no two of them name one model two ways; and the service, which names
  * every model it records by the catalog's id before it sends one.
  */
@@ -23,12 +22,12 @@ const GPT = "gpt";
 /**
  * The maker's word Anthropic's names lead with, which a label leaves off:
  * the harness mark beside a model already says whose it is, so "Claude Opus
- * 5.5" reads "Opus 5.5", and Luke says it the way the screen shows it. OpenAI's names carry no such word and stay whole.
+ * 5.5" reads "Opus 5.5", and the app says it the way the screen shows it. OpenAI's names carry no such word and stay whole.
  */
 const MAKER_WORD = "Claude ";
 
 /**
- * A recorded model as the catalog names it. Note that what Luke ran on its
+ * A recorded model as the catalog names it. Note that what we ran on our
  * own OpenAI key recorded OpenAI's own id where it named no catalog id: the
  * brain's turn rows written before it named its model by the catalog's id. The catalog names those under their
  * provider, which is how a card reads whose mark the model wears; an id that
@@ -68,13 +67,8 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
   );
 }
 
-/** The name a member's operator goes by everywhere it is named: Luke, never a teammate's first name. */
-export const OPERATOR_NAME = "Luke";
-
-/** What names an agent: what kind it is, its title, the automation whose run started it, and the model it runs on. */
+/** What names an agent: its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
-  /** What kind of agent it is; an operator is named Luke whatever else it holds. Absent for a coder, as the wire leaves it. */
-  readonly kind?: AgentKind | undefined;
   readonly title: string | null;
   readonly model: string;
   /** The name of the automation whose run started the agent, as the run started it; none for one started by hand. */
@@ -84,26 +78,15 @@ interface NamedAgent {
 }
 
 /**
- * The name an agent goes by apart from its title: Luke for an operator,
- * and none for any other agent, which goes by its title. Every place that names an agent
- * goes through this, `agentName` among them, so an operator is Luke in
- * every one; a query names it as `agentGivenNameSql` does.
- */
-export function agentGivenName(agent: Pick<NamedAgent, "kind">): string | undefined {
-  return agent.kind === AGENT_KIND.OPERATOR ? OPERATOR_NAME : undefined;
-}
-
-/**
  * An agent as every place names it, the window's and the service's alike:
- * its tab, a sidebar row, a card, a notification, a mention Luke or an
- * agent writes, and the name one agent is introduced to another by. The
- * name it goes by (`agentGivenName`), or its title, or until it has one the
+ * its tab, a sidebar row, a card, a notification, a mention the app or an
+ * agent writes, and the name one agent is introduced to another by. Its
+ * title, or until it has one the
  * name of the automation whose run started it, or else its model's name
  * (`modelLabel`), never its bare id.
  */
 export function agentName(agent: NamedAgent, models?: readonly CatalogModel[]): string {
   return (
-    agentGivenName(agent) ??
     agent.title ??
     agent.automationName ??
     agent.automationOrigin?.name ??

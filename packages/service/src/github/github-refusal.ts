@@ -7,7 +7,7 @@
  * unavailable, and logged by kind: nothing of a token, the request that
  * carried it, or GitHub's body reaches a line. Where the read is whether
  * the workspace reaches a task's repository, a GitHub that did not answer is
- * refused as its own kind, so the desktop says GitHub, not Luke, failed.
+ * refused as its own kind, so the desktop says GitHub, not the service, failed.
  */
 
 import { Effect } from "effect";

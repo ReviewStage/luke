@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
+  AGENT_LAUNCH,
   AGENT_PAYER,
   AGENT_RUNTIME,
   type AgentPullRequest,
@@ -8,7 +9,6 @@ import {
   CHECK_SUMMARY,
   CONTEXT_WINDOW,
   LOCAL_AGENT_REFUSAL,
-  OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/agent-wire";
 import { FAILURE_REASON, remedyLabel } from "@luke/features/failure-remedy";
@@ -58,6 +58,7 @@ import {
   transcriptRowKey,
   unreadOpeningLine,
   unreadSentLines,
+  workingLineWords,
 } from "./agent-model.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
 
@@ -152,7 +153,7 @@ test("a line after a turn still open is placed in that turn, unless it did not g
   };
   const steer = developer("m-3", "Use the mailer.");
   const placed = (unsent: (id: string) => boolean) =>
-    placedMessages([ask, open, steer], false, unsent).map((each) => [
+    placedMessages([ask, open, steer], unsent).map((each) => [
       each.message.id,
       each.arrived.map((line) => line.id),
     ]);
@@ -169,47 +170,6 @@ test("a line after a turn still open is placed in that turn, unless it did not g
       ["m-1", []],
       ["m-2", []],
       ["m-3", []],
-    ],
-  );
-});
-
-test("an operator's heartbeat that found nothing draws no reply, a line it took in stands in order, and a reply that says more, or any other agent's, is drawn", () => {
-  const heartbeat = developer("m-1", "Your heartbeat: look over the developer's open work.");
-  const quiet: AgentTranscriptMessage = {
-    id: "m-2",
-    role: MESSAGE_ROLE.ASSISTANT,
-    parts: [{ type: "step-start" }, { type: "text", text: `${OPERATOR_QUIET_REPLY}\n` }],
-  };
-  const typed: AgentTranscriptMessage = {
-    ...developer("m-3", "Anything new?"),
-    arrivedIn: { journalId: "m-2", afterStep: 1 },
-  };
-  const said: AgentTranscriptMessage = {
-    id: "m-4",
-    role: MESSAGE_ROLE.ASSISTANT,
-    parts: [{ type: "text", text: `Stopped Ana. ${OPERATOR_QUIET_REPLY}` }],
-  };
-  assert.deepEqual(
-    placedMessages([heartbeat, quiet, typed, said], true).map((each) => [
-      each.message.id,
-      each.arrived.map((line) => line.id),
-    ]),
-    [
-      ["m-1", []],
-      ["m-3", []],
-      ["m-4", []],
-    ],
-  );
-  // Any other agent's reply is drawn whatever it says.
-  assert.deepEqual(
-    placedMessages([heartbeat, quiet, typed, said]).map((each) => [
-      each.message.id,
-      each.arrived.map((line) => line.id),
-    ]),
-    [
-      ["m-1", []],
-      ["m-2", ["m-3"]],
-      ["m-4", []],
     ],
   );
 });
@@ -565,7 +525,7 @@ test("the starts that made a new task and the accepted section and task change c
   assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8", "c9", "c12"]);
 });
 
-test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
+test("a working agent is starting until its turn opens, saying what a host's launch waits on, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
   const task: AgentTranscriptMessage = {
     id: "m-plan",
     role: MESSAGE_ROLE.USER,
@@ -605,6 +565,15 @@ test("a working agent is starting until its turn opens, thinking until the turn 
   assert.equal(agentWorkingPhase([task, closed], false), "working");
   assert.equal(agentWorkingPhase([task, calling, line], false), "working");
   assert.equal(agentWorkingPhase([task, opened, line], false), "thinking");
+  // A host's launch says what the start waits on, naming the host or the harness, and nothing once the turn has opened.
+  const waiting = { launch: AGENT_LAUNCH.WAITING, host: "Studio", runtime: AGENT_RUNTIME.CODEX };
+  assert.equal(workingLineWords("starting", waiting), "Waiting for Studio…");
+  assert.equal(
+    workingLineWords("starting", { ...waiting, launch: AGENT_LAUNCH.STARTING }),
+    "Starting Codex…",
+  );
+  assert.equal(workingLineWords("thinking", waiting), "Thinking…");
+  assert.equal(workingLineWords("starting"), "Starting…");
 });
 
 test("the working line counts from the press of the line that opened the turn, through the turn and a line steering it", () => {
@@ -680,7 +649,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Luke's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
+  // Giving the repository to our GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -694,7 +663,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   );
   assert.deepEqual(notSelected, {
     reason: FAILURE_REASON.ADD_REPOSITORY,
-    text: "Luke's GitHub App doesn't have access to acme/relay.",
+    text: "Vespin's GitHub App doesn't have access to acme/relay.",
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });
@@ -756,7 +725,7 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
   );
 });
 
-test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Luke's key paid for says to continue in a new one, Settings mending nothing", () => {
+test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Vespin's key paid for says to continue in a new one, Settings mending nothing", () => {
   const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) => ({
     failure: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
     ...(provider === undefined ? undefined : { provider }),
@@ -787,7 +756,7 @@ test("a Start refused for a missing credential says in one sentence which harnes
       },
       {
         reason: FAILURE_REASON.OTHER,
-        text: "Luke's key no longer runs agents. Continue in a new one.",
+        text: "Vespin's key no longer runs agents. Continue in a new one.",
       },
     ],
   );
@@ -812,13 +781,13 @@ test("a message to an agent whose device is away says it is offline, in the word
   );
 });
 
-test("a message Luke heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
+test("a message Vespin heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
   assert.deepEqual(
     [
       messageFailureWords(AGENT_CALL_FAILURE.UNANSWERED),
       messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
     ],
-    ["Luke didn't hear back. Try again.", "Luke didn't hear back."],
+    ["No answer came back. Try again.", "No answer came back."],
   );
 });
 

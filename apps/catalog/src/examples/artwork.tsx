@@ -25,7 +25,7 @@ import { CatalogSection } from "../section";
 
 /**
  * artwork.tsx -- the production artwork `@luke/ui` draws from `@luke/brand`'s
- * generated sources: Luke's face at rest and its still mark, every glyph, every provider's
+ * generated sources: the app's face at rest and its still mark, every glyph, every provider's
  * mark, and what fires an automation, each drawn from the package itself
  * rather than from a copy.
  */

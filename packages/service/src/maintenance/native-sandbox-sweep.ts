@@ -1,12 +1,12 @@
 /**
  * native-sandbox-sweep.ts -- the scheduled sweep's stop of a native agent's sandbox whose run ended and which no Terminal holds.
  *
- * A native harness's sandbox (Claude Code's or Codex's, which Luke opens
- * itself, `coder-host/runner-sessions.ts`) is stopped when its runner
+ * A native harness's sandbox (Claude Code's or Codex's, which we open
+ * ourselves, `coder-host/runner-sessions.ts`) is stopped when its runner
  * ends: the events route calls `runnerEnded` on the runner's END. A stop
  * that failed there is logged and not retried, so the sandbox would idle
  * until its timeout. This sweep retries it: it pages through the project's
- * running sandboxes, from the oldest and the newest on alternate minutes, keeps the ones named as Luke names a
+ * running sandboxes, from the oldest and the newest on alternate minutes, keeps the ones named as we name a
  * native sandbox and carrying an agent's tag, reads a window of them that
  * moves along the list from one sweep to the next, and stops each whose
  * conversation is native, whose newest turn ended longer ago than a short
@@ -16,7 +16,7 @@
  * eve's sandboxes are never looked at past their name, and a run still
  * going, or waiting on a wakeup (whose turn stays running), keeps its
  * sandbox. A runner still up after its run ended
- * is warm (`CODER.RUNNER_WARM`), or a newer launch a message started since:
+ * is warm (the sandbox's `CODER.RUNNER_WARM`), or a newer launch a message started since:
  * once the run has stood idle past the warm window, the sweep asks it to end
  * (`retireWarmRunner`), which a runner that took a message since declines,
  * and its END stops the sandbox. The stop is as the END's: the repository's credential taken off the firewall,
@@ -24,7 +24,7 @@
  * credential would not come off, the sandbox is left for the next sweep.
  *
  * A runner that exited while its run's turn still runs died without its END
- * (it drains its END to Luke before it exits): the sweep settles that turn
+ * (it drains its END to us before it exits): the sweep settles that turn
  * as failed (`settleRunnerLostTurns`), so the agent offers Continue rather
  * than running for a day, and its sandbox is stopped once the grace passes,
  * as any ended run's is. The turn keeps how the runner ended, its exit code
@@ -51,6 +51,7 @@ import {
 import { readNativeRunStanding } from "@luke/database/models/agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import { Cause, Data, Duration, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
@@ -112,7 +113,7 @@ const NOTHING_SWEPT: NativeSandboxSweepOutcome = {
 
 const SANDBOX_ENDING = {
   STOPPED: "stopped",
-  /** Its runner was warm past `CODER.RUNNER_WARM`, and was asked to end, which its END's stop follows. */
+  /** Its runner was warm past the sandbox's `CODER.RUNNER_WARM`, and was asked to end, which its END's stop follows. */
   RETIRED: "retired",
   HELD: "held",
   FAILED: "failed",
@@ -126,7 +127,7 @@ const SANDBOX_ENDING = {
 
 type SandboxEnding = (typeof SANDBOX_ENDING)[keyof typeof SANDBOX_ENDING];
 
-/** A running sandbox Luke opened for a native agent: the session Luke minted for it, the sandbox session it runs, and the agent its tag names. */
+/** A running sandbox we opened for a native agent: the session we minted for it, the sandbox session it runs, and the agent its tag names. */
 interface NativeSandbox {
   readonly sessionId: string;
   readonly running: string;
@@ -330,14 +331,14 @@ const runEnded = (
 
 /**
  * A runner still up after its run ended, asked to end once the run has
- * stood idle past `CODER.RUNNER_WARM`, and left warm before that.
+ * stood idle past the sandbox's `CODER.RUNNER_WARM`, and left warm before that.
  * `retireWarmRunner` reads the runner again under its lease, and the runner
  * ends only where it is still warm, so a message sent since keeps it. A
  * retire Vercel did not take is left for the next sweep.
  */
 const retiredPastWarm = (api: VercelSandboxApi, sandbox: NativeSandbox, now: Date) =>
   Effect.gen(function* () {
-    const ended = yield* runEnded(sandbox, now, CODER.RUNNER_WARM);
+    const ended = yield* runEnded(sandbox, now, CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL]);
     if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
     const retired = yield* Effect.result(
       retireWarmRunner({ ...sandbox, userId: ended.value.userId }),

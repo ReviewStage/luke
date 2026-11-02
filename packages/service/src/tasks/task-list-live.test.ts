@@ -48,7 +48,6 @@ import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
-  OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/agent-wire";
 import {
@@ -106,9 +105,7 @@ const openUser = Effect.gen(function* () {
 /** An agent the account starts on the plan, or with no plan in the workspace, started `ago` before the list is read. */
 const openAgent = (
   userId: string,
-  place:
-    | { readonly taskId: string; readonly blank?: boolean }
-    | { readonly workspaceId: string; readonly operator?: boolean },
+  place: { readonly taskId: string; readonly blank?: boolean } | { readonly workspaceId: string },
   ago: number,
   started: Partial<
     Pick<
@@ -123,20 +120,12 @@ const openAgent = (
         ? place.blank === true
           ? { taskId: place.taskId, planSnapshot: null, prompt: null }
           : { taskId: place.taskId, planSnapshot: "# Invitations\n", prompt: null }
-        : place.operator === true
-          ? {
-              taskId: null,
-              organizationId: place.workspaceId,
-              planSnapshot: null,
-              prompt: null,
-              kind: AGENT_KIND.OPERATOR,
-            }
-          : {
-              taskId: null,
-              organizationId: place.workspaceId,
-              planSnapshot: null,
-              prompt: "Sweep the flaky tests.",
-            }),
+        : {
+            taskId: null,
+            organizationId: place.workspaceId,
+            planSnapshot: null,
+            prompt: "Sweep the flaky tests.",
+          }),
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -452,7 +441,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* pinAgent(owner, loose.id, true);
         const gone = yield* openAgent(teammate, { workspaceId: plan.workspaceId }, 2 * 60_000);
         yield* archiveAgent(owner, gone.id, true);
-        // An agent a run made, one that agent started on no task, the operator, and an agent it started.
+        // An agent a run made, and one that agent started on no task.
         const triage = Option.getOrThrow(
           yield* createAutomation(owner, {
             organizationId: plan.workspaceId,
@@ -479,14 +468,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           automationRunId: triageRun.id,
           startedByAgentId: runAgent.id,
         });
-        const operator = yield* openAgent(
-          owner,
-          { workspaceId: plan.workspaceId, operator: true },
-          6 * 60_000,
-        );
-        const operated = yield* openAgent(owner, { workspaceId: plan.workspaceId }, 5 * 60_000, {
-          startedByAgentId: operator.id,
-        });
         // A local agent on the owner's Mac running Claude Code, continued and forked on a plan of its own.
         const runs = yield* startTask(owner, { name: "Local runs" });
         const deviceId = randomUUID();
@@ -502,7 +483,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* openAgent(owner, { taskId: runs.id }, 10 * 60_000, {
           startedFrom: { agentId: local.id, messageId: randomUUID(), steps: 1, totalSteps: 2 },
         });
-        // Tasks made for the owner by a coding agent, and by Luke on their call.
+        // Tasks made for the owner by a coding agent, and by the notetaker on their call.
         const followUp = yield* startTask(owner, {
           name: "Invite emails",
           origin: { actor: PLAN_ACTOR.AGENT, agentId: done.id },
@@ -519,16 +500,14 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
         // Each agent's owner, as the requirement names it: a run's agent and the child it started
-        // belong to the run, whose automation the agent itself does not name; the operator and its
-        // start to Luke; one with no task, no run, and no operator's start to none.
+        // belong to the run, whose automation the agent itself does not name; one with no task and
+        // no run to none.
         const { planlessAgents } = yield* heldListOf(owner, NOW);
         const ownerOf = (agentId: string) =>
           planlessAgents.find((agent) => agent.id === agentId)?.owner;
         const ownedByRun = { kind: AGENT_OWNER.RUN, automationId: triage.id, runId: triageRun.id };
         assert.deepEqual(ownerOf(runAgent.id), ownedByRun);
         assert.deepEqual(ownerOf(runChild.id), ownedByRun);
-        assert.deepEqual(ownerOf(operator.id), { kind: AGENT_OWNER.OPERATOR });
-        assert.deepEqual(ownerOf(operated.id), { kind: AGENT_OWNER.OPERATOR });
         assert.equal(ownerOf(loose.id), undefined);
         // Every plan's agents, the archived among them, as each plan's own list names them, for its
         // tabs, their harness, Mac, and continues among it; the live rows come in the order they
@@ -673,33 +652,18 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "a member's operator, with no repository, says its kind and a task's pilot that it is one, as the held read reads them, while a coder says neither",
+    "a task's pilot says it is one, as the held read reads it, while a coder does not",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
         const workspace = yield* openWorkspace(owner);
         const coder = yield* openAgent(owner, { workspaceId: workspace }, 60_000);
-        const { agent: operator } = Option.getOrThrow(
-          yield* createAgent(owner, {
-            taskId: null,
-            organizationId: workspace,
-            planSnapshot: null,
-            prompt: null,
-            kind: AGENT_KIND.OPERATOR,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: null,
-          }),
-        );
 
         const read = yield* liveListOf(owner, NOW);
 
         assert.deepEqual(read, yield* heldListOf(owner, NOW));
         const listed = new Map(read.planlessAgents?.map((agent) => [agent.id, agent]));
-        assert.equal(listed.get(operator.id)?.kind, AGENT_KIND.OPERATOR);
-        assert.equal(listed.get(operator.id)?.repository, null);
-        assert.equal(listed.get(coder.id)?.kind, undefined);
+        assert.equal(listed.get(coder.id)?.pilot, undefined);
 
         const plan = yield* startTask(owner, { name: "Teammate invitations" });
         const { agent: pilot } = Option.getOrThrow(
@@ -720,43 +684,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           yield* heldTaskAgentsOf(owner, plan.id, NOW),
         );
         const listedPilot = taskAgents.find((agent) => agent.id === pilot.id);
-        assert.deepEqual([listedPilot?.pilot, listedPilot?.kind], [true, undefined]);
-      }),
-  );
-
-  it.effect(
-    "a task's pilot is delivered as a coder, so a desktop from before pilots still decodes the list",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openUser;
-        const plan = yield* startTask(owner, { name: "Teammate invitations" });
-        Option.getOrThrow(
-          yield* createAgent(owner, {
-            taskId: plan.id,
-            planSnapshot: "# Invitations\n",
-            prompt: null,
-            kind: AGENT_KIND.PILOT,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: "acme/relay",
-          }),
-        );
-        // The kinds a desktop from before pilots decodes; any other fails its whole agent list.
-        const beforePilots = Schema.Array(
-          Schema.Struct({
-            kind: Schema.optionalKey(Schema.Literals([AGENT_KIND.CODER, AGENT_KIND.OPERATOR])),
-          }),
-        );
-
-        const statements = Option.getOrThrow(taskListLiveStatements(owner));
-        const rows = yield* runLive(statements.agents);
-
-        const decoded = yield* Schema.decodeUnknownEffect(beforePilots)(rows);
-        assert.deepEqual(
-          decoded.map((row) => row.kind),
-          [AGENT_KIND.CODER],
-        );
+        assert.equal(listedPilot?.pilot, true);
       }),
   );
 
@@ -934,80 +862,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.deepEqual(
           [pilot, coder, subPilot, helper].map((agent) => pilotOf(agent.id)),
           [undefined, named, named, undefined],
-        );
-      }),
-  );
-
-  it.effect(
-    "say an operator's newest turn is quiet only where its reply is the quiet reply alone, and never a coder's",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const owner = yield* openUser;
-        const plan = yield* startTask(owner, { name: "Teammate invitations" });
-        /** An agent whose one settled turn replied with the parts given. */
-        const replied = (
-          kind: "operator" | "coder",
-          parts: readonly { readonly type: string; readonly text?: string }[],
-        ) =>
-          Effect.gen(function* () {
-            const agent =
-              kind === "operator"
-                ? Option.getOrThrow(
-                    yield* createAgent(owner, {
-                      taskId: null,
-                      organizationId: yield* openWorkspace(owner),
-                      planSnapshot: null,
-                      prompt: null,
-                      kind: AGENT_KIND.OPERATOR,
-                      idempotencyKey: randomUUID(),
-                      model: "anthropic/claude-opus-5.5",
-                      effort: "high",
-                      repository: null,
-                    }),
-                  ).agent
-                : yield* openAgent(owner, { workspaceId: plan.workspaceId }, 60_000);
-            const turnId = yield* turnOf(agent, TURN_STATUS.SETTLED, 30_000, { settled: true });
-            yield* db.insert(messages).values({
-              userId: owner,
-              conversationId: agent.conversationId,
-              seq: 1,
-              clientId: turnId,
-              turnId,
-              role: MESSAGE_ROLE.ASSISTANT,
-              parts: [...parts] as never,
-              placedAt: new Date(NOW - 20_000),
-              createdAt: new Date(NOW - 20_000),
-            });
-            return agent.id;
-          });
-        const quiet = yield* replied("operator", [
-          { type: "step-start" },
-          { type: "text", text: `${OPERATOR_QUIET_REPLY}\n` },
-        ]);
-        const busy = yield* replied("operator", [
-          { type: "step-start" },
-          { type: "text", text: "Stopped Ana: it retried the same migration for an hour." },
-          { type: "step-start" },
-          { type: "text", text: OPERATOR_QUIET_REPLY },
-        ]);
-        const mentions = yield* replied("operator", [
-          { type: "text", text: `Nothing needs you, so ${OPERATOR_QUIET_REPLY}.` },
-        ]);
-        const coder = yield* replied("coder", [{ type: "text", text: OPERATOR_QUIET_REPLY }]);
-
-        const read = yield* liveListOf(owner, NOW);
-        const quietOf = (id: string) =>
-          (read.planlessAgents ?? []).find((agent) => agent.id === id)?.quietTurn;
-        assert.deepEqual([quiet, busy, mentions, coder].map(quietOf), [
-          true,
-          undefined,
-          undefined,
-          undefined,
-        ]);
-        assert.equal(
-          (read.planlessAgents ?? []).find((agent) => agent.id === quiet)?.status,
-          AGENT_STATUS.COMPLETED,
         );
       }),
   );

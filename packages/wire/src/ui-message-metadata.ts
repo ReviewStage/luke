@@ -48,7 +48,7 @@ export const MESSAGE_AUTHOR = {
  * How a developer's ask arrived, or what else carried a line steered into a
  * coding agent: another coding agent's message, a thread's reply, answer or
  * close, a plan comment thread a member sent it, the brief a Start opened it
- * with, GitHub's word on its pull request, a line Luke sent, or an
+ * with, GitHub's word on its pull request, a line the service sent, or an
  * automation's run.
  */
 export const MESSAGE_CHANNEL = {
@@ -124,8 +124,8 @@ const FAILING_CHECK_CONCLUSIONS: ReadonlySet<string> = new Set([
 
 /**
  * The most a GitHub line's metadata holds: words and an inline comment's body
- * within the most GitHub lets one body spell, as many inline comments as Luke
- * reads of a review, as many checks as Luke reads of a head (a hundred check
+ * within the most GitHub lets one body spell, as many inline comments as we
+ * read of a review, as many checks as we read of a head (a hundred check
  * runs and a hundred commit statuses), and every name or address within a
  * bound far past what GitHub mints, so nothing it sends is refused.
  */
@@ -184,7 +184,7 @@ const spanInstant = nonNegativeInteger;
  * A user row is one of these things, and the shape says which: the
  * developer's typed ask, a spoken ask cut from a voice session, a line
  * steered into a coding agent by what carried it (another coding agent's
- * message, a thread, a plan comment, a Start, GitHub, Luke, or an
+ * message, a thread, a plan comment, a Start, GitHub, the service, or an
  * automation), or a note the runtime wrote down. A struct each rather than one
  * with every field optional, so a note carrying a channel has no shape to
  * arrive in. Only a spoken ask says who wrote it, since a call carries both
@@ -341,7 +341,7 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
 
-/** A Luke line is one Luke sent the agent on its own: a wakeup it set, or an operator's opening or wake. */
+/** A service line is one the service sent the agent on its own, such as a wakeup it set. */
 const LUKE_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.LUKE),
 });
@@ -432,7 +432,7 @@ export type CompactionMetadata = EffectSchema.Schema.Type<typeof COMPACTION_META
  * What an assistant row says about itself: which model wrote it, the one
  * that answered the turn, whatever harness ran it, or the voice model on a
  * call, and, for a row of
- * the voice model's — one of Luke's settled utterances cut from a voice
+ * the voice model's — one of its settled utterances cut from a voice
  * session — the session and span it was cut from, the delegation it followed
  * where the developer's line before it was handed to the brain, and the
  * message it was read aloud from where it was one: the brain's briefing, or

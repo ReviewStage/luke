@@ -9,7 +9,6 @@ import {
   draftNextRuns,
   draftProblems,
   filterValuesOf,
-  repositoryHeld,
   SCHEDULE_KIND,
   sameDraft,
   scheduleDraftOf,
@@ -70,38 +69,6 @@ const SAVED: AutomationSummary = {
   repositories: ["acme/ledger"],
 };
 
-test("an automation the service took with no repository, aimed at one agent, saves a new schedule with none chosen, until its runs go elsewhere", () => {
-  const operator = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
-  const heartbeat: AutomationSummary = {
-    ...SAVED,
-    name: "Luke's heartbeat",
-    scope: AUTOMATION_SCOPE.PERSONAL,
-    repositories: [],
-    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: operator },
-  };
-  const opened = automationDraft(heartbeat, DEFAULTS);
-  const later = { ...opened, schedule: scheduleDraftOf("0 10,17 * * 1-5") };
-  const elsewhere = { ...later, target: AUTOMATION_TARGET.NEW_AGENT };
-
-  assert.deepEqual(draftProblems(later, repositoryHeld(later, heartbeat), NOW), {});
-  assert.deepEqual(changeOf(later, heartbeat, DEFAULTS), {
-    trigger: {
-      kind: AUTOMATION_TRIGGER.SCHEDULE,
-      cron: "0 10,17 * * 1-5",
-      timezone: "America/Los_Angeles",
-    },
-  });
-  assert.equal(
-    draftProblems(elsewhere, repositoryHeld(elsewhere, heartbeat), NOW)[DRAFT_FIELD.REPOSITORY],
-    "Choose the repository it works in.",
-  );
-  assert.equal(
-    repositoryHeld(later, SAVED),
-    false,
-    "one on a repository holds none once its draft drops it",
-  );
-});
-
 test("a cron the picker writes reads back as its kind and time, and any other is kept as it was", () => {
   for (const cron of ["15 * * * *", "30 7 * * *", "0 9 * * 1-5", "0 9 * * 3"]) {
     assert.equal(cronOf(scheduleDraftOf(cron)), cron, cron);
@@ -145,16 +112,15 @@ test("a new draft runs at nine on weekdays in the window's zone, and a saved one
   );
 });
 
-test("a draft saves once it is named, told its task, on a schedule Luke reads at most every 15 minutes, and in a repository", () => {
+test("a draft saves once it is named, told its task, on a schedule Vespin reads at most every 15 minutes, and in a repository where a GitHub event fires it", () => {
   const fresh = automationDraft(undefined, DEFAULTS);
   assert.deepEqual(Object.keys(draftProblems(fresh, false, NOW)).toSorted(), [
     DRAFT_FIELD.NAME,
     DRAFT_FIELD.PROMPT,
-    DRAFT_FIELD.REPOSITORY,
   ]);
 
-  const written = { ...fresh, name: " Sweep ", prompt: "Fix it.", repository: "acme/ledger" };
-  assert.deepEqual(draftProblems(written, false, NOW), {});
+  const written = { ...fresh, name: " Sweep ", prompt: "Fix it." };
+  assert.deepEqual(draftProblems(written, false, NOW), {}, "a schedule works in no repository");
 
   const often = { ...written, schedule: scheduleDraftOf("*/5 * * * *") };
   assert.equal(
@@ -164,13 +130,18 @@ test("a draft saves once it is named, told its task, on a schedule Luke reads at
   const unread = { ...written, schedule: scheduleDraftOf("every morning") };
   assert.equal(
     draftProblems(unread, false, NOW)[DRAFT_FIELD.SCHEDULE],
-    "That isn't a schedule Luke can read.",
+    "That isn't a schedule Vespin can read.",
   );
   const nowhere = { ...written, timezone: "Mars/Olympus" };
   assert.equal(draftProblems(nowhere, false, NOW)[DRAFT_FIELD.SCHEDULE], "Pick a time zone.");
 
+  const onGitHub = { ...written, triggerKind: AUTOMATION_TRIGGER.GITHUB };
+  assert.deepEqual(draftProblems(onGitHub, false, NOW), {
+    [DRAFT_FIELD.REPOSITORY]: "Choose the repository whose events start it.",
+  });
+  assert.deepEqual(draftProblems({ ...onGitHub, repository: "acme/ledger" }, false, NOW), {});
   assert.deepEqual(
-    draftProblems({ ...written, repository: null }, true, NOW),
+    draftProblems(onGitHub, true, NOW),
     {},
     "a plan's automation works in its plan's repository",
   );

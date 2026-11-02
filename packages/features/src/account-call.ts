@@ -117,7 +117,7 @@ interface AccountCallOptions {
 }
 
 /**
- * One call to Luke's own service, however it is authorized: the base address
+ * One call to our own service, however it is authorized: the base address
  * trimmed once, the credential read fresh for every attempt, the header
  * written once, a request the ambient `HttpClient` carries under the call's
  * own deadline, a client that failed read as a network fault by the error's

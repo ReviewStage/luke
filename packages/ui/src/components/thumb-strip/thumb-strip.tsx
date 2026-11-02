@@ -4,8 +4,9 @@ import { PAGE_THUMB_SIZE, PageThumb } from "../page-thumb/page-thumb.js";
 /**
  * thumb-strip.tsx -- a row of small previews of the files a viewer walks through, the one shown marked, a press on another showing it.
  *
- * Each file stands as a row's `PageThumb`: its picture where it is one, or
- * the glyph its place hands for any other file. The one shown stands at
+ * Each file stands as a row's `PageThumb`: its picture where it is one, a
+ * video's first frame where it is one, or the glyph its place hands for any
+ * other file. The one shown stands at
  * full strength in a ring of the text's ink; the rest are dimmed until the
  * pointer is on them, darkened rather than faded, so nothing behind the strip
  * shows through them. The strip is centred in its room and scrolls across
@@ -25,12 +26,14 @@ import { PAGE_THUMB_SIZE, PageThumb } from "../page-thumb/page-thumb.js";
  * its thumb, which draws the box.
  */
 
-/** One file of the strip: its name, and its picture or the glyph that stands for it. */
+/** One file of the strip: its name, and its picture, its video, or the glyph that stands for it. */
 export interface ThumbStripItem {
   /** The file's name, which its press is named for. */
   readonly name: string;
   /** The picture's address, where the file is one. */
   readonly image?: string | undefined;
+  /** The video's `data:` URL, where the file is one, whose first frame stands for it. */
+  readonly video?: string | undefined;
   /** What stands for a file with no picture, such as its type's glyph. */
   readonly glyph?: ReactNode;
 }
@@ -90,7 +93,12 @@ export function ThumbStrip({
             tabIndex={index === at ? 0 : -1}
             onClick={() => onPick(index)}
           >
-            <PageThumb size={PAGE_THUMB_SIZE.ROW} image={item.image} glyph={item.glyph} />
+            <PageThumb
+              size={PAGE_THUMB_SIZE.ROW}
+              image={item.image}
+              video={item.video}
+              glyph={item.glyph}
+            />
           </button>
         </li>
       ))}

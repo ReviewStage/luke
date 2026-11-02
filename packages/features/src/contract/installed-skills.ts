@@ -1,5 +1,5 @@
 /**
- * installed-skills.ts -- the skills members install into Luke (`installed-skill-route-wire.ts`), as procedures: list them, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check it for an update or update it, share a personal one with a workspace, and remove it.
+ * installed-skills.ts -- the skills members install into the app (`installed-skill-route-wire.ts`), as procedures: list them, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check it for an update or update it, share a personal one with a workspace, and remove it.
  *
  * Every output is its wire schema flipped, so oRPC's output check encodes
  * the handler's value into the bytes the wire carries. A body refuses a key

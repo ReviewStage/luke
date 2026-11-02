@@ -1,5 +1,6 @@
 import { GITHUB_INSTALL_STATUS, type GitHubInstallStatus } from "./github-install-wire.js";
 import { INTEGRATION_LANDING_STATUS, type IntegrationLandingStatus } from "./integration-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /**
  * landing-outcome.ts -- how a connect ended, as every page a browser lands on after one says it: its tone, its title, and the line under it.
@@ -27,25 +28,25 @@ export const LANDING_OUTCOME = {
   CONNECTED: "connected",
   /** The provider is connected to the workspace, for everyone in it. */
   WORKSPACE_CONNECTED: "workspace-connected",
-  /** The provider's app was installed and Luke reaches its repositories. */
+  /** The provider's app was installed and we reach its repositories. */
   INSTALLED: "installed",
-  /** An installation changed which repositories Luke reaches. */
+  /** An installation changed which repositories we reach. */
   UPDATED: "updated",
   /** The developer asked an organization's owner to install the app. */
   REQUESTED: "requested",
-  /** The provider named no installation Luke could confirm. */
+  /** The provider named no installation we could confirm. */
   NOT_CONFIRMED: "not-confirmed",
-  /** The sign-in gave Luke no grant: declined, cancelled, or refused. */
+  /** The sign-in gave us no grant: declined, cancelled, or refused. */
   NOT_COMPLETED: "not-completed",
-  /** Luke could not reach the provider, or the service between them. */
+  /** We could not reach the provider, or the service between them. */
   UNAVAILABLE: "unavailable",
-  /** The connect's link is too old, already used, or not Luke's. */
+  /** The connect's link is too old, already used, or not ours. */
   EXPIRED: "expired",
   /** The provider's account already stands for another workspace. */
   ALREADY_CONNECTED: "already-connected",
   /** The page was opened with no connect to carry out. */
   NOTHING_TO_CONNECT: "nothing-to-connect",
-  /** Luke's own service gave no answer. */
+  /** Our own service gave no answer. */
   LUKE_UNREACHABLE: "luke-unreachable",
 } as const;
 
@@ -65,14 +66,14 @@ export const LANDING_CLOSE_TAB = "You can close this tab.";
 
 /** How to go on from an outcome a fresh connect fixes. */
 function connectAgain(name: string | undefined): string {
-  return `Connect ${name ?? "it"} again from Luke.`;
+  return `Connect ${name ?? "it"} again from ${PRODUCT_NAME}.`;
 }
 
 /** Each outcome's words, for the provider `name`, or none where the page does not know it. */
 const LANDING_WORDS = {
   [LANDING_OUTCOME.CONNECTED]: (name) => ({
     tone: LANDING_TONE.COMPLETE,
-    title: name === undefined ? "Connected to Luke" : `${name} is connected`,
+    title: name === undefined ? `Connected to ${PRODUCT_NAME}` : `${name} is connected`,
     line: undefined,
   }),
   [LANDING_OUTCOME.WORKSPACE_CONNECTED]: (name) => ({
@@ -84,16 +85,16 @@ const LANDING_WORDS = {
     tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
-        ? "Luke can see your repositories"
-        : `Luke can see your ${name} repositories`,
+        ? `${PRODUCT_NAME} can see your repositories`
+        : `${PRODUCT_NAME} can see your ${name} repositories`,
     line: undefined,
   }),
   [LANDING_OUTCOME.UPDATED]: (name) => ({
     tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
-        ? "Luke's repositories were updated"
-        : `Luke's ${name} repositories were updated`,
+        ? `${PRODUCT_NAME}'s repositories were updated`
+        : `${PRODUCT_NAME}'s ${name} repositories were updated`,
     line: undefined,
   }),
   [LANDING_OUTCOME.REQUESTED]: () => ({
@@ -106,8 +107,8 @@ const LANDING_WORDS = {
     tone: LANDING_TONE.DANGER,
     title:
       name === undefined
-        ? "Luke could not confirm the installation"
-        : `Luke could not confirm the ${name} installation`,
+        ? `${PRODUCT_NAME} could not confirm the installation`
+        : `${PRODUCT_NAME} could not confirm the ${name} installation`,
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.NOT_COMPLETED]: (name) => ({
@@ -117,7 +118,10 @@ const LANDING_WORDS = {
   }),
   [LANDING_OUTCOME.UNAVAILABLE]: (name) => ({
     tone: LANDING_TONE.DANGER,
-    title: name === undefined ? "Luke could not finish connecting" : `Luke could not reach ${name}`,
+    title:
+      name === undefined
+        ? `${PRODUCT_NAME} could not finish connecting`
+        : `${PRODUCT_NAME} could not reach ${name}`,
     line: "Try again in a moment.",
   }),
   [LANDING_OUTCOME.EXPIRED]: (name) => ({
@@ -139,11 +143,11 @@ const LANDING_WORDS = {
   [LANDING_OUTCOME.NOTHING_TO_CONNECT]: (name) => ({
     tone: LANDING_TONE.DANGER,
     title: name === undefined ? "Nothing to connect" : `No ${name} connection to finish`,
-    line: `Connect ${name ?? "it"} from Luke.`,
+    line: `Connect ${name ?? "it"} from ${PRODUCT_NAME}.`,
   }),
   [LANDING_OUTCOME.LUKE_UNREACHABLE]: () => ({
     tone: LANDING_TONE.DANGER,
-    title: "Luke could not be reached",
+    title: `${PRODUCT_NAME} could not be reached`,
     line: "Reload this page to try again.",
   }),
 } as const satisfies Record<LandingOutcome, (name: string | undefined) => LandingWords>;

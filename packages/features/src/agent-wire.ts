@@ -1,9 +1,11 @@
 import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
-import { Effect, Schema as EffectSchema, Option, Result, SchemaTransformation } from "effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
+import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import {
   mergeMethodSchema,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -131,7 +133,7 @@ export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_W
 /**
  * Who a coding agent's commits are by and its pull request is opened as,
  * settled once for the agent as its first session starts: the developer who
- * started it, on their own GitHub account with the Luke GitHub App's bot as
+ * started it, on their own GitHub account with our GitHub App's bot as
  * co-author, or the App's bot alone, with why it is the bot.
  */
 export const AGENT_AUTHOR = {
@@ -154,7 +156,7 @@ export type AgentAuthor = (typeof AGENT_AUTHOR)[keyof typeof AGENT_AUTHOR];
 /**
  * Who pays for a coding agent's model calls, recorded as the agent starts
  * and never moved after: the starter's Claude plan or ChatGPT plan, which
- * run the provider's own harness, the starter's own API key, or Luke's key;
+ * run the provider's own harness, the starter's own API key, or our key;
  * or, for a local agent, its Mac's own login to the harness. A plan that
  * runs out pauses the agent rather than falling through to another payer; a
  * Mac signed out since falls back to the account's saved credential.
@@ -174,7 +176,7 @@ export type AgentPayer = (typeof AGENT_PAYER)[keyof typeof AGENT_PAYER];
 /**
  * What answers a coding agent's conversation, as its conversation's row
  * records it: eve, as every agent ran before the native harnesses, or the
- * provider's own harness, Claude Code or Codex, which Luke launches in the
+ * provider's own harness, Claude Code or Codex, which we launch in the
  * agent's sandbox. The store's own vocabulary spells the same words
  * (`@luke/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
  */
@@ -193,29 +195,16 @@ export type NativeAgentRuntime = (typeof NATIVE_AGENT_RUNTIMES)[number];
 
 /**
  * What kind of agent a row is: a coder, which every agent started on work is;
- * a pilot, which stands on a task worked in pilot mode (`TASK_MODE.PILOT`),
+ * or a pilot, which stands on a task worked in pilot mode (`TASK_MODE.PILOT`),
  * breaks it into child tasks, and runs coders on them, started on its task
- * and repository as a coder is; or a member's operator, the one agent per
- * member per workspace that manages their other agents, started blank with
- * no task and no repository.
+ * and repository as a coder is.
  */
 export const AGENT_KIND = {
   CODER: "coder",
   PILOT: "pilot",
-  OPERATOR: "operator",
 } as const;
 
 export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
-
-/**
- * An agent's kind as a reader decodes it off the wire. Note that a kind this
- * build does not know reads as a coder rather than refused, because a list
- * carries every agent's kind and one row of a kind added later would
- * otherwise fail the whole list for every build shipped before it.
- */
-export const agentKindSchema = EffectSchema.Literals(Object.values(AGENT_KIND)).pipe(
-  EffectSchema.catchDecoding(() => Effect.succeed(Option.some(AGENT_KIND.CODER))),
-);
 
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
@@ -237,9 +226,9 @@ export const LOCAL_AGENT_REFUSAL = {
   CODEX: "codex",
   /** The model runs on no native harness here, so no runner would launch on the Mac. */
   NO_HARNESS: "no-harness",
-  /** The device is still fetching what its VMs run on, the first time (`DEVICE_SETUP.PREPARING`), so it takes no agent yet. */
+  /** The device is still fetching what its agents run on, the first time (`DEVICE_SETUP.PREPARING`), so it takes no agent yet. */
   PREPARING: "preparing",
-  /** The device could not fetch what its VMs run on (`DEVICE_SETUP.FAILED`), so it takes no agent until it tries again. */
+  /** The device could not fetch what its agents run on (`DEVICE_SETUP.FAILED`), so it takes no agent until it tries again. */
   SETUP_FAILED: "setup-failed",
   /** The device is another member's, and only its owner starts agents on it; the refusal carries the device and its owner (`refusedDeviceSchema`) where the service named them. */
   NOT_OWNER: "not-owner",
@@ -317,17 +306,6 @@ export function deviceStanding(ageMs: number | undefined, readFailed: boolean): 
   return readFailed ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
 }
 
-/**
- * The whole of what an operator answers a heartbeat that found nothing for
- * its member: a turn whose reply is exactly this, and nothing more, is a
- * quiet turn, which leaves its member no unseen dot and no notice, and whose
- * reply the panel does not draw. A reply that only mentions it is no quiet one.
- */
-export const OPERATOR_QUIET_REPLY = "HEARTBEAT_OK";
-
-/** The most characters of the time zone an operator's ensure names, an IANA zone's name. */
-const OPERATOR_TIME_ZONE_MAX_CHARS = 64;
-
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const AGENT_BRIEF = {
   PLAN: "plan",
@@ -370,7 +348,7 @@ export const AGENT_FAILURE = {
   PROVIDER_KEY: "provider_key",
   /** The agent's session never started, so no turn ran; a new agent is the way on. */
   NOT_STARTED: "not_started",
-  /** The agent ran a fast version on the account's own key while Luke ran Fast on its own key alone; no agent fails this way now, and one that did still reads as this. */
+  /** The agent ran a fast version on the account's own key while we ran Fast on our own key alone; no agent fails this way now, and one that did still reads as this. */
   FAST_ON_OWN_KEY: "fast_own_key",
   /** The provider refused fast mode for the organization of the key the step ran on. */
   FAST_NOT_ENABLED: "fast_not_enabled",
@@ -820,7 +798,7 @@ export const AGENT_LIST_ARCHIVED = {
 } as const;
 
 /**
- * Who archived an agent: a member from the window, Luke on a call for the
+ * Who archived an agent: a member from the window, the app on a call for the
  * member on it, or another coding agent of the workspace for the member who
  * started that agent, through its `archive_agent` tool.
  */
@@ -833,7 +811,7 @@ export const AGENT_ARCHIVER = {
 export type AgentArchiver = (typeof AGENT_ARCHIVER)[keyof typeof AGENT_ARCHIVER];
 
 /**
- * Who archived an agent, as its banner and card say it: a member, or Luke or
+ * Who archived an agent, as its banner and card say it: a member, or the app or
  * another agent on a member's behalf, the member absent once their account
  * is gone, the agent by its id and its title as it stood then, and the
  * reason it was archived for where one was given. `withTask` marks an agent
@@ -852,19 +830,17 @@ const agentArchivedBySchema = EffectSchema.Struct({
 
 export type AgentArchivedBy = typeof agentArchivedBySchema.Type;
 
-/** What an agent belongs to: a task, an automation's run, or Luke, its member's operator. */
+/** What an agent belongs to: a task, or an automation's run. */
 export const AGENT_OWNER = {
   TASK: "task",
   RUN: "run",
-  OPERATOR: "operator",
 } as const;
 
 /**
- * The one owner of an agent, the three cases excluding each other by their
- * `kind`: the task it works on, the run of an automation that started it or
- * whose agent did, with the automation the run belongs to, or Luke, the
- * member's operator, which is also the owner of an agent the operator started
- * on no task. An agent whose owner is gone carries none: the run of a deleted
+ * The one owner of an agent, the two cases excluding each other by their
+ * `kind`: the task it works on, or the run of an automation that started it
+ * or whose agent did, with the automation the run belongs to. An agent with
+ * neither, or whose owner is gone, carries none: the run of a deleted
  * automation goes with it, and no case stands for that.
  */
 export const agentOwnerSchema = EffectSchema.Union([
@@ -874,33 +850,27 @@ export const agentOwnerSchema = EffectSchema.Union([
     automationId: wireUuidSchema,
     runId: wireUuidSchema,
   }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(AGENT_OWNER.OPERATOR) }),
 ]);
 
 export type AgentOwner = typeof agentOwnerSchema.Type;
 
-/** What an agent's owner is read from: its task, its run and the automation that run belongs to, whether it is an operator, and whether an operator started it. */
+/** What an agent's owner is read from: its task, and its run and the automation that run belongs to. */
 export interface AgentOwnerRead {
   readonly taskId: string | null;
   readonly runId: string | null;
   readonly runAutomationId: string | null;
-  readonly kind: AgentKind;
-  readonly startedByOperator: boolean;
 }
 
 /**
- * Who owns the agent: its task, else its run, else Luke where it is the
- * operator or the operator started it; none where its owner is gone. Note
- * that the run's automation is read through the run, never from the agent's
- * own `automationId`, which a run's child agent leaves null.
+ * Who owns the agent: its task, else its run; none where it has neither or
+ * its owner is gone. Note that the run's automation is read through the run,
+ * never from the agent's own `automationId`, which a run's child agent
+ * leaves null.
  */
 export function agentOwnerOf(read: AgentOwnerRead): AgentOwner | undefined {
   if (read.taskId !== null) return { kind: AGENT_OWNER.TASK, taskId: read.taskId };
   if (read.runId !== null && read.runAutomationId !== null) {
     return { kind: AGENT_OWNER.RUN, automationId: read.runAutomationId, runId: read.runId };
-  }
-  if (read.kind === AGENT_KIND.OPERATOR || read.startedByOperator) {
-    return { kind: AGENT_OWNER.OPERATOR };
   }
   return undefined;
 }
@@ -929,13 +899,9 @@ export const agentSummarySchema = EffectSchema.Struct({
   runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
-  kind: EffectSchema.optionalKey(agentKindSchema),
   /**
    * True where the agent is its task's pilot, which a breakdown's answer goes
-   * to. Note that a pilot is said here rather than in `kind`, because a
-   * desktop from before pilots decodes `kind` as a coder or an operator alone
-   * and would read no summary that named one; absent for every other agent.
+   * to; absent for every other agent.
    */
   pilot: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /** Where its runner runs, said only of a local agent on its starter's device; absent for one in a sandbox, and from a service older than it. */
@@ -960,14 +926,6 @@ export const agentSummarySchema = EffectSchema.Struct({
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
-  /**
-   * True where the agent is a member's operator whose newest turn's reply is
-   * its quiet reply alone (`OPERATOR_QUIET_REPLY`): a heartbeat that found
-   * nothing, whose end leaves no unseen dot and no notice. Absent for every
-   * other turn, from the held reads, which do not read it, and from a service
-   * before heartbeats.
-   */
-  quietTurn: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /**
    * The newest turn the status is read from, by the service's own id for
    * it; nothing before the first turn. A message that opens a new turn moves
@@ -1117,33 +1075,6 @@ export const agentMessageAnswerSchema = EffectSchema.Struct({
   txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/**
- * The asking member's operator in a workspace ensured (PUT
- * `/api/workspaces/{id}/operator`): the one standing, or a fresh one made
- * blank where none stands, or, with `reset`, the standing one archived, its
- * transcript kept, and a fresh one made in its place; or, with `restore`,
- * the member's own operator a Reset archived, by its id, brought back in
- * place of the one standing, which is archived, as Reset's Undo asks.
- * `timeZone` is the
- * IANA zone the client runs in, which the heartbeat an ensure that makes the
- * operator aims at it is read in; UTC where it is absent or does not read.
- */
-export const operatorEnsureRequestSchema = EffectSchema.Struct({
-  reset: EffectSchema.optionalKey(EffectSchema.Boolean),
-  restore: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  timeZone: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(OPERATOR_TIME_ZONE_MAX_CHARS)),
-  ),
-});
-
-export type OperatorEnsureRequest = typeof operatorEnsureRequestSchema.Type;
-
-/** The operator an ensure answers, by its id, and the transaction its row went in where this ensure made it. */
-export const operatorEnsureAnswerSchema = EffectSchema.Struct({
-  agentId: EffectSchema.String,
-  txid: EffectSchema.optionalKey(agentTxidSchema),
-});
-
 /** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
 export const agentDeleteAnswerSchema = EffectSchema.Struct({
   deleted: EffectSchema.Literal(true),
@@ -1152,7 +1083,7 @@ export const agentDeleteAnswerSchema = EffectSchema.Struct({
 
 /**
  * The run of an automation that started an agent, as its page opens on it:
- * the automation's prompt alone, without the lines Luke adds of the firing,
+ * the automation's prompt alone, without the lines we add of the firing,
  * then what fired it, each where the firing has one: the issue or pull
  * request a GitHub event names, a webhook call's body as its caller sent
  * it, cut as the agent was handed it, and the member who asked for a run
@@ -1380,8 +1311,8 @@ export const REVIEW_STATE = {
 /**
  * Someone a pull request names on GitHub: their login, their avatar where
  * GitHub's own avatar host serves it, whether they are an App's bot, and
- * the Luke account whose linked GitHub account it is, where that account is
- * a member of the agent's workspace. Luke's own App's bot is an App's bot
+ * the user account whose linked GitHub account it is, where that account is
+ * a member of the agent's workspace. Our own App's bot is an App's bot
  * like any other.
  */
 const githubPersonSchema = EffectSchema.Struct({
@@ -1853,7 +1784,7 @@ export const agentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
  * (GET), read of its repository rather than its pull request: the
  * repository's labels, the users who may be asked for a review (those it
  * may assign), and its organization's teams that reach it, each up to
- * the bound; each empty where the Luke GitHub App may not read it.
+ * the bound; each empty where our GitHub App may not read it.
  */
 export const agentReviewOptionsAnswerSchema = EffectSchema.Struct({
   labels: EffectSchema.Array(pullRequestLabelSchema).check(
@@ -2016,7 +1947,7 @@ export const agentDelegationInputSchema = EffectSchema.Struct({
   model: EffectSchema.optionalKey(
     describeWire(
       EffectSchema.String,
-      "The id of the model the worker runs on, from Luke's catalog; your own where left out.",
+      `The id of the model the worker runs on, from ${PRODUCT_NAME}'s catalog; your own where left out.`,
     ),
   ),
   effort: EffectSchema.optionalKey(
@@ -2047,7 +1978,7 @@ export const agentDelegationOutputSchema = EffectSchema.Struct({
  * carries in the transcript (`tool-write_todos`). Each call carries the
  * whole list, so the newest call's input is the list as it stands, and a
  * tab draws each call where it landed with the older ones folded. Named
- * to-dos rather than a plan, because the plan is Luke's own document.
+ * to-dos rather than a plan, because the plan is the app's own document.
  */
 export const AGENT_TODOS_TOOL = "write_todos";
 
@@ -2145,7 +2076,7 @@ export type TurnRecord = typeof turnRecordSchema.Type;
 
 /**
  * What sent one of the developer's lines to a coding agent: a member, from
- * the message box or an Inbox answer; Luke, from a call; an automation's
+ * the message box or an Inbox answer; the app, from a call; an automation's
  * run, on its creator's behalf; GitHub, telling the agent of a review, a
  * comment, or a failed check on its pull request, by who caused it there;
  * or another coding agent of the workspace, through `message_agent`.
@@ -2160,7 +2091,7 @@ export const MESSAGE_SENDER = {
 
 export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
 
-/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
+/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, the app from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const AGENT_SENDER = {
   MEMBER: "member",
   FORMER: "former",
@@ -2174,8 +2105,8 @@ export const AGENT_SENDER = {
  * a reader sees over it: a member by their account's id and the name it
  * holds now, a member who has left among them, and with no id what sent it
  * in a member's place or a member whose account is gone, each named as the
- * service words it, and what kind of sender it is, so the window draws Luke
- * as Luke, an automation as one, and GitHub as the login named; the kind is
+ * service words it, and what kind of sender it is, so the window draws the app
+ * as itself, an automation as one, and GitHub as the login named; the kind is
  * absent from a service older than it. The window names nobody over the reader's own.
  * Another coding agent of the workspace is named with no kind and marked
  * `agent` instead, because a window reads `kind` as one of the words it
@@ -2257,7 +2188,7 @@ const agentTranscriptMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
    * What opened a brain turn, as its row recorded it, on the turn's
-   * journal: a spoken turn is the voice's, whose words Luke says aloud
+   * journal: a spoken turn is the voice's, whose words the app says aloud
    * whether or not a line on screen asked for it, as the look around a
    * call opens with is. Absent on a coding agent's page, on any other row,
    * and from a service older than it.
@@ -2412,6 +2343,20 @@ const agentSubagentTitleSchema = EffectSchema.Struct({
 export type AgentSubagentTitle = typeof agentSubagentTitleSchema.Type;
 
 /**
+ * Where the launch a local agent's transcript waits on stands, as its page
+ * says it (`agentMessagesAnswerSchema`'s `launch`): written and waiting for
+ * its host to take it, or the step the host that took it reported
+ * (`DEVICE_LAUNCH_STEP`), in the order a launch passes them.
+ */
+export const AGENT_LAUNCH = {
+  /** The launch is written and no host has taken it yet. */
+  WAITING: "waiting",
+  ...DEVICE_LAUNCH_STEP,
+} as const;
+
+export type AgentLaunch = (typeof AGENT_LAUNCH)[keyof typeof AGENT_LAUNCH];
+
+/**
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
  * learns from the page that ends the hold that there is nothing more to
@@ -2440,6 +2385,16 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
   /** When the run that status is read from began, as the agent's summary says it, so a tab following the transcript counts the run a new turn opened. */
   runStartedAt: EffectSchema.optionalKey(countedNumber),
   /**
+   * Where the launch the agent waits on stands, on the agent's own
+   * transcript while it runs on a device and that launch's turn has not
+   * opened: waiting while no host has taken it, then the step the host
+   * reported, which the working line words in place of "Starting…". Absent
+   * on a worker's page, for an agent in the cloud, where the host that took
+   * the launch reported no step, once the launch's turn has opened, and
+   * from a service older than it.
+   */
+  launch: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_LAUNCH))),
+  /**
    * The delegations the agent's newest turn still waits on, each by the
    * call that started it with when its worker began, so a running
    * subagent's row counts how long it has worked; absent on a worker's
@@ -2465,7 +2420,7 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
   failureReason: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
   /**
    * Where a failed agent that ran directly on its Mac, which now runs every
-   * agent in a VM and so refused to start it, left its work: the folder of
+   * agent in a folder of its own and so refused to start it, left its work: the folder of
    * its checkout on that Mac. Its `failureReason` is `session_ended`, which
    * a panel older than this key words; absent for every other failure, and
    * from a service older than it.

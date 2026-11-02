@@ -3,7 +3,7 @@ import { Cause, Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * The agents' directory under Luke's application data, one entry per agent:
+ * The agents' directory under the app's application data, one entry per agent:
  * where earlier builds kept the local brain's store and workspace, and what a
  * launch still looks under to remove the retired store.
  */
@@ -35,7 +35,7 @@ const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
 ];
 
 interface RemoveRetiredStoreOptions {
-  /** Luke's own application-state root, the agents' directory beneath it. */
+  /** The app's own application-state root, the agents' directory beneath it. */
   stateRoot: string;
   report: (message: string) => void;
 }

@@ -11,9 +11,11 @@
  * tab as much as in the browser. A link in words being edited opens through
  * the opener of the place the words stand in (`useEditedLinksHost`), as a
  * press on the same link drawn there would, because a press in the editor
- * only places the caret; the window's own where no place said one. Copy
- * link copies the address as written and says Link copied, as every menu's
- * copy does.
+ * only places the caret; the window's own where no place said one. A link
+ * to an agent's page offers Open in browser after it, opening the page's own
+ * app link outside the window (`open-in-browser-item.tsx`). Copy link
+ * copies the address as written and says Link copied, as every menu's copy
+ * does.
  */
 
 import { dropBelowStart, linkAddressOf, MENU_ALIGN, type MenuPlacement, useMenu } from "@luke/ui";
@@ -21,6 +23,7 @@ import { ExternalLinkIcon, LinkIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { ActionMenu } from "./desktop/action-menu.js";
+import { linkedPageInBrowserItem } from "./open-in-browser-item.js";
 import { opensAsLink, useOpenLink } from "./tasks/use-open-link.js";
 
 /** What a right-click on a link is on: the address, and the link Open link presses. */
@@ -83,7 +86,7 @@ function placementOf(event: MouseEvent, element: HTMLElement): MenuPlacement {
 /**
  * The window's one link menu, drawn wherever a right-click on a link hangs
  * it. It is mounted once, at the window's root, under the window's opener
- * for a place in Luke and its toast.
+ * for a place in the app and its toast.
  */
 export function LinkMenu(): React.JSX.Element | null {
   const { drawn, show, close } = useMenu(true);
@@ -107,6 +110,7 @@ export function LinkMenu(): React.JSX.Element | null {
 
   if (drawn === undefined || link === undefined) return null;
   const { href, element } = link;
+  const inBrowser = linkedPageInBrowserItem(href);
   return (
     <ActionMenu
       label={LINK_MENU_LABEL}
@@ -122,6 +126,7 @@ export function LinkMenu(): React.JSX.Element | null {
               else (editedLinkOpenerOf(element) ?? openLink)(href);
             },
           },
+          ...(inBrowser === undefined ? [] : [inBrowser]),
           {
             label: LINK_COPY.LABEL,
             icon: <LinkIcon aria-hidden="true" />,

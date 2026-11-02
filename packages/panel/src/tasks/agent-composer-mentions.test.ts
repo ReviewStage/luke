@@ -444,16 +444,33 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
   typeInComposer(container, "Follow @roll");
   await settle();
   const offered = listed(container);
-  pressInComposer(container, "ArrowDown");
   pressInComposer(container, "Enter");
   await settle();
   const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(offered, ["rollout-store.ts", "Rollout"]);
+  assert.deepEqual(offered, ["Rollout", "rollout-store.ts"]);
   assert.deepEqual(chips.map(chipName), ["Rollout"]);
   assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}`]);
+});
+
+test("a word that finds an agent and a file leads the @ list with the agent, which Enter writes", async () => {
+  const name = "Roll out invites";
+  const agent = { ...STORE_AGENT, name, summary: workspaceAgent(STORE_AGENT.id, name, TASK_ID) };
+  const { container } = await box({ ...planPage([]), agents: [SELF_AGENT, agent] });
+
+  typeInComposer(container, "Ask @roll");
+  await settle();
+  const offered = groupsListed(container).map(([group]) => group);
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(offered, ["Agents", "Plan", "Files and folders"]);
+  assert.deepEqual(
+    [...composerEditor(container).querySelectorAll("[data-mention-ref]")].map(chipName),
+    [name],
+  );
 });
 
 test("the @ list hangs at the caret, by the word's line, and narrows as the word is typed on while the caret stays in the box", async () => {
@@ -476,7 +493,7 @@ test("the @ list hangs at the caret, by the word's line, and narrows as the word
 
     assert.deepEqual(hung, { side: "above", left: "120px", top: "300px" });
     assert.ok(first.length > 2, "a letter offers more than the word does");
-    assert.deepEqual(listed(container), ["rollout-store.ts", "Rollout"]);
+    assert.deepEqual(listed(container), ["Rollout", "rollout-store.ts"]);
     assert.ok(composerEditor(container).contains(document.activeElement), "the caret stays");
   } finally {
     vi.restoreAllMocks();
@@ -499,7 +516,7 @@ test("the @ list closes on a press outside it and the box, stays open for a pres
   typeInComposer(container, "o");
   await settle();
 
-  assert.deepEqual(keptByTheBox, ["rollout-store.ts", "Rollout"]);
+  assert.deepEqual(keptByTheBox, ["Rollout", "rollout-store.ts"]);
   assert.equal(afterAway, false, "a press outside closes it");
   assert.equal(container.querySelector(".mention-menu") !== null, false, "and it stays closed");
 });
@@ -616,8 +633,8 @@ test("once the plan's repository changes, the box offers the new repository's fi
   redraw(planPage([], "acme/next"));
   await settle();
 
-  assert.deepEqual(before, ["rollout-store.ts", "Rollout"]);
-  assert.deepEqual(listed(container), ["rollout-next.ts", "Rollout"]);
+  assert.deepEqual(before, ["Rollout", "rollout-store.ts"]);
+  assert.deepEqual(listed(container), ["Rollout", "rollout-next.ts"]);
 });
 
 test("a sent message's mention of an MCP server is drawn on a plan's page as a chip that opens nothing", () => {
@@ -839,11 +856,11 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
   )?.firstElementChild;
 
   assert.deepEqual(groupsListed(container), [
+    ["Agents", ["Wire the desktop"]],
     ["Plan", ["Goal", "Rollout", "Invitations"]],
     ["Pages", ["Invites by week"]],
-    ["Agents", ["Wire the desktop"]],
     ["Integrations", ["Linear"]],
-    ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Dates", "Linear"]],
+    ["Mention from", ["Agents", "Plan", "Pages", "Files and folders", "Dates", "Linear"]],
   ]);
   assert.equal(agentGlyph?.className, "state-glyph", "the agent's row leads with its tab's glyph");
 });
@@ -862,7 +879,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   const pageMention: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id };
   assert.deepEqual(chips.map(chipName), ["Invites by week"]);
   assert.deepEqual(sent, [`Build ${mentionMarkdown(pageMention, "Invites by week", PLACE)}`]);
-  assert.equal(sent[0], "Build [@Invites by week](https://tryluke.dev/acme/plan/pl_1/page/page-1)");
+  assert.equal(sent[0], "Build [@Invites by week](https://vespin.dev/acme/plan/pl_1/page/page-1)");
 });
 
 test("on the page of an agent no plan holds an @ offers the pages it showed, a pick sent as the agent's page's link", async () => {
@@ -885,7 +902,7 @@ test("on the page of an agent no plan holds an @ offers the pages it showed, a p
 
   assert.deepEqual(offered, ["Invites by week"]);
   assert.deepEqual(sent, [
-    "Build [@Invites by week](https://tryluke.dev/acme/agent/agent-9/page/page-1)",
+    "Build [@Invites by week](https://vespin.dev/acme/agent/agent-9/page/page-1)",
   ]);
 });
 
@@ -899,7 +916,7 @@ test("another agent picked from the @ list is drawn as its chip and sent as its 
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(sent, ["Build on [@Wire the desktop](https://tryluke.dev/acme/agent/agent-2)"]);
+  assert.deepEqual(sent, ["Build on [@Wire the desktop](https://vespin.dev/acme/agent/agent-2)"]);
 });
 
 test("a sent message's mention of a page or an agent is drawn as the chip that opens its tab through the window's opener, its target on no attribute", () => {
@@ -1060,7 +1077,7 @@ test("an @ whose read of the repository's files was refused ends its reading, sa
   await settle();
 
   assert.equal(listNote(container).words, "");
-  assert.deepEqual(listed(container), ["rollout-store.ts", "Rollout"]);
+  assert.deepEqual(listed(container), ["Rollout", "rollout-store.ts"]);
 });
 
 it.effect(
@@ -1159,7 +1176,7 @@ it.effect(
       yield* Effect.promise(settle);
 
       assert.deepEqual(sent, [
-        `Ask [@Bill by seat](https://tryluke.dev/acme/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
+        `Ask [@Bill by seat](https://vespin.dev/acme/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://vespin.dev/acme/agent/${SWEEPER.id})`,
       ]);
     }),
 );
@@ -1393,7 +1410,7 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   const file = "https://github.com/acme/relay/blob/HEAD/apps/web/rollout-store.ts";
 
   typeInComposer(container, "Build ");
-  pasteInComposer(container, page.replace("https:", "tryluke:"));
+  pasteInComposer(container, page.replace("https:", "vespin:"));
   typeInComposer(container, "on ");
   pasteInComposer(container, agent);
   typeInComposer(container, "in ");
@@ -1463,11 +1480,11 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
   await settle();
 
   assert.deepEqual(kinds, [
-    ["Files and folders", "acme/relay"],
+    ["Agents", "acme"],
     ["Plan", "2 sections"],
     ["Pages", "1 page"],
-    ["Agents", "acme"],
-    ["Dates", "A day, a time, or a range"],
+    ["Files and folders", "acme/relay"],
+    ["Dates", ""],
     ["Linear", "Integration"],
   ]);
   assert.deepEqual(wideKeys, ["↑↓Move", "⏎⇥Mention", "→Open", "EscClose"]);
@@ -1501,9 +1518,9 @@ test("a bare End and Home take the highlight to the last row and the first, a mo
   pressInComposer(container, "Enter", { shiftKey: true });
   await settle();
 
-  assert.deepEqual(held, ["Plan", "Goal"], "a modified Home or End is the editor's");
+  assert.deepEqual(held, ["Agents", "Wire the desktop"], "a modified Home or End is the editor's");
   assert.deepEqual(last, ["Mention from", "Linear"]);
-  assert.deepEqual(first, ["Plan", "Goal"]);
+  assert.deepEqual(first, ["Agents", "Wire the desktop"]);
   assert.equal(composerEditor(container).querySelector("[data-mention-ref]"), null);
 });
 
@@ -1851,7 +1868,7 @@ test("a person picked from the @ list is drawn as their chip and sent as their p
     chips.map((chip) => chip.textContent),
     ["Dana Reyes"],
   );
-  assert.deepEqual(sent, ["Ask [@Dana Reyes](https://tryluke.dev/acme/person/u_dana)"]);
+  assert.deepEqual(sent, ["Ask [@Dana Reyes](https://vespin.dev/acme/person/u_dana)"]);
 });
 
 test("a sent message's mention of a person is drawn as the chip wearing their mark and their name now that opens their page, its target on no attribute", async () => {
@@ -1893,8 +1910,8 @@ test("off a members' directory an @ offers no people", async () => {
 
 test("a person's page pasted into the box becomes their chip called by their name, and one of another workspace pastes as the words it is", async () => {
   const { container, sent } = await memberBox();
-  const here = "https://tryluke.dev/acme/person/u_dana";
-  const elsewhere = "https://tryluke.dev/other/person/u_dana";
+  const here = "https://vespin.dev/acme/person/u_dana";
+  const elsewhere = "https://vespin.dev/other/person/u_dana";
 
   typeInComposer(container, "Ask ");
   pasteInComposer(container, here);
@@ -1912,9 +1929,9 @@ test("a person's page pasted into the box becomes their chip called by their nam
   assert.deepEqual(sent, [`Ask [@Dana Reyes](${here}) not ${elsewhere}`]);
 });
 
-test("an old Luke issue page's link pasted into the box stays the words it is, since Luke keeps no issues of its own", async () => {
+test("an old Vespin issue page's link pasted into the box stays the words it is, since Vespin keeps no issues of its own", async () => {
   const { container, sent } = await box(taskPage());
-  const old = "https://tryluke.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
+  const old = "https://vespin.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
 
   typeInComposer(container, "Fix ");
   pasteInComposer(container, old);

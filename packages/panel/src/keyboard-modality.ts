@@ -6,7 +6,7 @@ import { useEffect } from "react";
 
 /**
  * `:focus-visible` is a heuristic about how focus arrived, and in a window
- * Luke focuses programmatically it guesses wrong: the engine can read the
+ * the app focuses programmatically it guesses wrong: the engine can read the
  * window taking focus as keyboard modality and ring a control after a plain
  * press, most reliably the first time the window is ever focused. Modality
  * is tracked outright instead, on the root as `data-keyboard`, so a ring or

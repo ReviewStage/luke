@@ -840,9 +840,6 @@ export function CloudBrowserDraftPane({
         {opening ? (
           <div className={NOTICE_CLASS}>
             <Spinner label={`Opening in ${browserOf(owner.name)}`} size={SPINNER_SIZE.REGION} />
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              A sandbox that stopped can take a minute to wake.
-            </Text>
           </div>
         ) : (
           <div className={NOTICE_CLASS}>

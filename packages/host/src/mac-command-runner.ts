@@ -136,7 +136,7 @@ export function runMacCommand(
       exitCode: null,
       stdout: "",
       stderr:
-        `Luke could not start the command: ${error instanceof Error ? error.message : String(error)}`.slice(
+        `Could not start the command: ${error instanceof Error ? error.message : String(error)}`.slice(
           0,
           MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS,
         ),

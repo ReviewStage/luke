@@ -13,7 +13,7 @@ import type { PushMethod } from "../contract/pushes.js";
 import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js";
 
 /**
- * The one-shot events a shell feeds the page: a Luke link. Each is said once
+ * The one-shot events a shell feeds the page: an app link. Each is said once
  * and never bootstrapped from.
  */
 type InProcessEventMethod = Extract<PushMethod, "onShowLink">;

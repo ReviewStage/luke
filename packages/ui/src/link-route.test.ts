@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { LINK_ROUTE, linkRoute } from "./link-route.js";
 
 /**
- * Where the window opens a Luke link: a page of Settings in Settings, on
+ * Where the window opens an app link: a page of Settings in Settings, on
  * the reader's own copy of the workspace its slug names; a place of an
  * experiment that is off nowhere; anything else on the Plans tab, whose
  * read decides. Synthetic workspaces.

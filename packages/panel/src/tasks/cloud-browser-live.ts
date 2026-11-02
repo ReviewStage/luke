@@ -7,7 +7,9 @@
  * cookie. Everything past the door is here, the same on both. A socket is
  * sized with the viewport the pane draws at as soon as it opens, and again
  * each time the pane resizes, and says the member is watching once a minute
- * while it stands, which keeps the relay from closing it as idle. The pane
+ * while it stands, which keeps the relay from closing it as idle until the
+ * member has sent it no input for fifteen minutes (`browser-live/bounds.ts`'s
+ * `INPUT_IDLE`), so a window left open on the pane lets its sandbox stop. The pane
  * holds a view only while it is shown and its window's page visible
  * (`cloud-browser-pane.tsx`), so a hidden one holds no socket and lets its
  * agent's sandbox stop (`browser-live/relay.ts`). A socket that drops is

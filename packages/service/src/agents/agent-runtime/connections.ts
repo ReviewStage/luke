@@ -1,5 +1,5 @@
 /**
- * connections.ts -- every integration one agent of Luke's is handed for a turn, as one dynamic connection.
+ * connections.ts -- every integration one agent of ours is handed for a turn, as one dynamic connection.
  *
  * eve hands a declared subagent none of its parent's connections, so each of
  * the four agents registers its own: one `connections/integrations.ts`, which

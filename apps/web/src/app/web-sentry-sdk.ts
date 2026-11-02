@@ -51,7 +51,7 @@ const ROUTE = "route";
 const PAGELOAD_ORIGIN = "auto.pageload.browser";
 
 /**
- * The route a tab's path is named by: the kind of place the Luke link it is
+ * The route a tab's path is named by: the kind of place the app link it is
  * names (`/app/task`, `/app/agent`), and the panel's own route for any path
  * naming none, so no workspace's slug and no id becomes a transaction's
  * name.

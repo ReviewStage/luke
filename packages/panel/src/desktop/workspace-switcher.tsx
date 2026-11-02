@@ -33,7 +33,7 @@ import { WorkspaceTile } from "./workspace-tile.js";
  * GitHub are managed. Nothing else stands in the menu. The head stands
  * whenever an account is signed in and its workspaces are read, its first
  * workspace alone included, because its menu is where a workspace is made;
- * before then the sidebar's head is Luke's.
+ * before then the sidebar's head is the app's.
  */
 
 /** The menu's items: every workspace by its tile, with who shares it under its name as the head says it, the listed one checked; then New workspace and Workspace settings. */

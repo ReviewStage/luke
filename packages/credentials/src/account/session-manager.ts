@@ -1,4 +1,5 @@
 import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
 import { singleFlightEffect } from "@luke/runtime/effect";
 import {
@@ -35,10 +36,10 @@ import {
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./snapshot.js";
 
 /** Why a sign-in again that landed on another account is refused. */
-const OTHER_ACCOUNT = "That sign-in is a different Luke account.";
+const OTHER_ACCOUNT = `That sign-in is a different ${PRODUCT_NAME} account.`;
 
 /** Why a session hand-off from a browser signed in as someone else is refused. */
-const OTHER_BROWSER_ACCOUNT = "That browser is signed in to a different Luke account.";
+const OTHER_BROWSER_ACCOUNT = `That browser is signed in to a different ${PRODUCT_NAME} account.`;
 
 /** The path the hosted authorize route sends the code back to. */
 const CALLBACK_PATH = "/callback";
@@ -53,13 +54,13 @@ const SESSION_CALLBACK_PATH = "/session";
 const SIGN_IN_PAGES = {
   granted: {
     badge: "Signed in",
-    title: "Signed in to Luke",
-    body: "You can close this tab and return to Luke.",
+    title: `Signed in to ${PRODUCT_NAME}`,
+    body: `You can close this tab and return to ${PRODUCT_NAME}.`,
   },
   notGranted: {
     badge: "Not completed",
     title: "Sign-in was not completed",
-    body: "Return to Luke and try again.",
+    body: `Return to ${PRODUCT_NAME} and try again.`,
   },
 } as const;
 
@@ -74,13 +75,13 @@ const SESSION_PAGES = {
   notGranted: {
     badge: "Not completed",
     title: "Workspace access was not completed",
-    body: "You're signed in to Luke. To manage a workspace's members, return to Luke and try again.",
+    body: `You're signed in to ${PRODUCT_NAME}. To manage a workspace's members, return to ${PRODUCT_NAME} and try again.`,
   },
 } as const;
 
 /**
  * Whose mark the landing card carries. Only the two identity providers have
- * one; anything else draws Luke's own mark alone rather than a wrong badge.
+ * one; anything else draws our own mark alone rather than a wrong badge.
  */
 function connectionSource(provider: AccountProvider): LoopbackConnectionSource | undefined {
   if (provider === LOOPBACK_CONNECTION_SOURCE.GOOGLE) return LOOPBACK_CONNECTION_SOURCE.GOOGLE;

@@ -1,5 +1,5 @@
 /**
- * hosts.ts -- the account's hosts as Settings › Hosts draws them (`../host-wire.ts`): listed, removed, the install tokens that add them kept and revoked, and a box's pairing read, approved, or denied by its code.
+ * hosts.ts -- the account's hosts as Settings › Hosts draws them (`../host-wire.ts`): listed, removed, and a box's pairing read, approved, or denied by its code.
  *
  * Every procedure is the account's own, on its sign-in or its browser
  * session. The outputs are the wire schemas flipped, so oRPC's output
@@ -14,8 +14,6 @@ import {
   devicePresenceAnswerSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
-  hostInstallTokenAnswerSchema,
-  hostInstallTokenRequestSchema,
   hostPairingAnswerSchema,
   hostPairingApproveAnswerSchema,
   hostPairingCodeRequestSchema,
@@ -24,7 +22,7 @@ import {
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
-/** Every body here: an id, a hash, or a code, and room to spare. */
+/** Every body here: an id or a code, and room to spare. */
 const BODY_BYTES = 1_024;
 
 export const hostsContract = {
@@ -37,18 +35,6 @@ export const hostsContract = {
   remove: hostedProcedure
     .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_REMOVE }))
-    .input(exactInput(hostIdRequestSchema))
-    .output(EffectSchema.flip(hostDoneAnswerSchema)),
-  keepInstallToken: hostedProcedure
-    .meta(bodyCap(BODY_BYTES))
-    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_INSTALL_TOKENS }))
-    .input(exactInput(hostInstallTokenRequestSchema))
-    .output(EffectSchema.flip(hostInstallTokenAnswerSchema)),
-  revokeInstallToken: hostedProcedure
-    .meta(bodyCap(BODY_BYTES))
-    .meta(
-      openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_INSTALL_TOKEN_REVOKE }),
-    )
     .input(exactInput(hostIdRequestSchema))
     .output(EffectSchema.flip(hostDoneAnswerSchema)),
   readPairing: hostedProcedure

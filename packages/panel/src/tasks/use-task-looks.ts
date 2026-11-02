@@ -281,7 +281,7 @@ function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolea
   return edit.by === undefined || readerId === undefined || edit.by.userId === readerId;
 }
 
-/** A visit to the task between `mark`, the last look's, and `opened`: each section someone else, a teammate or Luke or an agent, saved in that span; none while no task is drawn. */
+/** A visit to the task between `mark`, the last look's, and `opened`: each section someone else, a teammate or the app or an agent, saved in that span; none while no task is drawn. */
 function visited(
   task: Task | undefined,
   readerId: string | undefined,

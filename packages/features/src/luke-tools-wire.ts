@@ -1,10 +1,10 @@
 /**
- * luke-tools-wire.ts -- which of Luke's own tools an agent is offered, and whether `run_on_mac` would run for it, as its MCP popover reads them.
+ * luke-tools-wire.ts -- which of our own tools an agent is offered, and whether `run_on_mac` would run for it, as its MCP popover reads them.
  *
  * The service answers by the same rules the agent's runtime narrows its
  * tools by (`packages/service/src/agents/luke-tools.ts`), so the list is the
  * one the agent is handed, in its order: eve's tools for an agent on eve,
- * and the tools of Luke's MCP server for one on Claude Code or Codex, whose
+ * and the tools of our MCP server for one on Claude Code or Codex, whose
  * harness keeps its own shell and files. `run_on_mac` is answered off where
  * the service would refuse a call now: no Mac of the starter's listening,
  * or words someone other than the starter put into the agent's
@@ -43,7 +43,7 @@ export const runOnMacStandingSchema = EffectSchema.Union([runOnMacOnSchema, runO
 
 export type RunOnMacStanding = typeof runOnMacStandingSchema.Type;
 
-/** The agent's Luke tools, by name in the order it is offered them, and where its `run_on_mac` stands. */
+/** Our tools the agent is offered, by name in the order it is offered them, and where its `run_on_mac` stands. */
 export const lukeToolsAnswerSchema = EffectSchema.Struct({
   tools: EffectSchema.Array(EffectSchema.String),
   runOnMac: runOnMacStandingSchema,

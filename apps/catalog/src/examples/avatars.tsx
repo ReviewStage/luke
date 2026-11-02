@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -67,7 +68,7 @@ function Avatars(): React.JSX.Element {
                 size={size}
               />
               <Avatar
-                name="Luke"
+                name={PRODUCT_NAME}
                 glyph={<WingFace />}
                 shape={AVATAR_SHAPE.SQUARE}
                 size={size}

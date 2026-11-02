@@ -113,7 +113,7 @@ function utcDayOf(column: PgColumn) {
   return sql<string>`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD')`;
 }
 
-/** The conversation a child conversation was delegated from, to tell a coding agent's subagent from Luke's. */
+/** The conversation a child conversation was delegated from, to tell a coding agent's subagent from the app's. */
 const parentConversation = alias(conversations, "parent_conversation");
 
 const WindowScopeSchema = Schema.Struct({
@@ -129,7 +129,7 @@ const TURN_DAY = utcDayOf(turns.settledAt);
  * Every ended turn of the window, by its day, its conversation's kind and
  * its parent's, its status, and its failure word. Grouped on the columns
  * themselves rather than a case over them, so the fold below decides which
- * turns are Luke's and which a coding agent's.
+ * turns are the app's and which a coding agent's.
  */
 const findTurnOutcomes = SqlSchema.findAll({
   Request: WindowScopeSchema,
@@ -389,7 +389,7 @@ const NO_FAILURES: AdminFailureCount = { failed: 0, total: 0 };
 
 const NO_RUNS: AdminAutomationCount = { failed: 0, skipped: 0, total: 0 };
 
-/** Whose work a turn is: Luke's, a coding agent's own run, or a subagent one of its turns delegated to. */
+/** Whose work a turn is: the app's, a coding agent's own run, or a subagent one of its turns delegated to. */
 const TURN_WORK = {
   LUKE: "luke",
   AGENT: "agent",
@@ -408,7 +408,7 @@ function turnWorkOf(kind: string, parentKind: string | null): TurnWork {
  * The turn and agent series and the failure classes. A coding agent's run is
  * a turn of its own conversation, or a Start that never got one; its
  * subagents' turns run inside that turn, so they count toward neither rate.
- * Every other ended turn is Luke's. An abandoned turn counts whatever its
+ * Every other ended turn is the app's. An abandoned turn counts whatever its
  * kind.
  */
 const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(function* (

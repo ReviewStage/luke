@@ -8,6 +8,7 @@
  * that offer their details to copy, alone and beside a Retry.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -109,7 +110,7 @@ function Toasts(): React.JSX.Element {
 
 /** What a failure's Copy details puts on the clipboard, as the panel builds it from the failure's report. */
 const FAILURE_DETAILS = [
-  "Luke showed an error. Find it in Sentry and the logs by these details:",
+  `${PRODUCT_NAME} showed an error. Find it in Sentry and the logs by these details:`,
   "time: 2026-10-29T18:20:03.198Z",
   "failure.surface: agent.stop",
   "failure.kind: unexpected",

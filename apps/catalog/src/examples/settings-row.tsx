@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AVATAR_SIZE,
@@ -72,7 +73,10 @@ function HeldSwitch({ label, control }: { label: string; control: SettingsRowCon
 function Rows(): React.JSX.Element {
   return (
     <SettingsSection>
-      <SettingsRow label="Launch at login" description="Luke opens with the Mac, in the menu bar.">
+      <SettingsRow
+        label="Launch at login"
+        description={`${PRODUCT_NAME} opens with the Mac, in the menu bar.`}
+      >
         {(control) => <HeldSwitch label="Launch at login" control={control} />}
       </SettingsRow>
       <SettingsRow

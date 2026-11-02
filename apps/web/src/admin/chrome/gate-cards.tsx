@@ -1,10 +1,11 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
 import { AuthPage, BUTTON_VARIANT, Button, FaceMark, SocialSignInCard } from "@luke/ui";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { useSocialSignIn } from "../../sign-in-choices";
 import { authClient } from "../auth-client";
 
-/** Luke's mark at the head of the gate's cards. */
+/** The app's mark at the head of the gate's cards. */
 function AdminMark(): React.JSX.Element {
   return (
     <span className="inline-flex w-13">
@@ -21,7 +22,7 @@ export function SignInCard(): React.JSX.Element {
   return (
     <SocialSignInCard
       mark={<AdminMark />}
-      title="Luke admin"
+      title={`${PRODUCT_NAME} admin`}
       pending={pending}
       failed={failed ? UNREPORTED.NO_REPORTER : undefined}
       onPress={begin}

@@ -18,14 +18,10 @@
  * to the menu and from there to the same nothing.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
 import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
-import {
-  EXPERIMENT,
-  type Experiment,
-  type ExperimentChoices,
-  experimentOn,
-} from "./experiments.js";
+import { type Experiment, type ExperimentChoices, experimentOn } from "./experiments.js";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
@@ -84,7 +80,6 @@ export const APP_COMMAND = {
   SET_STATUS: "set-status",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
-  ASK_LUKE: "ask-luke",
   AUTOMATIONS: "automations",
   EXIT_AUTOMATIONS: "exit-automations",
   EXIT_BOARD: "exit-board",
@@ -486,7 +481,7 @@ export const APP_SHORTCUTS = {
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.HIDE]: {
-    label: "Hide Luke",
+    label: `Hide ${PRODUCT_NAME}`,
     chord: { key: SHORTCUT_KEY.H },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
@@ -496,7 +491,7 @@ export const APP_SHORTCUTS = {
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.QUIT]: {
-    label: "Quit Luke",
+    label: `Quit ${PRODUCT_NAME}`,
     chord: { key: SHORTCUT_KEY.Q },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
@@ -605,12 +600,6 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.EXIT_PERSON_PAGE]: {
     label: "Exit profile",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-  },
-  // Note that Luke takes ⇧⌘K beside the palette's ⌘K, whose first entry is Ask Luke, rather than ⇧⌘L, which macOS gives its Search With Google service.
-  [APP_COMMAND.ASK_LUKE]: {
-    label: "Ask Luke",
-    chord: { key: SHORTCUT_KEY.K, shift: true },
-    experiment: EXPERIMENT.OPERATOR,
   },
   [APP_COMMAND.AUTOMATIONS]: {
     label: "Automations",
@@ -822,7 +811,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.DELETE,
       APP_COMMAND.OPEN_IN_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
-      APP_COMMAND.ASK_LUKE,
       APP_COMMAND.INBOX,
       APP_COMMAND.TASKS,
       APP_COMMAND.INBOX_LIST,

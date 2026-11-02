@@ -77,13 +77,13 @@ export const HOSTED_API_ERROR = {
   AGENT_IMAGE_PREPARING: "agent-image-preparing",
   /**
    * The agent runs on a native harness (Claude Code or Codex) that this part
-   * of Luke cannot reach yet, such as a call, which runs on eve alone; nothing
+   * of the app cannot reach yet, such as a call, which runs on eve alone; nothing
    * was written or charged. It is reached from the agent's own tab.
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /**
    * What was asked runs on OpenAI (a voice call, a dictated clip) and the
-   * account saved no OpenAI API key of its own, which Luke spends none of its
+   * account saved no OpenAI API key of its own, which we spend none of our
    * own in place of; nothing was sent or charged. The key is added in Settings.
    */
   OPENAI_KEY_MISSING: "openai-key-missing",
@@ -128,7 +128,7 @@ export const HOSTED_API_ERROR = {
   /**
    * The account keeps no credential that pays for a coding agent on the
    * model's provider: neither that provider's subscription (a Claude
-   * setup-token, a ChatGPT sign-in) nor its API key. Luke's own key pays for
+   * setup-token, a ChatGPT sign-in) nor its API key. Our own key pays for
    * no coding agent, so nothing was written; the refusal names the provider,
    * which the account connects in Settings › Agents.
    */
@@ -159,8 +159,6 @@ export const HOSTED_API_ERROR = {
   LOCAL_AGENT_REFUSED: "local-agent-refused",
   /** A host called with a daemon below the service's floor, or with no version at all (`host-wire.ts`); nothing was read or written, and the box's install script upgrades it in place. */
   HOST_UPGRADE_NEEDED: "host-upgrade-needed",
-  /** An enroll named the id of one of its install token's member's hosts that is still enrolled; nothing was written, and the box keeps the secret it has. Only a removed host enrolls again. */
-  HOST_STILL_ENROLLED: "host-still-enrolled",
   /** The agent ran on a host its starter removed, so no message reaches it again; Continue starts a new agent elsewhere. Nothing was sent. */
   DEVICE_REMOVED: "device-removed",
   /** A change named where a task runs, which is set when the task is created and never changed after; nothing was written. */
@@ -171,8 +169,8 @@ export const HOSTED_API_ERROR = {
   TASK_BLOCK_CYCLE: "task-block-cycle",
   /** A parent asked for is the task itself or one of its descendants, under which the task would descend from itself. Nothing was written. */
   TASK_PARENT_CYCLE: "task-parent-cycle",
-  /** A device agent's save named a generation that is no longer the agent's newest, since a newer save landed; nothing was granted or committed. */
-  AGENT_STATE_STALE: "agent-state-stale",
+  /** A start asked to be the parent of a task that has a parent already, which a start never takes the place of. Nothing was written. */
+  TASK_PARENT_HELD: "task-parent-held",
   /** The account named too many pairing codes that no pending pairing has, so its reads, approves, and denies by code are refused until the time the refusal names; nothing was read or written. */
   HOST_PAIRING_HELD: "host-pairing-held",
 } as const;

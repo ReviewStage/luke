@@ -8,6 +8,7 @@ import {
   type PlanCommentAsked,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
 import { steerAgent } from "../agents/coder-host/steer.js";
@@ -33,7 +34,7 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * (`eve-host/auth.ts`'s `DEPLOYMENT_PRESENCE`). It is sent under a key
  * drawn from the one the member's client made for the comment, so a comment
  * sent again is handed over once. A comment that mentions no agent hands
- * nothing to anyone, an \`@\` of Luke among it, and an agent's own reply
+ * nothing to anyone, an \`@\` of the app's own name among it, and an agent's own reply
  * never does.
  */
 
@@ -50,11 +51,11 @@ export interface CommentAsk {
   readonly sender: string;
 }
 
-/** Who wrote an entry, as the words handed over name them: Luke among them only in a thread written before the task's Luke was gone. */
+/** Who wrote an entry, as the words handed over name them: the app's own name among them only in a thread written before the task's own assistant was gone. */
 function writerName(entry: PlanCommentThread["entries"][number]): string {
   switch (entry.writer.actor) {
     case PLAN_COMMENT_ACTOR.LUKE:
-      return "Luke";
+      return PRODUCT_NAME;
     case PLAN_COMMENT_ACTOR.AGENT:
       return "An agent";
     case PLAN_COMMENT_ACTOR.MEMBER:

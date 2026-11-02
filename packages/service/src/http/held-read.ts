@@ -12,7 +12,7 @@ import { Sync } from "../sync/watch.js";
  * again each time a watch on the rows' topics wakes (`sync/watch.ts`), each
  * look reading where the rows stand and none of their words, and let go at
  * the hold's end, when it answers the rows unchanged and the reader asks
- * again. A watch on no topics, or one Luke Sync cannot wake, wakes every
+ * again. A watch on no topics, or one Sync cannot wake, wakes every
  * poll. The Inbox and a plan's comments are read this way, so a window
  * hears a teammate's or an agent's change the moment it lands without
  * asking on a clock of its own.

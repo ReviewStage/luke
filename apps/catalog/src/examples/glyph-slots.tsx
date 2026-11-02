@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -22,7 +23,7 @@ import { CatalogSection } from "../section";
 /**
  * glyph-slots.tsx -- a glyph's seat before a line's words in each ink: a
  * call's muted glyph, the full ink of the one item in progress, the ink its
- * holder sets, and Luke's face in his blue; a to-do's seat as tall as its
+ * holder sets, and the app's face in its blue; a to-do's seat as tall as its
  * first line before words that wrap; a slot its container sizes larger;
  * a page's outline inset a step inside its slot beside a person's; and a
  * to-do's glyph arriving as a press moves the step on.
@@ -85,7 +86,7 @@ function GlyphSlots(): React.JSX.Element {
             <GlyphSlot ink={GLYPH_INK.VOICE}>
               <WingFace fill inherit />
             </GlyphSlot>
-            <Text variant={TEXT_VARIANT.CAPTION}>Luke's note on lines 3–4</Text>
+            <Text variant={TEXT_VARIANT.CAPTION}>{PRODUCT_NAME}'s note on lines 3–4</Text>
           </span>
         </Stack>
       </CatalogSection>
@@ -126,7 +127,7 @@ function GlyphSlots(): React.JSX.Element {
           <GlyphSlot ink={GLYPH_INK.VOICE}>
             <WingFace fill inherit />
           </GlyphSlot>
-          <Text variant={TEXT_VARIANT.CAPTION}>Luke</Text>
+          <Text variant={TEXT_VARIANT.CAPTION}>{PRODUCT_NAME}</Text>
         </span>
       </CatalogSection>
     </>

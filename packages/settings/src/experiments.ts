@@ -1,4 +1,6 @@
 // experiments.ts -- the features a developer can turn on before they are finished, and how a choice of them is read.
+
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 
@@ -10,15 +12,13 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
   MEMORY: "memory",
-  /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
-  OPERATOR: "operator",
   /** Channels: a workspace's threads read as Slack-style streams by topic, the sidebar listing channels in place of the Inbox and the tasks. */
   CHANNELS: "channels",
-  /** Pilot: a new task can start with one pilot agent that plans the work, splits it into child tasks, and runs a coding agent on each. */
+  /** Pilot: a new task can start with one pilot agent that plans the work, splits it into sub-tasks, and runs a coding agent on each. */
   PILOT: "pilot",
-  /** Skills: the skills a member installs into Luke for their agents, managed in Settings › Skills, and the `/` list of skills in a box written to an agent. */
+  /** Skills: the skills a member installs into the app for their agents, managed in Settings › Skills, and the `/` list of skills in a box written to an agent. */
   SKILLS: "skills",
-  /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in Luke's cloud. */
+  /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in our cloud. */
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
 } as const;
 
@@ -47,8 +47,8 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.BRING_YOUR_OWN_HOST,
     name: "Bring your own host",
     detail:
-      "Run agents on your own Macs and Linux machines, This Mac among them, set up in Settings › Hosts. " +
-      "Their transcripts and the files their tools read still reach Luke.",
+      "Run agents on your own Macs and Linux machines. " +
+      `Their transcripts and the files their tools read still reach ${PRODUCT_NAME}.`,
     owner: "Charles",
     since: "2026-10-30",
   },
@@ -56,7 +56,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.SKILLS,
     name: "Skills",
     detail:
-      "Install skills into Luke for your agents to use, managed in Settings › Skills, " +
+      `Install skills into ${PRODUCT_NAME} for your agents to use, ` +
       "and name one with / in a message to an agent.",
     owner: "Charles",
     since: "2026-10-30",
@@ -65,7 +65,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.PILOT,
     name: "Pilot",
     detail:
-      "Start a new task with one pilot agent that plans the work, splits it into child tasks, " +
+      "Start a new task with one pilot agent that plans the work, splits it into sub-tasks, " +
       "and runs an agent on each.",
     owner: "Charles",
     since: "2026-10-29",
@@ -84,18 +84,9 @@ export const EXPERIMENTS = [
     name: "Memory",
     detail:
       "Your agents keep settled facts about how your team works and recall them in later work, " +
-      "shared across your workspace and reviewed in Settings › Memory.",
+      "shared across your workspace.",
     owner: "Dean",
     since: "2026-10-23",
-  },
-  {
-    key: EXPERIMENT.OPERATOR,
-    name: "Luke, your operator",
-    detail:
-      "One Luke of your own in each workspace that keeps an eye on your agents, steers them, " +
-      "and tells you what needs you.",
-    owner: "Dean",
-    since: "2026-10-22",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

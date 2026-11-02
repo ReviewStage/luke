@@ -78,8 +78,8 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
-  // Each integration's MCP server is a path of Luke's MCP route, in its function, named by its connection; the dispatcher restores its public path from `route-path`.
-  // Note that a route a segment rule names gets no exact rule of its own, so Luke's own server's path is spelled here beside it.
+  // Each integration's MCP server is a path of our MCP route, in its function, named by its connection; the dispatcher restores its public path from `route-path`.
+  // Note that a route a segment rule names gets no exact rule of its own, so our own server's path is spelled here beside it.
   { src: "/api/agents/mcp", route: "agents/mcp", query: `${DISPATCH_QUERY.PATH}=agents/mcp` },
   {
     src: "/api/agents/mcp/integrations/([^/]+)",
@@ -211,18 +211,39 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
 );
 
 /**
+ * A condition that a request was made to one host, as a pattern held to its
+ * whole value, which names each spelling a browser may send of it, the one
+ * with a trailing dot among them: what holds the sandbox's host to the page
+ * route (`@luke/features/page-frame`). Note that it is written `re` and
+ * anchored, because a bare string is a pattern Vercel may match anywhere in
+ * the host, and a list of spellings would be reflowed by the formatter that
+ * runs on commit, against the generation this file holds the file to.
+ */
+const HostConditionSchema = Schema.Struct({
+  type: Schema.Literal("host"),
+  value: Schema.Struct({ re: Schema.String }),
+});
+
+/** The status a host's refused path is answered with. */
+const NOT_FOUND_STATUS = 404;
+
+/**
  * A route of the web service as `vercel.json` writes it: a rewrite, and the
  * response headers a page route sends beside it, as the app's routes send
- * its Content Security Policy; a redirect, its status and its `Location`
- * header, as the app's built file name sends the browser to `/app`; or
- * headers alone, which routing carries on past (`continue`) to whichever
- * later route or built file answers, as every page of the site wears its
- * security headers. A generated `/api/` rewrite carries none of them.
+ * its Content Security Policy, or, held to one host, the status every other
+ * path of that host is answered with; a redirect, its status and its
+ * `Location` header, as the app's built file name sends the browser to
+ * `/app`; or headers alone, which routing carries on past (`continue`) to
+ * whichever later route or built file answers, as every page of the site
+ * wears its security headers. A generated `/api/` rewrite carries none of
+ * them.
  */
 const WebRouteSchema = Schema.Union([
   Schema.Struct({
     src: Schema.String,
+    has: Schema.optionalKey(Schema.Array(HostConditionSchema)),
     dest: Schema.String,
+    status: Schema.optionalKey(Schema.Literal(NOT_FOUND_STATUS)),
     headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   }),
   Schema.Struct({
@@ -253,10 +274,9 @@ export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
  * services deployment: the web service owns the build, the install, the
  * ignore rule, and the `routes` the `/api/` rewrites are generated into,
  * because Vercel evaluates a service's routes only once a request has
- * entered it and ignores a `routes` key left at the top level; the eve
- * service owns its own build; and the top-level `rewrites` are the public
- * routing that sends `/eve/coder/v1/*` to eve and everything else to the web
- * service. The `git` key turns off deployment of GitHub's merge-queue
+ * entered it and ignores a `routes` key left at the top level; and the
+ * top-level `rewrites` are the public routing that sends every path to the
+ * web service. The `git` key turns off deployment of GitHub's merge-queue
  * branches (`gh-readonly-queue/<base>/pr-<n>-<sha>`): CI gates the queue, and
  * the squash it lands on `main` deploys on its own. It turns off, too, the
  * branches that hold pictures alone and share no history with `main`: PR
@@ -273,29 +293,10 @@ const WebService = Schema.Struct({
   routes: Schema.Array(WebRouteSchema),
 });
 
-const EveService = Schema.Struct({
-  root: Schema.String,
-  framework: Schema.String,
-  installCommand: Schema.String,
-  buildCommand: Schema.String,
-  ignoreCommand: Schema.String,
-});
-
-/** A route of the eve service, which rewrites its mounted path back to eve's own rather than naming a destination. */
-const TransformRouteSchema = Schema.Struct({
-  src: Schema.String,
-  transforms: Schema.Array(
-    Schema.Struct({ type: Schema.String, op: Schema.String, args: Schema.String }),
-  ),
-});
-
-const CoderService = Schema.Struct({
-  ...EveService.fields,
-  routes: Schema.Array(TransformRouteSchema),
-});
-
+/** A top-level rewrite: the service a path enters, where one host's alone, that host's. */
 const ServiceRewriteSchema = Schema.Struct({
   source: Schema.String,
+  has: Schema.optionalKey(Schema.Array(HostConditionSchema)),
   destination: Schema.Struct({ service: Schema.String }),
 });
 
@@ -306,7 +307,7 @@ const GitConfig = Schema.Struct({
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
   git: GitConfig,
-  services: Schema.Struct({ web: WebService, dev: CoderService }),
+  services: Schema.Struct({ web: WebService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });
@@ -377,11 +378,24 @@ export async function rewritesDrifted(web: string): Promise<boolean> {
   return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 
-/** `vercel.json` with the web service's generated rewrites replaced by the committed table, ahead of every other route of that service. */
+/** Whether a route or a top-level rewrite is held to one host, as the sandbox's are. */
+const isHostLocked = (route: object): boolean => "has" in route;
+
+/**
+ * `vercel.json` with the web service's generated rewrites replaced by the
+ * committed table, ahead of every other route of that service but those held
+ * to one host. Those stand first, because Vercel stops at the first route
+ * that matches, so a table rule ahead of them would answer an `/api/` path on
+ * the sandbox's host that they refuse.
+ */
 export async function vercelConfigSource(web: string): Promise<string> {
   const config = await readVercelConfig(web);
   const others = config.services.web.routes.filter((rewrite) => !isTableRewrite(rewrite));
-  const routes = [...(await readApiRewritesTable(web)), ...others];
+  const routes = [
+    ...others.filter(isHostLocked),
+    ...(await readApiRewritesTable(web)),
+    ...others.filter((route) => !isHostLocked(route)),
+  ];
   const services = { ...config.services, web: { ...config.services.web, routes } };
   return `${JSON.stringify({ ...config, services }, null, 2)}\n`;
 }

@@ -102,7 +102,7 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
- * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
+ * integrations-page.tsx -- Settings › Integrations: the services the account connects so our agents can use them.
  *
  * One row per account at a provider (two Notion workspaces are two rows,
  * "Notion · Acme" and "Notion · Personal", each its own grant), and one for
@@ -197,8 +197,10 @@ const CONNECTED_SKELETON_ROWS = 2;
 
 /**
  * The sections that stand while the statuses are read, a row to each offered
- * provider: a few connected, each ending in its ⋯, and the rest not, each in
- * its Connect, every one led by its mark over its line.
+ * provider: a few connected, each ending in its ⋯ under its line, and the
+ * rest not, each in its Connect with no line, as `rowLine` draws a provider
+ * with none, every one led by its mark, so the rows land in the height they
+ * stood in.
  */
 const INTEGRATIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
@@ -212,7 +214,7 @@ const INTEGRATIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
     headed: true,
     rows: INTEGRATION_PROVIDER_LIST.slice(CONNECTED_SKELETON_ROWS).map(() => ({
-      described: true,
+      described: false,
       mark: SETTINGS_ROW_MARK_WIDTH,
       controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
     })),
@@ -768,13 +770,11 @@ function IntegrationRow({
         confirm={disconnect}
         question={{
           title: `Disconnect ${name}?`,
-          ...(bySignIn
-            ? { body: "Agents lose GitHub until you connect it again." }
+          body: bySignIn
+            ? "Agents lose GitHub until you connect it again."
             : several
-              ? {
-                  body: `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`,
-                }
-              : undefined),
+              ? `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`
+              : `Agents lose ${INTEGRATION_NAME[provider]} until you connect it again.`,
           verb: "Disconnect",
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,

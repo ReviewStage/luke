@@ -2,11 +2,11 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * textarea.tsx -- shadcn/ui's textarea (style `base-nova`), vendored and drawn as Luke's many-line field.
+ * textarea.tsx -- shadcn/ui's textarea (style `base-nova`), vendored and drawn as our many-line field.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add textarea` reads as a small diff. Its classes
- * are Luke's field rather than shadcn's, the input's (`input.tsx`) with a
+ * are our field rather than shadcn's, the input's (`input.tsx`) with a
  * line's block inset and a handle to size it by height: block rather than
  * flex, and sized by its rows rather than `field-sizing-content`, which a
  * growing note asks for itself (`components/text-field`). None of shadcn's

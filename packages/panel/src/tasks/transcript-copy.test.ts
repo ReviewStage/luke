@@ -5,7 +5,6 @@ import {
   AGENT_SENDER,
   type AgentTranscriptMessage,
   agentMessageReplyLine,
-  OPERATOR_QUIET_REPLY,
 } from "@luke/features/agent-wire";
 import { INBOX_REPLY, inboxAnswerMessage } from "@luke/features/inbox-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
@@ -140,7 +139,7 @@ test("another agent's message in its whole shape is copied as its words alone, w
       "message",
       MESSAGE_ROLE.USER,
       [
-        "Message · [@Invite emails](https://tryluke.dev/acme/agent/a1) to you:",
+        "Message · [@Invite emails](https://vespin.dev/acme/agent/a1) to you:",
         "Rebase before you push.",
         agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
       ].join("\n\n"),
@@ -278,7 +277,7 @@ const FORKED_FIRST = firstMessageText(
     messageId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
     preamble: "This is the work you continue from.",
     steps: [
-      { kind: REPLAY_STEP_KIND.LINE, summary: "Luke: Make it round.", words: "Make it round." },
+      { kind: REPLAY_STEP_KIND.LINE, summary: "Vespin: Make it round.", words: "Make it round." },
       {
         kind: REPLAY_STEP_KIND.TOOL,
         summary: "Ran: pnpm test",
@@ -308,7 +307,7 @@ test("an agent started from another is copied as its brief, the source's steps i
       "Fix the tile.",
       "## Forked from an earlier agent · 2 of 3 steps",
       "_1 earlier step was left out to keep the replay within its size limit._",
-      "- **Luke:** Make it round.\n- **Agent:** Ran: pnpm test",
+      "- **Vespin:** Make it round.\n- **Agent:** Ran: pnpm test",
       "## Developer",
       "Try a square instead.",
       "## Agent",
@@ -337,7 +336,7 @@ test("an agent started from another that has done nothing yet previews no step, 
   assert.equal(latestActivity(copied), undefined);
 });
 
-test("a summary Luke wrote of the source's oldest steps is copied under its line, as his words, and its steps are not counted as left out", () => {
+test("a summary Vespin wrote of the source's oldest steps is copied under its line, as its words, and its steps are not counted as left out", () => {
   const first = firstMessageText(
     "Fix the tile.",
     {
@@ -361,7 +360,7 @@ test("a summary Luke wrote of the source's oldest steps is copied under its line
       "## Prompt",
       "Fix the tile.",
       "## Continued from an earlier agent · 1 of 41 steps",
-      "**Summary of 40 earlier steps (written by Luke)**",
+      "**Summary of 40 earlier steps (written by Vespin)**",
       "> Read the tile code.\n>\n> Found the radius bug.",
       "- **Agent:** Fixed.",
     ].join("\n\n") + "\n",
@@ -466,34 +465,4 @@ test("an agent started blank is copied with no brief, its first line, spoken on 
       "\n\n",
     ) + "\n",
   );
-});
-
-test("an operator's heartbeat that found nothing is copied, and previewed, as no reply, and any other agent's same words are copied as said", () => {
-  const messages = [
-    said("asked", MESSAGE_ROLE.USER, "What stands?"),
-    said("answered", MESSAGE_ROLE.ASSISTANT, "Two agents run; nothing waits on you."),
-    said("heartbeat", MESSAGE_ROLE.USER, "Your heartbeat: look over the developer's open work."),
-    said("quiet", MESSAGE_ROLE.ASSISTANT, OPERATOR_QUIET_REPLY),
-  ];
-  const operator = agentTranscript({
-    title: "Luke",
-    messages,
-    brief: AGENT_BRIEF.BLANK,
-    quiet: true,
-  });
-  const coder = agentTranscript({
-    title: "Tile",
-    messages,
-    brief: AGENT_BRIEF.BLANK,
-  });
-
-  assert.deepEqual(latestActivity(operator), {
-    kind: LATEST_ACTIVITY.WORDS,
-    text: "Two agents run; nothing waits on you.",
-  });
-  assert.ok(!transcriptMarkdown(operator, TRANSCRIPT_COPY.CONCISE).includes(OPERATOR_QUIET_REPLY));
-  assert.deepEqual(latestActivity(coder), {
-    kind: LATEST_ACTIVITY.WORDS,
-    text: OPERATOR_QUIET_REPLY,
-  });
 });

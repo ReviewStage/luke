@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="packages/brand/assets/luke-wordmark-dark.svg">
-    <img src="packages/brand/assets/luke-wordmark-light.svg" alt="Luke" width="360">
+    <img src="packages/brand/assets/luke-wordmark-light.svg" alt="Vespin" width="360">
   </picture>
 </p>
 
@@ -12,11 +12,11 @@
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-black" alt="macOS 14 or newer, Apple silicon">
 </p>
 
-Luke is a macOS app for planning a change with coding agents, handing it to
+Vespin is a macOS app for planning a change with coding agents, handing it to
 them to build, and reviewing what they ship.
 
 **Status:** an early MVP. It runs on Apple silicon Macs with macOS 14 or newer,
-and in a browser at [tryluke.dev/app](https://tryluke.dev/app). It is free.
+and in a browser at [vespin.dev/app](https://vespin.dev/app). It is free.
 
 You describe the change to a coding agent, typed or dictated. It reads the
 repository, asks about what you left open, and writes the plan as a design doc
@@ -37,7 +37,7 @@ Claude Code, Codex, or any other agent.
    agent.
 3. **Build.** **Start** hands the plan to a coding agent on the Claude or GPT
    model you pick. It works on a full checkout in a sandbox of its own, runs
-   the tests, pushes a branch, opens the pull request as you with Luke as
+   the tests, pushes a branch, opens the pull request as you with Vespin as
    co-author, and fixes the checks that fail. You can message it mid-run or
    open a terminal in its sandbox.
 4. **Review.** When an agent needs a decision, a manual step, or your eyes on
@@ -60,9 +60,9 @@ Claude Code, Codex, or any other agent.
 - **Skills** in the repository's `.agents/skills` or `.claude/skills` are
   offered to agents, and `/` in an agent's message box picks one.
 - **Run on this Mac** checks an agent's branch out in a local worktree with
-  your own git login and opens a terminal on it inside Luke.
+  your own git login and opens a terminal on it inside Vespin.
 - **Your own keys**: coding agents run on your Claude or ChatGPT subscription
-  or on your Anthropic or OpenAI API key, added in Settings › Agents. Luke
+  or on your Anthropic or OpenAI API key, added in Settings › Agents. Vespin
   pays for no model calls.
 - **Automations** start agents on a schedule, a GitHub event, an
   integration's event, or a webhook.
@@ -74,18 +74,18 @@ Claude Code, Codex, or any other agent.
 Requires an Apple silicon Mac on macOS 14 or newer.
 
 1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg),
-   open it, and drag **Luke** into **Applications**.
-2. Open Luke and sign in with Google or GitHub.
+   open it, and drag **Vespin** into **Applications**.
+2. Open Vespin and sign in with Google or GitHub.
 3. Connect GitHub in Settings › Workspace › Integrations, which installs the
-   Luke GitHub App on the account or organization whose repositories you want
+   Vespin GitHub App on the account or organization whose repositories you want
    to work on. A workspace's owner or an admin connects it.
 
-Luke asks for microphone access the first time you dictate, and updates
+Vespin asks for microphone access the first time you dictate, and updates
 itself.
 
 ## Where your code and data go
 
-Luke is a desktop app and a web app backed by a hosted service, and all three
+Vespin is a desktop app and a web app backed by a hosted service, and all three
 are in this repository.
 
 - **Your code** is read in a [Vercel Sandbox](https://vercel.com/docs/sandbox),
@@ -94,23 +94,23 @@ are in this repository.
   the sandbox. Each coding agent gets a sandbox of its own and pushes through
   the same App.
 - **Models.** Every model call runs on your own keys or subscriptions, added
-  in Settings › Agents; Luke pays for none. Dictation runs on OpenAI, on your
-  OpenAI API key, and is off without one; the recording goes through Luke's
+  in Settings › Agents; Vespin pays for none. Dictation runs on OpenAI, on your
+  OpenAI API key, and is off without one; the recording goes through Vespin's
   service to OpenAI. Coding agents run on Anthropic or OpenAI, depending on the
   model you pick, on your subscription or API key.
 - **Commands on your Mac.** Coding agents can run shell commands on your
   Mac, in your login shell, and what they print goes to the model. This is
-  how an agent reads a local checkout or a server you have running. Luke asks
+  how an agent reads a local checkout or a server you have running. Vespin asks
   before each command by default; choose Always allow or Never in Settings ›
   This Mac.
 
-[PRIVACY.md](PRIVACY.md) lists everything Luke stores, every provider it sends
+[PRIVACY.md](PRIVACY.md) lists everything Vespin stores, every provider it sends
 data to, and how long each keeps it.
 
 ## Open source and the hosted service
 
 The app is open source under the [Apache License 2.0](LICENSE). It signs in to
-a hosted service at [tryluke.dev](https://tryluke.dev), run by Stage Inc.,
+a hosted service at [vespin.dev](https://vespin.dev), run by Stage Inc.,
 which is free to use. The service's code is in this repository to read, but
 running your own copy of it is not supported yet.
 
@@ -119,7 +119,7 @@ which is proprietary and not covered by this repository's license, or OpenAI's
 Codex, depending on the model you pick.
 
 Third-party names and logos, such as those of the integrations above, belong
-to their owners. Their use here does not mean those owners endorse Luke.
+to their owners. Their use here does not mean those owners endorse Vespin.
 
 ## Contributing
 

@@ -13,8 +13,8 @@ import {
   HoverCardList,
   HoverCardRow,
   HoverCardRule,
-  ListRowCount,
   linesCount,
+  ProgressCount,
   TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
@@ -83,15 +83,22 @@ import { WorkspaceRef } from "./workspace-ref.js";
 
 /**
  * A sidebar row's end: its repository where its group does not say it, its
- * face, its draft's pencil, its one icon, and its time, in the caption's
- * muted figures, ending on the time's last letter so times of any length
- * line up; each mark at the glyph's size a step before the next, so they
- * step out with the time while the row is hovered. A long repository is cut
+ * face, its draft's pencil, how many of its sub-tasks are finished, its one
+ * icon, and its time, in the caption's muted figures, the time ending on
+ * its last letter in a slot as wide as its longest count ("59m"), so the
+ * icon before it, a pull request's say, stands at the same place on every
+ * row whatever the time says and whatever stands before it;
+ * each mark at the glyph's size a step before the next, and the sub-tasks'
+ * figures a glyph's gap before what follows them, so they never run into
+ * it, so they step out with the time while the row is hovered. The end
+ * keeps no room at rest for the acts that come in on hover, so the row's
+ * name runs to its marks and fades only where they begin, and is cut anew
+ * before the acts as they come (`list-row.css`). A long repository is cut
  * short, so the row's own name keeps its room at the sidebar's least width;
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end min-w-sidebar-row-time text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12";
+  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-luke-12 [&_.luke-progress-count]:mr-icon-gap [&>.luke-time]:min-w-sidebar-row-age";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
@@ -138,7 +145,7 @@ export function RepositoryDetail({
 /**
  * Who created the task, at the card's foot: their face and "Created by
  * Charles Pan · 3d ago", "Created by you", or a member who left saying so;
- * or, for a task Luke or an agent made, its square with the member's face on
+ * or, for a task the app or an agent made, its square with the member's face on
  * its corner and "Created by Invite emails for you · from Teammate
  * invitations",
  * read against the members of the directory around the card, a press
@@ -155,7 +162,7 @@ function CreatorDetail({
 }): React.JSX.Element {
   const creator = useCreator(task, readerId);
   const maker = useTaskMaker(task);
-  // Note that the line opens the member it names, whoever made the task for them, since Luke and an agent have no page.
+  // Note that the line opens the member it names, whoever made the task for them, since the app and an agent have no page.
   const door = useActorDoor(creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
   const by = `${actorName(creator, { sentence: true })}${left ? ", who left" : ""}`;
@@ -307,11 +314,11 @@ function TaskRelations({
       {subTasks.length === 0 ? null : (
         <>
           <HoverCardRow
-            glyph={<GLYPH.TASK />}
+            glyph={<GLYPH.SUB_TASK />}
             label="Sub-tasks"
             end={
-              <ListRowCount
-                settled={count.finished}
+              <ProgressCount
+                done={count.finished}
                 total={count.total}
                 label={`${count.finished} of ${count.total} sub-tasks finished`}
               />
@@ -403,7 +410,7 @@ export function TaskCard({
       : related.find((each) => each.id === task.parentTaskId);
   const subTasks = subTasksOf(related, task.id);
   const placed = parent !== undefined || subTasks.length > 0 || task.blocked === true;
-  // Note that a task Luke or an agent made says so in a workspace of one too, where its member's own needs no saying.
+  // Note that a task the app or an agent made says so in a workspace of one too, where its member's own needs no saying.
   const creatorShown =
     (task.origin !== undefined || (shared ?? (members !== undefined && members.length > 1))) &&
     (task.createdBy !== undefined || task.ownerId !== undefined);

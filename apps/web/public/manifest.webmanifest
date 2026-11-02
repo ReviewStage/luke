@@ -1,8 +1,8 @@
 {
   "id": "/app",
-  "name": "Luke",
-  "short_name": "Luke",
-  "description": "Plan a feature out loud with Luke before a coding agent builds it.",
+  "name": "Vespin",
+  "short_name": "Vespin",
+  "description": "Plan a feature out loud with Vespin before a coding agent builds it.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",

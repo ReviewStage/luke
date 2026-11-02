@@ -4,7 +4,7 @@ import { SearchXIcon } from "lucide-react";
 /**
  * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, an Inbox item, or a channel's thread that is not there for whoever opened it, and the admin dashboard's for an account.
  *
- * A link to anything in Luke may reach someone the thing is not shared
+ * A link to anything in the app may reach someone the thing is not shared
  * with, and the service answers them as it answers a thing that does not
  * exist, so a link never says that something private is there, as GitHub's
  * own 404 does. The window says the same for both, in the place the thing

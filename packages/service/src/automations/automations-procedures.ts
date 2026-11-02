@@ -7,6 +7,7 @@ import {
 import { Effect, Option } from "effect";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import { SERVER_AUTOMATION_SOURCE } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -37,8 +38,7 @@ import {
  * cron in a known zone, no more often than every fifteen minutes, which the
  * desktop checks with the same module before it sends), a model choice must
  * be one the catalog offers the account, and the task must name a
- * repository, but for an automation aimed at the account's own operator,
- * which works in none; those checks, and the webhook secret a write mints,
+ * repository; those checks, and the webhook secret a write mints,
  * are `automation-writes.ts`'s, which the agents' automation tools write
  * through too.
  *
@@ -78,7 +78,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
 
     /** An automation made on a workspace of the account's with the repositories its runs work in. */
     create: automations.create.effect(function* ({ input: made, context: { userId } }) {
-      const created = yield* createAutomationAs(userId, made);
+      const created = yield* createAutomationAs(userId, made, SERVER_AUTOMATION_SOURCE.MEMBER);
       return {
         automation: created.automation,
         ...(created.webhookSecret === undefined

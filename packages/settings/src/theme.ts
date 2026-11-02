@@ -2,7 +2,7 @@ import type { UnparsedWireValue } from "@luke/wire";
 import { Schema } from "effect";
 
 /**
- * Whether Luke draws light or dark, or follows the Mac. The words are
+ * Whether the app draws light or dark, or follows the Mac. The words are
  * Electron's own `nativeTheme.themeSource` values, so the stored choice is
  * handed to the app as it stands; System is stored as itself rather than as
  * whatever the Mac resolves to now, so it goes on following the Mac.

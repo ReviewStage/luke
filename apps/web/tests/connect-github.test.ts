@@ -17,7 +17,7 @@ import { appTab, closeAppTabs } from "./support/connect-app-tab";
  * once GitHub is connected, and never while the page is still on its way
  * there; a same-tab connect that failed offers the way back too.
  * The page runs as it does in the browser, mounted on its own `#root`; the
- * network, the HTTP boundary to Luke and Better Auth, is a fake.
+ * network, the HTTP boundary to the service and Better Auth, is a fake.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
@@ -93,7 +93,7 @@ test("a signed-out browser is offered each provider, named for it", async () => 
   const page = await openPage(new Map([[SESSION_PATH, () => SIGNED_OUT]]));
 
   await titled(page, "Sign in to connect GitHub");
-  expect(page.textContent).toContain("Sign in to the Luke account you use on your Mac.");
+  expect(page.textContent).toContain("Sign in to the Vespin account you use on your Mac.");
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);
   expect(page.querySelector('[role="alert"]')?.textContent).toBe("");
 });
@@ -155,7 +155,7 @@ test("an expired intent says to connect again, with nothing to press off a Mac",
   );
 
   await titled(page, "This link to connect GitHub has expired");
-  expect(page.textContent).toContain("Connect GitHub again from Luke.");
+  expect(page.textContent).toContain("Connect GitHub again from Vespin.");
   expect(buttonNames(page)).toEqual([]);
 });
 
@@ -202,7 +202,7 @@ test("a connect the app's tab handed off closes once GitHub is connected, and no
   await titled(page, "GitHub is connected");
   await vi.waitFor(async () => {
     await act(() => new Promise((resolve) => setImmediate(resolve)));
-    expect(links(page)).toEqual([["Open Luke", "/app"]]);
+    expect(links(page)).toEqual([["Open Vespin", "/app"]]);
   });
   expect(closed).toHaveBeenCalled();
 });
@@ -221,6 +221,6 @@ test("a same-tab connect GitHub refused says why and offers the way back", async
   );
   expect(links(page)).toEqual([
     ["Try again", "/connect-github.html?intent=intent-1"],
-    ["Open Luke", "/settings/integrations"],
+    ["Open Vespin", "/settings/integrations"],
   ]);
 });

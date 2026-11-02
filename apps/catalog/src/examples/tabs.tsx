@@ -5,6 +5,8 @@ import {
   CodeIcon,
   DocumentIcon,
   FolderIcon,
+  STATUS_TONE,
+  type StatusTone,
   TABS_GROUND,
   Tab,
   TabCard,
@@ -36,6 +38,7 @@ interface SampleTab {
   readonly icon: React.JSX.Element;
   readonly label: string;
   readonly detail?: string;
+  readonly detailTone?: StatusTone;
   readonly failed?: boolean;
   readonly unread?: boolean;
   readonly preview?: boolean;
@@ -45,7 +48,13 @@ interface SampleTab {
 
 const SAMPLE_TABS: readonly SampleTab[] = [
   { id: "plan", icon: <DocumentIcon />, label: "Plan" },
-  { id: "inbox", icon: <FolderIcon />, label: "Inbox", detail: "3" },
+  {
+    id: "inbox",
+    icon: <FolderIcon />,
+    label: "Inbox",
+    detail: "3",
+    detailTone: STATUS_TONE.ATTENTION,
+  },
   { id: "agent", icon: <UserIcon />, label: "Refresh tokens before they expire" },
   { id: "failed", icon: <UserIcon />, label: "Migrate the sessions table", failed: true },
   { id: "changes", icon: <CodeIcon />, label: "Changes", unread: true },
@@ -102,6 +111,7 @@ function Strip({
             icon={tab.icon}
             label={tab.label}
             detail={tab.detail}
+            detailTone={tab.detailTone}
             endMark={
               tab.failed === true ? (
                 <span className="catalog-end-mark" role="img" aria-label="Failed">

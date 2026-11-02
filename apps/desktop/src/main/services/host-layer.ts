@@ -81,7 +81,7 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
  * standing layer is a step of the desktop's own launch rather than something
  * this module builds.
  *
- * A live run keeps its settings and workspace files on disk under Luke's own
+ * A live run keeps its settings and workspace files on disk under the app's own
  * application data; a fixture or capture run keeps nothing and is
  * network-silent. Either way this process is one operator over one
  * transport, and one node.

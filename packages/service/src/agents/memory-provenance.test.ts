@@ -11,7 +11,6 @@ import { messages, turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
@@ -29,12 +28,12 @@ import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
 import { runAgentRemember } from "./memory-tools.js";
 
 /**
- * memory-provenance.test.ts -- a coding agent's `remember` refused on a turn whose words are no member's.
+ * memory-provenance.test.ts -- a coding agent's `save_memory` refused on a turn whose words are no member's.
  *
  * Through `runAgentRemember`, over a real dialect, with the turn under way
  * written as the relay writes it: a turn an automation's run opened keeps
  * nothing, an eve agent an automation started included, whose first line
- * the relay wrote with no sender, and neither does an operator's turn its heartbeat opened, nor a
+ * the relay wrote with no sender, nor a
  * turn whose journal already holds a web read, eve's or Claude Code's; a
  * turn a member's own line opened, which read nothing of the web, keeps the
  * memory; and a turn that settled refuses nothing. Synthetic accounts,
@@ -43,34 +42,19 @@ import { runAgentRemember } from "./memory-tools.js";
 
 const FACT = "The web server's store tests run on PGlite through test:store.";
 
-/** A member with Memory on, in a workspace of their own, and an agent of the kind given there. */
-const openAgent = (
-  kind: typeof AGENT_KIND.CODER | typeof AGENT_KIND.OPERATOR,
-  automationOrigin?: StoredAutomationOrigin,
-) =>
+/** A member with Memory on, in a workspace of their own, and an agent there. */
+const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
     const workspaceId = yield* openWorkspace(userId);
-    const place =
-      kind === AGENT_KIND.OPERATOR
-        ? ({
-            taskId: null,
-            organizationId: workspaceId,
-            planSnapshot: null,
-            prompt: null,
-            kind,
-          } as const)
-        : ({
-            taskId: null,
-            organizationId: workspaceId,
-            planSnapshot: null,
-            prompt: "Tidy the docs.",
-          } as const);
     const started = yield* createAgent(userId, {
-      ...place,
+      taskId: null,
+      organizationId: workspaceId,
+      planSnapshot: null,
+      prompt: "Tidy the docs.",
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -155,14 +139,14 @@ const remember = (agent: Agent) => {
 it.layer(getTestDB())("a remember's provenance", (it) => {
   it.effect("a turn an automation's run opened keeps nothing", () =>
     Effect.gen(function* () {
-      const { agent, workspaceId } = yield* openAgent(AGENT_KIND.CODER);
+      const { agent, workspaceId } = yield* openAgent();
       yield* writeTurn(agent, { sender: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }, []);
 
       const answer = yield* remember(agent);
 
       assert.equal(answer.status, ACTION_RESULT_STATUS.REJECTED);
       assert.equal(answer.reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
-      assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
+      assert.deepEqual(yield* listMemories(workspaceId), []);
     }),
   );
 
@@ -175,40 +159,40 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
           firing: { kind: AUTOMATION_FIRING.MANUAL },
           prompt: "Triage the overnight errors.",
         };
-        const { agent, workspaceId } = yield* openAgent(AGENT_KIND.CODER, origin);
+        const { agent, workspaceId } = yield* openAgent(origin);
         yield* writeTurn(agent, { sender: undefined }, []);
 
         assert.equal((yield* remember(agent)).reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
-        assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
+        assert.deepEqual(yield* listMemories(workspaceId), []);
       }),
   );
 
   it.effect(
-    "a turn that read the web, through Luke's page read or Claude Code's search, keeps nothing",
+    "a turn that read the web, through Vespin's page read or Claude Code's search, keeps nothing",
     () =>
       Effect.gen(function* () {
         for (const read of [AGENT_TOOL.READ_WEB_PAGE, CLAUDE_CODE_TOOL.WEB_SEARCH]) {
-          const { agent, workspaceId } = yield* openAgent(AGENT_KIND.OPERATOR);
+          const { agent, workspaceId } = yield* openAgent();
           yield* writeTurn(agent, { sender: MESSAGE_SENDER.MEMBER }, [AGENT_TOOL.BASH, read]);
 
           const answer = yield* remember(agent);
 
           assert.equal(answer.reason, MEMORY_PROVENANCE_REFUSAL.WEB_READ, read);
-          assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
+          assert.deepEqual(yield* listMemories(workspaceId), []);
         }
       }),
   );
 
   it.effect("a turn a member's line opened, which read nothing of the web, keeps the memory", () =>
     Effect.gen(function* () {
-      const { agent, workspaceId } = yield* openAgent(AGENT_KIND.OPERATOR);
+      const { agent, workspaceId } = yield* openAgent();
       yield* writeTurn(agent, { sender: MESSAGE_SENDER.MEMBER }, [AGENT_TOOL.BASH]);
 
       const answer = yield* remember(agent);
 
       assert.equal(answer.outcome, MEMORY_OUTCOME.KEPT);
       assert.deepEqual(
-        (yield* listMemories(workspaceId, agent.userId)).map((kept) => kept.text),
+        (yield* listMemories(workspaceId)).map((kept) => kept.text),
         [FACT],
       );
     }),
@@ -216,7 +200,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
 
   it.effect("a turn that settled refuses nothing, whatever opened it", () =>
     Effect.gen(function* () {
-      const { agent } = yield* openAgent(AGENT_KIND.CODER);
+      const { agent } = yield* openAgent();
       yield* writeTurn(
         agent,
         { sender: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },

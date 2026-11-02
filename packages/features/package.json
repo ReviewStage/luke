@@ -1,6 +1,6 @@
 {
   "name": "@luke/features",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "private": true,
   "type": "module",
   "description": "The client side of the hosted service: its paths and wire, its clients, the plan domain, the planner's run vocabulary, product events, and feedback delivery",
@@ -84,6 +84,7 @@
     "./integration-wire": "./src/integration-wire.js",
     "./integration-status-words": "./src/integration-status-words.js",
     "./model-label": "./src/model-label.js",
+    "./product-name": "./src/product-name.js",
     "./models-wire": "./src/models-wire.js",
     "./page-wire": "./src/page-wire.js",
     "./picture-wire": "./src/picture-wire.js",
@@ -155,6 +156,7 @@
     "./browser-cdp": "./src/browser-cdp.js",
     "./page-policy": "./src/page-policy.js",
     "./page-find": "./src/page-find.js",
+    "./page-link": "./src/page-link.js",
     "./terminal-entry": "./src/terminal-entry.js",
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",

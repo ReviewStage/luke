@@ -42,9 +42,9 @@ function SignIn(): React.JSX.Element {
   const [failure, setFailure] = useState<string | undefined>(undefined);
   return createElement(AuthPage, {
     mark: createElement("svg", { width: 52, height: 52 }),
-    title: "Sign in to Luke",
+    title: "Sign in to Vespin",
     error: failure === undefined ? undefined : { words: failure, failure: FAILURE },
-    footnote: "You can close this window after Luke confirms the sign-in.",
+    footnote: "You can close this window after Vespin confirms the sign-in.",
     children: createElement(Button, {
       variant: BUTTON_VARIANT.OUTLINE,
       onClick: () => setFailure("Sign-in could not start."),
@@ -57,7 +57,7 @@ test("the card is a region in the page's main landmark named by its title, its a
   const container = mount(createElement(SignIn));
   const card = container.querySelector("main > section");
   const title = container.querySelector("h1");
-  expect(title?.textContent).toBe("Sign in to Luke");
+  expect(title?.textContent).toBe("Sign in to Vespin");
   expect(card?.getAttribute("aria-labelledby")).toBe(title?.id);
   expect(container.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
   expect(card?.textContent).toContain("Continue with GitHub");
@@ -75,9 +75,9 @@ test("what went wrong is announced from an alert region that stood empty before 
 
 test("a page with nothing to say past its title says its title alone", () => {
   const container = mount(
-    createElement(AuthPage, { title: "Continuing to Luke…", description: "", footnote: null }),
+    createElement(AuthPage, { title: "Continuing to Vespin…", description: "", footnote: null }),
   );
-  expect(container.querySelector("main")?.textContent).toBe("Continuing to Luke…");
+  expect(container.querySelector("main")?.textContent).toBe("Continuing to Vespin…");
   expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
 });
 
@@ -102,10 +102,10 @@ test("the way on is one link, named by its words, going where it says", () => {
   const pressed: string[] = [];
   const container = mount(
     createElement(AuthPage, {
-      title: "Luke could not reach GitHub",
+      title: "Vespin could not reach GitHub",
       description: "Try again in a moment.",
       action: {
-        label: "Open Luke",
+        label: "Open Vespin",
         href: "/app",
         onClick: (event) => {
           event.preventDefault();
@@ -116,13 +116,13 @@ test("the way on is one link, named by its words, going where it says", () => {
   );
   const links = Array.from(container.querySelectorAll("a"));
   expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-    ["Open Luke", "/app"],
+    ["Open Vespin", "/app"],
   ]);
   act(() => links[0]?.click());
   expect(pressed).toEqual(["/app"]);
 });
 
 test("a page with no way on draws no link", () => {
-  const container = mount(createElement(AuthPage, { title: "Continuing to Luke…" }));
+  const container = mount(createElement(AuthPage, { title: "Continuing to Vespin…" }));
   expect(container.querySelector("a")).toBeNull();
 });

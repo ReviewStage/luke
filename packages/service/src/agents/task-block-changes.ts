@@ -119,15 +119,13 @@ function pairsOf(
 
 /**
  * The blocks a call asks for, read before anything is written: every other
- * task it names a task of the workspace the caller may change, as
- * `refused` judges its owner's, or the refusal's words.
+ * task it names a task of the workspace, or the refusal's words.
  */
 export const blockWritesAsked = (
   userId: string,
   workspaceId: string,
   taskId: string,
   changes: TaskBlockChanges,
-  refused: (task: { readonly ownerId: string }) => string | undefined,
 ) =>
   Effect.gen(function* () {
     const { blockedBy, blocks } = changes;
@@ -151,8 +149,6 @@ export const blockWritesAsked = (
       if (Option.isNone(header) || header.value.workspaceId !== workspaceId) {
         return Result.fail(TASK_BLOCK_REFUSAL.NO_TASK);
       }
-      const steward = refused(header.value);
-      if (steward !== undefined) return Result.fail(steward);
     }
     return Result.succeed(writes);
   });

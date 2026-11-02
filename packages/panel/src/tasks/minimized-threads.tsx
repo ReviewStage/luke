@@ -63,7 +63,7 @@ function MinimizedChip({
   faces: ReactNode;
   /** How many comments the cards hold. */
   count: number;
-  /** Whether every thread under the chip is resolved; none for cards with no state, as Luke's notes have none. */
+  /** Whether every thread under the chip is resolved; none for cards with no state, as the app's notes have none. */
   resolved?: boolean | undefined;
   /** Whether the cards stand above the code, on no line, where the chip takes a row of its own rather than floating over a line. */
   above?: boolean;

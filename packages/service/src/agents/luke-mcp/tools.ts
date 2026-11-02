@@ -1,11 +1,11 @@
 /**
- * tools.ts -- the Luke tools a native harness's agent is served over MCP, each by its eve tool's own schema and door.
+ * tools.ts -- our tools a native harness's agent is served over MCP, each by its eve tool's own schema and door.
  *
  * A Claude Code or Codex agent keeps its harness's own shell, files, todos,
- * and subagents; what touches Luke reaches it as an MCP tool of Luke's own
- * server (`app.ts`). Each tool here is the one the agent's eve tool file
- * declares (`apps/dev/tools/<name>.ts`): the same name, the same description,
- * the same input schema, and the same door the coder host's method for it
+ * and subagents; what touches the app reaches it as an MCP tool of our own
+ * server (`app.ts`). Each tool here is the one eve's agent was offered: the
+ * same name, the same description, the same input schema, and the same door
+ * the coder host's method for it
  * runs (`../coder-host/inbox-door.ts` for the inbox, `../coder-host/agent-doors.ts`
  * for the rest), so the two runtimes run one implementation. A door is
  * reached directly rather than through the coder host, because the host
@@ -31,7 +31,7 @@
  * sends once, as eve's run again does; and the turn's count of plan notes is
  * kept on the running turn's row in the store (`runTurnCappedEditPlan`), so
  * the cap holds per turn as eve's does. The list is narrowed per agent as
- * eve narrows its own (`offeredLukeMcpTool`), `remember` and `recall` by its
+ * eve narrows its own (`offeredLukeMcpTool`), `save_memory` and `search_memory` by its
  * starter's Memory among it, and a tool left out is still refused by its
  * door where a harness calls it anyway. A tool whose words differ by
  * workspace, `post_thread`'s naming its open channels, is described for
@@ -45,7 +45,7 @@ import {
   reserveTurnPlanNotes,
   settleTurnPlanNotes,
 } from "@luke/database/models/agent-store";
-import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
@@ -61,9 +61,8 @@ import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   type CommentToolName,
   READ_COMMENTS_TOOL,
-  REOPEN_THREAD_TOOL,
   REPLY_TO_COMMENT_TOOL,
-  RESOLVE_THREAD_TOOL,
+  UPDATE_COMMENT_TOOL,
 } from "../../tasks/comment-tools.js";
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
@@ -124,7 +123,6 @@ import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
   CODER_TOOL,
-  kindToolsOf,
   machineToolsOf,
   type OfferedBeside,
   repositoryToolsOf,
@@ -132,8 +130,7 @@ import {
 } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
-import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
-import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
+import { SAVE_MEMORY_TOOL, SEARCH_MEMORY_TOOL } from "../memory-tools.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
@@ -248,7 +245,7 @@ const isLooked = Schema.is(
 
 /**
  * A look's text block where it looked: its status alone, as JSON. Note that
- * the transcript keeps a Luke tool's text blocks alone
+ * the transcript keeps the text blocks of a tool of ours alone
  * (`../native-events/claude-code-moments.ts`), so this is what a look is
  * stored as, the same as eve's relay stores one (`storedPictureLookOutput`).
  */
@@ -271,7 +268,7 @@ function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] 
  * (`storedBrowserOutput`) as one text block, then each screenshot's
  * bounded copy as an image, in the order its steps name them. Note
  * that no caption stands between them, because the native transcript joins
- * a Luke tool's text blocks and reads them as one JSON value
+ * the text blocks of a tool of ours and reads them as one JSON value
  * (`../native-events/runner-moments.ts`), so the one block keeps the result
  * whole there, the kept copies' ids among it for the window to draw.
  */
@@ -406,7 +403,6 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(MESSAGE_AGENT_TOOL),
   agentTool(UPDATE_AGENT_TOOL),
   agentTool(LIST_MODELS_TOOL),
-  agentTool(LIST_OPEN_ASKS_TOOL),
   // Tasks and sections.
   agentTool(LIST_TASKS_TOOL),
   agentTool(READ_TASK_TOOL),
@@ -421,13 +417,12 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(DELETE_AUTOMATION_TOOL),
   agentTool(RUN_AUTOMATION_TOOL),
   // The workspace's shared memory.
-  agentTool(REMEMBER_TOOL),
-  agentTool(RECALL_TOOL),
+  agentTool(SAVE_MEMORY_TOOL),
+  agentTool(SEARCH_MEMORY_TOOL),
   // The plan's comments.
   commentTool(READ_COMMENTS_TOOL),
   commentTool(REPLY_TO_COMMENT_TOOL),
-  commentTool(RESOLVE_THREAD_TOOL),
-  commentTool(REOPEN_THREAD_TOOL),
+  commentTool(UPDATE_COMMENT_TOOL),
   // The developer's Mac.
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target, input)),
   // The agent's browser.
@@ -435,17 +430,15 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<Agent, "repository" | "kind" | "machine">;
+export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
-const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
+/** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
+const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, kind, starter, or starter's Memory withholds. */
+/** The tools eve offers some agents and not others: each one some agent's repository, starter, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...repositoryToolsOf({ repository: "any" }),
-  ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
-  ...kindToolsOf({ kind: AGENT_KIND.CODER }),
   ...starterToolsOf({ underPilot: false }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
 ]);
@@ -453,7 +446,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * repository, its kind, whether a pilot started it, and whether
+ * repository, whether a pilot started it, and whether
  * its starter has Memory on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
@@ -467,7 +460,6 @@ export function offeredLukeMcpTool(
   const offered: ReadonlySet<string> = new Set<string>([
     ...(beside.memoryOn ? MEMORY_TOOLS : []),
     ...repositoryToolsOf(agent),
-    ...kindToolsOf(agent),
     ...starterToolsOf(beside),
     ...machineToolsOf(agent),
   ]);

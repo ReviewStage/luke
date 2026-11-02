@@ -17,7 +17,7 @@ import {
 import { wireUuidSchema } from "./service-wire.js";
 
 /**
- * installed-skill-view.ts -- the skills a member installs into Luke as one window hears them: each call's answer whole, or why there is none.
+ * installed-skill-view.ts -- the skills a member installs into the app as one window hears them: each call's answer whole, or why there is none.
  *
  * The host asks the service on the window's behalf
  * (`installed-skill-client.ts`) and answers the window one of the shapes

@@ -66,7 +66,7 @@ const TRACED: Pick<ShownFailureSentry, "getActiveSpan" | "getCurrentScope"> = {
   getCurrentScope: () => ({ getPropagationContext: () => ({ traceId: TRACE_FIXTURE }) }),
 };
 
-/** An agent's Stop that Luke never heard back on, the fetch beneath it naming a credential. */
+/** An agent's Stop that we never heard back on, the fetch beneath it naming a credential. */
 function unheardStop(): ToastNotice {
   // A credential in the cause's code as well as its message, since a code is sent as a tag and grouped by.
   const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {
@@ -79,7 +79,7 @@ function unheardStop(): ToastNotice {
     hold: TOAST_HOLD.FAILED,
     failure: {
       surface: FAILURE_SURFACE.AGENT_STOP,
-      cause: new Error("Luke didn't hear back.", { cause: unreached }),
+      cause: new Error("No answer came back.", { cause: unreached }),
       about: { agentId: "agent-fixture" },
     },
   };
@@ -302,7 +302,7 @@ test("a failure toast reports what failed: an unexpected one as an error line an
     "failure.kind": "unexpected",
     "failure.code": "[redacted]",
     "error.name": "Error",
-    "error.message": "Luke didn't hear back.",
+    "error.message": "No answer came back.",
     "error.root.name": "TypeError",
     "error.root.code": "[redacted]",
     "error.root.status": 503,
@@ -347,7 +347,7 @@ test("a failure toast reports what failed: an unexpected one as an error line an
       contexts: { shown_failure: unexpected },
     },
   });
-  assert.equal(issue?.error.message, "Luke didn't hear back.");
+  assert.equal(issue?.error.message, "No answer came back.");
   // Sentry reads the causes beneath an issue's error too, so they go redacted, their frames among them.
   const beneath = issue?.error.cause;
   assert.ok(beneath instanceof Error);
@@ -373,7 +373,7 @@ test("a failure toast for a hosted call that never answered reports what the hos
 
   act(() =>
     show?.({
-      words: "Luke didn't hear back.",
+      words: "No answer came back.",
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
       failure: {
@@ -444,13 +444,13 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
 
   assert.deepEqual(copied, [
     [
-      "Luke showed an error. Find it in Sentry and the logs by these details:",
+      "Vespin showed an error. Find it in Sentry and the logs by these details:",
       "time: 2026-10-29T18:20:03.198Z",
       "failure.surface: agent.stop",
       "failure.kind: unexpected",
       "failure.code: [redacted]",
       "error.name: Error",
-      "error.message: Luke didn't hear back.",
+      "error.message: No answer came back.",
       "error.root.name: TypeError",
       "error.root.code: [redacted]",
       "error.root.status: 503",
@@ -462,7 +462,7 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
       `sentry.trace_id: ${TRACE_FIXTURE}`,
     ].join("\n"),
     [
-      "Luke showed an error. Find it in Sentry and the logs by these details:",
+      "Vespin showed an error. Find it in Sentry and the logs by these details:",
       "time: 2026-10-29T18:20:03.198Z",
       "failure.surface: agent.start",
       "failure.kind: refused",

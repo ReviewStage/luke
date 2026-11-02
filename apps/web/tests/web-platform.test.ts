@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { resolveObjectURL } from "node:buffer";
+import { hostedContract } from "@luke/features/contract";
 import { LINK_PLATFORM } from "@luke/features/link-open";
+import { getOpenAPIMeta } from "@orpc/openapi";
 import { afterEach, test, vi } from "vitest";
 import { downloadText, webPlatform } from "../src/app/web-platform";
 
@@ -11,8 +13,9 @@ import { downloadText, webPlatform } from "../src/app/web-platform";
  * scheme, and a GitHub link only where its address is GitHub's; a download's
  * file stays readable after its press returns, for a browser that reads it
  * only then, and is let go of as the next download starts; the way to
- * the Mac app is offered only on a Mac; and the admin dashboard is a link
- * to its page on the tab's own origin.
+ * the Mac app is offered only on a Mac; the admin dashboard is a link
+ * to its page on the tab's own origin; and an agent's page is framed through
+ * the service's frame of its version, on the tab's own origin.
  */
 
 /** The platform as the tab builds it, counting nothing. */
@@ -25,7 +28,7 @@ const OFF_THE_WEB = [
   "data:text/html,<script>alert(document.cookie)</script>",
   "vbscript:msgbox(1)",
   "file:///etc/passwd",
-  "tryluke://acme/plan/3f6c1b2a",
+  "vespin://acme/plan/3f6c1b2a",
 ] as const;
 
 afterEach(() => {
@@ -99,7 +102,7 @@ test("a download's file stays readable once its press returns, and is let go of 
 test("the way to the Mac app is offered on a Mac, and on no other platform", () => {
   window.history.replaceState(null, "", "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b");
 
-  assert.match(webPlatform(COUNTING, LINK_PLATFORM.MAC).macAppLink?.() ?? "", /^tryluke:/u);
+  assert.match(webPlatform(COUNTING, LINK_PLATFORM.MAC).macAppLink?.() ?? "", /^vespin:/u);
   assert.equal(webPlatform(COUNTING, LINK_PLATFORM.OTHER).macAppLink, undefined);
   // jsdom's browser says it runs on Linux, where the Mac app cannot open.
   assert.equal(webPlatform(COUNTING).macAppLink, undefined);
@@ -111,4 +114,32 @@ test("the admin dashboard is a link to its page on the tab's own origin, whateve
   assert.deepEqual(webPlatform(COUNTING).adminDashboard(), {
     href: `${location.origin}/admin`,
   });
+});
+
+test("an agent's page is framed through the service's frame of its version on the tab's own origin, a task's page and an agent's alike", () => {
+  window.history.replaceState(null, "", "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b");
+  const platform = webPlatform(COUNTING);
+  const task = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+  const agent = "4b0d6b5e-0a8f-4a8e-9a43-1c5f7f8b2a10";
+  const page = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
+  /** The address the contract declares for a procedure, its path's names filled in. */
+  const declared = (
+    procedure: Parameters<typeof getOpenAPIMeta>[0],
+    names: Readonly<Record<string, string>>,
+  ) => {
+    const path = getOpenAPIMeta(procedure)?.path ?? "";
+    return new URL(
+      path.replace(/\{(\w+)\}/gu, (_, name: string) => names[name] ?? ""),
+      location.origin,
+    ).href;
+  };
+
+  assert.equal(
+    platform.pageFrameUrl({ taskId: task, pageId: page, version: 3 }),
+    declared(hostedContract.taskFiles.pageFrame, { id: task, page, version: "3" }),
+  );
+  assert.equal(
+    platform.pageFrameUrl({ agentId: agent, pageId: page, version: 1 }),
+    declared(hostedContract.agentPages.frame, { id: agent, page, version: "1" }),
+  );
 });

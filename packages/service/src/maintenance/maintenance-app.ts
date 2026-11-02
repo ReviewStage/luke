@@ -6,7 +6,6 @@ import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments"
 import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import type { AgentStateBlobs } from "../agents/agent-state-blobs.js";
 import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
@@ -24,16 +23,14 @@ import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { sweepAgentStates } from "./agent-state-sweep.js";
 import { sweepDeviceLeases } from "./device-lease-sweep.js";
+import { sweepDeviceWarmRunners } from "./device-warm-sweep.js";
 import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
-import { sweepOperatorWakes } from "./operator-wake-sweep.js";
 import { sweepSandboxRetention } from "./sandbox-retention-sweep.js";
-import { sweepStarterNotices } from "./starter-notice-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
@@ -63,17 +60,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 ): Effect.fn.Return<
   Response,
   unknown,
-  | DatabaseServices
-  | HostedEnvironment
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog
-  | AgentStateBlobs
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp | ModelCatalog
 > {
   const environment = yield* HostedEnvironment;
-  const startContext = yield* Effect.context<
-    HttpClient.HttpClient | GitHubApp | ModelCatalog | AgentStateBlobs
-  >();
+  const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
   const eveFor: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
     deploymentEveOrigin(),
     EVE_MOUNT.CODER,
@@ -96,6 +86,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepDeviceLeases(writer, { now }),
       ),
+    sweepDeviceWarmRunners: (now) =>
+      sweepDeviceWarmRunners(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepTerminalLeases: (now) =>
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
@@ -114,10 +108,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAgentQueues: () => sweepAgentQueues(eveFor).pipe(Effect.provideContext(startContext)),
-    sweepOperatorWakes: (now) =>
-      sweepOperatorWakes(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
-    sweepStarterNotices: (now) =>
-      sweepStarterNotices(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
@@ -132,8 +122,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     // A repository no agent starts on any more keeps no snapshot past its age.
     sweepRepositorySnapshots: () =>
       sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
-    sweepAgentStates: (now) =>
-      sweepAgentStates(new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
   });
 });
@@ -144,12 +132,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
  * since `vercel.json` sends the function only its own path.
  */
 export function maintenanceApp(): WebRoutes<
-  | DatabaseServices
-  | HostedEnvironment
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog
-  | AgentStateBlobs
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp | ModelCatalog
 > {
   return Layer.mergeAll(
     // `ANY_METHOD`, not `GET`: the handler decides its own method refusal, so a

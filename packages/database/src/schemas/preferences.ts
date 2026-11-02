@@ -17,7 +17,7 @@ export const accountPreference = pgTable("account_preference", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   /**
-   * Where the account's Luke links open (`@luke/features/link-open`); null
+   * Where the account's app links open (`@luke/features/link-open`); null
    * until the account chooses, which reads as the browser. A part of the
    * snapshot of its own rather than the shared preferences, so a build that
    * predates it, writing that part whole, never clears it; written alone, it

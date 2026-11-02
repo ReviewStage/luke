@@ -98,7 +98,7 @@ const PERSON_SENDERS: ReadonlySet<string> = new Set([AGENT_SENDER.MEMBER, AGENT_
 /**
  * Whether a person wrote the line, the reader or a teammate, which Edit
  * writes again: no sender kept, as on a line from before senders were, or a
- * member's. Luke from a call, an automation, GitHub, and another agent write
+ * member's. The app from a call, an automation, GitHub, and another agent write
  * lines no person said, which Revert to here still drops.
  */
 function writtenByPerson(message: AgentTranscriptMessage): boolean {

@@ -86,7 +86,7 @@ process.stdout.write("${SCAN_MARKER}" + JSON.stringify(report) + "\n");
 `;
 
 /**
- * The fake MCP server, the stand-in for Luke's: one `echo` tool over stdio,
+ * The fake MCP server, the stand-in for Vespin's: one `echo` tool over stdio,
  * whose answer also says whether the server itself was handed the token.
  */
 const MCP_SOURCE = String.raw`
@@ -99,7 +99,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   if (message.method === "initialize") {
     send({ id: message.id, result: { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "luke-probe", version: "1" } } });
   } else if (message.method === "tools/list") {
-    send({ id: message.id, result: { tools: [{ name: "${PROBE_MCP.TOOL}", description: "Echo the text back. Luke's probe uses it to prove MCP tool calls work.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }] } });
+    send({ id: message.id, result: { tools: [{ name: "${PROBE_MCP.TOOL}", description: "Echo the text back. Vespin's probe uses it to prove MCP tool calls work.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }] } });
   } else if (message.method === "tools/call") {
     const text = String(message.params?.arguments?.text ?? "");
     send({ id: message.id, result: { content: [{ type: "text", text: "luke-probe-echo:" + text + " access_token_in_env=" + ("${CHATGPT_PROVIDER.ENV_KEY}" in process.env) }] } });

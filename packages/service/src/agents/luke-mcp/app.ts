@@ -1,5 +1,5 @@
 /**
- * app.ts -- Luke's MCP server: the tools that touch Luke, served to a native harness's agent over streamable HTTP under its runner's bearer.
+ * app.ts -- our MCP server: the tools that touch the app, served to a native harness's agent over streamable HTTP under its runner's bearer.
  *
  * Claude Code (`mcp__luke__<tool>`) and Codex (`mcp_servers.luke`) both reach
  * it as a standard MCP server: JSON-RPC 2.0 over streamable HTTP, each
@@ -37,9 +37,10 @@
  */
 
 import { readAgentOfConversation, readAgentUnderPilot } from "@luke/database/models/agent-store";
-import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { failureKind } from "@luke/runtime/effect";
 import {
   EXCESS_KEYS,
@@ -70,7 +71,7 @@ import {
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
-import type { OfferedBeside } from "../coder-host/tool-set.js";
+import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
@@ -142,7 +143,7 @@ const MCP_METHOD = {
 
 /** What a tool call answers where its door failed rather than refused, which names nothing of the failure: the same input tried again within the window is keyed to this call (`call-key.ts`), so a start or a message it may have made is made once. */
 const DOOR_FAILED =
-  "Luke could not run this tool just now; try it again in a moment with the same input, which runs it once.";
+  "This tool could not run just now; try it again in a moment with the same input, which runs it once.";
 
 const IdSchema = Schema.Union([Schema.String, Schema.Number]);
 const ParamsSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -233,16 +234,40 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
  * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
  * characters it would save the result to a file and hand the model a path
  * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). Eve
- * hands its model a Luke tool's whole result, which each door bounds.
+ * hands its model the whole result of a tool of ours, which each door bounds.
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
-/** What an agent whose row is gone is offered by: no repository, and no operator's tools. */
-const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
-  repository: null,
-  kind: AGENT_KIND.CODER,
-  machine: AGENT_MACHINE.VERCEL,
-};
+/**
+ * The tools an agent calls on almost every run, which Claude Code lists in
+ * its prompt from the first turn rather than deferring behind its tool
+ * search, where the first call of each costs a `ToolSearch` step first:
+ * `_meta['anthropic/alwaysLoad']`, the pinned Agent SDK's per-tool form of
+ * `defer_loading: false` (its `McpHttpServerConfig.alwaysLoad`). Note that
+ * every tool loaded so costs its definition on every turn, so the rarely
+ * called ones (`look_at_picture`, the automations, the sections) stay
+ * deferred.
+ */
+const ALWAYS_LOADED_TOOLS: ReadonlySet<string> = new Set([
+  CODER_TOOL.POST_THREAD,
+  CODER_TOOL.READ_THREADS,
+  CODER_TOOL.WITHDRAW_ASK,
+  CODER_TOOL.OPEN_PULL_REQUEST,
+  CODER_TOOL.EDIT_PLAN,
+  CODER_TOOL.UPDATE_TASK,
+  CODER_TOOL.READ_TASK,
+  CODER_TOOL.SHOW_IMAGE,
+  CODER_TOOL.SHOW_PAGE,
+  CODER_TOOL.MESSAGE_AGENT,
+  CODER_TOOL.LIST_AGENTS,
+  CODER_TOOL.START_AGENT,
+]);
+
+/** What a listed tool declares: `TOOL_META`, and loaded from the first turn where it is one of `ALWAYS_LOADED_TOOLS`. */
+const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as const;
+
+/** What an agent whose row is gone is offered by: no repository, on our own machine. */
+const NO_AGENT_OFFERED: LukeMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
 /** What beside its row an agent whose row is gone is offered by: no Memory, and under no pilot. */
 const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, underPilot: false };
@@ -268,11 +293,11 @@ export interface LukeMcpDoors {
 /**
  * One MCP server as the endpoint answers it for an admitted agent: the name
  * it gives itself, its `tools/list`, and its `tools/call` on the call's
- * params; Luke's own, or one integration's.
+ * params; our own, or one integration's.
  */
 interface McpServer {
   readonly name: string;
-  /** What `initialize` tells the client of the server, which the harness shows the model; none for Luke's own, whose tools say it. */
+  /** What `initialize` tells the client of the server, which the harness shows the model; none for our own, whose tools say it. */
   readonly instructions: (
     admitted: AdmittedConversation,
   ) => Effect.Effect<Option.Option<string>, never, LukeMcpServices>;
@@ -314,7 +339,7 @@ function callLukeTool(
     Effect.map((result) => Result.succeed(toolResult(tool, result))),
     Effect.catchCause((cause) =>
       Effect.as(
-        Effect.logWarning(`Luke MCP tool ${name} failed: ${failureKind(cause)}`),
+        Effect.logWarning(`${PRODUCT_NAME} MCP tool ${name} failed: ${failureKind(cause)}`),
         Result.succeed(DOOR_FAILED_RESULT),
       ),
     ),
@@ -323,11 +348,11 @@ function callLukeTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
- * repository, its kind, whether a pilot started it, and its starter's
- * Memory (`offeredLukeMcpTool`),
- * each in the words it is shown them with (`describe`); those eve offers
- * every agent where its row is gone, since no narrowed tool's door would
- * carry out a call for an agent that no longer stands.
+ * repository, whether a pilot started it, and its starter's Memory
+ * (`offeredLukeMcpTool`), each in the words it is shown them with
+ * (`describe`); those eve offers every agent where its row is gone, since no
+ * narrowed tool's door would carry out a call for an agent that no longer
+ * stands.
  */
 function listLukeTools(
   admitted: AdmittedConversation,
@@ -357,7 +382,7 @@ function listLukeTools(
             name,
             description: words,
             inputSchema: tool.inputSchema,
-            _meta: TOOL_META,
+            _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
           })),
         ),
         (tools) => Result.succeed({ tools }),
@@ -365,14 +390,14 @@ function listLukeTools(
     }),
     Effect.catchCause((cause) =>
       Effect.as(
-        Effect.logWarning(`Luke MCP tools/list failed: ${failureKind(cause)}`),
-        rpcFailure(JSON_RPC_ERROR.INTERNAL_ERROR, "Luke could not list its tools just now"),
+        Effect.logWarning(`${PRODUCT_NAME} MCP tools/list failed: ${failureKind(cause)}`),
+        rpcFailure(JSON_RPC_ERROR.INTERNAL_ERROR, "The tools could not be listed just now"),
       ),
     ),
   );
 }
 
-/** Luke's own server, over the doors the edge composes. */
+/** Our own server, over the doors the edge composes. */
 function lukeServer(doors: LukeMcpDoors): McpServer {
   return {
     name: "luke",
@@ -548,7 +573,7 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
   return yield* answerMessage(server.value, admitted.value, message.success, parsed.success);
 });
 
-/** The group: Luke's server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
+/** The group: our server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
 export function lukeMcpApp(doors: LukeMcpDoors): WebRoutes<LukeMcpServices> {
   const luke = Option.some(lukeServer(doors));
   return Layer.mergeAll(

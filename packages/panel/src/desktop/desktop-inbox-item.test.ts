@@ -26,7 +26,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { formatCount } from "@luke/features/number-format";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -57,6 +57,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import {
+  ACME,
   AGENT,
   ASKING_ID,
   answeredBy,
@@ -77,6 +78,7 @@ import {
   EXPIRY_ASK,
   faceKind,
   footWords,
+  GENERAL,
   handFiles,
   heldMessages,
   hoveredCard,
@@ -410,6 +412,43 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "1 of 3"]);
 });
 
+test("a picture of an item stays open in its viewer while a new thread lands in its channel, and while a channel made redraws its words", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  const channels = (...open: (typeof GENERAL)[]) => ({
+    [ACME.id]: { rows: { open, archived: [] } },
+  });
+  world.channels = channels(GENERAL);
+  const shot = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c77";
+  const address = inboxAttachmentAddress(
+    { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+    shot,
+    "acme",
+  );
+  world.inboxes.set(BILLING.id, [
+    { ...saying(THRESHOLD, `![The form](${address})`), channelId: GENERAL.id },
+    RETRY,
+  ]);
+  const { page } = mount([], { chosen: ON_THRESHOLD, channels: true });
+  await settle();
+  for (const land of world.imageReads.splice(0)) land();
+  await settle();
+  const press = page.querySelector<HTMLButtonElement>('button[aria-label="Enlarge The form"]');
+  assert.ok(press, "the picture is pressed to enlarge it");
+  act(() => press.click());
+  // The channel's row moves with the thread posted, its name and link as they were.
+  act(() => world.deliverChannels(channels({ ...GENERAL, latestPostedAt: 9_000, threads: 2 })));
+  await settle();
+  const shown = () =>
+    document.querySelector<HTMLImageElement>('[role="dialog"] .luke-zoom-image')?.alt;
+  assert.equal(shown(), "The form.png", "the viewer stays open as the thread lands");
+  // A channel made is a new name the words chip, so they are drawn again whole.
+  const made = { ...GENERAL, id: "c0ffee00-0000-4000-8000-000000000002", name: "billing" };
+  act(() => world.deliverChannels(channels(GENERAL, made)));
+  await settle();
+  assert.equal(shown(), "The form.png", "the viewer stays open as its words are drawn again");
+});
+
 test("a recording an agent's words draw plays where it stands, left out of the replay, and its Expand opens the viewer a picture does, which plays it and walks on to the picture drawn with it", async () => {
   const [still, video] = [
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c90",
@@ -467,7 +506,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
-      "under Luke's own bar, with an Expand into the viewer",
+      "under Vespin's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
@@ -500,13 +539,18 @@ test("a recording an agent's words draw plays where it stands, left out of the r
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
-      "under Luke's own bar",
+      "under Vespin's own bar",
     );
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
     assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
-    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM]);
+    assert.equal(
+      card?.querySelector('[aria-label="Inviting a member.webm"] video')?.getAttribute("src"),
+      "blob:video-3",
+      "the viewer's strip shows the recording by its first frame",
+    );
+    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM]);
     assert.equal(viewerPlace(card ?? document), "2 of 2");
     act(() =>
       card?.dispatchEvent(
@@ -1133,6 +1177,41 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
     sent.map(({ text }) => text),
     [`See ${file}`],
   );
+});
+
+test("in the window's Inbox an @ in the box of a task's item offers that plan's sections, read as last saved", async () => {
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.TASKS_REVISIONS) {
+        const lastEdit = { actor: PLAN_ACTOR.AGENT, at: 2, duringCall: false };
+        const newest = { seq: 2, lastEdit, startedAt: 2, changes: 1 };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { revisions: [newest] } });
+      }
+      if (request.kind === ACT_KIND.TASKS_REVISION) {
+        const body = "## Thresholds\nAlert at 80%.\n\n## Delivery\nEmail the owner.";
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: {
+            revision: { seq: 2, document: { body, assumptions: [] }, previous: null },
+          },
+        });
+      }
+      return previous(request);
+    },
+  });
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  const pane = itemPane(page);
+
+  typeInComposer(pane, "See @thresh");
+  await settle();
+
+  const offered = [
+    ...pane.querySelectorAll('.mention-menu [aria-label="Plan"] .luke-combobox-option-label'),
+  ].map((name) => name.textContent);
+  assert.deepEqual(offered, ["Thresholds"]);
 });
 
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
@@ -1960,7 +2039,7 @@ test.each([
     quoted: "Seven days, to match the trial.",
   },
   {
-    words: "the line saying an ask was withdrawn",
+    words: "why the line saying an ask was withdrawn says it was",
     shown: threadItem(
       [
         askingMessage(EXPIRY_ASK, {
@@ -1970,8 +2049,8 @@ test.each([
       ],
       { status: INBOX_STATUS.CLOSED, settledAt: 2_000 },
     ),
-    within: '[data-inbox-settled="withdrawn"]',
-    quoted: "Withdrawn",
+    within: '[data-inbox-comment="withdrawn"] [data-inbox-withdrawn-why]',
+    quoted: "The plan settled it.",
   },
   {
     words: "the item's title",

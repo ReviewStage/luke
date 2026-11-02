@@ -27,13 +27,13 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { GitHubApp } from "../github/github-app.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
-import { NO_AGENT_STATE_STORE } from "../testing/agent-state-blobs-fake.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
+import { recordingHarness } from "../testing/native-harness-fake.js";
 import { recordingSentry, type SentItem, sentOfType } from "../testing/sentry-transport.js";
 import { maintenanceApp } from "./maintenance-app.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
@@ -45,9 +45,9 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
  * sweep does is `maintenance-sweep.test.ts`'s. The exceptions are a
  * deleted task's agent, whose conversation the purge takes once its
  * retention has passed and not before, and an automation the sweep starts,
- * which reaches eve as the deployment acting for its owner: under the
- * deployment's own secret at eve's door, never the cron's bearer the sweep
- * itself was called with, over GitHub and eve as one fake HTTP boundary.
+ * whose agent's harness is reached acting for its owner, with nothing sent
+ * to eve or under the cron's bearer the sweep itself was called with, over
+ * GitHub and eve as one fake HTTP boundary.
  */
 
 const CRON_SECRET = "cron-secret-1";
@@ -107,7 +107,6 @@ const sweep = (
       database,
       reached,
       Layer.succeed(HostedEnvironment, environment(cronSecret)),
-      NO_AGENT_STATE_STORE,
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       maintenanceApp().pipe(HttpRouter.provideRequest(services)),
@@ -309,12 +308,17 @@ function githubAndEve() {
   const catalog = modelCatalogOf([
     { id: MODEL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
   ]);
-  return { asked, reached: Layer.merge(github.layer, catalog) };
+  const harness = recordingHarness();
+  return {
+    asked,
+    heard: harness.heard,
+    reached: Layer.mergeAll(github.layer, catalog, harness.layer),
+  };
 }
 
 it.layer(getTestDB())("an automation the sweep starts", (it) => {
   it.effect(
-    "reaches eve as the deployment acting for its owner, under the deployment's own secret and never the cron's bearer the sweep was called with",
+    "reaches its agent's harness acting for its owner, and sends eve nothing, the cron's bearer the sweep was called with least of all",
     () =>
       Effect.gen(function* () {
         yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
@@ -326,13 +330,8 @@ it.layer(getTestDB())("an automation the sweep starts", (it) => {
           Effect.provide(sentry.layer),
         );
         assert.equal(status, 200);
-        assert.deepEqual(eve.asked, [
-          {
-            url: `${EVE_ORIGIN}/eve/coder/v1/session`,
-            authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
-            account: owner,
-          },
-        ]);
+        assert.deepEqual(eve.heard, [{ call: "open", account: owner }]);
+        assert.deepEqual(eve.asked, []);
       }),
   );
 });

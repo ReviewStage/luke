@@ -13,7 +13,7 @@ const DEPENDENCY_FIELDS = [
 const WORKSPACE_PROTOCOL = "workspace:";
 // What a workspace holds that no build reads: its documents, its tests, and
 // their fixtures and goldens. Note that `testing/` is not among them, because
-// a service imports from it (`apps/dev` runs the scripted model).
+// a service's build may import from it.
 const UNSHIPPED = [
   "**/*.md",
   "**/*.test.*",

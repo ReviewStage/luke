@@ -1,9 +1,9 @@
 /**
- * native-runtime.ts -- the native harnesses a coding agent's conversation may run on, and the sessions Luke mints for them, told apart by their ids.
+ * native-runtime.ts -- the native harnesses a coding agent's conversation may run on, and the sessions we mint for them, told apart by their ids.
  *
  * A conversation's `runtime` (`conversations.runtime`) says which
  * implementation of `AgentSessions` answers it: eve, or one of the native
- * harnesses here. A native harness's session is Luke's own, minted as it
+ * harnesses here. A native harness's session is our own, minted as it
  * opens with the harness's prefix (`runner-sessions.ts`), so a call that
  * names a session and no conversation, a cancel or a reset, is answered by
  * the implementation that minted it. This module reaches nothing, so the
@@ -12,10 +12,10 @@
 
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 
-/** A runtime other than eve: a harness Luke launches in the agent's sandbox. */
+/** A runtime other than eve: a harness we launch in the agent's sandbox. */
 export type NativeRuntime = Exclude<ConversationRuntime, typeof CONVERSATION_RUNTIME.EVE>;
 
-/** What the id of a session Luke mints for each native harness begins with. */
+/** What the id of a session we mint for each native harness begins with. */
 export const NATIVE_SESSION_PREFIX = {
   [CONVERSATION_RUNTIME.CLAUDE_CODE]: "luke-claude-code-",
   [CONVERSATION_RUNTIME.CODEX]: "luke-codex-",

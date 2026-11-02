@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import {
   AGENT_STATUS,
-  type AgentSubagentStanding,
   type AgentSummary,
   type AgentTranscriptMessage,
   agentMessageReplyLine,
@@ -72,13 +71,8 @@ function assistant(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 
-/** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say, in the transcript of `page`'s agent on its task's page where one is given. */
-function drawn(
-  message: AgentTranscriptMessage,
-  moving = false,
-  standings?: ReadonlyMap<string, AgentSubagentStanding>,
-  page?: TaskMentionsValue,
-) {
+/** The message drawn as an agent's turn is, every target its rows open recorded, in the transcript of `page`'s agent on its task's page where one is given. */
+function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMentionsValue) {
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -89,7 +83,7 @@ function drawn(
     plan: false,
     lead: AGENT_LEAD,
     moving,
-    delegation: { models: [], standings, onOpenTarget: (target) => opened.push(target) },
+    delegation: { models: [], onOpenTarget: (target) => opened.push(target) },
   });
   act(() =>
     root.render(
@@ -128,7 +122,7 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
     verb: "Showed",
     made: "Pricing explorer",
-    opens: "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
+    opens: "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
   },
   {
     name: "a read of an agent opens its tab",
@@ -173,7 +167,7 @@ const OPENING_CALLS: readonly {
     verb: "Posted",
     made: "Which currency?",
     opens:
-      "https://tryluke.dev/acme/agent/8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21/inbox/9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "https://vespin.dev/acme/agent/8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21/inbox/9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
   },
   {
     name: "a pull request opened, named by its number",
@@ -218,7 +212,6 @@ for (const call of OPENING_CALLS) {
     const { container } = drawn(
       assistant([toolPart(call.tool, call.input, call.output)]),
       false,
-      undefined,
       page,
     );
     const row = container.querySelector<HTMLElement>(`[data-call-id="call-${call.tool}"] summary`);
@@ -417,109 +410,6 @@ test("a finished turn's lead folds under a line that opens as it is pressed", ()
     "the opened fold lists the read",
   );
 });
-
-/** A stored tool part whose call failed. */
-function failedPart(tool: string, input: WireRecord): WireRecord {
-  return {
-    type: `tool-${tool}`,
-    toolCallId: `call-${tool}`,
-    state: "output-error",
-    input,
-    errorText: "The command did not run.",
-  };
-}
-
-/** What a closed fold's line says of a failure: its failed mark, and its label. */
-function failureOn(line: Element | null | undefined) {
-  assert.equal(line?.getAttribute("aria-expanded"), "false", "the fold is closed");
-  return {
-    marked: line?.querySelector('[role="img"][aria-label="Failed"]') !== null,
-    label: line?.getAttribute("aria-label") ?? undefined,
-  };
-}
-
-const FAILURE_LINES: readonly {
-  readonly name: string;
-  readonly parts: readonly WireRecord[];
-  readonly standings?: ReadonlyMap<string, AgentSubagentStanding>;
-  readonly label: string | undefined;
-}[] = [
-  {
-    name: "a stopped turn's run of calls, one of which failed",
-    parts: [
-      failedPart("run_on_mac", { command: "pnpm test" }),
-      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
-    ],
-    label: "2 tool calls, 1 failed",
-  },
-  {
-    name: "a stopped turn's run of calls that all answered",
-    parts: [
-      toolPart("run_on_mac", { command: "pnpm test" }, { output: "ok" }),
-      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
-    ],
-    label: undefined,
-  },
-  {
-    name: "a finished turn's lead holding a call that failed",
-    parts: [
-      failedPart("run_on_mac", { command: "pnpm test" }),
-      { type: "text", text: "The tests did not run." },
-      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
-      { type: "text", text: "Read it." },
-    ],
-    label: "2 tool calls, 1 message, 1 failed",
-  },
-  {
-    name: "a finished turn's lead holding two calls that failed",
-    parts: [
-      failedPart("run_on_mac", { command: "pnpm test" }),
-      failedPart("read_file", { filePath: "src/new.ts" }),
-      { type: "text", text: "Neither ran." },
-    ],
-    label: "2 tool calls, 2 failed",
-  },
-  {
-    name: "a finished turn's lead whose calls all answered",
-    parts: [
-      toolPart("run_on_mac", { command: "pnpm test" }, { output: "ok" }),
-      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
-      { type: "text", text: "All green." },
-    ],
-    label: undefined,
-  },
-  {
-    name: "a run whose worker's own session failed after its call answered",
-    parts: [
-      toolPart("delegate", { task: "Audit the retry paths" }, { status: "accepted" }),
-      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
-    ],
-    standings: new Map([
-      [
-        "call-delegate",
-        {
-          callId: "call-delegate",
-          status: AGENT_STATUS.FAILED,
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          startedAt: 1,
-        },
-      ],
-    ]),
-    label: "1 tool call, 1 subagent, 1 failed",
-  },
-];
-
-for (const { name, parts, standings, label } of FAILURE_LINES) {
-  test(`a closed fold's line wears the failed mark and says how many failed where calls it holds failed: ${name}`, () => {
-    const { container } = drawn(assistant(parts), false, standings);
-    const line = container.querySelector("[data-turn-fold] > summary");
-    assert.deepEqual(failureOn(line), { marked: label !== undefined, label });
-    // The label's last part is how many failed, which the line says in words beside its mark.
-    const failed = label?.slice(label.lastIndexOf(", ") + 2);
-    if (failed !== undefined) assert.ok(line?.textContent?.endsWith(failed), failed);
-  });
-}
 
 /** An agent of the task's, as its list holds it. */
 function listedAgent(id: string, title: string, overrides: Partial<AgentSummary> = {}) {
@@ -1123,7 +1013,7 @@ const AGENT_MESSAGE: AgentTranscriptMessage = {
     {
       type: "text",
       text: [
-        "Message · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:",
+        "Message · [@Invite emails](https://vespin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:",
         "Rebase before you push.",
         agentMessageReplyLine("7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"),
       ].join("\n\n"),

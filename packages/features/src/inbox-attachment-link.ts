@@ -1,16 +1,16 @@
 import { type LINK_PLACE, type LinkPlace, linkOf } from "./link-grammar.js";
-import { isLinkHome, LINK_HOME } from "./link-home.js";
+import { isLinkHome, LINK_HOME_PATTERN } from "./link-home.js";
 import { insideCode } from "./mention-link.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * inbox-attachment-link.ts -- a picture in an Inbox item's Markdown as its address on tryluke.dev: written, read back, and found in the item's words.
+ * inbox-attachment-link.ts -- a picture in an Inbox item's Markdown as its address on vespin.dev: written, read back, and found in the item's words.
  *
  * A message on an item's thread, its agent's or a member's, draws a picture
  * as a plan does, `![alt](<address> "caption")`, its address the item's own
  * link (`link-grammar.ts`) with `/files/<attachment>` after it, as a plan's
  * picture stands under its plan's (`plan-attachment-link.ts`):
- * `https://tryluke.dev/<workspace>/plan/<task>/inbox/<item>/files/<attachment>`,
+ * `https://vespin.dev/<workspace>/plan/<task>/inbox/<item>/files/<attachment>`,
  * or `/agent/<agent>/inbox/<item>/files/<attachment>` for an item of an
  * agent with no task. The address is a real one on purpose: opened in a
  * browser it lands on the item, which opens to its readers alone, and
@@ -44,7 +44,7 @@ const HOLDER_ID = /^[A-Za-z0-9_-]{1,200}$/u;
  * and the picture's id ends the address.
  */
 const ADDRESS_IN_TEXT = new RegExp(
-  `(?:https|${LINK_HOME.APP_SCHEME}):\\/\\/${LINK_HOME.HOST.replaceAll(".", "\\.")}\\/[^\\s/()]{1,200}\\/(?:plan|task|agent)\\/[^\\s/()]{1,200}\\/${INBOX_STEP}\\/([0-9a-f-]{36})\\/${FILES_STEP}\\/([0-9a-f-]{36})(?![\\w-])`,
+  `${LINK_HOME_PATTERN}\\/[^\\s/()]{1,200}\\/(?:plan|task|agent)\\/[^\\s/()]{1,200}\\/${INBOX_STEP}\\/([0-9a-f-]{36})\\/${FILES_STEP}\\/([0-9a-f-]{36})(?![\\w-])`,
   "gu",
 );
 
@@ -59,7 +59,7 @@ const MAX_ADDRESS_CHARS = 1_024;
 export const INBOX_PICTURE_IN_WORDS =
   /(?<!\\)!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})/gu;
 
-/** A destination that names a scheme, `https:`, `data:`, or Luke's own, and so no file in the agent's sandbox. */
+/** A destination that names a scheme, `https:`, `data:`, or our own, and so no file in the agent's sandbox. */
 const SCHEMED = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
 
 /** An item of the Inbox as its link names it: under its task, or under its agent with no task. */

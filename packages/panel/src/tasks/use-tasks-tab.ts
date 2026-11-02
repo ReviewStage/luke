@@ -27,6 +27,8 @@ import {
   type TaskAgentPin,
   type TaskBlockRelation,
   type TaskBlockRequest,
+  type TaskCreateRelation,
+  type TaskCreateRelationKind,
   type TaskMode,
   type TaskRelationChangeRequest,
   type TaskRelationKind,
@@ -86,7 +88,6 @@ import {
   recentRepositories,
   renamedView,
   repositoryChangeFailureNote,
-  repositoryPageUrl,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
@@ -152,6 +153,7 @@ import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
+import type { NewTaskRelation } from "./new-task-relation.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
@@ -510,24 +512,11 @@ function startingStanding(standing: TaskStanding | undefined) {
   return assigneeId === undefined || assigneeId === null ? rest : { ...rest, assigneeId };
 }
 
-/**
- * The task New child task makes its task under, as the task's menu or ⌘K
- * asked: its id, its name, which the card says, and the workspace and
- * repository the child takes from it, since a child always works where its
- * parent does.
- */
-export interface NewTaskParent {
-  readonly taskId: string;
-  readonly name: string;
-  readonly workspaceId: string;
-  readonly repository: string | null;
-}
-
-/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), the task it makes a child of (New sub-task), or the card a start refused after it closed opens again on. */
+/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), the relation it starts its task in (a relation's New task, or New sub-task), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
-  /** The task the card makes its task a child of; none for a task at the top. */
-  readonly parent?: NewTaskParent;
+  /** The relation the card starts its task in, from the new task's side; none for a task related to none. */
+  readonly relation?: NewTaskRelation;
   /** What the card starts; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
@@ -544,8 +533,8 @@ export interface NewTaskPreset {
 interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
-  /** The task the card made its task a child of, which it opens again under; none for a task at the top. */
-  readonly parent?: NewTaskParent;
+  /** The relation the card started its task in, which it opens again on; none for a task related to none. */
+  readonly relation?: NewTaskRelation;
   readonly repository: string | null;
   readonly choice: ModelChoice | undefined;
   readonly press: NewTaskPress;
@@ -563,8 +552,8 @@ export interface NewTaskStart {
   readonly runsOn?: TaskRunsOnRequest;
   /** The device Runs on chose, which a refusal names; none for the cloud. */
   readonly device?: MacOffer;
-  /** The task the start makes its task a child of, whose repository and place to run the child takes; none for a task at the top. */
-  readonly parentTaskId?: string;
+  /** The relation the start makes its task in, from the new task's side, written with it in one transaction; none for a task related to none. */
+  readonly relation?: TaskCreateRelation;
   readonly handed?: NewTaskAgent;
   /** How the task is worked, where the card's choice named it while the Pilot experiment is on; by its agents otherwise. */
   readonly mode?: TaskMode;
@@ -674,10 +663,10 @@ export interface TasksControl {
   onShowSource: (taskId: string, source: RevisionSource) => void;
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowTask: (taskId: string) => void;
-  /** Opens a task the same way, scrolled to the section a mention or a Luke link names, or at its top for the task's own. */
+  /** Opens a task the same way, scrolled to the section a mention or an app link names, or at its top for the task's own. */
   onShowMention: (mention: PlanMention) => void;
   /**
-   * Opens the place a Luke link names, of the Plans tab's: a task, its
+   * Opens the place an app link names, of the Plans tab's: a task, its
    * section, version, page, call, or turn; an agent, on its task's tab or
    * its own page; an Inbox item, in its task's Inbox tab, or the Inbox on one with no task; Automations, on one. A
    * place of a workspace the account lists by the link's slug is shown in
@@ -772,8 +761,6 @@ export interface TasksControl {
   onRemoveTaskBlock: (taskId: string, relation: TaskBlockRelation, otherId: string) => void;
   /** Moves one relation of a task to another kind in one call, drawn as the service answers it; a refusal says why in a toast. */
   onChangeTaskRelation: (taskId: string, relation: TaskRelationChangeRequest) => void;
-  /** Opens a task's repository on GitHub in the browser. */
-  onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
   onOpenWorkspaceGitHub: (taskId: string) => void;
   /**
@@ -793,8 +780,8 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
-  /** New task as a child of the task given, in its workspace and repository: what the task's menu and ⌘K's New sub-task ask. */
-  onNewChildTask: (parentTaskId: string) => void;
+  /** New task related to the task given as `kind`, read from the new task's side, in that task's workspace: what the add menu's New task, and the task's menu and ⌘K's New sub-task, ask. */
+  onNewRelatedTask: (taskId: string, kind: TaskCreateRelationKind) => void;
   /**
    * Adds a task named `name` to a Tasks page group with no agent, in the
    * listed workspace, and opens nothing: what a group's quick add asks.
@@ -843,8 +830,8 @@ export interface TasksControl {
     readDefault: () => Promise<AgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
-    /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers. */
-    tasks: readonly { readonly id: string; readonly name: string }[];
+    /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers and the Relation pill offers its workspace's of. */
+    tasks: readonly TaskSummary[];
     /** Opens a task or a section a mention in the composer names, as the window's own opener does. */
     onShowMention: (mention: PlanMention) => void;
   };
@@ -2542,12 +2529,6 @@ export function useTasksTab(input: {
     setRelationMenu((held) => ({ taskId, kind, request: (held?.request ?? 0) + 1 }));
   };
 
-  const repositoryOf = (taskId: string): string | null =>
-    tasks.tasks.find((task) => task.id === taskId)?.repository ??
-    (region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
-      ? region.task.repository
-      : null);
-
   // A fixture's task reads its staged history through the same acts (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
@@ -2657,7 +2638,7 @@ export function useTasksTab(input: {
               ? undefined
               : {
                   ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
-                  ...(card.parent === undefined ? undefined : { parent: card.parent }),
+                  ...(card.relation === undefined ? undefined : { relation: card.relation }),
                   refused: { card, note },
                 },
         });
@@ -2670,7 +2651,7 @@ export function useTasksTab(input: {
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
       ...(from.mode === undefined ? undefined : { mode: from.mode }),
-      ...(from.parentTaskId === undefined ? undefined : { parentTaskId: from.parentTaskId }),
+      ...(from.relation === undefined ? undefined : { relation: from.relation }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
       ...(stays ? { quiet: true } : undefined),
@@ -3059,7 +3040,7 @@ export function useTasksTab(input: {
   };
 
   /**
-   * A Luke link's place opened through the door each kind already has: the
+   * An app link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
    * plan's place. One of an agent's messages opens the agent's tab and asks
    * it to bring the message into view. Note
@@ -3715,32 +3696,21 @@ export function useTasksTab(input: {
         ...(workspaceId === undefined ? undefined : { workspaceId }),
       });
     },
-    onOpenOnGitHub: (taskId) => {
-      const repository = repositoryOf(taskId);
-      if (repository !== null) openGitHub(repositoryPageUrl(repository));
-    },
     onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
     onRetryDocument: () => {
       if (tasks.activeTaskId !== undefined) select(tasks.activeTaskId);
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
-    onNewChildTask: (parentTaskId) => {
+    onNewRelatedTask: (taskId, kind) => {
       // The open document stands for its task where the list read did not land, as its menu reads it.
-      const parent =
-        tasks.tasks.find((task) => task.id === parentTaskId) ??
-        (region.kind === DOCUMENT_REGION.READY && region.task.id === parentTaskId
+      const task =
+        tasks.tasks.find((each) => each.id === taskId) ??
+        (region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
           ? region.task
           : undefined);
-      if (parent === undefined) return;
-      newTaskWith({
-        parent: {
-          taskId: parent.id,
-          name: parent.name,
-          workspaceId: parent.workspaceId,
-          repository: parent.repository,
-        },
-      });
+      if (task === undefined) return;
+      newTaskWith({ relation: { kind, task } });
     },
     onQuickAdd: quickAdd,
     onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),

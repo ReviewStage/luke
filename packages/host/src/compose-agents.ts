@@ -16,7 +16,6 @@ import {
   type AgentLukeToolsAnswerView,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
-  type AgentOperatorEnsureAnswerView,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -45,7 +44,6 @@ import {
   agentListParamsSchema,
   agentMessageParamsSchema,
   agentMessagesParamsSchema,
-  agentOperatorEnsureParamsSchema,
   agentPageParamsSchema,
   agentPartParamsSchema,
   agentPictureParamsSchema,
@@ -68,10 +66,8 @@ import {
   type GitHubTokenAnswerView,
   githubTokenSaveParamsSchema,
   type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
   type HostsAnswerView,
   hostIdParamsSchema,
-  hostInstallTokenParamsSchema,
   INBOX_SCOPE_KIND,
   type MemoriesAnswerView,
   memoriesReadParamsSchema,
@@ -101,6 +97,7 @@ import {
   type InboxReader,
 } from "@luke/features/inbox-writes";
 import { LIVE_READ, type LiveRead } from "@luke/features/live-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
@@ -199,8 +196,6 @@ export type AgentClient = Pick<
   | "hosts"
   | "devicePresence"
   | "removeHost"
-  | "keepHostInstallToken"
-  | "revokeHostInstallToken"
   | "readHostPairing"
   | "approveHostPairing"
   | "denyHostPairing"
@@ -220,7 +215,6 @@ export type AgentClient = Pick<
   | "changeQueue"
   | "archive"
   | "pin"
-  | "ensureOperator"
   | "stop"
   | "rewind"
   | "delete"
@@ -558,27 +552,6 @@ function composed(
         const { id } = yield* readParams(hostIdParamsSchema, params, "a remove names a host");
         return carried<HostDoneAnswerView>(yield* asked(client.removeHost(id)));
       }),
-    [GATEWAY_METHOD.HOSTS_KEEP_INSTALL_TOKEN]: (params) =>
-      Effect.gen(function* () {
-        // Note that only the token's hash crosses here: the window that minted the token keeps it.
-        const { tokenHash } = yield* readParams(
-          hostInstallTokenParamsSchema,
-          params,
-          "keeping an install token names its hash",
-        );
-        return carried<HostInstallTokenAnswerView>(
-          yield* asked(client.keepHostInstallToken(tokenHash)),
-        );
-      }),
-    [GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN]: (params) =>
-      Effect.gen(function* () {
-        const { id } = yield* readParams(
-          hostIdParamsSchema,
-          params,
-          "a revoke names an install token",
-        );
-        return carried<HostDoneAnswerView>(yield* asked(client.revokeHostInstallToken(id)));
-      }),
     [GATEWAY_METHOD.HOSTS_PAIRING_READ]: (params) =>
       Effect.gen(function* () {
         const { code } = yield* readParams(hostPairingParamsSchema, params, "a read names a code");
@@ -896,18 +869,6 @@ function composed(
         );
         return carried<AgentAgentAnswer>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, ...request } = yield* readParams(
-          agentOperatorEnsureParamsSchema,
-          params,
-          "ensuring the operator names its workspace",
-        );
-        const answer = yield* asked(client.ensureOperator(workspaceId, request));
-        // Note that a made operator is waited for on the list, so its row stands once the window hears its id.
-        if ("txid" in answer) yield* listed(answer.txid);
-        return carried<AgentOperatorEnsureAnswerView>(answer);
-      }),
     [GATEWAY_METHOD.AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
@@ -1028,7 +989,7 @@ function composed(
         const { agentId } = yield* readParams(
           agentPullRequestParamsSchema,
           params,
-          "reading an agent's Luke tools names one agent",
+          `reading an agent's ${PRODUCT_NAME} tools names one agent`,
         );
         const answer = yield* asked(client.lukeTools(agentId));
         return carried<AgentLukeToolsAnswerView>(answer);

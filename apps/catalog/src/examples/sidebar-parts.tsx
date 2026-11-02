@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AVATAR_SIZE,
@@ -8,7 +9,6 @@ import {
   IconButton,
   InboxIcon,
   MoreButton,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   SearchIcon,
@@ -29,7 +29,7 @@ import { CatalogSection } from "../section";
 
 /**
  * sidebar-parts.tsx -- the parts every surface drawing the app's sidebar
- * shares: Luke's head, and the same head naming the surface it stands on;
+ * shares: the app's head, and the same head naming the surface it stands on;
  * the places over their rule; a place and the rows that narrow it, which
  * its row folds, its ⋯ standing beside its chord under the pointer; and the
  * foot's account row.
@@ -42,7 +42,7 @@ function FoldingFilters(): React.JSX.Element {
     <SidebarPlaces label="Places">
       <NavItem
         icon={<InboxIcon />}
-        count={{ value: 3, noun: "for you", tone: NAV_COUNT_TONE.UNREAD }}
+        count={{ value: 3, noun: "need you", tone: STATUS_TONE.ATTENTION }}
         shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
         fold={{ state: fold.state, label: "Channels" }}
         actions={<MoreButton thing="Inbox" size={BUTTON_SIZE.COMPACT} />}
@@ -77,12 +77,12 @@ function SidebarParts(): React.JSX.Element {
     <>
       <CatalogSection id="sidebar-identity" title="Head">
         <div className="catalog-narrow">
-          <SidebarIdentity name="Luke" face={<WingFace fill />} />
+          <SidebarIdentity name={PRODUCT_NAME} face={<WingFace fill />} />
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-identity-qualified" title="Head on a surface of its own">
         <div className="catalog-narrow">
-          <SidebarIdentity name="Luke" qualifier="Admin" face={<WingFace fill />} />
+          <SidebarIdentity name={PRODUCT_NAME} qualifier="Admin" face={<WingFace fill />} />
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-places" title="Places over their rule">

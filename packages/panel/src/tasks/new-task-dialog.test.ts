@@ -283,7 +283,7 @@ test("the card, named New task, holds the composer with its words focused, the r
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the task");
-  assert.equal(controls.includes("Plan with Luke first"), false, "no Plan toggle stands");
+  assert.equal(controls.includes("Plan with Vespin first"), false, "no Plan toggle stands");
   for (const each of ["Attach files", "acme/web", "Start a task with no agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
   }
@@ -572,25 +572,11 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
   assert.deepEqual(card.starts, []);
 });
 
-test("a card holding words is nudged rather than put away by the first Escape, and put away by the next", async () => {
-  const card = await mount();
-  card.type("Dark mode");
-  await card.key("Escape");
-  const nudged = card.dialog()?.getAttribute("data-nudge");
-  await card.key("Escape");
-
-  assert.equal(nudged, "true", "the first Escape nudges the card and keeps it");
-  assert.equal(card.dialog(), null);
-  assert.equal(document.activeElement, card.opener);
-  assert.deepEqual(card.starts, []);
-});
-
 test("words left in a card put away come back as New task opens again and after a relaunch, and a task started lets them go", async () => {
   const card = await mount();
   card.type("Dark mode");
   await card.key("Escape");
-  await card.key("Escape");
-  assert.equal(card.dialog(), null);
+  assert.equal(card.dialog(), null, "one Escape puts away a card holding words");
 
   await card.reopen();
   assert.equal(card.field().textContent, "Dark mode");
@@ -619,11 +605,11 @@ test("an agent's start still out lets its words go, so New task opened before it
   assert.equal(card.field().textContent, "", "the card opened again is empty");
   await card.key("Escape");
   await act(async () =>
-    answer({ reason: FAILURE_REASON.OTHER, text: "Luke cannot reach acme/web." }),
+    answer({ reason: FAILURE_REASON.OTHER, text: "Vespin cannot reach acme/web." }),
   );
   await settle();
   assert.equal(card.field().textContent, "Dark mode");
-  assert.match(card.note() ?? "", /Luke cannot reach acme\/web\./u);
+  assert.match(card.note() ?? "", /Vespin cannot reach acme\/web\./u);
 });
 
 test("words typed before the workspaces are read stay in the box as the workspace lands, over its older draft, and are its draft", async () => {
@@ -637,7 +623,6 @@ test("words typed before the workspaces are read stay in the box as the workspac
   await card.list("workspace-personal");
   assert.equal(card.field().textContent, "Dark mode");
 
-  await card.key("Escape");
   await card.key("Escape");
   await card.reopen();
   assert.equal(card.field().textContent, "Dark mode");
@@ -657,11 +642,11 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
 });
 
 test("a refusal keeps the card and the words, says why under it, and Retry starts again", async () => {
-  const card = await mount("Luke cannot reach acme/web.");
+  const card = await mount("Vespin cannot reach acme/web.");
   card.type("Dark mode toggle");
   await card.key("Enter");
   assert.ok(card.dialog());
-  assert.match(card.note() ?? "", /Luke cannot reach acme\/web\./u);
+  assert.match(card.note() ?? "", /Vespin cannot reach acme\/web\./u);
   assert.equal(card.field().textContent, "Dark mode toggle");
   act(() => card.button("Retry").click());
   await settle();
@@ -801,7 +786,7 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   );
 });
 
-/** A read answering that the App is installed and gives Luke no repository. */
+/** A read answering that the App is installed and gives us no repository. */
 const NOTHING_REACHED = () =>
   Promise.resolve({
     repositories: {
@@ -846,8 +831,8 @@ test("a member of a workspace whose GitHub reaches no repository is told so and 
   await settle();
 
   assert.deepEqual(menuNotes(), [
-    "Luke cannot see any repository yet.",
-    "Ask Dean or Charles to add a repository to Luke's GitHub App.",
+    "Vespin cannot see any repository yet.",
+    "Ask Dean or Charles to add a repository to Vespin's GitHub App.",
   ]);
   assert.equal(
     buttons.some((button) => button.textContent === OPEN_SETTINGS_LABEL),
@@ -869,7 +854,7 @@ test("an owner of a workspace whose GitHub reaches no repository is offered Open
     assert.fail("the menu offers to open Settings");
   act(() => open.click());
 
-  assert.deepEqual(notes, ["Luke cannot see any repository yet."]);
+  assert.deepEqual(notes, ["Vespin cannot see any repository yet."]);
   assert.deepEqual(dialog.links, [
     {
       page: SETTINGS_VIEW.WORKSPACE,

@@ -7,19 +7,19 @@ import {
   type DeviceAgentAnswer,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLine,
+  type DeviceAgentRelease,
   type DeviceAgentRequest,
-  type DeviceAgentStateCommitRequest,
-  type DeviceAgentStateSaveAnswer,
   type DeviceArch,
   type DeviceCapability,
   type DeviceIsolation,
   type DeviceLaunchRefusal,
+  type DeviceLaunchStep,
   type DevicePlatform,
   type DeviceSetup,
   type DeviceSignedIn,
+  type HostUpdate,
 } from "./device-agent-wire.js";
 import {
-  type HostEnrollRequest,
   type HostPairingPollAnswer,
   type HostPairingStartAnswer,
   type HostPairingStartRequest,
@@ -38,7 +38,7 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
- * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, settles a line or answers a request, and saves its agents' state.
+ * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, says which step a launch it claimed has reached, settles a line or answers a request, and saves its agents' state.
  *
  * Each is a procedure of the hosted contract over the one account call, so
  * the bearer is read fresh per attempt and a 401 is renewed and retried
@@ -46,16 +46,15 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * which the caller asks again after a pause; a claim refused is
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, or its caller withdrew
  * it) and one unanswered nothing; a
- * register, a settle, or an answer not taken is false, and a beat or a
+ * register, a step, a settle, or an answer not taken is false, and a beat or a
  * read of the live agents not taken is nothing. A save of an agent's
  * state, or its commit, refused says whether a newer save made it stale,
  * and one unanswered, or refused as unavailable, is nothing. A host also
  * asks the runner token route for a GitHub token for one of its agents
  * (`githubToken`), on the same credential, its device secret. A box with
- * no secret yet enrolls on an install token (`enrollHost`), or pairs with
- * a code: it starts a pairing with no credential (`startHostPairing`) and
- * polls on the poll secret it was answered (`pollHostPairing`) until a
- * member approves or denies it.
+ * no secret yet pairs with a code: it starts a pairing with no credential
+ * (`startHostPairing`) and polls on the poll secret it was answered
+ * (`pollHostPairing`) until a member approves or denies it.
  */
 
 /** A read's bytes as the answer's wire spells them. */
@@ -71,38 +70,16 @@ export interface DeviceAgentClaimedLine {
   readonly secretsGone?: true | undefined;
 }
 
-/** A beat the service took: the ids of the launches it holds the device to, none from a service before the field (`deviceAgentBeatAnswerSchema`). */
+/** A beat the service took: the ids of the launches it holds the device to, none from a service before the field, and a release newer than the host's, where the service names one (`deviceAgentBeatAnswerSchema`). */
 export interface DeviceAgentBeat {
   readonly openLaunches?: readonly string[] | undefined;
+  readonly release?: DeviceAgentRelease | undefined;
 }
 
-/** How the service refused a save of an agent's state, or its commit. */
-export const DEVICE_AGENT_STATE_REFUSAL = {
-  /** A newer save of the agent's landed since the generation it named, so no save from that one ever will. */
-  STALE: "stale",
-  /** Any other refusal: the agent is not this device's, or the path's grant lapsed. */
-  REFUSED: "refused",
-} as const;
-
-type DeviceAgentStateRefusal =
-  (typeof DEVICE_AGENT_STATE_REFUSAL)[keyof typeof DEVICE_AGENT_STATE_REFUSAL];
-
-/** A save or commit of an agent's state the service refused, and how. */
-export interface DeviceAgentStateRefused {
-  readonly refusal: DeviceAgentStateRefusal;
-}
-
-/** A save's or commit's failure as its caller reads it: refused, and how, or nothing where it was not answered or the service could not take it now. */
-function stateRefusalOf(failed: HostedFailure): DeviceAgentStateRefused | undefined {
-  if (failed._tag !== "HostedRefused" || failed.refusal === HOSTED_API_ERROR.UNAVAILABLE) {
-    return undefined;
-  }
-  return {
-    refusal:
-      failed.refusal === HOSTED_API_ERROR.AGENT_STATE_STALE
-        ? DEVICE_AGENT_STATE_REFUSAL.STALE
-        : DEVICE_AGENT_STATE_REFUSAL.REFUSED,
-  };
+/** Where a host's update stands, as its beat says it while one is under way, and why it failed where it did. */
+export interface DeviceAgentUpdate {
+  readonly update: HostUpdate;
+  readonly updateFailure?: string | undefined;
 }
 
 /** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
@@ -119,78 +96,6 @@ export interface DeviceAgentDevice {
   /** Where its setup stands while it is not ready to take an agent, and why it failed where it did; none once it is ready. */
   readonly setup?: DeviceSetup | undefined;
   readonly setupFailure?: string | undefined;
-}
-
-/** How a host's enroll ended. */
-export const HOST_ENROLL_OUTCOME = {
-  /** The service took the install token and answered the box's device secret, this once. */
-  ENROLLED: "enrolled",
-  /** The box's id is a host of the member's still enrolled, so nothing was written and its secret stands. */
-  STILL_ENROLLED: "still-enrolled",
-  /** The service refused the install token: unknown, revoked, past its 24 hours, or for an id it does not take. */
-  REFUSED: "refused",
-  /** The service refused the daemon's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
-  UPGRADE_NEEDED: "upgrade-needed",
-  /** No answer could be read: the network, the deadline, or a service answering something else. */
-  UNANSWERED: "unanswered",
-} as const;
-
-export type HostEnrollOutcome =
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.ENROLLED; readonly deviceSecret: string }
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.STILL_ENROLLED }
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.REFUSED }
-  | {
-      readonly outcome: typeof HOST_ENROLL_OUTCOME.UPGRADE_NEEDED;
-      readonly minimumVersion?: string | undefined;
-    }
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.UNANSWERED };
-
-/** How a refusal of the enroll reads, by its slug. */
-function enrollRefusal(failed: HostedRefused): HostEnrollOutcome {
-  switch (failed.refusal) {
-    case HOSTED_API_ERROR.HOST_UPGRADE_NEEDED:
-      return {
-        outcome: HOST_ENROLL_OUTCOME.UPGRADE_NEEDED,
-        minimumVersion: failed.data?.minimumVersion,
-      };
-    case HOSTED_API_ERROR.HOST_STILL_ENROLLED:
-      return { outcome: HOST_ENROLL_OUTCOME.STILL_ENROLLED };
-    default:
-      return { outcome: HOST_ENROLL_OUTCOME.REFUSED };
-  }
-}
-
-/**
- * A host's enroll (`contract/device-agents.ts`): the install token, as the
- * call's bearer, traded for the box's device secret under the id given. The
- * daemon's version rides on the caller's own `HttpClient`, as on every call
- * of a host's.
- */
-export function enrollHost(
-  serviceBaseUrl: string,
-  installToken: string,
-  request: HostEnrollRequest,
-): Effect.Effect<HostEnrollOutcome, never, HttpClient.HttpClient> {
-  const bearer = `Bearer ${installToken}`;
-  const hosted = hostedClient({
-    baseUrl: serviceBaseUrl,
-    credential: { authorization: () => Effect.succeed(bearer) },
-  });
-  return askHosted(hosted.deviceAgents.enroll, request).pipe(
-    Effect.map(
-      (answer): HostEnrollOutcome => ({
-        outcome: HOST_ENROLL_OUTCOME.ENROLLED,
-        deviceSecret: answer.deviceSecret,
-      }),
-    ),
-    Effect.catch((failed) =>
-      Effect.succeed(
-        failed._tag === "HostedRefused"
-          ? enrollRefusal(failed)
-          : { outcome: HOST_ENROLL_OUTCOME.UNANSWERED },
-      ),
-    ),
-  );
 }
 
 /** How a pairing's start or poll ended. */
@@ -411,13 +316,27 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** That this Mac is here now, and which harnesses it is signed in to; the launches the service holds it to where it took the beat, and nothing where it did not. */
+  /** That this Mac is here now, which harnesses it is signed in to, and where its update stands while one is under way; the launches the service holds it to and a newer release where it took the beat, and nothing where it did not. */
   beat(
     deviceId: string,
     signedIn: DeviceSignedIn,
+    updating?: DeviceAgentUpdate,
   ): Effect.Effect<DeviceAgentBeat | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.beat, { deviceId, signedIn }).pipe(
-      Effect.map((answer): DeviceAgentBeat => ({ openLaunches: answer.openLaunches })),
+    const failure = updating?.updateFailure;
+    const input = {
+      deviceId,
+      signedIn,
+      // Note that a beat updating nothing names neither key, since a service from before them refuses a key it does not know.
+      ...(updating === undefined ? undefined : { update: updating.update }),
+      ...(updating === undefined || failure === undefined ? undefined : { updateFailure: failure }),
+    };
+    return askHosted(this.#hosted.deviceAgents.beat, input).pipe(
+      Effect.map(
+        (answer): DeviceAgentBeat => ({
+          openLaunches: answer.openLaunches,
+          release: answer.release,
+        }),
+      ),
       Effect.orElseSucceed(() => undefined),
     );
   }
@@ -479,6 +398,23 @@ export class HostedDeviceAgentClient {
   }
 
   /**
+   * The step a launch line this Mac claimed has reached (`DEVICE_LAUNCH_STEP`),
+   * which the agent's transcript words until its harness's first event;
+   * whether the service kept it. A service from before the procedure
+   * refuses it, which is false too, so a report never holds up the launch.
+   */
+  lineStep(
+    deviceId: string,
+    id: string,
+    step: DeviceLaunchStep,
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.lineStep, { deviceId, id, step }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+
+  /**
    * One line settled, a launch line with its runner's exit code where it
    * exited with one, and why it never started where the device says;
    * whether the service took it. Note that a settle naming why is asked
@@ -533,45 +469,6 @@ export class HostedDeviceAgentClient {
       Effect.catch((failed) =>
         Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),
       ),
-    );
-  }
-
-  /**
-   * A save of the agent's state asked for, from the generation its state
-   * stands at, none where it has none: the path its bundle goes to, its one
-   * upload, and the agent's state key; refused, or nothing where unanswered.
-   */
-  saveState(
-    deviceId: string,
-    agentId: string,
-    fromGeneration: number | null,
-  ): Effect.Effect<
-    DeviceAgentStateSaveAnswer | DeviceAgentStateRefused | undefined,
-    never,
-    HttpClient.HttpClient
-  > {
-    return askHosted(this.#hosted.deviceAgents.saveState, {
-      deviceId,
-      agentId,
-      fromGeneration,
-    }).pipe(
-      Effect.map((answer): DeviceAgentStateSaveAnswer => answer),
-      Effect.catch((failed) => Effect.succeed(stateRefusalOf(failed))),
-    );
-  }
-
-  /**
-   * A save the device uploaded, committed: the generation it was kept as;
-   * refused, or nothing where unanswered. The same commit asked again is
-   * answered the same generation.
-   */
-  commitState(
-    deviceId: string,
-    commit: Omit<DeviceAgentStateCommitRequest, "deviceId">,
-  ): Effect.Effect<number | DeviceAgentStateRefused | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.commitState, { deviceId, ...commit }).pipe(
-      Effect.map((answer): number => answer.generation),
-      Effect.catch((failed) => Effect.succeed(stateRefusalOf(failed))),
     );
   }
 

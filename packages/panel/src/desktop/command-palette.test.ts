@@ -2,12 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import {
-  AGENT_KIND,
-  AGENT_STATUS,
-  CHECK_SUMMARY,
-  PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -62,13 +57,7 @@ import {
   type InboxChoice,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import {
-  fakeActPort,
-  fakeActPortAnswering,
-  fakeAppBridge,
-  refusedOnPort,
-  type SentPortAct,
-} from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   DESKTOP_CAPABILITIES,
@@ -671,9 +660,9 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
 });
 
-test("the field asks to search Luke under All, and the kind under its filter", () => {
+test("the field asks to search Vespin under All, and the kind under its filter", () => {
   openPalette();
-  assert.equal(field().placeholder, "Search Luke");
+  assert.equal(field().placeholder, "Search Vespin");
 
   chooseFilter("This task");
   assert.equal(field().placeholder, "Search this task");
@@ -1582,7 +1571,7 @@ test("a task whose assignee and creator share a first name says the one the whol
   assert.deepEqual(rows(), ["Audit trail · relay · Charles Ward"]);
 });
 
-test("a task Luke or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
+test("a task Vespin or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const task = (id: string, origin?: TaskSummary["origin"]) => ({
     id,
@@ -1616,7 +1605,7 @@ test("a task Luke or a coding agent made says who in its detail and is found by 
 
   assert.deepEqual(rows(), [
     "Invite emails · relay · by Agent",
-    "Audit log export · relay · by Luke",
+    "Audit log export · relay · by Vespin",
     "Rate limits · relay",
   ]);
   assert.deepEqual(marks(), [null, null, null]);
@@ -1828,7 +1817,7 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⇧�
     `Copy link to task · ${DOCUMENT_TASK.name}`,
   ]);
   assert.equal(chord, "⇧⌘C");
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${LINKED_AGENT}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
@@ -1868,9 +1857,9 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
-    `https://tryluke.dev/acme/automation/${automationId}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
+    `https://vespin.dev/acme/automation/${automationId}`,
   ]);
 });
 
@@ -1899,8 +1888,8 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/page/${pageId}`,
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}/page/${pageId}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
   ]);
 });
 
@@ -1925,7 +1914,7 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   await act(async () => undefined);
 
   assert.deepEqual(listed, ["Copy link to profile"]);
-  assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
+  assert.deepEqual(copied, ["https://vespin.dev/acme/person/user-charles"]);
 });
 
 test("on the home page nothing has a link, so ⇧⌘C is not offered and ⌘K lists no Copy link", () => {
@@ -1958,7 +1947,7 @@ test("with the side panel filling the window over an agent's tab, ⇧⌘C copies
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}/changes`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${LINKED_AGENT}/changes`]);
 });
 
 test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⇧⌘C, as ⇧⌘C there copies", () => {
@@ -2011,7 +2000,7 @@ test("on an agent's page in another workspace than the one listed, ⇧⌘C names
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/beta/agent/${LINKED_AGENT}`]);
 });
 
 test("People lists the listed workspace's members as every people menu does, the reader first as You and the rest by name with their email, found by email too, each hanging their card, and a choice opens their page", async () => {
@@ -2543,7 +2532,7 @@ test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages t
   assert.ok(listed.includes(`Review notes · ${DOCUMENT_TASK.name}`), "the Inbox's page is listed");
 });
 
-test("with a task on screen, ⌘K offers its Version history, Cancel task, Change repository, and Open on GitHub, each running on it what its ⋯ item runs", () => {
+test("with a task on screen, ⌘K offers its Version history, Cancel task, and Change repository, each running on it what its ⋯ item runs", () => {
   const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
   const ran: string[] = [];
   const base = tasksControl();
@@ -2554,7 +2543,6 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
     history: { ...base.history, onOpen: (taskId) => ran.push(`history:${taskId}`) },
     onSettleTasks: (taskIds, status) => ran.push(`settle:${taskIds.join()}:${status}`),
     onChangeRepository: (taskId) => ran.push(`repository:${taskId}`),
-    onOpenOnGitHub: (taskId) => ran.push(`github:${taskId}`),
   });
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
@@ -2586,7 +2574,7 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
       ),
     ),
   );
-  for (const command of ["Version history", "Cancel task", "Change repository", "Open on GitHub"]) {
+  for (const command of ["Version history", "Cancel task", "Change repository"]) {
     act(() => {
       assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
     });
@@ -2597,59 +2585,7 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
     `history:${task.id}`,
     `settle:${task.id}:canceled`,
     `repository:${task.id}`,
-    `github:${task.id}`,
   ]);
-});
-
-test("⌘K opened with the keys on a Pull request tab leaves ⇧⌘O off the task's Open on GitHub, since the chord opens the pull request there", () => {
-  const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
-  const base = tasksControl();
-  const tasks = tasksControl({
-    tasks: [task],
-    region: { kind: DOCUMENT_REGION.READY, task },
-    activeTaskId: task.id,
-    sidePanel: { ...base.sidePanel, open: true, tab: { changes: LINKED_AGENT } },
-  });
-  const panel = document.body.appendChild(document.createElement("div"));
-  panel.className = "side-panel";
-  panel.appendChild(document.createElement("button")).focus();
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          Fragment,
-          null,
-          createElement(Looker, { looked: task }),
-          createElement(WindowPalette, {
-            available: true,
-            tab: PANEL_TAB.TASKS,
-            onTabChange: () => undefined,
-            tasks,
-            settings: {
-              rows: {
-                settings: settingsView(),
-                accountDrawn: true,
-                capabilities: DESKTOP_CAPABILITIES,
-              },
-              capabilities: DESKTOP_CAPABILITIES,
-              onViewChange: () => undefined,
-            },
-            readFiles: () => Promise.reject(new Error("no repository is open")),
-          }),
-        ),
-      ),
-    ),
-  );
-  act(() => {
-    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
-  });
-  chooseFilter("Commands");
-  type("open on github");
-
-  assert.equal(rowChord("Open on GitHub"), null);
 });
 
 /** The open task's page in `room`, its panel on the plan, beside the palette, the plan looked at as the window's shell looks at it. */
@@ -2779,106 +2715,7 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
   assert.deepEqual(asked, [`${agent.id}:true`, `${agent.id}:false`]);
 });
 
-/** Answers Luke's ensure with his id, every other act with nothing, and keeps every act sent. */
-function servingLuke(agentId: string): SentPortAct[] {
-  const sent: SentPortAct[] = [];
-  fakeActPortAnswering((request) => {
-    sent.push(request);
-    return Promise.resolve(
-      request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
-    );
-  });
-  return sent;
-}
-
-test("⌘K's first entry is Ask Luke while the account has the operator on, which opens his page, and he is not listed again, nor a Luke a Reset retired", async () => {
-  const lukeId = "6a1f0c2e-0000-4000-8000-0000000000a1";
-  servingLuke(lukeId);
-  const opened: string[] = [];
-  const tasks = tasksControl({
-    workspace: ACME,
-    workspaces: [ACME],
-    listedAgents: {
-      standing: [
-        {
-          id: lukeId,
-          planId: null,
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          title: "Orla",
-          kind: AGENT_KIND.OPERATOR,
-          createdAt: 1,
-          status: AGENT_STATUS.COMPLETED,
-          turnId: null,
-          automationId: null,
-          workspaceId: ACME.id,
-          repository: null,
-          activityAt: 2,
-        },
-      ],
-      archived: [
-        {
-          id: "6a1f0c2e-0000-4000-8000-0000000000a0",
-          planId: null,
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          title: "Ines",
-          kind: AGENT_KIND.OPERATOR,
-          createdAt: 0,
-          status: AGENT_STATUS.COMPLETED,
-          turnId: null,
-          archivedAt: 1,
-          automationId: null,
-          workspaceId: ACME.id,
-          repository: null,
-          activityAt: 1,
-        },
-      ],
-    },
-  });
-  handState(experimentsOn(EXPERIMENT.OPERATOR));
-  await paletteUnderState({
-    ...tasks,
-    agentView: { ...tasks.agentView, onOpen: (agentId) => void opened.push(agentId) },
-  });
-  await settle();
-
-  assert.equal(rows()[0], "Ask Luke");
-  assert.deepEqual(
-    footer(),
-    ["↑↓ Select", "⏎ Run", "←→ Filter"],
-    "Ask Luke is a command, which runs",
-  );
-  chooseFilter("Commands");
-  assert.equal(rows()[0], "Ask Luke");
-  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "←→ Filter"]);
-  chooseFilter("All");
-  assert.ok(
-    !rows().some((row) => row.startsWith("Orla")),
-    "Luke is not listed again by his agent's name",
-  );
-  type("Ines");
-  assert.ok(!rows().some((row) => row.startsWith("Ines")), "a Luke a Reset retired is not listed");
-  type("");
-  press("Ask Luke");
-  await settle();
-  assert.deepEqual(opened, [lukeId]);
-});
-
-test("⌘K offers no Ask Luke and ensures nothing while the account has the operator off", async () => {
-  const sent = servingLuke("6a1f0c2e-0000-4000-8000-0000000000a1");
-  handState({});
-  await paletteUnderState(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
-
-  assert.ok(!rows().includes("Ask Luke"));
-  assert.deepEqual(
-    sent.filter((request) => request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR),
-    [],
-  );
-});
-
-test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
+test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();

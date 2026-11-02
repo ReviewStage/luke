@@ -18,8 +18,8 @@ import { changesPeople } from "./github-people.js";
 /**
  * Who an agent's pull request names, as its changes carry them, read off a
  * scripted GitHub over a real dialect: GitHub's accounts by login and
- * avatar, a reviewer by where they stand, Luke's own App's bot an App's bot
- * like any other, and a teammate named by their Luke account only while they
+ * avatar, a reviewer by where they stand, our own App's bot an App's bot
+ * like any other, and a teammate named by their user account only while they
  * are a member of the agent's workspace. Synthetic accounts throughout.
  */
 
@@ -51,7 +51,7 @@ const STRANGER = githubUser(1003, "octostranger", "https://evil.example.com/a.pn
 /** An App's bot GitHub draws by its App's logo, at its App's address. */
 const DEVIN_AVATAR = "https://avatars.githubusercontent.com/in/811515?v=4";
 const DEVIN = githubUser(1004, "devin-ai-integration[bot]", DEVIN_AVATAR);
-/** Luke's own App's bot, whose logo GitHub serves at the fixture App's id. */
+/** Our own App's bot, whose logo GitHub serves at the fixture App's id. */
 const LUKE_AVATAR = `https://avatars.githubusercontent.com/in/${GITHUB_FIXTURE.APP_ID}?v=4`;
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login, LUKE_AVATAR);
 
@@ -75,7 +75,7 @@ function repository(answers: {
   };
 }
 
-/** A Luke account that signed in with GitHub as the GitHub account given. */
+/** A user account that signed in with GitHub as the GitHub account given. */
 const linkedAccount = (githubId: number) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -99,7 +99,7 @@ const peopleOf = (organizationId: string, script: RepositoryScript) =>
 
 it.layer(getTestDB())("who a pull request names", (it) => {
   it.effect(
-    "its opener, each reviewer by their newest decision and one asked again as asked, and its reviews that said something; Luke's bot and another App's are bots, and only a member of the agent's workspace is named by their Luke account",
+    "its opener, each reviewer by their newest decision and one asked again as asked, and its reviews that said something; Vespin's bot and another App's are bots, and only a member of the agent's workspace is named by their Vespin account",
     () =>
       Effect.gen(function* () {
         const charles = yield* linkedAccount(CHARLES.id);
@@ -164,7 +164,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           },
         ]);
 
-        // Priya joins the workspace, and is named by her Luke account from then on.
+        // Priya joins the workspace, and is named by her user account from then on.
         yield* joinWorkspace(workspace, priya);
         const joined = yield* peopleOf(
           workspace,

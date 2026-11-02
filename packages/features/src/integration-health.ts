@@ -22,7 +22,7 @@ import {
  * is mended by reconnecting (a token issued before a provider-side setting
  * changed keeps failing); a server that never answered is an outage a
  * reconnect would not mend, so it keeps its switch and offers nothing. A read
- * not answered yet is still being checked; one Luke's own service could not
+ * not answered yet is still being checked; one our own service could not
  * answer says nothing of the server, so a surface says the tools could not be
  * read and offers to read them again, never that the connection works.
  */
@@ -48,7 +48,7 @@ export const CONNECTION_HEALTH = {
   BROKEN: "broken",
   /** Its tools have not been read yet. */
   CHECKING: "checking",
-  /** Luke's own service could not ask the server, so nothing is known of it: a read that failed, which asking again may mend. */
+  /** Our own service could not ask the server, so nothing is known of it: a read that failed, which asking again may mend. */
   FAILED: "failed",
 } as const;
 
@@ -73,7 +73,7 @@ export function toolsCount(count: number): string {
  * Someone else's words as a line of their own under a sentence of ours:
  * who said them, then the words quoted as they came. Note that the words
  * are never folded into our sentence, because a provider's text has its own
- * grammar and case, and quoted it reads as theirs rather than as Luke's.
+ * grammar and case, and quoted it reads as theirs rather than as ours.
  */
 export function saidWords(source: string, words: string): string {
   return `${source} said: “${words}”`;

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Something Luke should do that it does not
+about: Something Vespin should do that it does not
 labels: enhancement
 ---
 

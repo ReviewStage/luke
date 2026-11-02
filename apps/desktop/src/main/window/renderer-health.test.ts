@@ -40,7 +40,7 @@ const { FakeWindow, metrics, windows } = await vi.hoisted(async () => {
       this.webContents = {
         id,
         getOSProcessId: () => pid,
-        getURL: () => `file:///Applications/Luke.app/Contents/Resources/renderer/${document}`,
+        getURL: () => `file:///Applications/Vespin.app/Contents/Resources/renderer/${document}`,
       };
     }
     isDestroyed(): boolean {

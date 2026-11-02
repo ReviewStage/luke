@@ -25,7 +25,6 @@ const AGREEING: AgentPins = {
     },
   ],
   eveBaseImage: "vcr.vercel.com/vercel/eve/base:0.74.0",
-  ociBaseImage: "ghcr.io/vercel/eve:0.74.0@sha256:13059d8c",
   installedEve: "0.74.0+build.7",
 };
 
@@ -46,7 +45,7 @@ describe("pinProblems", () => {
         },
       ],
     });
-    expect(drifted).toHaveLength(7);
+    expect(drifted).toHaveLength(6);
     expect(drifted.join("\n")).toContain("^0.3.304 against 0.3.304");
     expect(drifted.join("\n")).toContain("2.1.299 against 2.1.300");
     expect(drifted.join("\n")).toContain("0.163.0 against 0.164.0");
@@ -55,6 +54,5 @@ describe("pinProblems", () => {
     expect(drifted.join("\n")).toContain(
       "eve/base:0.74.0 against vcr.vercel.com/vercel/eve/base:0.75.0",
     );
-    expect(drifted.join("\n")).toContain("eve:0.74.0 against ghcr.io/vercel/eve:0.75.0");
   });
 });

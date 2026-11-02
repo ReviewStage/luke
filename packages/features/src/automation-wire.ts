@@ -13,7 +13,7 @@ import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-
  * task's repository with the automation's prompt as the agent's prompt, the
  * firing described beneath it, exactly as a developer's own Start with a
  * task would. A trigger is a schedule, a cron expression read in an IANA
- * time zone, or an event of the task's repository the Luke GitHub App is
+ * time zone, or an event of the task's repository our GitHub App is
  * told of, filtered by label or branch, a call to the automation's own
  * webhook address, or an event of an integration installed on the
  * automation's workspace (`trigger-catalog.ts`), filtered by its fields. Every firing is a run, kept whether it started an agent,
@@ -30,7 +30,7 @@ import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-
 export const AUTOMATION_BOUNDS = {
   /** The most characters an automation's name may spell. */
   MAX_NAME_CHARS: 80,
-  /** The most characters of a prompt: under a coding agent's prompt bound, with room for what Luke adds about the firing. */
+  /** The most characters of a prompt: under a coding agent's prompt bound, with room for what we add about the firing. */
   MAX_PROMPT_CHARS: 12_000,
   /** The most characters of a cron expression. */
   MAX_CRON_CHARS: 120,
@@ -58,7 +58,7 @@ export const AUTOMATION_BOUNDS = {
 export const AUTOMATION_TRIGGER = {
   /** A cron schedule in a time zone, fired by the service's once-a-minute sweep. */
   SCHEDULE: "schedule",
-  /** An event of the task's repository, delivered by the Luke GitHub App's webhook. */
+  /** An event of the task's repository, delivered by our GitHub App's webhook. */
   GITHUB: "github",
   /** A POST to the automation's own secret address. */
   WEBHOOK: "webhook",
@@ -125,7 +125,7 @@ export const scheduleTriggerSchema = EffectSchema.Struct({
 export const GITHUB_SENDER = {
   /** A person's own account. */
   PEOPLE: "people",
-  /** Luke's coding agents: the Luke GitHub App, and a developer an agent opening its pull request from a `luke/` branch writes as. */
+  /** Our coding agents: our GitHub App, and a developer an agent opening its pull request from a `luke/` branch writes as. */
   LUKE_AGENTS: "luke-agents",
   /** Any other App or bot account: Dependabot, Renovate, and their like. */
   OTHER_BOTS: "other-bots",
@@ -411,7 +411,7 @@ export const AUTOMATION_RUN_REASON = {
   TASK_UNREACHABLE: "plan-unreachable",
   /** Its creator is no longer a member of its workspace, and a run starts as its creator. */
   CREATOR_LEFT: "creator-left",
-  /** The task names no repository. */
+  /** No longer produced, but still read: rows written before a run could start in no repository hold it. */
   NO_REPOSITORY: "no-repository",
   /** The GitHub installation connected to the task's workspace no longer reaches the repository. */
   REPOSITORY_UNREACHABLE: "repository-unreachable",
@@ -419,7 +419,7 @@ export const AUTOMATION_RUN_REASON = {
   GITHUB_SIGN_IN: "github-sign-in",
   /** The model or effort named is no longer offered. */
   MODEL: "model",
-  /** Its creator connected neither a subscription nor an API key for the model's provider, and Luke's key pays for no coding agent. */
+  /** Its creator connected neither a subscription nor an API key for the model's provider, and our key pays for no coding agent. */
   CREDENTIAL_MISSING: "credential-missing",
   /** The coding agents' service could not be reached. */
   UNAVAILABLE: "unavailable",
@@ -557,9 +557,8 @@ export const automationDeletedAnswerSchema = EffectSchema.Struct({
   txid: EffectSchema.optionalKey(automationTxidSchema),
 });
 
-/** The repositories an automation's runs work in, `owner/name` each, the first where a run starts: at least one, and a handful at most. */
+/** The repositories an automation's runs work in, `owner/name` each, the first where a run starts: none for runs that work in no repository, and a handful at most. */
 const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullNameSchema).check(
-  EffectSchema.isMinLength(1),
   EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_REPOSITORIES),
 );
 
@@ -567,8 +566,10 @@ const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullName
  * An automation to make (POST): where it stands, its name, trigger, and
  * action, and its guards or the defaults. It stands on a task, whose
  * workspace and repository it takes, or on a workspace with the
- * repositories its runs work in, which is how an automation is made with no
- * task; a request naming both, or neither, is refused.
+ * repositories its runs work in, none for runs that work in no repository,
+ * which is how an automation is made with no task; a request naming both,
+ * or neither, is refused, and so is a GitHub trigger with no repository
+ * whose events could fire it.
  */
 export const automationCreateRequestSchema = EffectSchema.Struct({
   planId: EffectSchema.optionalKey(wireUuidSchema),

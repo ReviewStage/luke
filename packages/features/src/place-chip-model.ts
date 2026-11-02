@@ -3,9 +3,9 @@ import { UNTITLED_TASK_NAME } from "./task-wire.js";
 import { NOTHING_SAID, thingName, thingOfPlace } from "./thing-kind.js";
 
 /**
- * place-chip-model.ts -- a Luke link drawn in words as its chip says it: the name of the place it opens, as the window already knows it, and the task it stands under.
+ * place-chip-model.ts -- a link of ours drawn in words as its chip says it: the name of the place it opens, as the window already knows it, and the task it stands under.
  *
- * A link to a place in Luke an agent or a teammate writes bare, an agent's
+ * A link to a place in the app an agent or a teammate writes bare, an agent's
  * or a page's address say, is drawn as a chip (the desktop's `mention-chip.tsx`), and the
  * chip is named from what the window already holds: the task's title, the
  * page's, the agent's, the Inbox item's, the member's, the automation's.
@@ -73,7 +73,7 @@ function taskOf(place: LinkPlace): string | undefined {
 }
 
 /**
- * What a chip says of the place a Luke link opens: for a thing named live
+ * What a chip says of the place a link of ours opens: for a thing named live
  * (`THING_NAME`), the name the window holds for it, else the words it was
  * labelled with; for any other, the words first, then the name held; else
  * its kind; and the task it stands under, by the name the window holds for it.

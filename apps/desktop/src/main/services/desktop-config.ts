@@ -24,12 +24,12 @@ interface DesktopLaunch {
  * what makes the order in `main` the whole of the launch's order.
  */
 export interface DesktopConfig {
-  /** Luke's own application-state root: the directory Electron's userData was moved to. */
+  /** The app's own application-state root: the directory Electron's userData was moved to. */
   readonly stateRoot: string;
   /**
    * The named development instance this run is (`run.sh --instance`), absent
    * for the plain one and always for a packaged build. A named instance runs
-   * beside the plain one, so it leaves to it what only one Luke may hold: the
+   * beside the plain one, so it leaves to it what only one instance may hold: the
    * system-wide talk and stop keys.
    */
   readonly instance?: string;
@@ -60,6 +60,6 @@ export interface DesktopConfig {
    * a gated feature's items stand. Called with nothing, it draws what it holds.
    */
   readonly showMenuBar: (change?: MenuBarChange) => void;
-  /** The Luke links the system hands the app, heard from before the launch (`@luke/features/app-links`). */
+  /** The links of ours the system hands the app, heard from before the launch (`@luke/features/app-links`). */
   readonly appLinks: AppLinkInbox;
 }

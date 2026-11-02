@@ -131,7 +131,7 @@ interface AdminReachRow {
 
 /**
  * One of the most active accounts over the window, ranked by the days it took
- * a meaningful action rather than by volume: who lives in Luke daily, which a
+ * a meaningful action rather than by volume: who lives in the app daily, which a
  * single heavy day cannot fake. The account fields match the roster row's,
  * because both tables draw the same account cell, and the id goes back into
  * the detail endpoint's gate, never into a rendered string.

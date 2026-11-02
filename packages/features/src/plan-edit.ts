@@ -9,11 +9,11 @@ import { planLastEditSchema, TASK_BOUNDS, taskSchema } from "./task-wire.js";
  * A plan is one Markdown text (`plan-document.ts`), and the developer edits
  * it whole: the edit names the text the editor opened on (`base`), or the
  * developer's own last save since, and the text the developer wrote
- * (`value`). Luke may write while the developer types, on a call, so the
+ * (`value`). The app may write while the developer types, on a call, so the
  * text need not still hold the base. Where it does, the edit replaces it.
  * Where it does not, the developer's change is taken as a patch from the base
  * to their text and laid over what the text holds now, line by line, so a
- * point Luke wrote in another section meanwhile survives the developer's edit
+ * point the app wrote in another section meanwhile survives the developer's edit
  * and the edit survives the point. A patch that does not apply is a conflict,
  * answered with what the text holds now, and nothing is changed: the
  * developer chooses whether their text stands. The conflict names who last
@@ -26,7 +26,7 @@ import { planLastEditSchema, TASK_BOUNDS, taskSchema } from "./task-wire.js";
 
 /**
  * A plan's text as an edit names it, kept exactly as written and held to the
- * plan's bound. A text the developer's change lays past the bound over Luke's
+ * plan's bound. A text the developer's change lays past the bound over the app's
  * is the save's to refuse as too long.
  */
 const DOCUMENT_TEXT = EffectSchema.String.check(

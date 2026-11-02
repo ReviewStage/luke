@@ -2,7 +2,7 @@
 
    A theme is an attribute beside the profile (`data-luke-theme`): `dark`,
    `light`, or, on the desktop, `system`, which follows the Mac's appearance
-   (Luke's own Theme setting drives it through `nativeTheme.themeSource`).
+   (the app's own Theme setting drives it through `nativeTheme.themeSource`).
    Every role is set by both profiles in both themes, and `tokens.test.ts`
    holds every palette to the same set of names.
 
@@ -188,7 +188,7 @@
 }
 
 /* The site's light ground is shadcn/ui's stock light theme warmed off pure
-   white, its accent Luke's cyan as a fill and darkened to a teal as ink. A
+   white, its accent our cyan as a fill and darkened to a teal as ink. A
    page without a theme of its own is this one. */
 [data-luke-profile="web"],
 [data-luke-profile="web"][data-luke-theme="light"] {
@@ -311,7 +311,7 @@
   --luke-color-text-body: var(--luke-color-text);
   --luke-color-ink: #fff;
   --luke-color-ink-inverse: var(--luke-color-ground);
-  /* Luke's teal lifted to read on the dark grounds, AA against each (`tokens.test.ts`). */
+  /* Our teal lifted to read on the dark grounds, AA against each (`tokens.test.ts`). */
   --luke-color-accent-text: #15b3d0;
 
   --luke-color-ground: #121316;

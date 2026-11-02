@@ -2,7 +2,7 @@
  * inbox-settle.ts -- the inbox items whose reason is gone settled on their own: their task's work done or canceled, or their agent archived.
  *
  * An ask waits on the developer for as long as its task's work does. A
- * task moved to Done or Canceled, by a member or by Luke's own finish, and
+ * task moved to Done or Canceled, by a member or by our own finish, and
  * an agent archived, by whoever archives it, close every open item of
  * theirs that holds an ask or whose agent waits on a reply, in the same
  * transaction as the write that moved them, so no caller has to remember
@@ -23,7 +23,7 @@
  * since closed. An item the other act still settles, its agent still
  * archived or its task still Done or Canceled, stays settled and is handed
  * to that act instead, its reason and stamp, so undoing that act in turn
- * opens it. A task Luke reopens on its own, as a turn starting on it does
+ * opens it. A task we reopen on our own, as a turn starting on it does
  * (`beginTaskWork`), opens nothing; only the agent's own post under the
  * item's key does.
  */
@@ -108,19 +108,23 @@ const closeOpenItems = SqlSchema.findAll({
 });
 
 /**
- * Every ask still kept open on the items named withdrawn with why. Note that
- * only the ask's standing keys are merged over it, as the inbox store's own
- * close writes them, so a deployment that does not know the ask's type keeps
- * the keys it does not read.
+ * Every ask still kept open on the items named withdrawn with why, at `now`.
+ * Note that only the ask's standing keys are merged over it, as the inbox
+ * store's own close writes them, so a deployment that does not know the
+ * ask's type keeps the keys it does not read.
  */
 const withdrawOpenAsks = SqlSchema.void({
-  Request: Schema.Struct({ itemIds: Schema.Array(Schema.String), reason: Schema.String }),
-  execute: ({ itemIds, reason }) =>
+  Request: Schema.Struct({
+    itemIds: Schema.Array(Schema.String),
+    reason: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: ({ itemIds, reason, now }) =>
     Database.use((db) =>
       db
         .update(inboxMessage)
         .set({
-          ask: sql`${inboxMessage.ask} || jsonb_build_object('status', ${INBOX_ASK_STATUS.WITHDRAWN}::text, 'withdrawnReason', ${reason}::text)`,
+          ask: sql`${inboxMessage.ask} || jsonb_build_object('status', ${INBOX_ASK_STATUS.WITHDRAWN}::text, 'withdrawnReason', ${reason}::text, 'withdrawnAt', ${now.getTime()}::bigint)`,
         })
         .where(
           and(
@@ -142,7 +146,7 @@ function settle(
   return Effect.gen(function* () {
     const closed = yield* closeOpenItems({ by, ids, reason, now });
     if (closed.length === 0) return 0;
-    yield* withdrawOpenAsks({ itemIds: closed.map(({ id }) => id), reason });
+    yield* withdrawOpenAsks({ itemIds: closed.map(({ id }) => id), reason, now });
     return closed.length;
   });
 }
@@ -227,12 +231,17 @@ const lockOtherActRows = SqlSchema.void({
 /**
  * The items one settle closed that the other act still settles handed to
  * it, closed for its reason at its stamp: a task's to the archive of their
- * agent, an archive's to their task's Done or Canceled. Their ids and the
- * reason they now stand closed for.
+ * agent, an archive's to their task's Done or Canceled. Their ids, the
+ * reason they now stand closed for, and the stamp they now stand closed at,
+ * in epoch milliseconds.
  */
 const handOverSettledItems = SqlSchema.findAll({
   Request: SettleRequestSchema,
-  Result: Schema.Struct({ id: Schema.String, reason: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    reason: Schema.String,
+    settledAt: Schema.NullOr(Schema.Number),
+  }),
   execute: (request) =>
     Database.use((db) =>
       db
@@ -254,19 +263,29 @@ const handOverSettledItems = SqlSchema.findAll({
             request.by === SETTLE_BY.TASK ? AGENT_STILL_ARCHIVED : TASK_STILL_SETTLED,
           ),
         )
-        .returning({ id: inboxItem.id, reason: sql<string>`${inboxItem.closedReason}` }),
+        .returning({
+          id: inboxItem.id,
+          reason: sql<string>`${inboxItem.closedReason}`,
+          settledAt: sql<
+            number | null
+          >`(extract(epoch from ${inboxItem.settledAt}) * 1000)::float8`,
+        }),
     ),
 });
 
-/** The withdrawn ask of the message named made to say the reason its item was handed to. */
+/** The withdrawn ask of the message named made to say the reason its item was handed to, withdrawn at the stamp it was handed at, where it has one. */
 const rewordWithdrawnAsk = SqlSchema.void({
-  Request: Schema.Struct({ messageId: Schema.String, reason: Schema.String }),
-  execute: ({ messageId, reason }) =>
+  Request: Schema.Struct({
+    messageId: Schema.String,
+    reason: Schema.String,
+    at: Schema.NullOr(Schema.Number),
+  }),
+  execute: ({ messageId, reason, at }) =>
     Database.use((db) =>
       db
         .update(inboxMessage)
         .set({
-          ask: sql`${inboxMessage.ask} || jsonb_build_object('withdrawnReason', ${reason}::text)`,
+          ask: sql`${inboxMessage.ask} || jsonb_strip_nulls(jsonb_build_object('withdrawnReason', ${reason}::text, 'withdrawnAt', ${at}::bigint))`,
         })
         .where(eq(inboxMessage.id, messageId)),
     ),
@@ -310,7 +329,7 @@ const findLatestAsks = SqlSchema.findAll({
     ),
 });
 
-/** The ask of the message named open again, the why of its withdrawal taken off, and its item holding it open. */
+/** The ask of the message named open again, the why and the time of its withdrawal taken off, and its item holding it open. */
 const reopenAsk = SqlSchema.void({
   Request: Schema.Struct({ messageId: Schema.String, itemId: Schema.String }),
   execute: ({ messageId, itemId }) =>
@@ -319,7 +338,7 @@ const reopenAsk = SqlSchema.void({
         db
           .update(inboxMessage)
           .set({
-            ask: sql`(${inboxMessage.ask} - 'withdrawnReason') || jsonb_build_object('status', ${INBOX_ASK_STATUS.OPEN}::text)`,
+            ask: sql`(${inboxMessage.ask} - 'withdrawnReason' - 'withdrawnAt') || jsonb_build_object('status', ${INBOX_ASK_STATUS.OPEN}::text)`,
           })
           .where(eq(inboxMessage.id, messageId)),
       ),
@@ -353,13 +372,19 @@ function reopen(
     const handed = yield* handOverSettledItems(request);
     if (handed.length > 0) {
       const latest = yield* findLatestAsks({ itemIds: handed.map(({ id }) => id) });
-      const handedTo = new Map(handed.map((item) => [item.id, item.reason]));
+      const handedTo = new Map(handed.map((item) => [item.id, item]));
       yield* Effect.forEach(
         latest.filter(
           (ask) => ask.status === INBOX_ASK_STATUS.WITHDRAWN && ask.withdrawnReason === reason,
         ),
-        (ask) =>
-          rewordWithdrawnAsk({ messageId: ask.id, reason: handedTo.get(ask.itemId) ?? reason }),
+        (ask) => {
+          const to = handedTo.get(ask.itemId);
+          return rewordWithdrawnAsk({
+            messageId: ask.id,
+            reason: to?.reason ?? reason,
+            at: to?.settledAt ?? null,
+          });
+        },
         { discard: true },
       );
     }

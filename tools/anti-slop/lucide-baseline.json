@@ -12,7 +12,6 @@
   "packages/panel/src/desktop/person-page.tsx": 1,
   "packages/panel/src/desktop/section-icon-picker.tsx": 2,
   "packages/panel/src/desktop/sidebar-foot.tsx": 1,
-  "packages/panel/src/desktop/sidebar-luke.tsx": 1,
   "packages/panel/src/desktop/sidebar-sections.test.ts": 1,
   "packages/panel/src/desktop/sidebar-task-view.tsx": 1,
   "packages/panel/src/desktop/tab-switcher.tsx": 1,

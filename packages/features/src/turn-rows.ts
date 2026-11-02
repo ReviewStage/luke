@@ -12,10 +12,7 @@
  * on, its line counting the calls and subagents and never the thoughts;
  * and a finished turn folds everything ahead of its last words into one
  * line saying how much it holds, its subagents and the coding agents it
- * started named apart from its other calls, so it reads as its answer. A
- * group or a fold
- * holding a call that failed says so on its line, so a failure is not
- * folded out of sight. That
+ * started named apart from its other calls, so it reads as its answer. That
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
@@ -62,6 +59,10 @@ export const CALL_KIND = {
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
+  /** More sent to one of a native harness's subagents (Claude Code's `SendMessage`), its row naming the subagent. */
+  WORKER_MESSAGE: "worker-message",
+  /** A background command, monitor, or subagent stopped (Claude Code's `TaskStop`), its row naming it by its id. */
+  STOP_BACKGROUND: "stop-background",
   LIST_AGENTS: "list-agents",
   READ_AGENT: "read-agent",
   MESSAGE_AGENT: "message-agent",
@@ -93,7 +94,7 @@ export const CALL_KIND = {
   MOVE_TASK: "move-task",
   /** A task of the workspace changed (`update_task`), its row naming the task once answered; an older transcript's archive of one reads as a change too. */
   UPDATE_TASK: "update-task",
-  /** The workspace's issues listed (`list_issues`, retired with Luke's own issues; an older transcript still names it). */
+  /** The workspace's issues listed (`list_issues`, retired with our own issues; an older transcript still names it). */
   LIST_ISSUES: "list-issues",
   /** One issue read (`read_issue`), filed (`create_issue`), or changed (`update_issue`), retired with `list_issues`, its row naming it by its identifier and title once answered. */
   READ_ISSUE: "read-issue",
@@ -111,19 +112,17 @@ export const CALL_KIND = {
   SLEEP: "sleep",
   /** The workspace's tasks listed (`list_tasks`). */
   LIST_TASKS: "list-tasks",
-  /** A fact kept in the workspace's shared memory (`remember`), its row saying it. */
+  /** A fact kept in the workspace's shared memory (`save_memory`, or `remember` in an older transcript), its row saying it. */
   REMEMBER: "remember",
-  /** The workspace's shared memory searched (`recall`), its row naming the query where there was one. */
+  /** The workspace's shared memory searched (`search_memory`, or `recall` in an older transcript), its row naming the query where there was one. */
   RECALL: "recall",
-  /** Every open ask waiting on the member listed (`list_open_asks`). */
-  LIST_OPEN_ASKS: "list-open-asks",
   /** The plan's comment threads read (`read_comments`). */
   READ_COMMENTS: "read-comments",
   /** An answer written in one of the plan's comment threads (`reply_to_comment`), its row saying it. */
   REPLY_TO_COMMENT: "reply-to-comment",
-  /** A comment thread of the plan resolved (`resolve_thread`). */
+  /** A comment thread of the plan resolved (`update_comment`, or `resolve_thread` in an older transcript). */
   RESOLVE_THREAD: "resolve-thread",
-  /** A resolved comment thread of the plan brought back (`reopen_thread`). */
+  /** A resolved comment thread of the plan brought back (`update_comment`, or `reopen_thread` in an older transcript). */
   REOPEN_THREAD: "reopen-thread",
   /** A connection's tools searched (`connection_search`), its row naming the server it searched. */
   SEARCH_TOOLS: "search-tools",
@@ -159,7 +158,9 @@ export const CALL_WORDS = {
   [CALL_KIND.MOVE_THREAD]: { verb: "Moved a thread to", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
-  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
+  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
+  [CALL_KIND.WORKER_MESSAGE]: { verb: "Messaged the worker", code: false },
+  [CALL_KIND.STOP_BACKGROUND]: { verb: "Stopped", code: true },
   [CALL_KIND.LIST_AGENTS]: { verb: "Listed the agents", code: false },
   [CALL_KIND.READ_AGENT]: { verb: "Read the agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the agent", code: false },
@@ -192,7 +193,6 @@ export const CALL_WORDS = {
   [CALL_KIND.LIST_TASKS]: { verb: "Listed the tasks", code: false },
   [CALL_KIND.REMEMBER]: { verb: "Saved to memory:", code: false },
   [CALL_KIND.RECALL]: { verb: "Searched memory", code: false },
-  [CALL_KIND.LIST_OPEN_ASKS]: { verb: "Listed the open asks", code: false },
   [CALL_KIND.READ_COMMENTS]: { verb: "Read the comments", code: false },
   [CALL_KIND.REPLY_TO_COMMENT]: { verb: "Replied to a comment:", code: false },
   [CALL_KIND.RESOLVE_THREAD]: { verb: "Resolved a thread", code: false },
@@ -416,8 +416,6 @@ export interface RowReading<B> {
   readonly part: (block: B) => RowPart;
   /** Whether the block still moves, which a group of calls shimmers for. */
   readonly running: (block: B) => boolean;
-  /** Whether the block is a call that failed, which the line of a group or a fold holding it marks; none fails where unsaid. */
-  readonly failed?: (block: B) => boolean;
   /** Whether the block stays out of a finished turn's fold, drawn after it, because it is still worth reading unasked; none stays out where unsaid. */
   readonly kept?: (block: B) => boolean;
 }
@@ -440,16 +438,12 @@ export type TurnRow<B> =
       /** Open while it is the turn's latest work and the turn still moves. */
       readonly open: boolean;
       readonly running: boolean;
-      /** How many of the calls it holds failed. */
-      readonly failed: number;
     }
   | {
       readonly kind: typeof TURN_ROW.FOLDED;
       readonly key: string;
       readonly summary: string;
       readonly rows: readonly TurnRow<B>[];
-      /** How many of the calls it holds failed. */
-      readonly failed: number;
     };
 
 /** Whether a value is a record of its own keys, rather than an array or a primitive. */
@@ -556,11 +550,6 @@ function runsWithCalls(part: RowPart): boolean {
   return isWork(part) || part === ROW_PART.NOTE;
 }
 
-/** How many calls among the blocks failed. */
-function failedCount<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): number {
-  return blocks.filter((each) => read.failed?.(each.block) === true).length;
-}
-
 /** A block with the key its row is drawn under. */
 interface Keyed<B> {
   readonly key: string;
@@ -599,7 +588,6 @@ function groupedRows<B>(
         summary: groupSummary(held),
         open,
         running: group.some((each) => read.running(each.block)),
-        failed: failedCount(group, read),
       });
     } else {
       rows.push(
@@ -718,7 +706,6 @@ function foldedLead<B>(
       key: folds === 0 ? `${turnKey}-folded` : first.key,
       summary: foldedSummary(held),
       rows: groupedRows(run.blocks, read, false, false),
-      failed: failedCount(run.blocks, read),
     });
     folds += 1;
   }

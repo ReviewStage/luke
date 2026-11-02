@@ -35,6 +35,7 @@
 
 import { Predicate } from "effect";
 import { redactCredentials } from "./credential-redaction.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /** Where a failure was shown: the surface whose words said so. */
 export const FAILURE_SURFACE = {
@@ -110,11 +111,9 @@ export const FAILURE_SURFACE = {
   GITHUB_TOKEN_REMOVE: "github_token.remove",
   GITHUB_TOKEN_SAVE: "github_token.save",
   HOSTS_READ: "hosts.read",
-  HOST_INSTALL_COMMAND: "host_install.command",
   HOST_PAIRING_ANSWER: "host_pairing.answer",
   HOST_PAIRING_READ: "host_pairing.read",
   HOST_REMOVE: "host.remove",
-  HOST_REVOKE: "host.revoke",
   INBOX_ANSWER: "inbox.answer",
   INBOX_CLOSE: "inbox.close",
   INBOX_CODE_READ: "inbox_code.read",
@@ -134,7 +133,6 @@ export const FAILURE_SURFACE = {
   MESSAGE_EDIT: "message.edit",
   MESSAGE_REVEAL: "message.reveal",
   MODELS_READ: "models.read",
-  OPERATOR_RESET: "operator.reset",
   PAGE_READ: "page.read",
   PALETTE_READ: "palette.read",
   PERSON_AUTOMATIONS_READ: "person_automations.read",
@@ -245,6 +243,8 @@ export interface FailureAbout {
   readonly agentId?: string | undefined;
   readonly conversationId?: string | undefined;
   readonly turnId?: string | undefined;
+  /** The call that started the worker a failure is about, among its agent's workers. */
+  readonly callId?: string | undefined;
   readonly inboxItemId?: string | undefined;
   readonly automationId?: string | undefined;
   readonly channelId?: string | undefined;
@@ -339,6 +339,7 @@ const ABOUT_ATTRIBUTE = {
   agentId: "agent.id",
   conversationId: "conversation.id",
   turnId: "turn.id",
+  callId: "call.id",
   inboxItemId: "inbox_item.id",
   automationId: "automation.id",
   channelId: "channel.id",
@@ -390,7 +391,7 @@ const DETAIL_KEY = {
 } as const;
 
 /** The line a failure's copied details open with, saying what the rest is for. */
-const DETAILS_HEADING = "Luke showed an error. Find it in Sentry and the logs by these details:";
+const DETAILS_HEADING = `${PRODUCT_NAME} showed an error. Find it in Sentry and the logs by these details:`;
 
 /** The issue's context its attributes travel under. */
 const SHOWN_FAILURE_CONTEXT = "shown_failure";

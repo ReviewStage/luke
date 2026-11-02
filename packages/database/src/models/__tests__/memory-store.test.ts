@@ -9,7 +9,6 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { memory } from "../../schemas/memory.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
-import { deleteAccount } from "../account-store.js";
 import {
   forgetMemory,
   listMemories,
@@ -31,10 +30,7 @@ import {
  * new memory and never a correction; and a memory outlives the member who
  * said it, as git history outlives its committers: one who leaves leaves
  * their memories with the workspace, and an account deleted leaves them too,
- * named by nobody, which then only a manager may forget. A private memory
- * is its member's alone: no teammate lists, corrects, or forgets it, a
- * manager included, the same words fold only within one visibility, and it
- * leaves with its member's account.
+ * named by nobody, which then only a manager may forget.
  *
  * Synthetic accounts, workspaces, and words throughout.
  */
@@ -65,8 +61,8 @@ function keptId(outcome: MemoryOutcome): string {
   return outcome.memory.id;
 }
 
-const wordsOf = (workspaceId: string, readerId: string | null) =>
-  Effect.map(listMemories(workspaceId, readerId), (memories) => memories.map((kept) => kept.text));
+const wordsOf = (workspaceId: string) =>
+  Effect.map(listMemories(workspaceId), (memories) => memories.map((kept) => kept.text));
 
 it.layer(getTestDB())("the workspace's memory store", (it) => {
   it.effect(
@@ -91,7 +87,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         );
 
         assert.equal(again.kind, MEMORY_OUTCOME.ALREADY_KEPT);
-        const standing = yield* listMemories(workspaceId, owner);
+        const standing = yield* listMemories(workspaceId);
         assert.deepEqual(
           standing.map((kept) => [kept.text, kept.userId]),
           [
@@ -119,7 +115,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         assert.equal(corrected.kind, MEMORY_OUTCOME.CORRECTED);
         assert.equal(keptId(corrected), id);
         assert.deepEqual(
-          (yield* listMemories(workspaceId, owner)).map((kept) => [kept.text, kept.userId]),
+          (yield* listMemories(workspaceId)).map((kept) => [kept.text, kept.userId]),
           [[DEPLOYS_CORRECTED, teammate]],
         );
       }),
@@ -136,7 +132,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
       const folded = yield* rememberMemory(workspaceId, owner, DEPLOYS_CORRECTED, old);
 
       assert.equal(keptId(folded), standing);
-      assert.deepEqual(yield* wordsOf(workspaceId, owner), [DEPLOYS_CORRECTED]);
+      assert.deepEqual(yield* wordsOf(workspaceId), [DEPLOYS_CORRECTED]);
     }),
   );
 
@@ -157,7 +153,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
           { concurrency: "unbounded" },
         );
 
-        const standing = yield* wordsOf(workspaceId, owner);
+        const standing = yield* wordsOf(workspaceId);
         assert.equal(standing.length, 1);
         assert.ok([first, second].includes(standing[0] ?? ""));
       }),
@@ -170,14 +166,14 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
       const elsewhere = yield* openWorkspace(owner);
       const id = keptId(yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined));
 
-      assert.deepEqual(yield* listMemories(elsewhere, owner), []);
+      assert.deepEqual(yield* listMemories(elsewhere), []);
       assert.equal(
         (yield* rememberMemory(elsewhere, owner, DEPLOYS_CORRECTED, id)).kind,
         MEMORY_OUTCOME.NOT_FOUND,
       );
       yield* forgetMemory(elsewhere, id, { userId: owner, manages: true });
 
-      assert.deepEqual(yield* wordsOf(workspaceId, owner), [DEPLOYS]);
+      assert.deepEqual(yield* wordsOf(workspaceId), [DEPLOYS]);
     }),
   );
 
@@ -203,7 +199,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         assert.equal(refused, MEMORY_FORGET.NOT_PERMITTED);
         assert.equal(ownWords, MEMORY_FORGET.FORGOTTEN);
         assert.equal(managed, MEMORY_FORGET.FORGOTTEN);
-        assert.deepEqual(yield* wordsOf(workspaceId, owner), []);
+        assert.deepEqual(yield* wordsOf(workspaceId), []);
       }),
   );
 
@@ -221,7 +217,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
 
       const late = yield* rememberMemory(workspaceId, owner, DEPLOYS_CORRECTED, id);
       assert.equal(late.kind, MEMORY_OUTCOME.NOT_FOUND);
-      assert.deepEqual(yield* wordsOf(workspaceId, owner), [TESTS_RUN]);
+      assert.deepEqual(yield* wordsOf(workspaceId), [TESTS_RUN]);
     }),
   );
 
@@ -239,7 +235,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
           updatedAt: now,
         })),
       );
-      const [oldest] = yield* listMemories(workspaceId, owner);
+      const [oldest] = yield* listMemories(workspaceId);
       assert.ok(oldest !== undefined);
 
       const refused = yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined);
@@ -247,7 +243,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
 
       assert.equal(refused.kind, MEMORY_OUTCOME.FULL);
       assert.equal(corrected.kind, MEMORY_OUTCOME.CORRECTED);
-      assert.equal((yield* listMemories(workspaceId, owner)).length, MEMORY_BOUNDS.MAX_MEMORIES);
+      assert.equal((yield* listMemories(workspaceId)).length, MEMORY_BOUNDS.MAX_MEMORIES);
     }),
   );
 
@@ -261,9 +257,9 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined);
 
         yield* leaveWorkspace(workspaceId, teammate);
-        const afterLeaving = yield* wordsOf(workspaceId, owner);
+        const afterLeaving = yield* wordsOf(workspaceId);
         yield* db.delete(user).where(eq(user.id, teammate));
-        const afterDeleting = yield* listMemories(workspaceId, owner);
+        const afterDeleting = yield* listMemories(workspaceId);
         const orphan = afterDeleting.find((kept) => kept.text === TESTS_RUN);
         assert.ok(orphan !== undefined);
         const byMember = yield* forgetMemory(workspaceId, orphan.id, {
@@ -287,129 +283,6 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
       }),
   );
 
-  it.effect(
-    "a private memory is its member's alone: no teammate lists, corrects, or forgets it, a manager included, and its member does",
-    () =>
-      Effect.gen(function* () {
-        const { owner, teammate, workspaceId } = yield* openTeam;
-        yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined);
-        const kept = yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined, {
-          privately: true,
-        });
-        const id = keptId(kept);
-
-        assert.equal(kept.kind, MEMORY_OUTCOME.KEPT);
-        assert.deepEqual(yield* wordsOf(workspaceId, owner), [DEPLOYS]);
-        assert.deepEqual(
-          (yield* wordsOf(workspaceId, teammate)).toSorted(),
-          [DEPLOYS, TESTS_RUN].toSorted(),
-        );
-        // The owner manages the workspace, and still reaches the teammate's private memory as an id naming nothing.
-        assert.equal(
-          (yield* rememberMemory(workspaceId, owner, DEPLOYS_CORRECTED, id)).kind,
-          MEMORY_OUTCOME.NOT_FOUND,
-        );
-        assert.equal(
-          yield* forgetMemory(workspaceId, id, { userId: owner, manages: true }),
-          MEMORY_FORGET.FORGOTTEN,
-        );
-        assert.ok((yield* wordsOf(workspaceId, teammate)).includes(TESTS_RUN));
-        // A read for no reader, and a keep whose agent reaches no private memory, see the shared ones alone, the member's own included.
-        assert.deepEqual(yield* wordsOf(workspaceId, null), [DEPLOYS]);
-        assert.equal(
-          (yield* rememberMemory(workspaceId, teammate, DEPLOYS_CORRECTED, id, {
-            readsPrivate: false,
-          })).kind,
-          MEMORY_OUTCOME.NOT_FOUND,
-        );
-
-        const corrected = yield* rememberMemory(workspaceId, teammate, DEPLOYS_CORRECTED, id);
-        assert.equal(corrected.kind, MEMORY_OUTCOME.CORRECTED);
-        assert.deepEqual(yield* wordsOf(workspaceId, owner), [DEPLOYS]);
-        assert.equal(
-          yield* forgetMemory(workspaceId, id, { userId: teammate, manages: false }),
-          MEMORY_FORGET.FORGOTTEN,
-        );
-        assert.deepEqual(yield* wordsOf(workspaceId, teammate), [DEPLOYS]);
-      }),
-  );
-
-  it.effect(
-    "the same words stand once only within one visibility: a private memory never folds into a shared one, or a shared one into it",
-    () =>
-      Effect.gen(function* () {
-        const { owner, teammate, workspaceId } = yield* openTeam;
-        const shared = keptId(yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined));
-
-        const kept = yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined, {
-          privately: true,
-        });
-        const again = yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined, {
-          privately: true,
-        });
-        assert.equal(kept.kind, MEMORY_OUTCOME.KEPT);
-        assert.notEqual(keptId(kept), shared);
-        assert.equal(again.kind, MEMORY_OUTCOME.ALREADY_KEPT);
-        assert.equal(keptId(again), keptId(kept));
-
-        // A correction of either into the other's words leaves both standing, each as private or shared as before.
-        const ownPrivate = keptId(
-          yield* rememberMemory(workspaceId, owner, DEPLOYS_CORRECTED, undefined, {
-            privately: true,
-          }),
-        );
-        const sharedCorrected = yield* rememberMemory(
-          workspaceId,
-          owner,
-          DEPLOYS_CORRECTED,
-          shared,
-        );
-        yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined);
-        const privateCorrected = yield* rememberMemory(workspaceId, owner, TESTS_RUN, ownPrivate);
-        assert.equal(keptId(sharedCorrected), shared);
-        assert.equal(keptId(privateCorrected), ownPrivate);
-
-        assert.deepEqual(
-          (yield* listMemories(workspaceId, owner))
-            .map((memory) => [memory.text, memory.privateTo])
-            .toSorted(),
-          [
-            [DEPLOYS, owner],
-            [DEPLOYS_CORRECTED, null],
-            [TESTS_RUN, owner],
-            [TESTS_RUN, null],
-          ].toSorted(),
-        );
-        assert.deepEqual(
-          (yield* wordsOf(workspaceId, teammate)).toSorted(),
-          [DEPLOYS_CORRECTED, TESTS_RUN].toSorted(),
-        );
-      }),
-  );
-
-  it.effect(
-    "deleting an account removes its private memories, and leaves its shared ones with the workspace",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const { owner, teammate, workspaceId } = yield* openTeam;
-        yield* rememberMemory(workspaceId, teammate, DEPLOYS, undefined);
-        yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined, { privately: true });
-
-        yield* deleteAccount(teammate);
-
-        assert.deepEqual(yield* wordsOf(workspaceId, owner), [DEPLOYS]);
-        const rows = yield* db
-          .select({ text: memory.text })
-          .from(memory)
-          .where(eq(memory.organizationId, workspaceId));
-        assert.deepEqual(
-          rows.map((row) => row.text),
-          [DEPLOYS],
-        );
-      }),
-  );
-
   it.effect("a workspace that names nothing keeps nothing", () =>
     Effect.gen(function* () {
       const owner = yield* openAccount;
@@ -419,7 +292,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         (yield* rememberMemory(gone, owner, DEPLOYS, undefined)).kind,
         MEMORY_OUTCOME.NOT_FOUND,
       );
-      assert.deepEqual(yield* listMemories(gone, owner), []);
+      assert.deepEqual(yield* listMemories(gone), []);
     }),
   );
 });

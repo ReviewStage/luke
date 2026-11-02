@@ -56,21 +56,19 @@ interface Recorded {
   purged: number[];
   abandoned: number[];
   deviceLeases: number[];
+  deviceWarmRunners: number[];
   sandboxed: number[];
   terminals: number[];
   native: number[];
   eve: number[];
   retention: number[];
   wakeups: number[];
-  operatorWakes: number[];
-  starterNotices: number[];
   withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
   imageTemplates: number[];
   repositorySnapshots: number[];
-  agentStates: number[];
   hostPairings: number[];
 }
 
@@ -79,21 +77,19 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     purged: [],
     abandoned: [],
     deviceLeases: [],
+    deviceWarmRunners: [],
     sandboxed: [],
     terminals: [],
     native: [],
     eve: [],
     retention: [],
     wakeups: [],
-    operatorWakes: [],
-    starterNotices: [],
     withdrawnLines: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
     imageTemplates: [],
     repositorySnapshots: [],
-    agentStates: [],
     hostPairings: [],
   };
   const options: MaintenanceSweepOptions = {
@@ -114,6 +110,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.deviceLeases.push(now);
         return { lapsed: 1, busy: 0, failed: 0 };
+      }),
+    sweepDeviceWarmRunners: (now) =>
+      Effect.sync(() => {
+        recorded.deviceWarmRunners.push(now);
+        return { retired: 1, left: 0, busy: 0, failed: 0 };
       }),
     sweepSandboxes: (now) =>
       Effect.sync(() => {
@@ -144,16 +145,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
-      }),
-    sweepOperatorWakes: (now) =>
-      Effect.sync(() => {
-        recorded.operatorWakes.push(now);
-        return { woken: 1, failed: 0 };
-      }),
-    sweepStarterNotices: (now) =>
-      Effect.sync(() => {
-        recorded.starterNotices.push(now);
-        return { told: 1, failed: 0 };
       }),
     purgeWithdrawnLines: (now) =>
       Effect.sync(() => {
@@ -186,11 +177,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         return { listed: 3, deleted: 1 };
       }),
     sweepAgentQueues: () => Effect.succeed(0),
-    sweepAgentStates: (now) =>
-      Effect.sync(() => {
-        recorded.agentStates.push(now);
-        return { deleted: 2, abandoned: 1, full: false };
-      }),
     sweepHostPairings: (now) =>
       Effect.sync(() => {
         recorded.hostPairings.push(now);
@@ -219,21 +205,19 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       purged: [],
       abandoned: [],
       deviceLeases: [],
+      deviceWarmRunners: [],
       sandboxed: [],
       terminals: [],
       native: [],
       eve: [],
       retention: [],
       wakeups: [],
-      operatorWakes: [],
-      starterNotices: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentStates: [],
       hostPairings: [],
     });
   }),
@@ -253,42 +237,38 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       purged: [],
       abandoned: [],
       deviceLeases: [],
+      deviceWarmRunners: [],
       sandboxed: [],
       terminals: [],
       native: [],
       eve: [],
       retention: [],
       wakeups: [],
-      operatorWakes: [],
-      starterNotices: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentStates: [],
       hostPairings: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
       abandoned: [],
       deviceLeases: [],
+      deviceWarmRunners: [],
       sandboxed: [],
       terminals: [],
       native: [],
       eve: [],
       retention: [],
       wakeups: [],
-      operatorWakes: [],
-      starterNotices: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentStates: [],
       hostPairings: [],
     });
   }),
@@ -307,42 +287,37 @@ it.effect(
       assert.deepEqual(answer.body.eveSandboxes, EVE);
       assert.deepEqual(answer.body.sandboxRetention, RETAINED);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
-      assert.deepEqual(answer.body.operatorWakes, { woken: 1, failed: 0 });
-      assert.deepEqual(answer.body.starterNotices, { told: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.deepEqual(answer.body.repositorySnapshots, { listed: 3, deleted: 1 });
-      assert.deepEqual(answer.body.agentStates, { deleted: 2, abandoned: 1, full: false });
       const [instant] = recorded.terminals;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
         purged: [instant],
         abandoned: [instant],
         deviceLeases: [instant],
+        deviceWarmRunners: [instant],
         sandboxed: [instant],
         terminals: [instant],
         native: [instant],
         eve: [instant],
         retention: [instant],
         wakeups: [instant],
-        operatorWakes: [instant],
-        starterNotices: [instant],
         withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],
         imageTemplates: [instant],
         repositorySnapshots: [instant],
-        agentStates: [instant],
         hostPairings: [instant],
       });
     }),
 );
 
 it.effect(
-  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the saved agent states' last among them, and the run's cron check-in fails",
+  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the hosts' pairings' last among them, and the run's cron check-in fails",
   () =>
     Effect.gen(function* () {
       const checkIns: string[] = [];
@@ -369,7 +344,7 @@ it.effect(
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.equal(recorded.imageTemplates.length, 1);
       assert.equal(recorded.repositorySnapshots.length, 1);
-      assert.equal(recorded.agentStates.length, 1);
+      assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.pictures.length, 1);
     }),
 );

@@ -31,6 +31,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
@@ -48,7 +49,7 @@ import { TasksBoard } from "./tasks-board.js";
  * right-click drop the task's own menu, whose Rename makes its name a
  * field, cards are chosen by their box and ⌘-click across columns for the
  * selection bar to act on them all, and its foot draws its agents at work and their pull requests,
- * each its mark and its number. In a narrow room, a phone's, one column stands at a time, chosen
+ * each its mark and its number, and how many of its sub-tasks are finished. In a narrow room, a phone's, one column stands at a time, chosen
  * by its tab, and a card's Status chip, its mark alone before its name as on a wide board, moves it.
  */
 
@@ -750,6 +751,22 @@ test("a right-click on a card drops the task's own menu", async () => {
   assert.deepEqual(opened, []);
 });
 
+test("under a finger, a card draws no ⋯, and a long press on it drops the task's own menu", async () => {
+  underAFinger();
+  const board = await mountBoard();
+
+  assert.ok(
+    board.querySelector('li[data-task-id="t-40"] button[aria-label="Task actions"]') === null,
+    "the card draws no ⋯",
+  );
+  longPress(cardOf(board, "t-40"));
+  const labels = [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].map(
+    (label) => label.textContent,
+  );
+  assert.ok(labels.includes("Rename"), "the menu offers Rename");
+  assert.deepEqual(opened, []);
+});
+
 test("the menu key drops a card's menu from its press or any control in the card, and its ⋯ is named for the task", async () => {
   const board = await mountBoard();
   const key = (target: HTMLElement) =>
@@ -853,6 +870,20 @@ test("a card wears one icon for how its agents stand, an agent at work before th
     "Working",
     "an agent at work outranks its pull requests",
   );
+});
+
+test("a card says how many of its sub-tasks are finished, and one with none says nothing of them", async () => {
+  const parent = task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH);
+  const board = await mountBoard([
+    parent,
+    { ...task(43, "Write the fix", TASK_STATUS.DONE, TASK_PRIORITY.HIGH), parentTaskId: parent.id },
+    { ...task(44, "Test on iOS", TASK_STATUS.TODO, TASK_PRIORITY.HIGH), parentTaskId: parent.id },
+  ]);
+  const said = (id: string) =>
+    board.querySelector(`li[data-task-id="${id}"] .luke-progress-count`)?.textContent ?? "";
+
+  assert.match(said("t-42"), /1 of 2 sub-tasks finished/u);
+  assert.equal(said("t-44"), "");
 });
 
 test("a card's assignee hangs the person's card", async () => {

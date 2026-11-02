@@ -94,9 +94,9 @@ import {
  * section keeping its place while its heading stands, so a save redraws the
  * sections it changed and leaves the scroll where it was. Under the title
  * one muted line says who created the task and how long ago, and, for a plan
- * anyone has written, who last did: a member, Luke (the notetaker), or a
+ * anyone has written, who last did: a member, the app (the notetaker), or a
  * coding agent, each on their own face hanging their card (`edit-ref.tsx`),
- * whose call it was on where Luke wrote it on one, and how long ago, moved
+ * whose call it was on where the app wrote it on one, and how long ago, moved
  * on once a minute, as a GitHub issue's page says it under its title. The edit's
  * time opens the plan's version history, where each earlier version is. Each section says the
  * same of the save that last changed it in fewer letters, quietly, while the
@@ -389,7 +389,7 @@ interface SectionMarks {
 /**
  * The section's quiet line: the face of who last changed the section under
  * `heading`, hanging their card, which names them and whose call it was,
- * and when in a row's few letters, "[Luke] 2h", shown while the pointer or
+ * and when in a row's few letters, "[Charles] 2h", shown while the pointer or
  * the keyboard is on it, at the end of a heading that keeps room for it;
  * none where no save has, or for the words before the first heading, which
  * have no heading's line for it to stand at. Where the window offers the

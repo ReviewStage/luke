@@ -47,6 +47,11 @@ import {
 import { Effect, Option, type Redacted } from "effect";
 import type { HttpClient } from "effect/http";
 import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_PULL_REQUEST_ACTION,
+} from "../events/server-events.js";
+import {
   namedOverviewConversation,
   namedOverviewPullRequest,
   namedPendingReview,
@@ -370,6 +375,22 @@ function writeOf(
   }
 }
 
+/** The change as the count words it, for the four that are counted; nothing for any other. */
+function countedAction(request: PullRequestActionRequest) {
+  switch (request.action) {
+    case PULL_REQUEST_ACTION.MERGE:
+      return SERVER_PULL_REQUEST_ACTION.MERGE;
+    case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
+      return SERVER_PULL_REQUEST_ACTION.REVIEW;
+    case PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE:
+      return SERVER_PULL_REQUEST_ACTION.AUTO_MERGE;
+    case PULL_REQUEST_ACTION.CLOSE:
+      return SERVER_PULL_REQUEST_ACTION.CLOSE;
+    default:
+      return undefined;
+  }
+}
+
 /** The write a change makes on the pull request, on the member's token. */
 export function actionWrite(
   request: PullRequestActionRequest,
@@ -455,6 +476,13 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
           Effect.flatMap(published, (kept) => forgetPublished(kept, context.userId, agent.id)),
         ),
       );
+      // Counted only where GitHub made the change, and under the member: an agent's own pull request work never comes through here.
+      const counted = countedAction(input.body);
+      if (counted !== undefined && written.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
+        yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_ACTION, context.userId, {
+          action: counted,
+        });
+      }
       return writeAnswerOf(written);
     }),
     /**

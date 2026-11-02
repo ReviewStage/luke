@@ -288,7 +288,7 @@ test("a tab reloaded on an entry the history saved starts on it, and learns the 
   });
 });
 
-test("the panel's own paths, and an entry holding a saved step, say no link as the page loads; a Luke link's path says its place once", () => {
+test("the panel's own paths, and an entry holding a saved step, say no link as the page loads; a Vespin link's path says its place once", () => {
   for (const address of ["/app", "/app.html", "/app/"]) {
     openAt(address);
     assert.deepEqual(linksSaid(), [], `${address} opens where the window rests`);

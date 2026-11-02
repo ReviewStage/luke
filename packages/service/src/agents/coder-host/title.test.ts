@@ -7,7 +7,6 @@ import { createTask, readTask } from "@luke/database/models/task-store";
 import { messages } from "@luke/database/schemas/storage";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
@@ -20,7 +19,7 @@ import { titleAgent } from "./title.js";
 
 /**
  * title.test.ts -- an automation's run is named from the automation's prompt
- * alone, without the lines Luke adds of the firing, and the subject of the
+ * alone, without the lines we add of the firing, and the subject of the
  * GitHub event that fired it; an agent started from another is named from
  * its brief and note, never the replay between them; the model's answer is
  * the agent's title, and the name of its task where that still stands
@@ -33,10 +32,10 @@ import { titleAgent } from "./title.js";
 /** The automation's prompt, long enough to fill the title model's excerpt by itself. */
 const PROMPT = `Find the flakiest test in CI this week and fix it. ${"Read every failed run. ".repeat(120)}`;
 
-/** What the agent was handed: the prompt, then what Luke adds of the firing. */
+/** What the agent was handed: the prompt, then what we add of the firing. */
 const HANDED = `${PROMPT}\n\n---\n\nLuke started this run for the automation "Flaky-test sweep" because commits were pushed on GitHub.`;
 
-/** The deployment's environment, which holds no model key of Luke's for a title to spend. */
+/** The deployment's environment, which holds no model key of ours for a title to spend. */
 const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -180,38 +179,6 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
   );
 });
 
-it.layer(getTestDB())("an operator's title", (it) => {
-  it.effect("an operator is never titled, so no read that takes the plain title names it", () =>
-    Effect.gen(function* () {
-      const owner = yield* openGithubUser();
-      const organizationId = yield* openWorkspace(owner);
-      const started = Option.getOrThrow(
-        yield* createAgent(owner, {
-          taskId: null,
-          organizationId,
-          planSnapshot: null,
-          prompt: null,
-          kind: AGENT_KIND.OPERATOR,
-          idempotencyKey: randomUUID(),
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          repository: null,
-        }),
-      );
-      const operator = yield* openedOn(
-        owner,
-        started.agent,
-        "Read my open work and say what stands.",
-      );
-
-      yield* titledAs(owner, operator, "Review open work");
-
-      const read = Option.getOrThrow(yield* readAgent(owner, operator.id));
-      assert.equal(read.title, null);
-    }),
-  );
-});
-
 it.layer(getTestDB())("an agent's title", (it) => {
   it.effect(
     "an account that saved no API key is titled with no model, from the first words of its opening's first line, its Markdown marks and links' addresses left out, opening on a capital and the rest as written, and its task named with it",
@@ -254,7 +221,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
   );
 
   it.effect(
-    "a native agent of an account that saved no API key is titled from its opening's first words, never on Luke's key",
+    "a native agent of an account that saved no API key is titled from its opening's first words, never on Vespin's key",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -277,7 +244,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
   );
 
   it.effect(
-    "an automation's run is named from the automation's prompt alone and the event's subject, never Luke's lines",
+    "an automation's run is named from the automation's prompt alone and the event's subject, never Vespin's lines",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -327,7 +294,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
 
         assert.match(asked[0] ?? "", /Find the flakiest test in CI this week/u);
         assert.match(asked[0] ?? "", /release\/2\.4/u, "the subject survives a long prompt");
-        assert.doesNotMatch(asked[0] ?? "", /Luke started this run/u);
+        assert.doesNotMatch(asked[0] ?? "", /Vespin started this run/u);
         assert.equal(titled.title, "Fix the flakiest CI test");
       }),
   );

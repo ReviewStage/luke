@@ -1,4 +1,5 @@
 import { keptImageOf } from "@luke/database/models/attached-file-parts";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { type FileUIPart, isFileUIPart, isTextUIPart, isToolUIPart } from "ai";
 import { isDeveloperLine, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 
@@ -11,8 +12,8 @@ import { isDeveloperLine, MESSAGE_ROLE, type StoredUIMessage } from "../../core.
 /** Who a stored message's words are attributed to when a stored message is rendered as a line. */
 const SPEAKER = {
   DEVELOPER: "Developer",
-  LUKE: "Luke",
-  NOTE: "Luke's own note",
+  LUKE: PRODUCT_NAME,
+  NOTE: `${PRODUCT_NAME}'s own note`,
 } as const;
 
 function speakerOf(message: StoredUIMessage): string {

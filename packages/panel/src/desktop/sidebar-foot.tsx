@@ -62,10 +62,10 @@ import { OfflineMark } from "./offline-mark.js";
  * between them as a small pill while they hold, and take no room while they
  * do not. The menu offers what the menu bar's Help menu offers, by the same
  * commands, with Settings at its head, the ways to reach the people who make
- * Luke under it, and Sign out last, which acts on the press.
+ * the app under it, and Sign out last, which acts on the press.
  */
 
-/** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
+/** Where Contact us > GitHub leads: our own issues, where CONTRIBUTING.md sends bugs and feature requests. */
 const ISSUES_URL = "https://github.com/ReviewStage/luke/issues";
 
 /** The account's place while no one is signed in: someone's outline. */
@@ -190,7 +190,7 @@ function AccountHeading({
  * The account's menu, in Cursor's order: the reader's own page where the
  * window offers one, then Settings; what the Help menu
  * offers, the changelog before it, and the ways to write to the people who
- * make Luke after it; then Sign out, while anyone is signed in to leave.
+ * make the app after it; then Sign out, while anyone is signed in to leave.
  */
 function accountMenuGroups(
   signedIn: boolean,

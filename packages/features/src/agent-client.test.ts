@@ -40,7 +40,7 @@ const CHOICE = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
 
 function client(): HostedAgentClient {
   return new HostedAgentClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://vespin.dev",
     credential: accountBearer({
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,
@@ -309,11 +309,11 @@ it.effect(
       });
       assert.equal(
         removal?.url,
-        `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
+        `https://vespin.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       );
       assert.equal(
         tokenRemoval?.url,
-        `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}&kind=${PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN}`,
+        `https://vespin.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}&kind=${PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN}`,
       );
     }),
 );
@@ -655,7 +655,7 @@ it.effect(
       assert.deepEqual(nowhere, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(
         api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
-        [[`https://tryluke.dev/api/agents/${AGENT_ID}/agents`, request]],
+        [[`https://vespin.dev/api/agents/${AGENT_ID}/agents`, request]],
       );
     }),
 );
@@ -758,31 +758,6 @@ it.effect(
           error,
         );
       }
-    }),
-);
-
-it.effect(
-  "ensures the operator in a workspace with the reset as sent, and reads the experiment's 404 as not found",
-  () =>
-    Effect.gen(function* () {
-      const path = `PUT /api/workspaces/${WORKSPACE_ID}/operator`;
-      const api = fakeCloudApi({ [path]: { answer: () => ({ agentId: AGENT_ID, txid: "9103" }) } });
-      const refusing = fakeCloudApi({
-        [path]: { answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }), status: 404 },
-      });
-
-      const ensured = yield* Effect.provide(
-        client().ensureOperator(WORKSPACE_ID, { reset: true }),
-        api.layer,
-      );
-      const refused = yield* Effect.provide(
-        client().ensureOperator(WORKSPACE_ID, {}),
-        refusing.layer,
-      );
-
-      assert.deepEqual(ensured, { agentId: AGENT_ID, txid: "9103" });
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { reset: true });
-      assert.deepEqual(refused, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
 

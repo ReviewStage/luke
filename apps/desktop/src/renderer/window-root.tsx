@@ -25,7 +25,7 @@ import { ReloadState } from "@luke/ui/error-boundary";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
-import { BLANK_WINDOW, type DesktopSentryOptions, startDesktopSentry } from "./desktop-sentry";
+import { BLANK_WINDOW, startDesktopSentry } from "./desktop-sentry";
 import { createReportingRoot, reloadWindow, WINDOW_FAILED } from "./desktop-sentry-root";
 
 /** What a window times of its own start. */
@@ -42,13 +42,11 @@ export interface WindowTiming {
  * Installs the window's bridge and platform, draws `surface` into its root
  * once the window's document has been read, and then starts its tracing. A
  * window whose document cannot be read draws that failure with Reload in
- * place of the surface, rather than stand blank. What its SDK watches
- * beyond every window's is `sentry`'s to say: the panel's entry asks for
- * its freezes to be reported, and, by `timing`, for its start to be timed.
+ * place of the surface, rather than stand blank. The panel's entry asks,
+ * by `timing`, for its start to be timed.
  */
 export function mountWindow(
   surface: ReactNode,
-  sentryOptions: DesktopSentryOptions = { reportsFreezes: false },
   timing: WindowTiming = { timesStart: false },
 ): void {
   // The window's start, which its first paint and first usable screen are timed from.
@@ -75,7 +73,7 @@ export function mountWindow(
   // Every window's tracing and error reports, from Sentry's SDK loaded once
   // the window has drawn (`desktop-sentry.ts`), so no window parses it on
   // its way to its first paint.
-  const sentry = startDesktopSentry(sentryOptions);
+  const sentry = startDesktopSentry();
   // What the panel times, recorded through the same SDK once it stands, and
   // every failure it shows, reported through it.
   installPanelSpanRecorder(sentry.recordSpan);

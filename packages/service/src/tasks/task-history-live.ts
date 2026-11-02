@@ -4,7 +4,6 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import { agentGivenNameSql } from "@luke/database/models/agent-name";
 import { taskSeenBy } from "@luke/database/models/workspace-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { member, user } from "@luke/database/schemas/auth";
@@ -58,11 +57,8 @@ function revisionsStatement(userId: string, taskId: string) {
             liveSessionId: sql<string | null>`null::text`,
             agentId: planRevision.agentId,
             agentModel: agentTable.model,
-            // The name the agent goes by: Luke for an operator, else its title.
-            agentTitle: sql<
-              string | null
-            >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
-            // No call stands to name, since Luke takes no calls; a released desktop still decodes the key.
+            agentTitle: agentTable.title,
+            // No call stands to name, since we take no calls; a released desktop still decodes the key.
             callId: sql<string | null>`null::text`,
             changes: planRevision.changes,
             restoredFrom: planRevision.restoredFrom,

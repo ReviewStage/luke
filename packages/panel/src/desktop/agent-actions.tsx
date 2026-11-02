@@ -1,5 +1,4 @@
 import {
-  AGENT_KIND,
   AGENT_MACHINE,
   type AgentAttachment,
   type AgentBrief,
@@ -233,11 +232,10 @@ export function agentTranscriptRead(
   agentId: string,
   title: string,
   brief: AgentBrief | undefined,
-  quiet = false,
 ): TranscriptRead {
   return () =>
     readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      "unread" in messages ? messages : agentTranscript({ title, messages, brief, quiet }),
+      "unread" in messages ? messages : agentTranscript({ title, messages, brief }),
     );
 }
 
@@ -304,12 +302,7 @@ export function useAgentDraftDoors(
   return { onFork, onContinue };
 }
 
-/**
- * One agent's actions, as every surface that draws it offers them. Luke, the
- * member's operator, is known by his kind and offers neither Rename, Archive,
- * nor Delete wherever he is drawn, a Luke a Reset retired included: his
- * name is his kind's, his Reset archives him, and there is one of him.
- */
+/** One agent's actions, as every surface that draws it offers them. */
 export function useAgentActions(
   agent: Pick<
     AgentSummary,
@@ -321,7 +314,6 @@ export function useAgentActions(
     | "model"
     | "archivedAt"
     | "brief"
-    | "kind"
     | "machine"
     | "startedBy"
   >,
@@ -345,10 +337,9 @@ export function useAgentActions(
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
-  const luke = agent.kind === AGENT_KIND.OPERATOR;
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
-  const renamable = !luke && agents.onUnarchive === undefined && agent.archivedAt === undefined;
+  const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const local = agent.machine === AGENT_MACHINE.DEVICE;
@@ -362,7 +353,7 @@ export function useAgentActions(
     : onOpenTerminal === undefined
       ? undefined
       : () => onOpenTerminal(agent.id);
-  const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief, luke);
+  const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
   return {
     doors: {
       onCopy: copied(read),
@@ -374,8 +365,8 @@ export function useAgentActions(
         agent.archivedAt !== undefined || local || onOpenBrowser === undefined
           ? undefined
           : () => onOpenBrowser(agent.id),
-      archive: luke ? undefined : agent.archivedAt === undefined ? archive.action : unarchive,
-      deletion: luke ? undefined : deletion.action,
+      archive: agent.archivedAt === undefined ? archive.action : unarchive,
+      deletion: deletion.action,
       copyLink,
     },
     rename: renamable ? rename : undefined,

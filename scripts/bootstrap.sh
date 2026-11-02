@@ -19,4 +19,4 @@ else
     ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 fi
 
-printf 'Luke workspace bootstrapped at %s\n' "$LUKE_REPO_ROOT"
+printf 'Vespin workspace bootstrapped at %s\n' "$LUKE_REPO_ROOT"

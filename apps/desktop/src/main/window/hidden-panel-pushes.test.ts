@@ -10,7 +10,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { PanelManager } from "./panel-manager";
 import { windowPushes } from "./window-pushes";
 
-/** A Luke link to a task, as the system hands one to the app. */
+/** An app link to a task, as the system hands one to the app. */
 const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
 
 /**

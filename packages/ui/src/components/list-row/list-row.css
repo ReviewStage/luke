@@ -86,9 +86,11 @@
   }
 
   /* The press stands its words at the row's insets, which a variant, a
-     density, and the acts beside it set. */
+     density, and the acts beside it set, and takes the row's corners,
+     which a card squares at its end where acts stand beside it (below). */
   .luke-list-row-main {
     padding: var(--luke-list-row-inset-block) var(--luke-list-row-inset-inline);
+    border-radius: inherit;
   }
 
   /* A card holds its rows edge to edge on its ground (`list-row.tsx`), a
@@ -108,10 +110,38 @@
     --luke-list-row-inset-inline: var(--luke-space-16);
   }
 
-  /* Note that a card's row rings inside its press, because the card's
-     corner clips whatever stands past its edge. */
-  .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
-    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+  /* Note that everything in a card rings inside itself, a row's press and
+     its acts alike, because the card's corner clips whatever stands past
+     its edge, as a flush `Card` does (`card.tsx`). */
+  .luke-list[data-variant="card"] {
+    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  }
+
+  /* A card's first and last rows take its corner where they meet it, its
+     round inside its hairline, so what is drawn on the row, its fill and an
+     open menu's ring, follows the card's round rather than cutting square
+     across it. */
+  .luke-list[data-variant="card"] > .luke-list-row {
+    --luke-list-row-card-corner: calc(var(--luke-control-radius) - 1px);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row:first-child {
+    border-start-start-radius: var(--luke-list-row-card-corner);
+    border-start-end-radius: var(--luke-list-row-card-corner);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row:last-child {
+    border-end-start-radius: var(--luke-list-row-card-corner);
+    border-end-end-radius: var(--luke-list-row-card-corner);
+  }
+
+  /* Note that the press's end meets the card only where no act or ⋯ stands
+     beside it, so there its ring stays square at its end, mid-row. */
+  .luke-list[data-variant="card"]
+    > .luke-list-row:has(> .luke-list-row-actions, > .luke-list-row-more)
+    > .luke-list-row-main {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
   }
 
   /* A compact row keeps its words and gives up some of the room around them. */
@@ -176,20 +206,8 @@
     min-width: 0;
   }
 
-  /* A dense row's description is a label beside its title, so it fades as
-     the title does (below) rather than ending in an ellipsis. */
-  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-  .luke-list-row-description[data-overflow] {
-    text-overflow: clip;
-  }
-
-  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-    .luke-list-row-description[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
-  }
-
   /* A dense row's description that alerts, a refusal, takes a line of its
-     own under the title and keeps its words whole, rather than giving way. */
+     own under the title, its words whole (below), rather than giving way. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
   .luke-list-row-text:has(> .luke-list-row-description [role="alert"]) {
     flex-wrap: wrap;
@@ -199,7 +217,6 @@
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     .luke-list-row-description:has([role="alert"]) {
     flex-basis: 100%;
-    white-space: normal;
   }
 
   /* A dense row's attachments take a line of their own over its title, as
@@ -283,8 +300,13 @@
   .luke-list-row-title,
   .luke-list-row-description {
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A description that alerts, a refusal, keeps its words whole, wrapping
+     rather than being cut short. */
+  .luke-list-row-description:has([role="alert"]) {
+    white-space: normal;
   }
 
   .luke-list-row-title {
@@ -306,16 +328,13 @@
     font-weight: var(--luke-type-body-weight);
   }
 
-  /* A title fades rather than ending in an ellipsis, as a browser's tab
-     does, out over its last few pixels only while it is measured cut short,
-     so a short one ends on its last letter; a row whose acts come in on
-     hover reads the cut sliding as they come and go. The mask fades the
-     words themselves, so it reads alike over every fill the row wears. */
-  .luke-list-row-title[data-overflow] {
-    text-overflow: clip;
-  }
-
-  .luke-list-row-title[data-overflow="true"] {
+  /* A title and its description fade rather than ending in an ellipsis,
+     as a browser's tab does, out over their last few pixels only while they
+     are measured cut short, so a short one ends on its last letter; a row
+     whose acts come in on hover reads the cut sliding as they come and go.
+     The mask fades the words themselves, so it reads alike over every fill
+     the row wears. */
+  :is(.luke-list-row-title, .luke-list-row-description)[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
@@ -474,6 +493,54 @@
     margin-block-start: var(--luke-space-2);
   }
 
+  /* Metadata on the last line ends the description's line, on its
+     baseline, and the title runs the words' and the end's tracks whole over
+     both; the row's mark stands level with the title's first line. The
+     words lend their parts to the press's tracks, as a mail-style row's do,
+     so the title takes the first row and the description and the end the
+     next, each in its own track. */
+  .luke-list-row[data-meta="last"] .luke-list-row-text {
+    display: contents;
+  }
+
+  .luke-list-row[data-meta="last"] .luke-list-row-leading {
+    height: var(--luke-type-label-leading);
+    align-items: center;
+    align-self: start;
+  }
+
+  .luke-list-row[data-meta="last"] .luke-list-row-title {
+    grid-column: text-start / end-end;
+  }
+
+  .luke-list-row[data-meta="last"] .luke-list-row-description {
+    grid-column: text;
+    margin-block-start: var(--luke-space-2);
+  }
+
+  .luke-list-row[data-meta="last"] :is(.luke-list-row-description, .luke-list-row-end) {
+    align-self: baseline;
+  }
+
+  /* A title that may run to two lines wraps, and one longer still fades
+     out at the end of its second, its first line drawn whole above it. */
+  .luke-list-row-title[data-lines="two"] {
+    /* Note that it is held to two lines by its height, because a line clamp
+       draws an ellipsis whatever its overflow says. */
+    max-height: calc(2 * var(--luke-type-label-leading));
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .luke-list-row-title[data-lines="two"][data-overflow="true"] {
+    mask-image:
+      linear-gradient(#000, #000),
+      linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+    mask-position: top, bottom;
+    mask-repeat: no-repeat;
+    mask-size: 100% 50%;
+  }
+
   /* Acts that always stand do so in their own track beside the press, as
      far in from the row's end as the press's words are. */
   .luke-list-row-actions {
@@ -545,6 +612,7 @@
      row is reached for or open, its room kept so nothing moves as it shows. */
   .luke-list-row-chevron {
     opacity: 0;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-list-row:is(:has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {

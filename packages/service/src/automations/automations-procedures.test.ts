@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { createAgent, readAgent } from "@luke/database/models/agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
@@ -15,7 +15,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
-import { AGENT_FAILURE, AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_FAILURE, AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   automationRunsLiveRowsSchema,
   automationRunsOfLiveRows,
@@ -80,6 +80,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
+import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { automationRunsLiveStatements, automationsLiveStatements } from "./automation-live.js";
 import { automationsProcedures } from "./automations-procedures.js";
 
@@ -173,6 +174,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           Layer.succeed(Clock.Clock, yield* Clock.Clock),
           githubReaching(INSTALLATIONS).layer,
           modelCatalogOf(CATALOG),
+          scriptedHarnessLayer((account) => sessionsAs(harnessFor(account))),
         ),
       ),
     );
@@ -349,7 +351,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, one naming a plan, with no repositories, or on a repository its installation does not reach, and is made on a GitHub event",
+    "an automation on a workspace is refused for an account outside it, one naming a plan, not naming its repositories, on a repository its installation does not reach, or on a GitHub event with no repository, and is made on a GitHub event, and in no repository on any other trigger",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openAccounts;
@@ -366,18 +368,33 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const { repositories: _none, ...bare } = weekdays(task.workspaceId, [relay]);
         const noRepositories = yield* post(owner, bare);
         const unreached = yield* post(owner, weekdays(task.workspaceId, ["acme/elsewhere"]));
-        const onGitHub = yield* post(owner, {
-          ...weekdays(task.workspaceId, [relay]),
+        const github = {
           trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
+        };
+        const onGitHubNowhere = yield* post(owner, {
+          ...weekdays(task.workspaceId, []),
+          ...github,
         });
+        const onGitHub = yield* post(owner, { ...weekdays(task.workspaceId, [relay]), ...github });
+        const nowhere = yield* post(owner, weekdays(task.workspaceId, []));
 
         assert.deepEqual(
-          [outside.status, onPlan.status, noRepositories.status, unreached.status, onGitHub.status],
+          [
+            outside.status,
+            onPlan.status,
+            noRepositories.status,
+            unreached.status,
+            onGitHubNowhere.status,
+            onGitHub.status,
+            nowhere.status,
+          ],
           [
             HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.FORBIDDEN,
+            HOSTED_HTTP_STATUS.CONFLICT,
+            HOSTED_HTTP_STATUS.CREATED,
             HOSTED_HTTP_STATUS.CREATED,
           ],
         );
@@ -494,104 +511,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         const gone = yield* ask(automationPath(automation.id), owner);
         assert.equal(gone.status, HOSTED_HTTP_STATUS.NOT_FOUND);
-      }),
-  );
-
-  it.effect(
-    "an automation aimed at its owner's operator needs no repository, made on a workspace naming none, and run there; every other automation still needs one",
-    () =>
-      Effect.gen(function* () {
-        const { owner, task, ask } = yield* openAccounts;
-        const agentOf = (kind: "operator" | "coder") =>
-          Effect.map(
-            createAgent(
-              owner,
-              kind === "operator"
-                ? {
-                    taskId: null,
-                    organizationId: task.workspaceId,
-                    planSnapshot: null,
-                    prompt: null,
-                    kind: AGENT_KIND.OPERATOR,
-                    idempotencyKey: randomUUID(),
-                    model: AGENT_DEFAULT_CHOICE.model,
-                    effort: AGENT_DEFAULT_CHOICE.effort,
-                    repository: null,
-                  }
-                : {
-                    taskId: null,
-                    organizationId: task.workspaceId,
-                    planSnapshot: null,
-                    prompt: PROMPT,
-                    idempotencyKey: randomUUID(),
-                    model: AGENT_DEFAULT_CHOICE.model,
-                    effort: AGENT_DEFAULT_CHOICE.effort,
-                    repository: `${RELAY.owner}/${RELAY.name}`,
-                  },
-            ),
-            (made) => Option.getOrThrow(made).agent,
-          );
-        const opened = yield* agentOf("operator");
-        const operator = opened.id;
-        const coder = (yield* agentOf("coder")).id;
-        // Its opening turn ended, as an ensure's does, so it is at work on nothing a run must wait for.
-        yield* Database.use((db) =>
-          db.insert(turns).values({
-            userId: owner,
-            conversationId: opened.conversationId,
-            origin: TURN_ORIGIN.TYPED,
-            status: TURN_STATUS.SETTLED,
-            settledAt: new Date(0),
-          }),
-        );
-        const aimed = (agentId: string) => ({ kind: AUTOMATION_TARGET.SAME_AGENT, agentId });
-        const { repositories: _none, ...noRepositories } = weekdays(task.workspaceId, []);
-        const make = (body: WireBoundaryInput) =>
-          ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
-
-        const heartbeat = readAnswer(
-          automationAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* make({ ...noRepositories, target: aimed(operator) }),
-        ).automation;
-        const coderNoRepositories = yield* make({ ...noRepositories, target: aimed(coder) });
-        const newAgentNoRepositories = yield* make(noRepositories);
-        const toNewAgent = yield* ask(automationPath(heartbeat.id), owner, {
-          method: "PATCH",
-          body: { target: { kind: AUTOMATION_TARGET.NEW_AGENT } },
-        });
-        const toCoder = yield* ask(automationPath(heartbeat.id), owner, {
-          method: "PATCH",
-          body: { target: aimed(coder) },
-        });
-        const { run } = readAnswer(
-          automationRunAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(automationRunPath(heartbeat.id), owner, {
-            method: "POST",
-            body: { idempotencyKey: randomUUID() },
-          }),
-        );
-
-        assert.deepEqual(
-          [heartbeat.repositories, heartbeat.target],
-          [[], aimed(operator)],
-          "made on the workspace with no repository, aimed at the operator",
-        );
-        assert.deepEqual(
-          [coderNoRepositories.body, newAgentNoRepositories.body, toNewAgent.body, toCoder.body],
-          [
-            { error: HOSTED_API_ERROR.INVALID_REQUEST },
-            { error: HOSTED_API_ERROR.INVALID_REQUEST },
-            { error: HOSTED_API_ERROR.NO_REPOSITORY },
-            { error: HOSTED_API_ERROR.NO_REPOSITORY },
-          ],
-        );
-        assert.deepEqual(
-          [run.status, run.agent?.id],
-          [AUTOMATION_RUN_STATUS.STARTED, operator],
-          "its run is handed to the operator",
-        );
       }),
   );
 
@@ -1047,7 +966,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "a Run now over a browser's session cookie starts the automation's agent as the deployment acting for the cookie's account, over the bearer over the bearer, and another account's cookie runs nothing",
+    "a Run now over a browser's session cookie starts the automation's agent as one over the bearer does, through its harness acting for the automation's creator, and another account's cookie runs nothing",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, openedAs } = yield* openAccounts;
@@ -1087,12 +1006,12 @@ it.layer(getTestDB())("the automation routes", (it) => {
           [AUTOMATION_RUN_STATUS.STARTED, AUTOMATION_RUN_STATUS.STARTED],
         );
         assert.deepEqual(overCookie.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
-        assert.deepEqual(openedAs, [deploymentFor(owner), `Bearer ${owner}`]);
+        assert.deepEqual(openedAs, [harnessFor(owner), harnessFor(owner)]);
       }),
   );
 
   it.effect(
-    "a teammate's Run now of the owner's workspace automation over a session cookie starts its agent as the deployment acting for the teammate, never for the automation's creator",
+    "a teammate's Run now of the owner's workspace automation over a session cookie starts its agent, the creator's, through its harness acting for that creator, whose plan or key pays",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, openedAs } = yield* openAccounts;
@@ -1118,7 +1037,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
 
         assert.equal(run.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: other });
-        assert.deepEqual(openedAs, [deploymentFor(other)]);
+        assert.deepEqual(openedAs, [harnessFor(owner)]);
       }),
   );
 

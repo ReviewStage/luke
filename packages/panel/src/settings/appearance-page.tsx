@@ -8,7 +8,7 @@ import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
 /**
- * How Luke looks: his theme and his zoom, in one nameless group, since the
+ * How the app looks: its theme and its zoom, in one nameless group, since the
  * page's title already names it; then how code and diffs are drawn, in the
  * groups the schema names (`DIFF_SETTING_GROUPS`): Diff, Lines, and Text, the
  * File tabs' numbers and wrap and every diff setting the Files changed

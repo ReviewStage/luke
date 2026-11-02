@@ -1,9 +1,9 @@
 /**
- * native-sandbox-template.ts -- Luke's own template of the coding agent's image, which a native harness's sandbox opens from: found, built once, snapshotted, and swept.
+ * native-sandbox-template.ts -- our own template of the coding agent's image, which a native harness's sandbox opens from: found, built once, snapshotted, and swept.
  *
  * eve prepares the coding agent's image into a snapshot of its own and hands
- * no code of Luke's its id, so a sandbox Luke opens itself for Claude Code or
- * Codex opens from a template Luke prepares from the same preparation
+ * no code of ours its id, so a sandbox we open ourselves for Claude Code or
+ * Codex opens from a template we prepare from the same preparation
  * (`agent-runtime/sandbox-image.ts`'s `prepareImage`) on eve's own base
  * image, as eve's template is. The preparation is recorded rather than run:
  * `prepareImage` is handed a session that keeps the files it writes and the
@@ -80,6 +80,15 @@ export const NATIVE_TEMPLATE = {
   WAIT: Duration.minutes(3),
   /** How old another key's template must be before the sweep deletes it, so a Preview's lasts its testing. */
   SWEEP_AFTER: Duration.days(1),
+  /**
+   * How long after its last use the template's snapshot is kept. Vercel
+   * restarts the wait each time a sandbox is created from it, so only an
+   * image no native agent opened in that long lets it lapse, and its loss is
+   * found as any other: by a launch Vercel answers that it is gone, or by the
+   * sweep's `SNAPSHOT_CHECK`, either of which builds it again
+   * (`forgetSnapshot`).
+   */
+  SNAPSHOT_EXPIRY: Duration.days(14),
   /** How often the sweep asks Vercel whether a ready template's snapshot still stands. */
   SNAPSHOT_CHECK: Duration.minutes(10),
   /** How often the sweep runs (`MAINTENANCE_SWEEP.CRONTAB`): the window of each `SNAPSHOT_CHECK` one sweep falls in. */
@@ -97,7 +106,7 @@ const TEMPLATE_TAG = {
 } as const;
 
 /** Where the recorded preparation is uploaded and run from: the default user's own `/tmp`. */
-export const BUILD_DIRECTORY = "/tmp/luke-template";
+const BUILD_DIRECTORY = "/tmp/luke-template";
 
 /** Where eve's session resolves a relative path, as its template's preparation saw it. */
 const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;
@@ -106,7 +115,7 @@ const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;
  * What eve's base setup does before it prepares a template: the workspace
  * made, here owned by the default user, who writes the checkout into it.
  */
-export const BASE_SETUP = [
+const BASE_SETUP = [
   `if ! mkdir -p ${WORKSPACE} 2>/dev/null || [ ! -w ${WORKSPACE} ]; then`,
   `  sudo -n install -d -o "$(id -u)" -g "$(id -g)" ${WORKSPACE}`,
   "fi",
@@ -132,12 +141,6 @@ type TemplateState =
 const PREPARING: TemplateState = { state: TEMPLATE_STATE.PREPARING };
 const FAILED: TemplateState = { state: TEMPLATE_STATE.FAILED };
 
-/** One command of the preparation, as `prepareImage` ran it: its script's path, and the files written since the command before it. */
-export interface RecordedStep {
-  readonly script: string;
-  readonly writes: readonly { readonly file: string; readonly destination: string }[];
-}
-
 /** The preparation as recorded: the template's key, its name, and the files that run it. */
 export interface ImageBuild {
   readonly key: string;
@@ -145,12 +148,10 @@ export interface ImageBuild {
   readonly files: readonly { readonly path: string; readonly contents: Uint8Array }[];
   /** The script that runs the preparation, whose path the files hold. */
   readonly entry: string;
-  /** Each command in order, with the writes that came before it, which the OCI image replays a layer each (`sandbox-oci-image.ts`). */
-  readonly steps: readonly RecordedStep[];
 }
 
 /** The shell line that puts a recorded file where the preparation wrote it. */
-export function replayWrite(file: string, destination: string): string {
+function replayWrite(file: string, destination: string): string {
   return `mkdir -p "$(dirname '${destination}')" && cp ${file} '${destination}'`;
 }
 
@@ -164,8 +165,6 @@ type TemplateRead = Effect.Effect<TemplateState, SandboxUnavailable>;
 export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
   const writes: { path: string; content: string }[] = [];
   const commands: string[] = [];
-  // How many files had been written when each command ran, so each step knows the writes before it.
-  const writtenBefore: number[] = [];
   const resolvePath = (path: string) => (path.startsWith("/") ? path : `${WORKSPACE}/${path}`);
   const recording: Pick<SandboxSession, "resolvePath" | "writeTextFile" | "run"> = {
     resolvePath,
@@ -174,7 +173,6 @@ export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
     },
     run: async (options) => {
       commands.push(options.command);
-      writtenBefore.push(writes.length);
       return { exitCode: 0, stdout: "", stderr: "" } as Awaited<ReturnType<SandboxSession["run"]>>;
     },
   };
@@ -207,22 +205,11 @@ export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
   digest.update(entry).update("\0");
   const key = digest.digest("hex").slice(0, 16);
   const entryFile = { path: `${BUILD_DIRECTORY}/build.sh`, contents: Buffer.from(entry, "utf8") };
-  const recorded = steps.map((step, index): RecordedStep => {
-    const from = writtenBefore[index - 1] ?? 0;
-    return {
-      script: step.path,
-      writes: writes.slice(from, writtenBefore[index]).map((write, offset) => ({
-        file: `${BUILD_DIRECTORY}/file-${from + offset}`,
-        destination: write.path,
-      })),
-    };
-  });
   return {
     key,
     name: `${NATIVE_TEMPLATE.NAME_PREFIX}${key}`,
     files: [...files, ...steps, entryFile],
     entry: entryFile.path,
-    steps: recorded,
   } satisfies ImageBuild;
 });
 
@@ -348,7 +335,7 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
     // and one Vercel took of a sandbox it stopped mid-build never is. Of readers racing here,
     // Vercel snapshots for the first and refuses the rest, which read on and find it ready.
     yield* api.updateTags(build.name, { ...tags, [TEMPLATE_TAG.BUILT]: String(now) });
-    const taken = yield* Effect.result(api.snapshot(session, Duration.infinity));
+    const taken = yield* Effect.result(api.snapshot(session, NATIVE_TEMPLATE.SNAPSHOT_EXPIRY));
     if (Result.isFailure(taken)) return PREPARING;
     yield* Effect.logInfo(`the native agents' image ${build.key} is ready`);
     return { state: TEMPLATE_STATE.READY, snapshotId: taken.success } as const;

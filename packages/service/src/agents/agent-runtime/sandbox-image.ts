@@ -3,7 +3,7 @@
  *
  * `sandbox.ts` hands this preparation to eve, which prepares its own
  * snapshot from it at build time, and `native-sandbox-template.ts` prepares
- * Luke's own template from it for a native harness's sandbox. It lives
+ * our own template from it for a native harness's sandbox. It lives
  * apart from `sandbox.ts` because that module reaches eve's sandbox runtime,
  * which a web function cannot bundle, while this one reaches only the code
  * extension's tooling installer, a few self-contained modules.
@@ -29,9 +29,8 @@ import { PREPARE_TMUX, SUDO_LINE } from "../terminal/tmux.js";
 
 /**
  * GitHub's own `gh stack` extension (github/gh-stack), pinned to a release
- * and to the SHA-256 GitHub publishes for each Linux build the image is made
- * for: x86-64, the Vercel sandbox's architecture, and arm64, which the OCI
- * image (`../sandbox-oci-image.ts`) is built for too.
+ * and to the SHA-256 GitHub publishes for each Linux build the image can be
+ * made for: x86-64, the Vercel sandbox's architecture, and arm64.
  */
 const GH_STACK = {
   VERSION: "v0.2.1",
@@ -104,8 +103,8 @@ const CLAUDE_CODE = CLAUDE_CODE_PIN;
  * the binary as `claude`, and checks that it prints the pin, `$SUDO` as
  * `STAGE_HEAD` set it. The binary is the one npm installs for the
  * machine's architecture: `CLAUDE_EXECUTABLE` on x86-64, the arm64 build's
- * beside it where the OCI image is built for arm64. Note that root's npm
- * reads root's home, never the default user's configuration.
+ * beside it on arm64. Note that root's npm reads root's home, never the
+ * default user's configuration.
  */
 const INSTALL_CLAUDE_CODE = [
   `case "$(uname -m)" in aarch64) CLAUDE_BINARY=${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.ARM64_BINARY} ;; *) CLAUDE_BINARY=${CLAUDE_EXECUTABLE} ;; esac`,
@@ -215,7 +214,7 @@ function stage(lines: readonly string[]): string {
  * What the system gives the image, which changes rarely: its packages,
  * Playwright's browser and the libraries it needs, the `agent` user, the
  * runner's directory, and sudo's contract. The code extension's tooling
- * follows it, then the tools Luke pins, which change often
+ * follows it, then the tools we pin, which change often
  * (`PREPARE_STAGES`).
  */
 const SYSTEM_STAGE = stage([
@@ -253,10 +252,8 @@ const SYSTEM_STAGE = stage([
 /**
  * The image's preparation in the stages `prepareImage` runs, from what
  * changes rarely to what changes often, each one command, with the code
- * extension's tooling between the first and the rest. The OCI image
- * (`../sandbox-oci-image.ts`) builds each as a layer of its own, so a box
- * that pulls it again after a pin moved pulls only the stages from that pin
- * on. `gh stack` follows the tooling, which installs the `gh` it extends;
+ * extension's tooling between the first and the rest. `gh stack` follows the
+ * tooling, which installs the `gh` it extends;
  * Codex follows the `agent` user, whose home holds its `CODEX_HOME`; and
  * the capability check comes last, once everything is in place.
  */

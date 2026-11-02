@@ -11,6 +11,7 @@ import { runnerLine } from "@luke/database/schemas/runner-line";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
@@ -175,7 +176,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     return agent;
   });
 
-/** A running sandbox as Luke names a native agent's, tagged with its agent, and with the runner named where one was launched. */
+/** A running sandbox as we name a native agent's, tagged with its agent, and with the runner named where one was launched. */
 function nativeSandbox(agentId: string, commandId?: string): FakeSandbox {
   const id = randomUUID();
   const running = `sbs_${id}`;
@@ -336,10 +337,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
             return [agent.id, sandbox] as const;
           }),
         );
-        // eve's sandbox, even tagged as an ended native agent's would be, is not Luke's to stop.
+        // eve's sandbox, even tagged as an ended native agent's would be, is not ours to stop.
         const eve = { ...eveSandbox(), tags: { sessionId: "wrun_eve", lukeAgent: ended.id } };
         const eveOwn = eveSandbox();
-        // A sandbox named as Luke's whose agent runs on eve is left to eve's own lifecycle.
+        // A sandbox named as ours whose agent runs on eve is left to eve's own lifecycle.
         const misnamed = nativeSandbox(onEve.id);
         api.sandboxes.unshift(eve, eveOwn);
         api.sandboxes.push(misnamed);
@@ -601,7 +602,9 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const idle = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
           status: TURN_STATUS.SETTLED,
           at: minutesBefore(
-            Duration.toMinutes(Duration.max(CODER.RUNNER_WARM, NATIVE_SANDBOX_SWEEP.GRACE)) + 1,
+            Duration.toMinutes(
+              Duration.max(CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL], NATIVE_SANDBOX_SWEEP.GRACE),
+            ) + 1,
           ),
         });
         const recent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {

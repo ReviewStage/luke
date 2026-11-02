@@ -39,7 +39,7 @@ export const macCommand = pgTable(
 
 /**
  * When a Mac of the account last held the read for its commands, which is
- * what an agent's call reads as Luke running on the developer's Mac with
+ * what an agent's call reads as the app running on the developer's Mac with
  * the setting on, and so taking shell commands, which every Mac runs. One
  * row per account, moved on every read.
  */

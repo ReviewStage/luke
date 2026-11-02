@@ -1,8 +1,8 @@
 /**
  * processes.ts -- whether a process the agent started still runs beside the runner, so ending the launch, and stopping the sandbox under it, would end it.
  *
- * Luke starts the runner under `setpriv` with its capability bounding set
- * emptied (the service's `runner-sessions.ts`), as it starts every command
+ * We start the runner under `setpriv` with its capability bounding set
+ * emptied (the service's `runner-sessions.ts`), as we start every command
  * a person or a model drives in an agent's sandbox. The bounding set is
  * inherited across `fork` and kept across `execve`, and a process can only
  * drop from it (https://man7.org/linux/man-pages/man7/capabilities.7.html),
@@ -26,11 +26,22 @@
  * until it is matched here too. The relays each sandboxed command starts end
  * with that command, so none stands while the agent waits.
  *
- * In a VM of its own (`processTable`'s `uid`), as a host runs every runner,
- * nothing empties the bounding set, and nothing needs to: the runner and
- * everything of the agent's run as one user, the device's, and every
- * process of the machine's own as root, so a process running as the
- * runner's own user marks it the agent's instead.
+ * Our own browser (`LUKE_BROWSER_PIN`) runs with an emptied set too, since
+ * the pages it loads are no one's we vouch for, and stands for as long as
+ * the sandbox once the agent opens it. It is told apart by its sessions:
+ * Xvfb and Chromium each lead one of their own, Chromium's renderers and
+ * helpers in it, so a process whose session's leader is Xvfb on the browser's
+ * display, or a Chromium on the browser's DevTools port, is the browser's. Counted
+ * as the agent's, it held every wait after the agent's first look at a page.
+ * The bridge that carries a connection to it stands only while one is open,
+ * a member's live view among them, so it still holds a wait, as it should.
+ * A Chromium or an Xvfb of the agent's own leads a session on another port
+ * or display, or none, so it still reads as the agent's.
+ *
+ * On a host, where the runner runs straight on the box beside the host's
+ * own processes and every other agent's, nothing empties the bounding set,
+ * and every process runs as one user, so the agent's are told apart by
+ * descent and process group instead (`host-processes.ts`).
  *
  * Where `/proc` cannot be read, the answer is that one runs, so a wait is
  * never released on a guess; so is a process whose command line cannot be
@@ -40,6 +51,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { Context, Effect, Layer } from "effect";
+import { LUKE_BROWSER_PIN } from "./pins.js";
 
 export interface ProcessTableShape {
   /** Whether a process of the agent's, beside the runner and the harness it spawned, still runs; yes where it cannot be told. */
@@ -56,11 +68,17 @@ const HARNESS_BRIDGE = {
   LISTEN: /^UNIX-LISTEN:\/tmp\/claude-http-[0-9a-f]+\.sock(,|$)/,
 } as const;
 
-/** One process as its `status` names it: its parent, whether its bounding set is empty, and its real user. */
+/** The command-line arguments the leader of a session of our browser runs with: Xvfb's display, or Chromium's DevTools port. */
+const LUKE_BROWSER_ARGUMENT = {
+  DISPLAY: `:${LUKE_BROWSER_PIN.DISPLAY}`,
+  DEVTOOLS: `--remote-debugging-port=${LUKE_BROWSER_PIN.DEVTOOLS_PORT}`,
+} as const;
+
+/** One process as its `status` names it: its parent, its session, where named, and whether its bounding set is empty. */
 interface Status {
   readonly parent: number;
+  readonly session: number | undefined;
   readonly emptied: boolean;
-  readonly uid: number | undefined;
 }
 
 /** A process's `status` read, or none where it ended before its read. */
@@ -72,25 +90,29 @@ function statusOf(root: string, pid: string): Status | undefined {
     return undefined;
   }
   const parent = /^PPid:\s+(\d+)$/m.exec(text)?.[1];
+  // Note that the first of a session's ids is the one in the namespace this `/proc` was mounted from.
+  const session = /^NSsid:\s+(\d+)/m.exec(text)?.[1];
   const bounding = /^CapBnd:\s+([0-9a-f]+)$/m.exec(text)?.[1];
-  const uid = /^Uid:\s+(\d+)/m.exec(text)?.[1];
   if (parent === undefined || bounding === undefined) return undefined;
   return {
     parent: Number(parent),
+    session: session === undefined ? undefined : Number(session),
     emptied: /^0+$/.test(bounding),
-    uid: uid === undefined ? undefined : Number(uid),
   };
+}
+
+/** A process's command line as its `cmdline` holds it, or none where it cannot be read. */
+function argvOf(root: string, pid: number): readonly string[] | undefined {
+  try {
+    return readFileSync(`${root}/${pid}/cmdline`, "utf8").split("\0");
+  } catch {
+    return undefined;
+  }
 }
 
 /** Whether a process's command line, read from its `cmdline`, is the bridge's; no where it cannot be read. */
 function runsBridge(root: string, pid: number): boolean {
-  let argv: string[];
-  try {
-    argv = readFileSync(`${root}/${pid}/cmdline`, "utf8").split("\0");
-  } catch {
-    return false;
-  }
-  const [program, listen] = argv;
+  const [program, listen] = argvOf(root, pid) ?? [];
   return (
     program !== undefined &&
     basename(program) === HARNESS_BRIDGE.PROGRAM &&
@@ -99,13 +121,23 @@ function runsBridge(root: string, pid: number): boolean {
   );
 }
 
+/** Whether a session's leader, read from its `cmdline`, is our browser: Xvfb on its display, or Chromium on its port; no where it cannot be read. */
+function leadsBrowser(root: string, leader: number): boolean {
+  const argv = argvOf(root, leader);
+  if (argv === undefined) return false;
+  const [program, display] = argv;
+  if (program !== undefined && basename(program) === LUKE_BROWSER_PIN.XVFB)
+    return display === LUKE_BROWSER_ARGUMENT.DISPLAY;
+  return argv.includes(LUKE_BROWSER_ARGUMENT.DEVTOOLS);
+}
+
 /**
  * Whether a process of the agent's runs under `root`, a `/proc`, beside the
- * runner (`self`), the processes it spawned, and the harness's bridge: one
- * with an emptied bounding set, or in a VM one running as `uid`; yes where
- * no process at all could be read.
+ * runner (`self`), the processes it spawned, the harness's bridge, and our
+ * browser: one with an emptied bounding set; yes where no process at all
+ * could be read.
  */
-function agentProcessRunsUnder(root: string, self: number, uid: number | undefined): boolean {
+function agentProcessRunsUnder(root: string, self: number): boolean {
   let pids: string[];
   try {
     pids = readdirSync(root).filter((name) => /^\d+$/.test(name));
@@ -119,10 +151,10 @@ function agentProcessRunsUnder(root: string, self: number, uid: number | undefin
   }
   if (statuses.size === 0) return true;
   for (const [pid, status] of statuses) {
-    const agents = uid === undefined ? status.emptied : status.uid === uid;
-    if (!agents || pid === self || status.parent === self) continue;
+    if (!status.emptied || pid === self || status.parent === self) continue;
     // Note that the bridge is the harness's only where the harness, a child of the runner, spawned it.
     if (statuses.get(status.parent)?.parent === self && runsBridge(root, pid)) continue;
+    if (status.session !== undefined && leadsBrowser(root, status.session)) continue;
     return true;
   }
   return false;
@@ -130,11 +162,10 @@ function agentProcessRunsUnder(root: string, self: number, uid: number | undefin
 
 /**
  * The processes under `root`, a `/proc`, as the runner `self` reads them:
- * the sandbox's own `/proc` and the runner's pid in production, and in a VM
- * the runner's own user (`uid`), whose processes are the agent's there.
+ * the sandbox's own `/proc` and the runner's pid in production.
  */
-export function processTable(root: string, self: number, uid?: number): Layer.Layer<ProcessTable> {
+export function processTable(root: string, self: number): Layer.Layer<ProcessTable> {
   return Layer.succeed(ProcessTable, {
-    agentProcessRuns: Effect.sync(() => agentProcessRunsUnder(root, self, uid)),
+    agentProcessRuns: Effect.sync(() => agentProcessRunsUnder(root, self)),
   });
 }

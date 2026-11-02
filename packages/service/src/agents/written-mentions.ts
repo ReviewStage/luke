@@ -10,7 +10,7 @@ import type { StoreFailure } from "../http/store-failure.js";
 /**
  * written-mentions.ts -- the mentions a tool hands an agent ready to write: a task's, a page's, on a task or on an agent with no task, or another agent's, each `[@name](target)` under its workspace.
  *
- * An agent names a thing of Luke's in its messages, its Inbox items, its
+ * An agent names a thing of ours in its messages, its Inbox items, its
  * plan notes, and its pages as a mention (`@luke/features/mention-link`),
  * which the desktop draws as the thing's chip and the plan keeps through
  * every correction. A tool that makes or lists such a thing answers its
@@ -82,7 +82,7 @@ export function pageMention(owner: PageOwner, pageId: string): Mention {
     : { kind: MENTION_KIND.PAGE, agentId: owner.agentId, pageId };
 }
 
-/** The mention as an agent writes it, named and under the workspace's step; a thing of Luke's names no repository. */
+/** The mention as an agent writes it, named and under the workspace's step; a thing of ours names no repository. */
 export function writtenMention(mention: Mention, name: string, workspace: string): string {
   return mentionMarkdown(mention, name, { workspace, repository: null });
 }

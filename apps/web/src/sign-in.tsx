@@ -8,6 +8,7 @@ import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
@@ -23,8 +24,8 @@ function providerHint(): SocialProvider | undefined {
 /**
  * The page opens on the provider's mark, unbadged while it offers that
  * provider's button. An address that names no provider is a sign-in that
- * cannot go on, so it opens on Luke's mark badged as failed, says so in the
- * consent page's failure wording, and offers Open Luke instead; it drops the
+ * cannot go on, so it opens on the app's mark badged as failed, says so in the
+ * consent page's failure wording, and offers the Open link instead; it drops the
  * closing note, which promises a confirmation that will never come.
  */
 function SignIn(): React.JSX.Element {
@@ -44,11 +45,15 @@ function SignIn(): React.JSX.Element {
   return (
     <AuthPage
       mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.DANGER} />}
-      title={provider ? "Sign in to Luke" : "Luke could not continue"}
+      title={provider ? `Sign in to ${PRODUCT_NAME}` : `${PRODUCT_NAME} could not continue`}
       description={provider ? undefined : "Start sign-in again."}
       error={failed ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER } : undefined}
       action={provider ? undefined : openLukeFromMac()}
-      footnote={provider ? "You can close this window after Luke confirms the sign-in." : undefined}
+      footnote={
+        provider
+          ? `You can close this window after ${PRODUCT_NAME} confirms the sign-in.`
+          : undefined
+      }
     >
       {provider ? (
         <SocialProviderButton

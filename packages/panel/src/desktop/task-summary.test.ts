@@ -23,6 +23,7 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
@@ -329,7 +330,23 @@ test("an agent's row in the summary draws the agent's one menu, Copy link copyin
   await act(async () => copy.click());
 
   assert.deepEqual(labels, ["Copy link", "Rename", "Archive", "Permanently delete"]);
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT.id}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT.id}`]);
+});
+
+test("under a finger, an agent's row in the summary draws no ⋯, and held it offers the agent's menu", () => {
+  underAFinger();
+  const { page } = mount("plan");
+  const row = [...page.querySelectorAll<HTMLElement>(".task-summary li > button")].find((each) =>
+    each.textContent?.includes(AGENT.title ?? ""),
+  );
+  assert.ok(row, "the agent's row is listed");
+  assert.ok(page.querySelector('[aria-label="Agent actions"]') === null, "the row draws no ⋯");
+
+  longPress(row);
+  const labels = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  assert.ok(labels.includes("Rename"), "the long press offers the agent's menu");
 });
 
 test("a heading folds its rows away, counting them, and stands folded as the summary is drawn again", () => {

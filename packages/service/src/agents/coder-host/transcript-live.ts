@@ -12,8 +12,10 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import { agentDelegationTable, agentTable } from "@luke/database/schemas/agent";
 import { agentQueue } from "@luke/database/schemas/agent-queue";
 import { user } from "@luke/database/schemas/auth";
+import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
 import { AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/agent-wire";
+import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
 import { TRANSCRIPT_WINDOW } from "@luke/features/transcript-window";
 import {
   and,
@@ -47,7 +49,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * status, so a turn moving from one to another moves them), which is where the
  * status is read from and a line stops awaiting its turn, and a title
  * landing, the agent's own (`agent`) or a worker's, or a worker's
- * delegation being recorded (`workers`). Each reads only the rows of the
+ * delegation being recorded (`workers`), and, for an agent on a device, its
+ * newest launch line being claimed, stepping, or settling (`launch`), which
+ * is where the page reads what the agent's start waits on. Each reads only the rows of the
  * account that started the agent, as the held read does, and only while
  * the reader is a member of the agent's workspace: the membership is joined
  * in the statement, so a member taken out of the workspace stops hearing
@@ -77,6 +81,7 @@ export interface TranscriptLiveStatements extends TranscriptWindowStatements {
   readonly agent: LiveStatement;
   readonly workers: LiveStatement;
   readonly queueRevision: LiveStatement;
+  readonly launch: LiveStatement;
 }
 
 /** A number Postgres holds as `bigint`, as a number rather than the text Realtime would carry. */
@@ -423,6 +428,30 @@ export function transcriptLiveStatements(
         reached,
       ),
     );
+  // The agent's newest launch line, on a device, as its claim, its step, and its settling stand,
+  // read on the agent's own transcript alone, since a worker's conversation is no agent's.
+  const launch = queryBuilder
+    .select(
+      liveSelection({
+        id: deviceAgentLine.id,
+        step: deviceAgentLine.launchStep,
+        claimed: sql<boolean>`${deviceAgentLine.claimedAt} is not null`,
+        settled: sql<boolean>`${deviceAgentLine.settledAt} is not null`,
+      }),
+    )
+    .from(deviceAgentLine)
+    .innerJoin(agentTable, eq(agentTable.id, deviceAgentLine.agentId))
+    .where(
+      and(
+        eq(agentTable.conversationId, conversationId),
+        eq(agentTable.userId, userId),
+        eq(deviceAgentLine.userId, userId),
+        eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+        reached,
+      ),
+    )
+    .orderBy(desc(deviceAgentLine.seq))
+    .limit(1);
   return Option.all({
     messages: liveStatementOf(written),
     turns: liveStatementOf(run),
@@ -430,6 +459,7 @@ export function transcriptLiveStatements(
     agent: liveStatementOf(agent),
     workers: liveStatementOf(workers),
     queueRevision: liveStatementOf(queueRevision),
+    launch: liveStatementOf(launch),
   }).pipe(
     Option.flatMap((statements) =>
       Option.map(transcriptWindowLiveStatements(target, reached, past), (window) => ({

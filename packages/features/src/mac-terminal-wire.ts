@@ -5,8 +5,8 @@ import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
  * mac-terminal-wire.ts -- the terminal a coding agent's pushed branch is opened in on this Mac.
  *
  * Open on this Mac names the agent, its repository, and its pushed branch;
- * Luke opens a terminal of this Mac in a tab of its own, whose shell brings
- * the branch into a worktree of Luke's own clone of the repository and opens
+ * the app opens a terminal of this Mac in a tab of its own, whose shell brings
+ * the branch into a worktree of our own clone of the repository and opens
  * a shell there, after the repository's run command where this Mac has one
  * for it, kept in its settings file and never sent anywhere. What the run prints, and the terminal's size, travel
  * on a port between main and that one tab, and nowhere else.

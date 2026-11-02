@@ -14,7 +14,7 @@ import { STATUS_TONE } from "@luke/ui";
 import { appPlatform } from "./app-platform.js";
 import { TOAST_HOLD, useToast } from "./toast.js";
 
-/** What every item that copies a Luke link is called, wherever it stands, and what its toast says once the clipboard took it. */
+/** What every item that copies an app link is called, wherever it stands, and what its toast says once the clipboard took it. */
 export const LINK_COPY = {
   LABEL: "Copy link",
   COPIED: "Link copied",

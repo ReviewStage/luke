@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { ensureAgentStateKey } from "@luke/database/models/agent-state-store";
-import { createAgent } from "@luke/database/models/agent-store";
 import { readGitHubTokenRow, saveGitHubToken } from "@luke/database/models/github-token-store";
 import {
   type KeyRing,
-  openAgentStateKey,
   openGitHubToken,
   openProviderKey,
   parseKeyRing,
@@ -16,17 +13,16 @@ import {
 } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { agentStateKey } from "@luke/database/schemas/agent-state";
 import { user } from "@luke/database/schemas/auth";
 import { githubPersonalToken } from "@luke/database/schemas/github-personal-token";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { getTestDB } from "@luke/database/testing";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyKind,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
-import { Effect, Option, Redacted, Result } from "effect";
+import { Effect, Redacted, Result } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   handleProviderKeyRewrap,
@@ -42,8 +38,8 @@ import {
  * subscription credential moves as a key does, beside the same provider's
  * API key, and each opens only as its kind.
  *
- * A member's GitHub token and a device agent's state key, sealed under the
- * same ring, move in the same pass.
+ * A member's GitHub token, sealed under the same ring, moves in the same
+ * pass.
  *
  * Synthetic accounts and keys; the key-encryption keys are fixed bytes
  * written for this file.
@@ -104,7 +100,6 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         // A pass walks every account's rows, so each case starts from none.
         yield* db.delete(accountProviderKey);
         yield* db.delete(githubPersonalToken);
-        yield* db.delete(agentStateKey);
         const [first, second, subscriber] = [
           `user-${randomUUID()}`,
           `user-${randomUUID()}`,
@@ -156,43 +151,14 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           },
           new Date(0),
         );
-        const task = yield* startTask(first, { name: "Invitations" });
-        const started = yield* createAgent(first, {
-          taskId: task.id,
-          idempotencyKey: randomUUID(),
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          planSnapshot: "# Invitations\n",
-          prompt: null,
-          repository: null,
-        });
-        const agentId = Option.getOrThrow(started).agent.id;
-        const stateKeyUnder = (keys: KeyRing) =>
-          Effect.map(ensureAgentStateKey(keys, first, agentId), (sealed) => {
-            const opened = openAgentStateKey(
-              keys,
-              { userId: first, agentId },
-              Option.getOrThrow(sealed),
-            );
-            return [
-              Option.getOrThrow(sealed).keyVersion,
-              Result.isSuccess(opened) ? Redacted.value(opened.success) : "unreadable",
-            ];
-          });
-        const [, stateKey] = yield* stateKeyUnder(ring(KEK.ONE));
         const rotating = ring(`${KEK.TWO},${KEK.ONE}`);
 
         const pass = yield* rewrapProviderKeys(rotating);
         const again = yield* rewrapProviderKeys(rotating);
         const rotated = ring(KEK.TWO);
 
-        assert.deepEqual(pass, { moved: 6, current: 1, changed: 0, unreadable: 1 });
-        assert.deepEqual(again, { moved: 0, current: 7, changed: 0, unreadable: 1 });
-        assert.deepEqual(
-          yield* stateKeyUnder(rotated),
-          [2, stateKey],
-          "the agent's state key moved",
-        );
+        assert.deepEqual(pass, { moved: 5, current: 1, changed: 0, unreadable: 1 });
+        assert.deepEqual(again, { moved: 0, current: 6, changed: 0, unreadable: 1 });
         assert.deepEqual(yield* openedUnder(rotated, first), [
           [PROVIDER_KEY_PROVIDER.ANTHROPIC, 2, "sk-ant-first-anthropic"],
           [PROVIDER_KEY_PROVIDER.OPENAI, 2, "sk-proj-first-openai"],
@@ -223,7 +189,6 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         const db = yield* Database;
         yield* db.delete(accountProviderKey);
         yield* db.delete(githubPersonalToken);
-        yield* db.delete(agentStateKey);
         const owner = `user-${randomUUID()}`;
         yield* db
           .insert(user)

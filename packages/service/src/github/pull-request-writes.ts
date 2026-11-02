@@ -4,7 +4,7 @@
  * Every write here runs on a member's own GitHub App user token
  * (`github-app.ts`'s `userToken`), handed in by the one seam that resolves it
  * (`agents/pull-request-write.ts`), never on an installation token, so what
- * the member may do on GitHub bounds what they do through Luke. A write is
+ * the member may do on GitHub bounds what they do through the service. A write is
  * one call of GitHub's GraphQL API (`githubWrite`), or, for its requested
  * reviewers and its labels, of its REST API (`githubRestWrite`), composed
  * over the App module's own kit (`githubPost`, `send`), so a token leaves

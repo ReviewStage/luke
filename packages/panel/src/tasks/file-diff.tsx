@@ -20,7 +20,7 @@ import { failureShown } from "../failure-report.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 
 /**
- * file-diff.tsx -- a patch as Luke draws every diff: Pierre's diff (`../diff-view/`) mounted in a review thread's card in the overview, laid out and marked as the File tabs' settings say, and unified wherever a split would not fit.
+ * file-diff.tsx -- a patch as the app draws every diff: Pierre's diff (`../diff-view/`) mounted in a review thread's card in the overview, laid out and marked as the File tabs' settings say, and unified wherever a split would not fit.
  *
  * Files changed draws its files as a list through the same bundle
  * (`diff-list.tsx`), in the same look and room. The bundle is loaded the
@@ -29,7 +29,7 @@ import { useFileViewSettings } from "./file-view-settings.js";
  * split diff sets the old side beside the new, so
  * each side has half the room: below `SPLIT_MIN_WIDTH` it is drawn unified
  * whatever the setting says, and the ⋯ offers Split view dimmed, the choice
- * kept for a wider panel. A note under a line of the patch, Luke's on a
+ * kept for a wider panel. A note under a line of the patch, the app's on a
  * Code card's snippet, is drawn by React into an element the diff keeps for
  * it, which Pierre stands under its line.
  */

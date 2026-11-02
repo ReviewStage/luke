@@ -14,9 +14,9 @@
  * so the hide-admins scope filters every series the same way.
  */
 export const ACTIVITY_FEATURE = {
-  /** A coding agent started (`agent.created_at`), by hand, by Luke, or by an automation. */
+  /** A coding agent started (`agent.created_at`), by hand, by the app, or by an automation. */
   AGENTS_STARTED: "agentsStarted",
-  /** A plan revision written by the developer, or by Luke's notetaker on their call. */
+  /** A plan revision written by the developer, or by our notetaker on their call. */
   PLAN_REVISIONS: "planRevisions",
   /** An inbox item the developer answered (`inbox_item.settled_at`, answered). */
   INBOX_ANSWERED: "inboxAnswered",

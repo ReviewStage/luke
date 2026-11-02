@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import {
-  AGENT_BRIEF,
-  AGENT_KIND,
-  type AgentBrief,
-  type AgentKind,
-  OPERATOR_QUIET_REPLY,
-} from "@luke/features/agent-wire";
+import { AGENT_BRIEF, AGENT_KIND, type AgentBrief } from "@luke/features/agent-wire";
+import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -34,7 +29,7 @@ import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
-const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
+const TASK_ADDRESS = "https://vespin.dev/acme/plan/pl_1";
 
 const SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-a";
@@ -200,8 +195,8 @@ test("the deployment's retire of a session, which a delete a browser asked for e
   }
 });
 
-test("a Claude Code agent is told of Claude Code's own tools and never of Luke's it is not offered, and an eve agent of Luke's as before", () => {
-  // The tools Claude Code owns in place of Luke's, as eve's instructions name Luke's.
+test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered, and an eve agent of Vespin's as before", () => {
+  // The tools Claude Code owns in place of ours, as eve's instructions name ours.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -247,7 +242,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
           [],
           label,
         );
-        // The tools that touch Luke stay Luke's, under their own names.
+        // The tools that touch the app stay ours, under their own names.
         for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
           assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
         }
@@ -267,7 +262,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
   }
 });
 
-test("a Claude Code or Codex agent is told of its browser, which Luke's MCP server serves it, with Playwright run from its own shell", () => {
+test("a Claude Code or Codex agent is told of its browser, which Vespin's MCP server serves it, with Playwright run from its own shell", () => {
   const BROWSER = `\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox`;
   const SHELL_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "on Playwright from Bash,"],
@@ -298,10 +293,10 @@ test("a Claude Code or Codex agent is told of its browser, which Luke's MCP serv
 test("a local agent is told its folders on the Mac, its own harness's sandbox, and no browser", () => {
   const MAC = {
     local: true,
-    sandboxed: false,
-    checkoutPath: "/Users/dev/.luke/agents/a1/repository",
-    installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
-    sharedFiles: "/Users/dev/.luke/agents/a1/tmp",
+    isolation: DEVICE_ISOLATION.BARE,
+    checkoutPath: "/Users/dev/.vespin/agents/a1/repository",
+    installedSkills: "/Users/dev/.vespin/agents/a1/installed-skills",
+    sharedFiles: "/Users/dev/.vespin/agents/a1/tmp",
   };
   const SANDBOX_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
@@ -346,43 +341,56 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
 });
 
-test("a local agent in a VM on its device is told its tools and logins there are out of reach, and to save pages where its device reads them", () => {
-  const VM = {
-    local: true,
-    sandboxed: true,
-    checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
-    installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
-    sharedFiles: "/home/luke-host/.luke/agents/a1/tmp",
-  };
-  for (const repository of ["Acme/Relay", null]) {
-    const words = coderInstructions(
-      repository,
-      AGENT_BRIEF.PROMPT,
-      true,
-      TASK_ADDRESS,
-      undefined,
-      null,
-      false,
-      CODER_HARNESS.CLAUDE_CODE,
-      undefined,
-      false,
-      VM,
-    );
-    const label = repository ?? "no repository";
-    assert.ok(words.includes("Linux virtual machine of your own"), label);
-    assert.ok(words.includes("out of your reach"), label);
-    assert.ok(!words.includes("their installed tools"), label);
-    assert.ok(!words.includes("the developer's own git credentials"), label);
-    assert.ok(!words.includes("## Your browser"), label);
-    if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
-    // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
-    assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
-    assert.ok(!words.includes("/tmp/luke"), label);
-  }
-});
+test.each([
+  {
+    isolation: DEVICE_ISOLATION.SANDBOX,
+    told: ["Linux virtual machine of your own", "out of your reach"],
+    untold: ["their installed tools"],
+  },
+  {
+    isolation: DEVICE_ISOLATION.DIRECT,
+    told: ["straight on one of the developer's own machines", "full access"],
+    untold: ["Linux virtual machine of your own", "Claude Code's own sandbox"],
+  },
+])(
+  "a local agent run on Vespin's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
+  ({ isolation, told, untold }) => {
+    const VM = {
+      local: true,
+      isolation,
+      checkoutPath: "/home/luke-host/.vespin/agents/a1/repository",
+      installedSkills: "/home/luke-host/.vespin/agents/a1/installed-skills",
+      sharedFiles: "/home/luke-host/.vespin/agents/a1/tmp",
+    };
+    for (const repository of ["Acme/Relay", null]) {
+      const words = coderInstructions(
+        repository,
+        AGENT_BRIEF.PROMPT,
+        true,
+        TASK_ADDRESS,
+        undefined,
+        null,
+        false,
+        CODER_HARNESS.CLAUDE_CODE,
+        undefined,
+        false,
+        VM,
+      );
+      const label = repository ?? "no repository";
+      for (const each of told) assert.ok(words.includes(each), `${label}: ${each}`);
+      for (const each of untold) assert.ok(!words.includes(each), `${label}: ${each}`);
+      assert.ok(!words.includes("the developer's own git credentials"), label);
+      assert.ok(!words.includes("## Your browser"), label);
+      if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
+      // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
+      assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
+      assert.ok(!words.includes("/tmp/luke"), label);
+    }
+  },
+);
 
-test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
-  // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
+test("a Codex agent is told of Codex's own tools and never of Vespin's it is not offered, nor of Claude Code's", () => {
+  // Our tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -455,7 +463,7 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
 });
 
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of its own pages alone", () => {
-  const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
+  const TASK_LINK = "`https://vespin.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(AGENT_BRIEF)) {
@@ -566,7 +574,7 @@ test("the session sends whatever is ready for the developer to look at or review
   }
 });
 
-test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
+test("an agent writing as its developer is told to end every commit on the trailer naming Vespin as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(AGENT_BRIEF)) {
     const developer = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER);
@@ -730,7 +738,7 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
 });
 
 /** The task link the golden's on-task prompts were composed with. */
-const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
+const TASK_LINK = "https://vespin.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 
 /** A coding agent's instructions, recorded for each brief, on a task and on none, byte for byte. */
 const CODER_PATH = fileURLToPath(
@@ -784,130 +792,13 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
       true,
     );
     assert.ok(!off.includes("## The workspace's memory"), brief);
-    assert.ok(!off.includes(`\`${CODER_TOOL.REMEMBER}\``), brief);
+    assert.ok(!off.includes(`\`${CODER_TOOL.SAVE_MEMORY}\``), brief);
     const start = on.indexOf("## The workspace's memory\n\n");
     const end = on.indexOf("## What your messages are", start);
     assert.ok(start > 0 && end > start, brief);
-    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.RECALL}\``), brief);
+    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.SEARCH_MEMORY}\``), brief);
     assert.equal(on.slice(0, start) + on.slice(end), off, brief);
   }
-});
-
-test("with Memory on, the operator is told to keep the developer's own preferences and what they are juggling private, and a coder that it keeps and recalls none", () => {
-  const memorySection = (kind: AgentKind) => {
-    const on = coderInstructions(
-      null,
-      AGENT_BRIEF.BLANK,
-      false,
-      null,
-      undefined,
-      null,
-      false,
-      CODER_HARNESS.EVE,
-      kind,
-      true,
-    );
-    const start = on.indexOf("## The workspace's memory\n\n");
-    return on.slice(start, on.indexOf("## What your messages are", start));
-  };
-  const operator = memorySection(AGENT_KIND.OPERATOR);
-  const coder = memorySection(AGENT_KIND.CODER);
-
-  assert.ok(operator.includes("Keep the developer's own preferences and what they are juggling"));
-  assert.ok(operator.includes("as private memories, with private set"));
-  assert.ok(coder.includes("you are never answered one, and you never set private"));
-  assert.ok(!coder.includes("what they are juggling"));
-});
-
-/** The member's operator's instructions, recorded byte for byte: an agent of kind operator, blank, on no task and no repository. */
-const OPERATOR_PATH = fileURLToPath(
-  new URL("../../../fixtures/coder-instructions/operator.json", import.meta.url),
-);
-
-/** An operator's instructions as its session composes them. */
-function operatorInstructions(): string {
-  return coderInstructions(
-    null,
-    AGENT_BRIEF.BLANK,
-    false,
-    null,
-    undefined,
-    null,
-    false,
-    CODER_HARNESS.EVE,
-    AGENT_KIND.OPERATOR,
-  );
-}
-
-// Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
-if (process.env.LUKE_UPDATE_FIXTURES === "1") {
-  writeFileSync(
-    OPERATOR_PATH,
-    `${JSON.stringify({ operator: operatorInstructions() }, null, 2)}\n`,
-  );
-}
-
-const OPERATOR_GOLDEN = Schema.decodeUnknownSync(Schema.Struct({ operator: Schema.String }))(
-  JSON.parse(readFileSync(OPERATOR_PATH, "utf8")),
-);
-
-test("an operator's instructions are the golden's, byte for byte: its own job and Steward's rules in place of an agent's job and pull request, and no delete; a coder's are the same whatever the kind defaults to", () => {
-  const operator = operatorInstructions();
-  assert.equal(operator, OPERATOR_GOLDEN.operator);
-  for (const told of [
-    "You are Luke, the developer's operator in this workspace",
-    "## What you may do unasked",
-    "## Never",
-    "Never merge or close a pull request yourself, and never ask an agent to merge or close one on your own initiative.",
-    `When the developer asks you in this conversation to merge or close a pull request, tell the agent that owns it to do it, with \`${CODER_TOOL.MESSAGE_AGENT}\``,
-    `and messaging any agent of the workspace with \`${CODER_TOOL.MESSAGE_AGENT}\`, a teammate's included.`,
-    "once, and never a second time for the same agent, which the service refuses",
-    "Never delete anything.",
-    "Never answer a thread's ask for the developer",
-    "Never change Settings, keys, or integrations.",
-    "Never act on a teammate's agent beyond reading and messaging it:",
-    "Never change a teammate's task, which you read and nothing more.",
-    "Never address a thread to anyone but the developer: your threads are theirs alone",
-    "Report each action you took unasked as a line of its own in your reply",
-    "ask the developer in a thread",
-    `reports back to you with \`${CODER_TOOL.MESSAGE_AGENT}\``,
-    `Your heartbeat is an automation of the developer's, Luke's heartbeat, that hands you a turn twice each weekday`,
-    `you change it with \`${CODER_TOOL.UPDATE_AUTOMATION}\`, such as its hours, or run it with \`${CODER_TOOL.RUN_AUTOMATION}\`, only when the developer asks`,
-    "## Your opening",
-    "with your desk beside it, read fresh. Say in a few lines what stands from the desk",
-    `\`${CODER_TOOL.LIST_OPEN_ASKS}\``,
-    "and never a teammate's agent, which the service refuses you; then say which agent you archived and why.",
-    "and never a teammate's task, which the service refuses you; a task is never archived",
-    "and never a teammate's agent, which the service refuses you; then say which agent you stopped and why.",
-    "otherwise only where work they asked you for splits into tasks of its own and you start an agent on each",
-    "Your messages are read by the developer alone, in Luke's own window as a transcript",
-    `exactly ${OPERATOR_QUIET_REPLY} alone.`,
-  ]) {
-    assert.ok(operator.includes(told), told);
-  }
-  for (const untold of [
-    "implement the plan",
-    `\`${CODER_TOOL.OPEN_PULL_REQUEST}\``,
-    `\`${CODER_TOOL.DELETE_SECTION}\``,
-    "and never ask an agent to.",
-    "and messaging any agent.",
-    "To reach a teammate's agent, ask the developer.",
-    `Read their open work with \`${CODER_TOOL.LIST_AGENTS}\``,
-    "unless the developer asked",
-    "since its agents start on your own task",
-    "what you changed, what you ran, and what you published or why not",
-  ]) {
-    assert.ok(!operator.includes(untold), untold);
-  }
-  // A coder on no repository is told the opposite on each, so the operator's words are its alone.
-  const coder = coderInstructions(null, AGENT_BRIEF.BLANK, false, null);
-  assert.ok(!coder.includes("## What you may do unasked"));
-  assert.ok(coder.includes(`\`${CODER_TOOL.DELETE_SECTION}\``));
-  assert.ok(!coder.includes(`\`${CODER_TOOL.LIST_OPEN_ASKS}\``));
-  assert.ok(coder.includes("and never a teammate's agent still in use unless the developer asked"));
-  assert.ok(coder.includes("since its agents start on your own task"));
-  assert.ok(coder.includes("what you changed, what you ran, and what you published or why not"));
-  assert.ok(!coder.includes("Luke's heartbeat"));
 });
 
 /** A pilot's instructions, recorded byte for byte: an agent of kind pilot, handed a prompt, on a task and a repository. */

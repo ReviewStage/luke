@@ -36,7 +36,7 @@
  * so their bearer is the Mac's Better Auth session, signed, which the bearer
  * plugin reads as the session cookie those calls take; the list, a
  * workspace created, and the members read take the Mac's OAuth token.
- * Luke's own rules stand in front of the plugin's, which checks the caller's
+ * Our own rules stand in front of the plugin's, which checks the caller's
  * role and membership again itself.
  *
  * The caller is resolved, and a body held to its bound, on the resource

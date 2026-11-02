@@ -253,7 +253,7 @@ it.effect("a sign-in page the browser could not open ends the trip as the browse
     const outcome = yield* Effect.scoped(consent.signInEffect());
 
     assert.deepEqual(outcome, {
-      reason: "Luke could not open the sign-in page in your browser.",
+      reason: "Could not open the sign-in page in your browser.",
       failure: SIGN_IN_FAILURE.BROWSER,
     });
   }),
@@ -319,7 +319,7 @@ it.effect(
       const outcome = yield* Fiber.join(yield* trip(consent));
 
       assert.deepEqual(outcome, {
-        reason: "Luke could not prepare a secure sign-in on this machine.",
+        reason: "Could not prepare a secure sign-in on this machine.",
       });
       assert.deepEqual(opened, []);
     }).pipe(Effect.ensuring(Effect.sync(() => vi.restoreAllMocks()))),

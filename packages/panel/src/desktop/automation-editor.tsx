@@ -61,6 +61,7 @@ import {
 } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { clockText, dateOfText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
@@ -195,7 +196,7 @@ import { automationDeleteQuestion, automationOwnerName } from "./automation-word
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneHead, phoneFindGroups } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -267,7 +268,7 @@ function sentryWithheld(
 const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
 
 /** What the page says where a Sentry trigger is held back from saving. */
-const SENTRY_WITHHELD = "Luke cannot receive Sentry events here. Choose another trigger.";
+const SENTRY_WITHHELD = `${PRODUCT_NAME} cannot receive Sentry events here. Choose another trigger.`;
 
 /** What the Trigger card says where the read of the workspace's Sentry did not land. */
 const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
@@ -305,12 +306,10 @@ const SENTRY_EVENTS: readonly { value: SentryTriggerEvent; label: string }[] = [
   { value: SENTRY_TRIGGER_EVENT.ISSUE_CREATED, label: "New issue" },
 ];
 
-/** What each Sentry event's row says under its name: how it reaches Luke. */
-const SENTRY_EVENT_DETAIL = {
-  [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]:
-    "Set the alert rule's action to send a notification to the Luke integration.",
-  [SENTRY_TRIGGER_EVENT.ISSUE_CREATED]: "Every new issue in the installed organization's projects.",
-} as const satisfies Record<SentryTriggerEvent, string>;
+/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches us. */
+const SENTRY_EVENT_DETAIL: Partial<Record<SentryTriggerEvent, string>> = {
+  [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]: `Set the alert rule's action to send a notification to the ${PRODUCT_NAME} integration.`,
+};
 
 /** Sentry's levels as the level pills name them, least severe first. */
 const SENTRY_LEVELS: readonly { value: SentryLevel; label: string }[] = [
@@ -360,9 +359,8 @@ const NO_MATCH = {
 const SAVE_REFUSAL_WORDS = {
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be saved. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
-  [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository it works in.",
-  [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke cannot reach that repository from this workspace on GitHub.",
+  [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository whose events start it.",
+  [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: `${PRODUCT_NAME} cannot reach that repository from this workspace on GitHub.`,
   [AUTOMATION_CALL_FAILURE.INVALID]:
     "The automation could not be saved as written. Check its schedule and prompt.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
@@ -751,7 +749,7 @@ function optionValue<Value extends string>(
   return (raw) => options.find((option) => option.value === raw)?.value;
 }
 
-/** When the draft runs next, its next two runs; nothing for one Luke cannot read. */
+/** When the draft runs next, its next two runs; nothing for one we cannot read. */
 function nextRunsText(draft: AutomationDraft): string | undefined {
   const [first, second] = draftNextRuns(draft, new Date(), 2);
   if (first === undefined) return undefined;
@@ -793,7 +791,7 @@ function ScheduleRows({
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
-  // Note that a zone Luke cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
+  // Note that a zone we cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
   const read =
     problem === undefined
       ? undefined
@@ -1040,7 +1038,7 @@ function AutomationActions({
   onDelete,
   running,
   onRunNow,
-  lead = [],
+  lead,
   heading,
 }: {
   /** The automation, whose link, Run now, and Delete the menu offers; none on a new automation's page, a phone's alone. */
@@ -1072,7 +1070,10 @@ function AutomationActions({
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
           heading={heading}
-          groups={[...lead, ...own].filter((group) => group.length > 0)}
+          // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read as the menu is drawn.
+          groups={[...(lead === undefined ? [] : [...lead, ...phoneFindGroups()]), ...own].filter(
+            (group) => group.length > 0,
+          )}
           onClose={menu.close}
         />
       )}
@@ -1295,8 +1296,8 @@ const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: st
   { value: GITHUB_SENDER.PEOPLE, label: "From people" },
   {
     value: GITHUB_SENDER.LUKE_AGENTS,
-    label: "From Luke's agents",
-    detail: "What Luke's agents open, as you or as the workspace's GitHub App.",
+    label: `From ${PRODUCT_NAME}'s agents`,
+    detail: `What ${PRODUCT_NAME}'s agents open, as you or as the workspace's GitHub App.`,
   },
   {
     value: GITHUB_SENDER.OTHER_BOTS,
@@ -1312,7 +1313,7 @@ const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail
   {
     value: PULL_REQUEST_MOMENT.PUSHED,
     label: "When pushed to",
-    detail: "A push by Luke's own agents never starts a run.",
+    detail: `A push by ${PRODUCT_NAME}'s own agents never starts a run.`,
   },
 ];
 
@@ -1530,7 +1531,7 @@ function SentryRows({
       />
       <FilterRow
         label="Projects"
-        detail="Project slugs, comma-separated. Empty for every project."
+        detail="Project slugs, comma-separated."
         values={trigger.filters?.project ?? []}
         problem={
           filterAdmitted(trigger.filters?.project) ? undefined : problems[DRAFT_FIELD.FILTERS]
@@ -1539,7 +1540,7 @@ function SentryRows({
       />
       <FilterRow
         label="Environments"
-        detail="Comma-separated. Empty for every environment."
+        detail="Comma-separated."
         values={trigger.filters?.environment ?? []}
         problem={
           filterAdmitted(trigger.filters?.environment) ? undefined : problems[DRAFT_FIELD.FILTERS]
@@ -1562,7 +1563,7 @@ function SentryRows({
       />
       <SettingsRow
         label="Same issue again after"
-        description={`Hours before one Sentry issue can start another run, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
+        description={`Hours, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
         error={inputProblem(problems[DRAFT_FIELD.COOLDOWN])}
       >
         {(control) => (
@@ -1688,8 +1689,8 @@ function WebhookRows({
         description={
           <>
             POST to the address with the secret as <code>Authorization: Bearer</code>. Don't send
-            secrets in the body: Luke hands the body to the run's agent, and it shows in the run's
-            transcript.
+            secrets in the body: {PRODUCT_NAME} hands the body to the run's agent, and it shows in
+            the run's transcript.
           </>
         }
       >
@@ -1725,7 +1726,7 @@ function WebhookRows({
         confirm={rotation}
         question={{
           title: "Make a new secret?",
-          body: `The secret your sender uses now stops working until you give it the new one, which Luke shows you once. ${IRREVERSIBLE_WORDS}`,
+          body: `The secret your sender uses now stops working until you give it the new one, which ${PRODUCT_NAME} shows you once. ${IRREVERSIBLE_WORDS}`,
           verb: "Make secret",
           running: "Making",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -2043,9 +2044,11 @@ function RunsGroup({
         description={
           taskBacked
             ? "Its task's repository."
-            : also.length === 0
-              ? undefined
-              : `Runs start here, and also work in ${andList(also)}.`
+            : draft.repository === null && draft.triggerKind !== AUTOMATION_TRIGGER.GITHUB
+              ? "Runs work in no repository, for work that touches no code."
+              : also.length === 0
+                ? undefined
+                : `Runs start here, and also work in ${andList(also)}.`
         }
         error={inputProblem(problems[DRAFT_FIELD.REPOSITORY])}
       >
@@ -2060,6 +2063,12 @@ function RunsGroup({
               value={draft.repository}
               chooser={repositories}
               onChoose={(repository) => onDraft(withRepository(draft, repository))}
+              onClear={
+                // A GitHub trigger is fired by its repository's events, so it never stands on none.
+                draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
+                  ? undefined
+                  : () => onDraft(withRepository(draft, null))
+              }
             />
           )
         }
@@ -2464,12 +2473,16 @@ export function AutomationPageSkeleton({
             runs={undefined}
             onRetry={() => undefined}
             onOpenAgent={() => undefined}
+            onOpenSetup={() => undefined}
           />
         )
       }
     />
   );
 }
+
+/** The setup's own scrolling column, which a run with nothing of its own to open hands the keyboard. */
+const SETUP_COLUMN = ".luke-detail-page-main";
 
 /** An automation's page's two screens in a narrow room: its setup, toolbar and all, and its runs. */
 const EDITOR_SCREENS: NarrowColumns = {
@@ -2594,7 +2607,7 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const drafted = draftProblems(draft, repositoryHeld(draft, automation), new Date());
+  const drafted = draftProblems(draft, repositoryHeld(automation), new Date());
   // Note that a time the field cannot read stops a save as the schedule's own problem does, since the draft holds only what read before it.
   const problems: DraftProblems =
     unreadableTime && drafted[DRAFT_FIELD.SCHEDULE] === undefined
@@ -2685,6 +2698,17 @@ export function AutomationEditor({
     },
     confirmFailure(FAILURE_SURFACE.AUTOMATION_DELETE, { automationId: automation?.id }),
   );
+  // A run with nothing of its own to open opens the setup, where whatever kept it from starting is mended:
+  // in one column it stands the setup again, as the runs' way back does; in two, where the setup already
+  // stands beside the runs, it hands the setup's column the keyboard, scrolled to its top.
+  const openSetup = () => {
+    const column = editorLayout.current?.querySelector<HTMLElement>(SETUP_COLUMN);
+    if (single) onRuns(false);
+    else if (column) {
+      column.scrollTop = 0;
+      column.focus({ preventScroll: true });
+    }
+  };
   const runsRead = {
     mine: automation === undefined || automation.mine === true,
     created: automation !== undefined,
@@ -2693,6 +2717,7 @@ export function AutomationEditor({
     runs: runs.read,
     onRetry: runs.reload,
     onOpenAgent,
+    onOpenSetup: openSetup,
   };
   return (
     <AutomationPageFrame

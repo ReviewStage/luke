@@ -1,9 +1,9 @@
 {
   "name": "@luke/claude-code-probe",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "Proves Claude Code on a Claude plan inside a Luke sandbox: the turn it runs there, and that its token stays with the CLI",
+  "description": "Proves Claude Code on a Claude plan inside a Vespin sandbox: the turn it runs there, and that its token stays with the CLI",
   "scripts": {
     "probe": "tsx src/cli.ts",
     "test:vitest": "vitest run",

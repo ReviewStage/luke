@@ -5,18 +5,18 @@ import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { ICONSET_SOURCES, iconutilArguments } from "./package-config.mjs";
 
 /**
- * Builds the app's Luke.icns from the committed brand PNGs. Skipped while
+ * Builds the app's `.icns` icon from the committed brand PNGs. Skipped while
  * the built icon is newer than every source, so dev launches pay nothing; the
  * sources are committed files, so mtime is a sound freshness answer.
  */
 export function buildAppIcon(appRoot) {
   const iconsetPath = path.join(appRoot, ".build", "luke.iconset");
-  const iconPath = path.join(appRoot, ".build", "Luke.icns");
+  const iconPath = path.join(appRoot, ".build", "Vespin.icns");
   const brandIconDirectory = path.join(BRAND_ASSETS_DIRECTORY, "icon");
   const sourcePaths = Object.values(ICONSET_SOURCES).map((sourceName) => {
     const sourcePath = path.join(brandIconDirectory, sourceName);
     if (!fs.existsSync(sourcePath)) {
-      throw new Error(`Luke brand icon source is missing: ${sourcePath}`);
+      throw new Error(`Vespin brand icon source is missing: ${sourcePath}`);
     }
     return sourcePath;
   });

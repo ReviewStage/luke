@@ -33,7 +33,7 @@ import { syncFromEnvironment, syncHub } from "./hub.js";
 import { NO_TOPICS, Sync, type SyncWatch } from "./watch.js";
 
 /**
- * Luke Sync's hub, on the test database's own listener: what a committed
+ * Sync's hub, on the test database's own listener: what a committed
  * write on a synced table wakes, how the listener is shared and proved, and
  * what waits on the clock instead. The tests run on a clock that announces
  * each wait, and move it only once something waits on it, so a write the
@@ -194,7 +194,7 @@ const opening = (topics: readonly SyncTopic[], fallback: Duration.Duration, scop
 /** Whether the fiber is still waiting. */
 const waiting = <A, E>(fiber: Fiber.Fiber<A, E>) => fiber.pollUnsafe() === undefined;
 
-it.layer(probeDB)("Luke Sync's hub", (it) => {
+it.layer(probeDB)("Vespin Sync's hub", (it) => {
   it.effect("a committed write wakes exactly the watches on its topics, with its txid", () =>
     onHub(({ asleep }) =>
       Effect.gen(function* () {

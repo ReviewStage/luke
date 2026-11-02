@@ -18,7 +18,7 @@ import { app } from "electron";
  * host-login-item.ts -- This Mac's `luke-host` as the host asks it (`@luke/host/effect`'s `ThisMacHost`): its login item registered, unregistered, or where it stands, and the version of the `luke-host` the app carries.
  *
  * A packaged app carries the login item, a launchd job in its
- * `Contents/Library/LaunchAgents` that runs Luke's host daemon as the member
+ * `Contents/Library/LaunchAgents` that runs our host daemon as the member
  * at login, whether or not the app is open, on the app's own state folder
  * (`@luke/host/daemon`'s `DARWIN_HOST`), and acts on it through its own
  * `luke-host` command (`native/macos/HostLoginItem.swift`), which reaches
@@ -107,7 +107,7 @@ const developmentHost = (stateRoot: string) =>
     const daemon = Effect.scoped(
       Effect.flatMap(
         ChildProcess.make(node, [bundle, "run"], {
-          // Note that the runner is the one the development build's own VMs mount, as a packaged app's is its own.
+          // Note that the runner is the development build's own, as a packaged app's is its own.
           env: {
             [DEVELOPMENT_VARIABLE.STATE_ROOT]: stateRoot,
             [DEVELOPMENT_VARIABLE.RUNNER_FOLDER]: path.resolve(

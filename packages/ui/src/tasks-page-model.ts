@@ -70,7 +70,7 @@ export interface TasksFilter {
   readonly repository?: readonly (string | null)[];
 }
 
-/** Who made a task, as the filter's Made by tells them apart: a person by hand, a coding agent, or Luke on a call. */
+/** Who made a task, as the filter's Made by tells them apart: a person by hand, a coding agent, or the app itself on a call. */
 export const TASK_MAKER = {
   PERSON: "person",
   AGENT: "agent",
@@ -295,7 +295,7 @@ const LIST_COLUMN_ROOM = {
   [TASK_PROPERTY.ASSIGNEE]: 32,
   [TASK_PROPERTY.CREATOR]: 140,
   [TASK_PROPERTY.AGENTS]: 100,
-  [LIST_COLUMN.SUB_TASKS]: 44,
+  [LIST_COLUMN.SUB_TASKS]: 76,
   [TASK_PROPERTY.UPDATED]: 76,
 } as const satisfies Record<ListColumn, number>;
 
@@ -411,7 +411,7 @@ function creatorOf(task: TaskSummary): string | null {
   return task.createdBy?.userId ?? task.ownerId ?? null;
 }
 
-/** Who made a task: a person by hand, read so for a task from a service before origins; a coding agent, one an automation's run started among them, whose task names the automation; or Luke on a call. */
+/** Who made a task: a person by hand, read so for a task from a service before origins; a coding agent, one an automation's run started among them, whose task names the automation; or the app itself on a call. */
 function makerOf(task: Pick<TaskSummary, "origin">): TaskMaker {
   switch (task.origin?.actor) {
     case undefined:

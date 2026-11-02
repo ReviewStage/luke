@@ -105,7 +105,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * Changes from its bar, says so where there is no pull request yet, and
  * offers a retry where a read failed. The overview is three reads, the pull
  * request itself, its checks, and its conversation, each drawn as it lands,
- * a skeleton until then, under the pill and title Luke already held.
+ * a skeleton until then, under the pill and title the app already held.
  * Synthetic people throughout.
  */
 
@@ -510,7 +510,7 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   });
 }
 
-/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in Luke where one is given. */
+/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function draw(
   control: AgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
@@ -521,7 +521,7 @@ async function draw(
   return drawn(createElement(Switching, { control, first }), registry, github, openPlace);
 }
 
-/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in Luke where one is given. */
+/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function drawn(
   tab: React.ReactElement,
   registry = AtomRegistry.make(),
@@ -661,7 +661,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   assert.deepEqual(
     [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
-    "Luke's own App's bot opened it, an App's bot on GitHub like any other",
+    "Vespin's own App's bot opened it, an App's bot on GitHub like any other",
   );
 
   const description =
@@ -1892,7 +1892,7 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
   );
 });
 
-test("each tab counts what Luke holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
+test("each tab counts what Vespin holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
   const checks = held<AgentOverviewChecksAnswerView>();
   const tab = await draw(controlAnswering({ checks: checks.read }));
   assert.equal(tabCount(tab, "Conversation"), "2");
@@ -2020,7 +2020,7 @@ test("where what the agent published is not read, the header still says where th
     null,
     "the header holds no ⋯",
   );
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
   await pressToolbar(tab, "Open on GitHub");
   await settle();
   assert.deepEqual(opened, [PAGE]);
@@ -2029,10 +2029,10 @@ test("where what the agent published is not read, the header still says where th
 test("the toolbar's ⋯ offers Refresh dimmed while a read is out, which a refresh would only repeat", async () => {
   const pullRequest = held<AgentOverviewPullRequestAnswerView>();
   const tab = await draw(controlAnswering({ pullRequest: pullRequest.read }));
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh (off)"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh (off)"]);
   await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
   await settle();
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
 });
 
 test("the toolbar's ⋯ offers nothing for the pull request before any of it is held", async () => {
@@ -2044,7 +2044,7 @@ test("the toolbar's ⋯ offers nothing for the pull request before any of it is 
   assert.deepEqual(toolbarItems(tab), []);
   await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
   await settle();
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
 });
 
 test("a ⌘-click on the title opens the pull request on GitHub, and a plain one opens nothing", async () => {
@@ -2155,7 +2155,7 @@ test("an agent with no pull request yet says so, and the toolbar's ⋯ offers no
   assert.deepEqual(toolbarItems(none), []);
 });
 
-test("the pill, the title, and the files' count stand from what Luke holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
+test("the pill, the title, and the files' count stand from what Vespin holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
   const pullRequest = held<{ pullRequest: AgentOverviewPullRequest }>();
   const checks = held<{ pullRequest: AgentOverviewChecks }>();
   const conversation = held<{ pullRequest: AgentOverviewConversation }>();
@@ -2174,7 +2174,7 @@ test("the pill, the title, and the files' count stand from what Luke holds befor
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations #42",
-    "the title is what Luke held of the pull request",
+    "the title is what Vespin held of the pull request",
   );
   assert.equal(tabCount(tab, "Files changed"), "+4 −1");
   assert.deepEqual(waiting(tab), [
@@ -2449,7 +2449,7 @@ test("a change refused for a repository out of the workspace's reach says where 
     assert.fail("the tab says why the change was not made");
   assert.match(
     note.textContent ?? "",
-    /Luke cannot reach this task's repository on GitHub\. Choose which repositories Luke can see\./u,
+    /Vespin cannot reach this task's repository on GitHub\. Choose which repositories Vespin can see\./u,
   );
   const open =
     [...note.querySelectorAll("button")].find((button) => button.textContent === "Open Settings") ??
@@ -2976,9 +2976,9 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   );
   const panel = openReview(tab);
   assert.deepEqual(words(panel, '[aria-label="What the review says"] [role="radio"]'), [
-    "CommentSubmit general feedback without approval.",
+    "Comment",
     "Approve",
-    "Request changesSubmit feedback that must be addressed.",
+    "Request changes",
   ]);
 
   writeReview(panel, "Ship it once **CI** is green.");
@@ -4079,7 +4079,7 @@ test("Close on an open pull request whose merge status could not be read asks fi
   const question = document.querySelector('[role="dialog"], [role="alertdialog"]');
   assert.match(
     question?.textContent ?? "",
-    /could not read whether this pull request is in the merge queue/u,
+    /Could not read whether this pull request is in the merge queue/u,
   );
   assert.deepEqual(changes, []);
 });
@@ -5638,7 +5638,7 @@ test("a thread's ⋯ in Files changed shows it in the Conversation through the s
   assert.equal(document.activeElement, card.querySelector("summary"));
 });
 
-test("Copy link in a thread's ⋯ copies its Luke link in the view it is drawn in; a thread with no id offers no ⋯ and no press to Files changed", async () => {
+test("Copy link in a thread's ⋯ copies its Vespin link in the view it is drawn in; a thread with no id offers no ⋯ and no press to Files changed", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
   const tab = await drawn(
@@ -5656,7 +5656,7 @@ test("Copy link in a thread's ⋯ copies its Luke link in the view it is drawn i
   await threadMenuItem(card ?? assert.fail("the thread is drawn"), "Copy link");
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
+    `https://vespin.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
   ]);
 });
 
@@ -6210,6 +6210,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
     "beside the title stands the merge alone",
   );
   assert.deepEqual(toolbarItems(tab), [
+    "Copy GitHub link",
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
@@ -6223,6 +6224,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
   await choose(tab, "Files changed");
   assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");
   assert.deepEqual(toolbarItems(tab), [
+    "Copy GitHub link",
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
@@ -6237,7 +6239,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
 
   await choose(tab, "Conversation");
   assert.deepEqual(
-    toolbarItems(tab).slice(4),
+    toolbarItems(tab).slice(5),
     [],
     "Files changed's items go with it once another view is shown",
   );

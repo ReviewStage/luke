@@ -27,6 +27,7 @@ import {
   ListChecks,
   ListEnd,
   ListTodo,
+  ListTree,
   MessageSquareHeart,
   MessagesSquare,
   PhoneOff,
@@ -106,6 +107,8 @@ function GitHubMarkGlyph(): React.JSX.Element {
 export const GLYPH = {
   // Things the app has.
   TASK: lucideGlyph(ListTodo),
+  // A task under another, its parent, wherever sub-tasks are named, counted, or added.
+  SUB_TASK: lucideGlyph(ListTree),
   AGENT: lucideGlyph(Bot),
   PULL_REQUEST: lucideGlyph(GitPullRequest),
   BRANCH: lucideGlyph(GitBranch),
@@ -143,7 +146,7 @@ export const GLYPH = {
   CALL: WaveformIcon,
   SETTINGS: GearIcon,
   TIME: lucideGlyph(Clock),
-  // Where a task's coding agents run: the cloud, a member's Mac running Luke, or a host they added.
+  // Where a task's coding agents run: the cloud, a member's Mac running the app, or a host they added.
   CLOUD: lucideGlyph(Cloud),
   DESKTOP: LaptopIcon,
   HOST: lucideGlyph(Server),
@@ -153,7 +156,7 @@ export const GLYPH = {
   TODOS: lucideGlyph(ListChecks),
   // An ask that wants a choice among options, the Inbox's "decide".
   DECIDE: lucideGlyph(Split),
-  // Word sent back to the makers of Luke, which no comment is.
+  // Word sent back to the makers of the app, which no comment is.
   FEEDBACK: lucideGlyph(MessageSquareHeart),
   // A message waiting behind an agent's running turn, to open the next one.
   QUEUED: lucideGlyph(ListEnd),

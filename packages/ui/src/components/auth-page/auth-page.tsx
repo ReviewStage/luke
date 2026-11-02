@@ -54,14 +54,14 @@ export function AuthPage({
   footnote,
   children,
 }: {
-  /** The artwork the page opens with: an `AuthMark`, or Luke's face. */
+  /** The artwork the page opens with: an `AuthMark`, or the app's face. */
   mark?: ReactNode;
   /** What the page is for, or how it ended, which names it. */
   title: ReactNode;
   description?: ReactNode;
   /** What went wrong and the failure beneath it, or nothing while nothing has. */
   error?: ShownError | undefined;
-  /** The way on, such as Open Luke, or nothing where there is none. */
+  /** The way on, such as the Open link, or nothing where there is none. */
   action?: AuthAction | undefined;
   /** A closing note under everything else ("You can close this window"). */
   footnote?: ReactNode;
@@ -70,7 +70,7 @@ export function AuthPage({
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   return (
-    <main className="luke-auth-page @container grid place-items-center min-h-dvh p-page-inset box-border">
+    <main className="luke-auth-page @container grid grid-cols-1 place-items-center min-h-dvh p-page-inset box-border">
       <section
         className="luke-auth-card flex flex-col items-center w-full max-w-auth-card box-border border border-border rounded-dialog bg-surface shadow-auth-card text-foreground font-ui text-body text-center wrap-anywhere"
         aria-labelledby={titleId}

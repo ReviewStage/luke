@@ -1,5 +1,5 @@
 /**
- * feedback-dialog.tsx -- a note to the people who make Luke, written in a modal over the window: words, screenshots, and whether to sign it.
+ * feedback-dialog.tsx -- a note to the people who make the app, written in a modal over the window: words, screenshots, and whether to sign it.
  *
  * The window asks the way every desktop app's "Send feedback" asks: it dims,
  * a card holds one field and the few things that go with it, and Cancel and
@@ -35,6 +35,7 @@ import {
   type FeedbackKind,
   type FeedbackSubmission,
 } from "@luke/features/feedback";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -54,16 +55,19 @@ import {
   ImageIcon,
   Inline,
   LAYOUT_ELEMENT,
+  LIST_MOTION_WAY,
+  ListMotion,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
   TextArea,
   Tooltip,
   useFilePicker,
+  useLeaving,
 } from "@luke/ui";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { enterKeyHint, enterSubmitKey } from "./enter-sends.js";
 import { failureShown } from "./failure-report.js";
@@ -74,7 +78,7 @@ import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
  * Each kind in its own words: the title its dialog carries, the field's
  * name, and the hint the empty field shows. The wire still
  * calls the second kind a prompt; to the person writing it, it is a feature
- * they would like Luke to have.
+ * they would like the app to have.
  */
 const FEEDBACK_COPY = {
   [FEEDBACK_KIND.FEEDBACK]: {
@@ -85,7 +89,7 @@ const FEEDBACK_COPY = {
   [FEEDBACK_KIND.PROMPT]: {
     title: "Suggest a feature",
     field: "Feature suggestion",
-    placeholder: "What would you want Luke to do?",
+    placeholder: `What would you want ${PRODUCT_NAME} to do?`,
   },
 } as const;
 
@@ -163,6 +167,72 @@ function dialogTitle(kind: FeedbackKind, about: Experiment | undefined): string 
 
 function feedbackImageUrl(image: FeedbackImage): string {
   return `data:${image.mediaType};base64,${image.base64}`;
+}
+
+/** The screenshots' row, each by a key minted for its image, a screenshot taken off scaling out where it stood. */
+function FeedbackImageRow({
+  row,
+  images,
+  busy,
+  onRemove,
+}: {
+  row: RefObject<HTMLUListElement | null>;
+  images: readonly FeedbackImage[];
+  busy: boolean;
+  onRemove: (image: FeedbackImage) => void;
+}): React.JSX.Element | null {
+  const [ids] = useState(() => new WeakMap<FeedbackImage, string>());
+  const minted = useRef(0);
+  const idOf = (image: FeedbackImage): string => {
+    const known = ids.get(image);
+    if (known !== undefined) return known;
+    minted.current += 1;
+    const id = String(minted.current);
+    ids.set(image, id);
+    return id;
+  };
+  const drawn = useLeaving(images, idOf);
+  if (drawn.length === 0) return null;
+  return (
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
+      ref={row}
+      className="feedback-dialog-images"
+      aria-label="Screenshots"
+      moves
+    >
+      {drawn.map(({ key, value: image, leaving }) => (
+        <AttachmentChip
+          key={key}
+          motionKey={key}
+          name={image.name}
+          image={feedbackImageUrl(image)}
+          removeDisabled={busy || leaving}
+          onRemove={() => onRemove(image)}
+        />
+      ))}
+    </Inline>
+  );
+}
+
+/** The screenshots attached to the kind's draft, under a motion that scales one in and out (`ListMotion`); another kind's draft is another scene, which stands at once. */
+function FeedbackImages({
+  kind,
+  ...props
+}: {
+  kind: FeedbackKind;
+  images: readonly FeedbackImage[];
+  busy: boolean;
+  onRemove: (image: FeedbackImage) => void;
+}): React.JSX.Element {
+  const row = useRef<HTMLUListElement | null>(null);
+  return (
+    <ListMotion root={row} way={LIST_MOTION_WAY.SCALE} scene={kind}>
+      <FeedbackImageRow row={row} {...props} />
+    </ListMotion>
+  );
 }
 
 /**
@@ -431,29 +501,16 @@ export function FeedbackDialog({
             />
           )}
         </FormField>
-        {shown.draft.images.length > 0 ? (
-          <Inline
-            as={LAYOUT_ELEMENT.UL}
-            gap={GAP.CONTROL}
-            align={ALIGN.STRETCH}
-            className="feedback-dialog-images"
-            aria-label="Screenshots"
-          >
-            {shown.draft.images.map((image, index) => (
-              <AttachmentChip
-                key={`${image.name}-${String(index)}`}
-                name={image.name}
-                image={feedbackImageUrl(image)}
-                removeDisabled={busy}
-                onRemove={() =>
-                  changeDraft({
-                    images: latestDrafts()[shown.kind].images.filter((_, held) => held !== index),
-                  })
-                }
-              />
-            ))}
-          </Inline>
-        ) : null}
+        <FeedbackImages
+          kind={shown.kind}
+          images={shown.draft.images}
+          busy={busy}
+          onRemove={(image) =>
+            changeDraft({
+              images: latestDrafts()[shown.kind].images.filter((held) => held !== image),
+            })
+          }
+        />
         {signature ? (
           <div className="feedback-dialog-signature flex min-w-0 items-center gap-control-gap">
             <Checkbox

@@ -237,7 +237,7 @@ const OTHER_CHANGES_TITLE = "Other changes";
 
 /** What "Other changes" says of itself. */
 const OTHER_CHANGES_SUMMARY =
-  "Lockfiles, generated files, binary assets, and other files left out of the chapters above, plus pure renames and any change no chapter told.";
+  "Lockfiles, generated files, binary assets, pure renames, and any change no chapter told.";
 
 /**
  * The fixed chapter that closes a pull request's story, always last: the

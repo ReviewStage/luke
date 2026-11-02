@@ -57,6 +57,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { handState } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { playMotions } from "../testing/pane-motion.js";
@@ -398,7 +399,7 @@ beforeEach(() => {
           scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
           repositories: repositories ?? [],
           ...(hooked
-            ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
+            ? { webhookUrl: "https://vespin.dev/api/automations/made/webhook" }
             : undefined),
         });
         // A webhook's secret is answered once, by the write that minted it.
@@ -1175,6 +1176,24 @@ test("an automation's whole row is its press: its owner and its next run open it
   await settle();
   assert.deepEqual(places, [{ kind: AUTOMATIONS_PAGE.LIST }], "the switch opens nothing");
   assert.ok(changes.length > 0, "and switches it");
+});
+
+test("under a finger, an automation's row draws its switch and no ⋯, and held opens its menu", async () => {
+  underAFinger();
+  const page = mount();
+  await settle();
+
+  const row = rowOf(page, SWEEP.name);
+  assert.ok(
+    row.querySelector('button[aria-label="Automation actions"]') === null,
+    "the row draws no ⋯",
+  );
+  assert.ok(row.querySelector(`[aria-label="Turn off ${SWEEP.name}"]`), "the row keeps its switch");
+  longPress(
+    row.querySelector<HTMLElement>("button.luke-list-row-main") ??
+      assert.fail("the row is a press"),
+  );
+  assert.ok(menuItem("Delete"), "held, it offers its menu");
 });
 
 test("a row opens its automation's page, headed by its name, with a crumb back to the list, and what it was saved as", async () => {
@@ -2087,28 +2106,33 @@ test("a refresh that fails while an automation's page stands keeps the page and 
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
 });
 
-test("a new automation with no repository is not created, and the refusal describes the repository chip", async () => {
+test("a new automation with no repository is created to work in none, but not on a GitHub event, whose refusal describes the repository chip", async () => {
   noRecent = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  pick(page, "Type", "GitHub event");
   act(() => button("Create automation").click());
   await settle();
 
-  assert.deepEqual(creates, [], "nothing is created without a repository");
-  assert.ok(announced("Choose the repository it works in."), "the refusal is announced");
+  const refusal = "Choose the repository whose events start it.";
+  assert.equal(creates.length, 0, "nothing on a GitHub event is created without a repository");
+  assert.ok(announced(refusal), "the refusal is announced");
   const chip =
     page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
     assert.fail("no repository chip");
   const ids = chip.getAttribute("aria-describedby")?.split(" ") ?? [];
   assert.ok(
-    ids.some(
-      (id) => document.getElementById(id)?.textContent === "Choose the repository it works in.",
-    ),
+    ids.some((id) => document.getElementById(id)?.textContent === refusal),
     "the refusal describes the chip it is about",
   );
   assert.equal(chip.getAttribute("aria-invalid"), "true");
+
+  pick(page, "Type", "Schedule");
+  act(() => button("Create automation").click());
+  await settle();
+  assert.deepEqual(creates[0]?.repositories, [], "a schedule is created to work in no repository");
 });
 
 test("the repository chosen first is not said again among the others its runs work in", async () => {
@@ -2417,11 +2441,12 @@ test("an automation's runs stand on its page's right, newest first, a run that s
   );
   act(() => started?.querySelector("button")?.click());
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
-  assert.equal(
-    runRows(page).filter((row) => row.querySelector(".luke-list-row-main")?.tagName === "BUTTON")
-      .length,
-    1,
-    "a run that started no agent is no press",
+  const unstarted = refused?.querySelector<HTMLButtonElement>(".luke-list-row-main");
+  assert.equal(unstarted?.tagName, "BUTTON", "a run that started no agent is a press too");
+  act(() => unstarted?.click());
+  assert.ok(
+    document.activeElement?.querySelector("input[aria-label='Automation name']"),
+    "it opens the automation's setup beside it, handing it the keyboard",
   );
 });
 
@@ -2491,6 +2516,37 @@ test("the Runs tab lists every automation's runs, each naming its automation, na
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
 });
 
+test("on the Runs tab a run that started no agent and names no subject opens its automation", async () => {
+  standing = [SWEEP, DIGEST];
+  workspaceRuns = [{ ...UNSTARTED_RUN, automation: { id: DIGEST.id, name: DIGEST.name } }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.RUNS });
+  await settle();
+
+  act(() => page.querySelector<HTMLElement>("ul[aria-label='Runs'] .luke-list-row-main")?.click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: DIGEST.id });
+});
+
+test("under a finger no run draws a ⋯, and a long press opens its menu", async () => {
+  underAFinger();
+  standing = [SWEEP, DIGEST];
+  workspaceRuns = [
+    { ...SWEEP_RUN, automation: { id: SWEEP.id, name: SWEEP.name } },
+    { ...UNSTARTED_RUN, automation: { id: DIGEST.id, name: DIGEST.name } },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.RUNS });
+  await settle();
+  const presses = [
+    ...page.querySelectorAll<HTMLElement>("ul[aria-label='Runs'] .luke-list-row-main"),
+  ];
+
+  assert.equal(presses.length, 2);
+  assert.ok(page.querySelector("button[aria-label='Run actions']") === null, "no run draws a ⋯");
+  const [, unstarted] = presses;
+  assert.ok(unstarted);
+  longPress(unstarted);
+  assert.ok(menuItem("Copy link"), "the long press opens the run's menu");
+});
+
 test("an automation's runs stand as quiet rows under the panel's heading while they are first read", async () => {
   runsHeld = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -2548,6 +2604,17 @@ const SWEEP_RUN = {
   agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
   firedAt: 3,
   settledAt: 3,
+} as const;
+
+/** A run that started no agent and names no subject, so has nothing of its own to open. */
+const UNSTARTED_RUN = {
+  id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+  firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+  status: AUTOMATION_RUN_STATUS.FAILED,
+  reason: "creator-left",
+  agent: null,
+  firedAt: 2,
+  settledAt: 2,
 } as const;
 
 test("opening a run's agent with unsaved changes asks first, and Leave opens it", async () => {
@@ -2640,12 +2707,12 @@ test("a new automation set to a GitHub event takes its settings as switches in t
     pickerDetail(page, "Type"),
     "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
-  act(() => switchNamed("From Luke's agents").click());
+  act(() => switchNamed("From Vespin's agents").click());
   assert.equal(isOn("Skip drafts"), true);
   assert.equal(isOn("Include forks"), false);
   assert.equal(
     pickerDetail(page, "Type"),
-    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+    "When a pull request by people or Vespin's agents is opened, marked ready, or pushed to in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
@@ -2665,12 +2732,12 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   assert.ok(
     says(
       rowOf(page, "Code review"),
-      "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+      "When a pull request by people or Vespin's agents is opened, marked ready, or pushed to in acme/ledger",
     ),
   );
 });
 
-test("a schedule Luke cannot read is not created, and the refusal is announced under its row", async () => {
+test("a schedule Vespin cannot read is not created, and the refusal is announced under its row", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
@@ -2682,16 +2749,16 @@ test("a schedule Luke cannot read is not created, and the refusal is announced u
   await settle();
 
   assert.deepEqual(creates, []);
-  assert.ok(announced("That isn't a schedule Luke can read."), "the refusal is announced");
+  assert.ok(announced("That isn't a schedule Vespin can read."), "the refusal is announced");
   assert.ok(
-    !pickerDescription(page, "Type").includes("That isn't a schedule Luke can read."),
+    !pickerDescription(page, "Type").includes("That isn't a schedule Vespin can read."),
     "the refusal stands under the cron's row, not the trigger's",
   );
   const cron = page.querySelector("input[aria-label='Cron']");
   const describedBy = cron?.getAttribute("aria-describedby")?.split(" ") ?? [];
   assert.ok(
     describedBy.some(
-      (id) => document.getElementById(id)?.textContent === "That isn't a schedule Luke can read.",
+      (id) => document.getElementById(id)?.textContent === "That isn't a schedule Vespin can read.",
     ),
     "the refusal describes the Cron field it is about",
   );
@@ -2699,7 +2766,7 @@ test("a schedule Luke cannot read is not created, and the refusal is announced u
 
   type(page.querySelector("input[aria-label='Cron']"), "0 2 * * *");
   await settle();
-  assert.ok(!announced("That isn't a schedule Luke can read."), "the refusal is gone");
+  assert.ok(!announced("That isn't a schedule Vespin can read."), "the refusal is gone");
   assert.equal(
     page.querySelector("input[aria-label='Cron']")?.getAttribute("aria-invalid"),
     null,
@@ -2789,7 +2856,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   const hooked = automation(8, {
     name: "Fix Sentry alerts",
     trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-    webhookUrl: "https://tryluke.dev/api/automations/hooked/webhook",
+    webhookUrl: "https://vespin.dev/api/automations/hooked/webhook",
   });
   standing = [hooked];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: hooked.id });
@@ -2893,7 +2960,7 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
   });
   await act(async () => menuItem("Copy link").click());
 
-  const automationLink = `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
+  const automationLink = `https://vespin.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
   assert.deepEqual(copied.slice(-4), [
     automationLink,
     `${automationLink}/run/6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d`,
@@ -2976,7 +3043,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
   doors[2]?.();
   await settle();
   await act(async () => menuItem("Copy link").click());
-  assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
+  assert.equal(copied.at(-1), `https://vespin.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
   doors[0]?.();
   await settle();
   await act(async () => menuItem("Run now").click());
@@ -3110,7 +3177,7 @@ function screensShown(page: HTMLElement): string[] {
 
 test("on a narrow stage an automation's setup stands the whole width with its runs hidden, until Runs stands them alone under a way back that returns to the setup", async () => {
   window.localStorage.clear();
-  runs = [SWEEP_RUN];
+  runs = [SWEEP_RUN, UNSTARTED_RUN];
   const sheets = layContainersAt({});
   try {
     const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -3125,10 +3192,18 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
     phoneRuns();
     assert.deepEqual(screensShown(page), ["runs"]);
     const runsScreen = page.querySelector("section[aria-label='Runs']");
-    assert.equal(runsScreen?.querySelectorAll("li").length, 1, "its runs are listed");
+    assert.equal(runsScreen?.querySelectorAll("li").length, 2, "its runs are listed");
 
     act(() => button(SWEEP.name).click());
     assert.deepEqual(screensShown(page), ["setup"]);
+
+    phoneRuns();
+    act(() => runsScreen?.querySelectorAll<HTMLElement>(".luke-list-row-main")[1]?.click());
+    assert.deepEqual(
+      screensShown(page),
+      ["setup"],
+      "a run that opens nothing else opens the setup",
+    );
   } finally {
     sheets.remove();
   }
@@ -3466,7 +3541,7 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   act(() => button("Create automation").click());
   await settle();
   assert.equal(creates.length, 0);
-  assert.match(page.textContent ?? "", /Luke cannot receive Sentry events here/u);
+  assert.match(page.textContent ?? "", /Vespin cannot receive Sentry events here/u);
 });
 
 test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {

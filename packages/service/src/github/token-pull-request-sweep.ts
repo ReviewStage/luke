@@ -2,7 +2,7 @@
  * token-pull-request-sweep.ts -- the scheduled sweep's poll of the pull requests of agents on a member's own GitHub token, which no webhook reaches.
  *
  * An agent on its starter's personal access token works on a repository no
- * installation of the Luke GitHub App reaches, so GitHub sends no delivery
+ * installation of our GitHub App reaches, so GitHub sends no delivery
  * of a review, a comment, or a check on its pull request. Each minute the
  * sweep claims a batch of those pull requests still open
  * (`token-pull-request-poll.ts`) and reads each on its owner's token, with

@@ -1,5 +1,5 @@
 /**
- * native-sandbox-template.test.ts -- Luke's own template of the coding agent's image, against a fake of Vercel Sandbox's REST API: reused once ready, built where missing, built once under concurrent launches, built anew for a new image, and swept.
+ * native-sandbox-template.test.ts -- our own template of the coding agent's image, against a fake of Vercel Sandbox's REST API: reused once ready, built where missing, built once under concurrent launches, built anew for a new image, and swept.
  */
 
 import assert from "node:assert/strict";
@@ -188,7 +188,7 @@ function vercel() {
       return Response.json({ session: { id: sessionId } });
     }
     if (rest === "snapshot") {
-      assert.deepEqual(await body(), { expiration: 0 });
+      assert.deepEqual(await body(), { expiration: 1_209_600_000 });
       // A snapshot stops the session at once, so a second one asked of it is refused.
       const taking = sandboxes.find(
         (each) => !each.deleted && each.currentSessionId === sessionId && each.status === "running",

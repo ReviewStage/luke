@@ -1,3 +1,4 @@
+import { AGENT_ARCHIVER } from "@luke/features/agent-wire";
 import { Schema, SchemaTransformation } from "effect";
 
 /** An optional field as its nullable column takes it. */
@@ -48,6 +49,18 @@ export const EpochMillisColumnSchema = Schema.Union([
  * `Schema.Date`.
  */
 export const InstantColumnSchema = Schema.Union([Schema.DateFromMillis, Schema.Date]);
+
+/** An agent's `archived_by` column as a row holds it (`StoredArchive`). */
+export const ArchivedByColumnSchema = Schema.NullOr(
+  Schema.Struct({
+    by: Schema.Literals(Object.values(AGENT_ARCHIVER)),
+    userId: Schema.String,
+    agentId: Schema.optionalKey(Schema.String),
+    agentName: Schema.optionalKey(Schema.String),
+    reason: Schema.optionalKey(Schema.String),
+    withTask: Schema.optionalKey(Schema.Boolean),
+  }),
+);
 
 const UsageCountsFields = {
   inputTokens: Schema.Number,

@@ -109,7 +109,7 @@ import {
   TimerIcon,
   WrenchIcon,
 } from "@luke/ui/icons";
-import { saysOwnAddress, siteName } from "@luke/ui/link-face";
+import { siteName } from "@luke/ui/link-face";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   MARKDOWN_HTML_STEP,
@@ -211,10 +211,10 @@ export const INERT_LINK_CLASS =
 /**
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
- * that opens in the browser over the act channel (`use-open-link.ts`), or,
- * written bare, as its own address, its website chip (`SiteChip`); any
- * other address is drawn as words that go nowhere, with the address as its
- * hint. `words` are its label's, which say whether it is its own address.
+ * that opens in the browser over the act channel (`use-open-link.ts`), as
+ * it is in a plan, bare or labelled; any other address is drawn as words
+ * that go nowhere, with the address as its hint. `words` are its label's,
+ * which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
  * link asks in a modal of its own and then calls `window.open`, which the
  * window denies (`hardened-window.ts`), so its link opened nothing.
@@ -236,7 +236,6 @@ function TranscriptLink({
       </Tooltip>
     );
   }
-  if (saysOwnAddress(href, words) && siteName(href) !== undefined) return <SiteChip href={href} />;
   return (
     <TextLink href={href} words={words} onOpen={openLink}>
       {children}
@@ -331,8 +330,8 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every link in the words whose target may name a mention, or is a
- * Luke link to any place (`readLink`), to be drawn as its own element,
+ * Marks every link in the words whose target may name a mention, or is an
+ * app link to any place (`readLink`), to be drawn as its own element,
  * which reads what it names against the plan its page is of (`linkChip`):
  * the same rule for a developer's `@`
  * mention, an agent's link, a reference link, and a bare address. A target
@@ -678,9 +677,11 @@ function LoneLinkElement({
 
 /** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
 function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
-  // Side by side, sharing the column's width, so a before and an after read as a pair; each still hugs its own picture, and none grows past its own size (tasks.css).
+  // Side by side, sharing the column's width, so a before and an after read as a pair, and wrapping where more would leave each too narrow; each still hugs its own picture, and none grows past its own size (tasks.css).
   return (
-    <div className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap flex items-start gap-block-gap`}>
+    <div
+      className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap grid grid-cols-picture-row items-start gap-block-gap`}
+    >
       {children}
     </div>
   );
@@ -1014,6 +1015,8 @@ const CALL_ICON = {
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
+  [CALL_KIND.WORKER_MESSAGE]: SendIcon,
+  [CALL_KIND.STOP_BACKGROUND]: CircleStopIcon,
   [CALL_KIND.LIST_AGENTS]: LayoutListIcon,
   [CALL_KIND.READ_AGENT]: ScrollTextIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
@@ -1046,7 +1049,6 @@ const CALL_ICON = {
   [CALL_KIND.LIST_TASKS]: () => <GLYPH.TASK />,
   [CALL_KIND.REMEMBER]: () => <GLYPH.MEMORY />,
   [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
-  [CALL_KIND.LIST_OPEN_ASKS]: () => <GLYPH.INBOX />,
   [CALL_KIND.READ_COMMENTS]: () => <GLYPH.COMMENT />,
   [CALL_KIND.REPLY_TO_COMMENT]: () => <GLYPH.COMMENT />,
   [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.SETTLED />,
@@ -1561,9 +1563,9 @@ function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boo
  * has got, which opens onto the list itself, set bare at the row's text
  * column as Claude Code and Codex hang theirs under the call, since it is
  * words rather than the code a call's card holds, and selectable as a
- * call's body is; a failure is said under it as a subagent's is. Whether it starts open is the caller's, since only
- * the newest list is worth reading unasked, and so is whether it is `live`,
- * the list the agent is at, whose item in progress wears the moving mark.
+ * call's body is; a failure is said under it as a subagent's is. It starts
+ * folded, as every call's row does, and whether it is `live`, the list the
+ * agent is at, whose item in progress wears the moving mark, is the caller's.
  */
 export function TranscriptTodos({
   state,
@@ -1676,7 +1678,7 @@ export type TranscriptSubagentProps = {
   /**
    * The task and the answer, for a row that opens no tab, which folds them
    * open under its line as a call's row does: a native harness's subagent,
-   * whose own work Luke keeps no transcript of.
+   * whose own work we keep no transcript of.
    */
   body?: { readonly input: ToolBlock; readonly output: ToolBlock | undefined } | undefined;
 };
@@ -1765,11 +1767,6 @@ export function TranscriptSubagent({
   );
 }
 
-/** What a fold's line says beside its failed mark: how many of the calls it holds failed. */
-function failedWords(failed: number): string {
-  return `${failed} failed`;
-}
-
 /**
  * A line that folds the rows beneath it: a run of calls, or a finished
  * turn's lead. Note that it stays in the muted ink, summary and all,
@@ -1778,36 +1775,25 @@ function failedWords(failed: number): string {
  * fold's chevron in a row's icon column, as the plan's card does at its
  * head, because its count already says what it holds, so what is left to
  * say is whether it is open, and an icon of its own would read as one more
- * of the calls it opens onto. Where calls it holds failed, the line wears
- * the failed mark after its count, open or closed, as an editor's tree
- * marks a folder holding a file with problems either way, so a failure is
- * never folded out of sight, and says beside the mark in the danger ink how
- * many failed ("2 failed"), so the mark is never left for a reader to read
- * alone; its label says the same.
+ * of the calls it opens onto. Note that it says nothing of a call that
+ * failed, because the call's own row marks it and says why, and a failure
+ * the agent went on past is not news on the line that folds its work away.
  */
 function TurnFold({
   summary,
   running,
-  failed,
   open = false,
   children,
 }: {
   summary: string;
   running: boolean;
-  failed: number;
   open?: boolean;
   children: ReactNode;
 }): ReactNode {
   return (
     <Disclosure defaultOpen={open} data-turn-fold="">
-      <DisclosureSummary aria-label={failed > 0 ? `${summary}, ${failedWords(failed)}` : undefined}>
+      <DisclosureSummary>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
-        {failed > 0 ? (
-          <span className="inline-flex items-center gap-tight-gap text-destructive">
-            <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} />
-            <span>{failedWords(failed)}</span>
-          </span>
-        ) : null}
       </DisclosureSummary>
       <DisclosureBody>{children}</DisclosureBody>
     </Disclosure>
@@ -1827,7 +1813,7 @@ function TurnRowView<B>({
       return children(row.block);
     case TURN_ROW.GROUP:
       return (
-        <TurnFold summary={row.summary} running={row.running} failed={row.failed} open={row.open}>
+        <TurnFold summary={row.summary} running={row.running} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
@@ -1835,7 +1821,7 @@ function TurnRowView<B>({
       );
     case TURN_ROW.FOLDED:
       return (
-        <TurnFold summary={row.summary} running={false} failed={row.failed}>
+        <TurnFold summary={row.summary} running={false}>
           <TranscriptRows rows={row.rows}>{children}</TranscriptRows>
         </TurnFold>
       );

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import {
@@ -29,9 +29,10 @@ import {
   openTaskAgent,
   openWorkspace,
 } from "../../testing/index.js";
-import { archiveAgent, recordAgentPublished } from "../agent-store.js";
+import { archiveAgent, readAgent, recordAgentPublished } from "../agent-store.js";
 import { ensureGeneralChannel } from "../channel-store.js";
 import {
+  archiveAgentOfDoneTask,
   assignUnassignedTask,
   beginTaskWork,
   createTask,
@@ -49,6 +50,7 @@ import {
   TASK_RUNS_IN_CLOUD,
   TaskAssigneeNotMember,
   TaskParentRepositoryDiffers,
+  type TaskStandingAgent,
   updateTask,
 } from "../task-store.js";
 
@@ -317,7 +319,7 @@ it.layer(getTestDB())("a plan's starting text", (it) => {
 
 it.layer(getTestDB())("who made a task", (it) => {
   it.effect(
-    "a task its member made by hand names no origin, and one Luke made on their call names him, in the list too",
+    "a task its member made by hand names no origin, and one Vespin made on their call names it, in the list too",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -946,6 +948,21 @@ const pullRequestIn = (state: StoredPullRequest["state"]): StoredPullRequest => 
 /** A guard reading every agent idle. */
 const everyoneIdle = () => Effect.succeed(true);
 
+/** A guard reading every agent idle but the one named, as an archive reads them. */
+const idleBut =
+  (busy: string) =>
+  (agents: readonly TaskStandingAgent[]): Effect.Effect<ReadonlySet<string>> =>
+    Effect.succeed(new Set(agents.map(({ id }) => id).filter((id) => id !== busy)));
+
+/** Who archived the agent, as Dean reads it: none while it stands unarchived. */
+const archiveOf = (dean: string, agentId: string) =>
+  Effect.map(readAgent(dean, agentId), (agent) =>
+    agent.pipe(
+      Option.flatMap(({ archivedBy }) => Option.fromNullishOr(archivedBy)),
+      Option.getOrUndefined,
+    ),
+  );
+
 it.layer(getTestDB())("a task's work finishing", (it) => {
   it.effect(
     "moves a task to done once an agent's pull request merged, none is open, no question waits, and every standing agent reads idle",
@@ -1034,6 +1051,49 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* updateTask(dean, taskId, { status: TASK_STATUS.CANCELED });
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.CANCELED);
+      }),
+  );
+});
+
+it.layer(getTestDB())("a task's move to Done", (it) => {
+  it.effect(
+    "archives its idle agents with it and a running one as its turn ends, and a move off Done brings back those alone",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId, workspace } = yield* openSharedTask;
+        const idle = yield* openTaskAgent(dean, workspace, taskId);
+        const running = yield* openTaskAgent(charles, workspace, taskId);
+        const byHand = yield* openTaskAgent(dean, workspace, taskId);
+        yield* archiveAgent(dean, byHand, true);
+        const asDean = { by: AGENT_ARCHIVER.MEMBER, userId: dean } as const;
+
+        // Dean's Done archives the idle agent as Dean, and leaves the running one at work.
+        const moved = yield* updateTask(dean, taskId, { status: TASK_STATUS.DONE }, undefined, {
+          archivedBy: asDean,
+          idle: idleBut(running),
+        });
+        assert.equal(Option.getOrUndefined(moved)?.status, TASK_STATUS.DONE);
+        assert.deepEqual(yield* archiveOf(dean, idle), { ...asDean, withTask: true });
+        assert.equal(yield* archiveOf(dean, running), undefined);
+
+        // Its turn ends while the task stands Done by Dean's move: archived then, as Dean.
+        const ended = yield* archiveAgentOfDoneTask(charles, taskId, running, idleBut(""));
+        assert.deepEqual(
+          ended.map(({ id }) => id),
+          [running],
+        );
+        assert.deepEqual(yield* archiveOf(dean, running), { ...asDean, withTask: true });
+
+        // Moved off Done, the task brings back what its Done archived, and the agent archived by hand stays.
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
+        assert.equal(yield* archiveOf(dean, idle), undefined);
+        assert.equal(yield* archiveOf(dean, running), undefined);
+        assert.notEqual(yield* archiveOf(dean, byHand), undefined);
+
+        // A turn ending on a task no longer Done archives nothing.
+        const after = yield* archiveAgentOfDoneTask(charles, taskId, running, idleBut(""));
+        assert.deepEqual(after, []);
+        assert.equal(yield* archiveOf(dean, running), undefined);
       }),
   );
 });

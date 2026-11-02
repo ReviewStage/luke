@@ -11,7 +11,7 @@ import { handOffToMacApp } from "../src/app/mac-app-handoff";
 import { type FakeService, fakeService } from "./support/fake-service";
 
 /**
- * A Luke link loaded in a tab, handed to Luke for Mac only where the
+ * An app link loaded in a tab, handed to the Mac app only where the
  * signed-in account chose the Mac app, the tab is on a Mac, and it came to
  * the link by a fresh navigation: the place the address names goes to the
  * app in its own scheme, and every other load stays on the web. Synthetic
@@ -49,7 +49,7 @@ it.effect("an account that chose the Mac app hands a plan's link to the app, on 
   Effect.gen(function* () {
     const opened = yield* loaded(choosing(LINK_OPEN.MAC_APP), TASK_ADDRESS, LINK_PLATFORM.MAC);
     assert.equal(opened.length, 1);
-    assert.match(opened[0] ?? "", /^tryluke:/u);
+    assert.match(opened[0] ?? "", /^vespin:/u);
     assert.match(opened[0] ?? "", new RegExp(`/acme/plan/${TASK_ID}$`, "u"));
   }),
 );

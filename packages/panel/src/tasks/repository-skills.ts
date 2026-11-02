@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import type { TasksSkillsAnswer } from "@luke/features/tasks-view";
 import { keepIdentity } from "@luke/wire";
@@ -19,7 +20,7 @@ import type { SkillSource, SkillsRead } from "./skill-picker.js";
 /** Why a repository's skills were not read, in the list's words. */
 const SKILLS_REFUSAL_LINE = {
   [TASK_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
-  [TASK_FILE_REFUSAL.NOT_REACHABLE]: "Luke's GitHub App no longer reaches this task's repository.",
+  [TASK_FILE_REFUSAL.NOT_REACHABLE]: `${PRODUCT_NAME}'s GitHub App no longer reaches this task's repository.`,
   [TASK_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read.",
   [TASK_FILE_REFUSAL.SECRET]: "This repository's skills could not be read.",
   [TASK_FILE_REFUSAL.MISSING]: "This repository's skills could not be read.",

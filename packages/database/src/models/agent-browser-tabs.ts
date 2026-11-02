@@ -161,7 +161,7 @@ function agentOfPlace(place: BrowserTabsPlace): SQL {
 /**
  * The tabs a member reaches in the place named: of an agent they see whole,
  * its task included where it is on one (`agentVisibleTo`). A tab
- * no coding agent's conversation names, one a task's Luke opened while a
+ * no coding agent's conversation names, one the per-task assistant opened while a
  * task had one, is listed to no one.
  */
 function reachedTabs(userId: string, place: BrowserTabsPlace, tabId?: string) {

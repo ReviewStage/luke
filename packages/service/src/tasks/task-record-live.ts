@@ -18,7 +18,7 @@ import { Option } from "effect";
  * (`plan`), one row marked by its last save, which only a save of the text
  * moves, whoever wrote it; the pages agents
  * showed (`pages`), one row a page at its newest version; the task's
- * calls (`calls`), which answers no rows now that Luke takes no calls; and
+ * calls (`calls`), which answers no rows now that we take no calls; and
  * the code the task's agents showed (`code`), which answers no rows now that
  * no agent shows code. Each statement reads what its held read reads
  * (`listPages`), the account joined through its membership of the task's
@@ -67,7 +67,7 @@ function pagesStatement(userId: string, taskId: string) {
 }
 
 /**
- * The task's calls: none, since Luke takes no calls. A released desktop
+ * The task's calls: none, since we take no calls. A released desktop
  * still follows the part and decodes it, so it stands, answering no rows.
  */
 function callsStatement() {

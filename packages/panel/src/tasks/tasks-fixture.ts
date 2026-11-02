@@ -63,7 +63,7 @@ import type { AutomationsPlace } from "./use-tasks-tab.js";
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Tasks, and under the tasks profile it also opens the
  * reference journey's task from `docs/TASKS.md`, a draft of the default
- * template partway through with Luke working on the call about it, which is
+ * template partway through with the app working on the call about it, which is
  * what the tasks capture shows; under the tasks-comments profile its plan
  * holds comment threads, answered as the service answers a read of them.
  * Every name and repository here is invented; nothing is read from an
@@ -178,7 +178,7 @@ function draftOf(sections: number): PlanDocument {
 
 /**
  * The fixture task's version history, newest first, each revision beside the
- * plan it saved: its member and a teammate of its workspace by hand, Luke on
+ * plan it saved: its member and a teammate of its workspace by hand, the app on
  * its call, and a coding agent, over the two days before the call, so the
  * version history shows real versions by more than one writer rather than
  * waiting on a read main answers with nothing. Note that the agent's revision
@@ -440,7 +440,7 @@ function thread(input: {
 /**
  * The comment threads on the fixture's plan, oldest first, as the service
  * answers a read of them: one on a whole block, one its coding agent
- * started, one answered by a member and by Luke, and one resolved, which
+ * started, one answered by a member and by the app, and one resolved, which
  * only the Comments tab lists. The open ones stand in the plan's first
  * sections, so the window's first screen of it shows their marks.
  */

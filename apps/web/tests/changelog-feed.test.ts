@@ -45,11 +45,11 @@ test("every release is an item, newest first, linking to its own page and dated 
     ]),
     [
       [
-        "Luke 1.1.0: The Call tab",
-        "https://tryluke.dev/changelog/1.1.0",
+        "Vespin 1.1.0: The Call tab",
+        "https://vespin.dev/changelog/1.1.0",
         "Tue, 13 Oct 2026 00:00:00 GMT",
       ],
-      ["Luke 1.0.0", "https://tryluke.dev/changelog/1.0.0", "Thu, 01 Oct 2026 00:00:00 GMT"],
+      ["Vespin 1.0.0", "https://vespin.dev/changelog/1.0.0", "Thu, 01 Oct 2026 00:00:00 GMT"],
     ],
   );
 });
@@ -57,8 +57,8 @@ test("every release is an item, newest first, linking to its own page and dated 
 test("an item carries the release's whole notes, its screenshots and links at the site's own addresses", () => {
   const description = parsedFeed(CHANGELOG).querySelector("item description")?.textContent ?? "";
   assert.match(description, /Calls read as one thread, &amp; so on\./);
-  assert.match(description, /src="https:\/\/tryluke\.dev\/changelog\/1\.1\.0\/the-call-tab\.png"/);
-  assert.match(description, /href="https:\/\/tryluke\.dev\/privacy"/);
+  assert.match(description, /src="https:\/\/vespin\.dev\/changelog\/1\.1\.0\/the-call-tab\.png"/);
+  assert.match(description, /href="https:\/\/vespin\.dev\/privacy"/);
   assert.match(
     description,
     /href="https:\/\/github\.com\/ReviewStage\/luke\/blob\/main\/PRIVACY\.md"/,
@@ -72,5 +72,5 @@ test("the feed is dated by its newest release, not by when it was built", () => 
     feed.querySelector("channel > lastBuildDate")?.textContent,
     "Tue, 13 Oct 2026 00:00:00 GMT",
   );
-  assert.equal(feed.querySelector("channel > link")?.textContent, "https://tryluke.dev/changelog");
+  assert.equal(feed.querySelector("channel > link")?.textContent, "https://vespin.dev/changelog");
 });

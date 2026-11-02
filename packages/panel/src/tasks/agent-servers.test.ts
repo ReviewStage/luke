@@ -115,7 +115,7 @@ const statuses: IntegrationStatuses = {
   cancelSignIn: () => Promise.resolve(true),
 };
 
-/** The button over the servers, opened once every tools read has answered, keeping each switch it was asked for. */
+/** The chip over the servers, opened once every tools read has answered, keeping each switch it was asked for. */
 async function opened(standing: IntegrationStatuses = statuses) {
   const switched: (readonly string[])[] = [];
   const container = document.createElement("div");
@@ -132,12 +132,15 @@ async function opened(standing: IntegrationStatuses = statuses) {
             onOpenSettings: () => undefined,
           },
           statuses,
+          face: "None",
         }),
       ),
     );
   render(standing);
   act(() =>
-    container.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]')?.click(),
+    container
+      .querySelector<HTMLButtonElement>('.agent-servers button[aria-haspopup="dialog"]')
+      ?.click(),
   );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -731,7 +734,7 @@ test("Escape from the home fades the popover out, inert and ending, then takes i
   const finishExits = holdPanelExits();
   const { container, key, type, field } = await opened();
   const button = () =>
-    container.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]') ??
+    container.querySelector<HTMLButtonElement>('.agent-servers button[aria-haspopup="dialog"]') ??
     assert.fail("no button");
   type("deploy");
 

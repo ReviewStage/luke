@@ -7,7 +7,6 @@ import type {
 } from "@luke/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAccountInboxAnswerView } from "@luke/features/agent-view";
 import {
-  AGENT_KIND,
   AGENT_STATUS,
   type AgentStatus,
   type AgentSummary,
@@ -457,55 +456,6 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
-    }),
-);
-it.effect(
-  "an operator's heartbeat that ended quiet leaves no dot, and one that said something leaves one",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const luke = (status: AgentStatus, patch: Partial<TasklessAgent> = {}) =>
-        tasklessAgent(status, {
-          kind: AGENT_KIND.OPERATOR,
-          automationId: null,
-          repository: null,
-          title: null,
-          ...patch,
-        });
-      const said = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
-
-      notices.observeAgents([luke(AGENT_STATUS.RUNNING)]);
-      notices.observeAgents([luke(AGENT_STATUS.RUNNING, { quietTurn: true })]);
-      notices.observeAgents([luke(AGENT_STATUS.COMPLETED, { quietTurn: true })]);
-      yield* settled;
-      assert.deepEqual(f.unseen, [], "a quiet end dots nothing");
-
-      notices.observeAgents([luke(AGENT_STATUS.RUNNING, { turnId: said })]);
-      notices.observeAgents([luke(AGENT_STATUS.COMPLETED, { turnId: said })]);
-      yield* settled;
-      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
-    }),
-);
-it.effect(
-  "a heartbeat whose end the agent's page saw first has its dot taken back once the list says it was quiet",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const luke = (status: AgentStatus, patch: Partial<TasklessAgent> = {}) =>
-        tasklessAgent(status, { kind: AGENT_KIND.OPERATOR, ...patch });
-
-      // A quiet mark read mid-turn is not the end's: the page ends the turn, which reads as news.
-      notices.observeAgents([luke(AGENT_STATUS.RUNNING, { quietTurn: true })]);
-      notices.observeStatus(AGENT_ID, AGENT_STATUS.COMPLETED);
-      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
-      notices.observeAgents([luke(AGENT_STATUS.COMPLETED, { quietTurn: true })]);
-      yield* settled;
-
-      assert.deepEqual(f.unseen.at(-1), []);
     }),
 );
 it.effect.each([

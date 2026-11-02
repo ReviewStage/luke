@@ -3,12 +3,12 @@ import { type RefObject, useId, useMemo, useRef, useState } from "react";
 import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
-import { NewTaskComposer, useNewTaskHolding } from "./new-task-composer.js";
+import { NewTaskComposer } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
- * new-task-dialog.tsx -- New task as a small modal over the window: the title, and the composer card whose words start a coding agent, or a plan with Luke.
+ * new-task-dialog.tsx -- New task as a small modal over the window: the title, and the composer card whose words start a coding agent, or a plan with the app.
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds New task's composer
@@ -20,20 +20,18 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
- * Plan mode an empty plan and a call with Luke. Tab stays inside the
+ * Plan mode an empty plan and a call with the app. Tab stays inside the
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
  * card away with nothing started, its words and files kept as New task's
- * draft for the next opening (`../composer-drafts.ts`); while the draft
- * holds words or files, the first of them only nudges the card, since a
- * stray press would otherwise drop the picks made in it, and the next puts
- * it away. A start under way holds the card. A refusal keeps the card with the reason under the
+ * draft for the next opening (`../composer-drafts.ts`). A start under way
+ * holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
  *
- * A task's menu and ⌘K's New child task open this same card for a child of
- * that task (New task's preset's `parent`), started in the parent's
- * workspace rather than the one listed.
+ * The add menu's New task, and a task's menu and ⌘K's New sub-task, open
+ * this same card with its Relation pill filled (New task's preset's
+ * `relation`), started in that task's workspace rather than the one listed.
  *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (New task's preset's `purpose`), so it is
@@ -64,10 +62,8 @@ function NewTaskCard({
   const [starting, setStarting] = useState(false);
   // The Automations page's Create with an agent opens this card for an automation's agent, and a refusal opens it again for the same.
   const purpose = newTask.preset?.purpose ?? NEW_TASK_PURPOSE.TASK;
-  // New sub-task opens it under a task, whose workspace the child starts in.
-  const parent = newTask.preset?.parent;
-  const workspaceId = parent?.workspaceId ?? newTask.workspaceId;
-  const holding = useNewTaskHolding(workspaceId, purpose);
+  // A relation's New task opens it related to a task, whose workspace the new task starts in.
+  const workspaceId = newTask.preset?.relation?.task.workspaceId ?? newTask.workspaceId;
   const dialog = useRef<DialogHandle>(null);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -95,7 +91,6 @@ function NewTaskCard({
       labelledBy={titleId}
       ref={dialog}
       busy={starting}
-      holding={holding}
       initialFocus={field}
       onDismiss={close}
       onExited={onExited}
@@ -104,9 +99,8 @@ function NewTaskCard({
         <NewTaskComposer
           newTask={newTask}
           workspaceId={workspaceId}
-          parent={parent}
           onStarting={setStarting}
-          // Note that the field's Escape goes through the dialog, so a draft holds it back as it holds the card's own.
+          // Note that the field's Escape goes through the dialog, so a start under way holds it back as it holds the card's own.
           onLeave={() => dialog.current?.dismiss()}
           focusedByOwner
           titleId={titleId}

@@ -1,17 +1,14 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held; and a host saves its own agents' state, from their newest generation alone, until the sweep deletes it seven days after its last save.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where we never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed, its beat told of a newer release and listing where its update stands; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
  *
- * Synthetic accounts, bearers, tokens, Macs, hosts, keys, and digests
- * throughout; the store of saved state is a double with no store behind it.
+ * Synthetic accounts, bearers, codes, Macs, hosts, and keys throughout.
  */
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { newestAgentState } from "@luke/database/models/agent-state-store";
 import { createAgent, latestTurnsOfReached } from "@luke/database/models/agent-store";
-import { mintHostInstallToken, revokeHostInstallToken } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
@@ -21,7 +18,9 @@ import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceSetup,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
+import { HOST_RELEASE } from "@luke/features/host-release";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
@@ -29,19 +28,12 @@ import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Clock, type Context, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { HOST_VERSION, hostSecretHash, mintHostSecret } from "../auth/device-secret.js";
+import { HOST_VERSION } from "../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { sweepAgentStates } from "../maintenance/agent-state-sweep.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
-import {
-  AGENT_STATE_GRANT,
-  agentStateBlobsFake,
-  agentStateBlobUrl,
-} from "../testing/agent-state-blobs-fake.js";
-import { AgentStateBlobs } from "./agent-state-blobs.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { deviceAgentsProcedures } from "./device-agents-procedures.js";
 import { hostsProcedures } from "./hosts-procedures.js";
@@ -53,12 +45,9 @@ const PATH = {
   LINES: "/api/device-agents/lines",
   LINE_CLAIM: "/api/device-agents/lines/claim",
   LIVE_AGENTS: "/api/device-agents/live-agents",
-  ENROLL: "/api/device-agents/enroll",
   ENROLL_OWN: "/api/device-agents/devices/enroll",
   HOSTS: "/api/hosts",
   HOST_REMOVE: "/api/hosts/remove",
-  STATE_SAVE: "/api/device-agents/state/save",
-  STATE_COMMIT: "/api/device-agents/state/commit",
   PAIRING_START: "/api/device-agents/pairing",
   PAIRING_POLL: "/api/device-agents/pairing/poll",
   PAIRING: "/api/hosts/pairing",
@@ -69,10 +58,7 @@ const PATH = {
 /** A daemon below the floor. */
 const OLD_VERSION = "0.0.9";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const DIGEST = "b".repeat(64);
-
-/** The deployment's key ring, a throwaway of this file's, which every agent's state key is sealed under. */
+/** The deployment's environment, its key ring a throwaway of this file's. */
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -93,9 +79,6 @@ const countedProperties = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
-
-/** The store of agents' saved state every case's routes and sweeps reach, and the paths it was asked to delete. */
-const stateStore = agentStateBlobsFake();
 
 /** One request of the device's, on the bearer given (an account's, or a host's secret), its body as JSON or its device in the query, a daemon's version where one is given, and the address the platform names where one is given; a POST with no body where asked. */
 function request(
@@ -131,7 +114,6 @@ const answerOf = (incoming: Request) =>
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, yield* HostedEnvironment),
-      Layer.succeed(AgentStateBlobs, yield* AgentStateBlobs),
       ANALYTICS.layer,
     );
     const context = yield* Effect.context<SqlClient.SqlClient>().pipe(Effect.provide(services));
@@ -147,7 +129,7 @@ const answerOf = (incoming: Request) =>
       deviceAgents: deviceAgentsProcedures(seams),
       hosts: hostsProcedures(seams),
     });
-    // SAFETY: the procedures yield the database, the clock, the environment, the store of saved state, and the analytics alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the procedures yield the database, the clock, the environment, and the analytics alone, which is all a test provides of the web runtime's services.
     const response = yield* Effect.promise(() =>
       handle(incoming, context as Context.Context<WebServices>),
     );
@@ -192,52 +174,6 @@ function macRegister(
   });
 }
 
-/** An install token of the account's, kept by its hash as Settings keeps one, and its id. */
-const installToken = (userId: string) =>
-  Effect.gen(function* () {
-    const minted = mintHostSecret(HOST_WIRE.INSTALL_TOKEN_PREFIX);
-    const kept = yield* mintHostInstallToken(userId, hostSecretHash(minted.secret));
-    return { token: minted.secret, id: kept.id };
-  });
-
-/** A box's enroll on the token given, under a fresh id unless one is given, at the floor's version unless another is given. */
-function enroll(
-  token: string,
-  init: { readonly deviceId?: string; readonly version?: string } = {},
-) {
-  return request(token, PATH.ENROLL, {
-    version: init.version ?? HOST_VERSION.FLOOR,
-    body: {
-      deviceId: init.deviceId ?? randomUUID(),
-      name: "fra-01",
-      platform: DEVICE_PLATFORM.LINUX,
-      arch: DEVICE_ARCH.X64,
-    },
-  });
-}
-
-/** A host enrolled under the account on a fresh token, registered on its own secret: its id, its secret, and its token. */
-const enrolledHost = (userId: string) =>
-  Effect.gen(function* () {
-    const token = yield* installToken(userId);
-    const deviceId = randomUUID();
-    const answer = yield* answerOf(enroll(token.token, { deviceId }));
-    assert.equal(answer.status, HOSTED_HTTP_STATUS.OK);
-    const secret: string = answer.body.deviceSecret;
-    const register = yield* statusOf(
-      request(secret, PATH.DEVICES, {
-        version: HOST_VERSION.FLOOR,
-        body: {
-          ...registered(deviceId),
-          platform: DEVICE_PLATFORM.LINUX,
-          home: "/var/lib/luke-host",
-        },
-      }),
-    );
-    assert.equal(register, HOSTED_HTTP_STATUS.OK);
-    return { deviceId, secret, token };
-  });
-
 /** An agent of the account's pinned to the device given, or to none, whose turn is running; its conversation's id. */
 const agentRunningOn = (userId: string, deviceId: string | null) =>
   Effect.gen(function* () {
@@ -274,77 +210,11 @@ function hostBeat(secret: string, deviceId: string, version: string = HOST_VERSI
   return request(secret, PATH.PRESENCE, { version, body: { deviceId } });
 }
 
-/** An agent of the account's pinned to the host given; its id. */
-const agentOnHost = (userId: string, deviceId: string) =>
-  Effect.gen(function* () {
-    const task = yield* startTask(userId, { name: "Invitations" });
-    const started = yield* createAgent(userId, {
-      taskId: task.id,
-      idempotencyKey: randomUUID(),
-      model: "anthropic/claude-opus-5.5",
-      effort: "high",
-      planSnapshot: "# Invitations\n",
-      prompt: null,
-      repository: null,
-      machine: AGENT_MACHINE.DEVICE,
-      deviceId,
-    });
-    return Option.getOrThrow(started).agent.id;
-  });
-
-/** A host's ask to save the agent's state from the generation given, on its secret, naming the device given. */
-function saveState(
-  host: { readonly secret: string; readonly deviceId: string },
-  agentId: string,
-  fromGeneration: number | null,
-) {
-  return answerOf(
-    request(host.secret, PATH.STATE_SAVE, {
-      version: HOST_VERSION.FLOOR,
-      body: { deviceId: host.deviceId, agentId, fromGeneration },
-    }),
-  );
+/** The release the service publishes, which every case that names it needs. */
+function publishedRelease() {
+  assert.ok(HOST_RELEASE !== undefined, "a release is published");
+  return HOST_RELEASE;
 }
-
-/** A host's commit of the save it uploaded to the path given, from the generation given. */
-function commitState(
-  host: { readonly secret: string; readonly deviceId: string },
-  agentId: string,
-  fromGeneration: number | null,
-  path: string,
-) {
-  return answerOf(
-    request(host.secret, PATH.STATE_COMMIT, {
-      version: HOST_VERSION.FLOOR,
-      body: {
-        deviceId: host.deviceId,
-        agentId,
-        fromGeneration,
-        path,
-        bytes: 749,
-        sha256: DIGEST,
-        baseCommit: null,
-      },
-    }),
-  );
-}
-
-/** A save asked and committed, as a host's turn's end does: the generation it was kept as, and its path. */
-const savedState = (
-  host: { readonly secret: string; readonly deviceId: string },
-  agentId: string,
-  fromGeneration: number | null,
-) =>
-  Effect.gen(function* () {
-    const granted = yield* saveState(host, agentId, fromGeneration);
-    assert.equal(granted.status, HOSTED_HTTP_STATUS.OK);
-    const path: string = granted.body.path;
-    const kept = yield* commitState(host, agentId, fromGeneration, path);
-    assert.equal(kept.status, HOSTED_HTTP_STATUS.OK);
-    return { generation: kept.body.generation, path };
-  });
-
-const STALE = { status: HOSTED_HTTP_STATUS.CONFLICT, body: { error: "agent-state-stale" } };
 
 /** A box's pairing start with no credential, from the address given where one is, at the version given or the floor's. */
 function startPairing(init: { readonly version?: string; readonly ip?: string } = {}) {
@@ -375,6 +245,29 @@ const startedPairing = Effect.gen(function* () {
   return { pollSecret, userCode };
 });
 
+/** A host paired under the account with a code it approved, registered on its own secret: its id and its secret. */
+const pairedHost = (userId: string) =>
+  Effect.gen(function* () {
+    const { pollSecret, userCode } = yield* startedPairing;
+    const approved = yield* byCode(userId, PATH.PAIRING_APPROVE, userCode);
+    assert.equal(approved.status, HOSTED_HTTP_STATUS.OK);
+    const handed = yield* pollPairing(pollSecret);
+    const deviceId: string = handed.body.deviceId;
+    const secret: string = handed.body.deviceSecret;
+    const register = yield* statusOf(
+      request(secret, PATH.DEVICES, {
+        version: HOST_VERSION.FLOOR,
+        body: {
+          ...registered(deviceId),
+          platform: DEVICE_PLATFORM.LINUX,
+          home: "/var/lib/luke-host",
+        },
+      }),
+    );
+    assert.equal(register, HOSTED_HTTP_STATUS.OK);
+    return { deviceId, secret };
+  });
+
 /** A code no pending pairing has: seven Bs and the letter given. */
 function unusedCode(last: string) {
   return `BBBB-BBB${last}`;
@@ -382,9 +275,10 @@ function unusedCode(last: string) {
 
 const NOT_FOUND = { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: "not-found" } };
 
-it.layer(
-  Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT), stateStore.layer),
-)("a local agent's Mac", (it) => {
+/** What every case runs over: its database, and the deployment's environment. */
+const SERVICES = Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT));
+
+it.layer(SERVICES)("a local agent's Mac", (it) => {
   it.effect(
     "a desktop's own sign-in is refused as needing an upgrade on the register, the beat, the follow reads and a claim, while its Mac registers on its secret",
     () =>
@@ -427,8 +321,8 @@ it.layer(
     Effect.gen(function* () {
       const owner = yield* account();
       const other = yield* account();
-      const host = yield* enrolledHost(owner);
-      const otherHost = yield* enrolledHost(other);
+      const host = yield* pairedHost(owner);
+      const otherHost = yield* pairedHost(other);
       const task = yield* startTask(owner, { name: "Invitations" });
       const started = yield* createAgent(owner, {
         taskId: task.id,
@@ -456,13 +350,13 @@ it.layer(
   );
 
   it.effect(
-    "a host calls on its own secret for itself alone, and one member's install token enrolls nothing under another",
+    "a host calls on its own secret for itself alone, and is listed under its own member alone",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
         const other = yield* account();
-        const host = yield* enrolledHost(owner);
-        const otherHost = yield* enrolledHost(other);
+        const host = yield* pairedHost(owner);
+        const otherHost = yield* pairedHost(other);
 
         const ownBeat = yield* answerOf(hostBeat(host.secret, host.deviceId));
         const otherDeviceBeat = yield* statusOf(hostBeat(host.secret, otherHost.deviceId));
@@ -472,22 +366,24 @@ it.layer(
             version: HOST_VERSION.FLOOR,
           }),
         );
-        // Note that the other member's token naming the owner's host's id takes nothing over.
-        const otherToken = yield* installToken(other);
-        const takenOver = yield* statusOf(enroll(otherToken.token, { deviceId: host.deviceId }));
         const ownerList = yield* answerOf(request(owner, PATH.HOSTS));
         const otherList = yield* answerOf(request(other, PATH.HOSTS));
 
-        // Note that a beat answers the launches the service holds the device to, none for a host with no agent.
+        const published = publishedRelease();
+
+        // Note that a beat answers the launches the service holds the device to, none for a host with no agent, and the release published, which a host at the floor is below.
         assert.deepEqual(ownBeat, {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { done: true, openLaunches: [] },
+          body: {
+            done: true,
+            openLaunches: [],
+            release: { version: published.VERSION, sha256: published.SHA256 },
+          },
         });
         assert.deepEqual(
           [otherDeviceBeat, followedByOther],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.NOT_FOUND],
         );
-        assert.equal(takenOver, HOSTED_HTTP_STATUS.UNAUTHORIZED);
         assert.deepEqual(
           ownerList.body.hosts.map((each: { readonly id: string }) => each.id),
           [host.deviceId],
@@ -500,48 +396,82 @@ it.layer(
       }),
   );
 
+  it.effect("a host on the published release is told of no release", () =>
+    Effect.gen(function* () {
+      const owner = yield* account();
+      const host = yield* pairedHost(owner);
+
+      const beat = yield* answerOf(
+        hostBeat(host.secret, host.deviceId, publishedRelease().VERSION),
+      );
+
+      assert.deepEqual(beat, {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: { done: true, openLaunches: [] },
+      });
+    }),
+  );
+
   it.effect(
-    "a standing host's id enrolls again only once removed, and a removed host's secret is refused at once",
+    "where a host's update stands is listed as its beat said it, and a beat naming none clears it",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
-        const host = yield* enrolledHost(owner);
-        const other = yield* account();
+        const host = yield* pairedHost(owner);
+        const failure = "the download did not match its checksum";
+        /** The account's one host's update, as Hosts lists it. */
+        const listedUpdate = Effect.map(answerOf(request(owner, PATH.HOSTS)), (listed) =>
+          listed.body.hosts.map(
+            (each: { readonly update?: string; readonly updateFailure?: string }) => [
+              each.update,
+              each.updateFailure,
+            ],
+          ),
+        );
 
-        const rerun = yield* answerOf(enroll(host.token.token, { deviceId: host.deviceId }));
-        const beatAfterRerun = yield* statusOf(hostBeat(host.secret, host.deviceId));
-        const removedByOther = yield* statusOf(
-          request(other, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+        const failed = yield* statusOf(
+          request(host.secret, PATH.PRESENCE, {
+            version: HOST_VERSION.FLOOR,
+            body: { deviceId: host.deviceId, update: HOST_UPDATE.FAILED, updateFailure: failure },
+          }),
         );
-        const removed = yield* statusOf(
-          request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
-        );
-        const beat = yield* statusOf(hostBeat(host.secret, host.deviceId));
-        const listed = yield* answerOf(request(owner, PATH.HOSTS));
-        const back = yield* statusOf(enroll(host.token.token, { deviceId: host.deviceId }));
+        const whileFailed = yield* listedUpdate;
+        // A host from before the field, or one updating nothing, beats with neither.
+        const plain = yield* statusOf(hostBeat(host.secret, host.deviceId));
+        const afterPlain = yield* listedUpdate;
 
-        assert.deepEqual(rerun, {
-          status: HOSTED_HTTP_STATUS.CONFLICT,
-          body: { error: "host-still-enrolled" },
-        });
-        assert.equal(beatAfterRerun, HOSTED_HTTP_STATUS.OK, "the standing host keeps its secret");
-        assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
-        assert.equal(removed, HOSTED_HTTP_STATUS.OK);
-        assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
-        assert.deepEqual(listed.body.hosts, []);
-        assert.equal(back, HOSTED_HTTP_STATUS.OK, "a removed host enrolls again");
-        assert.deepEqual(
-          countedProperties(owner, SERVER_EVENT.HOST_INSTALL),
-          [{ kind: "luke_host" }, { kind: "luke_host" }],
-          "the first enroll and the one after the removal count, the refused rerun does not",
-        );
+        assert.deepEqual([failed, plain], [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK]);
+        assert.deepEqual(whileFailed, [[HOST_UPDATE.FAILED, failure]]);
+        assert.deepEqual(afterPlain, [[undefined, undefined]]);
       }),
+  );
+
+  it.effect("a removed host's secret is refused at once, and no other account removes it", () =>
+    Effect.gen(function* () {
+      const owner = yield* account();
+      const host = yield* pairedHost(owner);
+      const other = yield* account();
+
+      const removedByOther = yield* statusOf(
+        request(other, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+      );
+      const removed = yield* statusOf(
+        request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+      );
+      const beat = yield* statusOf(hostBeat(host.secret, host.deviceId));
+      const listed = yield* answerOf(request(owner, PATH.HOSTS));
+
+      assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
+      assert.equal(removed, HOSTED_HTTP_STATUS.OK);
+      assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+      assert.deepEqual(listed.body.hosts, []);
+    }),
   );
 
   it.effect("removing a host settles its agents' running turns as failed, and no one else's", () =>
     Effect.gen(function* () {
       const owner = yield* account();
-      const host = yield* enrolledHost(owner);
+      const host = yield* pairedHost(owner);
       const onHost = yield* agentRunningOn(owner, host.deviceId);
       const elsewhere = yield* agentRunningOn(owner, null);
 
@@ -565,45 +495,16 @@ it.layer(
   );
 
   it.effect(
-    "a revoked or expired install token refuses new boxes, and the hosts it enrolled keep calling",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* account();
-        const revoked = yield* enrolledHost(owner);
-        const expiring = yield* enrolledHost(owner);
-
-        yield* revokeHostInstallToken(owner, revoked.token.id);
-        const afterRevoke = yield* statusOf(enroll(revoked.token.token));
-        yield* TestClock.adjust("25 hours");
-        const afterExpiry = yield* statusOf(enroll(expiring.token.token));
-
-        assert.deepEqual(
-          [afterRevoke, afterExpiry],
-          [HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_HTTP_STATUS.UNAUTHORIZED],
-        );
-        assert.deepEqual(
-          [
-            yield* statusOf(hostBeat(revoked.secret, revoked.deviceId)),
-            yield* statusOf(hostBeat(expiring.secret, expiring.deviceId)),
-          ],
-          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
-        );
-      }),
-  );
-
-  it.effect(
     "a daemon below the version floor, or naming none, is refused as needing an upgrade, and its Hosts row says so",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
-        const host = yield* enrolledHost(owner);
-        const token = yield* installToken(owner);
+        const host = yield* pairedHost(owner);
 
         const oldBeat = yield* answerOf(hostBeat(host.secret, host.deviceId, OLD_VERSION));
         const unnamed = yield* statusOf(
           request(host.secret, PATH.PRESENCE, { body: { deviceId: host.deviceId } }),
         );
-        const oldEnroll = yield* statusOf(enroll(token.token, { version: OLD_VERSION }));
         const listed = yield* answerOf(request(owner, PATH.HOSTS));
 
         assert.equal(oldBeat.status, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
@@ -612,7 +513,6 @@ it.layer(
           minimumVersion: HOST_VERSION.FLOOR,
         });
         assert.equal(unnamed, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
-        assert.equal(oldEnroll, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
         assert.deepEqual(
           listed.body.hosts.map(
             (each: { readonly version: string; readonly upgradeNeeded: boolean }) => [
@@ -627,7 +527,7 @@ it.layer(
   );
 
   it.effect(
-    "a desktop enrolls its own Mac on its sign-in, created where Luke never saw it, which then calls on its secret, is listed as a Mac with its user and why its setup failed, and is removed as any machine; no other account enrolls it",
+    "a desktop enrolls its own Mac on its sign-in, created where Vespin never saw it, which then calls on its secret, is listed as a Mac with its user and why its setup failed, and is removed as any machine; no other account enrolls it",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
@@ -667,25 +567,15 @@ it.layer(
               readonly id: string;
               readonly name: string;
               readonly platform: string;
-              readonly loginName: string;
               readonly setup: string;
               readonly setupFailure: string;
-            }) => [
-              each.id,
-              each.name,
-              each.platform,
-              each.loginName,
-              each.setup,
-              each.setupFailure,
-            ],
+            }) => [each.id, each.name, each.platform, each.setup, each.setupFailure],
           ),
-          // Note that the fixture's home is /Users/fixture, so the Mac runs as fixture.
           [
             [
               deviceId,
               "Studio",
               DEVICE_PLATFORM.DARWIN,
-              "fixture",
               DEVICE_SETUP.FAILED,
               "Claude Code could not be installed",
             ],
@@ -697,107 +587,7 @@ it.layer(
   );
 
   it.effect(
-    "a host saves its agent's state: an upload to a fresh path of the agent's and the agent's one key, each commit kept as the next generation, and the blob of the one it replaced deleted",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* account();
-        const host = yield* enrolledHost(owner);
-        const agentId = yield* agentOnHost(owner, host.deviceId);
-
-        const first = yield* saveState(host, agentId, null);
-        const firstKept = yield* commitState(host, agentId, null, first.body.path);
-        const second = yield* saveState(host, agentId, 1);
-        const secondKept = yield* commitState(host, agentId, 1, second.body.path);
-
-        assert.equal(first.status, HOSTED_HTTP_STATUS.OK);
-        assert.ok(first.body.path.startsWith(`agent-state/${agentId}/`));
-        assert.notEqual(second.body.path, first.body.path, "every save goes to a fresh path");
-        assert.equal(
-          second.body.upload.url,
-          agentStateBlobUrl(AGENT_STATE_GRANT.UPLOAD, second.body.path),
-        );
-        assert.equal(Buffer.from(first.body.key, "base64").length, 32);
-        assert.equal(second.body.key, first.body.key, "the agent keeps one key");
-        assert.deepEqual(
-          [firstKept, secondKept],
-          [
-            { status: HOSTED_HTTP_STATUS.OK, body: { generation: 1 } },
-            { status: HOSTED_HTTP_STATUS.OK, body: { generation: 2 } },
-          ],
-        );
-        assert.ok(stateStore.removed.includes(first.body.path), "the replaced blob is deleted");
-        assert.ok(!stateStore.removed.includes(second.body.path));
-      }),
-  );
-
-  it.effect(
-    "a save from a generation no longer the agent's newest is refused, its ask and its commit alike, while a commit asked again after its answer was lost is answered its generation",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* account();
-        const host = yield* enrolledHost(owner);
-        const agentId = yield* agentOnHost(owner, host.deviceId);
-        const kept = yield* savedState(host, agentId, null);
-
-        const staleAsk = yield* saveState(host, agentId, null);
-        const staleCommit = yield* commitState(
-          host,
-          agentId,
-          null,
-          `agent-state/${agentId}/${randomUUID()}`,
-        );
-        const askedAgain = yield* commitState(host, agentId, null, kept.path);
-
-        assert.deepEqual(staleAsk, STALE);
-        assert.deepEqual(staleCommit, STALE);
-        assert.deepEqual(askedAgain, { status: HOSTED_HTTP_STATUS.OK, body: { generation: 1 } });
-        assert.equal(
-          Option.getOrUndefined(yield* newestAgentState(owner, agentId))?.path,
-          kept.path,
-          "nothing stale was kept",
-        );
-      }),
-  );
-
-  it.effect(
-    "a host saves only its own account's agents pinned to it, and commits only a path of the agent's",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* account();
-        const other = yield* account();
-        const host = yield* enrolledHost(owner);
-        const ownSecondHost = yield* enrolledHost(owner);
-        const otherHost = yield* enrolledHost(other);
-        const agentId = yield* agentOnHost(owner, host.deviceId);
-        const elsewhere = yield* agentOnHost(owner, host.deviceId);
-        const path = `agent-state/${agentId}/${randomUUID()}`;
-
-        const refused = [
-          yield* saveState(otherHost, agentId, null),
-          yield* commitState(otherHost, agentId, null, path),
-          yield* saveState(ownSecondHost, agentId, null),
-          yield* commitState(ownSecondHost, agentId, null, path),
-        ].map((answer) => answer.status);
-        const othersPath = yield* commitState(
-          host,
-          agentId,
-          null,
-          `agent-state/${elsewhere}/${randomUUID()}`,
-        );
-
-        assert.deepEqual(refused, [
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-        ]);
-        assert.equal(othersPath.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
-        assert.ok(Option.isNone(yield* newestAgentState(owner, agentId)), "nothing was kept");
-      }),
-  );
-
-  it.effect(
-    "a box pairs with a code: a start below the floor is refused, a member reads and approves the code, the host is listed at once, and the box's next poll alone is handed its secret, counted as an install",
+    "a box pairs with a code: a start below the floor is refused, a member reads and approves the code, the host is listed at once, the box's next poll alone is handed its secret, counted as an install, and the host is listed as called in only once its program registers",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
@@ -817,12 +607,14 @@ it.layer(
         yield* TestClock.adjust("5 seconds");
         const again = yield* pollPairing(pollSecret);
         const secret: string = handed.body.deviceSecret;
+        const collected = yield* answerOf(request(owner, PATH.HOSTS));
         const register = yield* statusOf(
           request(secret, PATH.DEVICES, {
             version: HOST_VERSION.FLOOR,
             body: { ...registered(deviceId), platform: DEVICE_PLATFORM.LINUX, home: "/srv/luke" },
           }),
         );
+        const joined = yield* answerOf(request(owner, PATH.HOSTS));
 
         assert.equal(old, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
         assert.match(userCode, /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u);
@@ -851,6 +643,11 @@ it.layer(
         assert.ok(secret.startsWith("lkd_"));
         assert.deepEqual(again.body, { status: "expired" }, "the secret is handed over once");
         assert.equal(register, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(
+          [listed, collected, joined].map((each) => each.body.hosts[0]?.calledIn),
+          [false, false, true],
+          "collecting its secret is not calling in; its program's register is",
+        );
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
           { kind: "luke_host" },
         ]);
@@ -939,30 +736,6 @@ it.layer(
           [first.body, soon.body, later.body],
           [{ status: "pending" }, { status: "slow-down" }, { status: "pending" }],
         );
-      }),
-  );
-
-  it.effect(
-    "the sweep deletes an upload no commit named a day on, and an agent's saved state, blob and row, seven days after its last save",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* account();
-        const host = yield* enrolledHost(owner);
-        const agentId = yield* agentOnHost(owner, host.deviceId);
-        const kept = yield* savedState(host, agentId, null);
-        const savedAt = yield* Clock.currentTimeMillis;
-        // A save whose upload never came to a commit, as when its host went away mid-save.
-        const abandoned: string = (yield* saveState(host, agentId, 1)).body.path;
-
-        yield* sweepAgentStates(new Date(savedAt + 6 * DAY_MS));
-        const afterSix = yield* newestAgentState(owner, agentId);
-        const removedAfterSix = stateStore.removed.includes(kept.path);
-        yield* sweepAgentStates(new Date(savedAt + 7 * DAY_MS));
-
-        assert.ok(stateStore.removed.includes(abandoned), "the abandoned upload is deleted");
-        assert.ok(Option.isSome(afterSix) && !removedAfterSix, "six days on, the state stands");
-        assert.ok(stateStore.removed.includes(kept.path), "its blob is deleted");
-        assert.ok(Option.isNone(yield* newestAgentState(owner, agentId)), "and then its row");
       }),
   );
 });

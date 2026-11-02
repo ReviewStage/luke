@@ -7,7 +7,7 @@
  * (https://www.better-auth.com/docs/integrations/electron#handling-authorization-in-the-browser),
  * and sends the plugin's single-use code back to the loopback, where the Mac
  * exchanges it with its verifier. The plugin's own browser client would
- * redirect through a custom URL scheme; Luke's Mac listens on the loopback
+ * redirect through a custom URL scheme; the Mac app listens on the loopback
  * its OAuth sign-in already uses, so the page returns there, and only to a
  * loopback (`desktop-session-wire.ts`).
  *
@@ -34,6 +34,7 @@ import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./a
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
@@ -67,7 +68,7 @@ function said(title: string, body: string): View {
 /** Asks the plugin for the code and sends the browser on to the loopback; answers what to show when it cannot. */
 async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View> {
   if (query === undefined) {
-    return said("This link did not come from Luke", "Sign in again.");
+    return said(`This link did not come from ${PRODUCT_NAME}`, "Sign in again.");
   }
   // Note that the session is read beside the transfer rather than after it,
   // and under a deadline, so counting the sign-in adds little to the
@@ -86,9 +87,9 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
       ? {
           kind: VIEW.SIGN_IN,
           title: "Sign in to finish",
-          body: "Sign in with the account you use in Luke.",
+          body: `Sign in with the account you use in ${PRODUCT_NAME}.`,
         }
-      : said("Luke could not be reached", "Sign in again.");
+      : said(`${PRODUCT_NAME} could not be reached`, "Sign in again.");
   }
   const code = Schema.decodeUnknownSync(TransferAnswer)(answered.data).electron_authorization_code;
   // Note that the sign-in is counted here, before the page leaves, because
@@ -101,10 +102,10 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
 }
 
 /**
- * The page opens on Luke's mark, badged as failed once the hand-off ended
+ * The page opens on the app's mark, badged as failed once the hand-off ended
  * short of the Mac: the title says where the hand-off stands, the description
  * what to do about it, the body holds the providers when a sign-in comes
- * first, and Open Luke goes back where it ended. A sign-in that cannot start
+ * first, and the Open link goes back where it ended. A sign-in that cannot start
  * is said in the page's alert region rather than under the choices.
  */
 function DesktopSession(): React.JSX.Element {

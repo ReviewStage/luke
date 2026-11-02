@@ -9,6 +9,7 @@
  * beside its words, named for what it reads again.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -113,7 +114,7 @@ function ErrorStates(): React.JSX.Element {
             remedy={{ label: "Connect GitHub", onClick: stay }}
             onRetry={stay}
           >
-            Luke on GitHub doesn't have access to acme/a-very-long-repository-name.
+            {`${PRODUCT_NAME} on GitHub doesn't have access to acme/a-very-long-repository-name.`}
           </ErrorState>
         </div>
       </CatalogSection>
@@ -122,12 +123,12 @@ function ErrorStates(): React.JSX.Element {
           <ErrorState
             failure={CATALOG_FAILURE}
             remedy={{
-              label: "Add acme/a-very-long-repository-name to Luke on GitHub",
+              label: `Add acme/a-very-long-repository-name to ${PRODUCT_NAME} on GitHub`,
               onClick: stay,
             }}
             onRetry={stay}
           >
-            Luke on GitHub doesn't have access to this repository.
+            {`${PRODUCT_NAME} on GitHub doesn't have access to this repository.`}
           </ErrorState>
         </div>
       </CatalogSection>

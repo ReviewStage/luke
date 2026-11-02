@@ -1714,7 +1714,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           "the summary's room came out of the steps kept",
         );
         assert.match(replay?.steps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
-        assert.match(replay?.preamble ?? "", /written by Luke rather than by that agent/u);
+        assert.match(replay?.preamble ?? "", /written by Vespin rather than by that agent/u);
         assert.match(asked[0]?.prompt ?? "", /Step 0\./u);
         assert.ok(
           asked.every((call) => !/Step 29\./u.test(call.prompt)),

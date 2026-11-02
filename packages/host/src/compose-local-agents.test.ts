@@ -1,25 +1,29 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents in VMs: a device registered as sandboxed, signed in to nothing, getting ready while it fetches its sandbox and ready to take an agent only once it has it, or why it could not have it, an agent launched in its VM with a GitHub token from Luke, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran directly on it before refused with why.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran on the developer's own logins before refused with why.
  *
- * The follower runs over a scripted spawner, a fake sandbox, a file system
- * that holds nothing but what a test names, and a fake service that hands
- * one launch line and a new GitHub token at each ask, answers each claim as
- * a test says, its first answer lost where it says, and whose beat answers
- * the launches it holds the device to, on the test's clock. The device
- * converges to that answer on every beat: a launch it runs nothing for is
- * settled, a settle not taken is asked again, a runner whose launch is no
- * longer named is stopped as a stop line stops it, and neither a launch
+ * The follower runs over a scripted spawner, a file system that holds
+ * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
+ * token at each ask, answers each claim as a test says, its first answer
+ * lost where it says, and whose beat answers the launches it holds the
+ * device to, on the test's clock. The device converges to that answer on
+ * every beat: a launch it runs nothing for is settled, a settle not taken
+ * is asked again, a runner whose launch is no longer named is stopped as a
+ * stop line stops it, its process group killed, and neither a launch
  * claimed after the beat was sent nor one still starting is touched; a
- * runner's VM is deleted as its turn ends, and a launch kept from a run that
- * ended has its VM deleted and is settled; and a runner's GitHub token is
- * renewed by its age on the wall clock. Synthetic
- * ids and tokens throughout.
+ * launch kept from a run that ended is settled; and a runner's GitHub token is renewed by its age on the wall
+ * clock. A host updating itself (`daemon/host-update.ts`) runs on the
+ * machine's own file system and processes in a releases folder of its own,
+ * its release's tarball answered in place of GitHub, and switches only
+ * once the device is idle. Synthetic ids and tokens throughout.
  */
 
 import assert from "node:assert/strict";
-import { NodePath } from "@effect/platform-node";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { DeviceAgentClaimedLine, DeviceAgentDevice } from "@luke/features";
+import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@luke/features";
 import { CHECKOUT_IDENTITY_SCRIPT } from "@luke/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -29,24 +33,29 @@ import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceAgentLine,
+  type DeviceAgentRelease,
   type DeviceLaunchRefusal,
+  type DeviceSignedIn,
   deviceAgentLayout,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
+import { HOST_TARGET, hostTarballUrl } from "@luke/features/host-release";
+import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer, Option } from "effect";
+import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
-import { composeLocalAgents } from "./compose-local-agents.js";
+import { composeLocalAgents, type LocalAgentsUpdate } from "./compose-local-agents.js";
+import { hostUpdate } from "./daemon/host-update.js";
 import {
   Environment,
   type LocalAgentClis,
+  LocalAgentClisUnavailable,
   LocalAgentPlatform,
-  type LocalAgentSandbox,
-  LocalAgentSandboxUnavailable,
   Reporter,
 } from "./effect/seams.js";
-import { fakeClis, fakeSandbox, VM_EXEC, VM_TOOLS } from "./testing/fake-sandbox.js";
+import { fakeClis } from "./testing/fake-clis.js";
 import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const HOME = "/Users/dev";
@@ -56,11 +65,14 @@ const USER_ID = "user-fixture";
 /** A launch the service holds the device to that this run of the follower never claimed. */
 const GONE_LINE_ID = "3c5d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 const GONE_AGENT_ID = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
-const STATE_ROOT = "/Users/dev/Library/Application Support/Luke";
+const STATE_ROOT = "/Users/dev/Library/Application Support/Vespin";
 const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
 const SECRET_ENV = { LUKE_RUNNER_TOKEN: "runner-secret" };
-/** The runner's own start in its VM, apart from a command the follower runs there (`VM_EXEC`). */
-const VM_RUNNER = "/opt/luke/vm-runner";
+/** The runner's own start on the box, as the platform launches it. */
+const RUNNER = "/opt/luke-host/node/bin/node";
+/** Where the agent's gh keeps its sign-in, which the follower writes the agent's GitHub token into. */
+const GH_HOSTS = `${LAYOUT.folder}/home/.config/gh/hosts.yml`;
+const CLIS = fakeClis();
 const IDENTITY = { name: "Ada Lovelace", email: "7001+ada@users.noreply.github.com" };
 
 const LAUNCH: DeviceAgentClaimedLine = {
@@ -93,14 +105,14 @@ const until = (holds: () => boolean) =>
   });
 
 /**
- * The follower on a device whose agents run in VMs, This Mac unless
- * `formerlyDirect` says it is a host, with its sandbox ready once `ready`
- * succeeds; one launch line is handed. `madeBare` says the agent's checkout
- * already stands, as a launch from before the record left it. With what it
- * registered, spawned, asked, handed the sandbox, settled, and reported.
+ * The follower on a device whose agents run straight on the box, This Mac
+ * unless `formerlyDirect` says it is a host, with its CLIs ready once
+ * `ready` succeeds; one launch line is handed. `madeBare` says the agent's
+ * checkout already stands, as a launch from before the record left it.
+ * With what it registered, spawned, asked, settled, and reported.
  */
 const followingDevice = (
-  ready: LocalAgentSandbox["ready"],
+  ready: LocalAgentClis["ready"],
   options: {
     readonly madeBare?: boolean;
     readonly formerlyDirect?: boolean;
@@ -115,20 +127,20 @@ const followingDevice = (
     /** The lines the service hands, once, after `linesAfter`; the one launch where none are named. */
     readonly lines?: readonly DeviceAgentLine[];
     readonly linesAfter?: Duration.Input;
-    /** The runner runs until it is signalled in its VM, rather than ending by itself a second in. */
+    /** The runner runs until its process group is killed, rather than ending by itself a second in. */
     readonly runsUntilSignalled?: boolean;
-    /** How the agent's VM starts, at once where none is named. */
-    readonly started?: LocalAgentSandbox["started"];
+    /** How long making the agent's repository takes, no time where none is named. */
+    readonly worktreeTakes?: Duration.Input;
+    /** Making the agent's repository fails, as a clone that cannot be fetched does. */
+    readonly worktreeFails?: boolean;
     /** The service's beat names no open launches, as one from before the list does. */
     readonly listsNoLaunches?: boolean;
     /** The clock the follower reads, the test's own where none is named. */
     readonly clock?: Clock.Clock;
-    /** How many of the first deletes of a VM fail, as smolvm's can. */
-    readonly vmDeleteFails?: number;
-    /** Setting the commit identity in the VM fails, so the launch is given up after its VM started. */
-    readonly identityFails?: boolean;
-    /** How the device's agent CLIs are had, at once where none is named. */
-    readonly clisReady?: LocalAgentClis["ready"];
+    /** The host's update of itself, as a host's daemon hands it. */
+    readonly update?: LocalAgentsUpdate;
+    /** How long making a folder in the agent's own takes, as a files line's write makes one, none where none is named. */
+    readonly writingTakes?: Duration.Input;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -138,37 +150,46 @@ const followingDevice = (
     const signal = yield* Deferred.make<void>();
     const runner: Script =
       options.runsUntilSignalled === true
-        ? { exitCode: 143, until: Deferred.await(signal) }
-        : // Note that the runner in the VM ends by itself a second in, so the test's end has no runner to wait out.
+        ? // Note that the runner ends as its group is signalled, as the runner on a SIGTERM does.
+          {
+            exitCode: 143,
+            until: Deferred.await(signal),
+            killed: Deferred.succeed(signal, undefined),
+          }
+        : // Note that the runner ends by itself a second in, so the test's end has no runner to wait out.
           { exitCode: 0, after: Duration.seconds(1) };
     const spawner = scriptedSpawner((program, args) => {
       if (program === "/bin/bash" && args[0] === "-l")
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
-      if (program === "/bin/bash") return { exitCode: 0 };
-      if (program === VM_RUNNER) return runner;
-      if (program === VM_EXEC)
+      if (program === "/bin/bash" && args[1] === "exit 0")
         return {
-          exitCode:
-            options.identityFails === true && args.includes(CHECKOUT_IDENTITY_SCRIPT) ? 1 : 0,
+          exitCode: options.worktreeFails === true ? 1 : 0,
+          after: options.worktreeTakes ?? Duration.zero,
         };
+      if (program === "/bin/bash") return { exitCode: 0 };
+      if (program === RUNNER) return runner;
       return undefined;
     });
     const registered: DeviceAgentDevice[] = [];
     const asked: string[] = [];
     const beats: number[] = [];
+    /** What each beat said of the host's update, none where it named none. */
+    const said: (DeviceAgentUpdate | undefined)[] = [];
     const reported: string[] = [];
     const settled: { id: string; exitCode?: number; refusal?: DeviceLaunchRefusal }[] = [];
     /**
      * The service as the test steers it: the launches it holds the device
      * to, which a claim adds and a settle it takes removes; how many settles
-     * it refuses next, and the ids of those it refused; and how long a beat
-     * takes to answer, its answer read as it was asked.
+     * it refuses next, and the ids of those it refused; how long a beat
+     * takes to answer, its answer read as it was asked; and the release it
+     * names on each beat's answer, where it publishes one newer.
      */
     const service = {
       held: new Set<string>(),
       refusing: 0,
       refused: [] as string[],
       beatTakes: Duration.zero as Duration.Input,
+      release: undefined as DeviceAgentRelease | undefined,
     };
     let launched = false;
     const client = {
@@ -176,13 +197,15 @@ const followingDevice = (
         Effect.sync(() => registered.push(device)).pipe(
           Effect.as(options.refusesSetup !== true || device.setup === undefined),
         ),
-      beat: () =>
+      beat: (_deviceId: string, _signedIn: DeviceSignedIn, updating?: DeviceAgentUpdate) =>
         Effect.gen(function* () {
           beats.push(registered.length);
+          said.push(updating);
           const answer =
             options.listsNoLaunches === true ? {} : { openLaunches: [...service.held] };
+          const { release } = service;
           yield* Effect.sleep(service.beatTakes);
-          return answer;
+          return release === undefined ? answer : { ...answer, release };
         }),
       lines: () =>
         launched
@@ -199,6 +222,7 @@ const followingDevice = (
               if (answer !== undefined && "line" in answer) service.held.add(answer.line.id);
             }),
         ),
+      lineStep: () => Effect.succeed(true),
       settleLine: (
         _deviceId: string,
         id: string,
@@ -228,32 +252,17 @@ const followingDevice = (
           asked.push(agentId);
           return `ghs_fixture_${asked.length}`;
         }),
-
-      saveState: () => Effect.succeed(undefined),
-      commitState: () => Effect.succeed(undefined),
-    };
-    const vm = fakeSandbox(ready);
-    let deleteFails = options.vmDeleteFails ?? 0;
-    const sandbox: LocalAgentSandbox = {
-      ...vm.sandbox,
-      deleted: (agentId) =>
-        deleteFails > 0
-          ? Effect.sync(() => {
-              deleteFails -= 1;
-              return false;
-            })
-          : vm.sandbox.deleted(agentId),
-      ...(options.started === undefined ? undefined : { started: options.started }),
-      // Note that a runner signalled in its VM ends there, as the one the platform starts does.
-      signalled: (agentId) =>
-        Effect.andThen(vm.sandbox.signalled(agentId), Deferred.succeed(signal, undefined)),
     };
     const services = Layer.mergeAll(
       spawner.layer,
       NodePath.layer,
       FileSystem.layerNoop({
         exists: (path) => Effect.succeed(options.madeBare === true && path === LAYOUT.checkoutPath),
-        makeDirectory: () => Effect.void,
+        makeDirectory: (path) =>
+          options.writingTakes !== undefined && path.startsWith(LAYOUT.folder)
+            ? Effect.sleep(options.writingTakes)
+            : Effect.void,
+        chmod: () => Effect.void,
         readFileString: (path) => {
           const held = files.get(path);
           return held === undefined
@@ -293,9 +302,9 @@ const followingDevice = (
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
-        launch: ({ env }) => ({ command: VM_RUNNER, args: [], env }),
-        sandbox,
-        clis: fakeClis(options.clisReady),
+        launch: ({ node, env }) => ({ command: node, args: [], env }),
+        tools: { node: RUNNER, claude: CLIS.paths.claude, codex: CLIS.paths.codex },
+        clis: fakeClis(ready),
         formerlyDirect: options.formerlyDirect ?? true,
         storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
@@ -303,12 +312,9 @@ const followingDevice = (
         deviceName: "Studio",
         devicePlatform: DEVICE_PLATFORM.DARWIN,
         deviceArch: DEVICE_ARCH.ARM64,
-        deviceIsolation: DEVICE_ISOLATION.SANDBOX,
+        deviceIsolation: DEVICE_ISOLATION.DIRECT,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
-        stateSealed: () => Effect.die("this device saves no state"),
-        stateOpened: () => Effect.die("this device restores no state"),
-        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const clock = options.clock ?? (yield* Clock.Clock);
@@ -323,15 +329,15 @@ const followingDevice = (
       accountId: () => USER_ID,
       switchedOn: Effect.succeed(true),
       client,
+      update: options.update,
     }).pipe(Effect.provide(services), Effect.provideService(Clock.Clock, clock));
     yield* composer.lifetime.pipe(Effect.provideService(Clock.Clock, clock));
     return {
       registered,
       beats,
+      said,
       spawned: spawner.spawned,
       asked,
-      tokens: vm.tokens,
-      vm,
       settled,
       service,
       files,
@@ -340,16 +346,14 @@ const followingDevice = (
   });
 
 it.effect(
-  "a device registers as sandboxed, signed in to nothing, and launches its agent in a VM with a GitHub token from Luke, its commit identity set in its repository first, keeping the agent as one it made",
+  "a device registers as direct on the CLIs it keeps, signed in to nothing, and launches its agent on the box with a GitHub token from Vespin in gh's config, its commit identity and gh's helper set in its repository first, keeping the agent as one it made",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, spawned, asked, tokens, files } = yield* followingDevice(
-          () => Effect.void,
-        );
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        const { registered, spawned, asked, files } = yield* followingDevice(() => Effect.void);
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
 
-        // Note that no login of the device's reaches a VM, so the service pays with the sign-in saved in Luke, or refuses.
+        // Note that no login of the device's is what its agents run on, so the service pays with the sign-in saved in the account, or refuses.
         assert.deepEqual(
           registered.map((each) => ({
             isolation: each.isolation,
@@ -359,51 +363,52 @@ it.effect(
           })),
           [
             {
-              isolation: DEVICE_ISOLATION.SANDBOX,
-              claudeExecutable: VM_TOOLS.claude,
-              codexExecutable: VM_TOOLS.codex,
+              isolation: DEVICE_ISOLATION.DIRECT,
+              claudeExecutable: CLIS.paths.claude,
+              codexExecutable: CLIS.paths.codex,
               signedIn: { claudeCode: false, codex: false },
             },
           ],
         );
         assert.deepEqual(asked, [AGENT_ID]);
-        assert.deepEqual(tokens, ["ghs_fixture_1"]);
-        // Note that the uninstall removes the agents this record names, and no other Luke install's.
+        assert.ok(files.get(GH_HOSTS)?.includes('oauth_token: "ghs_fixture_1"'));
+        // Note that the uninstall removes the agents this record names, and no other install's.
         assert.ok(
           files.has(`${STATE_ROOT}/owned-agents/${AGENT_ID}`),
           "the launch keeps the agent in the device's record of the agents it made",
         );
-        const runner = spawned.find((each) => each.program === VM_RUNNER);
+        const runner = spawned.find((each) => each.program === RUNNER);
         assert.equal(runner?.env?.LUKE_RUNNER_TOKEN, SECRET_ENV.LUKE_RUNNER_TOKEN);
-        assert.equal(
-          Object.keys(runner?.env ?? {}).some(
-            (name) => name === "GH_CONFIG_DIR" || name.startsWith("GIT_CONFIG_"),
-          ),
-          false,
-          "the runner reaches GitHub through its VM's bindings alone",
+        // Note that gh prefers a token in its environment to its config, so one there would never be renewed.
+        assert.equal(runner?.env?.GH_TOKEN, undefined, "the runner's gh reads its config alone");
+        // Note that the identity the launch carries is set in the agent's repository, as a cloud checkout sets it, beside gh's helper, before its runner starts.
+        const identity = spawned.findIndex((each) =>
+          each.args.some((arg) => arg.includes(CHECKOUT_IDENTITY_SCRIPT)),
         );
-        // Note that the identity the launch carries is set in the agent's repository, in its VM, as a cloud checkout sets it, before its runner starts.
-        const identity = spawned.findIndex((each) => each.args.includes(CHECKOUT_IDENTITY_SCRIPT));
-        assert.equal(spawned[identity]?.program, VM_EXEC, "the identity is set inside the VM");
+        assert.equal(spawned[identity]?.cwd, LAYOUT.checkoutPath);
+        assert.equal(spawned[identity]?.env?.HOME, `${LAYOUT.folder}/home`);
         assert.equal(spawned[identity]?.env?.LUKE_GIT_NAME, IDENTITY.name);
         assert.equal(spawned[identity]?.env?.LUKE_GIT_EMAIL, IDENTITY.email);
-        assert.ok(identity < spawned.findIndex((each) => each.program === VM_RUNNER));
+        assert.equal(
+          spawned[identity]?.env?.LUKE_GIT_CREDENTIAL_HELPER,
+          `!'${CLIS.paths.gh}' auth git-credential`,
+        );
+        assert.ok(identity < spawned.findIndex((each) => each.program === RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => runner?.ended === "exited");
+        // Note that a turn's end lets go of the token, which no turn reads any more.
+        yield* until(() => !files.has(GH_HOSTS));
       }),
     ),
 );
 
 it.effect(
-  "a device fetching its CLIs and then its sandbox registers as getting ready once and beats while it fetches, then registers ready and follows",
+  "a device fetching its CLIs registers as getting ready once and beats while it fetches, then registers ready and follows",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, beats, spawned } = yield* followingDevice(
-          (preparing) => Effect.andThen(preparing, Effect.sleep(Duration.minutes(2))),
-          {
-            clisReady: (preparing) => Effect.andThen(preparing, Effect.sleep(Duration.minutes(1))),
-          },
+        const { registered, beats, spawned } = yield* followingDevice((preparing) =>
+          Effect.andThen(preparing, Effect.sleep(Duration.minutes(3))),
         );
         yield* TestClock.adjust(Duration.seconds(5));
         yield* until(() => registered.length > 0);
@@ -412,14 +417,13 @@ it.effect(
           registered.map((each) => each.setup),
           [DEVICE_SETUP.PREPARING],
         );
-        // Note that the sandbox's own two minutes have passed by now, so the device waits on its CLIs too.
         yield* TestClock.adjust(Duration.minutes(2));
         assert.equal(
-          spawned.some((each) => each.program === VM_RUNNER),
+          spawned.some((each) => each.program === RUNNER),
           false,
         );
         yield* TestClock.adjust(Duration.minutes(1));
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
 
         assert.deepEqual(
           registered.map((each) => each.setup),
@@ -444,7 +448,7 @@ it.effect(
         yield* TestClock.adjust(Duration.seconds(5));
         yield* until(() => registered.length > 0);
         yield* TestClock.adjust(Duration.minutes(3));
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
 
         assert.deepEqual(
           registered.map((each) => each.setup),
@@ -460,7 +464,7 @@ it.effect(
 );
 
 it.effect(
-  "a device whose sandbox could not be had registers why and beats, taking no agent, and tries again on its own after a wait that doubles, until it registers ready",
+  "a device whose CLIs could not be had registers why and beats, taking no agent, and tries again on its own after a wait that doubles, until it registers ready",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -470,7 +474,7 @@ it.effect(
             tries += 1;
             return tries <= 2
               ? Effect.fail(
-                  new LocalAgentSandboxUnavailable({ detail: "smolvm couldn't be downloaded" }),
+                  new LocalAgentClisUnavailable({ detail: "Codex couldn't be downloaded" }),
                 )
               : Effect.void;
           }),
@@ -482,7 +486,7 @@ it.effect(
         assert.equal(tries, 1);
         assert.ok(beats.length >= 2, `beats ${beats.join(",")}`);
         assert.equal(
-          spawned.some((each) => each.program === VM_RUNNER),
+          spawned.some((each) => each.program === RUNNER),
           false,
         );
         yield* TestClock.adjust(Duration.seconds(20));
@@ -491,19 +495,19 @@ it.effect(
         yield* TestClock.adjust(Duration.seconds(30));
         assert.equal(tries, 2);
         yield* TestClock.adjust(Duration.seconds(40));
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
 
         assert.deepEqual(
           registered.map((each) => [each.setup, each.setupFailure]),
           [
-            [DEVICE_SETUP.FAILED, "smolvm couldn't be downloaded"],
-            [DEVICE_SETUP.FAILED, "smolvm couldn't be downloaded"],
+            [DEVICE_SETUP.FAILED, "Codex couldn't be downloaded"],
+            [DEVICE_SETUP.FAILED, "Codex couldn't be downloaded"],
             [undefined, undefined],
           ],
         );
         assert.deepEqual(reported, [
-          "the local agents' setup failed: smolvm couldn't be downloaded",
-          "the local agents' setup failed: smolvm couldn't be downloaded",
+          "the local agents' setup failed: Codex couldn't be downloaded",
+          "the local agents' setup failed: Codex couldn't be downloaded",
         ]);
         yield* TestClock.adjust(Duration.seconds(1));
       }),
@@ -522,7 +526,7 @@ it.effect(
             Effect.suspend(() => {
               tries += 1;
               return Effect.fail(
-                new LocalAgentSandboxUnavailable({ detail: "smolvm couldn't be downloaded" }),
+                new LocalAgentClisUnavailable({ detail: "Codex couldn't be downloaded" }),
               );
             }),
           { files },
@@ -566,14 +570,35 @@ it.effect(
         });
         yield* until(() => claims.length === 1);
         yield* TestClock.adjust(Duration.seconds(1));
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => settled.some((each) => each.id === LINE_ID));
 
         assert.equal(claims.length, 2);
         assert.equal(claims[1], claims[0], "the retry is the same claim");
-        assert.equal(spawned.filter((each) => each.program === VM_RUNNER).length, 1);
+        assert.equal(spawned.filter((each) => each.program === RUNNER).length, 1);
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      }),
+    ),
+);
+
+it.effect(
+  "a launch whose repository could not be made is settled unstarted and lets go of the GitHub token it was handed",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, settled, asked, files } = yield* followingDevice(() => Effect.void, {
+          worktreeFails: true,
+        });
+        yield* until(() => settled.some((each) => each.id === LINE_ID));
+
+        assert.deepEqual(asked, [AGENT_ID]);
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 1 }]);
+        assert.equal(files.has(GH_HOSTS), false, "the token stays readable with no turn running");
+        assert.equal(
+          spawned.some((each) => each.program === RUNNER),
+          false,
+        );
       }),
     ),
 );
@@ -590,7 +615,7 @@ it.effect(
 
         assert.deepEqual(settled, [{ id: LINE_ID }]);
         assert.equal(
-          spawned.some((each) => each.program === VM_RUNNER),
+          spawned.some((each) => each.program === RUNNER),
           false,
         );
       }),
@@ -598,7 +623,7 @@ it.effect(
 );
 
 it.effect(
-  "an agent that ran directly on This Mac before is settled unstarted, naming why, and never started",
+  "an agent that ran on the developer's own logins on This Mac before is settled unstarted, naming why, and never started",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -611,18 +636,18 @@ it.effect(
           { id: LINE_ID, exitCode: 1, refusal: DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY },
         ]);
         assert.equal(
-          spawned.some((each) => each.program === VM_RUNNER),
+          spawned.some((each) => each.program === RUNNER),
           false,
         );
         assert.deepEqual(reported, [
-          "a local agent that ran directly on this Mac was not started, since every agent here runs in a VM now",
+          "a local agent that ran on the developer's own logins on this Mac was not started, since its work is outside a folder of its own",
         ]);
       }),
     ),
 );
 
 it.effect(
-  "a host, whose agents never ran directly on it, starts an agent whose checkout already stands in its VM",
+  "a host, whose agents never ran on the developer's own logins, starts an agent whose checkout already stands",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -630,7 +655,7 @@ it.effect(
           madeBare: true,
           formerlyDirect: false,
         });
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
 
         assert.equal(settled.length, 0);
         yield* TestClock.adjust(Duration.seconds(1));
@@ -646,7 +671,7 @@ it.effect(
       Effect.gen(function* () {
         const files = new Map<string, string>();
         const first = yield* followingDevice(() => Effect.void, { files });
-        yield* until(() => first.spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => first.spawned.some((each) => each.program === RUNNER));
         const second = yield* followingDevice(() => Effect.void, { files });
         yield* until(() => second.reported.length > 0);
         yield* TestClock.adjust(Duration.seconds(30));
@@ -678,7 +703,7 @@ it.effect(
       Effect.gen(function* () {
         const { service, settled, files, spawned } = yield* followingDevice(() => Effect.void);
         service.refusing = 2;
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => service.refused.length === 1);
 
@@ -691,52 +716,6 @@ it.effect(
 
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
         yield* until(() => keptLaunches(files).length === 0);
-      }),
-    ),
-);
-
-it.effect(
-  "a runner's VM that could not be deleted as its turn ended keeps its launch unsettled until a beat has deleted it, then settles it with the exit code",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { settled, files, spawned, vm, reported } = yield* followingDevice(
-          () => Effect.void,
-          { vmDeleteFails: 1 },
-        );
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
-        yield* TestClock.adjust(Duration.seconds(1));
-        yield* until(() => reported.length > 0);
-
-        assert.deepEqual(reported, ["a local agent's VM could not be deleted"]);
-        assert.deepEqual([settled, vm.deleted, keptLaunches(files)], [[], [], [LINE_ID]]);
-        yield* beatsOn(1);
-        yield* until(() => settled.length > 0);
-
-        assert.deepEqual(vm.deleted, [AGENT_ID]);
-        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
-        yield* until(() => keptLaunches(files).length === 0);
-      }),
-    ),
-);
-
-it.effect(
-  "a launch given up after its VM started, whose VM could not be deleted, is settled as not started only once a beat has deleted it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { settled, files, vm, reported } = yield* followingDevice(() => Effect.void, {
-          identityFails: true,
-          vmDeleteFails: 1,
-        });
-        yield* until(() => reported.includes("a local agent's VM could not be deleted"));
-
-        assert.deepEqual([settled, vm.deleted, keptLaunches(files)], [[], [], [LINE_ID]]);
-        yield* beatsOn(1);
-        yield* until(() => settled.length > 0);
-
-        assert.deepEqual(vm.deleted, [AGENT_ID]);
-        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 1 }]);
       }),
     ),
 );
@@ -761,25 +740,24 @@ it.effect(
 );
 
 it.effect(
-  "a runner whose launch the service no longer names is stopped as a stop line stops it, signalled in its VM before the VM is deleted, and its exit settled",
+  "a runner whose launch the service no longer names is stopped as a stop line stops it, its process group signalled and killed after a grace, and its exit settled",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { service, settled, spawned, vm, reported } = yield* followingDevice(
-          () => Effect.void,
-          { runsUntilSignalled: true },
-        );
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        const { service, settled, spawned, reported } = yield* followingDevice(() => Effect.void, {
+          runsUntilSignalled: true,
+        });
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* beatsOn(1);
-        assert.deepEqual(vm.signalled, [], "a runner the service holds it to runs on");
+        const runner = spawned.find((each) => each.program === RUNNER);
+        assert.equal(runner?.killed, undefined, "a runner the service holds it to runs on");
 
         service.held.delete(LINE_ID);
         yield* beatsOn(1);
         yield* until(() => settled.length > 0);
 
-        assert.deepEqual(vm.signalled, [AGENT_ID]);
-        assert.deepEqual(vm.deleted, [AGENT_ID]);
-        assert.equal(spawned.find((each) => each.program === VM_RUNNER)?.ended, "exited");
+        assert.deepEqual(runner?.killed, { killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
+        assert.equal(runner?.ended, "exited");
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 143 }]);
         assert.deepEqual(reported, [
           "a local agent's runner was stopped, since the service no longer holds it here",
@@ -791,7 +769,7 @@ it.effect(
 it.effect("a runner claimed after the beat was sent is not stopped by that beat's answer", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const { service, spawned, vm, beats } = yield* followingDevice(() => Effect.void, {
+      const { service, spawned, beats } = yield* followingDevice(() => Effect.void, {
         runsUntilSignalled: true,
         linesAfter: Duration.seconds(1),
       });
@@ -799,62 +777,61 @@ it.effect("a runner claimed after the beat was sent is not stopped by that beat'
       service.beatTakes = Duration.seconds(3);
       yield* until(() => beats.length > 0);
       yield* TestClock.adjust(Duration.seconds(1));
-      yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+      yield* until(() => spawned.some((each) => each.program === RUNNER));
       yield* TestClock.adjust(Duration.seconds(3));
       service.beatTakes = Duration.zero;
       yield* beatsOn(2);
 
-      assert.deepEqual(vm.signalled, []);
-      assert.equal(spawned.find((each) => each.program === VM_RUNNER)?.ended, "running");
-    }),
-  ),
-);
-
-it.effect("a launch still starting, its VM not yet up, is not settled by a beat naming it", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const { service, settled, spawned } = yield* followingDevice(() => Effect.void, {
-        started: () => Effect.sleep(Duration.seconds(40)),
-      });
-      yield* until(() => service.held.has(LINE_ID));
-      yield* beatsOn(2);
-
-      assert.deepEqual([settled, service.refused], [[], []]);
-      yield* TestClock.adjust(Duration.seconds(15));
-      yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
-      yield* TestClock.adjust(Duration.seconds(1));
-      yield* until(() => settled.length > 0);
-      assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      const runner = spawned.find((each) => each.program === RUNNER);
+      assert.deepEqual([runner?.killed, runner?.ended], [undefined, "running"]);
     }),
   ),
 );
 
 it.effect(
-  "after a restart, a launch kept from the run before has its agent's VM deleted and is settled as a runner gone",
+  "a launch still starting, its repository not yet made, is not settled by a beat naming it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const files = new Map([
-          [
-            `${STATE_ROOT}/local-agents.json`,
-            `${JSON.stringify({
-              devices: { [USER_ID]: "device-1" },
-              launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
-            })}\n`,
-          ],
-        ]);
-        const { settled, vm } = yield* followingDevice(() => Effect.void, { files, lines: [] });
-        yield* until(() => settled.length > 0);
+        const { service, settled, spawned } = yield* followingDevice(() => Effect.void, {
+          worktreeTakes: Duration.seconds(40),
+        });
+        yield* until(() => service.held.has(LINE_ID));
+        yield* beatsOn(2);
 
-        assert.deepEqual(vm.deleted, [GONE_AGENT_ID]);
-        assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
-        assert.deepEqual(keptLaunches(files), []);
+        assert.deepEqual([settled, service.refused], [[], []]);
+        yield* TestClock.adjust(Duration.seconds(15));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => settled.length > 0);
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
       }),
     ),
 );
 
+it.effect("after a restart, a launch kept from the run before is settled as a runner gone", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const files = new Map([
+        [
+          `${STATE_ROOT}/local-agents.json`,
+          `${JSON.stringify({
+            devices: { [USER_ID]: "device-1" },
+            launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
+          })}\n`,
+        ],
+      ]);
+      const { settled } = yield* followingDevice(() => Effect.void, { files, lines: [] });
+      yield* until(() => settled.length > 0);
+
+      assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
+      assert.deepEqual(keptLaunches(files), []);
+    }),
+  ),
+);
+
 it.effect(
-  "a runner's GitHub token is renewed once it is fifty minutes old by the wall clock, though the machine slept through the wait",
+  "a runner's GitHub token is renewed in gh's config once it is fifty minutes old by the wall clock, though the machine slept through the wait",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -871,17 +848,19 @@ it.effect(
           monotonicTimeNanos: test.monotonicTimeNanos,
           sleep: (duration) => test.sleep(duration),
         };
-        const { asked, spawned } = yield* followingDevice(() => Effect.void, {
+        const { asked, spawned, files } = yield* followingDevice(() => Effect.void, {
           runsUntilSignalled: true,
           clock,
         });
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* TestClock.adjust(Duration.minutes(1));
         assert.deepEqual(asked, [AGENT_ID], "a young token is not renewed");
 
         slept.millis = Duration.toMillis(Duration.minutes(50));
         yield* TestClock.adjust(Duration.minutes(1));
         yield* until(() => asked.length === 2);
+        // Note that the renewal is written where the running agent's gh and git read it on every call.
+        yield* until(() => files.get(GH_HOSTS)?.includes('oauth_token: "ghs_fixture_2"') === true);
       }),
     ),
 );
@@ -891,17 +870,18 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { service, settled, spawned, vm } = yield* followingDevice(() => Effect.void, {
+        const { service, settled, spawned } = yield* followingDevice(() => Effect.void, {
           runsUntilSignalled: true,
           listsNoLaunches: true,
         });
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
         service.held.clear();
         service.held.add(GONE_LINE_ID);
         yield* beatsOn(3);
 
-        assert.deepEqual([vm.signalled, settled, service.refused], [[], [], []]);
-        assert.equal(spawned.find((each) => each.program === VM_RUNNER)?.ended, "running");
+        const runner = spawned.find((each) => each.program === RUNNER);
+        assert.deepEqual([runner?.killed, settled, service.refused], [undefined, [], []]);
+        assert.equal(runner?.ended, "running");
       }),
     ),
 );
@@ -912,7 +892,7 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const { service, settled, spawned } = yield* followingDevice(() => Effect.void);
-        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
         service.refusing = 2;
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => service.refused.length === 1);
@@ -927,32 +907,204 @@ it.effect(
     ),
 );
 
-it.effect(
-  "after a restart, a kept launch whose VM could not be deleted is settled only once a beat has deleted it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const files = new Map([
-          [
-            `${STATE_ROOT}/local-agents.json`,
-            `${JSON.stringify({
-              devices: { [USER_ID]: "device-1" },
-              launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
-            })}\n`,
-          ],
-        ]);
-        const { settled, vm, beats } = yield* followingDevice(() => Effect.void, {
-          files,
-          lines: [],
-          vmDeleteFails: 2,
-        });
-        yield* until(() => beats.length > 0);
+/** The machine's own file system and processes, which a host's update runs on. */
+const NODE = NodeChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+);
 
-        assert.deepEqual([settled, keptLaunches(files)], [[], [GONE_LINE_ID]]);
-        yield* beatsOn(1);
-        yield* until(() => settled.length > 0);
-        assert.deepEqual(vm.deleted, [GONE_AGENT_ID]);
-        assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
-      }),
-    ),
+/** The version a host runs, and the newer one the service names. */
+const RUNNING = "0.3.0";
+const NEWER = "0.4.0";
+
+/** The newer release's tarball, as CI packs one: its `luke-host` command, which answers its version, under one `luke-host/` folder. */
+const newerTarball = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const scratch = yield* temporaryDirectoryScoped("luke-host-tarball-");
+  yield* fileSystem.makeDirectory(`${scratch}/luke-host/bin`, { recursive: true });
+  yield* fileSystem.writeFileString(
+    `${scratch}/luke-host/bin/luke-host`,
+    `#!/bin/sh\necho ${NEWER}\n`,
+    { mode: 0o755 },
+  );
+  execFileSync("tar", ["-czf", `${scratch}/luke-host.tar.gz`, "-C", scratch, "luke-host"]);
+  const archive = readFileSync(`${scratch}/luke-host.tar.gz`);
+  const sha256 = createHash("sha256").update(archive).digest("hex");
+  const release: DeviceAgentRelease = {
+    version: NEWER,
+    sha256: { [HOST_TARGET.LINUX_X64]: sha256, [HOST_TARGET.LINUX_ARM64]: sha256 },
+  };
+  return { archive, release };
+});
+
+/**
+ * A Linux host's update of itself, in a releases folder of the test's own
+ * as the account install lays it out: `RUNNING` and an older release under
+ * `versions/`, `current` naming `RUNNING`, and GitHub answering the newer
+ * release's tarball with the bytes given. With every address it fetched.
+ */
+const updatingHost = (tarball: Uint8Array<ArrayBuffer>) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const folder = yield* temporaryDirectoryScoped("luke-host-releases-");
+    for (const version of ["0.2.0", RUNNING]) {
+      yield* fileSystem.makeDirectory(`${folder}/versions/${version}/bin`, { recursive: true });
+    }
+    yield* fileSystem.symlink(`versions/${RUNNING}`, `${folder}/current`);
+    const fetched: string[] = [];
+    const update = yield* hostUpdate({
+      releases: { folder, running: RUNNING },
+      version: RUNNING,
+      target: HOST_TARGET.LINUX_X64,
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NODE,
+          fakeHttpClientLayer((url) => {
+            fetched.push(url);
+            return new Response(tarball);
+          }),
+          Layer.succeed(Reporter, { report: () => undefined }),
+        ),
+      ),
+    );
+    const current = fileSystem.readLink(`${folder}/current`);
+    const versions = Effect.map(fileSystem.readDirectory(`${folder}/versions`), (names) =>
+      [...names].sort(),
+    );
+    return { folder, update, fetched, current, versions };
+  });
+
+/** Waits until the condition holds, each round a read of the disk, so the update's own processes and file writes, which wait on no clock, finish meanwhile. */
+const untilOnDisk = <E, R>(holds: Effect.Effect<boolean, E, R>) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    for (let round = 0; round < 50_000; round += 1) {
+      if (yield* holds) return;
+      yield* Effect.ignore(fileSystem.exists("/"));
+    }
+    assert.fail("the update never got there");
+  });
+
+it.effect(
+  "a host holding a newer release waits while an agent runs, and switches once it ends: current names the new release, the running one is kept, and older ones go",
+  () =>
+    Effect.gen(function* () {
+      const { archive, release } = yield* newerTarball;
+      const { update, fetched, current, versions } = yield* updatingHost(archive);
+      const { service, spawned, said } = yield* followingDevice(() => Effect.void, {
+        runsUntilSignalled: true,
+        update: update.follower,
+      });
+      service.release = release;
+      yield* until(() => spawned.some((each) => each.program === RUNNER));
+      yield* untilOnDisk(update.follower.waiting);
+      yield* beatsOn(2);
+      // Note that a switch would hold up the beats it runs on, so the third is waited for on the disk.
+      yield* untilOnDisk(Effect.sync(() => said.length >= 3));
+
+      assert.deepEqual(fetched, [hostTarballUrl(NEWER, HOST_TARGET.LINUX_X64)]);
+      assert.deepEqual(said.at(-1), { update: HOST_UPDATE.WAITING });
+      assert.equal(yield* current, `versions/${RUNNING}`);
+
+      service.held.delete(LINE_ID);
+      yield* beatsOn(2);
+      yield* untilOnDisk(Effect.map(current, (link) => link === `versions/${NEWER}`));
+
+      assert.ok(said.some((each) => each?.update === HOST_UPDATE.UPDATING));
+      assert.deepEqual(yield* versions, [RUNNING, NEWER]);
+      yield* update.ended;
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
+);
+
+it.effect(
+  "a launch claimed while a host holding a newer release looked idle keeps it on the release it runs, and the launch runs",
+  () =>
+    Effect.gen(function* () {
+      const { archive, release } = yield* newerTarball;
+      const { update, current } = yield* updatingHost(archive);
+      // Note that the launch's claim is under way from the fourteenth second to the seventeenth, across the beat at the fifteenth.
+      const { service, spawned, said, beats } = yield* followingDevice(() => Effect.void, {
+        runsUntilSignalled: true,
+        linesAfter: Duration.seconds(14),
+        claim: () => Effect.delay(Effect.succeed(LAUNCH), Duration.seconds(3)),
+        update: update.follower,
+      });
+      service.release = release;
+      yield* untilOnDisk(update.follower.waiting);
+      yield* TestClock.adjust(Duration.seconds(14));
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* until(() => spawned.some((each) => each.program === RUNNER));
+      yield* beatsOn(1);
+      yield* until(() => beats.length >= 3);
+
+      assert.ok(said.every((each) => each?.update !== HOST_UPDATE.UPDATING));
+      assert.equal(yield* current, `versions/${RUNNING}`);
+      assert.equal(spawned.find((each) => each.program === RUNNER)?.ended, "running");
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
+);
+
+it.effect(
+  "a newer release whose download does not match its SHA-256 has every beat say the update failed and why, leaves the releases as they were, and is fetched again about an hour later",
+  () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const { archive, release } = yield* newerTarball;
+      const tampered = Uint8Array.from(archive);
+      tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
+      const { folder, update, fetched, current, versions } = yield* updatingHost(tampered);
+      const { service, said } = yield* followingDevice(() => Effect.void, {
+        lines: [],
+        update: update.follower,
+      });
+      service.release = release;
+      yield* untilOnDisk(Effect.map(update.follower.beating, (now) => now !== undefined));
+      yield* beatsOn(1);
+
+      assert.deepEqual(said.at(-1), {
+        update: HOST_UPDATE.FAILED,
+        updateFailure: `the ${NEWER} download did not match its SHA-256`,
+      });
+      assert.equal(yield* current, `versions/${RUNNING}`);
+      assert.deepEqual(yield* versions, ["0.2.0", RUNNING]);
+      assert.deepEqual([...(yield* fileSystem.readDirectory(folder))].sort(), [
+        "current",
+        "versions",
+      ]);
+
+      yield* TestClock.adjust(Duration.minutes(75));
+      yield* untilOnDisk(Effect.sync(() => fetched.length === 2));
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
+);
+
+it.effect(
+  "a line a host holding a newer release claimed keeps it on the release it runs while the line is being delivered",
+  () =>
+    Effect.gen(function* () {
+      const { archive, release } = yield* newerTarball;
+      const { update, current } = yield* updatingHost(archive);
+      const files: DeviceAgentLine = {
+        id: GONE_LINE_ID,
+        agentId: AGENT_ID,
+        seq: 1,
+        kind: DEVICE_AGENT_LINE_KIND.FILES,
+        payload: {
+          files: [{ path: `${LAYOUT.folder}/home/notes.txt`, mode: 0o600, contents: "bm90ZXM=" }],
+        },
+      };
+      // Note that the files line is claimed at once and its write takes an hour, across every beat the test sends.
+      const { service, said } = yield* followingDevice(() => Effect.void, {
+        lines: [files],
+        claim: () => Effect.succeed({ line: files }),
+        writingTakes: Duration.hours(1),
+        update: update.follower,
+      });
+      service.release = release;
+      yield* untilOnDisk(update.follower.waiting);
+      yield* beatsOn(2);
+      yield* untilOnDisk(Effect.sync(() => said.length >= 3));
+
+      assert.ok(said.every((each) => each?.update !== HOST_UPDATE.UPDATING));
+      assert.equal(yield* current, `versions/${RUNNING}`);
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
 );

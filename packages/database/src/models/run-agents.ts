@@ -10,13 +10,12 @@
  * agents.
  */
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { type Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { automation, automationRun } from "../schemas/automation.js";
-import { agentGivenNameSql } from "./agent-name.js";
 import { automationReadableBy } from "./automation-store.js";
 import { InstantColumnSchema } from "./columns.js";
 
@@ -41,10 +40,7 @@ const findRunAgents = SqlSchema.findAll({
         .select({
           id: agentTable.id,
           conversationId: agentTable.conversationId,
-          // The name the agent goes by: Luke for an operator, else its title.
-          title: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          title: agentTable.title,
           createdAt: agentTable.createdAt,
         })
         .from(agentTable)

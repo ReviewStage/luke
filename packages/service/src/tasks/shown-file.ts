@@ -3,7 +3,7 @@ import { isSecretFile, TASK_FILE_BOUNDS } from "@luke/features/task-wire";
 /**
  * shown-file.ts -- the one rule a file of the task's repository is put on the developer's screen by.
  *
- * The File tab's read of a whole file, from GitHub through the Luke GitHub
+ * The File tab's read of a whole file, from GitHub through our GitHub
  * App (`task-file.ts`), finds out a file's facts and hands them here: a
  * secret file is never read, only a regular file is shown, a file past the
  * size bound or holding a NUL among its first bytes is not text, and every

@@ -38,30 +38,30 @@ import type { RunMode } from "./run-mode.js";
  * This Mac runs agents only once the member turns it on, with Turn on under
  * This Mac in Settings › Hosts (`THIS_MAC_HOST_TURN_ON`), because turning it
  * on registers a login item that runs `luke-host` at login, the app open or
- * not, and `luke-host` downloads what its VMs run on. The Mac is turned on
+ * not, and `luke-host` downloads what its agents run on. The Mac is turned on
  * in one sequence, in order: it is enrolled on the member's own sign-in
  * under the device id the account has on this Mac (`local-agent-state.ts`),
  * minted the first time (`enrollOwn`), which converts its device in place,
- * so its agents, folders and VMs carry over; its record is written where
+ * so its agents and their folders carry over; its record is written where
  * `luke-host` reads it, the app's own state folder
  * (`host-device-record.ts`); the launches kept under the account are handed
  * to the device, whose follower settles them; and its login item is
  * registered (`ThisMacHost`). From then on the record keeps it on: a Mac
- * holding a record of the account's that Luke has not refused stands on as
+ * holding a record of the account's that the service has not refused stands on as
  * the app starts, its login item registered again where it is not, with
  * nothing to switch, since a task runs here only where its Runs on picks
  * this Mac; one holding none stands not turned on until the member asks.
  *
  * The record names the account the Mac runs agents for, the one whose
  * device id it carries, so another account signed in on the same Mac sees
- * it as another member's machine and turns nothing on or off. Luke refusing
- * the record's secret marks it refused (`@luke/host/daemon`), the Mac
+ * it as another member's machine and turns nothing on or off. The service
+ * refusing the record's secret marks it refused (`@luke/host/daemon`), the Mac
  * removed in Settings, and nothing enrolls it again on its own: only the
  * member's own act does, Turn on again (`THIS_MAC_HOST_TURN_ON`). A turn-on
  * that failed says why and waits for the same act, Retry; the app never
  * follows the queue itself.
  *
- * `luke-host` fetches what its VMs run on once each time it starts, and
+ * `luke-host` fetches what its agents run on once each time it starts, and
  * registers with the service whether that is still under way or failed, so
  * where it stands is read with the setup the service lists for this Mac. A
  * setup that failed waits for Retry, which starts `luke-host` again by
@@ -72,7 +72,7 @@ import type { RunMode } from "./run-mode.js";
  *
  * It turns on beside a standalone `luke-host` the install command put on
  * this Mac, whichever account that one runs agents for: each keeps its own
- * state folder, and each agent's VM and folder are named for the agent.
+ * state folder, and each agent's folder is named for the agent.
  *
  * Where it stands is read again every `IDLE` while the account is signed
  * in: running while a follower holds the machine's lease, which only
@@ -90,16 +90,15 @@ const SETUP_READ_EVERY = Duration.seconds(30);
 
 /** What a failed turn-on says, by what failed. */
 const FAILED_WORDS = {
-  VERSION: "Luke couldn't start its host program on this Mac",
-  NOT_FOUND: "Luke didn't find this Mac under your account. Retry.",
-  UPGRADE_NEEDED:
-    "Luke needs a newer version of this app to run agents here. Update Luke, then Retry.",
-  UNANSWERED: "Luke couldn't be reached to add this Mac. Check your connection, then Retry.",
-  REFUSED: "Luke refused to add this Mac",
-  NOT_SAVED: "Luke couldn't save this Mac's sign-in in its state folder. Retry.",
-  LOGIN_ITEM: "macOS refused Luke's login item",
-  NO_LOGIN_ITEM: "This build of Luke carries no login item to run agents with.",
-  SETUP: "Luke couldn't download what agents run on here",
+  VERSION: "Couldn't start the host program on this Mac",
+  NOT_FOUND: "This Mac isn't under your account. Retry.",
+  UPGRADE_NEEDED: "Running agents here needs a newer version of this app. Update it, then Retry.",
+  UNANSWERED: "Couldn't reach the service to add this Mac. Check your connection, then Retry.",
+  REFUSED: "The service refused to add this Mac",
+  NOT_SAVED: "Couldn't save this Mac's sign-in in the state folder. Retry.",
+  LOGIN_ITEM: "macOS refused the app's login item",
+  NO_LOGIN_ITEM: "This build carries no login item to run agents with.",
+  SETUP: "Couldn't download what agents run on here",
 } as const;
 
 /** Where this Mac's setup stands as the service lists it: none for one that is ready. */
@@ -220,7 +219,7 @@ export function composeThisMacHost(
 
     const set = (next: ThisMacHostStanding) => Effect.as(Ref.set(standing, next), next);
 
-    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for, naming the Mac as its `luke-host` registers it, so Luke creates the device where it never saw this Mac. */
+    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for, naming the Mac as its `luke-host` registers it, so the service creates the device where it never saw this Mac. */
     const enrolled = (deviceId: string, version: string) =>
       Effect.flatMap(host.machine, (machine) => client.enrollOwn(deviceId, machine)).pipe(
         Effect.updateService(
@@ -316,7 +315,7 @@ export function composeThisMacHost(
 
     /**
      * `luke-host` started again, its login item unregistered and registered,
-     * so it fetches what its VMs run on again; the setup it failed is taken
+     * so it fetches what its agents run on again; the setup it failed is taken
      * as unread until the next read, since it has not registered again yet.
      */
     const restarted = (deviceId: string) =>
@@ -366,7 +365,7 @@ export function composeThisMacHost(
             return yield* set(standingOf(THIS_MAC_HOST_STANDING.OTHER_ACCOUNT));
           }
           if ((yield* Ref.get(turnOnFailed)) && !explicit) return yield* Ref.get(standing);
-          // Note that a Mac is never enrolled on its own, because turning it on registers a login item and downloads what its VMs run on.
+          // Note that a Mac is never enrolled on its own, because turning it on registers a login item and downloads what its agents run on.
           if (Option.isNone(record) && !explicit) {
             return yield* set(standingOf(THIS_MAC_HOST_STANDING.NOT_TURNED_ON));
           }

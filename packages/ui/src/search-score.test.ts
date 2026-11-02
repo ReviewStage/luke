@@ -63,7 +63,7 @@ const CASES: readonly Case[] = [
   },
   {
     name: "a word inside a word",
-    subject: { label: "Reset Luke" },
+    subject: { label: "Reset Vespin" },
     query: "set",
     tier: SEARCH_TIER.WORDS,
     marks: { label: ["set"] },
@@ -133,7 +133,7 @@ test.each(CASES)("$name", ({ subject, query, tier, marks }) => {
 
 test("every row a tier finds ranks above every row the next tier finds, a label typed whole first, and the rest of a tier in the order given", () => {
   const rows: readonly SearchSubject[] = [
-    { label: "Reset Luke" },
+    { label: "Reset Vespin" },
     { label: "Theme", keywords: ["the settings of the window"] },
     { label: "Open settings" },
     { label: "Settings sync" },
@@ -152,7 +152,7 @@ test("every row a tier finds ranks above every row the next tier finds, a label 
     "Settings",
     "Open settings",
     "Open a set",
-    "Reset Luke",
+    "Reset Vespin",
     "Theme",
   ]);
 });

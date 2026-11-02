@@ -92,7 +92,7 @@ test("a working server keeps its switch and the tools it listed", () => {
   assert.equal(row.problem, undefined);
 });
 
-test("a connection is checked until its server answers, and says its tools could not be read when Luke could not ask", () => {
+test("a connection is checked until its server answers, and says its tools could not be read when Vespin could not ask", () => {
   assert.equal(
     connectionHealth(INTEGRATION_PROVIDER.SLACK, undefined).kind,
     CONNECTION_HEALTH.CHECKING,

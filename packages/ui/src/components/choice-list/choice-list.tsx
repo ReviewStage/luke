@@ -5,6 +5,7 @@ import { RadioGroup } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
 import { cn } from "../../cn.js";
 import { pulsePress } from "../../press-pulse.js";
+import { ignoredByReplay } from "../../session-replay-marks.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { Badge } from "../badge/badge.js";
 import {
@@ -71,7 +72,7 @@ import {
  * its `CheckboxGroup` of `Checkbox`es, each row a native button
  * (`nativeButton`) holding its words, so the roles, the checked state, and
  * the `data-checked` a row is drawn by are Base UI's. What a press and a
- * key do stays Luke's: Base UI checks a radio as focus lands on it, refuses
+ * key do stays our own: Base UI checks a radio as focus lands on it, refuses
  * Enter on a row, and has no press that takes a choice back or hears the
  * checked row again, so the list answers its rows' presses and its arrows
  * itself and stops Base UI's own handling of them
@@ -491,6 +492,8 @@ function ChoiceRow({
     nativeButton: true,
     value: option.value,
     "data-value": option.value,
+    // Note that the hidden input Base UI draws beside the row holds the option's value, which the screen recording must never read.
+    inputRef: ignoredByReplay,
     ...rovingItem(),
     // Note that a radio is drawn out of the tab order, which quiets the group's own roving stop, so the stop its keys keep is the only one.
     tabIndex: tabStop && !readOnly ? 0 : -1,

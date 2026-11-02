@@ -7,7 +7,7 @@
     },
     "model": {
       "type": "string",
-      "description": "The id of the model the worker runs on, from Luke's catalog; your own where left out."
+      "description": "The id of the model the worker runs on, from Vespin's catalog; your own where left out."
     },
     "effort": {
       "type": "string",

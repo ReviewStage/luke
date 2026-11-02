@@ -10,6 +10,7 @@ import {
 } from "@luke/features/admin-cost-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import { formatCompact, formatCount, formatUsd } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { readFailedWords } from "@luke/features/words";
 import {
   Badge,
@@ -39,8 +40,7 @@ import { useAdminRead } from "../use-admin-read.js";
 const COST_ERROR = readFailedWords("cost");
 
 /** What every figure on the screen is, said once at the top of the page. */
-const COST_DESCRIPTION =
-  "Every model token and metered second at its public list price: a list-price equivalent, not what Luke pays.";
+const COST_DESCRIPTION = `Every model token and metered second at its public list price: a list-price equivalent, not what ${PRODUCT_NAME} pays.`;
 
 /** The screen's dollar measure, named once so every label says the same thing. */
 const LIST_PRICE = "List-price equivalent";
@@ -57,7 +57,7 @@ function usdOrNone(value: number | null): string {
 
 /**
  * What every dollar on the screen is and is not, said once under the
- * headline: a comparison and a trend at public prices, never Luke's bill.
+ * headline: a comparison and a trend at public prices, never our bill.
  */
 function ListPriceNote(): React.JSX.Element {
   return (

@@ -4,7 +4,7 @@ import { type LocalAgentClis, LocalAgentClisUnavailable } from "./effect/seams.j
 import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
 
 /**
- * local-agent-setup.ts -- what a device has before it registers ready to take an agent, beside what its VMs run on: the Claude Code, Codex, and GitHub CLI its agents run, each fetched and kept under the device's own state, and the words it registers its setup failed with.
+ * local-agent-setup.ts -- what a device has before it registers ready to take an agent: the Claude Code, Codex, and GitHub CLI its agents run on, each fetched and kept under the device's own state, and the words it registers its setup failed with.
  *
  * Every host keeps its own copy of each CLI, a Linux host and a Mac's
  * `luke-host` alike, This Mac's among them, at `agent-tools/` under its
@@ -17,12 +17,10 @@ import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
 
 /**
  * What a device says it could not have, as it registers its setup failed
- * (`DEVICE_SETUP.FAILED`): words of Luke's own, never a tool's, so none
+ * (`DEVICE_SETUP.FAILED`): words of our own, never a tool's, so none
  * names a secret.
  */
-export const SETUP_FAILURE = {
-  SMOLVM: "smolvm couldn't be downloaded or didn't pass its check",
-  IMAGE: "the sandbox image couldn't be downloaded",
+const SETUP_FAILURE = {
   CLAUDE_CODE: "Claude Code couldn't be downloaded or didn't pass its check",
   CODEX: "Codex couldn't be downloaded or didn't pass its check",
   GH: "GitHub's CLI couldn't be downloaded or didn't pass its check",

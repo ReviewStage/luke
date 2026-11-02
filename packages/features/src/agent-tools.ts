@@ -1,8 +1,8 @@
 /**
- * agent-tools.ts -- every tool name a Luke agent's transcript may carry, which the service offers and the desktop draws.
+ * agent-tools.ts -- every tool name an agent's transcript may carry, which the service offers and the desktop draws.
  *
  * The service's tool registry (`packages/service/src/agents/agent-runtime/tools.ts`)
- * says which roles each of Luke's tools serves; the names themselves are
+ * says which roles each of our tools serves; the names themselves are
  * declared here, once, so the desktop reads a call in a transcript by the
  * same name the service offered it under, the brain's as a coding
  * agent's. Beside them stand the names eve gives tools of its own that a
@@ -16,7 +16,7 @@ import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
 
-/** Every tool Luke authors or declares for a model, by the name the model calls it by. */
+/** Every tool we author or declare for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
   // A look at one of the plan's pictures, the planning model's and a coding agent's.
   LOOK_AT_PICTURE: "look_at_picture",
@@ -45,8 +45,8 @@ export const AGENT_TOOL = {
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The workspace's shared memory, which a coding agent keeps and searches.
-  REMEMBER: "remember",
-  RECALL: "recall",
+  SAVE_MEMORY: "save_memory",
+  SEARCH_MEMORY: "search_memory",
   // The public reads, every role's: eve's provider-run search on the agent's own model call, and the page read.
   WEB_SEARCH: "web_search",
   READ_WEB_PAGE: "read_web_page",
@@ -72,8 +72,6 @@ export const AGENT_TOOL = {
   CREATE_CHANNEL: CHANNEL_TOOL.CREATE,
   UPDATE_CHANNEL: CHANNEL_TOOL.UPDATE,
   MOVE_THREAD: CHANNEL_TOOL.MOVE,
-  // Every open inbox ask to an operator's member, across all their agents, the operator's alone.
-  LIST_OPEN_ASKS: "list_open_asks",
   OPEN_PULL_REQUEST: "open_pull_request",
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
@@ -82,8 +80,7 @@ export const AGENT_TOOL = {
   // The plan's comment threads, read and answered by the planning model and every coding agent on the task.
   READ_COMMENTS: PLAN_COMMENT_TOOL.READ,
   REPLY_TO_COMMENT: PLAN_COMMENT_TOOL.REPLY,
-  RESOLVE_THREAD: PLAN_COMMENT_TOOL.RESOLVE,
-  REOPEN_THREAD: PLAN_COMMENT_TOOL.REOPEN,
+  UPDATE_COMMENT: PLAN_COMMENT_TOOL.UPDATE,
   READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
@@ -98,7 +95,7 @@ export type AgentTool = (typeof AGENT_TOOL)[keyof typeof AGENT_TOOL];
  * carries: its subagent tool for the worker, which earlier transcripts name
  * where the brain now calls its own `delegate`, and the two task
  * controls it adds beside any task. Note that their names are eve's own and
- * the tasks they name are eve's subagent tasks, not a Luke task.
+ * the tasks they name are eve's subagent tasks, not a task of ours.
  */
 export const EVE_TOOL = {
   WORKER: "worker",
@@ -126,12 +123,14 @@ export const CONNECTION_TOOL = {
  * post and read, since named for the channels a thread is posted to,
  * the four of the workspace's Chat, removed with it, the brain's lines of
  * code put on the developer's screen and its two whiteboard tools, removed
- * with the Code and Board tabs, and a voice call's question queue and
- * hang-up, removed with GPT Live.
+ * with the Code and Board tabs, a voice call's question queue and
+ * hang-up, removed with GPT Live, the memory's two tools, since named for
+ * the memory, and the plan comments' resolve and reopen, folded into
+ * `update_comment`.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
-  // Luke's own search on Luke's key, replaced by eve's provider-run `web_search` on the agent's own key.
+  // Our own search on our key, replaced by eve's provider-run `web_search` on the agent's own key.
   SEARCH_WEB: "search_web",
   LIST_CODING_AGENTS: "list_coding_agents",
   READ_CODING_AGENT: "read_coding_agent",
@@ -144,7 +143,7 @@ export const RETIRED_TOOL = {
   // Folded into `post_to_inbox` (a post that asks nothing) and `withdraw_ask`.
   CLOSE_INBOX_ITEM: "close_inbox_item",
   REPLY_INBOX: "reply_inbox",
-  // Luke's own issues, removed: a task carries its status and priority now.
+  // Our own issues, removed: a task carries its status and priority now.
   LIST_ISSUES: "list_issues",
   READ_ISSUE: "read_issue",
   CREATE_ISSUE: "create_issue",
@@ -165,18 +164,26 @@ export const RETIRED_TOOL = {
   QUEUE_QUESTION: "queue_question",
   WITHDRAW_QUESTION: "withdraw_question",
   END_CALL: "end_call",
+  // Renamed `save_memory` and `search_memory`, as every other tool names what it acts on.
+  REMEMBER: "remember",
+  RECALL: "recall",
+  // Folded into `update_comment` (`resolved`), whose name no channel thread's tool shares.
+  RESOLVE_THREAD: "resolve_thread",
+  REOPEN_THREAD: "reopen_thread",
 } as const;
 
 /**
  * Claude Code's own tools, by the names its CLI calls them, which a coding
- * agent running on Claude Code calls in place of Luke's shell, file, search,
+ * agent running on Claude Code calls in place of our shell, file, search,
  * todo, delegation, skill, and web tools, and waits with (background Bash,
  * `Monitor`, `ScheduleWakeup`). Its to-dos are the CLI's task list, one
  * task created, updated, listed, and read at a time (the four `Task*`
  * tools, which replaced `TodoWrite`'s whole list in CLI 2.1.304; an older
- * transcript still names `TodoWrite`). Its transcript stores each call under
- * this name; a call to Luke's own MCP server is stored under Luke's tool's
- * name (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
+ * transcript still names `TodoWrite`). It stops what it started in the
+ * background with `TaskStop`, and sends one of its subagents more with
+ * `SendMessage`. Its transcript stores each call under this name; a call to
+ * our own MCP server is stored under our tool's name
+ * (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
  */
 export const CLAUDE_CODE_TOOL = {
   BASH: "Bash",
@@ -193,7 +200,9 @@ export const CLAUDE_CODE_TOOL = {
   TASK_UPDATE: "TaskUpdate",
   TASK_LIST: "TaskList",
   TASK_GET: "TaskGet",
+  TASK_STOP: "TaskStop",
   AGENT: "Agent",
+  SEND_MESSAGE: "SendMessage",
   SKILL: "Skill",
   MONITOR: "Monitor",
   SCHEDULE_WAKEUP: "ScheduleWakeup",
@@ -208,16 +217,17 @@ export const CLAUDE_CODE_UNRECORDED_TOOL = {
   TOOL_SEARCH: "ToolSearch",
 } as const;
 
-/** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_threads` is Luke's `read_threads`. */
+/** What Claude Code puts before a tool of our MCP server (`mcpServers.luke`): `mcp__luke__read_threads` is our `read_threads`. */
 export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
 
 /**
  * Codex's own work, by the type of the app-server item that does it (its
  * todo list by its own name, since Codex reports it as the turn's plan
  * rather than as an item), which a coding agent running on Codex does in
- * place of Luke's shell, file, search, todo, and delegation tools. Its
- * transcript stores each under this name; a call to Luke's own MCP server is
- * stored under Luke's tool's name (`CODEX_LUKE_MCP_SERVER`), and a call to
+ * place of our shell, file, search, todo, and delegation tools, and a
+ * picture it looked at with `view_image`. Its
+ * transcript stores each under this name; a call to our own MCP server is
+ * stored under our tool's name (`CODEX_LUKE_MCP_SERVER`), and a call to
  * any other MCP server as `mcpToolCall`.
  */
 export const CODEX_TOOL = {
@@ -227,7 +237,8 @@ export const CODEX_TOOL = {
   WEB_SEARCH: "webSearch",
   TODO_LIST: "todoList",
   SUBAGENT: "collabAgentToolCall",
+  IMAGE_VIEW: "imageView",
 } as const;
 
-/** The name Codex knows Luke's MCP server by (`mcp_servers.luke`): its calls are Luke's tools. */
+/** The name Codex knows our MCP server by (`mcp_servers.luke`): its calls are our tools. */
 export const CODEX_LUKE_MCP_SERVER = "luke";

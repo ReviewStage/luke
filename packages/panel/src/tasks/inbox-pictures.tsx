@@ -41,7 +41,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * picture a comment carried that its words do not draw, a member's file,
  * is drawn after them by the same `InboxPicture` and walked with the rest. A
  * picture of another item, one copied across, is that item's to read, and
- * stands as its link here; a picture from outside Luke is never fetched.
+ * stands as its link here; a picture from outside the app is never fetched.
  * Every picture is left out of the session recording (`picture-block.tsx`).
  */
 
@@ -163,6 +163,13 @@ export function InboxPicture({
   );
 }
 
+/** The picture the viewer shows: the item's, the copy it was opened or walked to by its key, and the picture itself by its attachment. */
+interface ViewedPicture {
+  readonly itemId: string;
+  readonly key: string;
+  readonly attachmentId: string;
+}
+
 /** A picture the viewer walks: the key it was drawn under, and what it is. */
 interface WalkedPicture {
   readonly key: string;
@@ -182,38 +189,48 @@ function inDrawnOrder(drawn: ReadonlyMap<string, DrawnPicture>): readonly Walked
   return standing.map(({ key, attachmentId, alt, name }) => ({ key, attachmentId, alt, name }));
 }
 
+/** Whether the picture shown is drawn among the item's: its own copy, or, where its words were drawn again, another of the same picture. */
+function stillDrawn(drawn: ReadonlyMap<string, DrawnPicture>, shown: ViewedPicture): boolean {
+  if (drawn.has(shown.key)) return true;
+  return [...drawn.values()].some((picture) => picture.attachmentId === shown.attachmentId);
+}
+
 /**
  * The viewer over an item's pictures, from the one named: each picture held
  * now among the files it walks, and each still read joining them as its
- * bytes land; one whose read failed is skipped.
+ * bytes land; one whose read failed is skipped. Note that the picture shown
+ * is found by its copy's key, else by its attachment, because words drawn
+ * again draw the same picture under a new key.
  */
 function ItemViewer({
   pictures,
   images,
-  shownKey,
+  shown,
   onShow,
   onClose,
 }: {
   pictures: readonly WalkedPicture[];
   images: TaskInboxControl["images"];
-  shownKey: string;
-  onShow: (key: string) => void;
+  shown: ViewedPicture;
+  onShow: (picture: WalkedPicture) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
-  const held = pictures.flatMap(({ key, attachmentId, alt, name }) => {
-    const image = images.get(attachmentId);
+  const held = pictures.flatMap((picture) => {
+    const image = images.get(picture.attachmentId);
     if (image === undefined || "failed" in image) return [];
-    return [{ key, file: viewerFile(alt, name, image.url) }];
+    return [{ picture, file: viewerFile(picture.alt, picture.name, image.url) }];
   });
-  const at = held.findIndex((each) => each.key === shownKey);
+  const byKey = held.findIndex((each) => each.picture.key === shown.key);
+  const at =
+    byKey >= 0 ? byKey : held.findIndex((each) => each.picture.attachmentId === shown.attachmentId);
   if (at < 0) return null;
   return (
     <AttachmentViewer
       files={held.map((each) => each.file)}
       at={at}
       onAt={(next) => {
-        const shown = held[next];
-        if (shown !== undefined) onShow(shown.key);
+        const walked = held[next];
+        if (walked !== undefined) onShow(walked.picture);
       }}
       onClose={onClose}
     />
@@ -226,7 +243,9 @@ function ItemViewer({
  * Note that the viewer walks them in the order they stand in the window,
  * because the words they stand in are drawn apart, a thread's messages and a
  * row's pictures each by their own Markdown, so no one list holds them all in
- * order; a picture drawn or gone while it is open joins or leaves the walk.
+ * order; a picture drawn or gone while it is open joins or leaves the walk,
+ * and the viewer closes once the picture it shows is drawn no more, never
+ * while its words are only drawn again.
  */
 export function InboxPictures({
   itemId,
@@ -239,20 +258,30 @@ export function InboxPictures({
 }): React.JSX.Element {
   const { images, onImage, onRetryImage } = control;
   const drawn = useRef(new Map<string, DrawnPicture>());
-  const [viewing, setViewing] = useState<
-    { readonly itemId: string; readonly key: string } | undefined
-  >();
+  const [viewing, setViewing] = useState<ViewedPicture | undefined>();
   const register = useCallback((key: string, picture: DrawnPicture) => {
     drawn.current.set(key, picture);
     // An open viewer is drawn again to take the picture in.
     setViewing((now) => (now === undefined ? now : { ...now }));
     return () => {
       drawn.current.delete(key);
-      // An open viewer lets the picture go, and closes where it was the one shown.
-      setViewing((now) => (now === undefined || now.key === key ? undefined : { ...now }));
+      // An open viewer is drawn again to let the picture go.
+      setViewing((now) => (now === undefined ? now : { ...now }));
     };
   }, []);
-  const open = useCallback((key: string) => setViewing({ itemId, key }), [itemId]);
+  // Note that the viewer closes here rather than as a picture lets go, because
+  // words drawn again let their pictures go before drawing them anew, and
+  // this runs once both are done.
+  useLayoutEffect(() => {
+    if (viewing !== undefined && !stillDrawn(drawn.current, viewing)) setViewing(undefined);
+  }, [viewing]);
+  const open = useCallback(
+    (key: string) => {
+      const picture = drawn.current.get(key);
+      if (picture !== undefined) setViewing({ itemId, key, attachmentId: picture.attachmentId });
+    },
+    [itemId],
+  );
   const door = useMemo<InboxPicturesDoor>(
     () => ({ itemId, images, onImage, onRetryImage, register, open }),
     [itemId, images, onImage, onRetryImage, register, open],
@@ -264,8 +293,8 @@ export function InboxPictures({
         <ItemViewer
           pictures={inDrawnOrder(drawn.current)}
           images={images}
-          shownKey={viewing.key}
-          onShow={(key) => setViewing({ itemId, key })}
+          shown={viewing}
+          onShow={({ key, attachmentId }) => setViewing({ itemId, key, attachmentId })}
           onClose={() => setViewing(undefined)}
         />
       ) : null}

@@ -81,7 +81,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 /**
  * A coding agent's sessions on Codex, against a fake of Vercel Sandbox's
  * REST API and of OpenAI's token endpoint, over a real store: on the plan,
- * the runner launched naming Luke's token route and handed no token, the
+ * the runner launched naming our token route and handed no token, the
  * account's token renewed first where less than forty-five minutes are left;
  * a local agent's launch on its Mac, sealed in its line with no token in it,
  * on the plan's route or on the Mac's own Codex sign-in; a stop and a reset; a
@@ -97,7 +97,7 @@ const MCP_URL = "https://luke.test/api/agents/mcp";
 
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
-const INSTRUCTIONS = "You are a Luke coding agent.";
+const INSTRUCTIONS = "You are a Vespin coding agent.";
 const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
 const KEK = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const ISSUED_CLIENT = "oaiapp_test_client";
@@ -278,7 +278,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         );
         yield* signIn(userId, 60);
         const deviceId = randomUUID();
-        const codexExecutable = "/Users/fixture/Library/Application Support/Luke/codex/bin/codex";
+        const codexExecutable = "/Users/fixture/Library/Application Support/Vespin/codex/bin/codex";
         yield* registerDevice(userId, {
           id: deviceId,
           name: "Studio",

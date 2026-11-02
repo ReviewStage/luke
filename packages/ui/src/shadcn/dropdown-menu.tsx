@@ -3,18 +3,18 @@ import { cn } from "../cn.js";
 import { ChevronRightIcon } from "../face/glyphs.js";
 
 /**
- * dropdown-menu.tsx -- shadcn/ui's dropdown menu (style `base-nova`, on Base UI), vendored and drawn as Luke's menu.
+ * dropdown-menu.tsx -- shadcn/ui's dropdown menu (style `base-nova`, on Base UI), vendored and drawn as our menu.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add dropdown-menu` reads as a small diff.
- * Luke's changes:
+ * Our changes:
  *
  * - The content hangs from whatever anchor its owner hands it, a point in
  *   the window as well as a button (`anchor`), and is held inside what can
  *   be seen of the window (`collisionBoundary`, `collisionAvoidance`,
  *   `collisionPadding`), fixed to it; the positioner carries the layer it
  *   stands in (`data-layer`), over the window or over a modal it was opened
- *   from. The popup draws Luke's menu surface: the overlay ground, the
+ *   from. The popup draws our menu surface: the overlay ground, the
  *   strong edge, the menu's corner, shadow, and inset, a menu's width
  *   bounds, no taller than the room Base UI finds for it
  *   (`--available-height`, read by the theme's `menu-max`) and scrolling

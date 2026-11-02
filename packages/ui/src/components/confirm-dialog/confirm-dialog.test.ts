@@ -75,7 +75,7 @@ function Owner({
       confirm,
       question: {
         title: "Delete the OpenAI key?",
-        body: "Luke stops using it at once.",
+        body: "Vespin stops using it at once.",
         verb: "Delete",
         running: "Deleting",
         loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -164,7 +164,7 @@ test("it lands on Cancel, names and describes itself, and Cancel withdraws it an
   const title = document.getElementById(card.getAttribute("aria-labelledby") ?? "");
   const body = document.getElementById(card.getAttribute("aria-describedby") ?? "");
   assert.equal(title?.textContent, "Delete the OpenAI key?");
-  assert.equal(body?.textContent, "Luke stops using it at once.");
+  assert.equal(body?.textContent, "Vespin stops using it at once.");
   press("Cancel");
   assert.equal(question(), null);
   assert.ok(holds(opener), "focus goes back to the opener");

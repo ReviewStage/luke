@@ -262,7 +262,7 @@ test("a Stop main refuses returns the tab to running and says why in the questio
   const tab = await mount(9);
   const say = tab.post();
   await settle();
-  stopRefusal = "Luke can't stop that run right now.";
+  stopRefusal = "Vespin can't stop that run right now.";
 
   await stopRun(tab);
 

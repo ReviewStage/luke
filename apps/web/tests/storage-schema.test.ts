@@ -31,7 +31,7 @@ import { afterAll, test } from "vitest";
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-/** Every table the migrations declare, by its Postgres name, better-auth's own alongside Luke's. */
+/** Every table the migrations declare, by its Postgres name, better-auth's own alongside ours. */
 const DECLARED_TABLES = [
   "account",
   "account_chatgpt_host",
@@ -45,9 +45,6 @@ const DECLARED_TABLES = [
   "agent_queue",
   "agent_runner_lease",
   "agent_section_entry",
-  "agent_state_generation",
-  "agent_state_key",
-  "agent_state_upload",
   "agent_wakeup",
   "attachment",
   "automation",
@@ -64,8 +61,8 @@ const DECLARED_TABLES = [
   "github_installation",
   "github_personal_token",
   "github_rate_hold",
+  "github_repository",
   "github_repository_read",
-  "host_install_token",
   "host_pairing",
   "host_pairing_guess",
   "hosted_usage",
@@ -92,8 +89,6 @@ const DECLARED_TABLES = [
   "oauth_consent",
   "oauth_refresh_token",
   "oauth_resource",
-  "operator_notice",
-  "operator_wake",
   "organization",
   "personal_workspace",
   "plan_comment",

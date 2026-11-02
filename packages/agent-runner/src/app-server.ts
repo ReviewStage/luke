@@ -61,6 +61,13 @@ export interface AppServerCommand {
   readonly args: readonly string[];
   readonly cwd: string;
   readonly env: Readonly<Record<string, string | undefined>>;
+  /**
+   * Whether app-server stays in the runner's own process group rather than
+   * leading one of its own: on a host, where stopping the agent signals the
+   * runner's group alone, and kills it once its grace has passed, which
+   * would otherwise leave app-server and its commands running.
+   */
+  readonly inRunnerGroup?: boolean;
 }
 
 /** A request method the pinned protocol defines, and the params it takes. */
@@ -138,6 +145,7 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
         stdin: { stream: Stream.fromQueue(stdin), endOnDone: true },
         killSignal: APP_SERVER_KILL.SIGNAL,
         forceKillAfter: APP_SERVER_KILL.GRACE,
+        ...(command.inRunnerGroup === true ? { detached: false } : {}),
       }),
     )
     .pipe(
@@ -169,7 +177,7 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
     if (method !== undefined && id !== undefined) {
       return write({
         id,
-        error: { code: METHOD_NOT_FOUND, message: "Luke's runner serves no requests" },
+        error: { code: METHOD_NOT_FOUND, message: "The runner serves no requests" },
       }).pipe(
         Effect.andThen(Effect.logWarning(`agent-runner: refused app-server's ${method} request`)),
       );

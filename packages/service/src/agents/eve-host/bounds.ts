@@ -49,7 +49,7 @@ export const EVE_HOST_ATTRIBUTE = {
   ACCOUNT: "luke:account",
   /** The current request's time zone, where it named one a zone stands under; the turn's standing context reads it. */
   TIME_ZONE: "luke:time-zone",
-  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
+  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, a browser's comment to the app among them, and on the coder channel's cancel and reset; never laid over from a request. */
   CARRIER: "luke:carrier",
 } as const;
 

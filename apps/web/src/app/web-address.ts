@@ -1,7 +1,7 @@
 /**
  * web-address.ts -- where the web app stands on its origin: the path its panel is served at, the base its static files are under, and the address the tab is at.
  *
- * The panel is served at `/app` whatever Luke link it was opened on
+ * The panel is served at `/app` whatever app link it was opened on
  * (`vercel.json`), so that path names no place: the history writes it for a
  * step whose own address is not this site's, the loaded link reads it as
  * no place, session replay and Sentry name every address of the tab by it, and a

@@ -68,6 +68,11 @@
  * row is never glided twice, nor to a place a row leaving below it is
  * about to give up.
  *
+ * Something under the root that leaves the layout on a clock of its own,
+ * a fold's rows once their fade is done (`useDisclosureFold`), is taken
+ * out in a commit the lists never drew, so it tells the motion as it goes
+ * (`useListMotionReplay`), and what that moved glides as any commit's would.
+ *
  * The one move the layout would still make above a leaving row is the
  * scroller's: a list scrolled to its end that grows shorter is scrolled back
  * by the browser as much as it shrank, which carries every row in sight
@@ -159,10 +164,11 @@ interface Leaver {
   readonly onLeft: () => void;
 }
 
-/** What the lists under one motion hand it in a commit: the entries that began to leave, and the keys listed again before they had gone. */
+/** What the lists under one motion hand it in a commit: the entries that began to leave, the keys listed again before they had gone, and what asks it to read a commit it would not draw. */
 interface Leaves {
   readonly pending: Leaver[];
   readonly returned: string[];
+  readonly replay: () => void;
 }
 
 /** A point from the root's top left corner, in CSS pixels. */
@@ -289,6 +295,18 @@ export function useLeaving<T>(
     }
   });
   return drawn;
+}
+
+/** What asks nothing of a motion, where none stands around the caller. */
+const NO_REPLAY = (): void => undefined;
+
+/**
+ * What something under a `ListMotion` calls in the same breath as it leaves
+ * the layout on a state of its own, so the motion reads that commit and
+ * glides what it moved; nothing, where no motion stands around it.
+ */
+export function useListMotionReplay(): () => void {
+  return useContext(LeavesContext)?.replay ?? NO_REPLAY;
 }
 
 /** Every mover under `root`, outside any list a drag moves and any motion of its own inside it. */
@@ -599,6 +617,8 @@ interface ListMotionPlayerProps {
   root: RefObject<HTMLElement | null>;
   leaves: Leaves;
   change: unknown;
+  /** How many times something under the root asked for its commit to be read (`useListMotionReplay`). */
+  replays: number;
   scene: unknown;
   way: ListMotionWay;
   reading: boolean;
@@ -627,7 +647,10 @@ class ListMotionPlayer extends Component<
   override getSnapshotBeforeUpdate(previous: ListMotionPlayerProps): Batch | null {
     const root = this.props.root.current;
     if (root === null) return null;
-    if (this.props.change !== undefined && previous.change === this.props.change) return null;
+    const asked = previous.replays !== this.props.replays;
+    if (!asked && this.props.change !== undefined && previous.change === this.props.change) {
+      return null;
+    }
     // Note that another scene is another list, whose rows stand at once, the height held for the last one's given back with it.
     if (previous.scene !== this.props.scene) {
       this.release?.();
@@ -817,7 +840,12 @@ export function ListMotion({
   reading?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
-  const [leaves] = useState<Leaves>(() => ({ pending: [], returned: [] }));
+  const [replays, setReplays] = useState(0);
+  const [leaves] = useState<Leaves>(() => ({
+    pending: [],
+    returned: [],
+    replay: () => setReplays((count) => count + 1),
+  }));
   return (
     <LeavesContext.Provider value={leaves}>
       {children}
@@ -825,6 +853,7 @@ export function ListMotion({
         root={root}
         leaves={leaves}
         change={change}
+        replays={replays}
         scene={scene}
         way={way}
         reading={reading}

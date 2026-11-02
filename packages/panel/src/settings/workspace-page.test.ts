@@ -288,7 +288,7 @@ function answer(request: Asked): Promise<Answered> {
         email: request.payload.email,
         role: request.payload.role,
         expiresAt: "2026-10-16T12:00:00.000Z",
-        acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${request.payload.email}`,
+        acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${request.payload.email}`,
       };
       invitations = [...invitations, made];
       return Promise.resolve(done(made));
@@ -316,7 +316,7 @@ function answer(request: Asked): Promise<Answered> {
       if (refuseGitHubOpen) {
         return Promise.resolve({
           status: FAKE_ANSWER.REFUSED,
-          reason: "Luke could not open your browser.",
+          reason: "Vespin could not open your browser.",
         });
       }
       return Promise.resolve(done(undefined));
@@ -1616,8 +1616,7 @@ const githubSent = () =>
       : [],
   );
 
-/** The words GitHub's row says once an account is connected: to an owner or an admin, and to a member. */
-const MANAGES_ON_GITHUB = "Add accounts and choose repositories on GitHub.";
+/** The words GitHub's row says to a member once an account is connected. */
 const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
 
 test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
@@ -1641,7 +1640,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     );
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
-      ["GitHub", MANAGES_ON_GITHUB],
+      ["GitHub", undefined],
       ["acme-org", "Connected"],
       ["acme-labs", "Suspended or removed on GitHub."],
     ]);
@@ -1684,7 +1683,7 @@ test("a service from before several connections names one GitHub account alone, 
   const { page } = await mount(legacy);
 
   assert.deepEqual(integrationRows(page), [
-    ["GitHub", MANAGES_ON_GITHUB],
+    ["GitHub", undefined],
     ["acme-org", "Connected"],
   ]);
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
@@ -1717,7 +1716,7 @@ test("a GitHub page the browser could not open is said under the row, from Manag
   await settle();
 
   for (const { page } of [managed, unconnected]) {
-    assert.equal(refusalOf(githubGroup(page)), "Luke could not open your browser.");
+    assert.equal(refusalOf(githubGroup(page)), "Vespin could not open your browser.");
   }
 });
 
@@ -2026,7 +2025,7 @@ test("the invitations the host streams are drawn, another Mac's invitation among
     email: "ola@example.com",
     role: WORKSPACE_ROLE.MEMBER,
     expiresAt: "2026-10-16T12:00:00.000Z",
-    acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-ola@example.com",
+    acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-ola@example.com",
   };
   act(() => {
     for (const stream of invitationStreams) {
@@ -2072,7 +2071,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
   await settle();
 
   assert.deepEqual(invitationLink, [
-    "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com",
+    "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
   ]);
   assert.deepEqual(listed, [
     "alan@example.com",
@@ -2108,7 +2107,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
       ],
     ],
   );
-  assert.deepEqual(copied, ["https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com"]);
+  assert.deepEqual(copied, ["https://vespin.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
@@ -2226,6 +2225,25 @@ test("Cancelling an invitation asks first, in the accent rather than red, and se
   assert.deepEqual(invitationRows(page), []);
 });
 
+test("each pending invitation's Cancel invitation stands in a group named by its address, so a reader hears which one it cancels", async () => {
+  invitations = ["sam", "ada"].map((name) => ({
+    id: `inv-${name}`,
+    email: `${name}@example.com`,
+    role: WORKSPACE_ROLE.MEMBER,
+    expiresAt: "2026-10-16T12:00:00.000Z",
+    acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${name}`,
+  }));
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  const named = [
+    ...page.querySelectorAll<HTMLButtonElement>('button[aria-label="Cancel invitation"]'),
+  ].map((cancel) => {
+    const group = cancel.closest('[role="group"]');
+    return document.getElementById(group?.getAttribute("aria-labelledby") ?? "")?.textContent;
+  });
+  assert.deepEqual(named, ["sam@example.com", "ada@example.com"]);
+});
+
 test("Cancel invitation, drawn red, sends nothing while an invitation is on its way", async () => {
   invitations = [
     {
@@ -2233,7 +2251,7 @@ test("Cancel invitation, drawn red, sends nothing while an invitation is on its 
       email: "sam@example.com",
       role: WORKSPACE_ROLE.MEMBER,
       expiresAt: "2026-10-16T12:00:00.000Z",
-      acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-sam",
+      acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-sam",
     },
   ];
   let release: () => void = () => undefined;
@@ -2349,7 +2367,7 @@ test("an invitations read that failed says so with Retry in the list's place, wh
       email: "sam@example.com",
       role: WORKSPACE_ROLE.MEMBER,
       expiresAt: "2026-10-16T12:00:00.000Z",
-      acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-sam",
+      acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-sam",
     },
   ];
   refuseInvitationsRead = true;
@@ -2516,7 +2534,7 @@ test("each member's ⋯ holds Copy link, which copies that person's link under t
   await chooseAction(memberNamed(page, "Sam"), "Copy link");
   await settle();
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/person/${MEMBER.userId}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/person/${MEMBER.userId}`]);
   assert.match(document.body.textContent ?? "", /Link copied/u);
 });
 

@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/ReviewStage/luke/blob/main/SECURITY.md
     about: Email founders@stagereview.app rather than opening a public issue.
   - name: Ask a question or get support
-    url: https://tryluke.dev
-    about: Questions about using Luke, or an account problem, rather than a bug or feature request.
+    url: https://vespin.dev
+    about: Questions about using Vespin, or an account problem, rather than a bug or feature request.

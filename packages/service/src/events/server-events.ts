@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@luke/database/core/query";
 import { settledTurnAgentKind } from "@luke/database/models/agent-store";
 import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
@@ -5,6 +6,8 @@ import type { ConversationRuntime } from "@luke/database/storage-vocabulary";
 import type { AgentKind, AgentMachineKind } from "@luke/features/agent-wire";
 import type { AutomationFiringKind, AutomationTriggerKind } from "@luke/features/automation-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
+import type { ProviderKeyProvider } from "@luke/features/provider-key-wire";
+import type { TASK_STATUS } from "@luke/features/task-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import type { INVITATION_ROLE } from "@luke/features/workspace-invitation-wire";
 import { TURN_STATUS } from "@luke/wire";
@@ -14,9 +17,10 @@ import { PRODUCT_PLATFORM } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { afterResponse } from "../http/after-response.js";
 import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
+import { DEPLOYMENT_VARIABLE, deploymentNamed } from "./events.js";
 
 /**
- * What Luke's service counts about the work done through it: the core loop the
+ * What the service counts about the work done through it: the core loop the
  * desktop cannot see, because it happens on the service or in an agent's
  * sandbox — a task started, a coding agent started, a member's message to it,
  * each of its turns ended, a Stop, an archive, a pull request opened and
@@ -66,6 +70,14 @@ export const SERVER_EVENT = {
   AUTOMATION_RUN_START: "automation:run_start",
   GITHUB_APP_INSTALL: "github:app_install",
   HOST_INSTALL: "host:install",
+  TASK_FINISH: "task:finish",
+  AGENT_START_FAIL: "agent:start_fail",
+  GITHUB_ACCOUNT_LINK: "github:account_link",
+  GITHUB_TOKEN_SAVE: "github:token_save",
+  REPOSITORY_PIN: "repository:pin",
+  PROVIDER_KEY_CREATE: "provider_key:create",
+  PULL_REQUEST_ACTION: "pull_request:action",
+  AGENT_SETTINGS_CHANGE: "agent:settings_change",
 } as const;
 
 type ServerEventName = (typeof SERVER_EVENT)[keyof typeof SERVER_EVENT];
@@ -74,6 +86,19 @@ type ServerEventName = (typeof SERVER_EVENT)[keyof typeof SERVER_EVENT];
 export const SERVER_TASK_SOURCE = {
   SIDEBAR: "sidebar",
   AGENT: "agent",
+} as const;
+
+/** Who started a coding agent: a member by hand, another agent through its `start_agent`, or an automation's run. */
+export const SERVER_AGENT_STARTER = {
+  MEMBER: "member",
+  AGENT: "agent",
+  AUTOMATION: "automation",
+} as const;
+
+/** Who made an automation: a member, or an agent through its `create_automation`. */
+export const SERVER_AUTOMATION_SOURCE = {
+  MEMBER: SERVER_AGENT_STARTER.MEMBER,
+  AGENT: SERVER_AGENT_STARTER.AGENT,
 } as const;
 
 /** How a coding agent began: fresh on a plan or a prompt, or carried on from another agent. */
@@ -94,7 +119,7 @@ export const SERVER_AGENT_HARNESS = {
  * the runner already up (`warm`), the runner launched again in a sandbox
  * still up (`relaunched`), the sandbox resumed from its snapshot first
  * (`resumed`), or a fresh sandbox opened where the snapshot was gone
- * (`fresh`). What the warm window (`CODER.RUNNER_WARM`) is tuned by.
+ * (`fresh`). What each machine's warm window (`CODER.RUNNER_WARM`) is tuned by.
  */
 export const SERVER_HANDOFF_PATH = {
   WARM: "warm",
@@ -123,6 +148,15 @@ export const SERVER_TURN_DURATION = {
   UNDER_1H: "under_1h",
   UNDER_4H: "under_4h",
   OVER_4H: "over_4h",
+} as const;
+
+/**
+ * Why a failed turn failed: the store's own failure word, or `unknown` where
+ * the settled row names none of them.
+ */
+export const SERVER_TURN_FAILURE = {
+  ...TURN_FAILURE,
+  UNKNOWN: "unknown",
 } as const;
 
 const MINUTE_MS = 60_000;
@@ -154,13 +188,53 @@ export const SERVER_SIGN_IN_METHOD = {
   UNKNOWN: "unknown",
 } as const;
 
-/** What kind of machine first connected: a Linux box on an install token, or the Mac's own desktop. */
+/** What kind of machine first connected: a box on its approved pairing, or the Mac's own desktop. */
 export const SERVER_HOST_KIND = {
   LUKE_HOST: "luke_host",
   THIS_MAC: "this_mac",
 } as const;
 
+/** Who finished a task: a member, by moving it to Done or Canceled, or the service, on the merge of its work. */
+export const SERVER_TASK_FINISHER = {
+  MEMBER: "member",
+  MERGE: "merge",
+} as const;
+
+/**
+ * Why a coding agent's Start failed after its agent was made: eve or the
+ * runtime could not be reached, the agent's first line could not be written,
+ * the runtime refused the open, or the request was cut short before the
+ * session opened.
+ */
+export const SERVER_AGENT_START_FAILURE = {
+  UNREACHABLE: "unreachable",
+  FIRST_LINE: "first_line",
+  REFUSED: "refused",
+  CUT_SHORT: "cut_short",
+} as const;
+
+/** The pull request changes a member makes through the app that are counted; every other change is left out. */
+export const SERVER_PULL_REQUEST_ACTION = {
+  MERGE: "merge",
+  REVIEW: "review",
+  AUTO_MERGE: "auto_merge",
+  CLOSE: "close",
+} as const;
+
+/** What of an agent a member changed: the model it runs on, or its effort. */
+export const SERVER_AGENT_SETTING = {
+  MODEL: "model",
+  EFFORT: "effort",
+} as const;
+
 type Values<T> = T[keyof T];
+
+/** Where a task came to rest: done or canceled, the two a finish counts. */
+export type ServerTaskFinishStatus = typeof TASK_STATUS.DONE | typeof TASK_STATUS.CANCELED;
+
+export type ServerAgentStartFailure = Values<typeof SERVER_AGENT_START_FAILURE>;
+
+export type ServerAgentStarter = Values<typeof SERVER_AGENT_STARTER>;
 
 /**
  * Exactly what each event carries. A model and an effort are catalog ids the
@@ -177,8 +251,9 @@ export interface ServerEventProperties {
     effort: string;
     start_kind: Values<typeof SERVER_AGENT_START_KIND>;
     is_from_automation: boolean;
+    started_by: Values<typeof SERVER_AGENT_STARTER>;
     has_task: boolean;
-    /** What the agent is, so a member's operator, started with no task, is not counted as a taskless coder. */
+    /** What the agent is: a coder, or a task's pilot. */
     agent_kind: AgentKind;
   };
   [SERVER_EVENT.PULL_REQUEST_CREATE]: {
@@ -186,7 +261,10 @@ export interface ServerEventProperties {
     is_draft: boolean;
   };
   [SERVER_EVENT.INBOX_ANSWER_SEND]: Record<string, never>;
-  [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: AutomationTriggerKind };
+  [SERVER_EVENT.AUTOMATION_CREATE]: {
+    trigger_kind: AutomationTriggerKind;
+    source: Values<typeof SERVER_AUTOMATION_SOURCE>;
+  };
   /** Counts alone: how many chapters and hunks a generation told, how long it took, and how it came out. */
   [SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE]: {
     outcome: Values<typeof SERVER_CHAPTERS_OUTCOME>;
@@ -204,15 +282,18 @@ export interface ServerEventProperties {
     turn_running: boolean;
     idle_seconds?: number;
   };
-  /** A member's own message to an agent: what answers it, where it runs, what it is, and whether a turn was under way. */
+  /** A member's own message to an agent: what answers it, where it runs, what it is, whether a turn was under way, and whether it waited in the agent's queue first. */
   [SERVER_EVENT.MESSAGE_SEND]: {
     runtime: ConversationRuntime;
     machine: AgentMachineKind;
     agent_kind: AgentKind;
     turn_running: boolean;
+    queued: boolean;
   };
   [SERVER_EVENT.TURN_END]: {
     outcome: Values<typeof SERVER_TURN_OUTCOME>;
+    /** Why the turn failed, where its outcome is `failed` alone. */
+    failure?: Values<typeof SERVER_TURN_FAILURE>;
     duration: Values<typeof SERVER_TURN_DURATION>;
     agent_kind: AgentKind;
   };
@@ -233,6 +314,28 @@ export interface ServerEventProperties {
   [SERVER_EVENT.AUTOMATION_RUN_START]: { trigger_kind: AutomationFiringKind };
   [SERVER_EVENT.GITHUB_APP_INSTALL]: Record<string, never>;
   [SERVER_EVENT.HOST_INSTALL]: { kind: Values<typeof SERVER_HOST_KIND> };
+  /** A task moved to Done or Canceled, by a member's own move or by the service on its work's merge. */
+  [SERVER_EVENT.TASK_FINISH]: {
+    status: ServerTaskFinishStatus;
+    by: Values<typeof SERVER_TASK_FINISHER>;
+  };
+  /** A Start whose agent was made and then discarded because its session never opened. */
+  [SERVER_EVENT.AGENT_START_FAIL]: {
+    failure: ServerAgentStartFailure;
+    started_by: Values<typeof SERVER_AGENT_STARTER>;
+    agent_kind: AgentKind;
+  };
+  /** A GitHub account linked to a signed-in account, a sign-up through GitHub left out. */
+  [SERVER_EVENT.GITHUB_ACCOUNT_LINK]: Record<string, never>;
+  [SERVER_EVENT.GITHUB_TOKEN_SAVE]: Record<string, never>;
+  /** A repository pinned or unpinned in the sidebar; the repository is never named. */
+  [SERVER_EVENT.REPOSITORY_PIN]: { pinned: boolean };
+  /** A provider's key or sign-in saved, by the provider's catalog id alone. */
+  [SERVER_EVENT.PROVIDER_KEY_CREATE]: { provider: ProviderKeyProvider };
+  /** A member's own change to a pull request, an agent's through its own tools left out. */
+  [SERVER_EVENT.PULL_REQUEST_ACTION]: { action: Values<typeof SERVER_PULL_REQUEST_ACTION> };
+  /** One counted for each of the model and the effort that a member's change made differ. */
+  [SERVER_EVENT.AGENT_SETTINGS_CHANGE]: { changed: Values<typeof SERVER_AGENT_SETTING> };
 }
 
 /** One event as the service records it. */
@@ -252,8 +355,18 @@ const SERVER_EVENT_LIB = "luke-service";
  */
 const SERVER_EVENT_TIMEOUT_MS = 2_000;
 
-/** The one item a server event posts, under the same privacy fields the desktop's batch carries. */
-function serverEventBatch(event: ServerEvent, projectApiKey: string, now: number): PosthogBatch {
+/**
+ * The one item a server event posts, under the same privacy fields the
+ * desktop's batch carries, stamped with the deployment that recorded it as
+ * the desktop's are (`events.ts`), so a preview's or a local service's counts
+ * can be told from production's.
+ */
+function serverEventBatch(
+  event: ServerEvent,
+  projectApiKey: string,
+  now: number,
+  environment: string,
+): PosthogBatch {
   return {
     api_key: projectApiKey,
     historical_migration: false,
@@ -268,6 +381,7 @@ function serverEventBatch(event: ServerEvent, projectApiKey: string, now: number
           $geoip_disable: true,
           $lib: SERVER_EVENT_LIB,
           platform: PRODUCT_PLATFORM.SERVER,
+          environment,
         },
       },
     ],
@@ -301,11 +415,13 @@ const productAnalyticsOfEnvironment = Layer.effect(
     const key = environment.posthogProjectApiKey;
     if (key === undefined) return { capture: () => Effect.void };
     const host = environment.posthogIngestHost;
+    // Vercel's own variable, read as the layer is built, as `/api/events` reads it per request.
+    const deployment = deploymentNamed(process.env[DEPLOYMENT_VARIABLE]);
     return {
       capture: (event: ServerEvent) =>
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis;
-          yield* postBatchEffect(serverEventBatch(event, Redacted.value(key), now), {
+          yield* postBatchEffect(serverEventBatch(event, Redacted.value(key), now, deployment), {
             ...(host === undefined ? undefined : { host }),
             timeoutMs: SERVER_EVENT_TIMEOUT_MS,
           });
@@ -364,13 +480,24 @@ function turnOutcomeOf(turn: SettledAgentTurn): Values<typeof SERVER_TURN_OUTCOM
     : SERVER_TURN_OUTCOME.FAILED;
 }
 
+const TURN_FAILURE_WORDS: ReadonlySet<string> = new Set(Object.values(TURN_FAILURE));
+
+function isTurnFailure(word: string | null): word is Values<typeof TURN_FAILURE> {
+  return word !== null && TURN_FAILURE_WORDS.has(word);
+}
+
+/** A failed turn's failure word, held to the fixed set, so no other word the row holds reaches the count. */
+function turnFailureOf(turn: SettledAgentTurn): Values<typeof SERVER_TURN_FAILURE> {
+  return isTurnFailure(turn.failure) ? turn.failure : SERVER_TURN_FAILURE.UNKNOWN;
+}
+
 function turnDurationOf(ranMs: number): Values<typeof SERVER_TURN_DURATION> {
   const bucket = TURN_DURATION_BOUNDS.find(([, bound]) => ranMs < bound);
   return bucket === undefined ? SERVER_TURN_DURATION.OVER_4H : bucket[0];
 }
 
 /**
- * Counts every agent turn the store writer settled, wherever it was settled:
+ * Counts an agent turn the store writer settled, wherever it was settled:
  * the relay's or a runner's own end, a lost runner's or ended session's, and
  * the sweep's abandon alike, since each is the one write that moved the turn
  * to its end and a repeat of it settles nothing. It is counted under the
@@ -378,29 +505,38 @@ function turnDurationOf(ranMs: number): Values<typeof SERVER_TURN_DURATION> {
  * automation's run counts under its owner. The agent's kind is read once the
  * request has answered, by then past any transaction the settle ran inside,
  * and only where the turn still stands ended, so a settle that transaction
- * rolled back is not counted.
+ * rolled back is not counted. The deployment's listener hears each turn
+ * here and hands it on to its starter beside
+ * (`../agents/coder-host/settled-turns.ts`).
  */
-const turnEndCounting = Layer.succeed(SettledTurnListener, {
-  heard: (turn) =>
-    recordServerEventOf(
-      SERVER_EVENT.TURN_END,
-      turn.userId,
-      Effect.map(
-        settledTurnAgentKind(turn.turnId),
-        Option.map((agentKind) => ({
-          outcome: turnOutcomeOf(turn),
+export function turnEndCounted(
+  turn: SettledAgentTurn,
+): Effect.Effect<void, never, DatabaseServices> {
+  return recordServerEventOf(
+    SERVER_EVENT.TURN_END,
+    turn.userId,
+    Effect.map(
+      settledTurnAgentKind(turn.turnId),
+      Option.map((agentKind) => {
+        const outcome = turnOutcomeOf(turn);
+        return {
+          outcome,
+          ...(outcome === SERVER_TURN_OUTCOME.FAILED
+            ? { failure: turnFailureOf(turn) }
+            : undefined),
           duration: turnDurationOf(turn.ranMs),
           agent_kind: agentKind,
-        })),
-      ),
+        };
+      }),
     ),
-});
+  );
+}
 
-/** The deployment's analytics as `productAnalyticsOfEnvironment` posts them, with the store's settled turns counted through them. */
-export const productAnalyticsFromEnvironment = Layer.merge(
-  productAnalyticsOfEnvironment,
-  turnEndCounting,
-);
+/** A listener that counts the settled turns and nothing else, for a test over what an endpoint counted. */
+const turnEndCounting = Layer.succeed(SettledTurnListener, { heard: turnEndCounted });
+
+/** The deployment's analytics as `productAnalyticsOfEnvironment` posts them. */
+export const productAnalyticsFromEnvironment = productAnalyticsOfEnvironment;
 
 /**
  * Analytics that keeps what it was handed rather than posting it, for a test

@@ -86,7 +86,7 @@ import { WEBM_TYPE } from "./video-signature.js";
 /**
  * The version of this vocabulary: moved on when a block or a response type
  * is added, so a desktop reading an item written under a later one knows
- * what it cannot draw was written for a newer Luke. Version 1 was the
+ * what it cannot draw was written for a newer build. Version 1 was the
  * fixed kinds, a choice, an approval, a question, and a task, with one
  * Markdown details field; version 2 is blocks and a response; version 3
  * adds the code block; version 4 adds the image block; version 5 adds an
@@ -583,7 +583,7 @@ export type InboxReply = typeof inboxReplySchema.Type;
 /**
  * A type this build does not know, as a newer service wrote one: read as
  * the type's name alone, so it narrows away from every type this build
- * draws, and drawn as a placeholder naming a newer Luke. Note that a type
+ * draws, and drawn as a placeholder naming a newer build. Note that a type
  * this build knows is refused here, because a known block, response, or
  * ask that fails its own shape is a broken read and not a newer one.
  */
@@ -697,10 +697,15 @@ export const inboxWithdrawInputSchema = EffectSchema.Struct({
   reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
 });
 
-/** Where an ask stands as a read carries it, and why its agent withdrew it, on a withdrawn one. */
+/**
+ * Where an ask stands as a read carries it, and, on a withdrawn one, why its
+ * agent withdrew it and when it was withdrawn; the when is absent from an
+ * ask withdrawn before it was kept.
+ */
 const ASK_STANDING_FIELDS = {
   status: EffectSchema.Literals(Object.values(INBOX_ASK_STATUS)),
   withdrawnReason: EffectSchema.optionalKey(EffectSchema.String),
+  withdrawnAt: EffectSchema.optionalKey(countedNumber),
 };
 
 /**
@@ -1546,7 +1551,7 @@ export function inboxAnswersReply(answers: InboxAnswers, words: string): InboxRe
 
 /** An ask as a message keeps it without where it stands, where this build knows its type; nothing for a type a newer deployment wrote. */
 export function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
-  const { status: _status, withdrawnReason: _reason, ...kept } = ask;
+  const { status: _status, withdrawnReason: _reason, withdrawnAt: _at, ...kept } = ask;
   return EffectSchema.is(inboxAskSchema)(kept) ? kept : undefined;
 }
 

@@ -1,5 +1,6 @@
 import type { GitHubRepository } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { countWords, orList, REFRESH_FAILED_WORDS, readingWords } from "@luke/features/words";
@@ -56,7 +57,9 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
  * workspace's GitHub does not reach is offered, so a task never starts on
  * a repository its workspace cannot work in; a pick the read finds out of
  * reach is handed back, and with nothing to offer the chip reads No
- * repository, which a task can start with. With no
+ * repository, which a task can start with. An opener that may stand on
+ * no repository, as an automation's editor may, is offered No repository
+ * pinned under the list, which lets the pick go. With no
  * GitHub connected to the workspace, or one GitHub removed or suspended,
  * the menu says which in the list's place: an owner or an admin is offered
  * Open Settings at the workspace's GitHub repositories, the one place they
@@ -113,12 +116,15 @@ const PLACE_LOOK = {
 /** The chip's words while it waits on a pick. */
 const CHOOSE_LABEL = "Choose a repository";
 
-/** The chip's words where the workspace's GitHub reaches nothing to pick. */
+/** The chip's words where the workspace's GitHub reaches nothing to pick, or where none is chosen and none may stand, and the row that chooses none. */
 const NONE_LABEL = "No repository";
+
+/** The id of the row pinned under the list that chooses no repository. */
+const NONE_ROW = "none";
 
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
-  NONE_REACHED: "Luke cannot see any repository yet.",
+  NONE_REACHED: `${PRODUCT_NAME} cannot see any repository yet.`,
   NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
   NOT_CONNECTED_IN: (workspace: string) => `${workspace} has no GitHub connected yet.`,
   LAPSED: "This workspace's GitHub connection was removed or suspended on GitHub.",
@@ -131,7 +137,7 @@ const MENU_NOTE = {
 const OWNER_ASK = {
   CONNECT: "connect GitHub",
   RECONNECT: "reconnect GitHub",
-  ADD_REPOSITORY: "add a repository to Luke's GitHub App",
+  ADD_REPOSITORY: `add a repository to ${PRODUCT_NAME}'s GitHub App`,
 } as const;
 
 type OwnerAsk = (typeof OWNER_ASK)[keyof typeof OWNER_ASK];
@@ -236,6 +242,8 @@ interface RepositoryMenuProps {
   value: string | null;
   chooser: RepositoryChooser;
   onChoose: (repository: string) => void;
+  /** Lets the pick go, offered as No repository pinned under the list, where the opener may stand on none, as an automation's runs may; a null value then reads No repository. */
+  onClear?: (() => void) | undefined;
   /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the opener's own to drop. */
   onUnreached?: (() => void) | undefined;
   /** Hears the repositories each successful read lists, `owner/name`. */
@@ -271,7 +279,7 @@ export interface RepositoryMenu {
 
 /** The repository's menu, read and placed as the chip's always was, for whatever opener draws it (`RepositoryMenu`). */
 export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
-  const { chooser, openRequest, onAsked, onUnreached, onListed, value } = props;
+  const { chooser, openRequest, onAsked, onUnreached, onListed, onClear, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -349,7 +357,9 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     setOpen(!open);
   };
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
-  const label = value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
+  // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.
+  const none = onClear !== undefined || (rows.length === 0 && listed !== undefined);
+  const label = value ?? (none ? NONE_LABEL : CHOOSE_LABEL);
   // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
   const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
     <>
@@ -389,7 +399,7 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     ) : list === undefined ? (
       <Spinner delay label={readingWords("repositories")} />
     ) : rows.length === 0 && listed?.installed ? (
-      // Installed but giving Luke nothing: the repositories are chosen on GitHub, through the workspace's row.
+      // Installed but giving us nothing: the repositories are chosen on GitHub, through the workspace's row.
       deadEnd([MENU_NOTE.NONE_REACHED], OWNER_ASK.ADD_REPOSITORY, undefined)
     ) : undefined;
 
@@ -426,6 +436,18 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
         noMatch={MENU_NOTE.NO_MATCH}
         align={props.align ?? POPOVER_ALIGN.END}
         onPick={(repository) => choose(() => props.onChoose(repository))}
+        foot={
+          onClear === undefined
+            ? undefined
+            : [
+                {
+                  id: NONE_ROW,
+                  label: NONE_LABEL,
+                  icon: <GLYPH.REPOSITORY />,
+                  onPress: () => choose(onClear),
+                },
+              ]
+        }
         onClose={close}
         onLeave={(left) => {
           if (!(left instanceof Node && room.current?.contains(left))) setOpen(false);
@@ -444,22 +466,32 @@ export function RepositoryChip(
     describedBy?: string | undefined;
     /** A form row's chip: whether the row says its value is refused. */
     invalid?: true | undefined;
+    /** Why the repository is held to `value` and takes no pick, said on hover; none where it may be changed. */
+    held?: string | undefined;
   },
 ): React.JSX.Element {
   const menu = useRepositoryMenu(props);
+  const { held } = props;
+  // Note that a held chip is `aria-disabled` rather than disabled, because a disabled button hears no pointer, and its hint says why.
   return (
     <div className="repository-chip relative min-w-0" data-place={props.place} ref={menu.room}>
-      <Tooltip label={menu.open ? undefined : (props.value ?? undefined)} card={menu.card}>
+      <Tooltip
+        label={held ?? (menu.open ? undefined : (props.value ?? undefined))}
+        card={held === undefined ? menu.card : undefined}
+      >
         <Chip
           look={PLACE_LOOK[props.place]}
           width={props.width}
           chevron={props.place === CHIP_PLACE.FIELD}
           aria-describedby={props.describedBy}
           aria-invalid={props.invalid}
+          aria-disabled={held === undefined ? undefined : true}
           aria-haspopup="dialog"
           aria-expanded={menu.open}
           aria-controls={menu.open ? menu.menuId : undefined}
-          onClick={(event) => menu.press(event.currentTarget)}
+          onClick={(event) => {
+            if (held === undefined) menu.press(event.currentTarget);
+          }}
         >
           {menu.glyph}
           <ChipName>{menu.label}</ChipName>

@@ -4,6 +4,7 @@ import { childConversationId } from "@luke/database/models/ids";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { agentDelegationInputSchema } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -64,7 +65,7 @@ export function delegationChoice(
   if (Result.isSuccess(checked)) return checked;
   if (checked.failure === MODEL_CHOICE_REFUSAL.UNKNOWN_MODEL) {
     return Result.fail(
-      `Not run: \`${choice.model}\` is no model Luke offers. The models: ${offeredIds(catalog)}.`,
+      `Not run: \`${choice.model}\` is no model ${PRODUCT_NAME} offers. The models: ${offeredIds(catalog)}.`,
     );
   }
   const efforts = catalog.find((offered) => offered.id === choice.model)?.efforts ?? [];

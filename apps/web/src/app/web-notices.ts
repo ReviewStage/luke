@@ -1,7 +1,7 @@
 /**
  * web-notices.ts -- the doors a notice leaves a browser tab through: a badge on the installed app or a count before the tab's title.
  *
- * A tab posts no notification. The one notification Luke posts is a command
+ * A tab posts no notification. The one notification the app posts is a command
  * waiting on this Mac (`client-notices.ts`), and no command runs in a tab,
  * so the door that would post one is handed nothing and drops what it is.
  *

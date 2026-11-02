@@ -6,7 +6,7 @@ import { Schema } from "effect";
  * The service settles the identity once per checkout, through the coding
  * agent's own reads (`packages/service`'s `coder-host/checkout.ts`): the
  * developer's GitHub account, the account a member's own token belongs to,
- * or the Luke GitHub App's bot. A cloud sandbox has it set as its checkout
+ * or our GitHub App's bot. A cloud sandbox has it set as its checkout
  * deepens (`repository-shell.ts`'s `setCheckoutIdentity`); a device has it
  * handed on the launch line (`device-agent-wire.ts`) and sets it in the
  * agent's own repository before the runner starts

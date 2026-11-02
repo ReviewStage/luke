@@ -59,7 +59,7 @@ import {
 /**
  * The name eve gives a session's own Vercel sandbox (eve 0.74.0's
  * `vercelSessionName`); its templates are `eve-sbx-tpl-vercel-`, which this
- * leaves out, and a native agent's are Luke's own `luke-agent-`.
+ * leaves out, and a native agent's are our own `luke-agent-`.
  */
 export const EVE_SESSION_SANDBOX_NAME = "eve-sbx-vercel-";
 

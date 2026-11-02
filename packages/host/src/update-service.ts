@@ -1,3 +1,4 @@
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { scheduleOnce } from "@luke/runtime/effect";
 import {
   UPDATE_STATUS,
@@ -22,7 +23,7 @@ export const UPDATE_ENDPOINT = {
   // literal should not need that reading.
   UPDATE_FEED_URL: "https://github.com/ReviewStage/luke/releases/latest/download/",
   LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/luke/releases/latest",
-  CHANGELOG_PAGE_URL: "https://tryluke.dev/changelog",
+  CHANGELOG_PAGE_URL: `${LINK_ORIGIN}/changelog`,
 } as const;
 
 const UPDATE_CHECK_DEFAULTS = {
@@ -122,7 +123,7 @@ interface UpdateServiceOptions {
 }
 
 /**
- * Luke's face on electron-updater, shaped after a common production updater
+ * The app's face on electron-updater, shaped after a common production updater
  * setup. A check reads the release manifest from the feed fixed by the
  * build; a newer build downloads at once and installs at the quit the user
  * asks for — the row's restart press, or whenever they next quit. Failures
@@ -243,7 +244,7 @@ export class UpdateService {
   async check({ asked = false }: { asked?: boolean } = {}): Promise<UpdateSnapshot> {
     const engine = this.#engine;
     if (!engine || this.#installing) return this.#snapshot;
-    // A download in flight or in hand holds the row — here Luke is stricter
+    // A download in flight or in hand holds the row — here we are stricter
     // than the common updater setup: a timed tick that re-checked mid-flight
     // would stomp the progress or the restart offer with `checking`, and a
     // feed failure after a completed download would trade a build in hand

@@ -819,22 +819,28 @@
   display: none;
 }
 
-/* While chapters are being made, the placeholder's region takes the room under the line, as the
-   chapters' body does under theirs, so the rail runs the full height. */
-.chapters-generating > .luke-skeleton-region {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
+/* The brief lines up with the chapter's bar over it: its fold's chevron
+   under the rail toggle's glyph, which stands a control's inset in from the
+   bar's edge, and its heading and its words under the chapter's title,
+   which stands a control's gap past the toggle. */
+.chapter-brief {
+  --chapter-glyph-inset: calc((var(--luke-control-height) - var(--luke-control-icon)) / 2);
+  --chapter-words-gap: calc(var(--chapter-glyph-inset) + var(--luke-control-gap));
+
+  padding-inline: calc(var(--luke-list-inset) + var(--chapter-glyph-inset) - var(--luke-tight-gap))
+    var(--luke-list-inset);
 }
 
-/* A placeholder row in the rail's own list, a chapter's row's height and
-   inset, its block where the row's title will stand. */
-.chapters-skeleton-reading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-list-inset) var(--column-inset);
+.chapter-brief .pull-request-section-fold > .luke-disclosure-summary {
+  gap: var(--chapter-words-gap);
+}
+
+.chapter-brief-body {
+  padding-inline-start: calc(
+    var(--luke-tight-gap) +
+    var(--luke-control-icon) +
+    var(--chapter-words-gap)
+  );
 }
 
 /* A panel too narrow for the rail beside the chapter floats it over the
@@ -1442,7 +1448,7 @@
 }
 
 /* One card for what is written on lines of code (`annotation-card.tsx`): a
-   review thread in Files changed and the Conversation, and Luke's note in a
+   review thread in Files changed and the Conversation, and the app's note in a
    File tab. The review thread's quiet card (`@luke/ui`'s Card), as wide as
    its words up to a reading measure. Its columns are the custom properties below: the head's
    chevron in a file header's 24px slot at its inset, the faces' column
@@ -1674,7 +1680,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* An agent's tab: a frame the log fills, its rows drawn by the one set of
    blocks (../tasks/transcript-blocks.tsx over ../ai-elements/). What
-   follows is its own: Luke's mark beside a note of his, drawn at the row's
+   follows is its own: the app's mark beside a note of its, drawn at the row's
    16px in his voice's colour; the agent's composer; a worker's line. */
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
@@ -1842,7 +1848,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    down. Opening, the card's top edge rises from where it stood to where the
    open card puts it, and its line and the list under it rise with that edge
    as one sheet, the list fading in as it comes up out of the card's foot;
-   closing, the sheet sinks back the same way as the list fades. The distance
+   closing, the sheet sinks back the same way, on the same beat. The distance
    is the list's height, measured as the press lands (`--disclosure-rise`,
    `use-disclosure.ts`). Note that the list travels with the line rather than
    standing still under it, because the card's ground is translucent and a
@@ -1856,11 +1862,16 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 }
 
 [data-todos-dock][data-disclosure="closing"] {
-  animation: todos-dock-roll-up var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  animation: todos-dock-roll-up var(--luke-duration-pane) var(--luke-motion-pane) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > summary {
-  animation: todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  animation: todos-dock-sink var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+}
+
+/* Note that the list's fade is what the fold waits on before it lets the list go, so it runs as long as the sheet sinks, or the sink would be cut off. */
+[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
+  animation: luke-disclosure-leave var(--luke-duration-pane) var(--luke-motion-pane) forwards;
 }
 
 /* Note that each clip names both ends, because a clip cannot be interpolated
@@ -1977,7 +1988,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   container: composer luke-room / inline-size;
 }
 
-.agent-composer-actions > :is(.agent-servers, .agent-context) {
+.agent-composer-actions > .agent-context {
   flex: none;
 }
 
@@ -1989,18 +2000,17 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   min-width: 0;
 }
 
-/* Too narrow for every press: the ⋯ takes in the MCP servers, the
-   context ring, and the microphone. The servers' and the
-   ring's boxes stay, out of the row at its right end, so a popover the ⋯
-   opens for them hangs where the ⋯ stands. */
+/* Too narrow for every press: the ⋯ takes in the context ring and the
+   microphone. The ring's box stays, out of the row at its right end, so
+   the popover the ⋯ opens for it hangs where the ⋯ stands. */
 /* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
-  .agent-composer :is(.agent-servers-button, .agent-context-button),
+  .agent-composer .agent-context-button,
   .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 
-  .agent-composer-actions > :is(.agent-servers, .agent-context) {
+  .agent-composer-actions > .agent-context {
     position: absolute;
     top: 0;
     right: 0;
@@ -2012,8 +2022,8 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* The narrowest: the + goes into the ⋯ too, leaving what the agent
-   published, the model, the ⋯, and Send. */
+/* The narrowest: the + goes into the ⋯ too, its menu's rows with it,
+   leaving what the agent published, the model, the ⋯, and Send. */
 @container composer (width < 240px) {
   .agent-composer .agent-composer-attach {
     display: none;
@@ -2065,26 +2075,29 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 /* A picture or a video fits the room under the viewer's header edge to
    edge at its own shape, and grows past its own pixels to fill it at most
    twice over (`@luke/ui`'s ZoomImage and VideoPlayer say their pixels once
-   they are read). Where the card hugs it (`DialogCard`), the room is the
-   room between the arrows, less the card's edge and its header, so the card
-   takes its shape, and it waits at a screenshot's shape until its pixels are
-   read. Where the card fills its room, as on a phone or for a picture opened
-   at its own pixels, which says none, the room is the body under the header,
-   one track its own size. */
+   they are read). Where the card hugs it (`DialogCard`), as a video's does
+   off a phone, the room is the room between the arrows, less the card's edge
+   and its header, so the card takes its shape, and it waits at a
+   screenshot's shape until its pixels are read. Where the card fills its
+   room, as a picture's always does and a phone's video's does, the room is
+   the body under the header, one track its own size; a picture opened at its
+   own pixels says none. */
 .attachment-viewer-room {
   container-type: size;
 }
 
-.attachment-viewer[data-hug="true"] .attachment-viewer-body > .luke-zoom-image {
-  width: min(
-    100cqw -
-    2px,
-    (100cqh - var(--luke-control-height) - 2 * var(--luke-space-4) - 3px) *
-    var(--luke-zoom-natural-width, 16) /
-    var(--luke-zoom-natural-height, 10),
-    var(--luke-zoom-natural-width, 1600) *
-    2px
-  );
+/* A finger swiping the viewer sideways (`@luke/ui`'s `use-page-swipe.ts`)
+   holds the file shown where the finger has taken it, with its transition
+   off, so it stays under the finger; let go short of the next file, the
+   mark comes off and it travels back on its transition, and the file walked
+   to stands in its place at once. */
+.attachment-viewer-body {
+  transition: translate var(--luke-duration-pane) var(--luke-motion-pane);
+}
+
+.attachment-viewer[data-luke-page-swipe] .attachment-viewer-body {
+  translate: var(--luke-page-swipe-offset, 0) 0;
+  transition: none;
 }
 
 .attachment-viewer[data-hug="true"] .attachment-viewer-body > .luke-video-player {
@@ -2334,9 +2347,10 @@ svg.lucide {
 /* Pictures standing alone in a paragraph of words drawn as a document
    (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
    by side, sharing the column's width, so a before and an after read as a
-   pair; each still hugs its own picture, and none grows past its own size. */
+   pair, and wrapping where more would leave each too narrow for a video's
+   bar (`grid-cols-picture-row`); each still hugs its own picture, and none
+   grows past its own size. */
 .transcript-pictures > .picture-block {
-  flex: 1 1 0;
   min-width: 0;
   margin: 0;
 }
@@ -2454,6 +2468,12 @@ svg.lucide {
 
 .comment-slot {
   animation: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards;
+}
+
+/* A card leaving fades out where it last stood, out of reach, as the cards below take its room. */
+.comment-slot[data-leaving="true"] {
+  animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  pointer-events: none;
 }
 
 /* The button stands in the gutter past the column's end, centred on its

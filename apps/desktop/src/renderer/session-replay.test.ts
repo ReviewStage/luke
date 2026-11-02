@@ -8,7 +8,7 @@ import { withoutLocalAddress } from "./session-replay";
  * Switching pageviews off stops it reaching one event; this is what stops it
  * reaching everything else the library puts it in.
  */
-const LOCAL = "file:///Users/someone/Applications/Luke.app/renderer/index.html";
+const LOCAL = "file:///Users/someone/Applications/Vespin.app/renderer/index.html";
 /** What the scrub puts in the address's place, as the library will report it. */
 const PANEL = "app://luke/panel";
 

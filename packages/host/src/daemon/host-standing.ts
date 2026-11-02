@@ -1,18 +1,19 @@
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { HOST_WIRE, hostUpgradeCommand } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { HTTP_STATUS } from "@luke/wire";
 import { Clock, Deferred, Duration, Effect, Ref } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /**
- * host-standing.ts -- every call a host's daemon makes to Luke, its version on it, and what Luke's answers say of the host's standing: refused as needing an upgrade, or its secret refused.
+ * host-standing.ts -- every call a host's daemon makes to the service, its version on it, and what the service's answers say of the host's standing: refused as needing an upgrade, or its secret refused.
  *
  * Every request to the service's origin carries the daemon's version
- * (`HOST_WIRE.VERSION_HEADER`), its enroll and the follower's reads alike,
+ * (`HOST_WIRE.VERSION_HEADER`), its connect and the follower's reads alike,
  * since they all go through the one `HttpClient` the daemon hands them; a
  * request anywhere else, a pinned tool's download, carries nothing of
- * Luke's. The same client hears each answer's status. A 426 is the service
+ * ours. The same client hears each answer's status. A 426 is the service
  * refusing a daemon below its floor, and a 401 the box's secret refused, the
  * host removed in Settings; either is said once, in words a person at the
  * box can act on. Below the floor, the daemon goes quiet for `QUIET` before
@@ -23,19 +24,19 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
  * says aloud too.
  */
 
-/** How long the daemon asks Luke nothing after it was refused, before it tries again. */
+/** How long the daemon asks the service nothing after it was refused, before it tries again. */
 const QUIET = Duration.minutes(5);
 
-/** What the daemon says once Luke first took its register, which the install script reads as the box connected. */
-const HOST_CONNECTED_REPORT = "Luke host: Connected to Luke.";
+/** What the daemon says once the service first took its register, which a person following its log reads as the box connected. */
+const HOST_CONNECTED_REPORT = `${PRODUCT_NAME} host: Connected to ${PRODUCT_NAME}.`;
 
-/** What Luke last said of this host. */
+/** What the service last said of this host. */
 const HOST_STANDING = {
-  /** Luke took its calls, or has not been asked yet. */
+  /** The service took its calls, or has not been asked yet. */
   STANDING: "standing",
-  /** Luke refused its version as below its floor. */
+  /** The service refused its version as below its floor. */
   UPGRADE_NEEDED: "upgrade-needed",
-  /** Luke refused its device secret: the host was removed, or enrolled again elsewhere. */
+  /** The service refused its device secret: the host was removed, or enrolled again elsewhere. */
   SECRET_REFUSED: "secret-refused",
 } as const;
 
@@ -48,15 +49,15 @@ function refusalReport(
 ): string {
   const script = `${serviceOrigin}${HOST_WIRE.INSTALL_SCRIPT_PATH}`;
   return refusal === HOST_STANDING.UPGRADE_NEEDED
-    ? `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: ${hostUpgradeCommand(script)}`
-    : "Luke host: Luke refused this box's secret, so it was removed in Settings › Hosts. Stopping its agents. Add it again with Add hosts, and rerun the install command it shows.";
+    ? `${PRODUCT_NAME} host: upgrade needed: ${PRODUCT_NAME} no longer accepts this version. Rerun the install command to upgrade in place: ${hostUpgradeCommand(script)}`
+    : `${PRODUCT_NAME} host: ${PRODUCT_NAME} refused this box's secret, so it was removed in Settings › Hosts. Stopping its agents. Add it again with Add hosts, and rerun the install command it shows.`;
 }
 
-/** The host's standing with Luke, as its calls heard it, and the client every call of its goes through. */
+/** The host's standing with the service, as its calls heard it, and the client every call of its goes through. */
 interface HostServiceStanding {
-  /** Whether the daemon may ask Luke now: it was not refused, or its quiet spell has passed. */
+  /** Whether the daemon may ask the service now: it was not refused, or its quiet spell has passed. */
   readonly asking: Effect.Effect<boolean>;
-  /** Waits until Luke first refuses the box's secret: the host was removed, and nothing it asks is answered again. */
+  /** Waits until the service first refuses the box's secret: the host was removed, and nothing it asks is answered again. */
   readonly secretRefused: Effect.Effect<void>;
   /** The client given, every request to the service's origin with the version on it and its answer heard. */
   readonly client: (client: HttpClient.HttpClient) => HttpClient.HttpClient;
@@ -69,7 +70,7 @@ export interface HostStandingOptions {
   readonly report: (line: string) => void;
 }
 
-/** A host's standing with Luke, standing until its first refusal. */
+/** A host's standing with the service, standing until its first refusal. */
 export const hostServiceStanding = Effect.fnUntraced(function* (options: HostStandingOptions) {
   const standing = yield* Ref.make<{ readonly kind: HostStanding; readonly until: number }>({
     kind: HOST_STANDING.STANDING,
@@ -81,7 +82,7 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
   const ofService = (request: HttpClientRequest.HttpClientRequest) =>
     request.url === options.serviceOrigin || request.url.startsWith(`${options.serviceOrigin}/`);
 
-  /** One answer's status heard: a refusal starts a quiet spell, said once; a 2xx after one says Luke is reached again. */
+  /** One answer's status heard: a refusal starts a quiet spell, said once; a 2xx after one says the service is reached again. */
   const heard = (status: number) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
@@ -100,7 +101,7 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
       }
       if (status >= 200 && status < 300 && before.kind !== HOST_STANDING.STANDING) {
         yield* Ref.set(standing, { kind: HOST_STANDING.STANDING, until: 0 });
-        options.report("Luke host: Luke took this box's calls again.");
+        options.report(`${PRODUCT_NAME} host: ${PRODUCT_NAME} took this box's calls again.`);
       }
     });
 
@@ -109,7 +110,7 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
     return now >= (yield* Ref.get(standing)).until;
   });
 
-  /** The first register Luke took, said once, which is what the install script waits to read. */
+  /** The first register the service took, said once, which is what a person following its log waits to read. */
   const registered = (request: HttpClientRequest.HttpClientRequest, status: number) =>
     status >= 200 && status < 300 && request.url === registerUrl
       ? Effect.flatMap(Ref.getAndSet(connected, true), (said) =>

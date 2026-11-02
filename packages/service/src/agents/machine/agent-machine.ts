@@ -1,9 +1,9 @@
 /**
- * agent-machine.ts -- the machine a native coding agent runs on, as the one interface its launch and Luke's doors to its files reach it through.
+ * agent-machine.ts -- the machine a native coding agent runs on, as the one interface its launch and our doors to its files reach it through.
  *
- * A native agent's runner (`@luke/agent-runner`) runs on a machine Luke
- * opens for it, today a Vercel Sandbox (`vercel-machine.ts`). Its launch
- * (`../coder-host/runner-sessions.ts`) and the door Luke's MCP tools read
+ * A native agent's runner (`@luke/agent-runner`) runs on a machine we
+ * open for it, today a Vercel Sandbox (`vercel-machine.ts`). Its launch
+ * (`../coder-host/runner-sessions.ts`) and the door our MCP tools read
  * a file through (`../luke-mcp/sandbox-door.ts`) reach that machine here
  * and nowhere else, so a second kind of machine shares one launch path and
  * one door rather than a copy of each that drifts.
@@ -14,7 +14,7 @@
  * it runs, set the repository's credential at its firewall, resume, stop,
  * and discard it, write files into it, launch the runner there and write
  * its stdin, read whether it ended, end it, and read one file. A runner on a
- * machine whose layout says it reads its lines takes them from Luke's store
+ * machine whose layout says it reads its lines takes them from our store
  * instead (`../coder-host/runner-sessions.ts`), and its stdin carries only
  * its config. What a
  * machine keeps of its own beyond that (a Vercel sandbox's snapshots, the
@@ -24,7 +24,7 @@
  * starter's Mac (`device-machine.ts`), which the agent's row picks between
  * (`agent.machine`, `agent-machines.ts`).
  *
- * A place is named by Luke's own runtime session id, which the conversation
+ * A place is named by our own runtime session id, which the conversation
  * records and every machine can find its place by, and by where the session
  * runs now, which is the machine's own and opaque to everyone else. A door
  * holds the session id alone, so a door's call names only that.
@@ -56,7 +56,7 @@ export type MachineName = string & Brand.Brand<"MachineName">;
 /** What a machine keeps of a place it found, for its own later calls on it. Opaque to every caller but the machine. */
 export type MachineKept = Brand.Brand<"MachineKept">;
 
-/** One agent's place on a machine: which machine, Luke's runtime session id, and where that session runs now. */
+/** One agent's place on a machine: which machine, our runtime session id, and where that session runs now. */
 export interface MachinePlace {
   readonly machine: AgentMachineKind;
   readonly session: string;
@@ -79,7 +79,7 @@ export interface MachineLayout {
   readonly installedSkills: string;
   readonly skillsUpload: string;
   readonly attachments: string;
-  /** Where the agent saves a file Luke reads back, a screenshot it shows or a page it posts: a folder Luke's reads reach on that machine. */
+  /** Where the agent saves a file the service reads back, a screenshot it shows or a page it posts: a folder the service's reads reach on that machine. */
   readonly sharedFiles: string;
   readonly claudeExecutable: string | undefined;
   /** None on a Mac that checked no Codex yet, which runs no Codex agent, as on a sandbox, which runs the image's. */
@@ -88,10 +88,10 @@ export interface MachineLayout {
   readonly writableRoots: readonly string[];
   /** The Mac's own logins, as it last said; none for a sandbox. */
   readonly signedIn: DeviceSignedIn;
-  /** How a local agent's device runs it, in a VM of its own or directly on the machine; none for a sandbox of Luke's. */
+  /** How a local agent's device runs it, in a VM of its own or directly on the machine; none for a sandbox of ours. */
   readonly isolation: DeviceIsolation | undefined;
   /**
-   * Whether the runner reads its lines past its config from Luke
+   * Whether the runner reads its lines past its config from the service
    * (`@luke/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
    * from its stdin, as a Mac's follower writes them to the runner its
    * release bundled.
@@ -106,7 +106,7 @@ export interface RunnerMark {
   readonly fingerprint?: string;
   /** Whether the launch runs on its Mac's own sign-in rather than a credential of the account's; nothing secret, and none for any other launch. */
   readonly ownLogin?: boolean;
-  /** Whether the launch reads its lines from Luke (`MachineLayout`'s `linesRead`); none for one Luke writes them to the stdin of, a launch from before the read among them. */
+  /** Whether the launch reads its lines from the service (`MachineLayout`'s `linesRead`); none for one the service writes them to the stdin of, a launch from before the read among them. */
   readonly linesRead?: boolean;
 }
 
@@ -306,7 +306,7 @@ export interface AgentMachineService {
    * (`LaunchRefused`'s `deviceAway`) where a line that carries more than a
    * stop goes to a device that is away. Note that a line written
    * here is not sealed, and a Mac keeps its lines in the store until it
-   * takes them, so no line may carry a secret: Codex asks Luke for each
+   * takes them, so no line may carry a secret: Codex asks the service for each
    * access token over HTTPS through the runner's token command
    * (`@luke/agent-runner`'s `codex-token.ts`) rather than taking it on stdin.
    * A machine whose runner reads its lines (`MachineLayout`'s `linesRead`),
@@ -316,6 +316,17 @@ export interface AgentMachineService {
     handle: RunnerHandle,
     text: string,
   ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
+  /**
+   * Whether the text given was written to the runner since its launch, as
+   * one write, where the machine keeps what it wrote: a Mac keeps its lines
+   * in the store. A sandbox keeps nothing of its runner's stdin, and its
+   * runner reads its lines from the service, which its END hands on, so it answers
+   * false.
+   */
+  readonly wrote: (
+    handle: RunnerHandle,
+    text: string,
+  ) => Effect.Effect<boolean, SandboxUnavailable>;
   /** The runner's exit code, null while it runs, or gone where the machine no longer knows it; waiting at most `within` for the exit. */
   readonly runnerExit: (
     handle: RunnerHandle,

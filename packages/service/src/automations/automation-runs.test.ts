@@ -18,7 +18,6 @@ import {
   createAutomation,
   deleteAutomation,
   listAutomationRuns,
-  readAutomation,
   recordAutomationRun,
   updateAutomation,
 } from "@luke/database/models/automation-store";
@@ -29,10 +28,11 @@ import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import {
   AGENT_BOUNDS,
+  AGENT_PAYER,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -644,6 +644,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           planSnapshot: null,
           prompt: "Keep the flaky tests quarantined.",
           repository: `${RELAY.owner}/${RELAY.name}`,
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.API_KEY,
         });
         const theirs = Option.getOrThrow(made).agent;
         yield* claimRuntimeSession(
@@ -716,6 +718,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           planSnapshot: null,
           prompt: "Watch the nightly build.",
           repository: `${RELAY.owner}/${RELAY.name}`,
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.API_KEY,
         });
         const other = Option.getOrThrow(made).agent.id;
         yield* toSameAgent(automation, other);
@@ -996,30 +1000,20 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a failed start records its failure in one fixed word and pauses nothing, so the next firing tries again",
+    "a run of an automation with no repository starts an agent in its workspace that works in none",
     () =>
       Effect.gen(function* () {
-        const { owner, automation } = yield* openAutomation({ repository: null });
+        const { owner, automation, workspaceId } = yield* openAutomation({ repository: null });
         const eve = fakeEve();
 
-        const outcomes = [];
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          const run = yield* runNow(automation);
-          outcomes.push(
-            yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)),
-          );
-        }
+        const agentId = yield* agentOfRun(eve, yield* runNow(automation));
 
+        const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
         assert.deepEqual(
-          outcomes.map(
-            (outcome) => outcome?.status === AUTOMATION_RUN_STATUS.FAILED && outcome.reason,
-          ),
-          Array.from({ length: 4 }, () => AUTOMATION_RUN_REASON.NO_REPOSITORY),
-          "each firing is tried, the fourth after three failures as the first",
+          [agent.organizationId, agent.taskId, agent.repository],
+          [workspaceId, null, null],
         );
-        const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
-        assert.equal(standing.enabled, true);
-        assert.deepEqual(eve.opened, []);
+        assert.equal(eve.opened.length, 1);
       }),
   );
 

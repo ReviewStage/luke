@@ -217,7 +217,6 @@ export function agentHoldingsOf(
     const latest = was !== undefined && was.updatedAt > entry.updatedAt ? was : entry;
     held.set(entry.agentId, {
       agentId: entry.agentId,
-      ...(latest.agentKind === undefined ? undefined : { agentKind: latest.agentKind }),
       agentTitle: latest.agentTitle,
       agentModel: latest.agentModel,
       automationId: latest.automationId,
@@ -422,12 +421,11 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRemoveTaskParent: () => undefined,
     onRemoveTaskBlock: () => undefined,
     onChangeTaskRelation: () => undefined,
-    onOpenOnGitHub: ignore,
     onRetryList: ignore,
     onRetryDocument: ignore,
     onNewTask: ignore,
     onNewTaskIn: ignore,
-    onNewChildTask: ignore,
+    onNewRelatedTask: ignore,
     onQuickAdd: () => Promise.resolve(undefined),
     onNewAutomationAgent: ignore,
     newTask: {

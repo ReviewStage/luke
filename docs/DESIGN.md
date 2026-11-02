@@ -1,10 +1,10 @@
 # Design: how the window moves and reads
 
-This is the contract every animated element in Luke's window obeys, and the
+This is the contract every animated element in Vespin's window obeys, and the
 bar every word drawn in it has to clear. The "Panel motion" section of
 `apps/desktop/src/renderer/AGENTS.md` says what the Electron window under it
 is; this file says how anything drawn in it is allowed to move, how much it is
-allowed to say, and which of the machine's keys Luke may take. A change that
+allowed to say, and which of the machine's keys Vespin may take. A change that
 adds or alters motion or copy is reviewed against these rules, and the fastest
 way to pass that review is to build from them.
 
@@ -170,7 +170,7 @@ sidebar's and a well's grounds) in `base.css` and `desktop.css`; component
 sheets consume the token rather than inventing another error red, overlay
 black, or text gray. The desktop's palette writes each colour once as a
 `light-dark()` pair, and the root's `system` theme follows the Mac's
-appearance, which Luke's Theme setting drives through Electron's
+appearance, which Vespin's Theme setting drives through Electron's
 `nativeTheme.themeSource`. Every colour of the window's own that differs in
 the light is written the same way, as a `light-dark()` pair in its own file,
 so a change of appearance is the stylesheet's alone:
@@ -301,11 +301,11 @@ time the page opens rather than once.
 Three categories, and only the first is ever cut:
 
 - **Describes.** Restates the control, reassures, or explains the app to
-  itself. "Luke listens through the Mac's own microphone rather than
+  itself. "Vespin listens through the Mac's own microphone rather than
   another." under a switch reading *Prefer the Mac's microphone*. Delete it.
   If the line seems necessary, the label is what to fix.
 - **Instructs.** Tells the developer something they cannot act without.
-  "With the lid shut, Luke uses the headset's microphone anyway." Nobody can
+  "With the lid shut, Vespin uses the headset's microphone anyway." Nobody can
   guess that. Keep it.
 - **Reports state.** This is the row's content. "Version 0.2.0 is available to
   download." Keep it.
@@ -330,11 +330,11 @@ What follows from this everywhere else:
 - Consent copy names the data categories, destination, account association,
   default state, and where the control lives. It never substitutes a generic
   reassurance for those facts.
-- No marketing register on the surface. Luke is not selling to someone who has
+- No marketing register on the surface. Vespin is not selling to someone who has
   already installed him.
 
 Copy that reaches a model rather than the screen (the agent's own
 instructions, the live session's instructions) obeys a different rule. Verbosity
-there is not slop, but a fact dropped from them is one Luke no longer has, so
+there is not slop, but a fact dropped from them is one Vespin no longer has, so
 compress the prose and never drop the fact. One rule per line beats three
 fused with em-dashes: the instruction to be brief has to be readable itself.

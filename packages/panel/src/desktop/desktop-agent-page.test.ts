@@ -11,7 +11,6 @@ import {
 import {
   AGENT_ARCHIVER,
   AGENT_BRIEF,
-  AGENT_KIND,
   AGENT_SENDER,
   AGENT_STATUS,
   type AgentPage,
@@ -150,12 +149,12 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** The prompt an automation's run handed its agent: the automation's own, then what Luke adds of the firing. */
+/** The prompt an automation's run handed its agent: the automation's own, then what we add of the firing. */
 const HANDED = `Sweep the flaky tests.
 
 ---
 
-Luke started this run for the automation "Flaky-test sweep" because its schedule was due.`;
+Vespin started this run for the automation "Flaky-test sweep" because its schedule was due.`;
 
 /** The agent an automation's run started, read as its page with the run. */
 const RUN_PAGE: AgentPage = {
@@ -1399,7 +1398,7 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
   const automation = sender?.querySelector<HTMLButtonElement>("button[data-actor-ref]");
   assert.equal(words(automation), "Flaky-test sweep");
   assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
-  assert.doesNotMatch(card.textContent ?? "", /Luke started this run/u);
+  assert.doesNotMatch(card.textContent ?? "", /Vespin started this run/u);
   act(() => automation?.click());
 
   assert.deepEqual(opened, [{ kind: "edit", automationId: SWEEP.id }]);
@@ -1530,7 +1529,7 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.ok(item, "the ⋯ offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
@@ -1625,47 +1624,6 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
     "Archive",
     "Permanently delete⌘⌫",
   ]);
-});
-
-test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete, while the account has the experiment off too", async () => {
-  pages = [{ agent: { ...PAGE, kind: AGENT_KIND.OPERATOR } }];
-  handState(
-    {},
-    {
-      run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
-    },
-  );
-  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more);
-  act(() => more.click());
-
-  assert.equal(page.querySelector("h1")?.textContent, "Luke");
-  assert.deepEqual(
-    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Copy link", "Copy concise transcript⌥⌘C", "Copy full transcript⌥⇧⌘C", "Show terminal⌘J"],
-  );
-});
-
-test("a Luke a Reset retired is still known by his kind: titled Luke, offering neither Rename, Unarchive, nor Permanently delete", async () => {
-  pages = [{ agent: { ...PAGE, kind: AGENT_KIND.OPERATOR, archivedAt: 2 } }];
-  handState(experimentsOn(EXPERIMENT.OPERATOR), {
-    run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
-  });
-  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more);
-  act(() => more.click());
-
-  assert.equal(page.querySelector("h1")?.textContent, "Luke");
-  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
-    (each) => each.textContent,
-  );
-  assert.ok(!offered.includes("Rename"));
-  assert.ok(!offered.includes("Unarchive"));
-  assert.ok(!offered.includes("Permanently delete"));
 });
 
 /** What a side panel is asked to show. */
@@ -2135,7 +2093,7 @@ it.effect(
 );
 
 it.effect(
-  "an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents",
+  "an agent working in no repository, as Vespin does, still takes an @ in its box, which offers the workspace's agents",
   () =>
     Effect.gen(function* () {
       installEditorLayout();

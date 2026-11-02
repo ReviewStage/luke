@@ -3,17 +3,18 @@ import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DevicePlatform,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
 import {
   HOST_UNINSTALL_COMMAND,
-  HOST_WIRE,
   type Host,
   hostInstallCommand,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { agoText, momentText } from "@luke/features/time-format";
-import { readingWords } from "@luke/features/words";
+import { agoText } from "@luke/features/time-format";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -27,37 +28,42 @@ import {
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
-  DialogActions,
-  ErrorLine,
   ErrorState,
   GAP,
   PlusIcon,
   SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
+  SettingsRow,
   type SettingsRowSkeletonShape,
+  type SettingsRowState,
+  SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsSection,
+  SPINNER_SIZE,
+  SpinnerRing,
   STATUS_TONE,
   Stack,
+  TEXT_TONE,
   Text,
   TrashIcon,
+  useAnnounce,
   useConfirmDialog,
   useMinute,
   useSecond,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
-import { DEVICE_PLATFORM_NAME, macSessionWords } from "../device-platform.js";
+import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import {
   type PresenceBook,
   presenceAgeMs,
   presenceStanding,
   useDevicePresence,
 } from "../device-presence.js";
+import { hostUpdateWords } from "../device-setup.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
@@ -72,22 +78,25 @@ import {
 } from "./this-mac-host-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command once.
+ * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command and waits for the hosts it adds.
  *
  * A machine is any device of the member's enrolled with a secret of its own
  * (`@luke/features/host-wire`): a Linux server or a Mac that ran the install
  * command, or a Mac its desktop enrolled. The list names each, what it is by
  * its platform (`DEVICE_PLATFORM_NAME`), whether it is online, held against
  * the window's own clock as a Mac's label is (`macOnline`), when it was last
- * seen otherwise, where its setup stands while it is not ready, getting
- * ready or couldn't set up and why, in the words This Mac's row says them
- * in (`setupLineOf`), for a Mac that it runs while its user is logged in,
- * since its host runs in their login session, and, where its host program
- * is below the service's floor, Upgrade needed with how to upgrade it: the
- * install command's upgrade, this Mac's app updated, or, for another Mac,
+ * seen otherwise, the host program's version it last called with, where its
+ * setup stands while it is not ready, getting ready or couldn't set up and
+ * why, in the words This Mac's row says them in (`setupLineOf`), where its
+ * update to a newer release stands while one is under way, waiting for its
+ * agents to finish, updating, or couldn't update and why
+ * (`hostUpdateWords`), on every row but This Mac's, whose line is its own
+ * app's reading, and, where its host program
+ * is below the service's floor, Update needed with how to update it: the
+ * install command's update, this Mac's app updated, or, for another Mac,
  * either, since the service lists no word of how a Mac joined. Remove,
  * behind the row's ⋯, refuses that machine at once, after asking with the
- * command that takes Luke off the machine itself where the install command
+ * command that takes the host off the machine itself where the install command
  * may have set it up. Adding takes a Linux server and a Mac alike, through
  * one command.
  *
@@ -100,52 +109,53 @@ import {
  * tab has no This Mac, so it draws neither, and with no host says what one
  * is above Add hosts.
  *
- * Add hosts mints an install token here, in the window, and hands the
- * service its SHA-256 alone, so the token never leaves the window that
- * shows it: it stands in this section's state while the dialog is open,
- * inside the install command the member runs on each host, and is gone once
- * the dialog closes. Revoke this command stops new servers enrolling with it, and none it
- * already enrolled. A pairing's link opened in this window stands its dialog
- * over the page (`host-connect-dialog.tsx`), and the list is read again once
- * Connect makes the host. The page stands only while the Bring your own host
+ * Add hosts shows the install command, public and the same for every
+ * member, which pairs a box with a code the member approves, and waits.
+ * While it stands the list is read every few seconds, and the dialog names
+ * each host the list holds that it did not hold as the dialog opened,
+ * moving by itself from connecting through getting ready to ready or
+ * couldn't set up and why (`joinedLine`). A host so named is approved,
+ * since the service lists no box before its approve, so the dialog never
+ * names one that is not. A pairing's link opened in this window stands its
+ * dialog over the page, Add hosts among it (`host-connect-dialog.tsx`), and
+ * once Connect makes the host the list is read again over the rows
+ * standing, so an open Add hosts names it and moves on by itself. The page
+ * stands only while the Bring your own host
  * experiment is on (`settings-rows.ts`'s `PAGE_EXPERIMENT`), so while it is
  * off nothing here is drawn, read, or turned on.
  */
 
-/** The bytes of randomness behind an install token, as many as a device secret's. */
-const INSTALL_TOKEN_BYTES = 32;
-
 /** `useMinute` counts in milliseconds, so the minute the list stands on is read off it in whole ones. */
 const MINUTE_MS = 60_000;
 
-/** How often the list is read while a host is getting ready, as often as This Mac's row reads its own. */
-const SETTING_UP_READ_EVERY_MS = 5_000;
+/** How often the list is read while a host is getting ready or updating, or Add hosts waits for one, as often as This Mac's row reads its own. */
+const WATCHED_READ_EVERY_MS = 5_000;
 
 /**
- * The class PostHog's recorder leaves out of a recording, element and children
- * alike, and a size containment: the commands do not wrap, so without it
- * their width widens the dialog's grid track past a phone's and puts the card,
- * its Done among it, off the screen. They scroll inside their cards instead.
+ * A size containment: the command does not wrap, so without it its width
+ * widens the dialog's grid track past a phone's and puts its card off the
+ * screen. It scrolls inside its card instead.
  */
-const COMMANDS = "ph-no-capture contain-inline-size";
+const COMMAND = "contain-inline-size";
 
 const WORDS = {
   ADD: "Add hosts",
-  ADDING: "Making a command",
-  ADD_FAILED: "Could not make an install command. Try again.",
-  READ_FAILED: "Could not read your hosts.",
   NONE: "No hosts yet. A host is a Mac or Linux server of yours that runs your agents instead of the cloud.",
-  SIGNED_OUT: "Sign in to see your hosts.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
-  UPGRADE_NEEDED: "Upgrade needed",
-  UPGRADE_TITLE: "Run this on the host to upgrade it",
-  MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
-  OTHER_MAC_UPGRADE: "If you added it from the Luke app on it, update the app there.",
+  UPGRADE_NEEDED: "Update needed",
+  UPGRADE_TITLE: "Run this on the host to update it",
+  MAC_UPGRADE: `Update the ${PRODUCT_NAME} app on this Mac.`,
+  OTHER_MAC_UPGRADE: `If you added it from the ${PRODUCT_NAME} app on it, update the app there.`,
   OTHER_MAC_UPGRADE_TITLE: "If you used the install command, run this on it",
   INSTALL_TITLE: "Run this on each host",
-  REVOKE: "Revoke this command",
+  INSTALL_NEXT: "Then open the link it prints, and approve its code.",
+  MAC_SESSION: "A Mac host runs your agents only while its user is logged in.",
+  WAITING: "Waiting for approval",
+  CONNECTING: "Connecting…",
+  READY: "Ready",
+  CLOSE: "Close",
 } as const;
 
 /** The row that stands while the machines are read: a machine with its ⋯. */
@@ -153,38 +163,58 @@ const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
 ];
 
-/** Add hosts' own line under the list, the button stretched to the rows' width and its failure under it. */
+/** Add hosts' own line under the list, the button stretched to the rows' width. */
 const ADD_LINE = "grid";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
-/** A remove or a revoke the service did not take, said in the dialog that asked. */
+/** A remove the service did not take, said in the dialog that asked. */
 const REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
-  reason: "Luke could not reach the service. Try again.",
+  reason: "Could not reach the service. Try again.",
 };
-
-/** An install token minted for the dialog, and what the service answered keeping its hash. */
-interface ShownToken {
-  readonly installToken: string;
-  readonly id: string;
-  readonly expiresAt: number;
-  readonly installScriptUrl: string;
-}
-
-/** A fresh install token and its SHA-256 in hex, from the platform's own Web Crypto, so the desktop and a browser mint one alike. */
-async function mintedInstallToken(): Promise<{ installToken: string; tokenHash: string }> {
-  const bytes = crypto.getRandomValues(new Uint8Array(INSTALL_TOKEN_BYTES));
-  const installToken = `${HOST_WIRE.INSTALL_TOKEN_PREFIX}${Base64Url.encode(bytes)}`;
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(installToken));
-  return { installToken, tokenHash: Hex.encode(new Uint8Array(digest)) };
-}
 
 /** Where a host stands now; one the read does not name, though it is the account's own, is gone. */
 function hostStanding(host: Host, book: PresenceBook): DeviceStanding {
   return presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
 }
 
-/** A host's line under its name: online, or when it was last seen. */
+/** How a host's standing leads its line: online with the finished session's dot, what needs a look tinted, and a first read still out plain. */
+const STANDING_STATE = {
+  [DEVICE_STANDING.ONLINE]: SETTINGS_ROW_STATE.CONNECTED,
+  [DEVICE_STANDING.OFFLINE]: SETTINGS_ROW_STATE.ATTENTION,
+  [DEVICE_STANDING.UNKNOWN]: SETTINGS_ROW_STATE.ATTENTION,
+  [DEVICE_STANDING.CHECKING]: SETTINGS_ROW_STATE.PLAIN,
+} as const satisfies Record<DeviceStanding, SettingsRowState>;
+
+/**
+ * A host's line under its name, its standing first, as Integrations leads with
+ * Connected: online after the dot, offline or unknown in the attention tint,
+ * and then what it is. Note that an online line draws its words inside the
+ * dot's line, because words after it sit off the dot's baseline, and a tinted
+ * one tints its standing alone.
+ */
+function StandingLine({
+  standing,
+  seen,
+  rest,
+}: {
+  standing: DeviceStanding;
+  seen: string;
+  rest: string;
+}): React.JSX.Element {
+  const state = STANDING_STATE[standing];
+  if (state === SETTINGS_ROW_STATE.CONNECTED) {
+    return <SettingsRowStateLine state={state}>{`${seen} · ${rest}`}</SettingsRowStateLine>;
+  }
+  return (
+    <>
+      <SettingsRowStateLine state={state}>{seen}</SettingsRowStateLine>
+      {` · ${rest}`}
+    </>
+  );
+}
+
+/** A host's standing under its name: online, or when it was last seen. */
 function seenWords(host: Host, book: PresenceBook, now: number): string {
   const standing = hostStanding(host, book);
   if (standing === DEVICE_STANDING.ONLINE) return WORDS.ONLINE;
@@ -206,7 +236,22 @@ function setupLine(host: Host, standing: DeviceStanding): HostLine | null {
   return setupLineOf(host.setup, host.setupFailure);
 }
 
-/** How a host is upgraded, under its Upgrade needed: this Mac's app updated, the install command's upgrade run on a server, and either for another Mac. */
+/**
+ * Where a host that is not this Mac stands in updating itself: waiting for
+ * its agents to finish or updating, plain, or couldn't update and why,
+ * tinted; nothing while no update is under way, or while it is offline,
+ * whose last word of its update may no longer hold.
+ */
+function updateLine(host: Host, standing: DeviceStanding): HostLine | null {
+  if (host.update === undefined || standing === DEVICE_STANDING.OFFLINE) return null;
+  return {
+    words: hostUpdateWords(host.update, host.updateFailure),
+    state:
+      host.update === HOST_UPDATE.FAILED ? SETTINGS_ROW_STATE.ATTENTION : SETTINGS_ROW_STATE.PLAIN,
+  };
+}
+
+/** How a host is updated by hand, under its Update needed: this Mac's app updated, the install command's update run on a server, and either for another Mac. */
 function UpgradeHow({
   platform,
   thisMac,
@@ -236,8 +281,7 @@ function UpgradeHow({
 }
 
 /** What Remove says goes, whatever the machine. */
-const REMOVED =
-  "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke.";
+const REMOVED = `It stops taking agents now, and its agents stop. Their tasks and transcripts stay in ${PRODUCT_NAME}.`;
 
 /**
  * What Remove says, and the title of the uninstall command it shows, by what
@@ -246,18 +290,18 @@ const REMOVED =
  * Mac may be either, since the service lists no word of how a Mac joined.
  */
 const REMOVE_WORDS = {
-  SERVER: { body: REMOVED, uninstall: "Run this on the host to remove Luke from it" },
+  SERVER: { body: REMOVED, uninstall: `Run this on the host to remove ${PRODUCT_NAME} from it` },
   THIS_MAC: {
     body: `${REMOVED} To use it again, choose Turn on again under This Mac.`,
     uninstall: undefined,
   },
   MAC: {
-    body: `${REMOVED} If you added it from the Luke app on it, choose Turn on again under This Mac there to use it again.`,
+    body: `${REMOVED} If you added it from the ${PRODUCT_NAME} app on it, choose Turn on again under This Mac there to use it again.`,
     uninstall: "If you used the install command, run this on it",
   },
 } as const;
 
-/** One machine's row: its name, what it is and whether it is online, where its setup stands while it is not ready, for a Mac whose login it runs in, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
+/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, Update needed with how to update it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,
@@ -281,24 +325,23 @@ function HostRow({
   );
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
-  const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
+  const kind = DEVICE_PLATFORM_NAME[platform];
+  const versioned = host.version === null ? kind : `${kind} · ${host.version}`;
   const removeWords =
     thisMac !== undefined
       ? REMOVE_WORDS.THIS_MAC
       : platform === DEVICE_PLATFORM.DARWIN
         ? REMOVE_WORDS.MAC
         : REMOVE_WORDS.SERVER;
-  // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry.
-  const line = thisMac !== undefined ? thisMac.line : setupLine(host, hostStanding(host, book));
-  const session: HostLine | null =
-    platform === DEVICE_PLATFORM.DARWIN
-      ? { words: macSessionWords(host.loginName), state: SETTINGS_ROW_STATE.PLAIN }
-      : null;
+  const standing = hostStanding(host, book);
+  // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry, and its update is its app's.
+  const line = thisMac !== undefined ? thisMac.line : setupLine(host, standing);
+  const update = thisMac !== undefined ? null : updateLine(host, standing);
+  const label = thisMac === undefined ? host.name : `${host.name} (this Mac)`;
   return (
     <>
       <MenuRow
-        thing="Host"
-        alone
+        thing={label}
         actions={[
           {
             label: "Remove",
@@ -309,17 +352,19 @@ function HostRow({
           },
         ]}
         row={{
-          label: thisMac === undefined ? host.name : `${host.name} (this Mac)`,
+          label,
           adornment: host.upgradeNeeded ? (
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,
           description: (
             <>
-              {host.upgradeNeeded && host.version !== null
-                ? `${seen} · runs ${host.version}`
-                : seen}
-              {session === null ? null : <HostStateLine line={session} />}
+              <StandingLine
+                standing={standing}
+                seen={seenWords(host, book, now)}
+                rest={versioned}
+              />
               {line === null ? null : <HostStateLine line={line} />}
+              {update === null ? null : <HostStateLine line={update} />}
             </>
           ),
           control: thisMac === undefined ? undefined : <ThisMacAct thisMac={thisMac} />,
@@ -356,20 +401,42 @@ function HostRow({
   );
 }
 
-/** The dialog Add hosts opens: the install command with the token in it, shown this once, and Revoke. */
+/**
+ * Where a host that joined while Add hosts stood is, in the words its row
+ * says its setup in: connecting until its program first calls in, then
+ * getting ready, or couldn't set up and why, while it says so, and ready.
+ * Like its row it offers no Retry, since a host retries its setup itself.
+ */
+function joinedLine(host: Host): HostLine {
+  // Note that a service older than `calledIn` lists none, so its hosts read as called in rather than connecting for good.
+  if (host.calledIn === false) return { words: WORDS.CONNECTING, state: SETTINGS_ROW_STATE.PLAIN };
+  if (host.setup !== undefined) return setupLineOf(host.setup, host.setupFailure);
+  return { words: WORDS.READY, state: SETTINGS_ROW_STATE.CONNECTED };
+}
+
+/**
+ * The dialog Add hosts opens: the install command, what comes after it, and
+ * the hosts that joined since it opened, each where it stands, or a wait
+ * until one does; a reader is told as each moves. Its one answer is a
+ * quiet Close, which only closes: nothing waits on it, since the dialog
+ * moves on by itself whether or not it is pressed.
+ */
 function AddHostsDialog({
-  shown,
-  onRevoke,
+  known,
+  hosts,
+  installScriptUrl,
   onClose,
 }: {
-  shown: ShownToken;
-  onRevoke: () => Promise<ActionResult>;
+  /** The ids of the account's hosts as the dialog opened, which it never names as joined. */
+  known: ReadonlySet<string>;
+  hosts: readonly Host[];
+  installScriptUrl: string;
   onClose: () => void;
 }): React.JSX.Element {
-  const revoking = useConfirmDialog(
-    { subject: true, surfaceOpen: true },
-    onRevoke,
-    confirmFailure(FAILURE_SURFACE.HOST_REVOKE),
+  const joined = hosts.filter((host) => !known.has(host.id));
+  useAnnounce(
+    ANNOUNCE.POLITE,
+    joined.map((host) => `${host.name}: ${joinedLine(host).words}`).join(" "),
   );
   return (
     <Dialog
@@ -377,35 +444,42 @@ function AddHostsDialog({
       title={WORDS.ADD}
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
-      actionsStart={
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={revoking.ask} disabled={revoking.busy}>
-          {WORDS.REVOKE}
+      actions={
+        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
+          {WORDS.CLOSE}
         </Button>
       }
-      actions={<DialogActions onDone={onClose} />}
     >
-      <div className={COMMANDS}>
-        <Stack gap={GAP.CONTROL}>
-          <Text>{`It works until ${momentText(shown.expiresAt)}, and isn't shown again.`}</Text>
-          <CodeCard
-            title={WORDS.INSTALL_TITLE}
-            titleIs={CODE_CARD_TITLE.WORDS}
-            code={hostInstallCommand(shown.installScriptUrl, shown.installToken)}
-            copy={copyThroughShell}
-          />
-        </Stack>
+      <div className={COMMAND}>
+        <CodeCard
+          title={WORDS.INSTALL_TITLE}
+          titleIs={CODE_CARD_TITLE.WORDS}
+          code={hostInstallCommand(installScriptUrl)}
+          copy={copyThroughShell}
+        />
       </div>
-      <ConfirmDialog
-        open
-        confirm={revoking}
-        question={{
-          title: "Revoke this command?",
-          body: "No new server can be added with it. Servers already added keep working.",
-          verb: "Revoke",
-          running: "Revoking",
-          loss: CONFIRM_LOSS.IRREVERSIBLE,
-        }}
-      />
+      <Stack gap={GAP.TIGHT}>
+        <Text>{WORDS.INSTALL_NEXT}</Text>
+        <Text tone={TEXT_TONE.MUTED}>{WORDS.MAC_SESSION}</Text>
+      </Stack>
+      <SettingsSection>
+        {joined.length === 0 ? (
+          <SettingsRow leading={<SpinnerRing size={SPINNER_SIZE.INLINE} />} label={WORDS.WAITING} />
+        ) : (
+          joined.map((host) => (
+            <SettingsRow
+              key={host.id}
+              label={host.name}
+              description={
+                <>
+                  {DEVICE_PLATFORM_NAME[host.platform ?? DEVICE_PLATFORM.LINUX]}
+                  <HostStateLine line={joinedLine(host)} />
+                </>
+              }
+            />
+          ))
+        )}
+      </SettingsSection>
     </Dialog>
   );
 }
@@ -421,9 +495,8 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [adding, setAdding] = useState(false);
-  const [addFailed, setAddFailed] = useState(false);
-  const [shown, setShown] = useState<ShownToken | undefined>(undefined);
+  // The ids of the account's hosts as Add hosts opened, while its dialog stands.
+  const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
   const thisMac = useThisMacHost(signedIn);
   const [connecting, closeConnect] = useHostConnect();
   // A pairing's question does not outlive the page it was asked over.
@@ -435,6 +508,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     let live = true;
     setHosts(undefined);
     setReadFailed(false);
+    setAdding(undefined);
     act(ACT_KIND.HOSTS_LIST).then(
       (answer) => {
         if (!live) return;
@@ -455,48 +529,46 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   }, [act, signedIn, attempt]);
 
   // A server that joins while the page stands is drawn within a minute, with no skeleton over the list the member is reading.
-  // Note that while a host is getting ready the list is read every few seconds instead, so it reads ready, or why it couldn't set up, about as soon as This Mac's row would.
-  const settingUp = hosts?.some((host) => host.setup === DEVICE_SETUP.PREPARING) ?? false;
-  const period = settingUp ? Math.floor(now / SETTING_UP_READ_EVERY_MS) : minute;
+  // Note that while a host is getting ready or updating, or Add hosts waits for one, the list is read every few seconds instead, so a host reads approved, ready, updated, or why it couldn't about as soon as This Mac's row would.
+  const changing =
+    hosts?.some(
+      (host) => host.setup === DEVICE_SETUP.PREPARING || host.update === HOST_UPDATE.UPDATING,
+    ) ?? false;
+  const watched = changing || adding !== undefined;
+  const period = watched ? Math.floor(now / WATCHED_READ_EVERY_MS) : minute;
+  // A read after the page's first lands over the list standing, so no skeleton covers the rows the member is reading.
+  const relist = useCallback(
+    (live: () => boolean) =>
+      act(ACT_KIND.HOSTS_LIST).then(
+        (answer) => {
+          if (!live() || "failure" in answer) return;
+          setHosts((standing) => (standing === undefined ? standing : answer.hosts));
+        },
+        () => undefined,
+      ),
+    [act],
+  );
   const mountMinute = useRef(minute);
   useEffect(() => {
     // The mount's own read is the effect above, so the minute it began in stands as it is.
-    if (!signedIn || (!settingUp && period === mountMinute.current)) return;
+    if (!signedIn || (!watched && period === mountMinute.current)) return;
     let live = true;
-    act(ACT_KIND.HOSTS_LIST).then(
-      (answer) => {
-        if (!live || "failure" in answer) return;
-        setHosts((standing) => (standing === undefined ? standing : answer.hosts));
-      },
-      () => undefined,
-    );
+    relist(() => live);
     return () => {
       live = false;
     };
-  }, [act, signedIn, settingUp, period]);
+  }, [signedIn, watched, period, relist]);
 
+  // Note that Add hosts waits for the list, since the dialog names only the hosts the list did not hold as it opened, and its command names the script the list's answer does.
   const add = useCallback(() => {
-    setAdding(true);
-    setAddFailed(false);
-    // Note that the token is minted here and only its hash is sent, so the token stands in this window alone.
-    mintedInstallToken()
-      .then(({ installToken, tokenHash }) =>
-        act(ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN, { tokenHash }).then((answer) => {
-          if ("failure" in answer) {
-            setAddFailed(true);
-            return;
-          }
-          setShown({
-            installToken,
-            id: answer.id,
-            expiresAt: answer.expiresAt,
-            installScriptUrl: answer.installScriptUrl,
-          });
-        }),
-      )
-      .catch(() => setAddFailed(true))
-      .finally(() => setAdding(false));
-  }, [act]);
+    if (hosts !== undefined) setAdding(new Set(hosts.map((host) => host.id)));
+  }, [hosts]);
+
+  // Note that closing Add hosts reads the list once more, so a host approved since the dialog's last read is drawn now rather than at the next minute.
+  const closeAdd = useCallback(() => {
+    setAdding(undefined);
+    relist(() => true);
+  }, [relist]);
 
   const remove = useCallback(
     (id: string): Promise<ActionResult> =>
@@ -509,17 +581,6 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
         }),
     [act],
   );
-
-  const revoke = useCallback((): Promise<ActionResult> => {
-    if (shown === undefined) return Promise.resolve(REFUSED);
-    return act(ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN, { id: shown.id })
-      .catch(() => undefined)
-      .then((answer) => {
-        if (answer === undefined || "failure" in answer) return REFUSED;
-        setShown(undefined);
-        return ACCEPTED;
-      });
-  }, [act, shown]);
 
   const thisMacId = thisMac.standing?.deviceId;
   const listedMac =
@@ -535,7 +596,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
       {/* Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member. */}
       <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
         {!signedIn ? (
-          <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
+          <SettingsLine>{SIGNED_OUT_WORDS}</SettingsLine>
         ) : loaded && ordered.length === 0 && !thisMacAlone ? (
           <SettingsLine>{WORDS.NONE}</SettingsLine>
         ) : loaded ? (
@@ -561,7 +622,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
               failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)}
               onRetry={() => setAttempt((count) => count + 1)}
             >
-              {WORDS.READ_FAILED}
+              {readFailedWords("your hosts")}
             </ErrorState>
           </SettingsLine>
         ) : (
@@ -573,34 +634,19 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           <Button
             variant={BUTTON_VARIANT.OUTLINE}
             icon={<PlusIcon />}
-            busy={adding}
-            busyLabel={WORDS.ADDING}
+            disabled={!loaded}
             onClick={add}
           >
             {WORDS.ADD}
           </Button>
-          <ErrorLine
-            level={ANNOUNCE.ALERT}
-            error={
-              addFailed
-                ? {
-                    words: WORDS.ADD_FAILED,
-                    failure: unreadShown(FAILURE_SURFACE.HOST_INSTALL_COMMAND),
-                  }
-                : undefined
-            }
-          />
         </div>
       ) : null}
-      {shown === undefined ? null : (
+      {adding === undefined || !loaded ? null : (
         <AddHostsDialog
-          shown={shown}
-          onRevoke={revoke}
-          onClose={() => {
-            setShown(undefined);
-            // The list is read again, so a server that joined while the dialog stood is drawn.
-            setAttempt((count) => count + 1);
-          }}
+          known={adding}
+          hosts={hosts}
+          installScriptUrl={installScriptUrl}
+          onClose={closeAdd}
         />
       )}
       {/* Note that a pairing's dialog comes after Add hosts, so it stands over it where both are open. */}
@@ -609,7 +655,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           key={connecting}
           code={connecting}
           onClose={closeConnect}
-          onConnected={() => setAttempt((count) => count + 1)}
+          onConnected={() => relist(() => true)}
         />
       )}
     </>

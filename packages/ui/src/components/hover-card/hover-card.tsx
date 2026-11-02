@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import type { StatusTone } from "../../status-tone.js";
 import { GAP, LAYOUT_ELEMENT, Stack } from "../layout/layout.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
@@ -77,7 +78,7 @@ const NAME =
 const SUB =
   "luke-hover-card-sub flex min-w-0 items-center gap-1 text-caption leading-[inherit] text-muted-foreground tabular-nums [&>span]:min-w-0 [&>span]:wrap-anywhere";
 const CORNER =
-  "luke-hover-card-corner flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
+  "luke-hover-card-corner flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums data-tone:text-tone-ink";
 const NOTE =
   "luke-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-caption";
 const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border";
@@ -154,6 +155,7 @@ export function HoverCardHead({
   oneLine = false,
   sub,
   corner,
+  cornerTone,
 }: {
   /** What leads the head at a card's size, a face or a tile, beside the rest rather than on the name's first line. */
   mark?: ReactNode;
@@ -165,6 +167,8 @@ export function HoverCardHead({
   sub?: ReactNode;
   /** What stands muted at the head's right, one short word: the subject's age, how it ended, or how many wait. */
   corner?: ReactNode;
+  /** The corner's status tone, muted where absent: attention where it counts what waits on the reader. */
+  cornerTone?: StatusTone | undefined;
 }): React.JSX.Element {
   const head = (
     <div className={mark === undefined ? HEAD : `${HEAD} ${LED_HEAD}`}>
@@ -183,7 +187,11 @@ export function HoverCardHead({
         )}
         {sub === undefined ? null : <span className={SUB}>{sub}</span>}
       </div>
-      {corner === undefined ? null : <span className={CORNER}>{corner}</span>}
+      {corner === undefined ? null : (
+        <span className={CORNER} data-tone={cornerTone}>
+          {corner}
+        </span>
+      )}
     </div>
   );
   if (mark === undefined) return head;

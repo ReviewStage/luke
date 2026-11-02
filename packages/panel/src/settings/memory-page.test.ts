@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import type { MemorySummary } from "@luke/features/memory-wire";
+import {
+  FAILURE_KIND,
+  FAILURE_SURFACE,
+  type ShownFailureReport,
+} from "@luke/features/shown-failure";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { installShownFailureReporter } from "../failure-report.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { chooseMenuItem, menuItems } from "../testing/phone-head.js";
 import { MemorySection } from "./memory-page.js";
@@ -42,7 +48,6 @@ const DEPLOYS: MemorySummary = {
   text: "Deployments go out from the release branch through Vercel.",
   keptBy: { userId: READER, name: "Rita Reader" },
   forgettable: true,
-  private: false,
   createdAt: Date.UTC(2026, 9, 10, 12),
   updatedAt: Date.UTC(2026, 9, 12, 12),
 };
@@ -52,7 +57,6 @@ const TESTS: MemorySummary = {
   text: "The web server's store tests run on PGlite through test:store.",
   keptBy: { userId: "user-dean", name: "Dean" },
   forgettable: false,
-  private: false,
   createdAt: Date.UTC(2026, 9, 9, 12),
   updatedAt: Date.UTC(2026, 9, 9, 12),
 };
@@ -61,8 +65,8 @@ const TESTS: MemorySummary = {
 let stored: MemorySummary[] = [];
 /** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
-/** Whether the read is answered with a failure rather than the memories. */
-let refuseRead = false;
+/** The failure the read is answered with rather than the memories, where it fails. */
+let readFailure: { readonly failure: AgentCallFailure } | undefined;
 /** Whether a forget is answered with a failure rather than the memories. */
 let refuseForget = false;
 /** Where a forget is held unanswered until the test lets it go, rather than answered at once. */
@@ -86,7 +90,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         const held = holdReads;
         return new Promise((resolve) => held.push(resolve));
       }
-      return Promise.resolve(done(refuseRead ? unanswered : { memories: stored }));
+      return Promise.resolve(done(readFailure ?? { memories: stored }));
     case ACT_KIND.MEMORIES_FORGET:
       if (refuseForget) return Promise.resolve(done(unanswered));
       if (holdForgets !== undefined) {
@@ -105,7 +109,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   stored = [DEPLOYS, TESTS];
   sent = [];
-  refuseRead = false;
+  readFailure = undefined;
   refuseForget = false;
   holdForgets = undefined;
   holdReads = undefined;
@@ -211,21 +215,6 @@ async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean
   return askedFirst;
 }
 
-/** The switcher's sides, each its name and its count. */
-const sides = (page: HTMLElement) =>
-  [...page.querySelectorAll<HTMLElement>('[aria-label="Whose memories"] [role="radio"]')].map(
-    (side) => side.textContent,
-  );
-
-/** Shows the switcher's side whose name starts with `name`. */
-function showSide(page: HTMLElement, name: string): void {
-  const side =
-    [...page.querySelectorAll<HTMLElement>('[aria-label="Whose memories"] [role="radio"]')].find(
-      (each) => each.textContent?.startsWith(name),
-    ) ?? assert.fail(`no ${name} side`);
-  act(() => side.click());
-}
-
 /** Types `query` over whatever the search holds, as the developer would. */
 async function searchFor(page: HTMLElement, query: string): Promise<void> {
   const field =
@@ -238,7 +227,7 @@ async function searchFor(page: HTMLElement, query: string): Promise<void> {
   await settle();
 }
 
-test("what Luke kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
+test("what Vespin kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
   const { page } = await mount();
 
   assert.deepEqual(
@@ -246,10 +235,6 @@ test("what Luke kept in the workspace is read for it and listed in the service's
       .filter((request) => request.kind === ACT_KIND.MEMORIES_READ)
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }],
-  );
-  assert.match(
-    page.textContent ?? "",
-    /keep what you settle in Acme and recall it in later tasks/u,
   );
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   const keeper = (memory: MemorySummary) =>
@@ -312,31 +297,6 @@ test("a memory a search hid comes back unchosen, so a later act on what is chose
   assert.equal(pressOf(page, DEPLOYS).getAttribute("data-selected"), null);
 });
 
-test("a keeper the filter keeps stays named by their chip on the side that holds none of theirs", async () => {
-  stored = [
-    DEPLOYS,
-    TESTS,
-    {
-      ...DEPLOYS,
-      id: "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a7b",
-      text: "Answer in short paragraphs.",
-      private: true,
-    },
-  ];
-  const { page } = await mount();
-  const filter =
-    page.querySelector<HTMLButtonElement>('button[aria-label="Filter"]') ??
-    assert.fail("no Filter");
-  act(() => filter.click());
-  chooseMenuItem("Kept by");
-  chooseMenuItem("Dean");
-
-  showSide(page, "Only you");
-
-  assert.match(page.textContent ?? "", /Kept by Dean/u);
-  assert.deepEqual(words(page), []);
-});
-
 test("a forget that fails says so in the dialog and keeps the memory listed", async () => {
   refuseForget = true;
   const { page } = await mount();
@@ -350,34 +310,13 @@ test("a forget that fails says so in the dialog and keeps the memory listed", as
   );
 });
 
-test("a private memory stands on the reader's own side, counted there, and its Forget says only the reader's agents lose it", async () => {
-  stored = [{ ...DEPLOYS, private: true }, TESTS];
-  const { page } = await mount();
-
-  assert.deepEqual(sides(page), ["Acme1", "Only you1"]);
-  assert.deepEqual(words(page), [TESTS.text]);
-  showSide(page, "Only you");
-  assert.deepEqual(words(page), [DEPLOYS.text]);
-  askForget(page, DEPLOYS);
-  assert.match(dialog().textContent ?? "", /Your Luke will not recall it again/u);
-});
-
-test("the search keeps the memories whose words or keeper hold it, and each side counts what it leaves there", async () => {
-  const mine: MemorySummary = {
-    ...DEPLOYS,
-    id: "3d4e5f6a-7b8c-4d9e-8f0a-1b2c3d4e5f6a",
-    text: "My previews deploy to Vercel's staging team.",
-    private: true,
-  };
-  stored = [DEPLOYS, TESTS, mine];
+test("the search keeps the memories whose words or keeper hold it", async () => {
   const { page } = await mount();
 
   await searchFor(page, "vercel");
 
-  assert.deepEqual(sides(page), ["Acme1", "Only you1"]);
   assert.deepEqual(words(page), [DEPLOYS.text]);
   await searchFor(page, "dean");
-  assert.deepEqual(sides(page), ["Acme1", "Only you0"]);
   assert.deepEqual(words(page), [TESTS.text]);
 });
 
@@ -445,7 +384,7 @@ test("showing another workspace reads that workspace's memories in place of the 
     [{ workspaceId: ACME.id }, { workspaceId: GLOBEX.id }],
   );
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /settle in Globex/u);
+  assert.match(page.textContent ?? "", /hasn't remembered anything yet/u);
 });
 
 test("a forget answered after the page moved on to another workspace leaves that workspace's list as it read it", async () => {
@@ -460,7 +399,7 @@ test("a forget answered after the page moved on to another workspace leaves that
   await settle();
 
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /settle in Globex/u);
+  assert.match(page.textContent ?? "", /hasn't remembered anything yet/u);
 });
 
 test("a forget answered after the page left its workspace and came back reads that workspace again, so the forgotten memory is not left listed", async () => {
@@ -526,21 +465,21 @@ test("another account signing in on the same workspace reads its memories again,
   );
 });
 
-test("a workspace Luke has remembered nothing in says so", async () => {
+test("a workspace Vespin has remembered nothing in says so", async () => {
   stored = [];
   const { page } = await mount();
 
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /Luke hasn't remembered anything yet\./u);
+  assert.match(page.textContent ?? "", /Vespin hasn't remembered anything yet\./u);
 });
 
 test("a read that fails offers to try again, and no account reads nothing", async () => {
-  refuseRead = true;
+  readFailure = unanswered;
   const { page: failed } = await mount();
   const { page: signedOut } = await mount(false);
 
-  assert.match(failed.textContent ?? "", /Luke's memory could not be read\./u);
-  refuseRead = false;
+  assert.match(failed.textContent ?? "", /Vespin's memory could not be read\./u);
+  readFailure = undefined;
   act(() => button(failed, "Retry").click());
   await settle();
   assert.deepEqual(words(failed), [DEPLOYS.text, TESTS.text]);
@@ -552,12 +491,29 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
   );
 });
 
+test("a read the service refused is reported as that refusal, never as a page that read nothing", async () => {
+  const refusal = { failure: AGENT_CALL_FAILURE.NOT_FOUND } as const;
+  readFailure = refusal;
+  const reports: ShownFailureReport[] = [];
+  const uninstall = installShownFailureReporter((report) => {
+    reports.push(report);
+    return undefined;
+  });
+  await mount();
+  uninstall();
+
+  assert.deepEqual(
+    reports.map((report) => [report.surface, report.kind, report.cause]),
+    [[FAILURE_SURFACE.MEMORIES_READ, FAILURE_KIND.REFUSED, refusal]],
+  );
+});
+
 test("while the memories are read the page says Reading, which is neither its failure nor its empty line", async () => {
   holdReads = [];
   const { page } = await mount();
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no reading region");
-  assert.equal(status.textContent, "Reading Luke's memory");
+  assert.equal(status.textContent, "Reading Vespin's memory");
   assert.doesNotMatch(page.textContent ?? "", /could not be read|hasn't remembered/u);
 });
 

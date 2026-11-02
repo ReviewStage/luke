@@ -1,8 +1,8 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
 import type { GitHubPerson } from "@luke/features/agent-wire";
 import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
-import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelProvider } from "@luke/features/models-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   PLAN_ACTOR,
   type PlanEditor,
@@ -20,12 +20,12 @@ import {
 import { TAB_WORDS } from "./tab-strip-model.js";
 
 /**
- * actor-model.ts -- whoever did something, as the window names them: a person, Luke, a coding agent, an automation, or someone it cannot name.
+ * actor-model.ts -- whoever did something, as the window names them: a person, the app itself, a coding agent, an automation, or someone it cannot name.
  *
  * Every place that says who wrote, said, started, or answered something
  * reads its actor here and draws it one way (`actor-ref.tsx`): a person on a
  * circle, their sign-in picture or the first letter of their name on a hue
- * read off their id; Luke, an agent, and an automation each on a solid
+ * read off their id; the app itself, an agent, and an automation each on a solid
  * rounded square; and someone the window cannot name on a quiet outline. A
  * person is named by the reader's own words for them: "you" for the
  * reader's own, "your" for what is theirs. A member the wire names by
@@ -33,8 +33,8 @@ import { TAB_WORDS } from "./tab-strip-model.js";
  * picture, email, and role, so the wire's every person field needs no
  * picture of its own; a member the read no longer lists has left.
  *
- * A plan's edit is named by its actor (`editActor`), and Luke's also by
- * whose call he wrote it on (`editCallOwner`). A person's or Luke's card
+ * A plan's edit is named by its actor (`editActor`), and the app's also by
+ * whose call it wrote it on (`editCallOwner`). A person's or the app's card
  * says what they last did in the plan, read off who last changed each of
  * its sections (`latestActivity`), which the window already holds.
  */
@@ -90,8 +90,6 @@ export type Actor =
       readonly taskId?: string | undefined;
       readonly name: string;
       readonly provider: ModelProvider | undefined;
-      /** Whether the agent is a member's operator, who wears Luke's face rather than his harness's mark; absent for any other agent. */
-      readonly operator?: true | undefined;
       readonly state: ActorState;
     }
   | {
@@ -120,7 +118,7 @@ export interface GitHubActor {
   readonly kind: typeof ACTOR_KIND.GITHUB;
   readonly login: string;
   readonly avatarUrl?: string;
-  /** Whether it is an App's bot, drawn on a square as Luke and the agents are, rather than a person's circle. */
+  /** Whether it is an App's bot, drawn on a square as the app and the agents are, rather than a person's circle. */
   readonly bot: boolean;
 }
 
@@ -134,7 +132,7 @@ export const ROLE_WORDS = {
   [WORKSPACE_ROLE.MEMBER]: "Member",
 } as const satisfies Record<WorkspaceRole, string>;
 
-/** Luke, who is always the same actor. */
+/** The app itself, which is always the same actor. */
 export const LUKE_ACTOR: Actor = { kind: ACTOR_KIND.LUKE };
 
 /** How many hues an identity's letter is drawn on: `--luke-color-identity-1` through `--luke-color-identity-6`. */
@@ -201,7 +199,7 @@ function inSentence(words: string, sentence: boolean): string {
 
 /**
  * What an actor is called: the reader's own account "You", or "you" inside
- * a sentence, a person or a former member by name, Luke, an agent or an
+ * a sentence, a person or a former member by name, the app itself, an agent or an
  * automation by its title, and someone unnamed as "Someone". `possessive`
  * says whose: "Your pick" opening a phrase, "your Mac" inside a sentence, or
  * "Charles Pan’s".
@@ -220,7 +218,7 @@ export function actorName(
       case ACTOR_KIND.AUTOMATION:
         return actor.name;
       case ACTOR_KIND.LUKE:
-        return OPERATOR_NAME;
+        return PRODUCT_NAME;
       case ACTOR_KIND.SOMEONE:
         return actor.name ?? inSentence(SOMEONE_WORDS[actor.reason], sentence);
       case ACTOR_KIND.GITHUB:
@@ -362,7 +360,7 @@ function soleMember(reader: EditReader): boolean {
  * `personActor` reads them, and the unassigned mark where no one is; a
  * task assigned to the reader wears nothing. Note that a task no one is on
  * wears nothing either in a workspace of the reader alone, because the mark
- * is there to say someone else could take it. Who made it, a teammate, Luke,
+ * is there to say someone else could take it. Who made it, a teammate, the app itself,
  * or an agent, is never its face, since it is not who is on it, and stays
  * on its card and its menu's Created by.
  */
@@ -389,7 +387,7 @@ export interface OriginAgent {
 
 /**
  * Who made a task for its member, where they did not make it by hand
- * (`TaskOrigin`): Luke for one made on their call; the automation whose run
+ * (`TaskOrigin`): the app itself for one made on their call; the automation whose run
  * started the agent that made it; or that agent, as `agent` names it, or as
  * a coding agent the window does not hold, on the mark of no known harness.
  * None for a task its member made by hand, whose creator alone names it.
@@ -438,7 +436,7 @@ function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
 }
 
 /**
- * Who wrote an edit: a member, the reader among them; Luke; a coding agent
+ * Who wrote an edit: a member, the reader among them; the app itself; a coding agent
  * as its row names it now, wearing the harness and state of `agent` where
  * the window found it; nobody for the one revision from before history.
  */
@@ -471,7 +469,7 @@ export interface ActorActivity {
   readonly at: number;
 }
 
-/** Whether a section's last change is the actor's: a member's by their id, Luke's, or a coding agent's by its name. */
+/** Whether a section's last change is the actor's: a member's by their id, the app's, or a coding agent's by its name. */
 function changedBy(edit: PlanLastEdit, actor: Actor): boolean {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
@@ -576,7 +574,7 @@ export interface GitHubPlace {
  * Someone a pull request names on GitHub, as the window draws them. A
  * GitHub account linked to a member is that member, by the name the
  * members read gives them, or the login while it is unread. Anyone else is
- * themself on GitHub: a person's circle, or an App's bot's square, Luke's
+ * themself on GitHub: a person's circle, or an App's bot's square, our
  * own App's bot among them.
  */
 export function githubActor(person: GitHubPerson, place: GitHubPlace): Actor {

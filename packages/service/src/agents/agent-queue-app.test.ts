@@ -10,12 +10,14 @@ import {
 import { readAgent } from "@luke/database/models/agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace } from "@luke/database/testing";
 import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
 import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import {
   AGENT_ATTACHMENT_TYPE,
+  AGENT_KIND,
+  AGENT_MACHINE,
   agentMessagesAnswerSchema,
   agentQueueAnswerSchema,
   QUEUE_CHANGE,
@@ -33,6 +35,7 @@ import {
   TURN_ORIGIN,
   TURN_TRIGGER,
 } from "../core.js";
+import { SERVER_EVENT } from "../events/server-events.js";
 import { keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -40,6 +43,7 @@ import {
   AGENT_PICTURE,
   AGENT_STOP,
   type Answer,
+  countedWith,
   fakeEve,
   messagedAgent,
   readAnswer,
@@ -352,6 +356,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
     Effect.gen(function* () {
       const eve = fakeEve();
       const { agent, ask, owner, target } = yield* messagedAgent(eve, { running: true });
+      const countedBefore = countedWith(owner, SERVER_EVENT.MESSAGE_SEND).length;
       const id = randomUUID();
       const [queued] = (yield* queueChanged(ask, owner, agent.id, {
         change: QUEUE_CHANGE.ADD,
@@ -366,6 +371,16 @@ it.layer(getTestDB())("an agent's queue", (it) => {
 
       assert.deepEqual(queue.messages, []);
       assert.equal(yield* sentLineStands(owner, target.conversationId, sentLineId(id)), true);
+      // Counted once, as it went, and as a message that waited in the queue.
+      assert.deepEqual(countedWith(owner, SERVER_EVENT.MESSAGE_SEND).slice(countedBefore), [
+        {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          machine: AGENT_MACHINE.VERCEL,
+          agent_kind: AGENT_KIND.CODER,
+          turn_running: true,
+          queued: true,
+        },
+      ]);
     }),
   );
 

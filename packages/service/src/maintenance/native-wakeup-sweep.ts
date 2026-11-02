@@ -6,7 +6,7 @@
  * with the instant it comes due (`@luke/agent-runner/protocol`'s
  * `RUNNER_RELEASE`), which the events route kept
  * (`@luke/database/models/agent-wakeups`). Once a wakeup is due, the
- * sweep hands its prompt to the agent as a message from Luke, the one way a
+ * sweep hands its prompt to the agent as a message from us, the one way a
  * message reaches an agent (`steerAgent`), which relaunches the CLI on
  * the session it resumes, as the wakeup would have started a turn in the
  * CLI that waited. The message goes under a key of the wakeup's own, so a
@@ -58,7 +58,7 @@ function wakeupKey(wakeup: ClaimedAgentWakeup): string {
 }
 
 /**
- * One wakeup handed to its agent as a message from Luke; whether it landed.
+ * One wakeup handed to its agent as a message from us; whether it landed.
  * It is sent only while it still stands, so one a Stop or a launch deleted
  * since the claim is not sent, and deleted once the send landed; one whose
  * send failed stands for its next delivery.

@@ -35,7 +35,7 @@ export interface NativeNode extends DesktopService {
   readonly capabilities: NativeNodeCapabilities;
   /**
    * Reads macOS's own answer now and writes it to the document. The
-   * permission is the system's to move, and it moves while Luke runs, so
+   * permission is the system's to move, and it moves while the app runs, so
    * every reader takes it afresh rather than trusting what was written last.
    */
   refreshMicrophoneStatus: () => MicrophoneStatus;

@@ -140,7 +140,7 @@ it.effect("a sign-in the service refuses is a sentence for the row, and no keys"
     });
     const answered = JSON.parse(yield* press(setup));
     assert.deepEqual(answered, {
-      refused: "Luke couldn't verify the ChatGPT sign-in. Try again.",
+      refused: "Couldn't verify the ChatGPT sign-in. Try again.",
     });
   }),
 );
@@ -168,7 +168,7 @@ it.effect("a service that does not answer the host id opens no browser", () =>
 );
 
 it.effect(
-  "a sign-in finished after the Luke account changed is saved for no one, the new account included",
+  "a sign-in finished after the Vespin account changed is saved for no one, the new account included",
   () =>
     Effect.gen(function* () {
       const setup = harness({
@@ -179,7 +179,7 @@ it.effect(
       const answered = JSON.parse(yield* press(setup));
       assert.deepEqual(answered, {
         refused:
-          "You signed in to Luke as someone else while ChatGPT was open, so nothing was saved. Try again.",
+          "You signed in to Vespin as someone else while ChatGPT was open, so nothing was saved. Try again.",
       });
       assert.deepEqual(setup.saves, []);
     }),

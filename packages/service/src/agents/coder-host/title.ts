@@ -11,7 +11,7 @@ import { nameUntitledTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
 import { firstMessageParts } from "@luke/features/agent-replay";
-import { AGENT_BOUNDS, AGENT_KIND } from "@luke/features/agent-wire";
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { titlesNothing } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
@@ -42,7 +42,7 @@ import { CURSOR_START } from "./transcript.js";
  * was handed, never from the other agent's transcript replayed between
  * them (`@luke/features/agent-replay`), whose words are that agent's.
  * An automation's run is named from the automation's prompt alone in its
- * opening's place, without the lines Luke adds of the firing, which would
+ * opening's place, without the lines we add of the firing, which would
  * name every run of it alike, and the GitHub event's subject where one
  * fired it; a run about one pull request or issue was named by it as it
  * started (`automation-runs.ts`), so no model is asked.
@@ -58,7 +58,7 @@ import { CURSOR_START } from "./transcript.js";
  * conversation leaves here but to the model.
  *
  * The model runs on the account's own API key (`account-keys.ts`'s
- * `ownKeyOf`), never Luke's. An account that saved none, as one paying
+ * `ownKeyOf`), never ours. An account that saved none, as one paying
  * only through a subscription, is named with no model call at all: the
  * first words of the first line of its opening, or of the automation's
  * prompt, or of the task a subagent was handed, tidied as a model's answer
@@ -66,7 +66,7 @@ import { CURSOR_START } from "./transcript.js";
  *
  * A task still standing untitled, as one started from a prompt alone does,
  * takes the title its first agent to be titled is given, and keeps it: a
- * name a member or Luke gave the task, before or meanwhile, is never
+ * name a member or the app gave the task, before or meanwhile, is never
  * written over, and a later agent's title never renames it.
  */
 
@@ -437,9 +437,7 @@ export function titleInboxThread(
  * exchange with no words in it asks nothing. A call that answers nothing
  * writes nothing, so the next words or turn's end ask again. The title
  * written also names the agent's task where it still stands untitled.
- * With no model the title is cut from the opening's first words. An
- * operator is never titled, since it goes by Luke wherever it is named and
- * a title would leak through every read that takes the plain title.
+ * With no model the title is cut from the opening's first words.
  */
 export function titleAgent(
   model: LanguageModel | undefined,
@@ -447,7 +445,7 @@ export function titleAgent(
   agent: Agent,
 ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
-    if (agent.title !== null || agent.kind === AGENT_KIND.OPERATOR) return;
+    if (agent.title !== null) return;
     const title = yield* titleOfConversation(model, target, CODER_TOOL_SET, agent.automationOrigin);
     if (Option.isNone(title)) return;
     yield* titledWithTask(target.userId, agent, title.value);

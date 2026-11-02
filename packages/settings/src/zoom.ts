@@ -1,5 +1,5 @@
 /**
- * zoom.ts -- how large Luke draws his window: the sizes Settings offers, and the step ⌘+ and ⌘− take between them.
+ * zoom.ts -- how large the app draws its window: the sizes Settings offers, and the step ⌘+ and ⌘− take between them.
  *
  * A size is a whole percentage, the way Chrome and VS Code word their own
  * zoom, and the steps are Chrome's between two thirds and twice: the

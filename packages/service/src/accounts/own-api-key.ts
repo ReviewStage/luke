@@ -1,9 +1,9 @@
 /**
  * own-api-key.ts -- the API key one account saved for a provider, opened, and nothing where it saved none.
  *
- * Every model call Luke makes for an account outside a coding agent's step
+ * Every model call we make for an account outside a coding agent's step
  * (a voice call, a dictated clip) runs on the account's own key and never on
- * Luke's, since Luke pays for no model call. The key is read afresh on every
+ * ours, since we pay for no model call. The key is read afresh on every
  * call, so one saved, replaced, or removed in Settings is the next call's.
  * A row the deployment's ring cannot open (no ring, a malformed one, or one
  * that no longer holds the row's version) answers unreadable rather than

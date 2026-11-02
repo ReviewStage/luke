@@ -38,7 +38,8 @@ import {
  * takes the focus it is handed; one unavailable refuses its press; one a
  * field drives is found by its id; a chevron says nothing to a reader; acts
  * shown on hover are still a Tab stop after the row; and an app hears
- * whether the title is cut short. Synthetic members.
+ * whether the title is cut short, and a regular row's description says
+ * whether it is. Synthetic members.
  */
 
 declare global {
@@ -585,6 +586,38 @@ test("a row's fold is a control beside its press, saying whether its rows stand 
   expect(container.querySelector("output")?.textContent).toBe("unfold,fold");
 });
 
+test("a nested row is read at its level and its place among the rows under the same parent, its parent at the top level among the rows there", () => {
+  const nested = (title: string, depth: number, position: number) =>
+    createElement(ListRow, {
+      key: title,
+      title,
+      depth,
+      nest: { position, size: 2 },
+      onPress: ignore,
+    });
+  const container = draw(
+    createElement(List, {
+      label: "Tasks",
+      children: [
+        nested("Parent", 0, 1),
+        nested("First child", 1, 1),
+        nested("Second child", 1, 2),
+        nested("Other", 0, 2),
+      ],
+    }),
+  );
+  const read = [...container.querySelectorAll("li")].map(
+    (item) =>
+      `${item.querySelector("button")?.textContent}: level ${item.getAttribute("aria-level")}, ${item.getAttribute("aria-posinset")} of ${item.getAttribute("aria-setsize")}`,
+  );
+  expect(read).toEqual([
+    "Parent: level 1, 1 of 2",
+    "First child: level 2, 1 of 2",
+    "Second child: level 2, 2 of 2",
+    "Other: level 1, 2 of 2",
+  ]);
+});
+
 test("a row that opens nothing hears no keys, not even its acts'", () => {
   const heard: string[] = [];
   const container = draw(
@@ -846,4 +879,23 @@ test("an app hears whether a row's title is cut short, whenever its box resizes"
   width = 320;
   act(() => resized());
   expect(heard).toEqual([false, true]);
+});
+
+test("a regular row's description says it is cut short once its words run past its box", () => {
+  const resized = standInResizeObserver();
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const container = draw(
+    createElement(List, {
+      label: "Inbox",
+      children: createElement(ListRow, {
+        title: "Run the memberships migration on preview",
+        description: "The member who sent it / Any admin / Billing",
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  act(() => resized());
+  const description = container.querySelector(".luke-list-row-description");
+  expect(description?.getAttribute("data-overflow")).toBe("true");
 });

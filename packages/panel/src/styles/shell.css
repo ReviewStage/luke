@@ -5,7 +5,7 @@
    toolbar that heads a page there (`@luke/ui`'s `Toolbar`, which draws
    itself) and the room it leaves the title bar's buttons.
 
-   What stands in the sidebar, Luke's head over the column, the places under
+   What stands in the sidebar, the app's head over the column, the places under
    it, and the foot under them, is `@luke/ui`'s (`components/sidebar/`),
    drawn in utilities, and a phone's places bar is drawn in utilities where
    it is written (`mobile-bar.tsx`). What stays here is what utilities say

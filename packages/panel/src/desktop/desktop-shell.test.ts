@@ -22,7 +22,6 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { NAV_COUNT_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -475,7 +474,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, or Channels in its place, Automations, or Settings, and Luke once signed out", async () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, or Channels in its place, Automations, or Settings, and Vespin once signed out", async () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
@@ -501,7 +500,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
       titled(false, PANEL_TAB.TASKS, false),
       titled(false, PANEL_TAB.TASKS, true, [{ ...ACME, id: "workspace-other" }]),
     ],
-    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke", DOCUMENT_NAME],
+    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Vespin", DOCUMENT_NAME],
   );
 
   mount(false, false, {
@@ -694,7 +693,7 @@ test("a press on the Automations row in a floating sidebar puts the sidebar away
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
 
-test("the sidebar offers no Issues row, with every experiment on, since Luke keeps no issues of its own", async () => {
+test("the sidebar offers no Issues row, with every experiment on, since Vespin keeps no issues of its own", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   const page = mount(false);
   await settle();
@@ -710,7 +709,7 @@ test("with Channels on, the sidebar keeps the Tasks section and stands the chann
   const groups = [...sidebar.querySelectorAll("nav[aria-label]")].map((nav) =>
     nav.getAttribute("aria-label"),
   );
-  assert.ok(groups.includes("Tasks"), `the Tasks section stands: ${groups.join(", ")}`);
+  assert.ok(groups.includes("My tasks"), `the Tasks section stands: ${groups.join(", ")}`);
   assert.ok(!groups.includes("Channels"), "the channels head no section of their own");
   const inbox = () => placeRow(page, "Inbox") ?? assert.fail("the Inbox's row stands");
   assert.equal(
@@ -849,10 +848,6 @@ test("on a phone the bar's Inbox wears the count the drawer's row shows, named i
     /^Inbox3 need you/u,
     "the drawer counts the same",
   );
-  // Note that the drawer's count wears the unread dot's blue, not a tally's ink.
-  const toneOf = (row: HTMLElement | undefined) =>
-    row?.querySelector(".luke-nav-item-count")?.getAttribute("data-tone");
-  assert.equal(toneOf(placeRow(page, "Inbox")), NAV_COUNT_TONE.UNREAD);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1275,7 +1270,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
 });
 
 test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
-  const body = `## Rollout\n\nAs in [@the plan](https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
+  const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, false, {
     page: TASKS_PAGE.DOCUMENT,

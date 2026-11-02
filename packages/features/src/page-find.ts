@@ -1,12 +1,13 @@
 import { Schema as EffectSchema } from "effect";
+import { PAGE_LINK_SCRIPT } from "./page-link.js";
 
 /**
  * page-find.ts -- ⌘F in a plan's page as drawn: the find the page's frame runs over its own words, and the messages the side panel and the frame pass to drive it.
  *
  * A page is drawn in a frame sandboxed to its scripts alone, with an opaque
  * origin, so nothing in the panel reaches its words to find them. Every
- * server of a page therefore answers it with one script of Luke's own ahead of
- * the agent's HTML (`withPageFind`), which finds in the page's text at the
+ * server of a page therefore answers it with one script of our own ahead of
+ * the agent's HTML (`withPageScripts`), which finds in the page's text at the
  * panel's asking, tints the matches with the CSS Custom Highlight API rather
  * than wrapping them, so the page's own tree is never rewritten, and brings
  * the one the find is at into view. The panel's find bar is the one every
@@ -19,7 +20,7 @@ import { Schema as EffectSchema } from "effect";
  * and ⌘F, ⌘G, and ⇧⌘G pressed in it, which no key pressed in a frame
  * otherwise brings to the window's keymap.
  * The script runs among the page's own, so whatever the frame posts is the
- * page's word, not Luke's: the panel takes a message only from the frame it
+ * page's word, not ours: the panel takes a message only from the frame it
  * drew and only in the shape below, and what it takes is a count and a
  * selection, nothing it acts on beyond the find bar.
  */
@@ -86,7 +87,7 @@ export const pageFindAnswerSchema = EffectSchema.Union([
 
 /**
  * The script the frame runs, ahead of the page's own. It is plain JavaScript in
- * a string because it runs in the page, apart from every bundle of Luke's.
+ * a string because it runs in the page, apart from every bundle of ours.
  * A match is the query found in the page's text read as one string, case
  * aside, where an inline element runs on into its neighbours and any other
  * sets its text apart, as the panel's own find reads a tab; what is hidden
@@ -285,12 +286,14 @@ function doctypeEnd(html: string): number {
 }
 
 /**
- * The page as served: the find's script ahead of the agent's HTML, after
- * its doctype, so markup the page leaves open (a `<textarea>` or a comment
- * never closed) cannot swallow the script, and a page keeps the standards
- * mode its doctype asks for.
+ * The page as served: our scripts, the find's and the link's
+ * (`@luke/features/page-link`), ahead of the agent's HTML, after its
+ * doctype, so markup the page leaves open (a `<textarea>` or a comment
+ * never closed) cannot swallow them, and a page keeps the standards mode
+ * its doctype asks for.
  */
-export function withPageFind(html: string): string {
+export function withPageScripts(html: string): string {
   const end = doctypeEnd(html);
-  return `${html.slice(0, end)}<script>${PAGE_FIND_SCRIPT}</script>${html.slice(end)}`;
+  const scripts = `<script>${PAGE_FIND_SCRIPT}</script><script>${PAGE_LINK_SCRIPT}</script>`;
+  return `${html.slice(0, end)}${scripts}${html.slice(end)}`;
 }

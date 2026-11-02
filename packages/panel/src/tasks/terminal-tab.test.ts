@@ -36,6 +36,7 @@ import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -585,12 +586,8 @@ test("a service it cannot reach shows a bar that says so, whose action asks agai
   mountAnnouncer();
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
-  assert.equal(tab.bar(), "Luke's service did not answer.");
-  assert.equal(
-    announcedPolitely(),
-    "Luke's service did not answer.",
-    "the bar is said as it lands",
-  );
+  assert.equal(tab.bar(), "The service did not answer.");
+  assert.equal(announcedPolitely(), "The service did not answer.", "the bar is said as it lands");
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();
@@ -1071,6 +1068,26 @@ test("a shell row's ⋯, its right-click and the menu key open the same menu of 
     );
   });
   assert.deepEqual(offered(), SAME, "the menu key opens it");
+});
+
+test("under a finger, a shell row draws its × but no ⋯, and held it opens its menu", async () => {
+  underAFinger();
+  // Note that the screen listens on a media query by its old door, which a finger's stub leaves out.
+  const finger = vi.mocked(window.matchMedia);
+  const answer = finger.getMockImplementation() ?? assert.fail("a finger answers the window");
+  finger.mockImplementation((query) =>
+    Object.assign(answer(query), { addListener: () => undefined, removeListener: () => undefined }),
+  );
+  const tab = await mount();
+  const item = tab.container.querySelector<HTMLElement>('[aria-label="Shell list"] > li');
+  const row = item?.querySelector<HTMLButtonElement>(":scope > button, :scope button");
+  assert.ok(row, "the row stands");
+  assert.ok(item?.querySelector('button[aria-label="Shell actions"]') === null, "no ⋯");
+  assert.ok(item?.querySelector('button[aria-label="End shell"]'), "the × stands");
+
+  longPress(row);
+  const menu = document.querySelector('[role="menu"]:not([data-leaving])');
+  assert.equal(menu?.getAttribute("aria-label"), "Shell actions");
 });
 
 test("the shells list folds away beside the screen, and its toggle asks the panel to bring it back", async () => {

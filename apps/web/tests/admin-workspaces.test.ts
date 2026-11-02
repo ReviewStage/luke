@@ -13,7 +13,7 @@ import { choose, menuItems, openViewOptions } from "./support/view-options";
  * shared workspaces' four counts, lists each workspace with its owner and
  * GitHub installation, narrows the rows as a maintainer
  * types, asks for every workspace once View options' "Shared only" is cleared, and opens a
- * row's owner on a press. The network, the HTTP boundary to Luke, is a fake
+ * row's owner on a press. The network, the HTTP boundary to the service, is a fake
  * that answers every read with the list given and writes down what it was
  * asked.
  */

@@ -7,10 +7,10 @@ import {
 import { LINK_ORIGIN } from "./link-home.js";
 
 /**
- * open-address.ts -- what a web page at a Luke link reads off its address: the place it is a link to, spelled in the desktop's own scheme.
+ * open-address.ts -- what a web page at a link of ours reads off its address: the place it is a link to, spelled in the desktop's own scheme.
  *
  * The web app is served at every place's address, `/<workspace>/<kind>/…`,
- * on Luke's home and on a preview alike, and offers the place to the Mac app
+ * on our home and on a preview alike, and offers the place to the Mac app
  * (its sign-in's "Open in the Mac app", and the hand-off an account that
  * chose the app gets). Its path, its query (which names a comment thread of
  * a task), and its fragment are read as those of a link on the home,

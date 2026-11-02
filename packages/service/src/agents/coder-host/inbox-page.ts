@@ -31,7 +31,7 @@ import { CODER } from "./bounds.js";
  * still the inbox's is held, looked at again as each write to the task's
  * items, their threads, files, and read marks lands, which notifies the
  * task's topic, as the task's live read is woken (`taskInboxLive`), or
- * every `MESSAGES_POLL` where Luke Sync cannot wake it, each
+ * every `MESSAGES_POLL` where the sync hub cannot wake it, each
  * look reading where the items stand and none of their words, and let
  * go at `MESSAGES_HOLD` as a transcript read is (`transcript.ts`), so the
  * Inbox tab hears an item the moment it lands without asking on a clock of
@@ -50,7 +50,7 @@ import { CODER } from "./bounds.js";
  * answered at the hold's end at the latest. It looks again on the
  * account's topic, which an item written anywhere in its workspaces, its
  * own read marks, and its automations' runs notify, as the account's live
- * read is woken (`inboxLive`); where Luke Sync cannot wake it, it looks every
+ * read is woken (`inboxLive`); where the sync hub cannot wake it, it looks every
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
  * A reader that asks is listed the archived tasks holding items beside the

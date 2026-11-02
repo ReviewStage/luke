@@ -26,8 +26,8 @@ import {
  * runner's own (`runner-moments.ts`) is read here for what the transcript
  * keeps. Codex names no model call, so its items stand in: an agent message
  * is a step, its deltas drafting the step's words and its completion
- * telling them whole; a command, a file change, an MCP call, a web search
- * and a subagent call each start a call as their item starts and settle it
+ * telling them whole; a command, a file change, an MCP call, a web search,
+ * a picture looked at, and a subagent call each start a call as their item starts and settle it
  * as it completes; a reasoning item's summary is the step's reasoning; the
  * turn's plan is its todo list, one call for each time Codex sets it.
  * `turn/completed` ends one model turn, failed where Codex says so, with
@@ -39,8 +39,8 @@ import {
  * on a thread of its own, which its subagent call stands for, so anything
  * of a thread other than the session's is passed over but the end of its
  * turn, which settles the spawn that started it: the spawn answers the
- * moment the thread starts, so it is kept open until then. A call to Luke's own
- * MCP server is named as Luke's tool and its answer read as the JSON that
+ * moment the thread starts, so it is kept open until then. A call to our own
+ * MCP server is named as our tool and its answer read as the JSON that
  * tool answers, a picture in it standing in for its bytes; a call to an
  * integration's own server is stored as eve's call of that integration's
  * tool is, so it draws with the service's mark and the tool's own name. Each shape is
@@ -71,6 +71,7 @@ const ITEM = {
   MCP_TOOL_CALL: "mcpToolCall",
   WEB_SEARCH: "webSearch",
   SUBAGENT: "collabAgentToolCall",
+  IMAGE_VIEW: "imageView",
   COMPACTION: "contextCompaction",
 } as const;
 
@@ -109,6 +110,9 @@ const PLAN_REASON_STATUS: ReadonlyMap<string, PlanStatus> = new Map([
   ["invalid_user", PLAN_STATUS.INVALID],
   ["usage_limit_exceeded", PLAN_STATUS.LIMIT_REACHED],
 ]);
+
+/** The status OpenAI refuses a credential with, which a failed connection carries in its `codexErrorInfo`. */
+const HTTP_UNAUTHORIZED = 401;
 
 const readEnvelope = Schema.decodeUnknownOption(
   Schema.Struct({ method: Schema.String, params: Schema.Unknown }),
@@ -188,6 +192,9 @@ const readSubagent = Schema.decodeUnknownOption(
     agentsStates: Schema.optionalKey(WireValueSchema),
   }),
 );
+const readImageView = Schema.decodeUnknownOption(
+  Schema.Struct({ ...ITEM_FIELDS, path: Schema.String }),
+);
 const readTextBlock = Schema.decodeUnknownOption(
   Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
 );
@@ -256,7 +263,7 @@ interface Answered extends Call {
 }
 
 /**
- * An MCP result's text blocks joined. A picture in a Luke tool's answer is
+ * An MCP result's text blocks joined. A picture in our own tool's answer is
  * left out, so the JSON the tool answered reads whole; in any other server's
  * a stand-in takes the place of its bytes.
  */
@@ -272,8 +279,8 @@ function mcpAnswerText(content: readonly WireValue[], lukeTool: boolean): string
 }
 
 /**
- * The name and input a call to an MCP server is stored under: Luke's tool's
- * own for Luke's server; for an integration's own server, its integration's
+ * The name and input a call to an MCP server is stored under: our tool's own
+ * for our own server; for an integration's own server, its integration's
  * fixed name and envelope, as eve's nested call of the tool is stored
  * (`storedServerCall`); `mcpToolCall` naming the server and tool otherwise.
  */
@@ -371,6 +378,15 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
           output: { status: call.status, agentsStates: call.agentsStates ?? {} },
         },
         failed: FAILED_STATUSES.has(call.status),
+      }));
+    // Note that Codex reports no status for a picture it looked at, and the model read the picture itself, which stands in as a CLI tool's does.
+    case ITEM.IMAGE_VIEW:
+      return Option.map(readImageView(item), (view) => ({
+        callId: view.id,
+        name: CODEX_TOOL.IMAGE_VIEW,
+        input: { path: view.path },
+        answer: { lukeTool: false, text: PICTURE_STAND_IN, output: PICTURE_STAND_IN },
+        failed: false,
       }));
     default:
       return Option.none();
@@ -569,10 +585,21 @@ function usageMoments(params: unknown): readonly NativeMoment[] {
   });
 }
 
+/** The HTTP status one kind of a `codexErrorInfo` object carries, such as `httpConnectionFailed`'s 401. */
+function httpStatusOf(value: unknown): number | undefined {
+  return Predicate.isObject(value) &&
+    "httpStatusCode" in value &&
+    Predicate.isNumber(value.httpStatusCode)
+    ? value.httpStatusCode
+    : undefined;
+}
+
 /**
  * How a turn's `codexErrorInfo` found the plan: a usage limit, or a sign-in
- * not accepted; every other kind says nothing of the plan. A kind this pin
- * does not name says nothing either.
+ * or key not accepted; every other kind says nothing of the plan. A kind this
+ * pin does not name says nothing either. Note that Codex says an API key
+ * OpenAI refused, an expired one among them, as a connection that failed
+ * with a 401 rather than as `unauthorized`.
  */
 function planStatusOfInfo(info: unknown): PlanStatus | undefined {
   const kind = codexErrorKind(info);
@@ -582,6 +609,11 @@ function planStatusOfInfo(info: unknown): PlanStatus | undefined {
       return PLAN_STATUS.LIMIT_REACHED;
     case CODEX_ERROR_INFO.UNAUTHORIZED:
       return PLAN_STATUS.INVALID;
+    case CODEX_ERROR_INFO.HTTP_CONNECTION_FAILED:
+    case CODEX_ERROR_INFO.RESPONSE_STREAM_CONNECTION_FAILED:
+      return Predicate.isObject(info) && httpStatusOf(Object.values(info)[0]) === HTTP_UNAUTHORIZED
+        ? PLAN_STATUS.INVALID
+        : undefined;
     case CODEX_ERROR_INFO.CONTEXT_WINDOW_EXCEEDED:
     case CODEX_ERROR_INFO.SESSION_BUDGET_EXCEEDED:
     case CODEX_ERROR_INFO.RATE_LIMIT_EXCEEDED:
@@ -590,8 +622,6 @@ function planStatusOfInfo(info: unknown): PlanStatus | undefined {
     case CODEX_ERROR_INFO.CYBER_POLICY:
     case CODEX_ERROR_INFO.MISALIGNMENT_POLICY_VIOLATION:
     case CODEX_ERROR_INFO.TOO_MANY_DENIALS:
-    case CODEX_ERROR_INFO.HTTP_CONNECTION_FAILED:
-    case CODEX_ERROR_INFO.RESPONSE_STREAM_CONNECTION_FAILED:
     case CODEX_ERROR_INFO.INTERNAL_SERVER_ERROR:
     case CODEX_ERROR_INFO.BAD_REQUEST:
     case CODEX_ERROR_INFO.THREAD_ROLLBACK_FAILED:
@@ -611,13 +641,8 @@ function errorInfoWords(info: unknown): readonly string[] {
   if (Predicate.isString(info)) return [info];
   if (!Predicate.isObject(info)) return [];
   return Object.entries(info).flatMap(([name, value]) => {
-    const status =
-      Predicate.isObject(value) &&
-      "httpStatusCode" in value &&
-      Predicate.isNumber(value.httpStatusCode)
-        ? [String(value.httpStatusCode)]
-        : [];
-    return [name, ...status];
+    const status = httpStatusOf(value);
+    return status === undefined ? [name] : [name, String(status)];
   });
 }
 

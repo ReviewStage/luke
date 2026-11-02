@@ -23,7 +23,7 @@ import { reachTaskRepository, refused } from "./task-file.js";
  * from, a folder at a time as the developer opens one, so it is listed
  * exactly where and as the file is read (`task-file.ts`): the task is read
  * under the account first, so a task another account owns reads as no
- * task, then the Luke GitHub App confirms the account reaches the task's
+ * task, then our GitHub App confirms the account reaches the task's
  * repository and mints a token for that one repository, used for the one
  * listing and going nowhere else; the listing is of the head of the
  * repository's default branch, and names it. A secret file is listed by

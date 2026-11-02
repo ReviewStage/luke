@@ -41,8 +41,8 @@ import { OpenLinkProvider } from "./use-open-link.js";
 /**
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
  * agent carries their face and name under its bubble, as a teammate's line
- * on a call does, and the reader's own carries none; Luke's carries
- * his tile, an automation's its own, GitHub's the login it names, another
+ * on a call does, and the reader's own carries none; the app's carries
+ * its tile, an automation's its own, GitHub's the login it names, another
  * coding agent's its harness's mark by its name, where the service says
  * the model it runs on, and a member's who has left the quiet
  * outline, and a message from before senders were kept names nobody.
@@ -118,7 +118,7 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
   line("dean", "Use seven days.", { ...DEAN, kind: MEMBER }),
   { ...line("charles", "Not five.", { ...CHARLES, kind: MEMBER }), sentAt: CHARLES_SENT_AT },
   line("earlier", "Keep the old copy."),
-  line("luke", "Rebase on main.", { name: "Luke", kind: AGENT_SENDER.LUKE }),
+  line("luke", "Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.LUKE }),
   line("automation", "Triage the failures.", {
     name: "Nightly triage",
     kind: AGENT_SENDER.AUTOMATION,
@@ -141,8 +141,8 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
     model: "anthropic/claude-opus-5.5",
     agentId: SENDER_ID,
   }),
-  // A service older than the sender's kind names Luke by name alone.
-  line("older", "Rebase again.", { name: "Luke" }),
+  // A service older than the sender's kind names the app by name alone.
+  line("older", "Rebase again.", { name: "Vespin" }),
 ];
 
 /** A message's sender as a reader sees it: what kind of mark it wears, the name beside it, and the picture on it. */
@@ -244,7 +244,7 @@ async function sendersFor(
   });
 }
 
-test("each member sees a teammate's face and name under the teammate's messages and none under their own, Luke, an automation, and another agent each as itself, someone who left on an outline, and a message with no sender names nobody", async () => {
+test("each member sees a teammate's face and name under the teammate's messages and none under their own, Vespin, an automation, and another agent each as itself, someone who left on an outline, and a message with no sender names nobody", async () => {
   const deanSees = await sendersFor(DEAN.userId);
   act(() => root?.unmount());
   const charlesSees = await sendersFor(CHARLES.userId);
@@ -252,7 +252,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
 
   // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
   const others: readonly Seen[] = [
-    ["luke", ACTOR_KIND.LUKE, "Luke"],
+    ["luke", ACTOR_KIND.LUKE, "Vespin"],
     ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
     ["gone", ACTOR_KIND.SOMEONE, "Former member"],
     // GitHub names who caused what it told the agent of: a person by their login and its avatar, a bot by its App's.
@@ -268,7 +268,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
     // Another coding agent of the workspace is drawn as an agent, not a person, under its name.
     ["agent", ACTOR_KIND.AGENT, "Add PR overview tab"],
     ["claude-agent", ACTOR_KIND.AGENT, "Split view"],
-    ["older", ACTOR_KIND.SOMEONE, "Luke"],
+    ["older", ACTOR_KIND.SOMEONE, "Vespin"],
   ];
   assert.deepEqual(deanSees, [
     ["charles", ACTOR_KIND.PERSON, "Charles Pan", CHARLES_PICTURE],

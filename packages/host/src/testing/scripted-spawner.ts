@@ -5,10 +5,12 @@
  * after its delay, or never where it names no code. The spawner keeps the
  * platform's one promise about the scope a process is spawned in: a process
  * still running when that scope closes is ended, group and all, under the
- * signal and the SIGKILL grace its command asked for. What the process was
- * handed (program, arguments, working directory, environment, stdin) and
- * how it ended are kept for the test to read, which is what the operating
- * system would observe.
+ * signal and the SIGKILL grace its command asked for. A kill signals the
+ * process's group as the caller asked, and sets off what its script says
+ * a signal does. What the process was handed (program, arguments, working
+ * directory, environment, stdin), whether it was killed, and how it ended
+ * are kept for the test to read, which is what the operating system would
+ * observe.
  */
 
 import { Deferred, Duration, Effect, Layer, Sink, Stream } from "effect";
@@ -26,6 +28,14 @@ export interface Script {
   readonly after?: Duration.Input;
   /** What it runs until, in place of `after`, as a process that ends on a signal sent another way. */
   readonly until?: Effect.Effect<void>;
+  /** What a kill of its group sets off, as a process that handles the signal does. */
+  readonly killed?: Effect.Effect<void>;
+}
+
+/** How a process's group was killed: the signal, and the wait before SIGKILL. */
+interface Killed {
+  readonly killSignal: string;
+  readonly forceKillAfterMillis: number;
 }
 
 /** One process as the operating system saw it: what it was handed, and how it ended. */
@@ -37,10 +47,9 @@ interface Spawned {
   readonly extendEnv: boolean | undefined;
   readonly stdin: ChildProcess.CommandOptions["stdin"];
   /** How it ended: on its own, or ended with its group under the command's kill options. */
-  ended:
-    | "exited"
-    | "running"
-    | { readonly killSignal: string; readonly forceKillAfterMillis: number };
+  ended: "exited" | "running" | Killed;
+  /** How its group was killed while it ran, where it was. */
+  killed: Killed | undefined;
 }
 
 export interface ScriptedSpawner {
@@ -82,6 +91,7 @@ export function scriptedSpawner(
         extendEnv: command.options.extendEnv,
         stdin: command.options.stdin,
         ended: "running",
+        killed: undefined,
       };
       spawned.push(record);
       const exit = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
@@ -107,7 +117,15 @@ export function scriptedSpawner(
         pid: ChildProcessSpawner.ProcessId(spawned.length),
         exitCode: Deferred.await(exit),
         isRunning: Effect.map(Deferred.isDone(exit), (done) => !done),
-        kill: () => Effect.void,
+        kill: (options) =>
+          Effect.gen(function* () {
+            if (yield* Deferred.isDone(exit)) return;
+            record.killed = {
+              killSignal: options?.killSignal ?? command.options.killSignal ?? "SIGTERM",
+              forceKillAfterMillis: Duration.toMillis(options?.forceKillAfter ?? 0),
+            };
+            yield* script.killed ?? Effect.void;
+          }),
         stdin: Sink.drain,
         stdout: bytes(script.stdout),
         stderr: bytes(script.stderr),

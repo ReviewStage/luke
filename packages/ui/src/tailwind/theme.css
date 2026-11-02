@@ -327,7 +327,7 @@
      List, a column's width, a row's height, a maker's name's measure, and the
      List's columns as the view draws them. */
   --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
-  --spacing-welcome-face: 34px; /* off-scale: Luke's face on the welcome's tile */
+  --spacing-welcome-face: 34px; /* off-scale: the app's face on the welcome's tile */
   --spacing-welcome-composer: min(var(--luke-page-measure), 100%);
   --spacing-page-measure: var(--luke-page-measure);
   --spacing-row-context: 20ch; /* off-scale: a row's context, bounded in letters */
@@ -445,6 +445,9 @@
      menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
      out once seen. */
   --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
+  /* A phone's sheet rises and sinks on the pane's beat, so its scrim and its card fade on it too. */
+  --animate-sheet-scrim: luke-dialog-fade var(--luke-duration-pane) var(--luke-motion-pane);
+  --animate-sheet-leave: leave-fade var(--luke-duration-pane) var(--luke-motion-pane) forwards;
   --animate-dialog-in:
     luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
     luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast);
@@ -734,6 +737,7 @@
   ); /* the disc a press wears at its corner (`CornerBadge`) */
   --spacing-corner-badge-glyph: 10px; /* off-scale: the glyph on that disc */
   --spacing-section-icon-scroll: 220px; /* off-scale: the icon grid's room, about seven rows */
+  --container-section-icon-picker: 340px; /* off-scale: ten icon buttons and the picker's insets */
   --grid-template-columns-section-icons: repeat(
     10,
     28px
@@ -743,7 +747,7 @@
   /* An actor's mark (`@luke/panel`'s `actor-ref.tsx`): the opaque tile a
      member who left, and a pile's count, stand on, a step of ink over the
      ground, so the face a square overlaps never shows through it; the ground
-     a pile's ring cuts each face from; someone unnamed's outline; Luke's
+     a pile's ring cuts each face from; someone unnamed's outline; the app's
      face's share of his square; the member an agent acted for, at the
      corner; a pile's badge; and how far each face overlaps the one before. */
   --color-actor-tile: color-mix(in srgb, var(--luke-color-ink) 10%, var(--luke-color-ground));
@@ -754,19 +758,19 @@
     inset 0 0 0 1px var(--luke-color-border-strong),
     0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
   --shadow-actor-for-ring: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
-  --spacing-actor-face-share: 80%; /* off-scale: Luke's face, a share of his square */
+  --spacing-actor-face-share: 80%; /* off-scale: the app's face, a share of its square */
   --spacing-actor-for-x: 22%; /* off-scale: how far the face acted for stands past the mark's end */
   --spacing-actor-for-y: 18%; /* off-scale: and past its foot */
   --spacing-actor-for-near: 8%; /* off-scale: both, at a card's and a page's size */
   --spacing-actor-badge: 13px; /* off-scale: a pile face's badge */
   --spacing-actor-badge-glyph: 8px; /* off-scale: the badge's glyph */
   --spacing-actor-overlap: 5px; /* off-scale: how far each face overlaps the one before */
-  /* A sidebar row's end (`task-card.tsx`'s `SIDEBAR_ROW_TIME`): room for
-     two of a row's small acts and a hair, so times line up; the repository
+  /* A sidebar row's end (`task-card.tsx`'s `SIDEBAR_ROW_TIME`): its time's
+     own slot, as wide as its longest count, so the marks before it line up; the repository
      it names before its marks, cut short past a few words; the attention
      mark's glyph a size under the row's; the empty group's slot past its header's glyph; and the
      offline pill, its height, glyph, tint, and arrival. */
-  --spacing-sidebar-row-time: calc(2 * var(--luke-space-24) + var(--luke-space-2));
+  --spacing-sidebar-row-age: 3.5ch; /* off-scale: a time's longest count, "59m", in its tabular figures */
   --spacing-sidebar-row-repository: 7em; /* off-scale: a few words of a repository's name */
   --spacing-sidebar-slot-start: calc(
     var(--luke-row-inset) +
@@ -1056,14 +1060,15 @@
      face and a short date, and the row it shares with the ⋯, which hangs a
      step past the column (both measured on `.plan-body`, tasks.css, where the
      heading's room reads them too); the line under "Edited by" that Dismiss
-     overhangs; and the still wash of Luke's accent on a section changed since
+     overhangs; and the still wash of the app's accent on a section changed since
      the last look. */
   --spacing-plan-byline-room: var(--plan-byline-room);
   --spacing-plan-unit-row: calc(var(--plan-unit-row-room) + var(--luke-space-6));
   --spacing-plan-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
   --color-plan-changed: color-mix(in srgb, var(--accent) 9%, transparent);
   /* A transcript (`ai-elements/`): its column's inset; a reply's reading
-     leading; the developer's bubble, at most nearly the column, at a large
+     leading; a bubble, the developer's and a received one alike, at most
+     enough short of the column that the two sides stand apart, at a large
      corner; where a line's words start past its icon (`--transcript-gutter`,
      tasks.css), which what opens under a line is set in to; a call's chip at a pill's widest
      in its line; the measure of the line said in place of lines, and of a
@@ -1071,7 +1076,7 @@
      its own, ringed and lifted, kept inside the log's edges, and the ground a
      button floats on there; and the line of an address that opens nothing. */
   --spacing-content-inset: var(--content-inset);
-  --spacing-bubble: 95%; /* off-scale: a share of the column */
+  --spacing-bubble: 85%; /* off-scale: a share of the column */
   --spacing-transcript-gutter: var(--transcript-gutter);
   --spacing-tool-chip: var(--luke-inline-ref-pill-width);
   --spacing-conversation-empty: 280px; /* off-scale: a short line's measure */
@@ -1088,7 +1093,7 @@
      page's version steps, a control's gap less its own edge; a changed
      image's side, two to a row where they fit; a snippet's height before it
      is drawn, from its rows; a file's status letter's tint of its own ink;
-     and Luke's own colour, which his name is said in. */
+     and the app's own colour, which its name is said in. */
   --spacing-file-tree: min(
     var(--file-tree-width, 264px),
     40%
@@ -1178,7 +1183,7 @@
      screenful's worth, a screenshot's shape at a stand-in's width while its
      bytes are read, a caption a step under the words around it, a field
      under it that describes it anew, and the glyph a picture from outside
-     Luke is marked by. */
+     the app is marked by. */
   --spacing-picture-most: 520px; /* off-scale: a screenful's worth */
   --spacing-picture-stand-in: 480px; /* off-scale: a picture's width before its bytes are read */
   --aspect-screenshot: 16 / 10;
@@ -1186,6 +1191,13 @@
   --text-picture-caption--line-height: 1.45;
   --spacing-picture-describe: min(360px, 100%); /* off-scale: a description's field */
   --spacing-picture-glyph: 0.95em;
+  /* Pictures written side by side (`@luke/panel`'s `transcript-pictures`):
+     as many to a row as keep each wide enough for a video's bar, the rest
+     wrapping under them, a row of few sharing the column's width. */
+  --grid-template-columns-picture-row: repeat(
+    auto-fit,
+    minmax(min(220px, 100%), 1fr)
+  ); /* off-scale: a video's bar, its play, time, scrubber, Expand, and Full screen */
   /* The plan's comments (`plan-comments.tsx`): the margin past the column
      its cards stand in at their own width, a reply's line set in under the
      name past the writer's mark, and the quote's edge, struck where its

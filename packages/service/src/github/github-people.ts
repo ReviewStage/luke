@@ -1,13 +1,13 @@
 /**
- * github-people.ts -- who a pull request names, as an agent's changes carry them: each GitHub account by its login and avatar, and a member of the agent's workspace named by the Luke account their GitHub account is linked to.
+ * github-people.ts -- who a pull request names, as an agent's changes carry them: each GitHub account by its login and avatar, and a member of the agent's workspace named by the user account their GitHub account is linked to.
  *
  * GitHub names everyone by an account of its own, so a login alone would
- * draw a teammate as a stranger. A Luke account that signed in with GitHub
+ * draw a teammate as a stranger. A user account that signed in with GitHub
  * keeps a provider row whose `account_id` is GitHub's id for them, and a
  * pull request names that same id, so the two meet by id rather than by a
  * login a person may change. An account is named only where its holder is a
- * member of the agent's own workspace, so the answer never says which Luke
- * account stands behind someone outside it. Luke's own App's bot is named
+ * member of the agent's own workspace, so the answer never says which app
+ * account stands behind someone outside it. Our own App's bot is named
  * as any other App's bot is: by its login, as GitHub names it.
  *
  * Who a pull request names rides beside its files and is never what the

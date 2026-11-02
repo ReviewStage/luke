@@ -37,11 +37,10 @@ import { type BrowserLiveDependencies, type BrowserLiveViewer, relayBrowserTab }
  * page state follows, input is refused until the member takes the tab
  * over and reaches the page mapped onto it after, any socket of the member
  * whose takeover stands drives it, a member who does not control the agent
- * cannot take it, a close hands the tab back, and a
- * coding agent's sandbox is held while its tab is watched and Luke's is
- * not. A tab the browser no longer holds, or the store no longer lists,
- * closes as gone; an agent with no sandbox yet as not opened; and a panel
- * that sends nothing as idle.
+ * cannot take it, a close hands the tab back, and a coding agent's sandbox
+ * is held while its tab is watched. A tab the browser no longer holds, or
+ * the store no longer lists, closes as gone; an agent with no sandbox yet
+ * as not opened; and a panel that sends nothing as idle.
  */
 
 const SESSION = "wrun_live_fixture";
@@ -943,7 +942,7 @@ it.effect(
 );
 
 it.effect(
-  "a panel saying it is watching once a minute stays open past the idle bound and moves the lease on, though it sends nothing else",
+  "a panel saying it is watching once a minute stays open past the idle bound and moves the lease on, until the member has sent no input for the input bound",
   () =>
     Effect.gen(function* () {
       const { peer, browser, commands } = yield* liveBrowser();
@@ -954,16 +953,27 @@ it.effect(
         commands,
         Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
       );
-      for (let minute = 0; minute < 10; minute += 1) {
-        yield* TestClock.adjust(Duration.minutes(1));
-        yield* panel.push({ type: BROWSER_LIVE_CLIENT.WATCHING });
-        yield* settle;
-      }
+      const watchFor = (minutes: number) =>
+        Effect.gen(function* () {
+          for (let minute = 0; minute < minutes; minute += 1) {
+            yield* TestClock.adjust(Duration.minutes(1));
+            yield* panel.push({ type: BROWSER_LIVE_CLIENT.WATCHING });
+            yield* settle;
+          }
+        });
+      yield* watchFor(10);
       assert.deepEqual(panel.closed, [], "a watched panel stays open");
       assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.REFUSED), [], "watching drives nothing");
       assert.equal(store.holds.length, 11, "each minute's watching moved the lease on");
-      yield* panel.leave;
+
+      // A resize is the member's input, so the input bound runs from it.
+      yield* panel.push({ ...VIEWPORT, width: VIEWPORT.width + 1 });
+      yield* settle;
+      yield* watchFor(14);
+      assert.deepEqual(panel.closed, [], "input moved the input bound on");
+      yield* watchFor(2);
       yield* Fiber.join(fiber);
+      assert.deepEqual(panel.closed, [BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE]]);
     }),
 );
 

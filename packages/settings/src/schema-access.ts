@@ -82,7 +82,7 @@ const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFER
 
 const SHARED_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(SHARED_PREFERENCE_FIELDS);
 
-/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's Luke links open, and what Enter does in an agent's box while it works. */
+/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's app links open, and what Enter does in an agent's box while it works. */
 const OWN_PART_FIELDS = [
   APP_SETTING_SCHEMA.linkOpen.field,
   APP_SETTING_SCHEMA.agentEnter.field,

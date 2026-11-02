@@ -47,6 +47,7 @@ import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
@@ -99,7 +100,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * own edge, never folding, as Settings' page list does. At its head stand
  * back and forward and the Back row, which Escape presses too, then the
  * view's title, then the versions, newest first: who wrote each, drawn as
- * the rest of the window draws them (Luke's face as the Transcript wears
+ * the rest of the window draws them (the app's face as the Transcript wears
  * it, the reader's account picture as You, a teammate's sign-in picture
  * where the workspace's members read lists one, a coding agent's harness and
  * title), what it did, and how long ago, in the sidebar's few letters with
@@ -221,8 +222,9 @@ function sourceItem(source: SourceDoor): MenuAction {
 /**
  * One revision's row: who wrote it, what it did, and when; lit while its
  * version is drawn. Its ⋯ (`ListRow`'s `menu`) shows while the row is hovered
- * or holds the keyboard, and drops the same menu the row's right-click and
- * the menu key hang. A row with nothing to offer has none of them.
+ * or holds the keyboard, and drops the same menu the row's right-click, a
+ * long press, and the menu key hang; a finger's row draws no ⋯, as a phone's
+ * Inbox row draws none. A row with nothing to offer has none of them.
  */
 function RevisionRow({
   line,
@@ -255,6 +257,7 @@ function RevisionRow({
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
+  const coarse = useCoarsePointer();
   const groups = [
     [
       ...(copyLink === undefined ? [] : [copyLink]),
@@ -267,7 +270,7 @@ function RevisionRow({
       ? []
       : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
   ].filter((group) => group.length > 0);
-  // Note that the author's card hangs beside the row as the pointer rests on it, Luke's his own; an agent or an automation the version names by name alone hangs nothing.
+  // Note that the author's card hangs beside the row as the pointer rests on it, the app's its own; an agent or an automation the version names by name alone hangs nothing.
   const card = actorCard(author);
   return (
     <RowHintOptions card={card}>
@@ -289,6 +292,7 @@ function RevisionRow({
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         hint={card === undefined ? undefined : { Hint: RowHint, label: actorName(author) }}
         menu={rowMenu(VERSION_THING, groups)}
+        more={!coarse}
       />
     </RowHintOptions>
   );
@@ -347,7 +351,7 @@ function SectionsHead({
   );
 }
 
-/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn; its right-click offering Copy link and its revision's source. */
+/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn; its right-click, a long press, and the menu key offering Copy link and its revision's source, a finger's row drawing no ⋯ as a revision's draws none. */
 function SectionRow({
   section,
   selected,
@@ -366,6 +370,7 @@ function SectionRow({
   copyLink: MenuAction | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
+  const coarse = useCoarsePointer();
   const items = [
     ...(copyLink === undefined ? [] : [copyLink]),
     ...(source === undefined ? [] : [sourceItem(source)]),
@@ -378,6 +383,7 @@ function SectionRow({
       current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
       onPress={onSelect}
       menu={items.length === 0 ? undefined : rowMenu(SECTION_THING, [items])}
+      more={!coarse}
     />
   );
 }

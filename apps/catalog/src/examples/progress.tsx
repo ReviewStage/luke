@@ -3,6 +3,7 @@
  * at its start, part way, and done, and a bar of its own named by its label.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { GAP, Progress, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -17,7 +18,7 @@ function ProgressBars(): React.JSX.Element {
           {SHARES.map((share) => (
             <Stack key={share} gap={GAP.ICON}>
               <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                {`Downloading Luke 4.2 · ${String(share)}%`}
+                {`Downloading ${PRODUCT_NAME} 4.2 · ${String(share)}%`}
               </Text>
               <Progress value={share} />
             </Stack>

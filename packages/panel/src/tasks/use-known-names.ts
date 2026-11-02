@@ -12,16 +12,15 @@ import { useEffect, useMemo } from "react";
 import { tellAct } from "../act.js";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { appStateDerivedAtom } from "../use-app-state.js";
+import { APP_SLICE, appStateDerivedAtom } from "../use-app-state.js";
 import { useHeldChannels } from "./use-channels.js";
 
 /**
- * use-known-names.ts -- the names the window already holds for places in Luke, by id, for a chip to call a Luke link by.
+ * use-known-names.ts -- the names the window already holds for places in the app, by id, for a chip to call an app link by.
  *
  * Read from main's document, which every window holds: every task's title,
  * the agents each task's row names, as their tabs name them
- * (`agentName`, so an operator is Luke and an untitled agent goes by its
- * model), and the models they run on, the agents with no task the list
+ * (`agentName`, so an untitled agent goes by its model), and the models they run on, the agents with no task the list
  * carries, theirs, and the automations that started them, the active task's
  * pages, each task's key, the Inbox items waiting, and the agents an
  * automation started with no task; from the directories standing around
@@ -186,22 +185,23 @@ const heldWorkspacesAtom = Atom.map(namedSlicesAtom, ({ planning }) => planning?
 
 /**
  * The link each listed task's key names its task by, and each held
- * channel's name, `#app`, its channel by, which words written with either
- * among them are drawn with as its chip. A name two workspaces' channels
- * share names neither, as a key two tasks share does. The same object
- * until a key, a channel, or a link changes.
+ * channel's name, `#app`, its channel by. A name two workspaces' channels
+ * share names neither, as a key two tasks share does. It tells its readers
+ * only when a name or its link changed, never for a channel's other moves,
+ * such as a thread posted in it, because the words drawn with it are drawn
+ * again whole on each change (`transcript-blocks.tsx`'s `keySerial`), which
+ * would close a picture open over them.
  */
-export function useWordTargets(): ReadonlyMap<string, string> {
-  const keys = useAtomValue(heldKeyTargetsAtom);
-  const workspaces = useAtomValue(heldWorkspacesAtom);
-  const channels = useHeldChannels();
-  return useMemo(() => {
-    if (channels.size === 0) return keys;
+const heldWordTargetsAtom: Atom.Atom<ReadonlyMap<string, string>> = Atom.withEquality(
+  Atom.make((get) => {
+    const keys = get(heldKeyTargetsAtom);
+    const workspaces = get(heldWorkspacesAtom);
+    const channels = Object.entries(get(APP_SLICE.CHANNELS) ?? {});
     const targets = new Map(keys);
     const shared = new Set<string>();
-    for (const [workspaceId, held] of channels) {
+    for (const [workspaceId, read] of channels) {
       const slug = workspaces?.find((each) => each.id === workspaceId)?.slug ?? workspaceId;
-      for (const channel of held) {
+      for (const channel of read.rows?.open ?? []) {
         const name = `#${channel.name}`;
         if (targets.has(name)) shared.add(name);
         const mention = { kind: MENTION_KIND.CHANNEL, channelId: channel.id } as const;
@@ -210,7 +210,18 @@ export function useWordTargets(): ReadonlyMap<string, string> {
     }
     for (const name of shared) targets.delete(name);
     return targets;
-  }, [keys, workspaces, channels]);
+  }),
+  sameTargets,
+);
+
+/**
+ * The names words written with any among them are drawn with as a chip:
+ * each listed task's key and each held channel's name, by the link each
+ * names it with (`heldWordTargetsAtom`). The same object until a name or a
+ * link changes.
+ */
+export function useWordTargets(): ReadonlyMap<string, string> {
+  return useAtomValue(heldWordTargetsAtom);
 }
 
 /**

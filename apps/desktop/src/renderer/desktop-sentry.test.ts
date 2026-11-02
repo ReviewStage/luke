@@ -27,13 +27,6 @@ vi.stubGlobal("cancelIdleCallback", () => undefined);
 /** The envelopes the window handed main. */
 const envelopes: string[] = [];
 
-/** The status messages the window handed main's freeze watchdog, by their threshold. */
-const watchdogThresholds: number[] = [];
-
-/** Every window's SDK, and the panel's, which also has its page watched for freezes. */
-const EVERY_WINDOW = { reportsFreezes: false } as const;
-const PANEL_WINDOW = { reportsFreezes: true } as const;
-
 /** The IPC a preload exposes for Sentry, as `@sentry/electron/preload` names it, answered here in main's place. */
 const SENTRY_IPC = {
   "sentry-ipc": {
@@ -44,9 +37,7 @@ const SENTRY_IPC = {
       envelopes.push(body);
     },
     sendFeedback: async () => ({ statusCode: 200 }),
-    sendStatus: (status: { config: { anrThreshold: number } }) => {
-      watchdogThresholds.push(status.config.anrThreshold);
-    },
+    sendStatus: () => undefined,
     sendStructuredLog: () => undefined,
     sendMetric: () => undefined,
   },
@@ -54,7 +45,6 @@ const SENTRY_IPC = {
 
 afterEach(() => {
   envelopes.length = 0;
-  watchdogThresholds.length = 0;
   idleCallbacks.length = 0;
   vi.restoreAllMocks();
   // Each test's window starts its SDK anew, as each window does once.
@@ -104,7 +94,7 @@ function sentExceptions(): { value: string | undefined; mechanism: string | unde
 
 test("a blank window reported before the SDK loads is handed to main once it has", async () => {
   Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
-  const sentry = startDesktopSentry(EVERY_WINDOW);
+  const sentry = startDesktopSentry();
 
   sentry.reportBlankWindow(
     new Error("the window's state could not be read"),
@@ -124,7 +114,7 @@ test("a blank window reported before the SDK loads is handed to main once it has
 
 test("a window whose surface has committed loads the SDK in its next idle moment, and what was reported before is sent", async () => {
   Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
-  const sentry = startDesktopSentry(EVERY_WINDOW);
+  const sentry = startDesktopSentry();
   const draw = createReportingRoot(document.createElement("div"), sentry);
 
   sentry.reportBlankWindow(new Error("said while the window drew"), BLANK_WINDOW.FIRST_READ);
@@ -141,7 +131,7 @@ test("a window whose surface has committed loads the SDK in its next idle moment
 
 test("a surface that fails its first render is handed to main as a blank window, with no commit to wait for", async () => {
   Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
-  const sentry = startDesktopSentry(EVERY_WINDOW);
+  const sentry = startDesktopSentry();
   const draw = createReportingRoot(document.createElement("div"), sentry);
   const Broken = () => {
     throw new Error("the surface fell over");
@@ -167,7 +157,7 @@ test("a span the panel timed before the SDK loads is sent once it has, with what
   Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
   // Note that the trace sample rate keeps a tenth of spans; this one is kept.
   vi.spyOn(Math, "random").mockReturnValue(0);
-  const sentry = startDesktopSentry(EVERY_WINDOW);
+  const sentry = startDesktopSentry();
   const startedAt = Date.now() - 1_500;
 
   sentry.recordSpan({
@@ -201,7 +191,7 @@ test("a span the panel timed before the SDK loads is sent once it has, with what
 test("a span the sample leaves out is never measured", async () => {
   Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
   vi.spyOn(Math, "random").mockReturnValue(0.99);
-  const sentry = startDesktopSentry(EVERY_WINDOW);
+  const sentry = startDesktopSentry();
   let measured = false;
 
   sentry.recordSpan({
@@ -219,24 +209,4 @@ test("a span the sample leaves out is never measured", async () => {
 
   assert.equal(measured, false);
   assert.doesNotMatch(JSON.stringify(sentItems()), /task\.open/);
-});
-
-test("a window other than the panel has its page watched for no freeze", async () => {
-  Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
-  const sentry = startDesktopSentry(EVERY_WINDOW);
-  sentry.load();
-  await sentry.settled;
-
-  assert.deepEqual(watchdogThresholds, []);
-});
-
-// Note that this runs last, because the watchdog's heartbeat the SDK arms
-// outlives the test.
-test("the panel's page is watched for freezes past a second", async () => {
-  Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
-  const sentry = startDesktopSentry(PANEL_WINDOW);
-  sentry.load();
-  await sentry.settled;
-
-  assert.deepEqual(watchdogThresholds, [1_000]);
 });

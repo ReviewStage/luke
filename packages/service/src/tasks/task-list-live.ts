@@ -15,7 +15,7 @@ import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { automationRun } from "@luke/database/schemas/automation";
 import { task } from "@luke/database/schemas/task";
-import { AGENT_BRIEF, AGENT_KIND, type AgentKind } from "@luke/features/agent-wire";
+import { AGENT_BRIEF, AGENT_KIND } from "@luke/features/agent-wire";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
@@ -23,7 +23,6 @@ import {
   awaitingLineAtIn,
   lastSettledAtIn,
   latestTurnOf,
-  quietTurnOf,
   sessionEndedOf,
 } from "../live/agent-standing.js";
 
@@ -51,7 +50,6 @@ const starter = alias(user, "starter");
 const archiver = alias(user, "archiver");
 const assignee = alias(user, "assignee");
 const starterPilot = alias(agentTable, "starter_pilot");
-const starterOperator = alias(agentTable, "starter_operator");
 
 /** The statements the plan list is subscribed to live. */
 export interface TaskListLiveStatements {
@@ -127,12 +125,7 @@ function issuesStatement() {
  * its conversation runs on, and the Mac it runs on by its name, as
  * `devicesNamed` reads them. Note that the Mac's last beat is not read,
  * because a beat wakes nothing (`deviceSync`) and a window judges a Mac by
- * its own presence read. Note too that the kind is answered as a coder for
- * every agent but an operator, a task's pilot among them, because a desktop
- * from before pilots decodes a kind it does not know as no list at all, and
- * a pilot is said by a column of its own, which such a desktop ignores; it
- * goes with the minimum supported desktop version, as `archivedAt` above
- * does, once that version reads an unknown kind as a coder (`agentKindSchema`).
+ * its own presence read. Note too that a pilot is said by a column of its own.
  */
 function agentsStatement(userId: string) {
   const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
@@ -147,7 +140,6 @@ function agentsStatement(userId: string) {
           effort: agentTable.effort,
           contextWindow: agentTable.contextWindow,
           title: agentTable.title,
-          kind: sql<AgentKind>`case when ${agentTable.kind} = ${AGENT_KIND.OPERATOR} then ${AGENT_KIND.OPERATOR} else ${AGENT_KIND.CODER} end`,
           brief: sql<string>`case when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT} when ${agentTable.planSnapshot} is not null then ${AGENT_BRIEF.PLAN} else ${AGENT_BRIEF.BLANK} end`,
           repository: agentTable.repository,
           starterId: agentTable.userId,
@@ -160,7 +152,6 @@ function agentsStatement(userId: string) {
           automationName: sql<string | null>`${agentTable.automationOrigin} ->> 'name'`,
           runId: agentTable.automationRunId,
           runAutomationId: automationRun.automationId,
-          starterOperatorId: starterOperator.id,
           archivedBy: agentTable.archivedBy,
           archiverName: archiver.name,
           disabledServers: agentTable.disabledServers,
@@ -175,7 +166,6 @@ function agentsStatement(userId: string) {
           turnStatus: latest.status,
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
-          quietTurn: quietTurnOf(agentTable.kind, agentTable.conversationId, latest),
           pilot: sql<boolean>`${agentTable.kind} = ${AGENT_KIND.PILOT}`,
         },
         {
@@ -202,13 +192,6 @@ function agentsStatement(userId: string) {
       ),
     )
     .leftJoin(automationRun, eq(automationRun.id, agentTable.automationRunId))
-    .leftJoin(
-      starterOperator,
-      and(
-        eq(starterOperator.id, agentTable.startedByAgentId),
-        eq(starterOperator.kind, AGENT_KIND.OPERATOR),
-      ),
-    )
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
     .leftJoin(conversations, eq(conversations.id, agentTable.conversationId))
     .leftJoin(device, eq(device.id, agentTable.deviceId))

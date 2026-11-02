@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { GITHUB_TOKEN_ABSENCE, memberGitHubToken } from "./github-token.js";
@@ -140,6 +141,7 @@ const openMembers = Effect.gen(function* () {
         Layer.succeed(Clock.Clock, yield* Clock.Clock),
         Layer.succeed(HostedEnvironment, environment),
         fake.layer,
+        ANALYTICS.layer,
         Logger.layer([recorder]),
       );
       const response = yield* hostedAnswer({ githubToken: procedures }, services, request);
@@ -158,6 +160,12 @@ const openMembers = Effect.gen(function* () {
   return { owner, ask, send, checks: fake.requests, logged };
 });
 
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+const countedFor = (userId: string) =>
+  ANALYTICS.recorded.filter((event) => event.userId === userId);
+
 function answerOf(answered: { status: number; body: WireBoundaryInput }): GitHubTokenAnswer {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
   const read = readEither(githubTokenAnswerSchema)(unparsedWire(answered.body));
@@ -175,6 +183,11 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
 
         const saved = yield* ask(owner, "PUT", { token: TOKEN.GOOD });
         const read = yield* ask(owner);
+        assert.deepEqual(
+          countedFor(owner),
+          [{ name: SERVER_EVENT.GITHUB_TOKEN_SAVE, userId: owner, properties: {} }],
+          "a save is counted once, a read none",
+        );
         const opened = yield* memberGitHubToken(owner).pipe(
           Effect.provideService(HostedEnvironment, ENVIRONMENT),
         );
@@ -256,6 +269,7 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
           { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE },
           { token: null, rejected: GITHUB_TOKEN_REJECTION.OTHER_USER },
         ]);
+        assert.deepEqual(countedFor(owner), [], "a token that was not kept is not counted");
         assert.ok(
           checks.every((check) => !check.authorization?.includes(TOKEN.FINE_GRAINED)),
           "a fine-grained token is never sent to GitHub",

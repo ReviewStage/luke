@@ -22,7 +22,7 @@ import {
 /**
  * route.ts -- the one table of where an address pressed opens: beside the surface it was pressed on, at a place the window goes to, or in the browser.
  *
- * An address (`addressOf`) is a place in Luke as its link names it, or a
+ * An address (`addressOf`) is a place in the app as its link names it, or a
  * page on the web: a pull request's on GitHub, a file's of a repository, or
  * any other. A surface (`Here`) is what the press came from and what that
  * holds: an Inbox item and what holds it, a task's page, an agent's page,
@@ -49,7 +49,7 @@ import {
  * - A task's page and an agent's page preview a pull request one of their
  *   agents opened, an archived one's among them, in its Pull request tab, and
  *   any other of their repository by its number in their first agent's.
- * - The window goes to every place in Luke, and to the Pull request tab of a
+ * - The window goes to every place in the app, and to the Pull request tab of a
  *   pull request a listed task's or a listed agent on no task's agent opened;
  *   anything else leaves for the browser, as everything does outside the
  *   window.
@@ -62,7 +62,7 @@ import {
 
 /** The kinds of address a press names. */
 export const ADDRESS = {
-  /** A place in Luke, as its link names it, or an older `luke://plan/` names a task or a section. */
+  /** A place in the app, as its link names it, or an older `luke://plan/` names a task or a section. */
   PLACE: "place",
   /** A pull request's page on GitHub, or any page under it. */
   PULL_REQUEST: "pull-request",
@@ -142,7 +142,7 @@ export type Here =
   | ({ readonly kind: typeof HERE.TASK | typeof HERE.AGENT } & Holding)
   | {
       readonly kind: typeof HERE.WINDOW;
-      /** Whether the window opens a place at all; outside it, as in a test of one surface, a Luke link opens in the browser. */
+      /** Whether the window opens a place at all; outside it, as in a test of one surface, an app link opens in the browser. */
       readonly opensPlaces: boolean;
       /** What the window lists, whose pull requests open in their Pull request tabs; none inside a pull request's own tab, where a link to one leaves for GitHub. */
       readonly listed: Listed | undefined;
@@ -157,7 +157,7 @@ export type Here =
 export const THING = {
   FILE: "file",
   PAGE: "page",
-  /** An agent's Changes, its Pull request tab, as a Luke link names it. */
+  /** An agent's Changes, its Pull request tab, as an app link names it. */
   CHANGES: "changes",
   /** An agent's transcript, at one of its messages where the link names one. */
   TRANSCRIPT: "transcript",
@@ -295,7 +295,7 @@ function itemOfInbox(
     : NOTHING;
 }
 
-/** A place in Luke pressed on an Inbox item: a page, an agent's Changes or a review thread of its pull request, an agent of what holds it or one of its messages, opens beside it, another Inbox item is chosen in its Inbox, and any other place is the window's. */
+/** A place in the app pressed on an Inbox item: a page, an agent's Changes or a review thread of its pull request, an agent of what holds it or one of its messages, opens beside it, another Inbox item is chosen in its Inbox, and any other place is the window's. */
 function itemPlace(link: ReadLink, here: InboxItemHere): Route {
   const at = link.place;
   switch (at.kind) {
@@ -414,7 +414,7 @@ function external(address: Address): Route {
   return address.href === undefined ? NOTHING : { kind: ROUTE.EXTERNAL, href: address.href };
 }
 
-/** An address no surface took: a place in Luke goes there, a listed task's or agent's pull request to its Pull request tab, and anything else, or everything outside the window, leaves for the browser. */
+/** An address no surface took: a place in the app goes there, a listed task's or agent's pull request to its Pull request tab, and anything else, or everything outside the window, leaves for the browser. */
 function throughWindow(address: Address, here: WindowHere): Route {
   if (!here.opensPlaces) return external(address);
   if (address.kind === ADDRESS.PLACE) return go(address.link);
@@ -471,7 +471,7 @@ function onTasksTab(address: Address, here: TasksTabHere): Route {
 }
 
 /**
- * The address a link is: a place a Luke link names, or a task or a section
+ * The address a link is: a place an app link names, or a task or a section
  * an older `luke://plan/` does; a pull request's page on GitHub, or any page
  * under it; a file's page, read against its own repository, which a surface
  * then holds it to, or an older `luke://file/`, which names none; and any

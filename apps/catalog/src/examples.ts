@@ -89,6 +89,7 @@ import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PORTAL_FENCE_EXAMPLE } from "./examples/portal-fence";
 import { PRESS_SHORTCUTS_EXAMPLE } from "./examples/press-shortcuts";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
+import { PROGRESS_RINGS_EXAMPLE } from "./examples/progress-rings";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
@@ -258,6 +259,7 @@ export const EXAMPLES: readonly Example[] = [
   POPOVER_PANELS_EXAMPLE,
   PRESS_SHORTCUTS_EXAMPLE,
   PROGRESS_EXAMPLE,
+  PROGRESS_RINGS_EXAMPLE,
   PROSE_EXAMPLE,
   PROVIDER_BUTTONS_EXAMPLE,
   ROLLING_NUMBER_EXAMPLE,

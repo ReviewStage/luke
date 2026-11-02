@@ -1,7 +1,7 @@
 /**
- * load-link.ts -- the tab's own address opened as a Luke link: once as the page loads, and again whenever the browser lands on an entry no step was saved in.
+ * load-link.ts -- the tab's own address opened as an app link: once as the page loads, and again whenever the browser lands on an entry no step was saved in.
  *
- * The web serves the panel at every Luke link's own path, so the address a
+ * The web serves the panel at every app link's own path, so the address a
  * tab is opened at is the link it was opened from on another host. It is
  * rebased onto the link home, so `readShownLink` reads it as the desktop reads a
  * link it is handed, and said once through the bridge's `onShowLink`, which

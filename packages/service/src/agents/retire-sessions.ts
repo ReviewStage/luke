@@ -17,7 +17,7 @@ import {
 } from "./eve-host/eve-sessions.js";
 
 /**
- * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a task's or an agent's at its delete, an account's at its deletion.
+ * retire-sessions.ts -- the eve sessions we let go of, retired for good: a task's or an agent's at its delete, an account's at its deletion.
  *
  * A session retired ends its workflow run, a turn under way and the workers
  * it handed out with it, and takes nothing again, so Vercel Workflow can
@@ -39,7 +39,7 @@ import {
  * same (`session-sandboxes.ts`). The one exception is a delete that cannot
  * name its caller to eve at all, which `retiringReach` refuses before it
  * changes anything. Only a coding agent's session is asked: a task's own
- * Luke's, from before every turn was an agent's, ran under an eve service
+ * session, from before every turn was an agent's, ran under an eve service
  * that stands no more, and its sandbox is left to the sweep.
  */
 

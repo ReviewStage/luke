@@ -2,7 +2,7 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * pagination.tsx -- shadcn/ui's pagination (style `base-nova`), vendored in part: the row and its elision, drawn in Luke's caption figures.
+ * pagination.tsx -- shadcn/ui's pagination (style `base-nova`), vendored in part: the row and its elision, drawn in our caption figures.
  *
  * The parts kept are shadcn's own source, as close to it as the window
  * allows, so a later `shadcn add pagination` reads as a small diff. Only the
@@ -19,7 +19,7 @@ import { cn } from "../cn.js";
  *   meets each item as a link or a figure rather than a list item. Its
  *   `role="navigation"` and English `aria-label` are dropped, because a
  *   `<nav>` is the landmark already and its caller names it.
- * - The row is Luke's: its items a small step apart, and without numbers
+ * - The row is our own: its items a small step apart, and without numbers
  *   (no `data-numbered`) its two steps at either end of the row, rather
  *   than shadcn's centred row.
  * - `PaginationEllipsis` draws the "…" the caller hands it, read as it is,

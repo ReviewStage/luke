@@ -1,7 +1,7 @@
 /**
  * channels-fixture.ts -- the synthetic workspace the `channels` fixture profiles draw: its channels, staged on the document as the host holds them, their threads, and the answers the Channels view's writes take in place of the service's (STAG-547).
  *
- * The Inbox fixture's machinery (`inbox-fixture.ts`) over Luke's own kind of
+ * The Inbox fixture's machinery (`inbox-fixture.ts`) over our own kind of
  * work: two people, a handful of tasks across the app, the service, and
  * infra, and threads in each channel, open asks of each kind and notices,
  * some settled on earlier days. `channels` reads it as Dean, and
@@ -12,12 +12,7 @@
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import {
-  AGENT_KIND,
-  AGENT_STATUS,
-  type AgentSummary,
-  PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+import { AGENT_STATUS, type AgentSummary, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
@@ -35,7 +30,6 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { LIVE_READ } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { OPERATOR_NAME } from "@luke/features/model-label";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import {
@@ -284,7 +278,7 @@ const TASKS: readonly TaskSeed[] = [
   },
 ];
 
-/** The reader's operator, Luke, an agent no task holds and no automation started, in no repository, which the Inbox lists under Luke. */
+/** The reader's agent that no task holds and no automation started, in no repository, which the Inbox lists under its own name. */
 interface StraySeed {
   readonly agentId: string;
   readonly agentTitle: string;
@@ -293,7 +287,7 @@ interface StraySeed {
 
 const STRAY: StraySeed = {
   agentId: AGENT.STRAY,
-  agentTitle: OPERATOR_NAME,
+  agentTitle: "Release checklist",
   owner: DEAN,
 };
 
@@ -1012,14 +1006,13 @@ function waiting(): readonly AppInboxTask[] {
   });
 }
 
-/** Luke's open threads, as main lists the items of agents with no task. */
+/** The stray agent's open threads, as main lists the items of agents with no task. */
 function taskless(): readonly AppInboxTasklessItem[] {
   return strayItems()
     .filter((each) => each.status === INBOX_STATUS.OPEN)
     .map(({ id, agentId, title, postedAt, updatedAt }) => ({
       id,
       agentId,
-      agentKind: AGENT_KIND.OPERATOR,
       title,
       postedAt,
       updatedAt,
@@ -1118,7 +1111,7 @@ const STAGE: Workspace = stage({
   github: null,
 });
 
-/** The list as the channels profiles draw it: the first workspace named Stage, holding Luke's tasks alone. */
+/** The list as the channels profiles draw it: the first workspace named Stage, holding our own tasks alone. */
 export function channelsTasksView(profile: string, list: TasksView): TasksView {
   if (!READERS.has(profile)) return list;
   return {
@@ -1250,7 +1243,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
           agent: {
             id: STRAY.agentId,
             planId: null,
-            kind: AGENT_KIND.OPERATOR,
             model: MODEL,
             effort: "high",
             title: STRAY.agentTitle,

@@ -1,0 +1,5 @@
+-- Expand step of dropping a device agent's saved state, "agent_state_generation", "agent_state_key", and
+-- "agent_state_upload": the modules no longer declare them, and nothing this deployment runs reads or writes
+-- them. Note that the tables themselves stay one deployment longer, because a build migrates while the
+-- deployment before it still serves and still writes them; a later release's migration drops them
+-- (apps/web/server/README.md, "Dropping a column ... takes two deployments").

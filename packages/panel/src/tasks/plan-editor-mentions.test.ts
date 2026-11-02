@@ -181,11 +181,11 @@ test("an @ typed in the plan offers the plan's sections and, as the word is type
 
   assert.deepEqual(empty, [
     ["Plan", ["Goal", "Rollout", "Teammate invitations"]],
-    ["Mention from", ["Files and folders", "Plan", "Dates"]],
+    ["Mention from", ["Plan", "Files and folders", "Dates"]],
   ]);
   assert.deepEqual(listed(task.container), [
-    ["Files and folders", ["rollout-store.ts"]],
     ["Plan", ["Rollout"]],
+    ["Files and folders", ["rollout-store.ts"]],
   ]);
 });
 
@@ -193,7 +193,6 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
   const task = await opened();
 
   await task.typeAtEnd(" See @roll");
-  task.press("ArrowDown");
   task.press("Enter");
   await act(async () => undefined);
 
@@ -307,7 +306,7 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
 
   assert.deepEqual(
     listed(plan.container).map(([group]) => group),
-    ["Plan", "Pages", "Agents", "Mention from"],
+    ["Agents", "Plan", "Pages", "Mention from"],
   );
 });
 
@@ -384,6 +383,7 @@ test("a bare @ in the plan narrows by its kind's row to the repository's paths, 
   const plan = await opened();
 
   await plan.typeAtEnd(" See @");
+  plan.press("ArrowDown");
   plan.press("ArrowDown");
   plan.press("ArrowDown");
   plan.press("ArrowDown");

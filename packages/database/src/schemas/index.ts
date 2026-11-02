@@ -1,4 +1,4 @@
-// Better Auth owns its generated schema; Luke-owned tables can join this
+// Better Auth owns its generated schema; our own tables can join this
 // aggregate from their own schema modules without being overwritten by it.
 export * from "./account-provider-key.js";
 export * from "./agent.js";
@@ -6,7 +6,6 @@ export * from "./agent-browser-tab.js";
 export * from "./agent-pin.js";
 export * from "./agent-queue.js";
 export * from "./agent-runner-lease.js";
-export * from "./agent-state.js";
 export * from "./agent-wakeup.js";
 export * from "./attachment.js";
 export * from "./auth.js";
@@ -20,8 +19,8 @@ export * from "./github-install-intent.js";
 export * from "./github-installation.js";
 export * from "./github-personal-token.js";
 export * from "./github-rate-hold.js";
+export * from "./github-repository.js";
 export * from "./github-repository-read.js";
-export * from "./host-install-token.js";
 export * from "./host-pairing.js";
 export * from "./inbox.js";
 export * from "./inbox-item-read.js";
@@ -32,7 +31,6 @@ export * from "./integration-installation.js";
 export * from "./mac-command.js";
 export * from "./memory.js";
 export * from "./native-call-key.js";
-export * from "./operator-notice.js";
 export * from "./personal-workspace.js";
 export * from "./plan-comment.js";
 export * from "./plan-page.js";

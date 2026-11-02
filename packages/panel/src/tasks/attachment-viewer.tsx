@@ -29,6 +29,7 @@ import {
   ThumbStrip,
   Tooltip,
   useImageZoom,
+  usePageSwipe,
   usePictureExpand,
   VIDEO_PLAYER_PLACE,
   VideoPlayer,
@@ -45,7 +46,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { DIAGRAM_REFUSED_LINE } from "../bundle-loader.js";
 import {
   copyImageThroughShell,
@@ -69,7 +70,9 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
+ * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). Its card
+ * fills the room whatever the picture's shape, as Slack's and Quick Look's
+ * frames do, so the header stands still while the picture is zoomed. A video,
  * such as one an agent recorded and opened from its Expand,
  * plays at once as large as the card lets it, with the player's own
  * controls, Full screen among them (`@luke/ui`'s VideoPlayer). A Mermaid
@@ -100,7 +103,10 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * On a phone the header is a phone's (`phone-head.tsx`): Close alone at its
  * start, the file's name centred over its size and note, and one ⋯ at its
  * end holding every other button of the header, the arrow keys still
- * walking the files.
+ * walking the files. On a touch screen a finger swiping sideways across the
+ * viewer walks the files too, the file shown following it until it is let
+ * go (`@luke/ui`'s `usePageSwipe`), unless the picture is zoomed, where the
+ * finger moves the picture instead.
  *
  * Note that a PDF is shown by its icon rather than drawn, because the
  * window's policy refuses the frames and objects Chromium draws one in.
@@ -475,6 +481,7 @@ export function AttachmentViewer({
   opening?: ImageOpening;
 }): React.JSX.Element | null {
   const titleId = useId();
+  const viewer = useRef<HTMLDivElement>(null);
   const phone = usePhoneRoom();
   const copyText = useCopyToast();
   const copyImage = useImageCopyToast();
@@ -503,21 +510,24 @@ export function AttachmentViewer({
   const [opened] = useState({ at, url: file?.url });
   const expand = usePictureExpand(at === opened.at && file?.url === opened.url);
   const close = () => expand.close(onClose);
-
-  if (file === undefined) return null;
   // Note that the walk goes round from either end rather than stopping,
   // because a button that went disabled under the pointer would drop the
   // keyboard's focus out of the card.
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
+  // A zoomed picture takes a finger's drag to move it, so the swipe stands down while it is zoomed.
+  usePageSwipe({ enabled: files.length > 1 && !zoom.zoomed, surface: viewer, onStep: walk });
+
+  if (file === undefined) return null;
   const image = picture !== undefined;
   const video = view === ATTACHMENT_VIEW.VIDEO;
   // The place's own action takes the file itself, so it is offered for a picture or a video, never a diagram's code.
   const media = view === ATTACHMENT_VIEW.IMAGE || video;
   // A phone walks the files from its ⋯ and the arrow keys, with no room beside the card for the arrows or under it for the strip.
   const walking = !phone && files.length > 1;
-  // A picture or a video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does,
-  // and a picture opened at its own pixels, a diagram to be moved about in, fills the room it is moved in.
-  const hug = !phone && (video || (image && opening === IMAGE_OPENING.FITTED));
+  // A video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does.
+  // Note that a picture's card fills the room, because a picture is zoomed inside it,
+  // and a card of its fitted shape would either show a zoomed tall picture through a slit or resize its header on every zoom.
+  const hug = !phone && video;
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -548,6 +558,7 @@ export function AttachmentViewer({
       expand={expand}
     >
       <div
+        ref={viewer}
         className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-luke-16"
         data-view={view}
         data-opening={opening}
@@ -705,14 +716,16 @@ export function AttachmentViewer({
           <div className="attachment-viewer-strip flex flex-none justify-center" {...DIALOG_VEIL}>
             <ThumbStrip
               label={STRIP_LABEL}
-              items={files.map((each) => ({
-                name: each.name,
-                image: attachmentView(each) === ATTACHMENT_VIEW.IMAGE ? each.url : undefined,
-                glyph:
-                  attachmentView(each) === ATTACHMENT_VIEW.IMAGE ? undefined : (
-                    <FileTypeIcon name={each.name} />
-                  ),
-              }))}
+              items={files.map((each) => {
+                const view = attachmentView(each);
+                const drawn = view === ATTACHMENT_VIEW.IMAGE || view === ATTACHMENT_VIEW.VIDEO;
+                return {
+                  name: each.name,
+                  image: view === ATTACHMENT_VIEW.IMAGE ? each.url : undefined,
+                  video: view === ATTACHMENT_VIEW.VIDEO ? each.url : undefined,
+                  glyph: drawn ? undefined : <FileTypeIcon name={each.name} />,
+                };
+              })}
               at={at}
               onPick={onAt}
             />

@@ -7,11 +7,7 @@ import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
 import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { INBOX_MESSAGE_AUTHOR } from "@luke/features/inbox-wire";
-import {
-  memberOpenAsks,
-  readInboxAttachment,
-  readInboxItem,
-} from "@luke/service/inbox/inbox-store";
+import { readInboxAttachment, readInboxItem } from "@luke/service/inbox/inbox-store";
 import { Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -26,8 +22,7 @@ import * as SqlClient from "effect/sql/SqlClient";
  * address escaped as a post writes them, its picture as that message's
  * file, and the ask its response stood for, open, answered, or withdrawn as
  * the item stood; an answer reads as the member's message answering that
- * ask, with the note as its words and the answer's files as its own; the
- * open ask is the one the operator's read finds; an item the version 4
+ * ask, with the note as its words and the answer's files as its own; an item the version 4
  * tool posted after the bump is written the same way; and a second run
  * writes nothing twice. Synthetic accounts throughout.
  */
@@ -70,7 +65,8 @@ it.effect(
         const taskId = randomUUID();
         yield* sql`insert into task (id, user_id, organization_id, number, name, document) values (${taskId}, 'dean', ${workspaceId}, 1, 'Teammate invitations', '')`;
         const agent = { id: randomUUID(), conversationId: randomUUID() };
-        yield* sql`insert into conversations (id, user_id, kind) values (${agent.conversationId}, 'dean', 'coding_agent')`;
+        // Note that the agent runs on Claude Code, so the later archive of every agent left on eve leaves it and its asks open.
+        yield* sql`insert into conversations (id, user_id, kind, runtime) values (${agent.conversationId}, 'dean', 'coding_agent', 'claude_code')`;
         yield* sql`insert into coding_agent (id, task_id, organization_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
           values (${agent.id}, ${taskId}, ${workspaceId}, 'dean', ${agent.conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})`;
         const item = (
@@ -220,12 +216,6 @@ it.effect(
             "answered",
             { ask: posted?.id, reply: "chose", choices: ["Approve"] },
           ],
-        );
-
-        const waiting = yield* memberOpenAsks("dean", workspaceId, 10);
-        assert.deepEqual(
-          waiting.map(({ id, askType }) => ({ id, askType })),
-          [{ id: branch, askType: "do" }],
         );
       }),
     ).pipe(Effect.provide(Layer.provideMerge(unmigratedPgliteSqlClient, NodeServices.layer))),

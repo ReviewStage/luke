@@ -184,7 +184,6 @@ const MEMORY: MemorySummary = {
   text: "Deployments go out from the release branch.",
   keptBy: { userId: "user-1", name: "Dean" },
   forgettable: true,
-  private: false,
   createdAt: 1,
   updatedAt: 2,
 };
@@ -294,8 +293,6 @@ function fakeService() {
     hosts: () => Effect.succeed({ failure: "unanswered" }),
     devicePresence: () => Effect.succeed({ failure: "unanswered" }),
     removeHost: () => Effect.succeed({ failure: "unanswered" }),
-    keepHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
-    revokeHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
     readHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     approveHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     denyHostPairing: () => Effect.succeed({ failure: "unanswered" }),
@@ -422,11 +419,6 @@ function fakeService() {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
         return { agent: AGENT };
       }),
-    ensureOperator: (workspaceId, request) =>
-      Effect.sync(() => {
-        asked.push(`ensureOperator:${workspaceId}:${String(request.reset === true)}`);
-        return { agentId: AGENT_ID, txid: "9103" };
-      }),
     agent: (agentId) =>
       Effect.sync(() => {
         asked.push(`page:${agentId}`);
@@ -472,7 +464,7 @@ function fakeService() {
         asked.push(`review-options:${agentId}`);
         return REVIEW_OPTIONS;
       }),
-    lukeTools: () => Effect.die("no Luke tools read in this suite"),
+    lukeTools: () => Effect.die("no Vespin tools read in this suite"),
     overviewChecks: (agentId) =>
       Effect.sync(() => {
         asked.push(`overview-checks:${agentId}`);
@@ -760,6 +752,7 @@ const TRANSCRIPT_PARTS = [
   "window",
   "windowParts",
   "queueRevision",
+  "launch",
 ] as const;
 const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
@@ -870,27 +863,6 @@ function subject(
     };
   });
 }
-
-it.effect(
-  "an ensure of the operator that made one waits for the task list to carry it before it answers",
-  () =>
-    Effect.gen(function* () {
-      const waited: (string | undefined)[] = [];
-      const { call, asked } = yield* subject({
-        listed: (txid) => Effect.sync(() => void waited.push(txid)),
-      });
-
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR, {
-          workspaceId: "workspace-1",
-          reset: true,
-        }),
-        { agentId: AGENT_ID, txid: "9103" },
-      );
-      assert.deepEqual(waited, ["9103"]);
-      assert.ok(asked.includes("ensureOperator:workspace-1:true"));
-    }),
-);
 
 it.effect("a delete waits for the task list to carry its transaction before it answers", () =>
   Effect.gen(function* () {
@@ -1350,6 +1322,7 @@ function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: numb
     window: [],
     windowParts: [],
     queueRevision: [],
+    launch: [],
   });
 }
 

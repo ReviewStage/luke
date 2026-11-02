@@ -13,6 +13,7 @@ import {
   planNotesSchema,
   readNotes,
 } from "@luke/features/plan-template";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
@@ -90,7 +91,7 @@ const pictureSchema = Schema.Struct({
   path: describeWire(
     trimmedText(PLAN_EDIT.MAX_PATH_CHARS),
     "The picture's file in your sandbox, such as a screenshot you took or a recording you made of " +
-      `a flow, relative to the checkout: a PNG, JPEG, or WebP of at most ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, ` +
+      `a flow, relative to your working folder or absolute: a PNG, JPEG, or WebP of at most ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, ` +
       `or a WebM video of at most ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB, which the plan plays.`,
   ),
   alt: describeWire(
@@ -147,8 +148,8 @@ export const EDIT_PLAN_TOOL = {
     "a Markdown link to its page whose words start with @, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the plan draws it as a chip. " +
     "To add a picture, such as a screenshot of what you built, name its file in your sandbox " +
     "under pictures, with alt text saying what it shows. " +
-    "Every save is recorded in the plan as yours. The developer reads the plan on their next " +
-    "call with Luke; you do not wait for an answer. A call's notes and pictures land together " +
+    "Every save is recorded in the plan as yours. The developer reads the plan when they next " +
+    `open it in ${PRODUCT_NAME}; you do not wait for an answer. A call's notes and pictures land together ` +
     "or not at all: where one names text or a heading the plan does not hold exactly once, " +
     "nothing is saved and the call answers the plan as it stands, to retry from. " +
     `A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes, each picture one.`,
@@ -163,7 +164,7 @@ export const PLAN_EDIT_REFUSAL = {
   NO_TASK_NAMED: `Not saved: name the task whose plan to edit as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   NO_TASK: `Not saved: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_TURN:
-    "Not saved: Luke has not recorded your turn yet, so its notes cannot be counted. Try again in a moment.",
+    "Not saved: your turn is not recorded yet, so its notes cannot be counted. Try again in a moment.",
   TOO_MANY_PICTURES: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN} pictures, as many as a plan may. Leave the pictures out.`,
   TOO_MANY_VIDEOS: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN} videos, as many as a plan may. Leave the videos out, or show them with show_image instead.`,
   TASK_GONE: "Not saved: this task no longer exists, so no picture can be added to its plan.",

@@ -20,8 +20,8 @@ import { searchTokens } from "./search-tokens.js";
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
  *
- * Every MCP server Luke hands a coding agent is one account at an
- * integration, so the popover has one row per account the Luke account
+ * Every MCP server the service hands a coding agent is one account at an
+ * integration, so the popover has one row per account the signed-in account
  * holds at each provider the deployment offers it, and one for a provider
  * where it holds none, in the provider list's order. A provider with more
  * than one account names each row by its label ("Notion · Acme"), and one
@@ -85,9 +85,9 @@ export interface ServerRow {
   readonly provider: IntegrationProvider;
   /** The server's name: its account's connection name, or the provider's where it holds none. */
   readonly connection: string;
-  /** The account the row stands for, where the Luke account holds one at the provider. */
+  /** The account the row stands for, where the signed-in account holds one at the provider. */
   readonly account?: IntegrationAccount;
-  /** How many accounts the Luke account holds at the provider. */
+  /** How many accounts the signed-in account holds at the provider. */
   readonly accounts: number;
   readonly name: string;
   readonly kind: ServerRowKind;
@@ -150,7 +150,7 @@ function wordsOf(
     if (health.kind === CONNECTION_HEALTH.BROKEN) {
       return { problem: health.problem, ...saidOf(health.said) };
     }
-    // Note that a read Luke's own service could not answer is said, never drawn as a server that works.
+    // Note that a read our own service could not answer is said, never drawn as a server that works.
     return health.kind === CONNECTION_HEALTH.FAILED
       ? { problem: readFailedWords("the tools") }
       : undefined;
@@ -315,7 +315,7 @@ export interface NamedServer {
 }
 
 /**
- * Every server the Luke account holds, standing as `status` says, in the
+ * Every server the signed-in account holds, standing as `status` says, in the
  * provider list's order: each account at a provider, named by its label
  * where the provider has more than one, and a provider with none by itself.
  */
@@ -376,15 +376,11 @@ export const SERVER_HANDED = {
 
 export type ServerHanded = (typeof SERVER_HANDED)[keyof typeof SERVER_HANDED];
 
-/** What a server's card says of what a mention of it does. */
+/** What a server's card says of what a mention of it does, where its corner's On or Off does not already say it all. */
 export const SERVER_MENTION_NOTE = {
-  ON: "On for this agent.",
-  ON_NAMED: "On for this agent, and this message names it.",
-  OFF: "Off for this agent.",
-  OFF_OPENS:
-    "Off for this agent. This message hands it to the turn it opens alone; the switch stays off.",
+  OFF_OPENS: "This message hands it to the turn it opens alone; the switch stays off.",
   OFF_STEERS:
-    "Off for this agent. Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
+    "Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
   NOT_CONNECTED: "Not connected, so no agent is handed it.",
   EXPIRED: "Sign-in expired. A call to it asks you to reconnect it first.",
 } as const;
@@ -392,13 +388,14 @@ export const SERVER_MENTION_NOTE = {
 /**
  * What a server's card says of a mention of it, from its row and the agent
  * the words are written to, if any, and how they reach it: an agent with
- * the server on has it anyway, and one with it off is handed it for one
- * turn, the one the words open or, where they reached a turn under way, the
- * next, its switch untouched (the service's `mentionedServers`); a server
- * not connected is handed to no agent, and one whose sign-in expired is
- * handed all the same, its calls asking for it to be reconnected. Nothing
- * where the row already says it, a problem of its server's or a sign-in
- * under way, or nothing is read yet.
+ * it off is handed it by the developer's words for one turn, the one the
+ * words open or, where they reached a turn under way, the next, its switch
+ * untouched (the service's `mentionedServers`); a server not connected is
+ * handed to no agent, and one whose sign-in expired is handed all the same,
+ * its calls asking for it to be reconnected. Nothing where the card already
+ * says it: an agent with the server on, which has it anyway, or the agent's
+ * own words, where the corner's On or Off is the whole of it; a problem of
+ * its server's or a sign-in under way; or nothing read yet.
  */
 export function serverMentionNote(
   row: ServerRow,
@@ -415,11 +412,7 @@ export function serverMentionNote(
     case SERVER_ROW.RETRY:
       return undefined;
     case SERVER_ROW.SWITCH:
-      if (agent === undefined) return undefined;
-      if (row.on) {
-        return agent.handed === undefined ? SERVER_MENTION_NOTE.ON : SERVER_MENTION_NOTE.ON_NAMED;
-      }
-      if (agent.handed === undefined) return SERVER_MENTION_NOTE.OFF;
+      if (agent?.handed === undefined || row.on) return undefined;
       return agent.handed === SERVER_HANDED.STEERS
         ? SERVER_MENTION_NOTE.OFF_STEERS
         : SERVER_MENTION_NOTE.OFF_OPENS;

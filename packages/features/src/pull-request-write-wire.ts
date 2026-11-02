@@ -4,8 +4,8 @@ import { Schema as EffectSchema } from "effect";
  * pull-request-write-wire.ts -- a change a workspace member makes to a coding agent's pull request from its Pull request tab, and how GitHub took it.
  *
  * Every change is sent to GitHub by the service as the member who pressed
- * the button, on their own GitHub sign-in, never as the Luke GitHub App, so
- * nobody does on GitHub through Luke what their own account may not. The
+ * the button, on their own GitHub sign-in, never as our GitHub App, so
+ * nobody does on GitHub through the app what their own account may not. The
  * request names the change (`POST /api/agents/{id}/pull-request/action`); the
  * answer says it was made, that the member must sign in with GitHub again
  * because they hold no sign-in GitHub takes, or that GitHub refused the
@@ -18,7 +18,7 @@ import { Schema as EffectSchema } from "effect";
  * member marked viewed on GitHub is read the same way, on their own sign-in,
  * since GitHub keeps the mark per account
  * (`GET /api/agents/{id}/pull-request/viewed`), and set by two of the
- * changes. A refusal of Luke's own,
+ * changes. A refusal of our own,
  * an agent out of reach or a service that could not answer, travels as the
  * hosted vocabulary's refusal as every other call's does.
  */

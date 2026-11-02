@@ -585,16 +585,16 @@ test("an agent named as an actor leads its card with its tile while its read is 
   assert.deepEqual([card.reading, card.led, card.name], [true, true, "Prorate"]);
 });
 
-test("a chip of Luke hangs Luke's own card", async () => {
+test("a chip of Vespin hangs Vespin's own card", async () => {
   const container = await drawn(
-    `Ask ${mentionMarkdown({ kind: MENTION_KIND.LUKE, taskId: BILLING.id }, "Luke", PLACE)}.`,
+    `Ask ${mentionMarkdown({ kind: MENTION_KIND.LUKE, taskId: BILLING.id }, "Vespin", PLACE)}.`,
   );
 
   const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
-  assert.deepEqual([card.actor, card.name], [ACTOR_KIND.LUKE, "Luke"]);
+  assert.deepEqual([card.actor, card.name], [ACTOR_KIND.LUKE, "Vespin"]);
 });
 
-test("Luke and an agent named as actors hang Luke's card and the agent's tab's card, the agent's read as it is hung", async () => {
+test("Vespin and an agent named as actors hang Vespin's card and the agent's tab's card, the agent's read as it is hung", async () => {
   const container = await drawnElement(
     createElement(
       "p",

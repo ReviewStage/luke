@@ -2,6 +2,7 @@ import type {
   DeviceAgentBeat,
   DeviceAgentClaimedLine,
   DeviceAgentDevice,
+  DeviceAgentUpdate,
   HostedDeviceAgentClient,
 } from "@luke/features";
 import { DEVICE_BEAT } from "@luke/features/agent-wire";
@@ -13,16 +14,18 @@ import {
 import {
   DEVICE_AGENT_FOLDER,
   DEVICE_AGENT_LINE_KIND,
-  DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
   DEVICE_LAUNCH_REFUSAL,
+  DEVICE_LAUNCH_STEP,
   DEVICE_SETUP,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLayout,
   type DeviceAgentLine,
+  type DeviceAgentRelease,
   type DeviceAgentRequest,
   type DeviceIsolation,
   type DeviceLaunchRefusal,
+  type DeviceLaunchStep,
   type DeviceSignedIn,
   deviceAgentFilesPayloadSchema,
   deviceAgentLaunchPayloadSchema,
@@ -57,23 +60,20 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import {
-  Environment,
-  LocalAgentPlatform,
-  type LocalAgentSandbox,
-  Reporter,
-} from "./effect/seams.js";
+import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
-  LAUNCH_NOTE,
-  notedFirstLines,
-  sessionResumed,
-  unrestoredNote,
-  unsavedNote,
-} from "./local-agent-first-lines.js";
+  AGENT_GIT_HELPER_SCRIPT,
+  agentFoldersMade,
+  agentGitHelperEnv,
+  agentGithubEnv,
+  agentGithubForgotten,
+  agentGithubWritten,
+  agentOnBox,
+} from "./local-agent-box.js";
+import { LAUNCH_NOTE, notedFirstLines, sessionResumed } from "./local-agent-first-lines.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
-import { localAgentSaves } from "./local-agent-saves.js";
 import {
   forgetOwnedAgent,
   keepOwnedAgent,
@@ -81,13 +81,12 @@ import {
   localAgentDeviceOf,
   ownedAgents,
   readLocalAgentState,
-  savedSince,
   writeLocalAgentState,
 } from "./local-agent-state.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: open but while Luke refuses the device, `daemon/host-standing.ts`).
+ * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each straight on the box in a folder of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: open but while the service refuses the device, `daemon/host-standing.ts`).
  *
  * The service writes a local agent's work as rows under this device's id
  * (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines
@@ -96,19 +95,19 @@ import type { RunMode } from "./run-mode.js";
  * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, an
  * app start among them, the device first has its agents' CLIs
  * (`LocalAgentClis.ready`: Claude Code, Codex, and GitHub's CLI, each
- * fetched and checked) and what its VMs run on (`LocalAgentSandbox.ready`:
- * a Mac's pinned smolvm, fetched and checked, and the image pulled once).
- * A first fetch or pull takes minutes, so while
+ * fetched and checked). A first fetch takes minutes, so while
  * it runs the device registers as preparing (`DEVICE_SETUP`) and beats, and
  * the menus list it as getting ready, which takes no agent; one that failed
  * registers why and beats, so it is listed as not set up rather than not at
  * all, and is tried again after `SETUP_RETRY`'s wait, doubling from try to
- * try, for as long as the gate stands. Once it has them it registers with its home folder, the VM's
- * own Claude Code and Codex, and no harness signed in by itself, since no
- * login of the device's reaches a VM, so every launch carries the sign-in
- * saved in Luke; then it beats every `BEAT_EVERY` while it follows. It
- * holds one read for its lines and one for its requests, each answered by
- * the service as soon as one waits, and claims each by its id.
+ * try, for as long as the gate stands. Once it has them it registers with
+ * its home folder, the Claude Code and Codex its agents run on
+ * (`LocalAgentPlatformSeam.tools`), and no harness signed in by itself,
+ * since no login of the device's is what its agents run on, so every launch
+ * carries the sign-in saved in the account; then it beats every `BEAT_EVERY` while
+ * it follows. It holds one read for its lines and one for its requests,
+ * each answered by the service as soon as one waits, and claims each by its
+ * id.
  *
  * Lines are claimed in the order the service lists them, its id order, and
  * handed to the agent they name, whose worker takes them one at a time, so
@@ -119,96 +118,81 @@ import type { RunMode } from "./run-mode.js";
  * launch whose claim was asked again had its secrets taken by the answer
  * lost, so it is settled as a runner gone. A launch makes the agent's own
  * repository under its folder (`deviceAgentLayout`) where it has none,
- * through the platform's script,
- * has a fresh VM made for the agent and started, sets in the repository, inside the
- * VM, who the agent's commits are by where the line says, as a cloud
- * checkout sets it (`@luke/features/checkout-identity`), and starts the
- * runner in it, with
- * the claim's secrets in its environment and nowhere else, never a file, an
- * argument, or a log, and its first lines on its stdin; its line is settled
- * with the runner's exit code once it exits. A message or retune line is
- * written to the running runner's stdin; a files line writes its files under
- * the agent's folder; a stop line ends the runner; a discard line ends it
- * and removes the agent's folder with everything in it, at once where its
- * state stands saved, and otherwise unless the platform's check of the
- * worktree finds work there that is nowhere else (a Mac's does, a host's
- * names none); a line of a kind it
- * does not know is settled untouched. A launch whose repository or VM could
- * not be made is settled as not started, and the runner never starts. A
- * launch or files line keeps the agent as one whose folder and VM this
+ * through the platform's script, sets in it who the agent's commits are by
+ * where the line says, as a cloud checkout sets it
+ * (`@luke/features/checkout-identity`), and gh's credential helper, and
+ * starts the runner (`LocalAgentPlatformSeam.launch`), with the claim's
+ * secrets in its environment and nowhere else, never a file, an argument,
+ * or a log, and its first lines on its stdin; its line is settled with the
+ * runner's exit code once it exits. As it goes, it reports on its line the
+ * step it has reached (`DEVICE_LAUNCH_STEP`), which the agent's transcript
+ * words until the harness's first event: preparing once it is taken,
+ * fetching just before a repository is made, and starting just before the
+ * runner, each on a fiber of its own, so the launch never waits on it. A
+ * message or retune line is written to the running runner's stdin; a files
+ * line writes its files under the agent's folder; a stop line ends the
+ * runner; a discard line ends it and removes the agent's folder with
+ * everything in it, unless the platform's check of the worktree finds work
+ * there that is nowhere else; a line of a kind it does not know is settled
+ * untouched. A launch whose repository
+ * could not be made is settled as not started, and the runner never
+ * starts. A launch or files line keeps the agent as one whose folder this
  * machine made (`keepOwnedAgent`), and a discard that removes the folder
  * forgets it, so an uninstall removes this machine's agents and no other
- * Luke install's beside it. Every time the gate opens, every agent the
+ * install's beside it. Every time the gate opens, every agent the
  * host's own state names, in how each ran or a launch it kept, is kept so
- * too, and, on a device whose agents' folders and smolvm store are its own
- * alone (`LocalAgentPlatformSeam.storesOwned`, a Linux host's), every agent
- * with a folder or a machine there (`adopted`), so one it last ran before
- * it kept that record is cleaned up as the rest are; never one from a
- * Mac's folders or store, which are shared.
+ * too, and, on a device whose agents' folders are its own alone
+ * (`LocalAgentPlatformSeam.storesOwned`, a Linux host's), every agent with
+ * a folder there (`adopted`), so one it last ran before it kept that record
+ * is cleaned up as the rest are; never one from a Mac's folders, which are
+ * shared.
  *
- * A VM (`LocalAgentPlatformSeam.sandbox`) lives for one turn. It is made
- * fresh and started before the runner starts in it; the runner is
- * signalled in it before its command is killed, since killing it would end
- * the runner with no signal at all; and once the runner has ended, whatever
- * ended it, the turn is let go of in one step (`turnLetGo`): on a device
- * that registers `DEVICE_CAPABILITY.AGENT_STATE`, the agent's state is
- * packed and verified in the VM, the VM is deleted with the GitHub token
- * kept for it, the pack is sealed, uploaded to Luke's store and committed
- * (`local-agent-saves.ts`), and the folder's `tmp` emptied,
- * while the rest of the folder stays for the next turn, whose fresh VM
- * mounts it and whose runner resumes the harness's session from it. A save
- * that fails keeps the folder and records the agent as unsaved, and a
- * bundle sealed but not committed is tried again on the beat. A launch
- * records the generation of the agent's saved state it names and holds the
- * agent's state key in memory. A launch that finds none of the agent's
- * work on the device, and names a generation, restores it before its
- * runner starts: its bundle downloaded, checked and opened on the device,
- * its repository made at the commit its work was saved on, and the pack
- * applied in the fresh VM by the runner bundle's `state restore`; a
- * restore that fails settles the launch unstarted
- * (`DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED`) and deletes nothing, so
- * the next message restores again, never starting the agent afresh. One
- * that names none, its saved state expired, starts the agent afresh with no
- * harness session, what a restore left unfinished there set aside in its
- * folder rather than gone on from or removed, to go with the folder as all
- * the pack leaves out does. Either is told the agent ahead of its first
- * message, as is why its last turn's work could not be saved
- * (`local-agent-first-lines.ts`). A discard that removes the folder lets go
- * of the agent's record. A discard deletes any VM still standing before it
- * removes the agent's folder. The runner runs on the VM's
- * own Node, Claude Code and Codex, which the device registers. For an agent
- * working in a repository, the device asks the service for an installation
- * token before the repository is made, and again once the last is
- * `GITHUB_TOKEN_REFRESH` old by the wall clock, read every minute, while its
- * runner runs, since such a token lasts an hour and a turn can last a day,
- * and a sleeping machine stretches a long wait but not the hour; it hands
- * it to the sandbox, which keeps
- * it outside every folder the VM mounts, so the agent only ever sees a
- * placeholder. The check of its folder for unsaved work runs in a VM made
- * for the check and deleted after it, rather than on the device, since the
- * worktree is the agent's to rig.
+ * Every host runs its agents straight on the box
+ * (`DEVICE_ISOLATION.DIRECT`): the runner is a child of the host's own
+ * process, the leader of a process group of its own, on the host's own
+ * Node and the CLIs it keeps, as its user, in the agent's folder, with the
+ * agent's home and caches there (`local-agent-box.ts`). Stopping it signals
+ * its group alone, and kills the group once `KILL_GRACE` has passed, so
+ * nothing of the host's or of any other agent's is stopped with it. Its
+ * folder stays between its turns: a turn's end lets go of its GitHub
+ * token and empties its `tmp`, and the next turn's runner goes on from the
+ * rest, its repository and its harness's session, until the agent is let
+ * go of, or a pass finds it unused for `FOLDER_UNUSED_FOR`, by when it last
+ * launched, ended a turn, or had files written, with all its work on
+ * GitHub, and clears its folder. A launch that finds none
+ * of the agent's work in its folder, which was cleared since, and would
+ * continue a harness's session, starts the agent afresh with none, from a
+ * repository made anew, and tells it so (`LAUNCH_NOTE.CLEARED`). For an
+ * agent working in a repository, the device asks the service for an
+ * installation token before the repository is made, and again once the
+ * last is `GITHUB_TOKEN_REFRESH` old by the wall clock, read every minute,
+ * while its runner runs, since such a token lasts an hour and a turn can
+ * last a day, and a sleeping machine stretches a long wait but not the
+ * hour; it writes it into gh's config in the agent's home, which its `gh`
+ * and its repository's `git` read on every call, so a renewal reaches a
+ * turn already running. The check of its folder for unsaved work runs on
+ * the box.
  *
- * Agents on This Mac ran directly on it before every agent ran in a VM
+ * Agents on This Mac ran on the developer's own logins on it before we
+ * gave each agent a folder of its own
  * (`LocalAgentPlatformSeam.formerlyDirect`), so there the host keeps how
  * each agent ran, beside its launches, and takes an agent from before that
- * record with a checkout as one that ran directly: its Git folder is in the
- * shared clone no VM mounts and its harness's sessions in the developer's
- * own home, so its launch is settled unstarted with the refusal that says
- * so (`DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY`), and a discard checks its folder
- * on the Mac, since it has no VM to check it in.
+ * record with a checkout as one that ran so (`DEVICE_ISOLATION.BARE`): its
+ * Git folder is in the shared clone and its harness's sessions in the
+ * developer's own home, so its launch is settled unstarted with the refusal
+ * that says so (`DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY`).
  *
  * Every launch this device claimed is kept in the host's state by its
  * line's id and its agent's, no secret beside it, until the service takes
  * its settle. A launch still kept as the gate opens had its runner end with
  * the app, or with the gate, so its turn is let go of as any turn's end is,
- * its agent's VM deleted, and it is settled with no exit code, which the
- * service reads as a runner gone: the agent's turn in flight is settled
- * lost, and its next message relaunches the runner on the harness's
- * session. No runner runs as the gate opens, so every VM still standing
- * then of an agent this machine made (`ownedAgents`) is one a run that died
- * left, and is deleted too. A VM of an agent this machine did not make is
- * never touched, since This Mac and a Mac's own `luke-host` share the
- * user's smolvm store.
+ * and it is settled with no exit code, which the service reads as a runner
+ * gone: the agent's turn in flight is settled lost, and its next message
+ * relaunches the runner on the harness's session. No runner runs as the
+ * gate opens, so every agent this machine made (`ownedAgents`) has its turn
+ * let go of too, whatever a run that died left in its folder. An agent this
+ * machine did not make is never touched, since This Mac and a Mac's own
+ * `luke-host` share the user's `~/.vespin/agents`.
  *
  * The service's list of the device's open launches is what the device
  * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
@@ -223,36 +207,39 @@ import type { RunMode } from "./run-mode.js";
  * list names none, and the device only settles what it kept.
  *
  * The device passes over the agents this machine made (`ownedAgents`),
- * never another Luke install's beside it, after the first beat the service
- * answers and every `PASS_EVERY` after, so it keeps nothing of an agent's
- * past its warm window. A pass leaves an agent be while a line of its is
- * delivered or waits to be, its runner runs, a launch of its is kept, or a
- * VM of its is held. A VM of theirs still standing is one a run left, and
- * is deleted, its folder kept. A folder whose state stands saved
- * (`savedSince`: a generation, with nothing unsaved, waiting, or restoring)
- * is let go of once its last turn ended over `WARM_WINDOW` before, or at
- * once while its disk has under `DISK_FREE_LEAST` free, and the agent's
- * next launch restores it. And the service's list of the device's live
- * agents, those pinned to it and not archived, is read: an agent
- * `ORPHAN_AFTER` answered reads in a row left out is let go of as a
- * discard lets go of it, at most `ORPHANS_PER_PASS` a pass, its folder
- * saved first where it is not; one still not saved is kept, and recorded
- * so with when, where the platform's check finds work in it or cannot say,
- * or the platform names no check, so no work is deleted unsaved before
- * `KEPT_FOR` has passed, and then let go of whole; and one whose VM could
- * not be deleted is tried again. A read that was not answered lets
- * go of no agent whole, and a listing smolvm could not give changes
- * nothing. This is what catches every agent a discard line never reached:
- * archived while the device was away, whose line expired, discarded by a
- * run that crashed, whose VM refused its delete, or deleted with its task.
- * And a pass saves one listed agent's folder that no save holds, as an
- * agent's from before saves, or one whose last save failed or was cut off,
- * packed in a VM made for it as a turn's end packs it, so its warm window
- * lets it go once the save lands: one agent at a time, a pass apart, so
- * the machine stays usable, those never tried first; one whose save failed
- * is kept and tried again after a wait doubled with each failure
- * (`SAVE_RETRY`). One that ran directly on the device is left as it is,
- * since it never launches again and a discard checks it on the device.
+ * never another install's beside it, after the first beat the service
+ * answers and every `PASS_EVERY` after. A pass leaves an agent be while a
+ * line of its is delivered or waits to be, its runner runs, or a launch of
+ * its is kept. And the service's list of the device's live agents, those
+ * pinned to it and not archived, is read: an
+ * agent `ORPHAN_AFTER` answered reads in a row left out is let go of as a
+ * discard lets go of it, at most `ORPHANS_PER_PASS` a pass; one whose
+ * folder the platform's check finds work in, or cannot say of, or on a
+ * platform that names no check, is kept, and recorded so with when, so no
+ * work is deleted before `KEPT_FOR` has passed, and then let go of whole.
+ * A read that was not answered lets go of no agent whole. This is what
+ * catches every agent a discard line
+ * never reached: archived while the device was away, whose line expired,
+ * discarded by a run that crashed, or deleted with its task. One that ran
+ * on the developer's own logins is checked on the device as the rest are.
+ * A pass then clears the folders of idle agents unused for
+ * `FOLDER_UNUSED_FOR`, longest unused first, where the platform's check
+ * finds all their work on GitHub, a local branch and a stash among it,
+ * checking at most `FOLDER_CHECKS_PER_PASS` a pass and never again one it
+ * found work in until its agent is used since; the agent stays this
+ * machine's, and its next launch starts afresh.
+ *
+ * A host that updates itself (`LocalAgentsDependencies.update`,
+ * `daemon/host-update.ts`) says on every beat where its update stands, and
+ * is handed each answered beat's newer release. Once it holds one checked,
+ * the device switches to it as soon as it is idle: no runner runs, no
+ * line it claimed waits to be delivered or is being delivered, no request
+ * is being answered, and no claim's answer was lost. Its claims of lines
+ * and requests stop first, under the lock every line's claim holds, and
+ * idle is read again there, so a line claimed meanwhile keeps the device
+ * on the release it runs and the switch waits for a later beat; once it
+ * switches, the lines and requests it did not claim wait in the service
+ * for the daemon started on the new release.
  *
  * Requests are each answered on a fiber of their own, inside the agent's
  * folder alone (`local-agent-requests.ts`). Turning the experiment off,
@@ -275,47 +262,47 @@ const SETUP_RETRY = {
 } as const;
 /** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
 const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
-/** The folder in an agent's folder that a restore left unfinished, whose saved state then expired, has its checkout set aside in, under the generation it restored. */
-const UNRESTORED_FOLDER = "unrestored";
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
 const UNSAVED_CHECK = Duration.seconds(30);
 /** Why a folder is kept where its check could not say what it holds. */
 const UNSAVED_UNKNOWN = "its worktree could not be checked for work not saved elsewhere";
-/** Why a sweep keeps a folder whose state could not be saved, on a device whose platform names no check of it. */
-const NOT_SAVED = "its state could not be saved";
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
 /** How many beats in a row a kept launch the service no longer lists must have its settle refused before it is let go of as a line long gone; one only hidden by a stop queued after it is taken well before. */
 const GONE_AFTER_REFUSALS = 4;
-/** How many more times a kept launch's VM that could not be deleted is deleted again, a beat apart, before its launch is settled regardless. */
-const VM_DELETE_TRIES = 4;
 /** How a claim the service did not answer is asked again, well inside its own claim window. */
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
-/** How long a runner's group has to end after SIGTERM before it is sent SIGKILL. */
+/** How long a runner's process group has to end after SIGTERM before the group is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
 /** How often an agent's GitHub token's age is read off the wall clock, and so how soon one the service did not hand is asked for again, well inside the hour the last one lasts. */
 const GITHUB_TOKEN_CHECK = Duration.minutes(1);
-/** How often a following device passes over the agents this machine made, letting go of what it keeps of them past their warm window. */
+/** How often a following device passes over the agents this machine made, letting go of what it keeps of those the service no longer lists. */
 const PASS_EVERY = Duration.minutes(5);
-/** How long after its last turn ends a saved agent's folder is kept, so a message soon after goes on from it rather than restoring it. */
-const WARM_WINDOW = Duration.minutes(15);
-/** The share of its disk left free under which a saved agent's folder is let go of without waiting out its warm window. */
-const DISK_FREE_LEAST = 0.1;
-/** How long a folder kept for work no save holds stands after it was first kept, while its agent stays unlisted, before a pass lets go of it whole regardless. */
+/** How long a folder kept for work in it stands after it was first kept, while its agent stays unlisted, before a pass lets go of it whole regardless. */
 const KEPT_FOR = Duration.days(7);
 /** How many successful reads in a row must leave an agent out before what the device holds of it is let go of. */
 const ORPHAN_AFTER = 2;
 /** How many agents one pass lets go of at most, so a backlog clears over a few passes rather than in one long one. */
 const ORPHANS_PER_PASS = 5;
-/** How long a folder a pass could not save waits before a pass tries it again: the first wait, doubled after each failed try up to the last. */
-const SAVE_RETRY = { FIRST: Duration.minutes(10), LAST: Duration.hours(6) } as const;
-/** What an agent's id is, and so the one name a folder or machine must have to be taken for an agent's. */
+/** How long an agent goes unused before a pass clears its folder, where it stands idle with all its work on GitHub, so a box that runs agents for weeks does not fill its disk with folders nobody messages again. */
+const FOLDER_UNUSED_FOR = Duration.days(7);
+/** How many unused folders one pass checks at most before it clears them, so a backlog clears over a few passes rather than in one long one. */
+const FOLDER_CHECKS_PER_PASS = 5;
+/** What an agent's id is, and so the one name a folder must have to be taken for an agent's. */
 const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 /** How a discard ended: everything removed, the folder kept for work in it, or a step that failed, which a later pass tries again. */
 const DISCARD_END = { REMOVED: "removed", KEPT: "kept", FAILED: "failed" } as const;
+
+/** How a pass's clearing of an unused folder ended: removed, kept for work in it, passed over for a use since the pass read it, or a removal that failed. */
+const CLEAR_END = {
+  REMOVED: "removed",
+  KEPT: "kept",
+  PASSED_OVER: "passed-over",
+  FAILED: "failed",
+} as const;
 
 /** What lets an agent go: its discard line, a sweep of it once the service no longer lists it, or a sweep of its folder kept `KEPT_FOR` since, which goes whatever it holds. */
 const LET_GO = { LINE: "line", SWEEP: "sweep", KEPT_PAST: "kept-past" } as const;
@@ -330,31 +317,13 @@ const VARIABLE = {
   PATH: "PATH",
 } as const;
 
-/**
- * A runner in a VM asked to end there, where it still runs, and given
- * `KILL_GRACE` to: killing its command (`smolvm machine exec`) would end it
- * at once with no signal, so every process of the agent's in the VM is
- * signalled first.
- */
-function endedInVm(
-  sandbox: LocalAgentSandbox,
-  agentId: string,
-  handle: ChildProcessSpawner.ChildProcessHandle,
-): Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> {
-  return Effect.gen(function* () {
-    if (!(yield* Effect.orElseSucceed(handle.isRunning, () => false))) return;
-    yield* sandbox.signalled(agentId);
-    yield* Effect.timeoutOption(Effect.ignore(handle.exitCode), KILL_GRACE);
-  });
-}
-
-/** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of Luke's is handed on. */
+/** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of the app's is handed on. */
 const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAME, VARIABLE.LANG];
 
 /** Where a device's setup stands as it registers: nothing once it is ready, else preparing, or failed and why. */
 type DeviceSetupRegister = Pick<DeviceAgentDevice, "setup" | "setupFailure">;
 
-/** What a device says of the harnesses signed in on it by itself: none, since no login of the device's reaches its agents' VMs. */
+/** What a device says of the harnesses signed in on it by itself: none, since its agents run on the sign-ins saved in the account, never the device's own. */
 const NOT_SIGNED_IN: DeviceSignedIn = { claudeCode: false, codex: false };
 
 const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
@@ -368,15 +337,30 @@ type LocalAgentClient = Pick<
   | "beat"
   | "lines"
   | "claimLine"
+  | "lineStep"
   | "settleLine"
   | "requests"
   | "claimRequest"
   | "answerRequest"
   | "githubToken"
-  | "saveState"
-  | "commitState"
   | "liveAgents"
 >;
+
+/**
+ * A host's update of itself as the follower carries it (`daemon/host-update.ts`):
+ * where it stands, which every beat says, each answered beat's release, and
+ * the switch the follower runs once the device is idle.
+ */
+export interface LocalAgentsUpdate {
+  /** Where the update stands, as the next beat says it; none while none is under way. */
+  readonly beating: Effect.Effect<DeviceAgentUpdate | undefined>;
+  /** An answered beat's release, none where it named none. */
+  readonly heard: (release: DeviceAgentRelease | undefined) => Effect.Effect<void>;
+  /** Whether a release is checked and waits for the device to be idle. */
+  readonly waiting: Effect.Effect<boolean>;
+  /** The switch to the release that waits, run while the device is idle and claims nothing, the beat given sent once it says it updates; whether it switched, after which the daemon ends. */
+  readonly switched: (beat: Effect.Effect<unknown>) => Effect.Effect<boolean>;
+}
 
 export interface LocalAgentsDependencies {
   kernel: Pick<HostKernel, "stateRoot" | "createId"> & { runMode: Pick<RunMode, "sendsNetwork"> };
@@ -385,9 +369,11 @@ export interface LocalAgentsDependencies {
   accountId: () => string | undefined;
   /** The device id this device enrolled under, where it enrolled one, as a host does; minted once per account and kept otherwise. */
   deviceId?: string | undefined;
-  /** Whether the device may ask Luke now, shut while Luke refuses it, read every `IDLE` while the gate is open. */
+  /** Whether the device may ask the service now, shut while the service refuses it, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
   client: LocalAgentClient;
+  /** The host's update of itself, where it updates itself; none on This Mac and wherever else the device does not. */
+  update?: LocalAgentsUpdate | undefined;
 }
 
 /** How a launch ended, which its settle carries until the service takes it: its runner's exit code where it exited with one, and why it never started where the device says. */
@@ -481,19 +467,6 @@ export function composeLocalAgents(
             ),
           );
 
-    /** The kept launches whose VM could not be deleted as their turn ended, by line id, with how many more times a beat deletes it again before they are settled regardless. */
-    const undeleted = new Map<string, number>();
-
-    /** Whether this device saves each agent's state at its turn's end, as it registers. */
-    const savesState = platform.deviceCapabilities.includes(DEVICE_CAPABILITY.AGENT_STATE);
-    const saves = yield* localAgentSaves({
-      stateRoot: kernel.stateRoot,
-      client,
-      state: Ref.get(state),
-      updated: (change) => Effect.provideContext(updateState(change), services),
-      report,
-    });
-
     const keepLaunch = (userId: string, id: string, agentId: string) =>
       updateState((current) => ({
         ...current,
@@ -505,7 +478,7 @@ export function composeLocalAgents(
      * before the record on a device whose agents may have run directly on it
      * (`formerlyDirect`), directly, where its checkout stands, since every
      * such agent did. None for an agent never launched here, and on a device
-     * whose agents always ran in VMs.
+     * whose agents never ran so.
      */
     const ranAs = (agentId: string, checkoutPath: string) =>
       Effect.gen(function* () {
@@ -537,16 +510,81 @@ export function composeLocalAgents(
       });
 
     /**
+     * The agent stamped as used now, by a launch, a turn's end, or files
+     * written, which a pass reads to clear its folder once it goes unused
+     * for `FOLDER_UNUSED_FOR`. Note that the stamp is whole milliseconds,
+     * because the state holds no fraction of one and a clock may read one.
+     */
+    const usedNow = (agentId: string) =>
+      Effect.flatMap(Clock.currentTimeMillis, (at) =>
+        updateState((current) => ({
+          ...current,
+          lastUsed: { ...current.lastUsed, [agentId]: Math.floor(at) },
+        })),
+      );
+
+    /** The agent's stamp of its last use let go of, as its folder goes. */
+    const usedForgotten = (agentId: string) =>
+      Effect.gen(function* () {
+        if ((yield* Ref.get(state)).lastUsed?.[agentId] === undefined) return;
+        yield* updateState(({ lastUsed, ...current }) => ({
+          ...current,
+          lastUsed: Object.fromEntries(
+            Object.entries(lastUsed ?? {}).filter(([id]) => id !== agentId),
+          ),
+        }));
+      });
+
+    /** Whether the agent's folder under the home folder given stands. */
+    const folderStands = (folder: string, agentId: string) =>
+      Effect.orElseSucceed(
+        fileSystem.exists(deviceAgentLayout(folder, agentId).folder),
+        () => false,
+      );
+
+    /** When the agent was last used here, by its stamp, where its folder under the home folder given stands; none where its folder stands no more, or it has no stamp. */
+    const usedAt = (folder: string, agentId: string) =>
+      Effect.gen(function* () {
+        const stamped = (yield* Ref.get(state)).lastUsed?.[agentId];
+        if (stamped === undefined || !(yield* folderStands(folder, agentId))) {
+          return Option.none<number>();
+        }
+        return Option.some(stamped);
+      });
+
+    /**
+     * Every agent this machine made whose folder under the home folder given
+     * stands with no stamp of its use, from before the stamp, stamped as
+     * used as the gate opens, so a pass clears none of theirs until
+     * `FOLDER_UNUSED_FOR` after the first start that stamps.
+     */
+    const unstampedStamped = (folder: string) =>
+      Effect.gen(function* () {
+        const now = Math.floor(yield* Clock.currentTimeMillis);
+        const found: Record<string, number> = {};
+        for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
+          if (!AGENT_UUID.test(agentId)) continue;
+          if ((yield* Ref.get(state)).lastUsed?.[agentId] !== undefined) continue;
+          if (yield* folderStands(folder, agentId)) found[agentId] = now;
+        }
+        if (Object.keys(found).length === 0) return;
+        yield* updateState((current) => ({
+          ...current,
+          lastUsed: { ...found, ...current.lastUsed },
+        }));
+      });
+
+    /**
      * Every agent this install's own state names kept as one whose folder
-     * and VM it made (`keepOwnedAgent`), under the home folder given, so an
-     * agent it last ran before it kept that record is deleted, saved and
-     * let go of as the rest are: each its `modes` names, which This Mac and
-     * a Mac's own `luke-host` each keep in their own state, and each of a
-     * launch it kept; and, on a device whose agents' folders and smolvm
-     * store are its own alone (`storesOwned`), each with a folder or a
-     * machine there. Note that a Mac's are shared with another Luke
-     * install, so nothing there is taken as this one's. Keeping one kept
-     * already changes nothing.
+     * it made (`keepOwnedAgent`), under the home folder given, so an agent
+     * it last ran before it kept that record is let go of as the rest are:
+     * each its `modes` names, which This Mac and a Mac's own `luke-host`
+     * each keep in their own state, and each of a launch it kept; and, on a
+     * device whose agents' folders are its own alone (`storesOwned`), each
+     * with a folder there.
+     * Note that a Mac's are shared with another install, so nothing
+     * there is taken as this one's. Keeping one kept already changes
+     * nothing.
      */
     const adopted = (folder: string) =>
       Effect.gen(function* () {
@@ -561,16 +599,12 @@ export function composeLocalAgents(
         }
       });
 
-    /** The agents with a folder under the home folder given or a machine in smolvm's store, by id; none of either that could not be listed. */
+    /** The agents with a folder under the home folder given, by id; none where they could not be listed. */
     const storedAgents = (folder: string) =>
-      Effect.gen(function* () {
-        const folders = yield* Effect.orElseSucceed(
-          fileSystem.readDirectory(path.join(folder, DEVICE_AGENT_FOLDER.ROOT)),
-          (): readonly string[] => [],
-        );
-        const machines = yield* platform.sandbox.machines;
-        return [...folders, ...Option.getOrElse(machines, (): ReadonlySet<string> => new Set())];
-      });
+      Effect.orElseSucceed(
+        fileSystem.readDirectory(path.join(folder, DEVICE_AGENT_FOLDER.ROOT)),
+        (): readonly string[] => [],
+      );
 
     // -- a turn's end ------------------------------------------------------------
 
@@ -588,42 +622,15 @@ export function composeLocalAgents(
       }).pipe(Effect.ignore);
 
     /**
-     * The end of one of the agent's turns, under the home folder given, once
-     * nothing holds its VM: a runner that ended, whatever ended it, a check
-     * of its folder between turns, or a run that died with the app or the
-     * gate, or a sweep's save; whether its VM is gone. A VM lives for one
-     * turn, so it is deleted with the GitHub token kept for it, and the
-     * folder's `tmp` is emptied; the rest of the folder, its repository,
-     * home and caches, stays for the agent's next turn. A runner's end, or a
-     * sweep's save (`ran`, the account, device and shell it ran under, and
-     * its launch line, none for a sweep's), saves the agent's state first, packed in the VM before
-     * the delete and sent once it is gone (`local-agent-saves.ts`). Note that
-     * this is the one step between a runner's end and its VM's delete, so
-     * whatever a turn's end must still do in its VM goes here, before the
-     * delete.
+     * The end of one of the agent's turns, whatever ended it, a run that
+     * died with the app or the gate among it: its GitHub token let go of,
+     * since no turn reads it any more, and its `tmp` emptied; the rest of
+     * its folder, its repository, home and caches, stays for its next turn.
      */
-    const turnLetGo = (
-      folder: string,
-      agentId: string,
-      ran?: {
-        readonly userId: string;
-        readonly deviceId: string;
-        readonly lineId?: string | undefined;
-        readonly shellVariables: Readonly<Record<string, string>>;
-      },
-    ) =>
+    const turnLetGo = (layout: DeviceAgentLayout) =>
       Effect.gen(function* () {
-        const layout = deviceAgentLayout(folder, agentId);
-        const deleted = platform.sandbox.deleted(agentId);
-        const gone =
-          ran === undefined
-            ? yield* deleted
-            : yield* saves.turnEnded(
-                { ...ran, agentId, layout },
-                Effect.provideContext(deleted, services),
-              );
+        yield* agentGithubForgotten(layout.folder);
         yield* tempEmptied(layout);
-        return gone;
       });
 
     // -- the gate --------------------------------------------------------------
@@ -638,6 +645,12 @@ export function composeLocalAgents(
         on && Option.isSome(home) && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
     );
 
+    /** A beat, saying where the host's update stands while one is under way. */
+    const beatOf = (deviceId: string) =>
+      Effect.flatMap(dependencies.update?.beating ?? Effect.succeed(undefined), (updating) =>
+        asked(client.beat(deviceId, NOT_SIGNED_IN, updating)),
+      );
+
     /**
      * The beats, each `beaten` (a beat alone, or a follow's beat and what it
      * converges to its answer), for as long as the gate stands and the
@@ -647,7 +660,7 @@ export function composeLocalAgents(
     const presence = (
       userId: string,
       deviceId: string,
-      beaten: Effect.Effect<unknown> = asked(client.beat(deviceId, NOT_SIGNED_IN)),
+      beaten: Effect.Effect<unknown> = beatOf(deviceId),
     ) =>
       Effect.gen(function* () {
         let sinceBeat = Duration.toMillis(BEAT_EVERY);
@@ -661,7 +674,7 @@ export function composeLocalAgents(
         }
       });
 
-    // -- what the VMs run on ------------------------------------------------------
+    // -- what the agents run on --------------------------------------------------
 
     /** How long a device waits after its `failed`th failed setup in a row before it tries again (`SETUP_RETRY`). */
     const setupRetryAfter = (failed: number) =>
@@ -675,13 +688,12 @@ export function composeLocalAgents(
       );
 
     /**
-     * Whether the device has its agents' CLIs (`LocalAgentClis.ready`) and
-     * what its VMs run on (`LocalAgentSandbox.ready`), in that order,
+     * Whether the device has its agents' CLIs (`LocalAgentClis.ready`),
      * asked each time the gate opens, and after a try that failed asked
      * again once `setupRetryAfter` has passed, one try at a time, for as
      * long as the gate stands and the account is the one `userId` names; it
-     * answers false only once either changes. As the first fetch or pull
-     * begins (`preparing`) the device registers as preparing and beats, so
+     * answers false only once either changes. As the first fetch begins
+     * (`preparing`) the device registers as preparing and beats, so
      * the menus list it as getting ready rather than not at all; a try that
      * failed registers why and beats while it waits for the next, so it is
      * listed as not set up rather than away. `registered` registers the
@@ -708,11 +720,7 @@ export function composeLocalAgents(
                   yield* Effect.forkIn(presence(userId, deviceId), scope);
                 }
               });
-              // Note that the device says it is getting ready once, whichever fetch begins first, its CLIs' or its VMs'.
-              const once = yield* Effect.cached(preparing);
-              return yield* Effect.result(
-                Effect.andThen(platform.clis.ready(once), platform.sandbox.ready(once)),
-              );
+              return yield* Effect.result(platform.clis.ready(preparing));
             }),
           );
           if (Result.isSuccess(ready)) return true;
@@ -750,9 +758,9 @@ export function composeLocalAgents(
     /**
      * What a runner and a command are started with of the device's own: the
      * developer's identity and shell, and their login shell's PATH, which
-     * smolvm runs under and the repository's script finds git on, read once
+     * the agent's commands and the repository's script find git on, read once
      * each time the gate opens; never the rest of the app's environment,
-     * which is Luke's and none of the agent's.
+     * which is the app's and none of the agent's.
      */
     const shellEnvironment = Effect.map(
       loginPath,
@@ -778,86 +786,38 @@ export function composeLocalAgents(
         const workers = yield* FiberMap.make<string>();
         const mailboxes = new Map<string, Queue.Queue<DeviceAgentClaimedLine>>();
         const runners = new Map<string, Runner>();
-        const vmHolds = new Map<string, number>();
-        const vmLocks = new Map<string, Semaphore.Semaphore>();
         /** The launch lines claimed and handed to their agents whose runners are not yet running or settled unstarted, which no beat settles. */
         const starting = new Set<string>();
-        /** Where this device's commits of saved state stood as each launch line still to be delivered was claimed (`saves.commitMark`), by its id. */
-        const launchClaims = new Map<string, number>();
         /** How each launch whose settle the service has not taken yet ended, by its line's id. */
         const endings = new Map<string, LaunchEnding>();
         /** Held by each claim and by a beat's settle of a launch the device never kept, so neither runs while the other is unanswered. */
         const claiming = yield* Semaphore.make(1);
         /** The runners a beat stops, since the service no longer holds the device to their launches. */
         const stopping = yield* FiberSet.make();
-        /** The tries a beat starts at committing a bundle left waiting, one per agent. */
-        const saving = yield* FiberMap.make<string>();
         /** Held by an agent's worker while it delivers a line of the agent's, and by a pass letting go of the agent, so neither runs under the other. */
         const deliveryLocks = new Map<string, Semaphore.Semaphore>();
         /** Done once a beat of this follow is answered, after which the device passes over its agents (`swept`). */
         const beaten = yield* Deferred.make<void>();
+        /** Whether no line or request is claimed, set under `claiming` once the device switches to a newer release, so they wait in the service for the daemon started on it. */
+        let paused = false;
+        /** How many lines were handed to their agents' workers and are not yet delivered, each counted from its hand-over until its worker is done with it. */
+        let undelivered = 0;
 
-        /** The lock over the agent's VM's start and delete, one per agent, so one agent's slow start holds up no other's. */
-        const vmLockOf = (agentId: string) => {
-          const kept = vmLocks.get(agentId);
-          if (kept !== undefined) return kept;
-          const made = Semaphore.makeUnsafe(1);
-          vmLocks.set(agentId, made);
-          return made;
-        };
-
-        /**
-         * The agent's VM started by `start` and held for as long as the scope
-         * it is run in stands, by its runner or by a check of its folder
-         * between turns; whether it stands. The last hold let go of ends the
-         * turn (`turnLetGo`), which deletes the VM, so a check between turns
-         * never leaves one standing, and none is deleted under a runner. A VM
-         * a discard deleted is held by nothing. Where a turn holds it
-         * (`turn`), a runner's launch (`lineId`) or a sweep's save, which has
-         * none, its let go saves the agent's state, and where the delete
-         * fails, a launch joins `undeleted`, so a beat deletes it again
-         * before the launch is settled.
-         */
-        const vmHeld = <E, R>(
-          agentId: string,
-          start: Effect.Effect<boolean, E, R>,
-          turn?: { readonly lineId?: string | undefined },
-        ) =>
-          Effect.gen(function* () {
-            const lock = vmLockOf(agentId);
-            const up = yield* lock.withPermit(
-              Effect.tap(start, (stands) =>
-                Effect.sync(() => {
-                  if (stands) vmHolds.set(agentId, (vmHolds.get(agentId) ?? 0) + 1);
-                }),
-              ),
-            );
-            if (!up) return false;
-            yield* Effect.addFinalizer(() =>
-              lock
-                .withPermit(
-                  Effect.gen(function* () {
-                    const held = vmHolds.get(agentId);
-                    if (held === undefined) return;
-                    if (held > 1) return vmHolds.set(agentId, held - 1);
-                    vmHolds.delete(agentId);
-                    const ran =
-                      turn === undefined || !savesState
-                        ? undefined
-                        : { userId, deviceId, lineId: turn.lineId, shellVariables };
-                    if (yield* turnLetGo(folder, agentId, ran)) return;
-                    if (turn?.lineId !== undefined) undeleted.set(turn.lineId, VM_DELETE_TRIES);
-                    report("a local agent's VM could not be deleted");
-                  }),
-                )
-                .pipe(Effect.provideContext(services)),
-            );
-            return true;
-          });
         const answering = yield* FiberSet.make();
 
         const settle = (id: string, exitCode?: number, refusal?: DeviceLaunchRefusal) =>
           asked(client.settleLine(deviceId, id, exitCode, refusal));
+
+        /**
+         * The step a launch line's launch has reached, reported on a fiber of
+         * the agent's scope, so the launch never waits on it; one refused or
+         * unanswered, an older service's among them, says nothing. Note that
+         * each is sent as the launch reaches it and may land out of order,
+         * because the service only ever moves a line's step forward, so a
+         * late report never takes it back.
+         */
+        const stepReported = (agentScope: Scope.Scope, id: string, step: DeviceLaunchStep) =>
+          Effect.asVoid(Effect.forkIn(asked(client.lineStep(deviceId, id, step)), agentScope));
 
         /**
          * A kept launch settled with how it ended, asked once; let go of
@@ -876,39 +836,34 @@ export function composeLocalAgents(
         const notStarted = (agentId: string, id: string, refusal?: DeviceLaunchRefusal) =>
           Effect.gen(function* () {
             yield* keepLaunch(userId, id, agentId);
-            const ending = { exitCode: NOT_STARTED, refusal };
-            // Note that a launch whose VM could not be deleted as its start was given up stays kept with how it ended, which every beat deletes again before it settles (`vmLetGo`).
-            if (undeleted.has(id)) return void endings.set(id, ending);
-            yield* settledLaunch(id, ending);
+            yield* settledLaunch(id, { exitCode: NOT_STARTED, refusal });
           });
 
         /**
          * The agent's own repository made where it has none, reading the
-         * agent's GitHub token where it has one through the sandbox's helper,
-         * never the token itself: a folder for an agent with no repository.
-         * A launch restoring the agent's saved state (`restoring`) has it made
-         * at the commit its work was saved on, or none at all where its work
-         * needs none, as the restore requires.
+         * agent's GitHub token where it has one through gh's helper, never
+         * the token itself, and `fetching` run just before its script: a
+         * folder for an agent with no repository.
          */
         const madeWorktree = (
           layout: DeviceAgentLayout,
           repository: string | null,
           branch: string | null,
           github: Readonly<Record<string, string>> | undefined,
-          restoring?: { readonly base: string | null },
+          fetching: Effect.Effect<void>,
         ) =>
           Effect.gen(function* () {
             if (yield* fileSystem.exists(path.join(layout.checkoutPath, ".git"))) return true;
-            if (repository === null || restoring?.base === null) {
+            if (repository === null) {
               yield* fileSystem.makeDirectory(layout.checkoutPath, { recursive: true });
               return true;
             }
+            yield* fetching;
             const script = platform.worktreeScript({
               home: folder,
               repository,
               worktree: layout.checkoutPath,
               branch,
-              base: restoring?.base,
             });
             const code = yield* Effect.scoped(
               Effect.flatMap(
@@ -928,29 +883,33 @@ export function composeLocalAgents(
         /**
          * Who the agent's commits are by, as the service settled it, set in
          * its own repository's config by the step a cloud checkout sets it
-         * with (`CHECKOUT_IDENTITY_SCRIPT`); whether it was. Note that it runs
-         * in the agent's VM, never on the device, whose own git a repository
-         * the agent rigged could steer, and on every launch, since a
-         * repository made before the launch line carried an identity holds
-         * none.
+         * with (`CHECKOUT_IDENTITY_SCRIPT`), where the line names one, and
+         * gh's credential helper beside it (`AGENT_GIT_HELPER_SCRIPT`), so
+         * the repository's every `git` reads the token gh's config holds;
+         * whether both were. Note that it runs as the agent, in its
+         * repository with its home and caches in its folder, never as the
+         * device's own git, which a repository the agent rigged could steer;
+         * and on every launch, since a repository made before the launch line
+         * carried an identity holds none.
          */
-        const identitySet = (
-          agentId: string,
-          layout: DeviceAgentLayout,
-          identity: CheckoutIdentity,
-        ) => {
-          const run = platform.sandbox.exec({
-            agentId,
-            folder: layout.folder,
-            cwd: layout.checkoutPath,
-            command: "/bin/bash",
-            args: ["-c", CHECKOUT_IDENTITY_SCRIPT],
-            env: { ...shellVariables, ...checkoutIdentityEnv(identity) },
-          });
+        const checkoutSet = (layout: DeviceAgentLayout, identity: CheckoutIdentity | undefined) => {
+          const script = [
+            ...(identity === undefined ? [] : [CHECKOUT_IDENTITY_SCRIPT]),
+            AGENT_GIT_HELPER_SCRIPT,
+          ].join("\n");
+          const env = {
+            ...shellVariables,
+            ...(identity === undefined ? {} : checkoutIdentityEnv(identity)),
+            ...agentGitHelperEnv(platform.clis.paths.gh),
+          };
+          const run = agentOnBox(
+            { folder: layout.folder, command: "/bin/bash", args: ["-c", script], env },
+            platform.clis.paths.gh,
+          );
           return Effect.scoped(
             Effect.flatMap(
               ChildProcess.make(run.command, [...run.args], {
-                cwd: folder,
+                cwd: layout.checkoutPath,
                 env: run.env,
                 extendEnv: false,
                 stdin: "ignore",
@@ -967,16 +926,16 @@ export function composeLocalAgents(
         };
 
         /**
-         * A fresh token for the agent's repository from the service, handed
-         * to the sandbox, which keeps it outside every folder the agent's VM
-         * mounts, where the VM's bindings read it; whether it was. A token
+         * A fresh token for the agent's repository from the service, written
+         * into gh's config in the agent's home, which its `gh` and `git` read
+         * on every call (`agentGithubWritten`); whether it was. A token
          * refused or unanswered is reported in those words alone.
          */
         const gaveGithubToken = (agentId: string) =>
           Effect.gen(function* () {
             const token = yield* asked(client.githubToken(agentId));
             if (token === undefined) return false;
-            yield* platform.sandbox.githubToken(agentId, token);
+            yield* agentGithubWritten(deviceAgentLayout(folder, agentId).folder, token);
             return true;
           }).pipe(
             Effect.orElseSucceed(() => false),
@@ -1020,54 +979,13 @@ export function composeLocalAgents(
           );
 
         /**
-         * What a restore left unfinished made of the agent's checkout, set
-         * aside in its folder under the generation it restored
-         * (`UNRESTORED_FOLDER`), and the restore let go of, once Luke no
-         * longer holds that generation, so it can never finish: the path it
-         * stands at now, none where the restore made no checkout. Note that it
-         * is moved rather than gone on from, since it may be incomplete, and
-         * not removed here, since it may hold the last of the agent's work,
-         * which the agent is told where to find; it stays with the folder,
-         * and goes with it, as all the pack leaves out does.
-         */
-        const unrestoredSetAside = (
-          agentId: string,
-          layout: DeviceAgentLayout,
-          generation: number,
-        ) =>
-          Effect.gen(function* () {
-            const aside = path.join(layout.folder, UNRESTORED_FOLDER, String(generation));
-            const made = yield* fileSystem.exists(layout.checkoutPath);
-            if (made) {
-              yield* fileSystem.makeDirectory(path.dirname(aside), { recursive: true });
-              yield* fileSystem.rename(layout.checkoutPath, aside);
-            }
-            yield* saves.restoreLetGo(userId, agentId);
-            report(
-              `a local agent's restore of generation ${generation} never finished before its saved state expired, so it starts afresh`,
-            );
-            return made ? Option.some(aside) : Option.none<string>();
-          });
-
-        /**
          * The runner started for a launch line, its first lines written, and
          * its exit settling the line; the line settled as not started where it
-         * cannot be. On a device that saves, a launch that finds none of the
-         * agent's work on it (`workExists`), or a restore into it left
-         * unfinished, and names a generation of its saved state restores it
-         * first: the folder made, the bundle downloaded,
-         * checked and opened into the pack (`saves.fetched`), the repository
-         * made at the pack's base, the VM started, and the pack restored in it
-         * (`saves.restored`); a restore that fails at any step settles the
-         * launch unstarted with the refusal that says so, deleting nothing, so
-         * the agent's next message restores again. One that names none but
-         * still continues a harness's session found its saved state expired,
-         * so the session is let go of and the agent starts afresh; one that
-         * names none where a restore was left unfinished has what that restore
-         * made set aside (`unrestoredSetAside`) and starts afresh too. The
-         * agent is told so ahead of its first message (`local-agent-first-lines.ts`),
-         * and why its last turn's work could not be saved, where its record
-         * says, which is let go of once told.
+         * cannot be. A launch that finds none of the agent's work in its
+         * folder (`workExists`), which was cleared since its last turn, and
+         * would continue a harness's session, lets that session go and starts
+         * the agent afresh from a repository made anew, telling it so ahead of
+         * its first message (`LAUNCH_NOTE.CLEARED`).
          */
         const launched = (
           agentId: string,
@@ -1076,7 +994,6 @@ export function composeLocalAgents(
           agentScope: Scope.Scope,
         ) =>
           Effect.gen(function* () {
-            const claimedAt = launchClaims.get(line.id) ?? saves.commitMark();
             const layout = deviceAgentLayout(folder, agentId);
             const payload = decodeLaunch(line.payload);
             // Note that a launch naming a worktree outside the agent's own folder is never made.
@@ -1087,125 +1004,68 @@ export function composeLocalAgents(
             ) {
               return yield* notStarted(agentId, line.id);
             }
-            const sandbox = platform.sandbox;
             const withRepository = payload.value.repository !== null;
-            // Note that an agent that ran directly on the Mac keeps its Git folder in the shared clone no VM mounts, and its harness's sessions in the developer's own home, so it never starts in a VM.
+            // Note that an agent that ran on the developer's own logins on the Mac keeps its Git folder in the shared clone and its harness's sessions in the developer's own home, so it never starts again.
             const ran = yield* ranAs(agentId, layout.checkoutPath);
             if (Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)) {
               report(
-                "a local agent that ran directly on this Mac was not started, since every agent here runs in a VM now",
+                "a local agent that ran on the developer's own logins on this Mac was not started, since its work is outside a folder of its own",
               );
               return yield* notStarted(agentId, line.id, DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
             }
             if (platform.formerlyDirect && Option.isNone(ran)) {
-              yield* keepMode(agentId, DEVICE_ISOLATION.SANDBOX);
+              yield* keepMode(agentId, platform.deviceIsolation);
             }
-            // Note that only a launch on a device that saves names the generation of the agent's saved state, so on any other its absence says nothing.
-            if (savesState) {
-              yield* saves.launched(
-                userId,
-                agentId,
-                payload.value.stateGeneration,
-                secrets.state?.key,
-                claimedAt,
-              );
-            }
-            // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
+            // Note that the agent is kept as this machine's before its folder is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
-            const generation = payload.value.stateGeneration;
-            const unfinished = savesState ? yield* saves.restoring(agentId) : undefined;
-            const cold =
-              savesState &&
-              (unfinished !== undefined || !(yield* workExists(layout, withRepository)));
-            const restore =
-              cold && generation !== undefined
-                ? { userId, agentId, layout, shellVariables, generation }
-                : undefined;
-            const expired = cold && generation === undefined && sessionResumed(secrets.stdin);
-            if (expired) {
-              report("a local agent's saved state expired, so it starts afresh with no session");
+            yield* usedNow(agentId);
+            const cleared =
+              sessionResumed(secrets.stdin) && !(yield* workExists(layout, withRepository));
+            if (cleared) {
+              report("a local agent's folder was cleared since its last turn, so it starts afresh");
             }
-            const setAside =
-              cold && generation === undefined && unfinished !== undefined
-                ? yield* Effect.result(unrestoredSetAside(agentId, layout, unfinished))
-                : Result.succeed(Option.none<string>());
-            if (Result.isFailure(setAside)) {
-              report(
-                "a local agent's unfinished restore could not be set aside, so it was not started",
-              );
-              return yield* notStarted(agentId, line.id);
-            }
-            const notRestored = () =>
-              notStarted(agentId, line.id, DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED);
-            const restoreSince = yield* Clock.currentTimeMillis;
-            // Note that a restore is recorded before anything of it is made, and its bundle is opened before its repository is made, so a refused one costs no fetch or VM; its `tmp` is made fresh, so no link left there takes the pack elsewhere.
-            const fetched =
-              restore === undefined
-                ? Option.none()
-                : yield* Effect.gen(function* () {
-                    yield* saves.restoreBegun(userId, agentId, restore.generation);
-                    yield* Effect.ignore(
-                      fileSystem.makeDirectory(layout.folder, { recursive: true }),
-                    );
-                    yield* tempEmptied(layout);
-                    return yield* saves.fetched(restore, secrets.state);
-                  });
-            if (restore !== undefined && Option.isNone(fetched)) return yield* notRestored();
-            // Note that the token is had before the repository is made, since the device's git reads it too, through the sandbox's helper.
+            // Note that the token is had before the repository is made, since the clone reads it too, through gh's helper.
             const hadToken = withRepository && (yield* gaveGithubToken(agentId));
             const made = yield* madeWorktree(
               layout,
               payload.value.repository,
               payload.value.startBranch,
-              withRepository ? sandbox.deviceGit(agentId) : undefined,
-              Option.getOrUndefined(Option.map(fetched, (state) => ({ base: state.baseCommit }))),
+              withRepository ? agentGithubEnv(layout.folder, platform.clis.paths.gh) : undefined,
+              stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.FETCHING),
             );
-            if (!made && restore !== undefined) {
-              yield* saves.notRestored(
-                restore.generation,
-                "its repository could not be made at the commit its work was saved on",
-              );
-              return yield* notRestored();
+            if (!made) {
+              // Note that the token was written before the repository was made, and no turn reads it where none starts.
+              yield* agentGithubForgotten(layout.folder);
+              return yield* notStarted(agentId, line.id);
             }
-            if (!made) return yield* notStarted(agentId, line.id);
             const temp = layout.temp;
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
-            // Note that the runner holds its VM for as long as its scope stands, so the VM is let go of last as the scope closes, once the runner has ended.
-            // Note that smolvm's reason names no secret, since its credentials are only ever references to their files.
-            const refused = yield* vmHeld(
-              agentId,
-              Effect.as(
-                sandbox.started({ agentId, folder: layout.folder, github: withRepository }),
-                true,
-              ),
-              { lineId: line.id },
+            // Note that the turn is let go of last as the runner's scope closes, once the runner has ended, and the agent stamped as used.
+            const refused = yield* Scope.addFinalizer(
+              runnerScope,
+              Effect.provideContext(Effect.andThen(turnLetGo(layout), usedNow(agentId)), services),
             ).pipe(
-              Scope.provide(runnerScope),
-              Effect.as(Option.none<string>()),
-              Effect.catchTag("LocalAgentSandboxUnavailable", (unavailable) =>
-                Effect.succeed(Option.some(unavailable.detail)),
+              Effect.andThen(
+                agentFoldersMade(layout.folder, {
+                  stateRoot: kernel.stateRoot,
+                  platform: platform.devicePlatform,
+                }),
               ),
+              Effect.as(Option.none<string>()),
+              Effect.orElseSucceed(() => Option.some("the agent's folders could not be made")),
             );
             if (Option.isSome(refused)) {
               yield* Scope.close(runnerScope, Exit.void);
-              report(`a local agent's VM could not be started: ${refused.value}`);
+              report(`a local agent could not be readied to start: ${refused.value}`);
               return yield* notStarted(agentId, line.id);
             }
-            // Note that a restore that fails lets its VM go with nothing packed, since its folder holds no turn of the agent's (`saves.turnEnded`).
-            if (restore !== undefined && Option.isSome(fetched)) {
-              if (!(yield* saves.restored(restore, fetched.value, restoreSince))) {
-                yield* Scope.close(runnerScope, Exit.void);
-                return yield* notRestored();
-              }
-            }
-            const identity = payload.value.identity;
-            if (withRepository && identity !== undefined) {
-              if (!(yield* identitySet(agentId, layout, identity))) {
-                yield* Scope.close(runnerScope, Exit.void);
-                report("a local agent's commit identity could not be set in its VM");
-                return yield* notStarted(agentId, line.id);
-              }
+            if (withRepository && !(yield* checkoutSet(layout, payload.value.identity))) {
+              yield* Scope.close(runnerScope, Exit.void);
+              report(
+                "a local agent's commit identity or GitHub helper could not be set in its repository",
+              );
+              return yield* notStarted(agentId, line.id);
             }
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
@@ -1213,10 +1073,11 @@ export function composeLocalAgents(
               agentId,
               folder: layout.folder,
               checkout: layout.checkoutPath,
-              node: sandbox.tools.node,
+              node: platform.tools.node,
               bundle: platform.runnerBundle,
               env: { ...shellVariables, TMPDIR: temp, ...platform.runnerEnv, ...secrets.env },
             });
+            yield* stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.STARTING);
             const started = yield* ChildProcess.make(command.command, [...command.args], {
               cwd: layout.checkoutPath,
               env: command.env,
@@ -1236,27 +1097,13 @@ export function composeLocalAgents(
               return yield* notStarted(agentId, line.id);
             }
             const handle = started.value;
-            // Note that this runs first as the scope closes, so the runner hears a signal before its command is killed.
-            yield* Scope.addFinalizer(
-              runnerScope,
-              Effect.provideContext(endedInVm(sandbox, agentId, handle), services),
-            );
             if (withRepository)
               yield* Effect.forkIn(renewingGithub(agentId, hadToken), runnerScope);
             yield* keepLaunch(userId, line.id, agentId);
-            const why = savesState ? yield* saves.whyUnsaved(agentId) : undefined;
-            const firstLines = notedFirstLines(
-              secrets.stdin,
-              [
-                ...(restore === undefined ? [] : [LAUNCH_NOTE.RESTORED]),
-                ...(expired ? [LAUNCH_NOTE.EXPIRED] : []),
-                ...Option.toArray(Option.map(setAside.success, unrestoredNote)),
-                ...(why === undefined ? [] : [unsavedNote(why)]),
-              ],
-              expired,
+            yield* Queue.offer(
+              stdin,
+              notedFirstLines(secrets.stdin, cleared ? [LAUNCH_NOTE.CLEARED] : [], cleared),
             );
-            yield* Queue.offer(stdin, firstLines.stdin);
-            if (why !== undefined && firstLines.said) yield* saves.whySaid(userId, agentId);
             // Note that the launch is forgotten only once the service took its settle, which every
             // beat asks again where it did not, so one an outage left unsettled is settled once it ends.
             const exited = yield* Effect.gen(function* () {
@@ -1265,13 +1112,11 @@ export function composeLocalAgents(
               // Note that how it ended is kept before the runner is let go of, so a beat that settles it first carries its exit code.
               endings.set(line.id, ending);
               runners.delete(agentId);
-              // Note that the launch is starting again while its scope closes, since the VM's delete outlasts a beat and no beat may settle the launch before it has said whether the delete failed.
+              // Note that the launch is starting again while its scope closes, so no beat settles it before its turn is let go of.
               starting.add(line.id);
               yield* Scope.close(runnerScope, Exit.void).pipe(
                 Effect.ensuring(Effect.sync(() => starting.delete(line.id))),
               );
-              // Note that a launch whose VM could not be deleted stays kept, which every beat deletes again before it settles (`vmLetGo`).
-              if (undeleted.has(line.id)) return;
               yield* settledLaunch(line.id, ending);
             }).pipe(Effect.forkIn(agentScope));
             runners.set(agentId, { lineId: line.id, stdin, handle, exited });
@@ -1279,50 +1124,19 @@ export function composeLocalAgents(
 
         /**
          * Why the agent's folder holds work a discard would lose, as the
-         * platform's check says it; none where the platform names no check or
-         * the check finds nothing. Where the agent ran in a VM (`vm`), the
-         * check runs in a fresh one made for it, since none stands between
-         * turns, which is deleted once the check is done, and never on the
-         * device, whose own git a repository the agent rigged could make run
-         * anything; a VM that cannot be made leaves the folder unchecked. A
-         * check that fails, outlasts `UNSAVED_CHECK`, or cannot start is taken
-         * as work, since the folder may hold the only copy.
+         * platform's check says it, run on the box; none where the platform
+         * names no check or the check finds nothing. A check that fails,
+         * outlasts `UNSAVED_CHECK`, or cannot start is taken as work, since
+         * the folder may hold the only copy.
          */
-        const unsavedWork = (
-          agentId: string,
-          layout: DeviceAgentLayout,
-          vm: LocalAgentSandbox | undefined,
-        ) =>
+        const unsavedWork = (layout: DeviceAgentLayout) =>
           Effect.gen(function* () {
             if (platform.unsavedWorkScript === undefined) return Option.none<string>();
             const script = platform.unsavedWorkScript({ worktree: layout.checkoutPath });
             return yield* Effect.scoped(
               Effect.gen(function* () {
-                // Note that the check reaches no remote, so its VM is made with no GitHub token.
-                const made = (sandbox: LocalAgentSandbox) =>
-                  sandbox.started({ agentId, folder: layout.folder, github: false }).pipe(
-                    Effect.as(true),
-                    Effect.orElseSucceed(() => false),
-                  );
-                if (vm !== undefined && !(yield* vmHeld(agentId, made(vm)))) {
-                  return (yield* fileSystem.exists(layout.checkoutPath))
-                    ? Option.some(UNSAVED_UNKNOWN)
-                    : Option.none<string>();
-                }
-                const run =
-                  vm === undefined
-                    ? { command: "/bin/bash", args: ["-c", script], env: undefined }
-                    : vm.exec({
-                        agentId,
-                        folder: layout.folder,
-                        cwd: layout.folder,
-                        command: "/bin/bash",
-                        args: ["-c", script],
-                        env: shellVariables,
-                      });
-                const handle = yield* ChildProcess.make(run.command, [...run.args], {
+                const handle = yield* ChildProcess.make("/bin/bash", ["-c", script], {
                   cwd: folder,
-                  ...(run.env === undefined ? undefined : { env: run.env, extendEnv: false }),
                   stdin: "ignore",
                   stderr: "ignore",
                   forceKillAfter: KILL_GRACE,
@@ -1340,13 +1154,13 @@ export function composeLocalAgents(
 
         /**
          * The runner given stopped and its exit waited for, so its line is
-         * settled first. It is signalled in its VM first, since killing its
-         * command would end it with no signal at all; its turn is let go of,
-         * its VM deleted, once it has ended.
+         * settled first. Its process group alone is asked to end (SIGTERM)
+         * and killed once `KILL_GRACE` has passed, so nothing of the host's or
+         * of another agent's is stopped with it. Its turn is let go of once it
+         * has ended.
          */
-        const ended = (agentId: string, runner: Runner) =>
+        const ended = (runner: Runner) =>
           Effect.gen(function* () {
-            yield* endedInVm(platform.sandbox, agentId, runner.handle);
             yield* Effect.ignore(runner.handle.kill({ forceKillAfter: KILL_GRACE }));
             yield* Fiber.await(runner.exited);
           });
@@ -1356,65 +1170,36 @@ export function composeLocalAgents(
           Effect.gen(function* () {
             const runner = runners.get(agentId);
             if (runner === undefined) return;
-            yield* ended(agentId, runner);
+            yield* ended(runner);
           });
 
         /**
-         * The VM a discard lets go of: the agent's, unless it ran directly on
-         * the device before every agent ran in a VM (`formerlyDirect`), when
-         * it has none and its folder is checked by the device's own script,
-         * as it always was.
-         */
-        const vmOf = (agentId: string, checkoutPath: string) =>
-          Effect.map(ranAs(agentId, checkoutPath), (ran) =>
-            Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)
-              ? undefined
-              : platform.sandbox,
-          );
-
-        /**
-         * The agent let go of: its runner stopped and its exit settled, its
-         * VM, where it ran in one, deleted, and its folder removed with
-         * everything in it, its worktree and what its runner and commands
+         * The agent let go of: its runner stopped and its exit settled, and
+         * its folder removed with everything in it, its worktree and what its
+         * runner and commands
          * wrote there; the shared clone the worktree was made from stays, and
          * the next worktree made of it prunes this one's record. A folder
-         * whose state stands saved (`savedSince`), or that stands no more,
-         * holds nothing to lose and goes at once, as does one kept
-         * `KEPT_FOR` since (`LET_GO.KEPT_PAST`). Otherwise a device whose
-         * platform names a check of the worktree keeps the folder, and says
-         * why, where the check finds work in it that is nowhere else, or
-         * cannot say, and a sweep (`LET_GO.SWEEP`) keeps it on a device whose
-         * platform names none; either records it kept, with when it first
-         * was, so no later pass checks it again (`swept`), and its VM goes
-         * either way. A VM that could not be deleted keeps the agent in the
-         * record, and a step that fails is reported; either is tried again by
-         * a later pass, since the agent still holds something here.
+         * that stands no more holds nothing to lose and goes at once, as does
+         * one kept `KEPT_FOR` since (`LET_GO.KEPT_PAST`). Otherwise a device
+         * whose platform names a check of the worktree keeps the folder, and
+         * says why, where the check finds work in it that is nowhere else, or
+         * cannot say, and records it kept, with when it first was, so no
+         * later pass checks it again (`swept`). A step that fails is
+         * reported, and tried again by a later pass, since the agent still
+         * holds something here.
          */
         const discarded = (agentId: string, by: LetGo) =>
           Effect.gen(function* () {
             yield* stopped(agentId);
             const layout = deviceAgentLayout(folder, agentId);
-            const vm = yield* vmOf(agentId, layout.checkoutPath);
-            const saved = Option.isSome(savedSince((yield* Ref.get(state)).saves?.[agentId]));
             const stands = yield* Effect.orElseSucceed(
               fileSystem.exists(layout.folder),
               () => false,
             );
             const unsaved =
-              saved || !stands || by === LET_GO.KEPT_PAST
+              !stands || by === LET_GO.KEPT_PAST
                 ? Option.none<string>()
-                : by === LET_GO.SWEEP && platform.unsavedWorkScript === undefined
-                  ? Option.some(NOT_SAVED)
-                  : yield* unsavedWork(agentId, layout, vm);
-            // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
-            const vmGone =
-              vm === undefined ||
-              (yield* vmLockOf(agentId).withPermit(
-                Effect.andThen(
-                  Effect.sync(() => vmHolds.delete(agentId)),
-                  vm.deleted(agentId),
-                ),
-              ));
+                : yield* unsavedWork(layout);
             if (Option.isSome(unsaved)) {
               report(`a local agent's folder was kept, since ${unsaved.value}: ${agentId}`);
               const at = yield* Clock.currentTimeMillis;
@@ -1425,15 +1210,10 @@ export function composeLocalAgents(
               return DISCARD_END.KEPT;
             }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
-            yield* saves.forgotten(userId, agentId);
-            // Note that a VM left standing keeps the agent in the record, so an uninstall deletes it yet, and a later pass tries it again.
-            if (vmGone) yield* forgetOwnedAgent(kernel.stateRoot, agentId);
+            yield* usedForgotten(agentId);
+            yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
             if ((yield* Ref.get(state)).modes?.[agentId] !== undefined) yield* forgetMode(agentId);
-            if (!vmGone) {
-              report(`a local agent's VM could not be deleted: ${agentId}`);
-              return DISCARD_END.FAILED;
-            }
             if ((yield* Ref.get(state)).kept?.[agentId] !== undefined) {
               yield* updateState(({ kept, ...current }) => ({
                 ...current,
@@ -1458,6 +1238,8 @@ export function composeLocalAgents(
             const files = decodeFiles(payload);
             if (Option.isNone(files)) return;
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
+            // Note that files a later line names use the agent's folder already, so no pass clears it before that line.
+            yield* usedNow(agentId);
             const layout = deviceAgentLayout(folder, agentId);
             for (const file of files.value.files) {
               const target = path.normalize(file.path);
@@ -1499,18 +1281,15 @@ export function composeLocalAgents(
                 // Note that a launch replaces the runner it finds, which is ended and its line settled first.
                 // It is starting until its runner runs or it is settled unstarted, so no beat settles it meanwhile.
                 return yield* Effect.gen(function* () {
+                  // Note that it reads as preparing while the runner it replaces stops, unless it is settled at once.
+                  if (claimed.secretsGone !== true) {
+                    yield* stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.PREPARING);
+                  }
                   yield* stopped(agentId);
                   // Note that a launch whose claim was asked again lost its secrets with the first answer, so it is settled as a runner gone, which ends its turn in words.
                   if (claimed.secretsGone === true) return yield* settle(line.id);
                   return yield* launched(agentId, line, claimed.secrets, agentScope);
-                }).pipe(
-                  Effect.ensuring(
-                    Effect.sync(() => {
-                      starting.delete(line.id);
-                      launchClaims.delete(line.id);
-                    }),
-                  ),
-                );
+                }).pipe(Effect.ensuring(Effect.sync(() => starting.delete(line.id))));
               case DEVICE_AGENT_LINE_KIND.MESSAGE:
               case DEVICE_AGENT_LINE_KIND.RETUNE: {
                 const text = decodeStdin(line.payload);
@@ -1536,10 +1315,8 @@ export function composeLocalAgents(
         /** A claimed line handed to its agent's worker, a launch marked starting first, so no beat settles it before its runner runs. */
         const handedOver = (claimed: DeviceAgentClaimedLine) =>
           Effect.gen(function* () {
-            if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) {
-              starting.add(claimed.line.id);
-              launchClaims.set(claimed.line.id, saves.commitMark());
-            }
+            if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) starting.add(claimed.line.id);
+            undelivered += 1;
             yield* Queue.offer(yield* mailboxOf(claimed.line.agentId), claimed);
           });
 
@@ -1564,9 +1341,15 @@ export function composeLocalAgents(
                 const agentScope = yield* Effect.scope;
                 for (;;) {
                   const claimed = yield* Queue.take(mailbox);
-                  yield* deliveryLockOf(agentId).withPermit(
-                    delivered(agentId, claimed, agentScope),
-                  );
+                  yield* deliveryLockOf(agentId)
+                    .withPermit(delivered(agentId, claimed, agentScope))
+                    .pipe(
+                      Effect.ensuring(
+                        Effect.sync(() => {
+                          undelivered -= 1;
+                        }),
+                      ),
+                    );
                 }
               }),
             );
@@ -1604,12 +1387,14 @@ export function composeLocalAgents(
          * hand-over are uninterruptible, because a line the service granted
          * is this Mac's alone to deliver, and its token is let go of in the
          * same step, so no line is handed over twice. Both hold `claiming`,
-         * so a beat never settles a launch whose claim is unanswered.
+         * so a beat never settles a launch whose claim is unanswered; none is
+         * asked once the device has paused its claims to switch releases.
          */
         const lineTaken = (id: string) =>
           Effect.uninterruptible(
             claiming.withPermit(
               Effect.gen(function* () {
+                if (paused) return false;
                 const answer = yield* claimedLine(id);
                 if (answer === undefined) return false;
                 if ("line" in answer) yield* handedOver(answer);
@@ -1627,6 +1412,7 @@ export function composeLocalAgents(
          */
         const linesFollowed = Effect.forever(
           Effect.gen(function* () {
+            if (paused) return yield* Effect.sleep(REREAD);
             for (const id of [...claimTokens.keys()]) {
               if (!(yield* lineTaken(id))) return yield* Effect.sleep(REREAD);
             }
@@ -1641,6 +1427,7 @@ export function composeLocalAgents(
         /** One request claimed and answered on a fiber of its own. */
         const answered = (request: DeviceAgentRequest) =>
           Effect.gen(function* () {
+            if (paused) return;
             const claimed = yield* asked(client.claimRequest(deviceId, request.id)).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced(CLAIM_RETRY.every),
@@ -1659,6 +1446,7 @@ export function composeLocalAgents(
         /** The requests read, each answered on its own fiber, so a slow read holds up neither the reads nor the others. */
         const requestsFollowed = Effect.forever(
           Effect.gen(function* () {
+            if (paused) return yield* Effect.sleep(REREAD);
             const requests = yield* asked(client.requests(deviceId));
             if (requests === undefined) return yield* Effect.sleep(REREAD);
             for (const request of requests) yield* FiberSet.run(answering, answered(request));
@@ -1678,35 +1466,8 @@ export function composeLocalAgents(
         const refusedUnlisted = new Map<string, number>();
 
         /**
-         * The VM of a kept launch that could not be deleted as its turn
-         * ended, its turn let go of again unless its agent runs or holds a
-         * VM now, whose own end deletes it in turn; whether its launch may be
-         * settled: once the VM is gone, or once `VM_DELETE_TRIES` more
-         * deletes failed, which is said.
-         */
-        const vmLetGo = (id: string, agentId: string) =>
-          vmLockOf(agentId).withPermit(
-            Effect.gen(function* () {
-              const triesLeft = undeleted.get(id) ?? 0;
-              const held = runners.has(agentId) || vmHolds.has(agentId);
-              if (!held && triesLeft > 0 && !(yield* turnLetGo(folder, agentId))) {
-                undeleted.set(id, triesLeft - 1);
-                return false;
-              }
-              if (!held && triesLeft === 0) {
-                report(
-                  "a local agent's VM left standing could not be deleted, so its launch was settled regardless",
-                );
-              }
-              undeleted.delete(id);
-              return true;
-            }),
-          );
-
-        /**
          * Every kept launch of the account's whose runner ended, settled
-         * again with how it ended, a VM that could not be deleted deleted
-         * first; let go of where the service took it, or where its answer
+         * again with how it ended; let go of where the service took it, or where its answer
          * (`open`) no longer listed it and its settle was refused on
          * `GONE_AFTER_REFUSALS` beats in a row, since a line long settled
          * may be gone and refuse every settle, while one only hidden by a
@@ -1720,9 +1481,6 @@ export function composeLocalAgents(
                 launch.userId === userId && !running.has(launch.id) && !starting.has(launch.id),
             );
             for (const launch of pending) {
-              if (undeleted.has(launch.id) && launch.agentId !== undefined) {
-                if (!(yield* vmLetGo(launch.id, launch.agentId))) continue;
-              }
               const ending = endings.get(launch.id);
               if (!(yield* settle(launch.id, ending?.exitCode, ending?.refusal))) {
                 const unlisted = open !== undefined && !open.has(launch.id);
@@ -1742,13 +1500,12 @@ export function composeLocalAgents(
          * runner that ran as the beat was sent whose launch the answer does
          * not name stopped, as a stop line stops it; and every launch the
          * answer names that the device neither ran, started, nor kept as the
-         * beat was sent, and still does not, settled as a runner gone; and
-         * every agent's bundle left waiting that is due tried again. Note
+         * beat was sent, and still does not, settled as a runner gone. Note
          * that what the device runs is read before the beat is sent, because
          * the answer is read after it: a launch claimed later is never judged
          * against an answer that could not have named it. An answer naming no
          * launches, from a service before the list, converges nothing but
-         * the kept launches' settles.
+         * the kept launches' settles. The beat's answer, where one came.
          */
         const reconciledBeat = Effect.gen(function* () {
           const ran = new Map(runners);
@@ -1757,26 +1514,19 @@ export function composeLocalAgents(
             ...runningLaunches(),
             ...(yield* Ref.get(state)).launches.map((launch) => launch.id),
           ]);
-          const beat: DeviceAgentBeat | undefined = yield* asked(
-            client.beat(deviceId, NOT_SIGNED_IN),
-          );
+          const beat: DeviceAgentBeat | undefined = yield* beatOf(deviceId);
           if (beat !== undefined) yield* Deferred.succeed(beaten, undefined);
           const open = beat?.openLaunches === undefined ? undefined : new Set(beat.openLaunches);
           yield* pendingSettled(open);
-          for (const agentId of yield* saves.due(userId)) {
-            yield* FiberMap.run(saving, agentId, saves.tried(userId, deviceId, agentId), {
-              onlyIfMissing: true,
-            });
-          }
-          if (open === undefined) return;
+          if (open === undefined) return beat;
           for (const [agentId, runner] of ran) {
             if (open.has(runner.lineId) || runners.get(agentId) !== runner) continue;
             report("a local agent's runner was stopped, since the service no longer holds it here");
-            yield* FiberSet.run(stopping, ended(agentId, runner));
+            yield* FiberSet.run(stopping, ended(runner));
           }
           const kept = new Set((yield* Ref.get(state)).launches.map((launch) => launch.id));
           const unknown = [...open].filter((id) => !knew.has(id) && !kept.has(id));
-          if (unknown.length === 0) return;
+          if (unknown.length === 0) return beat;
           // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
           yield* claiming.withPermit(
             Effect.forEach(
@@ -1785,6 +1535,49 @@ export function composeLocalAgents(
               { discard: true },
             ),
           );
+          return beat;
+        });
+
+        /** Whether the device runs nothing and has nothing under way: no runner, no launch starting, no line it claimed waiting or being delivered, and no request being answered. */
+        const idle = Effect.map(
+          FiberSet.size(answering),
+          (requests) =>
+            runners.size === 0 && starting.size === 0 && undelivered === 0 && requests === 0,
+        );
+
+        /**
+         * The switch to the release the host's update holds, once the device
+         * is idle: its claims of lines and requests paused under `claiming`,
+         * so no line's claim is under way, where it is idle still there and
+         * no claim's answer was lost, since that claim may have been handed a
+         * launch only this process could ask for again. A line claimed since
+         * the first look keeps the claims going and the switch waits for a
+         * later beat, as does a switch that did not go through; one that did
+         * leaves them paused, since the daemon ends, and since a line it
+         * claimed and a request it is answering are idle's to wait out, the
+         * daemon's end cuts off neither.
+         */
+        const switchedWhileIdle = (update: LocalAgentsUpdate) =>
+          Effect.gen(function* () {
+            if (!(yield* idle)) return;
+            const stopped = yield* claiming.withPermit(
+              Effect.gen(function* () {
+                if (claimTokens.size > 0 || !(yield* idle)) return false;
+                paused = true;
+                return true;
+              }),
+            );
+            if (!stopped) return;
+            if (!(yield* update.switched(beatOf(deviceId)))) paused = false;
+          });
+
+        /** A beat converged to (`reconciledBeat`), its release handed to the host's update, and the switch to one it holds where the device is idle. */
+        const followedBeat = Effect.gen(function* () {
+          const beat = yield* reconciledBeat;
+          const { update } = dependencies;
+          if (update === undefined || beat === undefined) return;
+          yield* update.heard(beat.release);
+          if (yield* update.waiting) yield* switchedWhileIdle(update);
         });
 
         /** The successful reads in a row each agent this machine made was left out of, by its id. */
@@ -1796,9 +1589,9 @@ export function composeLocalAgents(
         /**
          * The work given done on the agent under its delivery lock, only
          * where that is free and the agent stands idle: no line of its
-         * delivered or waiting to be, a launch among them, no runner, no
-         * launch kept, and no VM held, since the service may hold the device
-         * to it yet; none otherwise.
+         * delivered or waiting to be, a launch among them, no runner, and no
+         * launch kept, since the service may hold the device to it yet; none
+         * otherwise.
          */
         const whileIdle = <A, R>(agentId: string, work: Effect.Effect<A, never, R>) =>
           deliveryLockOf(agentId)
@@ -1809,7 +1602,7 @@ export function composeLocalAgents(
                 const kept = (yield* Ref.get(state)).launches.some(
                   (launch) => launch.agentId === agentId,
                 );
-                if (waiting || kept || runners.has(agentId) || vmHolds.has(agentId)) {
+                if (waiting || kept || runners.has(agentId)) {
                   return Option.none<A>();
                 }
                 return Option.some(yield* work);
@@ -1817,170 +1610,106 @@ export function composeLocalAgents(
             )
             .pipe(Effect.map(Option.flatten));
 
-        /** A VM a run of the agent's left standing deleted, with the token kept for it, and its folder kept for its next turn; whether none stands. */
-        const leftoverLetGo = (agentId: string) =>
-          vmLockOf(agentId).withPermit(
-            Effect.gen(function* () {
-              const gone = yield* turnLetGo(folder, agentId);
-              report(
-                gone
-                  ? `a VM a local agent's run left standing was deleted: ${agentId}`
-                  : `a VM a local agent's run left standing could not be deleted: ${agentId}`,
-              );
-              return gone;
-            }),
-          );
+        /** The use (`usedAt`) each agent's folder stood at when a pass's check found work in it, or could not say, so it is checked again only once the agent has been used since. */
+        const holdingWork = new Map<string, number>();
 
         /**
-         * The agent's folder let go of where its state stands saved and its
-         * last turn ended over `WARM_WINDOW` before `now`, or at once where
-         * its disk runs `low`, so its next launch restores it.
+         * The agent's folder, unused for `FOLDER_UNUSED_FOR`, removed whole
+         * where it still stands at the use `at` the pass read it at and the
+         * platform's check finds all its work on GitHub (`unsavedWork`), so
+         * its next launch starts afresh from its branch
+         * (`LAUNCH_NOTE.CLEARED`); its stamp goes with it, but the agent
+         * stays this machine's, and its mode stays, since it is not archived.
+         * One whose check finds work, or cannot say, is recorded so
+         * (`holdingWork`) and kept.
          */
-        const warmLetGo = (agentId: string, now: number, low: boolean) =>
+        const folderCleared = (agentId: string, at: number) =>
           Effect.gen(function* () {
-            const since = savedSince((yield* Ref.get(state)).saves?.[agentId]);
-            if (Option.isNone(since)) return;
-            if (!low && now - since.value <= Duration.toMillis(WARM_WINDOW)) return;
+            // Note that an agent used since the pass read it, as a files line ahead of its launch uses it, is no longer unused.
+            if (!Option.exists(yield* usedAt(folder, agentId), (now) => now === at)) {
+              return CLEAR_END.PASSED_OVER;
+            }
             const layout = deviceAgentLayout(folder, agentId);
-            if (!(yield* fileSystem.exists(layout.folder))) return;
+            const unsaved = yield* unsavedWork(layout);
+            if (Option.isSome(unsaved)) {
+              holdingWork.set(agentId, at);
+              report(
+                `a local agent's folder unused for ${Duration.format(FOLDER_UNUSED_FOR)} was kept, since ${unsaved.value}: ${agentId}`,
+              );
+              return CLEAR_END.KEPT;
+            }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
-            report(`a local agent's folder was let go of, its state saved: ${agentId}`);
+            yield* usedForgotten(agentId);
+            holdingWork.delete(agentId);
+            report(
+              `a local agent's folder unused for ${Duration.format(FOLDER_UNUSED_FOR)} was removed, its work all on GitHub: ${agentId}`,
+            );
+            return CLEAR_END.REMOVED;
           }).pipe(
             Effect.catch(() =>
-              Effect.sync(() => report(`a local agent's folder could not be removed: ${agentId}`)),
+              Effect.sync(() => {
+                report(`a local agent's folder could not be removed: ${agentId}`);
+                return CLEAR_END.FAILED;
+              }),
             ),
           );
 
         /**
-         * A save tried of the agent's folder where it stands unsaved, before
-         * a sweep lets go of the agent, or where no save holds it
-         * (`backfilled`): its bundle waiting committed now, or, where none
-         * waits and no restore into the folder is unfinished, the folder
-         * packed in a VM made for the save, whose let go deletes it, seals
-         * and sends as a turn's end does (`vmHeld`); whether it tried, which
-         * it does not where the folder stands saved or stands no more, or
-         * the agent ran directly on the device. Note that the agent's record
-         * says after whether it landed.
+         * The folders of the agents given, this machine's as the pass read
+         * them, whose agents went unused for `FOLDER_UNUSED_FOR` before `now`
+         * (`usedAt`), cleared longest unused first (`folderCleared`), each
+         * only while its agent stands idle (`whileIdle`), so never a running
+         * one's. Never one kept for work since its agent was left out
+         * (`kept`), one that ran on the developer's own logins, whose launch
+         * is refused for good, or one whose check found work, or could not
+         * say, at the use it stands at (`holdingWork`); and at most
+         * `FOLDER_CHECKS_PER_PASS` checks run a pass. It runs last in a pass
+         * (`swept`), so a read that was not answered clears no folder either.
          */
-        const saveTried = (agentId: string) =>
+        const unusedCleared = (agentIds: readonly string[], now: number) =>
           Effect.gen(function* () {
-            const save = (yield* Ref.get(state)).saves?.[agentId];
-            if (!savesState || Option.isSome(savedSince(save))) return false;
-            if (save?.restoring !== undefined) return false;
-            if (save?.pending !== undefined) {
-              yield* saves.tried(userId, deviceId, agentId);
-              return true;
+            const mine = new Set(agentIds);
+            for (const id of [...holdingWork.keys()]) {
+              if (!mine.has(id)) holdingWork.delete(id);
             }
-            const layout = deviceAgentLayout(folder, agentId);
-            if (!(yield* Effect.orElseSucceed(fileSystem.exists(layout.folder), () => false)))
-              return false;
-            const vm = yield* vmOf(agentId, layout.checkoutPath);
-            if (vm === undefined) return false;
-            const made = vm.started({ agentId, folder: layout.folder, github: false }).pipe(
-              Effect.as(true),
-              Effect.orElseSucceed(() => false),
-            );
-            yield* Effect.scoped(vmHeld(agentId, made, {}));
-            return true;
-          });
-
-        /** When each agent whose folder a pass could not save is due to be tried again, and how many tries in a row failed (`SAVE_RETRY`). */
-        const saveRetries = new Map<string, { readonly failed: number; readonly at: number }>();
-
-        /**
-         * One folder of the agents given saved, where no save holds it, as
-         * an agent's from before saves, or one whose last save failed or was
-         * cut off: the first of them idle (`whileIdle`) and due, those never
-         * tried first, packed in a VM made for it (`saveTried`), so the warm
-         * window lets it go once the save lands. One with a bundle waiting,
-         * which the beat tries, or a restore unfinished, whose folder holds
-         * none of the agent's work, is left be, and one that ran directly
-         * on the device passed over. A save that fails keeps the folder,
-         * unsaved, and is tried again after `SAVE_RETRY`'s wait, doubled
-         * with each that fails in a row, so one that always fails, as a
-         * pack over its cap does, never holds the others back.
-         */
-        const backfilled = (agentIds: readonly string[]) =>
-          Effect.gen(function* () {
-            const now = yield* Clock.currentTimeMillis;
-            const records = (yield* Ref.get(state)).saves;
-            const dueAt = (id: string) => saveRetries.get(id)?.at ?? 0;
-            const unsaved = agentIds
-              .filter((id) => {
-                const save = records?.[id];
-                return (
-                  Option.isNone(savedSince(save)) &&
-                  save?.pending === undefined &&
-                  save?.restoring === undefined &&
-                  dueAt(id) <= now
-                );
-              })
-              .sort((one, other) => dueAt(one) - dueAt(other));
-            for (const id of unsaved) {
-              if (!Option.exists(yield* whileIdle(id, saveTried(id)), (tried) => tried)) continue;
-              const save = (yield* Ref.get(state)).saves?.[id];
-              if (Option.isSome(savedSince(save))) {
-                saveRetries.delete(id);
-                report(`a local agent's folder no save held was saved: ${id}`);
-                return;
+            const unused: { readonly id: string; readonly at: number }[] = [];
+            for (const id of agentIds) {
+              const at = yield* usedAt(folder, id);
+              if (Option.isNone(at)) continue;
+              if (now - at.value >= Duration.toMillis(FOLDER_UNUSED_FOR)) {
+                unused.push({ id, at: at.value });
               }
-              if (save?.pending !== undefined) {
-                saveRetries.delete(id);
-                report(
-                  `a local agent's folder no save held was sealed, its save tried on the beat: ${id}`,
-                );
-                return;
-              }
-              const failed = (saveRetries.get(id)?.failed ?? 0) + 1;
-              const wait = Math.min(
-                Duration.toMillis(SAVE_RETRY.FIRST) * 2 ** (failed - 1),
-                Duration.toMillis(SAVE_RETRY.LAST),
-              );
-              saveRetries.set(id, { failed, at: (yield* Clock.currentTimeMillis) + wait });
-              report(
-                `a local agent's folder could not be saved, so it was kept and is tried again in ${Math.round(wait / 60_000)} minutes: ${id}`,
-              );
-              return;
+            }
+            const keptAt = (yield* Ref.get(state)).kept ?? {};
+            let checks = 0;
+            for (const { id, at } of unused.sort((one, other) => one.at - other.at)) {
+              if (checks >= FOLDER_CHECKS_PER_PASS) return;
+              if (keptAt[id] !== undefined || holdingWork.get(id) === at) continue;
+              const ran = yield* ranAs(id, deviceAgentLayout(folder, id).checkoutPath);
+              if (Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)) continue;
+              const ended = yield* whileIdle(id, folderCleared(id, at));
+              if (Option.exists(ended, (end) => end !== CLEAR_END.PASSED_OVER)) checks += 1;
             }
           });
 
         /**
          * One pass over the agents this machine made (`ownedAgents`), never
-         * another Luke install's, each left be while it is not idle
-         * (`whileIdle`). Their ids are read first, then smolvm's machines
-         * listed and the live agents read, so an agent named was made before
-         * the read was asked. Every VM of theirs standing is a run's leftover
-         * and deleted (`leftoverLetGo`); every folder saved and past its warm
-         * window let go of (`warmLetGo`), every one while the disk runs low;
-         * and every agent left out of `ORPHAN_AFTER` answered reads in a row,
-         * and not kept for work it holds, saved where it is not and let go of
-         * whole as a discard lets go of it, as is one kept `KEPT_FOR` since,
-         * up to `ORPHANS_PER_PASS`, those tried longest ago first; then one
-         * listed agent's folder no save holds saved (`backfilled`), so the
-         * device saves them one at a time, a pass apart, and stays usable. A
-         * listing that failed changes nothing, and a read that was not
-         * answered lets go of no agent whole and saves none.
+         * another install's, each left be while it is not idle
+         * (`whileIdle`). Their ids are read first, then the live agents, so
+         * an agent named was made before the read was asked. Every agent left
+         * out of `ORPHAN_AFTER` answered reads in a row, and not kept for work
+         * it holds, is let go of whole as a discard lets go of it, as is one
+         * kept `KEPT_FOR` since, up to `ORPHANS_PER_PASS`, those tried longest
+         * ago first; a read that was not answered lets go of no agent whole.
+         * Then the folders of idle agents unused for `FOLDER_UNUSED_FOR` are
+         * cleared (`unusedCleared`).
          */
         const swept = Effect.gen(function* () {
           passes += 1;
           const owned = (yield* ownedAgents(kernel.stateRoot))
             .filter((id) => AGENT_UUID.test(id))
             .sort();
-          const machines = yield* platform.sandbox.machines;
-          if (Option.isNone(machines)) return;
-          const vmStands = new Set<string>();
-          for (const id of owned.filter((each) => machines.value.has(each))) {
-            if (!Option.exists(yield* whileIdle(id, leftoverLetGo(id)), (gone) => gone)) {
-              vmStands.add(id);
-            }
-          }
           const now = yield* Clock.currentTimeMillis;
-          const free = yield* platform.diskFree(folder);
-          const low = Option.exists(free, (share) => share < DISK_FREE_LEAST);
-          // Note that a folder a VM still mounts is never let go of from under it.
-          for (const id of owned.filter((each) => !vmStands.has(each))) {
-            yield* whileIdle(id, warmLetGo(id, now, low));
-          }
           const live = yield* asked(client.liveAgents(deviceId));
           if (live === undefined) return;
           const mine = new Set(owned);
@@ -1991,21 +1720,16 @@ export function composeLocalAgents(
               lastTried.delete(id);
             }
           }
-          for (const id of [...saveRetries.keys()]) {
-            if (!mine.has(id)) saveRetries.delete(id);
-          }
           for (const id of owned) {
             if (!standing.has(id)) missedReads.set(id, (missedReads.get(id) ?? 0) + 1);
           }
-          // Note that a kept folder whose agent is no longer this machine's, stands again, or has been saved since is forgotten, so the agent is tried anew while it is left out.
-          const stays = (id: string, latest: LocalAgentState) =>
-            mine.has(id) && !standing.has(id) && Option.isNone(savedSince(latest.saves?.[id]));
-          const current = yield* Ref.get(state);
-          if (Object.keys(current.kept ?? {}).some((id) => !stays(id, current))) {
+          // Note that a kept folder whose agent is no longer this machine's, or stands again, is forgotten, so the agent is tried anew while it is left out.
+          const stays = (id: string) => mine.has(id) && !standing.has(id);
+          if (Object.keys((yield* Ref.get(state)).kept ?? {}).some((id) => !stays(id))) {
             yield* updateState((latest) => ({
               ...latest,
               kept: Object.fromEntries(
-                Object.entries(latest.kept ?? {}).filter(([id]) => stays(id, latest)),
+                Object.entries(latest.kept ?? {}).filter(([id]) => stays(id)),
               ),
             }));
           }
@@ -2025,9 +1749,7 @@ export function composeLocalAgents(
             const past = keptPast(id);
             const ended = yield* whileIdle(
               id,
-              past
-                ? discarded(id, LET_GO.KEPT_PAST)
-                : Effect.andThen(saveTried(id), discarded(id, LET_GO.SWEEP)),
+              discarded(id, past ? LET_GO.KEPT_PAST : LET_GO.SWEEP),
             );
             if (Option.isNone(ended)) continue;
             tried += 1;
@@ -2038,12 +1760,12 @@ export function composeLocalAgents(
             if (ended.value !== DISCARD_END.REMOVED) continue;
             report(
               past
-                ? `a local agent's folder kept a week for work no save holds was removed: ${id}`
+                ? `a local agent's folder kept a week for work in it was removed: ${id}`
                 : `a local agent the service no longer lists here was removed: ${id}`,
             );
           }
-          // Note that a folder a VM still mounts is never packed in another made beside it.
-          yield* backfilled(owned.filter((id) => standing.has(id) && !vmStands.has(id)));
+          // Note that the unused folders are read once the agents left out are let go of, so none is checked twice in one pass.
+          yield* unusedCleared(owned, now);
         });
 
         yield* Effect.forkScoped(linesFollowed);
@@ -2058,7 +1780,7 @@ export function composeLocalAgents(
             Effect.repeat(sweepPass, Schedule.spaced(PASS_EVERY)),
           ),
         );
-        yield* presence(userId, deviceId, Effect.provideContext(reconciledBeat, services));
+        yield* presence(userId, deviceId, Effect.provideContext(followedBeat, services));
       });
 
     /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */
@@ -2100,8 +1822,7 @@ export function composeLocalAgents(
      * machine's lease taken, the device registered, every agent its own
      * state names kept as its own (`adopted`), every launch it kept
      * from a runner that ended with the app or the gate settled as gone, its
-     * VM deleted first, every VM this machine's agents left standing
-     * deleted, and
+     * turn let go of first, as is every other agent's this machine made, and
      * the account's agents followed until the gate shuts or the account
      * changes, when the follow's scope closes, every runner it started is
      * stopped with its group, and the lease is given back.
@@ -2119,7 +1840,7 @@ export function composeLocalAgents(
       Effect.gen(function* () {
         const lost = yield* leased;
         if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
-        // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries and the kept launches' recovery among it, so nothing of this follower's registers or deletes a VM once another holds the machine, and the follow ends with every runner it started.
+        // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries and the kept launches' recovery among it, so nothing of this follower's registers or settles a launch once another holds the machine, and the follow ends with every runner it started.
         yield* Effect.race(underLease(userId, folder), lost.value);
       });
 
@@ -2127,7 +1848,7 @@ export function composeLocalAgents(
     const underLease = (userId: string, folder: string) =>
       Effect.gen(function* () {
         const deviceId = yield* deviceOf(userId);
-        const { tools } = platform.sandbox;
+        const { tools } = platform;
         const registered = (setup: DeviceSetupRegister) =>
           client.register(deviceId, {
             name: platform.deviceName,
@@ -2141,33 +1862,27 @@ export function composeLocalAgents(
             capabilities: platform.deviceCapabilities,
             ...setup,
           });
-        // Note that the device registers as ready only once it has what its VMs run on, so Start never takes one that cannot run an agent.
+        // Note that the device registers as ready only once it has what its agents run on, so Start never takes one that cannot run an agent.
         if (!(yield* readyForOpening(userId, deviceId, registered))) {
           return yield* Effect.sleep(IDLE);
         }
         const shellVariables = yield* shellEnvironment;
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
-        if (savesState) yield* saves.straysLetGo(userId);
-        // Note that the agents this install ran are kept as its own before its kept launches are settled and forgotten, and before any of its VMs is deleted or its first pass runs.
+        // Note that the agents this install ran are kept as its own before its kept launches are settled and forgotten, and before its first pass runs.
         yield* adopted(folder);
+        yield* unstampedStamped(folder);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
-          // Note that a runner that ended with the app saved nothing of its turn, so its folder holds state no save committed.
-          if (savesState && launch.agentId !== undefined) {
-            yield* saves.unsavedMarked(userId, launch.agentId, launch.id);
-          }
-          // Note that a runner that ended with the app left its VM standing, so its launch is settled only once its turn is let go of, which a beat tries again (`vmLetGo`).
-          if (launch.agentId !== undefined && !(yield* turnLetGo(folder, launch.agentId))) {
-            undeleted.set(launch.id, VM_DELETE_TRIES);
-            continue;
+          // Note that a runner that ended with the app left its turn standing, so its turn is let go of before its launch is settled.
+          if (launch.agentId !== undefined) {
+            yield* turnLetGo(deviceAgentLayout(folder, launch.agentId));
           }
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
         }
-        // Note that no runner runs yet, so a VM of any agent this machine made is a leftover; the agents of another Luke install sharing the smolvm store are never named here.
+        // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another install sharing `~/.vespin/agents` are never named here.
         const kept = new Set(left.flatMap((launch) => launch.agentId ?? []));
         for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
-          if (kept.has(agentId) || (yield* turnLetGo(folder, agentId))) continue;
-          report("a VM a local agent's run left standing could not be deleted");
+          if (!kept.has(agentId)) yield* turnLetGo(deviceAgentLayout(folder, agentId));
         }
         yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
       });

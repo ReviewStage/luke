@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BoardIcon,
   CircleCheckIcon,
@@ -101,7 +102,7 @@ function HeldDisclosure(): React.JSX.Element {
   return (
     <Disclosure open={open} onOpenChange={setOpen}>
       <DisclosureSummary>
-        <span>Luke · Lines 12–18</span>
+        <span>{PRODUCT_NAME} · Lines 12–18</span>
       </DisclosureSummary>
       <DisclosureBody>
         <Text>The retry loop starts here, before the first request is sent.</Text>
@@ -146,7 +147,8 @@ function Disclosures(): React.JSX.Element {
             </DisclosureSummary>
             <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
               <Text>
-                Luke read the plan, split it into three tasks, and started an agent on each.
+                {PRODUCT_NAME} read the plan, split it into three tasks, and started an agent on
+                each.
               </Text>
             </DisclosureBody>
           </Disclosure>

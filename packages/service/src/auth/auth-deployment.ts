@@ -28,14 +28,14 @@ import { Redacted } from "effect";
 import { text } from "../core.js";
 
 /** The Vercel environment a deployment runs as, as its own `VERCEL_ENV` names it. */
-const DEPLOYMENT_ENVIRONMENT = {
+export const DEPLOYMENT_ENVIRONMENT = {
   PRODUCTION: "production",
   PREVIEW: "preview",
   DEVELOPMENT: "development",
 } as const;
 
 /** The variables the deployment's shape is read from; a blank value is absent. */
-const AUTH_DEPLOYMENT_ENVIRONMENT = {
+export const AUTH_DEPLOYMENT_ENVIRONMENT = {
   ENVIRONMENT: "VERCEL_ENV",
   DEPLOYMENT_HOST: "VERCEL_URL",
   BRANCH_HOST: "VERCEL_BRANCH_URL",
@@ -44,7 +44,7 @@ const AUTH_DEPLOYMENT_ENVIRONMENT = {
 } as const;
 
 /**
- * The variables the Luke GitHub App is read from. Dean registered the App
+ * The variables our GitHub App is read from. Dean registered the App
  * under the ReviewStage org, and Vercel holds these five for every
  * environment. "Sign in with GitHub" is the App's own user authorization,
  * so its client id and secret are the sign-in's social client below, and
@@ -128,7 +128,7 @@ export interface AuthSecrets {
   /** The secret that signs this deployment's sessions; absent, Better Auth refuses to sign any, and `auth.ts` says so as it loads. */
   sessionSecret: Redacted.Redacted | undefined;
   google: SocialClient;
-  /** The Luke GitHub App's client, since a GitHub sign-in is that App's user authorization. */
+  /** Our GitHub App's client, since a GitHub sign-in is that App's user authorization. */
   github: SocialClient;
 }
 

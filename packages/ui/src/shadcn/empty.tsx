@@ -2,13 +2,13 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * empty.tsx -- shadcn/ui's empty (style `base-nova`), vendored and drawn as Luke's empty state: the place's glyph, its heading and line, and the way on, centred in the room the place leaves.
+ * empty.tsx -- shadcn/ui's empty (style `base-nova`), vendored and drawn as our empty state: the place's glyph, its heading and line, and the way on, centred in the room the place leaves.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add empty` reads as a small diff. Its local
  * changes:
  *
- * - `Empty` is the centred block alone, at Luke's measure
+ * - `Empty` is the centred block alone, at our measure
  *   (`max-w-empty-state`), inset, and gap, with no width, flex share,
  *   dashed edge, corner, or `text-balance` of its own, because the room it
  *   stands in, which shares its space above and below two to three, is
@@ -16,7 +16,7 @@ import { cn } from "../cn.js";
  *   wrap as a paragraph's do.
  * - `EmptyHeader` is the heading and the line together, at the item gap
  *   between them, with no measure of its own, since the block's is the
- *   measure; and `EmptyMedia`'s one look is Luke's glyph, large and fainter
+ *   measure; and `EmptyMedia`'s one look is our glyph, large and fainter
  *   than the muted ink, its stroke thinned (no `variant`, and no `mb-2`,
  *   since the block's gap stands between it and the words).
  * - `EmptyTitle`, `EmptyDescription`, and `EmptyContent` are dropped,

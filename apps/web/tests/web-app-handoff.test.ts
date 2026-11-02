@@ -10,7 +10,7 @@ import { pageLoadedBy } from "./support/page-load";
 
 /**
  * The web app's root opened at a plan's link on a Mac, by a fresh
- * navigation, for an account that chose to open its Luke links in the Mac
+ * navigation, for an account that chose to open its app links in the Mac
  * app: the panel draws first, the link the tab loaded at is handed to the
  * app, and the tab stays drawn beside it, handing nothing again as the
  * visitor returns to it. One mount per file, because the panel's state read
@@ -41,7 +41,7 @@ test("a plan's link opened on a Mac by an account that chose the Mac app is hand
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() => assert.equal(opened.length, 1, "the link is handed to the app"));
-  assert.match(opened[0] ?? "", /^tryluke:/u);
+  assert.match(opened[0] ?? "", /^vespin:/u);
   assert.match(opened[0] ?? "", new RegExp(`/plan/${LISTED_TASK.id}$`, "u"));
   // The visitor comes back to the tab, which is still drawn and asks the app nothing more.
   window.dispatchEvent(new Event("focus"));

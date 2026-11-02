@@ -116,7 +116,7 @@ import {
  *
  * The box is read the moment it changes (`parseSkillPaste`), so the line
  * under it says at once whether it is a GitHub repository, a skill's text,
- * or something Luke does not install from. A short pause after the last
+ * or something we do not install from. A short pause after the last
  * keystroke the service previews it, and a paste folds the box into one
  * line naming where the skills come from, with Change to open it again.
  * What follows is `npx skills add`'s own choice: a paste that named skills,

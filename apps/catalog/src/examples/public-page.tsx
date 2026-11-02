@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -31,7 +32,7 @@ const SECTIONS = [
   {
     id: "talk",
     title: "Talk it through",
-    body: "Say what the feature is for. Luke asks what he needs to and reads the code while you talk.",
+    body: `Say what the feature is for. ${PRODUCT_NAME} asks what it needs to and reads the code while you talk.`,
   },
   {
     id: "plan",
@@ -41,14 +42,14 @@ const SECTIONS = [
   {
     id: "hand",
     title: "Hand it off",
-    body: "Paste it into your coding agent of choice, or start one from Luke on acme-corporation-engineering-platform.",
+    body: `Paste it into your coding agent of choice, or start one from ${PRODUCT_NAME} on acme-corporation-engineering-platform.`,
   },
 ] as const;
 
 function Banner(): React.JSX.Element {
   return (
     <nav className="catalog-public-banner" aria-label="Site">
-      <span className="catalog-public-wordmark">Luke</span>
+      <span className="catalog-public-wordmark">{PRODUCT_NAME}</span>
       <span className="catalog-public-links">
         <span>About</span>
         <span>Changelog</span>
@@ -80,7 +81,7 @@ function Landing(): React.JSX.Element {
       footer={<Footer />}
       title="A better way to plan with agents."
       titleStyle={PUBLIC_TITLE.HERO}
-      lead="Talk through a feature with Luke. He reads the code while you talk and writes a plan you can paste into your coding agent."
+      lead={`Talk through a feature with ${PRODUCT_NAME}. It reads the code while you talk and writes a plan you can paste into your coding agent.`}
     >
       <PublicSection>
         <Inline gap={GAP.CONTROL}>
@@ -101,7 +102,9 @@ function About(): React.JSX.Element {
     <PublicPage banner={<Banner />} footer={<Footer />} title="About">
       <PublicSection title="Who we are">
         <Stack gap={GAP.FIELD}>
-          <Text>Ada Lovelace and Grace Hopper build Luke from a small room in Acme City.</Text>
+          <Text>
+            Ada Lovelace and Grace Hopper build {PRODUCT_NAME} from a small room in Acme City.
+          </Text>
           <Text>Both spent years writing the agents they now plan with.</Text>
         </Stack>
       </PublicSection>

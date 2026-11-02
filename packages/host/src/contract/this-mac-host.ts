@@ -8,7 +8,7 @@ import { THIS_MAC_HOST_ACT_KIND } from "./kinds.js";
  * The host answers both (`compose-this-mac-host.ts`): the standing it last
  * found, read again every few seconds while an account is signed in, with
  * the setup this Mac registered where the service lists it, and the member's
- * own turn-on, which enrolls the Mac where it never was, where Luke removed
+ * own turn-on, which enrolls the Mac where it never was, where the service removed
  * it, or where the last turn-on failed, and starts `luke-host` again where
  * its setup failed. A browser tab runs no local agents, so it refuses both.
  */
@@ -21,21 +21,21 @@ export const THIS_MAC_HOST_STANDING = {
   NOT_TURNED_ON: "not-turned-on",
   /** Being turned on: the Mac enrolled and its login item registered. */
   TURNING_ON: "turning-on",
-  /** `luke-host` is fetching what its VMs run on, which takes no agent until it is done. */
+  /** `luke-host` is fetching what its agents run on, which takes no agent until it is done. */
   GETTING_READY: "getting-ready",
   /** `luke-host` holds the machine's lease and follows its agents. */
   RUNNING: "running",
-  /** Registered, but not following: starting, between logins, or waiting on Luke. */
+  /** Registered, but not following: starting, between logins, or waiting on the service. */
   NOT_RUNNING: "not-running",
   /** Registered, and waiting on the member in System Settings › General › Login Items. */
   REQUIRES_APPROVAL: "requires-approval",
-  /** Luke refused this Mac's secret: it was removed, and comes back only by turning it on again. */
+  /** The service refused this Mac's secret: it was removed, and comes back only by turning it on again. */
   REMOVED: "removed",
   /** The last turn-on failed, for the reason it carries. */
   FAILED: "failed",
-  /** `luke-host` could not fetch what its VMs run on, for the reason it registered. */
+  /** `luke-host` could not fetch what its agents run on, for the reason it registered. */
   SETUP_FAILED: "setup-failed",
-  /** This Mac runs agents for another Luke account signed in on it before. */
+  /** This Mac runs agents for another account signed in on it before. */
   OTHER_ACCOUNT: "other-account",
 } as const;
 

@@ -13,7 +13,7 @@ import { underWebAdminDoors } from "./support/admin-doors";
  * headings, busiest first with an admin marked in words, and moves the way a
  * maintainer asks: a plain press on an account or on the way back moves in
  * place, and a modified one is left to the browser's own gesture. The
- * network, the HTTP boundary to Luke, is a fake that answers the day's read.
+ * network, the HTTP boundary to the service, is a fake that answers the day's read.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);

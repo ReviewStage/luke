@@ -181,13 +181,14 @@ const PANEL_WINDOW = {
     "offline-glyph",
     "offline-mark",
     "section-icon-scroll",
+    "sidebar-row-age",
     "sidebar-row-repository",
-    "sidebar-row-time",
     "sidebar-slot-start",
     "workspace-ref-lift",
     "workspace-shared-glyph",
   ],
   shadow: ["actor-for-ring", "actor-outline", "actor-outline-ring", "actor-ring"],
+  container: ["section-icon-picker"],
   animate: ["offline-arrive"],
 } as const;
 
@@ -613,6 +614,7 @@ const merge = extendTailwindMerge({
         "tooltip-card",
         ...FEEDBACK_DISPLAY.container,
         ...CONTENT_TEXT.container,
+        ...PANEL_WINDOW.container,
         ...PAGE_PATTERNS.container,
       ],
       animate: [

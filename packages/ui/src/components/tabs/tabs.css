@@ -316,6 +316,7 @@
   .luke-tab-close {
     display: flex;
     opacity: 0;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-tab[data-selected="true"] .luke-tab-close {
@@ -355,8 +356,11 @@
     --luke-tab-end: calc(var(--luke-tab-close) + 2 * var(--luke-tab-close-inset));
   }
 
+  /* Note that the mark and the × trade places on the hover's fade, as every
+     other reveal under the pointer does. */
   .luke-tab-end-mark {
     display: flex;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   @media (hover: hover) {

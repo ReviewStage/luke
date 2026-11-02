@@ -3,12 +3,12 @@ import Foundation
 import ServiceManagement
 
 /// This Mac's `luke-host` command, inside the app at `Contents/MacOS/luke-host`:
-/// the login item that runs Luke's host daemon as the member, at login,
+/// the login item that runs our host daemon as the member, at login,
 /// whether or not the app is open, and the way the app registers it.
 ///
 /// `register`, `unregister`, and `status` act on the login item through
 /// `SMAppService`, which reads its launchd job from the app's own
-/// `Contents/Library/LaunchAgents/dev.reviewstage.luke.host.plist`; each
+/// `Contents/Library/LaunchAgents/dev.vespin.host.plist`; each
 /// prints where it then stands as one word on stdout (`HostLoginItemStatus`),
 /// which the main process reads (`src/main/native/host-login-item.ts`).
 /// Note that it lives in `Contents/MacOS` rather than beside the other
@@ -16,8 +16,8 @@ import ServiceManagement
 /// which `SMAppService` registers the job for.
 ///
 /// `service` is what the job runs: the daemon's `run`, with its output
-/// appended to `~/Library/Logs/Luke/luke-host.log`. Every other command is
-/// the daemon's own (`enroll`, `version`, `run`), run in place on the Node
+/// appended to `~/Library/Logs/Vespin/luke-host.log`. Every other command is
+/// the daemon's own (`version`, `run`), run in place on the Node
 /// the app carries (`Resources/luke-host/node/bin/node`) with its bundle
 /// (`Resources/luke-host/lib/luke-host.mjs`): the same process, so launchd's
 /// stop and its restart after a crash reach the daemon itself.
@@ -27,10 +27,10 @@ import ServiceManagement
 /// where the daemon cannot start, 126, as a shell does.
 
 /// The job's plist, under the app's `Contents/Library/LaunchAgents`.
-private let PLIST_NAME = "dev.reviewstage.luke.host.plist"
+private let PLIST_NAME = "dev.vespin.host.plist"
 
 /// The log the job's output is appended to, under the member's home, and how large it grows before it is set aside once.
-private let LOG_FOLDER = "Library/Logs/Luke"
+private let LOG_FOLDER = "Library/Logs/Vespin"
 private let LOG_FILE = "luke-host.log"
 private let LOG_LIMIT: UInt64 = 10 * 1024 * 1024
 
@@ -142,7 +142,7 @@ enum HostLoginItem {
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
         guard let command = arguments.first else {
-            fail("usage: luke-host register | unregister | status | service | enroll [--token <token>] | version")
+            fail("usage: luke-host register | unregister | status | service | version")
         }
         switch command {
         case "register", "unregister", "status":

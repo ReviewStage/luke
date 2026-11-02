@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_ARCHIVER, AGENT_KIND, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { INBOX_ASK_STATUS, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
@@ -15,11 +15,9 @@ import { getTestDB, openInboxItem, openTaskAgent, openWorkspace } from "../../te
 import {
   archiveAgent,
   archiveIdleAgent,
-  archiveOperatorAgent,
   archiveUnmovedAgent,
   readAgent,
   recordAgentPublished,
-  restoreOperatorAgent,
   unarchiveAgentFrom,
 } from "../agent-store.js";
 import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-store.js";
@@ -33,7 +31,7 @@ import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-s
  * task, agent, or account, stands open. The
  * act's opposite, the agent brought back or a member moving the task off
  * Done or Canceled, opens again exactly the items that act settled, its asks
- * open again; Luke reopening the task as a turn starts on it opens nothing.
+ * open again; the task reopened by us as a turn starts on it opens nothing.
  *
  * Synthetic accounts, workspaces, tasks, and agents throughout.
  */
@@ -65,6 +63,7 @@ const standingOf = (itemId: string) =>
         closedReason: inboxItem.closedReason,
         closedBy: inboxItem.closedBy,
         openAsk: inboxItem.openAskMessageId,
+        settledAt: inboxItem.settledAt,
       })
       .from(inboxItem)
       .where(eq(inboxItem.id, itemId));
@@ -75,22 +74,33 @@ const standingOf = (itemId: string) =>
     return {
       ...(item ?? assert.fail("the item is gone")),
       asks: messages.flatMap(({ ask }) =>
-        ask === null ? [] : [{ status: ask.status, withdrawnReason: ask.withdrawnReason }],
+        ask === null
+          ? []
+          : [
+              {
+                status: ask.status,
+                withdrawnReason: ask.withdrawnReason,
+                withdrawnAt: ask.withdrawnAt,
+              },
+            ],
       ),
     };
   });
 
-/** The items stand open, each question's ask open too. */
+/** The items stand open, each question's ask open too, with no withdrawal's time left on it. */
 const assertOpen = (itemIds: readonly string[]) =>
   Effect.gen(function* () {
     for (const itemId of itemIds) {
       const standing = yield* standingOf(itemId);
       assert.equal(standing.status, INBOX_STATUS.OPEN);
-      for (const ask of standing.asks) assert.equal(ask.status, INBOX_ASK_STATUS.OPEN);
+      for (const ask of standing.asks) {
+        assert.equal(ask.status, INBOX_ASK_STATUS.OPEN);
+        assert.equal(ask.withdrawnAt, undefined);
+      }
     }
   });
 
-/** The items stand closed by no member, with why, and every ask they held withdrawn with the same why. */
+/** The items stand closed by no member, with why, and every ask they held withdrawn with the same why when the item settled. */
 const assertSettled = (itemIds: readonly string[], reason: string) =>
   Effect.gen(function* () {
     for (const itemId of itemIds) {
@@ -100,7 +110,11 @@ const assertSettled = (itemIds: readonly string[], reason: string) =>
       assert.equal(standing.closedBy, null);
       assert.equal(standing.openAsk, null);
       for (const ask of standing.asks) {
-        assert.deepEqual(ask, { status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: reason });
+        assert.deepEqual(ask, {
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+          withdrawnReason: reason,
+          withdrawnAt: standing.settledAt?.getTime(),
+        });
       }
     }
   });
@@ -159,7 +173,7 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
       }),
   );
 
-  it.effect("leaves a task's open notices open when Luke finishes its work", () =>
+  it.effect("leaves a task's open notices open when Vespin finishes its work", () =>
     Effect.gen(function* () {
       const dean = yield* openAccount;
       const workspace = yield* openWorkspace(dean);
@@ -239,29 +253,6 @@ it.layer(getTestDB())("an inbox item settling with its agent", (it) => {
         yield* unarchive(dean, archived.agentId);
         yield* assertOpen(archived.items);
         yield* assertSettled(shipped.items, "Its task is done.");
-      }),
-  );
-
-  it.effect(
-    "opens again the operator's items its Reset settled when the Reset is undone, settling the one it replaced",
-    () =>
-      Effect.gen(function* () {
-        const dean = yield* openAccount;
-        const workspace = yield* openWorkspace(dean);
-        const reset = yield* openTaskAgent(dean, workspace, null, AGENT_KIND.OPERATOR);
-        const asked = yield* openInboxItem(dean, workspace, null, reset, true);
-
-        assert.equal(Option.isSome(yield* archiveOperatorAgent(dean, workspace, reset)), true);
-        yield* assertSettled([asked], "Its agent was archived.");
-        const fresh = yield* openTaskAgent(dean, workspace, null, AGENT_KIND.OPERATOR);
-        const freshAsked = yield* openInboxItem(dean, workspace, null, fresh, true);
-
-        assert.equal(
-          Option.isSome(yield* restoreOperatorAgent(dean, workspace, reset, fresh)),
-          true,
-        );
-        yield* assertOpen([asked]);
-        yield* assertSettled([freshAsked], "Its agent was archived.");
       }),
   );
 });

@@ -1,14 +1,14 @@
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@luke/brand";
 import { type RefObject, useEffect, useRef, useState } from "react";
 
-/** One thing Luke might do with a moment, and how much of the pool it takes. */
+/** One thing the face might do with a moment, and how much of the pool it takes. */
 interface WeightedAside {
   motion: FaceMotion;
   weight: number;
 }
 
 /**
- * Gestures Luke makes for no reason at all, weighted rather than rotated
+ * Gestures the face makes for no reason at all, weighted rather than rotated
  * because these are not equals: the blink is half the pool and the loud ones
  * sit at the bottom, rare enough to stay surprises. They are what keeps a
  * permanent fixture from reading as a dead one — a face that never moves is a
@@ -32,7 +32,7 @@ const IDLE_ASIDES: readonly WeightedAside[] = [
 ];
 
 /**
- * Tricks for the pointer coming to rest on Luke himself. The flyoff is the
+ * Tricks for the pointer coming to rest on the face itself. The flyoff is the
  * showpiece and takes most of the pool; the rest are the loudest of the idle
  * asides, because a hover has earned something bigger than a blink. Nothing
  * here may carry meaning — a hand crosses the window whenever it likes, and a
@@ -77,14 +77,14 @@ const stillnessDelay = () =>
 
 /**
  * How far past the drawn face a hover still counts. Asking for the pixel is
- * asking to miss: a pointer resting anywhere near Luke means Luke. Wide
- * enough to be forgiving, narrow enough that the reach stays his — it must not
- * swallow the name beside him or read the whole card as a face.
+ * asking to miss: a pointer resting anywhere near the face means the face. Wide
+ * enough to be forgiving, narrow enough that the reach stays its own — it must not
+ * swallow the name beside it or read the whole card as a face.
  */
 const HOVER_REACH_PX = 8;
 
 /**
- * Whether the pointer is resting on Luke himself, give or take the reach. Read
+ * Whether the pointer is resting on the face itself, give or take the reach. Read
  * from the window's own pointer stream rather than from the face element, so
  * a face mid-trick still answers where it took off from: a motion transforms
  * layers inside the svg, and the box is measured at each move rather than
@@ -146,7 +146,7 @@ interface FacePlay {
 }
 
 /**
- * What Luke is playing: a gesture that has the face for one play, or nothing
+ * What the face is playing: a gesture that has the face for one play, or nothing
  * at all. Gestures always give the face back, and what they give it back to
  * is stillness: a face that never stops moving is one you stop reading.
  */

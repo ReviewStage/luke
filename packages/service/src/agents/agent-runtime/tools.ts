@@ -1,5 +1,5 @@
 /**
- * tools.ts -- every tool Luke offers any of its agents, and the roles each one serves.
+ * tools.ts -- every tool we offer any of our agents, and the roles each one serves.
  *
  * The one registry of the agent runtime's tools:
  * each tool, named once by the name a model calls it by
@@ -12,7 +12,7 @@
  * role is one entry here and its implementation where the role's root
  * reaches it. The tools eve injects of its own beside a task or a connection
  * (`task_wait`, `task_cancel`, `connection_search`, `connection_execute`)
- * and a declared subagent's own tool are eve's, not Luke's, and are not
+ * and a declared subagent's own tool are eve's, not ours, and are not
  * listed.
  *
  * This module is a leaf: a tool's module takes its name from here, so the
@@ -54,8 +54,8 @@ const TOOL_ROLES = {
   [AGENT_TOOL.DELETE_AUTOMATION]: [CODER],
   [AGENT_TOOL.RUN_AUTOMATION]: [CODER],
   [AGENT_TOOL.LIST_MODELS]: [CODER],
-  [AGENT_TOOL.REMEMBER]: [CODER],
-  [AGENT_TOOL.RECALL]: [CODER],
+  [AGENT_TOOL.SAVE_MEMORY]: [CODER],
+  [AGENT_TOOL.SEARCH_MEMORY]: [CODER],
   [AGENT_TOOL.WEB_SEARCH]: [CODER, CODER_WORKER],
   [AGENT_TOOL.READ_WEB_PAGE]: [CODER, CODER_WORKER],
   [AGENT_TOOL.RUN_ON_MAC]: [CODER],
@@ -75,14 +75,12 @@ const TOOL_ROLES = {
   [AGENT_TOOL.CREATE_CHANNEL]: [CODER],
   [AGENT_TOOL.UPDATE_CHANNEL]: [CODER],
   [AGENT_TOOL.MOVE_THREAD]: [CODER],
-  [AGENT_TOOL.LIST_OPEN_ASKS]: [CODER],
   [AGENT_TOOL.OPEN_PULL_REQUEST]: [CODER],
   [AGENT_TOOL.LOAD_SKILL]: [CODER],
   [AGENT_TOOL.SHOW_PAGE]: [CODER],
   [AGENT_TOOL.READ_COMMENTS]: [CODER],
   [AGENT_TOOL.REPLY_TO_COMMENT]: [CODER],
-  [AGENT_TOOL.RESOLVE_THREAD]: [CODER],
-  [AGENT_TOOL.REOPEN_THREAD]: [CODER],
+  [AGENT_TOOL.UPDATE_COMMENT]: [CODER],
   [AGENT_TOOL.READ_PAGE]: [CODER],
   [AGENT_TOOL.SHOW_IMAGE]: [CODER],
   [AGENT_TOOL.SLEEP]: [CODER],

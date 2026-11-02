@@ -1,10 +1,5 @@
 import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
-import {
-  AGENT_KIND,
-  type AgentAttachment,
-  type AgentKind,
-  type AgentSummary,
-} from "@luke/features/agent-wire";
+import type { AgentAttachment, AgentSummary } from "@luke/features/agent-wire";
 import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
@@ -44,7 +39,6 @@ import {
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { insideCode } from "@luke/features/mention-link";
-import { agentGivenName, OPERATOR_NAME } from "@luke/features/model-label";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
@@ -1174,7 +1168,6 @@ export const INBOX_HOLDER = {
 export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
-  | "agentKind"
   | "agentTitle"
   | "agentModel"
   | "automationId"
@@ -1186,14 +1179,11 @@ export type TasklessInboxAgent = Pick<
 /**
  * An agent with no task as the Inbox names it, from its own row where main
  * lists none of its items, a link naming one whose items are all settled:
- * the name it goes by (`agentGivenName`, Luke for the member's operator), else
- * its title, as main's read names it (`agentGivenNameSql`), and its kind, so
- * Luke's stands under Luke; the automation that started it, by the name its
- * run kept; and its repository and workspace where they are known.
+ * its title, as main's read names it; the automation that started it, by
+ * the name its run kept; and its repository and workspace where they are known.
  */
 export function inboxAgentOf(agent: {
   readonly id: string;
-  readonly kind?: AgentKind | undefined;
   readonly title: string | null;
   readonly model: string;
   readonly automationId?: string | null | undefined;
@@ -1203,8 +1193,7 @@ export function inboxAgentOf(agent: {
 }): TasklessInboxAgent {
   return {
     agentId: agent.id,
-    ...(agent.kind === undefined ? undefined : { agentKind: agent.kind }),
-    agentTitle: agentGivenName(agent) ?? agent.title,
+    agentTitle: agent.title,
     agentModel: agent.model,
     automationId: agent.automationId ?? null,
     automationName: agent.automationName ?? null,
@@ -1239,14 +1228,9 @@ export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
   return holder;
 }
 
-/** Whether a holder is the member's operator, Luke, whose items stand in a group of his own. */
-export function operatorHolder(holder: InboxHolder): boolean {
-  return holder.kind === INBOX_HOLDER.AGENT && holder.agent.agentKind === AGENT_KIND.OPERATOR;
-}
-
-/** The automation whose group an agent's items stand in; none for a task, the member's operator, and the agents no automation the reader may read names. */
+/** The automation whose group an agent's items stand in; none for a task, and the agents no automation the reader may read names. */
 export function holderAutomationId(holder: InboxHolder): string | null {
-  if (holder.kind === INBOX_HOLDER.TASK || operatorHolder(holder)) return null;
+  if (holder.kind === INBOX_HOLDER.TASK) return null;
   return holder.agent.automationId;
 }
 
@@ -1268,10 +1252,9 @@ export function itemWorkspaceId(holder: InboxHolder): string | undefined {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.workspaceId : holder.agent.workspaceId;
 }
 
-/** A holder's name as its group's header and a row's context say it: the task's, Luke's, the automation's, or the name of the agents no automation names. */
+/** A holder's name as its group's header and a row's context say it: the task's, the automation's, or the name of the agents no automation names. */
 export function holderName(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.name;
-  if (operatorHolder(holder)) return OPERATOR_NAME;
   const { automationId, automationName } = holder.agent;
   return automationId === null ? NO_AUTOMATION_NAME : (automationName ?? NO_AUTOMATION_NAME);
 }

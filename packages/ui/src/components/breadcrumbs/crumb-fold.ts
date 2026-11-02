@@ -22,7 +22,9 @@ import { BREADCRUMB_SHOWN, type Crumb } from "./breadcrumbs.js";
  * The bar is measured in the layout effect after each render, so the path
  * folds before it is painted, and again from nothing whenever its crumbs
  * change or any width the fold was settled on moves: the room the path
- * stands in, the list, a crumb, or the words once the page's fonts load.
+ * stands in, the list, a crumb, or the words once the page's fonts load,
+ * whether the observer reads that move or a render lands after it, as one
+ * that widens the bar while drawing the path again does.
  * Note that a fold is undone only by measuring again from nothing, so a
  * width the fold does not watch would leave the path folded or cut as it
  * stood at whichever moment it was last measured.
@@ -199,6 +201,13 @@ export function useCrumbFold(
     const list = nav?.querySelector("ol");
     if (nav === null || nav === undefined || list === null || list === undefined) return;
     if (observer.current !== null) watchCrumbs(observer.current, list, watched.current);
+    // Note that a render landing after a width moved measures again from nothing, because here a fold only grows, and the observer would read the widths this render settles on as unchanged.
+    const was = settled.current;
+    if (count > 0 && was !== undefined && !sameWidths(was, widthsOf(nav))) {
+      settled.current = undefined;
+      setState({ key, count: 0 });
+      return;
+    }
     if (count < most && list.scrollWidth > list.clientWidth) {
       settled.current = undefined;
       setState({ key, count: count + 1 });

@@ -1,4 +1,4 @@
-/* Luke's app window: a sidebar of places on the left, the chosen work on the
+/* Our app window: a sidebar of places on the left, the chosen work on the
    right, and the confirm and feedback dialogs over it. Last in index.css, so a rule here wins over a panel rule of equal
    weight. */
 
@@ -437,7 +437,8 @@ body,
   display: none;
 }
 
-.desktop-shell[data-sidebar-collapsed="true"][data-offline="true"] {
+/* Note that the room follows the pill drawn, not the network, so it stands until the pill has faded out. */
+.desktop-shell[data-sidebar-collapsed="true"]:has(.title-bar-controls .offline-mark) {
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
     3 *
@@ -675,7 +676,7 @@ body,
 /* Its column is a `ScrollArea` with nothing scrolling sideways, since
    nothing in a plan is wider than the column (its code and tables scroll on
    their own), and a stable gutter, so where macOS draws a bar that takes
-   room the column does not shift sideways on the line Luke writes that
+   room the column does not shift sideways on the line the app writes that
    first makes it scroll. This is the block inside it. */
 .desktop-document .plan-document-body {
   padding: var(--luke-page-inset);
@@ -1247,7 +1248,6 @@ body,
 .task-summary-archived-agent[data-menu-open="true"] > .task-summary-marks {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .task-summary-archived-agent:has(:focus-visible) .failed-mark,
@@ -1263,7 +1263,6 @@ body,
   .task-summary-archived-agent:hover > .task-summary-marks {
     opacity: 1;
     pointer-events: auto;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .task-summary-archived-agent:hover .failed-mark {

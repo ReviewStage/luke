@@ -11,7 +11,7 @@
  * source's steps the block keeps of how many there were. A preamble follows
  * for the model, then each step behind a marker of its own naming its kind,
  * then the closing marker. Where the oldest steps could not be kept, a
- * summary Luke wrote of them stands after the preamble and before the
+ * summary we wrote of them stands after the preamble and before the
  * steps, behind a marker of its own saying whose words it is and how many
  * steps it stands for. The note stands under its heading behind a
  * marker of its own naming how many of the message's files are the note's,
@@ -76,7 +76,7 @@ export const REPLAY_VALUE_FORM = {
 
 export type ReplayValueForm = (typeof REPLAY_VALUE_FORM)[keyof typeof REPLAY_VALUE_FORM];
 
-/** Who sent a line: a member of the workspace, Luke, an automation, GitHub, another agent, or the developer where the row named none. */
+/** Who sent a line: a member of the workspace, the app, an automation, GitHub, another agent, or the developer where the row named none. */
 export const REPLAY_SENDER = {
   DEVELOPER: "developer",
   MEMBER: "member",
@@ -154,7 +154,7 @@ export function toolStep(call: {
   };
 }
 
-/** A summary Luke wrote of the oldest steps the replay could not keep: its words, which are not the agent's own, and how many steps it stands for. */
+/** A summary we wrote of the oldest steps the replay could not keep: its words, which are not the agent's own, and how many steps it stands for. */
 export interface ReplaySummary {
   readonly text: string;
   readonly steps: number;
@@ -326,7 +326,7 @@ function senderFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep,
   return { sender };
 }
 
-/** The summary as the block spells it, marked as Luke's words rather than the agent's. */
+/** The summary as the block spells it, marked as the app's words rather than the agent's. */
 function summaryText(summary: ReplaySummary | undefined): string {
   if (summary === undefined) return "";
   return `<!-- luke:summary by=luke steps=${summary.steps} chars=${summary.text.length}${MARKER_END}${summary.text}\n`;

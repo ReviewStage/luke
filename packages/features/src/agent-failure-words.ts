@@ -1,4 +1,5 @@
 import { AGENT_FAILURE, type AgentFailure } from "./agent-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /**
  * agent-failure-words.ts -- why an agent's turn failed, in the words the window says it in: one phrase per failure word the service answers.
@@ -42,14 +43,15 @@ const MENDED_BY_NEW_AGENT: ReadonlySet<AgentFailure> = new Set([
 ]);
 
 /**
- * Why an agent that ran directly on its Mac failed there, and where its work
- * still is, said whole in place of a failure's words: on the reader's own
- * Mac where no one is named, else on the named starter's, whose Mac holds it.
+ * Why an agent that ran on its Mac before we gave each agent a folder of
+ * its own failed there, and where its work still is, said whole in place of
+ * a failure's words: on the reader's own Mac where no one is named, else on
+ * the named starter's, whose Mac holds it.
  */
 export function ranDirectlyWords(folder: string, starter: string | undefined): string {
   const mac = starter === undefined ? "your Mac" : `${starter}'s Mac`;
   const there = starter === undefined ? "" : " there";
-  return `This agent ran directly on ${mac}, which Luke no longer does. Its unpushed work is still in ${folder}${there}. Continue in a new agent to carry on in a sandbox.`;
+  return `This agent ran on ${mac} before ${PRODUCT_NAME} gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in ${folder}${there}. Continue in a new agent to carry on.`;
 }
 
 /**

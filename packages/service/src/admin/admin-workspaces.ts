@@ -3,7 +3,7 @@
  * workspaces and a table of workspaces, sorted by the last week's activity.
  *
  * A workspace is a Better Auth `organization`, and most are the personal one
- * made for each account, which says nothing about teams using Luke together.
+ * made for each account, which says nothing about teams using the app together.
  * So the headline counts read shared workspaces alone, two or more members
  * and nobody's personal one, and the table lists them unless the read asks
  * for every workspace. What a row names is the workspace's name, its owner,

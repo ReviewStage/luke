@@ -14,6 +14,7 @@ import { noInternalViMockRule } from "./rules/no-internal-vi-mock.ts";
 import { noLucideOutsideDoorRule } from "./rules/no-lucide-outside-door.ts";
 import { noNodeTestRule } from "./rules/no-node-test.ts";
 import { noOpenPageFromButtonRule } from "./rules/no-open-page-from-button.ts";
+import { noProductNameRule } from "./rules/no-product-name.ts";
 import { noRawAsyncPrimitivesRule } from "./rules/no-raw-async-primitives.ts";
 import { noRawHeadingOutsideUiRule } from "./rules/no-raw-heading-outside-ui.ts";
 import { noRawPressOutsideUiRule } from "./rules/no-raw-press-outside-ui.ts";
@@ -49,6 +50,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-lucide-outside-door": noLucideOutsideDoorRule,
     "no-node-test": noNodeTestRule,
     "no-open-page-from-button": noOpenPageFromButtonRule,
+    "no-product-name": noProductNameRule,
     "no-raw-async-primitives": noRawAsyncPrimitivesRule,
     "no-raw-heading-outside-ui": noRawHeadingOutsideUiRule,
     "no-raw-press-outside-ui": noRawPressOutsideUiRule,

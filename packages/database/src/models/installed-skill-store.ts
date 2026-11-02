@@ -20,7 +20,7 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 
 /**
- * installed-skill-store.ts -- the skills members install into Luke: installed, listed, read with their files, replaced, toggled, shared with a workspace, and removed, each by its own rule.
+ * installed-skill-store.ts -- the skills members install: installed, listed, read with their files, replaced, toggled, shared with a workspace, and removed, each by its own rule.
  *
  * A personal skill is its installer's alone: only they read, change,
  * toggle, and remove it, in whichever workspace they work, since it names

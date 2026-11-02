@@ -7,6 +7,7 @@ import {
   type DevicePlatform,
   type DeviceSetup,
   type DeviceSignedIn,
+  type HostUpdate,
 } from "@luke/features/device-agent-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
@@ -18,7 +19,8 @@ import { user } from "./auth.js";
  *
  * A device is a member's machine running the host program, a Mac or a
  * Linux box alike, and says which platform and architecture it runs on, whether it runs each
- * agent in a VM of its own or directly on the machine (`DEVICE_ISOLATION`),
+ * agent in a VM of its own, straight on the machine on our own sign-ins, or on
+ * the developer's own logins (`DEVICE_ISOLATION`),
  * and which lines beyond the first its follower takes (`DEVICE_CAPABILITY`).
  * The desktop mints the id once and keeps it, and registers it under the account it is signed in to;
  * an id another account registered first is never moved onto this one. While the desktop runs local agents it beats
@@ -31,16 +33,16 @@ import { user } from "./auth.js";
  * same Mac (`./device-agent.ts`). The row belongs to the account and leaves
  * with it.
  *
- * Every device joins by trading for a device secret of its own, a Linux
- * box an install token (`./host-install-token.ts`) and a Mac its desktop's
- * signed-in session, which the row keeps only as its SHA-256 in
- * `secret_hash` and which every later call of the device carries as its
- * bearer. Until the host first registers, it has no
+ * Every device joins with a device secret of its own, a box the one its
+ * approved pairing hands it (`./host-pairing.ts`) and a Mac the one its
+ * desktop's signed-in session trades for, which the row keeps only as its
+ * SHA-256 in `secret_hash` and which every later call of the device carries
+ * as its bearer. Until the host first registers, it has no
  * `home` or `claude_executable`, and no agent is offered or launched on it.
  * Removing a host stamps `removed_at` and clears its secret, so the box is
- * refused at once while its agents keep the name they ran under; enrolling
- * that id again under the same account brings it back with a new secret,
- * and a standing host's id is never enrolled again.
+ * refused at once while its agents keep the name they ran under; the
+ * account's signed-in session enrolling that id again brings it back with a
+ * new secret.
  */
 export const device = pgTable(
   "device",
@@ -60,7 +62,7 @@ export const device = pgTable(
     arch: text("arch").$type<DeviceArch>().notNull(),
     /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
     isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
-    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.luke/agents/<agent>`); null for a host that has not registered yet. */
+    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.vespin/agents/<agent>`); null for a host that has not registered yet. */
     home: text("home"),
     /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
     claudeExecutable: text("claude_executable"),
@@ -93,7 +95,16 @@ export const device = pgTable(
     setup: text("setup").$type<DeviceSetup>(),
     /** The device's own words for why its setup failed, naming no secret; null unless `setup` is failed. */
     setupFailure: text("setup_failure"),
-    /** The device's secret as its SHA-256 in hex, never the secret; null for a device that never enrolled, which Luke no longer takes a call from, and for a removed one. */
+    /**
+     * Where the host stands in updating itself to a newer release, as its
+     * last beat said (`HOST_UPDATE`): waiting for its agents to finish,
+     * switching, or failed. Null while no update is under way, as every row
+     * from before the column is; a beat naming none clears it.
+     */
+    updatePhase: text("update_phase").$type<HostUpdate>(),
+    /** The host's own words for why its update failed, naming no secret; null unless `update_phase` is failed. */
+    updateFailure: text("update_failure"),
+    /** The device's secret as its SHA-256 in hex, never the secret; null for a device that never enrolled, which the service no longer takes a call from, and for a removed one. */
     secretHash: text("secret_hash"),
     /** The host program version the device last called with; null for one that never enrolled. */
     version: text("version"),

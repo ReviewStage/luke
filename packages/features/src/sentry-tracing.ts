@@ -6,7 +6,7 @@
  * Electron's `sentry-ipc://` protocol, as a `fetch`. Browser tracing records
  * each `fetch` as a span, so a renderer left to trace everything traced its
  * own reporting: every report it sent was a span, and every span another
- * report. Those requests are Luke talking to itself and are never traced.
+ * report. Those requests are the app talking to itself and are never traced.
  * Note that this sits here rather than in `@luke/host`, because the renderer
  * reads it and may import only three of host's doors.
  */

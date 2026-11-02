@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import {
@@ -420,7 +419,7 @@ function workspaceOfRow(
 /** The longest slug spelled from a workspace's name, before any suffix. */
 const MAX_SLUG_CHARS = 48;
 
-/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under or one Luke's own pages stand under. */
+/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under or one our own pages stand under. */
 function slugOf(name: string): string {
   const spelled = name
     .normalize("NFKD")
@@ -430,7 +429,7 @@ function slugOf(name: string): string {
     .slice(0, MAX_SLUG_CHARS)
     .replace(/-+$/u, "");
   if (spelled === "") return "workspace";
-  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there, nor a step of Luke's own paths.
+  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there, nor a step of our own paths.
   const own = spelled.startsWith(PERSONAL_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
   return own ? `workspace-${spelled}` : spelled;
 }
@@ -541,15 +540,13 @@ export function agentSeenBy(userId: string): SQL {
 /**
  * The condition that the account reaches the coding agent row itself: it is
  * a member of the agent's workspace, an agent with no task as much as one on
- * a task, sees it as its GitHub access allows, and the agent is no
- * teammate's operator. Note that an operator is private to its member,
- * because it reads their inbox, DMs, and every agent they reach. It gates
+ * a task, and sees it as its GitHub access allows. It gates
  * what an agent does as itself, under the member who started it: its own
  * writes and reads by its id or its conversation, and its posts. What a
  * member, or another agent, reads or does to an agent keeps `agentVisibleTo`.
  */
 export function agentReachableBy(userId: string): SQL {
-  return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)} and ${agentNoTeammatesOperator(userId)})`;
+  return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)})`;
 }
 
 /**
@@ -571,11 +568,6 @@ export function agentVisibleTo(userId: string): SQL {
       .where(and(eq(task.id, agentTable.taskId), taskReachableBy(userId))),
   );
   return sql`(${agentReachableBy(userId)} and (${agentTable.taskId} is null or ${taskReached}))`;
-}
-
-/** The condition that the coding agent row is no operator but the account's own: a coder, or an operator the account started. */
-export function agentNoTeammatesOperator(userId: string): SQL {
-  return sql`(${agentTable.kind} <> ${AGENT_KIND.OPERATOR} or ${eq(agentTable.userId, userId)})`;
 }
 
 /** The condition that the account sees the task row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */

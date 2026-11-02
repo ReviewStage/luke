@@ -14,7 +14,6 @@ import {
   unarchiveChannel,
 } from "@luke/database/models/channel-store";
 import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
-import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { isWireUuid } from "@luke/features";
 import {
   CHANNEL_BOUNDS,
@@ -50,6 +49,7 @@ import {
 import { LINK_PLACE, linkOf, mentionMarkdownLink } from "@luke/features/link-grammar";
 import { decodeMention, MENTION_KIND, mentionLinksIn } from "@luke/features/mention-link";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { readEither } from "@luke/wire/effect";
 import { Data, DateTime, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -67,7 +67,6 @@ import {
   moveChannelThread,
   postInboxThread,
 } from "../../inbox/inbox-store.js";
-import { noticedForOperator } from "../operator-notice.js";
 import { pageStepOf } from "../written-mentions.js";
 import { CODER } from "./bounds.js";
 import {
@@ -144,7 +143,7 @@ const POST_THREAD_WORDS =
   "to is the member the thread's ask is addressed to, by their mention link, the [@Name](link) you name a member by, and the ask waits on them; " +
   "without it, it waits on the task's assignee, or on the developer who started you. " +
   `body is the message, one Markdown body of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters. ` +
-  "Write a file, a pull request, or an issue in it as a mention, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so Luke draws it as a chip. " +
+  `Write a file, a pull request, or an issue in it as a mention, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so ${PRODUCT_NAME} draws it as a chip. ` +
   "Put a link alone on its own line to show it as a card: a pull request, an issue, a page such as the GitHub settings page a to-do is done on, " +
   "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
   `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
@@ -294,7 +293,7 @@ interface AgentInboxLine {
   readonly id: string;
   readonly key: string;
   readonly title: string;
-  /** The thread as the agent names it in its words, `[@title](link)`, which Luke draws as its chip; none where the member reads its workspace no longer. */
+  /** The thread as the agent names it in its words, `[@title](link)`, which the app draws as its chip; none where the member reads its workspace no longer. */
   readonly mention?: string;
   readonly status: InboxItem["status"];
   /** Whether an answer to the open ask reaches the agent as a message, on a thread still asking. */
@@ -379,8 +378,6 @@ export const INBOX_REFUSAL = {
   NO_MEMBER:
     "Not posted: to names no member; write a member of your workspace by their mention link, [@Name](link), as a person's chip is written.",
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
-  NOT_ITS_MEMBER:
-    "Not posted: your threads are the developer's alone, which no teammate sees; name the developer in to, or leave to out.",
   ADDRESSEE_CANNOT_SEE:
     "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
   UNDER_PILOT:
@@ -655,8 +652,6 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_CHANNEL;
     case INBOX_POST_REFUSAL.NO_ADDRESSEE:
       return INBOX_REFUSAL.NO_ADDRESSEE;
-    case INBOX_POST_REFUSAL.NOT_ITS_MEMBER:
-      return INBOX_REFUSAL.NOT_ITS_MEMBER;
     case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:
       return INBOX_REFUSAL.ADDRESSEE_CANNOT_SEE;
     case INBOX_POST_REFUSAL.UNDER_PILOT:
@@ -781,17 +776,11 @@ export function postToInbox(
     const pictures = yield* bodyPictures(post.body, sandbox);
     if (Result.isFailure(pictures)) return inboxRejected(pictures.failure);
     const thread = threadPost(post, place.success);
-    return yield* Effect.flatMap(postInboxThread(agent, thread, pictures.success), (posted) => {
-      if (Result.isFailure(posted)) {
-        return Effect.succeed(inboxRejected(storeRefusal(posted.failure)));
-      }
-      // A new ask waits on the member, so their operator is told of it once it is kept.
-      const noticed =
-        post.ask === undefined
-          ? Effect.void
-          : noticedForOperator(agent.agentId, OPERATOR_NOTICE_KIND.INBOX_ASK);
-      return Effect.andThen(noticed, accepted(agent));
-    });
+    return yield* Effect.flatMap(postInboxThread(agent, thread, pictures.success), (posted) =>
+      Result.isFailure(posted)
+        ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
+        : accepted(agent),
+    );
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),

@@ -22,7 +22,7 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * transcript-link-chips.test.ts -- a link an agent or Luke writes in its
+ * transcript-link-chips.test.ts -- a link an agent or the app writes in its
  * words, labelled as it likes or bare, is drawn as the chip of what it
  * names wherever a transcript's words are drawn: an agent's reply, a
  * subagent's, and an Inbox item's Markdown, which all draw
@@ -38,7 +38,7 @@ const COMMIT = "0a1b2c3d";
 const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
 
 const WORDS = [
-  `Read [the rollout](https://tryluke.dev/acme/plan/${TASK_ID}#rollout),`,
+  `Read [the rollout](https://vespin.dev/acme/plan/${TASK_ID}#rollout),`,
   `[the store](https://github.com/${REPOSITORY}/blob/${COMMIT}/apps/web/store.ts#L3-L5),`,
   `${ISSUE_URL}, and [the docs](https://example.com/docs).`,
   "Not `https://linear.app/acme/issue/LUKE-9` nor `[@x](https://linear.app/acme)`.",

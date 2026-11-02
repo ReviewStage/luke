@@ -264,7 +264,7 @@ test("a Start refused because the workspace has no GitHub connected names the re
 
   assert.equal(
     tab.words(),
-    "This workspace isn't connected to GitHub, so Luke cannot reach Acme/Relay.",
+    "This workspace isn't connected to GitHub, so Vespin cannot reach Acme/Relay.",
   );
   assert.equal(tab.draft(), DRAFT.prompt, "the words stay in the box");
   await tab.press("Connect GitHub");
@@ -281,7 +281,7 @@ test("a Start refused because the workspace's GitHub was removed or suspended of
 
   assert.equal(
     tab.words(),
-    "This workspace's GitHub connection was removed or suspended, so Luke cannot reach Acme/Relay.",
+    "This workspace's GitHub connection was removed or suspended, so Vespin cannot reach Acme/Relay.",
   );
   await tab.press("Reconnect GitHub");
   assert.deepEqual(tab.remedies, [`workspace-github:${TASK_ID}`]);
@@ -295,8 +295,8 @@ test("a Start refused because the installation was not given the repository open
   ]);
   await tab.send();
 
-  assert.equal(tab.words(), "Luke's GitHub App doesn't have access to Acme/Relay.");
-  await tab.press("Add Acme/Relay to Luke's GitHub App");
+  assert.equal(tab.words(), "Vespin's GitHub App doesn't have access to Acme/Relay.");
+  await tab.press("Add Acme/Relay to Vespin's GitHub App");
   assert.deepEqual(tab.remedies, [`github:${settingsUrl}`]);
   assert.ok(tab.button("Retry"));
 });
@@ -351,7 +351,7 @@ test("a Start GitHub did not answer says so and offers Retry alone, and one from
 
   assert.equal(tab.words(), "GitHub didn't answer.");
   await tab.press("Retry");
-  assert.equal(tab.words(), "Luke cannot reach this task's repository on GitHub.");
+  assert.equal(tab.words(), "Vespin cannot reach this task's repository on GitHub.");
   assert.ok(tab.button("Retry"));
   assert.deepEqual(tab.remedies, []);
 });
@@ -379,16 +379,27 @@ test("a reconnect that could not begin says so under the box, and Reconnect is o
 
   await tab.press("Reconnect Slack");
 
-  assert.match(tab.note() ?? "", /could not start reconnecting it/u);
+  assert.match(tab.note() ?? "", /reconnecting it could not start/u);
   assert.ok(tab.button("Reconnect Slack"));
 });
+
+/** The servers popover opened from the box's + menu, its MCP servers row pressed. */
+function openServers(): void {
+  const plus =
+    document.querySelector<HTMLButtonElement>('button[aria-label="Add files and more"]') ??
+    assert.fail("the + is drawn");
+  act(() => plus.click());
+  const row =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (item) => item.textContent === "MCP servers",
+    ) ?? assert.fail("the + menu offers MCP servers");
+  act(() => row.click());
+}
 
 test("the MCP servers popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
   const tab = mount([]);
   await settle();
-  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]');
-  assert.ok(servers, "the MCP button is drawn");
-  act(() => servers.click());
+  openServers();
   await settle();
 
   const rows = [...document.querySelectorAll(".agent-servers-list li")].map(
@@ -402,9 +413,7 @@ test("the MCP popover's GitHub row connects GitHub in place, and the popover sta
   github = INTEGRATION_STATUS.DISCONNECTED;
   const tab = mount([]);
   await settle();
-  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]');
-  assert.ok(servers, "the MCP button is drawn");
-  act(() => servers.click());
+  openServers();
   await settle();
 
   const githubRow = () =>
@@ -425,11 +434,9 @@ test("the MCP popover's GitHub row connects GitHub in place, and the popover sta
 
 test("the MCP popover waits on a Connect as Settings does, with Reopen and Cancel, and says why one came back without access", async () => {
   slack = INTEGRATION_STATUS.DISCONNECTED;
-  const tab = mount([]);
+  mount([]);
   await settle();
-  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]');
-  assert.ok(servers, "the MCP button is drawn");
-  act(() => servers.click());
+  openServers();
   await settle();
   const slackRow = () => {
     const row = document.querySelector(".agent-servers-list li") ?? assert.fail("Slack has a row");
@@ -443,7 +450,17 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
     };
   };
 
-  await tab.press("Connect");
+  // Note that the popover stands beside the + menu, over the window, so its row's buttons are found there rather than in the tab.
+  const pressRow = async (words: string) => {
+    const found =
+      [...document.querySelectorAll<HTMLButtonElement>(".agent-servers-list li button")].find(
+        (button) => button.textContent === words,
+      ) ?? assert.fail(`Slack's row offers ${words}`);
+    act(() => found.click());
+    await settle();
+  };
+
+  await pressRow("Connect");
   assert.deepEqual(slackRow(), {
     words: "Waiting for Slack in your browser…",
     buttons: ["Reopen", "Cancel"],
@@ -459,8 +476,8 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
     buttons: ["Retry"],
   });
 
-  await tab.press("Retry");
-  await tab.press("Cancel");
+  await pressRow("Retry");
+  await pressRow("Cancel");
   assert.deepEqual(slackRow(), { words: undefined, buttons: ["Connect"] });
 });
 

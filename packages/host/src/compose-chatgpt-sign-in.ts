@@ -1,6 +1,7 @@
 import { chatGptSignIn, LOOPBACK_CONSENT_CANCELLED, type OpenConsent } from "@luke/credentials";
 import type { HostedAgentClient } from "@luke/features";
 import { AGENT_CALL_FAILURE, type ChatGptSignInAnswerView } from "@luke/features/agent-view";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   type ChatGptCredentialsSaveRequest,
   PROVIDER_KEY_REJECTION,
@@ -16,7 +17,7 @@ import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-conce
 import type { HostKernel } from "./host-kernel.js";
 
 /**
- * compose-chatgpt-sign-in.ts -- Sign in with ChatGPT for Luke's hosted runtime, run on this Mac and handed to the service.
+ * compose-chatgpt-sign-in.ts -- Sign in with ChatGPT for our hosted runtime, run on this Mac and handed to the service.
  *
  * A press in Settings asks the service for the account's host id, runs
  * OpenAI's open-source sign-in through the developer's browser and a
@@ -51,19 +52,16 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Why the service kept nothing, in a sentence for the row. */
 const REJECTION_WORDS = {
-  [PROVIDER_KEY_REJECTION.INVALID]:
-    "OpenAI didn't grant Luke use of your ChatGPT subscription. Try again.",
-  [PROVIDER_KEY_REJECTION.WRONG_PROVIDER]: "Luke couldn't save the ChatGPT sign-in. Try again.",
-  [PROVIDER_KEY_REJECTION.UNREACHABLE]: "Luke couldn't save the ChatGPT sign-in. Try again.",
+  [PROVIDER_KEY_REJECTION.INVALID]: `OpenAI didn't grant ${PRODUCT_NAME} use of your ChatGPT subscription. Try again.`,
+  [PROVIDER_KEY_REJECTION.WRONG_PROVIDER]: "Couldn't save the ChatGPT sign-in. Try again.",
+  [PROVIDER_KEY_REJECTION.UNREACHABLE]: "Couldn't save the ChatGPT sign-in. Try again.",
   [PROVIDER_KEY_REJECTION.TOO_MANY_TRIES]: "Too many sign-ins in the last hour. Try again later.",
-  [PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN]:
-    "Luke couldn't verify the ChatGPT sign-in. Try again.",
+  [PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN]: "Couldn't verify the ChatGPT sign-in. Try again.",
 } as const satisfies Record<ProviderKeyRejection, string>;
 
-const SAVE_FAILED = "Luke couldn't save the ChatGPT sign-in. Try again.";
+const SAVE_FAILED = "Couldn't save the ChatGPT sign-in. Try again.";
 
-const ACCOUNT_CHANGED =
-  "You signed in to Luke as someone else while ChatGPT was open, so nothing was saved. Try again.";
+const ACCOUNT_CHANGED = `You signed in to ${PRODUCT_NAME} as someone else while ChatGPT was open, so nothing was saved. Try again.`;
 
 export function composeChatGptSignIn(
   dependencies: ChatGptSignInDependencies,

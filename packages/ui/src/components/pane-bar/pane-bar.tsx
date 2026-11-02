@@ -22,7 +22,13 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * row's inset, where a tab's glyph does, since it holds words; the middle,
  * where nothing leads it, starts at the bar's own edge, since it holds
  * controls (Back and Forward before a path's crumbs, an address, tabs). The
- * actions stand at the bar's end, the glyphs in them close, and the ⋯ last.
+ * actions stand at the bar's end, the glyphs in them close, and the ⋯
+ * after them. A bar over a view with panes either side of it stands each
+ * pane's toggle at its own edge, as the window's title bar stands the
+ * sidebar's first and the side panel's last: the left pane's at the bar's
+ * very start (`start`), before the lead, which then starts at the toggle
+ * rather than a row's inset, and the right pane's at its very end (`end`),
+ * after the ⋯, so the two stand the same inset in from either edge.
  * A bar that would cut its title under the readable floor on one row
  * (`use-wrap-when-cut.ts`) stands it on a row of its own under the rest,
  * at the lead's inset, rather than cutting it to a few letters.
@@ -44,7 +50,11 @@ const BAR =
   "luke-pane-bar box-border flex min-h-pane-bar min-w-0 flex-none items-center gap-control-gap border-b border-border bg-muted px-list-inset py-tight-gap font-sans text-caption text-muted-foreground";
 /** Words leading the bar start where a tab's glyph does, a row's inset in. */
 const LEAD =
-  "luke-pane-bar-lead flex min-w-0 flex-initial items-center gap-item-gap pl-row-inset whitespace-nowrap";
+  "luke-pane-bar-lead flex min-w-0 flex-initial items-center gap-item-gap pl-row-inset whitespace-nowrap [.luke-pane-bar-start+&]:pl-0";
+/** A pane's toggle at the bar's very start, the lead after it starting at the toggle rather than a row's inset. */
+const START = "luke-pane-bar-start flex flex-none items-center";
+/** A pane's toggle at the bar's very end, after the ⋯, its glyph as close as the actions'. */
+const END = "luke-pane-bar-end flex flex-none items-center";
 const MARK = "luke-pane-bar-mark flex flex-none items-center [&>svg]:size-control-icon";
 const MIDDLE = "luke-pane-bar-middle flex min-w-0 flex-auto items-center gap-control-gap";
 /** The actions at the end, their glyphs close. */
@@ -89,13 +99,17 @@ function BarMenu({ menu }: { menu: PaneBarMenu }): React.JSX.Element {
 
 /** The bar over a tab or a dock: its lead, middle, and actions in that order, and its ⋯ last. */
 export function PaneBar({
+  start,
   mark,
   title,
   detail,
   middle,
   actions,
   menu,
+  end,
 }: {
+  /** The toggle of the pane on the view's left, at the bar's very start. */
+  start?: ReactNode;
   /** What leads the title: the thing's glyph, or a chip naming it. */
   mark?: ReactNode;
   /** What the tab shows, on one line that fades where the bar cuts it. */
@@ -106,14 +120,16 @@ export function PaneBar({
   middle?: ReactNode;
   /** The bar's buttons, at its end. */
   actions?: ReactNode;
-  /** The bar's ⋯, drawn last; none draws no ⋯. */
+  /** The bar's ⋯, drawn after the actions; none draws no ⋯. */
   menu?: PaneBarMenu | undefined;
+  /** The toggle of the pane on the view's right, at the bar's very end, after the ⋯. */
+  end?: ReactNode;
 }): React.JSX.Element {
   const frame = useRef<HTMLElement>(null);
   const titled = title !== undefined && title !== "";
   const wrapped = useWrapWhenCut(frame, TITLE_SEAT, titled);
   const leads = said(mark) || (titled && !wrapped) || said(detail);
-  const acts = said(actions) || menu !== undefined;
+  const acts = said(actions) || menu !== undefined || said(end);
   const words = titled ? (
     <OneLine
       className="luke-pane-bar-title flex-initial text-foreground"
@@ -128,6 +144,7 @@ export function PaneBar({
       className={wrapped ? `${BAR} ${WRAPPED}` : BAR}
       data-wrapped={wrapped ? "true" : undefined}
     >
+      {said(start) ? <div className={START}>{start}</div> : null}
       {leads ? (
         <div className={LEAD}>
           {said(mark) ? <span className={MARK}>{mark}</span> : null}
@@ -141,6 +158,7 @@ export function PaneBar({
         <div className={ACTIONS}>
           {actions}
           {menu === undefined ? null : <BarMenu menu={menu} />}
+          {said(end) ? <div className={END}>{end}</div> : null}
         </div>
       ) : null}
     </header>

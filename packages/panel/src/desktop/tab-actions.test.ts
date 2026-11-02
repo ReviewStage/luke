@@ -40,8 +40,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
  * document menu the Plan tab's ⋯ and right-click offer instead, pinning
  * the task rather than the tab. A tab with no content action shows no ⋯,
  * and no tab wears one of its own. A Pull request tab's ⋯ also offers what
- * its body hands up, Open on GitHub and Refresh, which no other tab's offers
- * but the Plan tab's, the task's own.
+ * its body hands up, Open on GitHub and Refresh, which no other tab's offers.
  */
 
 const TASK: Task = {
@@ -293,14 +292,9 @@ test("Overview's ⋯ and its right-click offer the task's own document menu, whi
     "Rename",
     "Version history",
     "Mark as unread",
-    "New sub-task",
-    "Add sub-task",
-    "Set parent",
-    "Mark as blocked by",
-    "Mark as blocking",
+    "Relations",
     "Pin",
     "Move to section",
-    "Open on GitHub",
     "Permanently delete",
   ]);
   // The right-click leads with the tab's keeping, which holds no Close nor Pin tab: Overview always stands, and the one Pin is the task's, among its own.
@@ -353,7 +347,7 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab of the panel offers, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's bar ⋯ offers Copy link first, then Copy GitHub link, Open on GitHub, and Refresh, which no other tab of the panel offers, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -368,7 +362,12 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
     published,
   );
   const { side } = bars(container);
-  assert.deepEqual(pressBarMore(side), ["Copy link", "Open on GitHub", "Refresh"]);
+  assert.deepEqual(pressBarMore(side), [
+    "Copy link",
+    "Copy GitHub link",
+    "Open on GitHub",
+    "Refresh",
+  ]);
   assert.ok(
     !rightClickChosen(side).some((item) => item === "Open on GitHub" || item === "Refresh"),
     "a right-click keeps to the tab's own and its link",
@@ -389,7 +388,7 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
     const items = pressBarMore(bars(each).side);
     assert.ok(
       !items.includes("Open on GitHub") && !items.includes("Refresh"),
-      `the ${JSON.stringify(other)} tab offers neither`,
+      `the ${JSON.stringify(other)} tab offers neither Open on GitHub nor Refresh`,
     );
     act(() => roots.pop()?.unmount());
     each.remove();
@@ -405,8 +404,8 @@ function installClipboard(): string[] {
 
 test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or Overview's, the task's own", async () => {
   const copied = installClipboard();
-  const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
-  const agent = `https://tryluke.dev/workspace-personal/agent/${AGENT.id}`;
+  const task = `https://vespin.dev/workspace-personal/plan/${TASK.id}`;
+  const agent = `https://vespin.dev/workspace-personal/agent/${AGENT.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
     [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
     [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],

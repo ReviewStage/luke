@@ -7,7 +7,7 @@
  * zone of the machine the CLI runs on
  * (https://code.claude.com/docs/en/scheduled-tasks). The runner runs on that
  * machine, beside the CLI, so it reads the schedule in its own local time
- * and answers the instant, which Luke keeps and delivers the wakeup at
+ * and answers the instant, which the service keeps and delivers the wakeup at
  * wherever it runs. A schedule that pins no single minute, such as a step
  * or a list, is no one-shot's this can tell the time of, and answers none.
  */

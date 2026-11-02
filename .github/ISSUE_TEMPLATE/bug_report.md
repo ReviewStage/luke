@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something in Luke does not work as it should
+about: Something in Vespin does not work as it should
 labels: bug
 ---
 
@@ -16,5 +16,5 @@ labels: bug
 
 ## Environment
 
-- Luke version:
+- Vespin version:
 - macOS version:

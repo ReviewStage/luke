@@ -37,7 +37,7 @@ import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
 } from "@luke/database/schemas/agent";
-import { type ConversationRuntime, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
   type NoteFiles,
@@ -75,8 +75,12 @@ import { Cause, Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
+  SERVER_AGENT_START_FAILURE,
   SERVER_AGENT_START_KIND,
+  SERVER_AGENT_STARTER,
   SERVER_EVENT,
+  type ServerAgentStarter,
+  type ServerAgentStartFailure,
 } from "../../events/server-events.js";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
@@ -104,7 +108,6 @@ import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
-  type EveFailed,
   type EveTypedTurn,
   RUNTIME_REFUSAL,
 } from "../eve-host/eve-sessions.js";
@@ -122,7 +125,7 @@ import {
   markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { contextWindowOf } from "./context.js";
-import { isNativeRuntime } from "./native-runtime.js";
+import type { NativeRuntime } from "./native-runtime.js";
 import {
   type FittedReplay,
   replayOf,
@@ -150,7 +153,7 @@ import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
- * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
+ * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from the app's voice, or from an automation's run.
  *
  * The model, effort, and context window are the ask's own where it names a
  * model, the account's stored default otherwise, either checked against the
@@ -158,7 +161,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
  * the voice tool can say which choices there are. The task must name a
- * repository the account still reaches through the Luke GitHub App, and
+ * repository the account still reaches through our GitHub App, and
  * through its workspace's installation where it has one, read now rather
  * than when the task named it (`packages/service/src/github/workspace-repository.ts`). The
  * agent and its conversation are made under the ask's key, and a retry
@@ -227,13 +230,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * coding agent's `start_agent`, which is how a pilot gives a child task its
  * sub-pilot; every later one makes a coder, as every Start on any other task
  * does. A pilot is refused for an account with the Pilot experiment off.
- * The member's operator is the one blank Start with no task: in a workspace
- * the account is a member of, on no repository, from no other agent and
- * with no prompt or note, and no other Start is an operator's. Every other
- * Start with no task still names a prompt, and a repository where it works
- * in one; one that names none works in none, as the operator does. The store
- * answers the operator already standing where there is one
- * (`createAgent`), so a Start of it is an ensure.
+ * A Start with no task names a prompt, and a repository where it works in
+ * one; one that names none works in none.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh, and so does one that could not be
  * reached, a first line that could not be written, and a Start cut short
@@ -265,9 +263,9 @@ export type StartPlace = StartWhere & {
   readonly noteHeading?: StartNoteHeading | undefined;
   /** Another agent of the same place to take over from, handed its brief and its transcript replayed in place of the plan or a prompt; none for an agent started afresh. */
   readonly from?: AgentStartFrom | undefined;
-  /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start, on a task or as the member's operator, names no prompt, note, or source. */
+  /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start names no prompt, note, or source. */
   readonly blank?: boolean | undefined;
-  /** What the agent is: a coder unless named, or the member's operator, which only a blank Start with no task and no repository makes. */
+  /** What the agent is: a coder unless named, or a pilot where a continue of a task's pilot asks for one. */
   readonly kind?: AgentKind | undefined;
 };
 
@@ -400,7 +398,7 @@ const acceptedChoiceRead = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { choice, keys };
 });
 
-/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, none for a blank Start on a task with none or the member's operator, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
+/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, none for a blank Start on a task with none, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
 interface StartLanding {
   readonly workspaceId: string;
   readonly repository: string | null;
@@ -492,19 +490,6 @@ const handedOf = Effect.fnUntraced(function* (
   return { text: written(fitted?.replay), startedFrom: fitted?.startedFrom };
 });
 
-/** Whether the place asks for the member's operator as only it may be started: blank, with no task, no repository, no source, and no words. */
-function operatorPlace(place: StartPlace, fitter: ReplayFitter | undefined): boolean {
-  return (
-    place.blank === true &&
-    place.taskId === null &&
-    place.repository === null &&
-    place.prompt === undefined &&
-    place.note === undefined &&
-    place.from === undefined &&
-    fitter === undefined
-  );
-}
-
 /**
  * What a fresh Start on the task asks for: its pilot where the task is worked
  * in pilot mode and no pilot of it stands unarchived, whoever started it,
@@ -531,7 +516,7 @@ const freshKindOn = Effect.fnUntraced(function* (
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task or the member's operator. */
+/** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -540,30 +525,9 @@ const landingOf = Effect.fnUntraced(function* (
   landed: StoredTask | undefined,
 ): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
   const brief = fitter === undefined ? place.prompt : fitter.prompt;
-  const operator = place.kind === AGENT_KIND.OPERATOR;
-  // The operator is started one way alone, and no other Start is an operator's.
-  if (operator && !operatorPlace(place, fitter)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
   if (place.taskId === null) {
     const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
     if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    if (operator) {
-      return {
-        workspaceId: place.organizationId,
-        repository: null,
-        task: undefined,
-        mover: undefined,
-        place: {
-          taskId: null,
-          organizationId: place.organizationId,
-          planSnapshot: null,
-          prompt: null,
-          kind: AGENT_KIND.OPERATOR,
-        },
-        startedFrom: undefined,
-      };
-    }
     // An agent with no plan has only words to be handed, so a Start that names none starts
     // nothing; one that names no repository works in none, as a blank agent on a task with none does.
     if (brief === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -806,30 +770,49 @@ const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
 };
 
 /**
- * Whether an open's refusal is a named outcome the developer is told as
- * such, which is logged and never reported: the plan or the key refused, the
- * device removed or away, or the image still being prepared.
- */
-function namedOpenRefusal(failed: EveFailed): boolean {
-  return (
-    failed.planRefusal !== undefined ||
-    failed.keyRefusal !== undefined ||
-    (failed.runtimeRefusal !== undefined && failed.runtimeRefusal !== RUNTIME_REFUSAL.NOT_HERE)
-  );
-}
-
-/**
  * The agent a Start made discarded because its session never opened, so a
  * retry under the same key starts it afresh and no agent stands to read as
  * never started: why said once as an error and reported
  * (`agentFailureSaid`), in the caller's scope, which names the agent; a
- * discard that fails is logged.
+ * discard that fails is logged. The failed Start is counted
+ * (`startFailed`) once the agent is discarded.
  */
-const discardedAt = (userId: string, agent: Agent, said: string, reason: string) =>
+const discardedAt = (
+  userId: string,
+  agent: Agent,
+  said: string,
+  reason: string,
+  failed: StartFailed,
+) =>
   Effect.andThen(
     agentFailureSaid(said, reason, true),
-    Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
+    Effect.andThen(
+      Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
+      startFailed(userId, agent, failed),
+    ),
   );
+
+/** A Start that failed to open its agent's session, counted under the member who made it, in the count's words. */
+const startFailed = (userId: string, agent: Agent, { failure, startedBy }: StartFailed) =>
+  recordServerEvent(SERVER_EVENT.AGENT_START_FAIL, userId, {
+    failure,
+    started_by: startedBy,
+    agent_kind: agent.kind,
+  });
+
+/** Why a Start failed, and who started it, as the count words them. */
+interface StartFailed {
+  readonly failure: ServerAgentStartFailure;
+  readonly startedBy: ServerAgentStarter;
+}
+
+/** Who a Start is counted as made by: an agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither. */
+const starterOf = (ask: Pick<StartAsk, "startedBy" | "automationOrigin">) =>
+  ask.startedBy !== undefined
+    ? SERVER_AGENT_STARTER.AGENT
+    : automationRun(ask) !== undefined
+      ? SERVER_AGENT_STARTER.AUTOMATION
+      : SERVER_AGENT_STARTER.MEMBER;
 
 /**
  * The pilot a continue keeps as its starter: the one that started its
@@ -909,22 +892,6 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * Whether a Start of the account's on the model would find a credential to
- * pay for it, refused by name where none does, as the Start itself would be
- * (`agentRuntimeChoice`): what a caller checks before it undoes anything a
- * refused Start could not put back, as an operator's Reset archives its
- * standing operator.
- */
-export const startCredentialStands = (userId: string, model: string) =>
-  Effect.asVoid(
-    Effect.catch(agentRuntimeChoice(userId, model), (failure) =>
-      failure instanceof AgentCredentialMissing
-        ? Effect.fail(credentialMissing(failure.provider))
-        : hostedStoreOrUnavailable(Effect.fail(failure)),
-    ),
-  );
-
-/**
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
  * chose, or for a local agent its Mac's own login where it has one
@@ -964,7 +931,7 @@ function startMachineOf(
     readonly machine?: AgentMachineKind | undefined;
     readonly deviceId?: string | undefined;
   },
-  runtime: ConversationRuntime,
+  runtime: NativeRuntime,
 ) {
   return Effect.catch(agentMachineChoice(userId, asked, runtime), (failure) =>
     failure instanceof LocalAgentRefused
@@ -1061,8 +1028,8 @@ const IN_THE_CLOUD: StartMachine = { asked: { machine: AGENT_MACHINE.VERCEL } };
  * Where a new agent runs, one rule for every Start: where the agent it is
  * started from runs, for a continue or a fork, `start_agent` from another
  * agent among them, so a local agent goes on locally; else where its task
- * runs (`task.runsOn`); else, with no task, as the member's operator and
- * an agent with no plan are, in the cloud. The starter is the account the
+ * runs (`task.runsOn`); else, with no task, as an agent with no plan is,
+ * in the cloud. The starter is the account the
  * Start is made for: a member's own, the calling agent's starter for
  * `start_agent`, and the automation's owner for an automation's run. A
  * device runs only its owner's agents, so a Start by anyone else is
@@ -1280,6 +1247,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
             agent,
             `eve could not be reached to start a coding agent: ${refusal.error}`,
             refusal.error,
+            { failure: SERVER_AGENT_START_FAILURE.UNREACHABLE, startedBy: starterOf(ask) },
           ),
         ),
       );
@@ -1315,6 +1283,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
             agent,
             `a Start's first line was not written: ${refusal.error}`,
             refusal.error,
+            { failure: SERVER_AGENT_START_FAILURE.FIRST_LINE, startedBy: starterOf(ask) },
           ),
         ),
       );
@@ -1354,6 +1323,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
                 agent,
                 `a Start was cut short before its agent's session opened: ${causeKind(cause)}`,
                 causeKind(cause),
+                { failure: SERVER_AGENT_START_FAILURE.CUT_SHORT, startedBy: starterOf(ask) },
               ),
       ),
       Effect.annotateLogs(agentLogIds(agent)),
@@ -1362,20 +1332,24 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       // An image still being prepared is answered by name, so the Start is made again under its key.
       const refusal = opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened);
       // A native harness says why it refused where its harness decided it (`runner-sessions.ts`), so
-      // eve's refusal, and a harness this function cannot reach, are said here.
-      if (
-        opened !== undefined &&
-        (!isNativeRuntime(runtime.runtime) || opened.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
-      ) {
+      // a harness this function cannot reach is said here.
+      if (opened !== undefined && opened.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE) {
         yield* agentFailureSaid(
           `a Start's open was refused: ${refusal.error}, status ${opened.status}`,
           refusal.error,
-          !namedOpenRefusal(opened),
+          true,
         ).pipe(Effect.annotateLogs(agentLogIds(agent)));
       }
       yield* hostedStoreOrUnavailable(discardAgent(userId, agent.id)).pipe(
         Effect.annotateLogs(agentLogIds(agent)),
       );
+      yield* startFailed(userId, agent, {
+        failure:
+          opened === undefined
+            ? SERVER_AGENT_START_FAILURE.UNREACHABLE
+            : SERVER_AGENT_START_FAILURE.REFUSED,
+        startedBy: starterOf(ask),
+      });
       return yield* Effect.fail(refusal);
     }
     yield* Effect.logInfo("a Start opened its agent's session").pipe(
@@ -1422,6 +1396,8 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
           ? SERVER_AGENT_START_KIND.CONTINUE
           : SERVER_AGENT_START_KIND.FORK,
     is_from_automation: automationRun(ask) !== undefined,
+    // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
+    started_by: starterOf(ask),
     has_task: ask.taskId !== null,
     agent_kind: agent.kind,
   });

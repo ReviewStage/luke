@@ -25,7 +25,7 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * notification, since news the developer did not ask for interrupts more
  * than it tells: the agent's unseen dot, the Inbox's counts and the Dock's
  * badge, and the Automations failed mark. The
- * one notification Luke posts is a command waiting on this Mac
+ * one notification the app posts is a command waiting on this Mac
  * (`client/client-notices.ts`), through the same doors.
  *
  * The panel reads an agent's status only while its tab is on screen, so
@@ -46,12 +46,9 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * run read again and not a new one: the ledger keeps the end it marked until
  * the new turn's id arrives, whose own end is the next dot. A list that
  * landed late, describing a turn the agent has left behind, says nothing
- * newer. A Stop is the developer's own and leaves no dot, and so does a quiet
- * turn, a member's operator's heartbeat whose reply is its quiet reply alone,
- * as the plan list says (`quietTurn`): one the agent's page saw end first has
- * its dot taken back once the list says it was quiet. The ledger is this
- * launch's and this account's, so an agent that ended before Luke watched
- * it, or while Luke was not running, is not dotted, a reload of the window
+ * newer. A Stop is the developer's own and leaves no dot. The ledger is this
+ * launch's and this account's, so an agent that ended before the app watched
+ * it, or while the app was not running, is not dotted, a reload of the window
  * dots nothing twice, and an account that signs out takes its agents with
  * it. Only another account is a change of hands: the account's own session
  * renewing, which it does mid-run, says the same account again and keeps the
@@ -191,8 +188,6 @@ interface HeldAgent {
   status: AgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
-  /** Whether that turn's reply is a member's operator's quiet reply alone, a heartbeat that found nothing, whose end leaves no dot. */
-  quietTurn?: boolean | undefined;
   /** The turns the agent has left behind, which a list that landed late may still describe. */
   pastTurns: ReadonlySet<string>;
 }
@@ -266,7 +261,6 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
     automationId: item.automationId,
     automationName: item.automationName,
     repository: item.repository,
-    ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
     ...(item.asking === undefined ? undefined : { asking: item.asking }),
     ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
@@ -295,7 +289,6 @@ function agentsOfOpenItems(
     held.set(item.agentId, {
       ...(was ?? {
         agentId: item.agentId,
-        ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
         agentTitle: item.agentTitle,
         agentModel: item.agentModel,
         automationId: item.automationId,
@@ -375,7 +368,6 @@ function sameAgents(
         was.items === held.items &&
         was.toDo === held.toDo &&
         was.updatedAt === held.updatedAt &&
-        was.agentKind === held.agentKind &&
         was.agentTitle === held.agentTitle &&
         was.agentModel === held.agentModel &&
         was.automationId === held.automationId &&
@@ -443,8 +435,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (focused && shownAgent === agentId) return;
-      // A heartbeat that found nothing leaves its member nothing to read, so its end is no news.
-      if (agent.quietTurn === true && agent.status === AGENT_STATUS.COMPLETED) return;
       unseen.add(agentId);
       publishUnseen();
     }
@@ -559,7 +549,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
       const was = ledger.get(agentId);
-      // An agent first seen ended ended before Luke watched it; one first seen at work may have just started.
+      // An agent first seen ended ended before the app watched it; one first seen at work may have just started.
       if (was === undefined) {
         if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);
@@ -572,19 +562,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was.turnId === next.turnId) {
         // A turn that ended stays ended, so an end is never a second turn's,
         // and running again under the ended turn's id is a late read or a
-        // message awaiting the next turn, which its own answer says. A read
-        // saying the ended turn was quiet still takes back what its end left.
-        if (!stillWriting(was.status)) {
-          if (
-            next.quietTurn === true &&
-            was.quietTurn !== true &&
-            was.status === AGENT_STATUS.COMPLETED
-          ) {
-            ledger.set(agentId, { ...was, quietTurn: true });
-            seen(agentId);
-          }
-          return;
-        }
+        // message awaiting the next turn, which its own answer says.
+        if (!stillWriting(was.status)) return;
         ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
         if (stillWriting(next.status)) return;
         ended(agentId, next);
@@ -614,14 +593,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     }
 
     /** The agent as the ledger holds it, on a plan or with none. */
-    function heldOf(
-      agent: Pick<AgentSummary, "planId" | "status" | "turnId" | "quietTurn">,
-    ): HeldAgent {
+    function heldOf(agent: Pick<AgentSummary, "planId" | "status" | "turnId">): HeldAgent {
       return {
         taskId: agent.planId,
         status: agent.status,
         turnId: agent.turnId,
-        quietTurn: agent.quietTurn,
         pastTurns: new Set(),
       };
     }
@@ -636,8 +612,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeMessaged: (agent) => observe(agent.id, heldOf(agent)),
       observeStatus: (agentId, status) => {
         const held = ledger.get(agentId);
-        // The page's answer says nothing of quiet, so a quiet mark read while the turn ran is not taken as its end's.
-        if (held !== undefined) observe(agentId, { ...held, status, quietTurn: undefined });
+        if (held !== undefined) observe(agentId, { ...held, status });
       },
       observeTaskGone: (taskId) => forget((agent) => agent.taskId !== taskId),
       observeFollowed: (agents, taskIds) => {
