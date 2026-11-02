@@ -435,7 +435,7 @@ describe("hostRuntime", () => {
       platform: "darwin",
       home: "/Users/ada",
       os: DARWIN_HOST,
-      stateRoot: "/Users/ada/Library/Application Support/Fullspin",
+      stateRoot: "/Users/ada/Library/Application Support/Luke",
     },
     {
       platform: "linux",
