@@ -411,6 +411,9 @@ test("a provider the deployment does not offer the account has no row, and every
   assert.deepEqual(rowNames(page), [
     "Executor",
     "GitHub",
+    "Gmail",
+    "Google Calendar",
+    "Google Drive",
     "Granola",
     "Linear",
     "Mercury",
@@ -426,7 +429,7 @@ test("a provider the deployment does not offer the account has no row, and every
   assert.equal(
     [...page.querySelectorAll("button")].filter((button) => button.textContent === "Connect")
       .length,
-    13,
+    16,
   );
 });
 

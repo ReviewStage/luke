@@ -26,6 +26,9 @@ const INTEGRATION_KEYWORDS = {
   [INTEGRATION_PROVIDER.EXECUTOR]:
     "executor.sh gateway apps tools automations skills openapi graphql",
   [INTEGRATION_PROVIDER.GITHUB]: "git repositories issues pull requests actions code",
+  [INTEGRATION_PROVIDER.GMAIL]: "google email mail inbox messages threads drafts labels workspace",
+  [INTEGRATION_PROVIDER.GOOGLE_CALENDAR]: "calendar events meetings schedule invites workspace",
+  [INTEGRATION_PROVIDER.GOOGLE_DRIVE]: "drive files folders documents docs sheets slides workspace",
   [INTEGRATION_PROVIDER.GRANOLA]: "meetings notes transcripts calls",
   [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
   [INTEGRATION_PROVIDER.MERCURY]: "bank banking accounts transactions payments finance",

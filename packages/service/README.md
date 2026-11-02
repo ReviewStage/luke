@@ -563,7 +563,10 @@ through the provider's own hosted MCP server with every tool it lists, the
 ones that write and the ones that answer a credential among them (`AGENTS.md`'s
 carve-out for integrations), and no approval step of Vespin's: Executor
 (`https://mcp.executor.sh/mcp`, the apps the developer set up in Executor),
-GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
+GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Gmail
+(`https://gmailmcp.googleapis.com/mcp/v1`), Google Calendar
+(`https://calendarmcp.googleapis.com/mcp/v1`), Google Drive
+(`https://drivemcp.googleapis.com/mcp/v1`), Granola
 (`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
 (`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
 (`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
@@ -821,6 +824,7 @@ vercel connect create vercel --target mcp --name vercel        # Vercel, through
 vercel connect create api.ycombinator.com/v1/mcp --name ycombinator   # Y Combinator's Bookface
 vercel connect attach <connector-uid> --yes                    # each of the above: production, preview, and development
 # Slack: an OAuth connector against Slack's MCP authorization server, created and attached below
+# Gmail, Google Calendar, Google Drive: Google OAuth connectors over our own client, below
 ```
 
 Each of those is a server that publishes its OAuth discovery and registers
@@ -907,6 +911,49 @@ vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --i
 rm ~/executor-client.json ~/executor-patch.json
 ```
 
+**Google's connectors.** Gmail, Google Calendar, and Google Drive are
+Google's own Workspace MCP servers, in Google's Developer Preview
+(https://developers.google.com/workspace/guides/configure-mcp-servers).
+Google registers no client for Connect, and its servers take only a client
+its Cloud project marks as an agent's, so all three connectors share one
+client of ours:
+
+1. A Google Cloud project, enrolled in the Workspace Developer Preview
+   Program, with the Gmail, Google Calendar, and Google Drive APIs and each
+   one's MCP service enabled.
+2. Its OAuth consent screen. While Google is offered only to the team's own
+   Workspace organization, its user type is Internal, which needs no Google
+   verification. Opening it to any other account means an External consent
+   screen and Google's verification, and Gmail's and Drive's restricted
+   scopes add an annual CASA security assessment.
+3. A Web application OAuth client with "Use this client for an AI-powered
+   agent" ticked and `https://connect.vercel.com/callback` among its
+   redirect URIs.
+4. One connector per product, each `vercel connect create google` over that
+   client's ID and secret, asking for its product's scopes alone, so
+   connecting Calendar never asks for mail:
+   - `gmail`: `https://www.googleapis.com/auth/gmail.readonly` and
+     `https://www.googleapis.com/auth/gmail.compose`. The server lists no send
+     tool, so none of `gmail.send` is asked for.
+   - `google-calendar`: `https://www.googleapis.com/auth/calendar.calendarlist.readonly`,
+     `https://www.googleapis.com/auth/calendar.events.freebusy`, and
+     `https://www.googleapis.com/auth/calendar.events`. Google's guide names
+     `calendar.events.readonly` in the last one's place, but the server's
+     `create_event`, `update_event`, `delete_event`, and `respond_to_event`
+     need `calendar.events` to write.
+   - `google-drive`: `https://www.googleapis.com/auth/drive.readonly` and
+     `https://www.googleapis.com/auth/drive.file`.
+
+   Each connector must hold a refresh token: Google issues one only to an
+   authorization that asks for `access_type=offline`, and without one a
+   grant lapses within the hour. Sign in once, and if the connection stands
+   expired an hour later, the connector is not asking for offline access.
+
+Set `GMAIL_ALLOWED_ACCOUNTS`, `GOOGLE_CALENDAR_ALLOWED_ACCOUNTS`, and
+`GOOGLE_DRIVE_ALLOWED_ACCOUNTS` to the organization's `@domain` while the
+consent screen is Internal, so no account outside it is offered a sign-in
+Google would refuse.
+
 **Granola's, PostHog's, Supabase's, and Y Combinator's connectors.** Each
 is created as above and then corrected in place, its UID unchanged, because
 the client Connect registers for it fails at the provider:
@@ -959,7 +1006,8 @@ organization to grant before it returns, and a sign-in that waited there
 came back to Connect as "Callback state not found or expired"; signing in
 again straight through connects.
 
-Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
+Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID`,
+`GOOGLE_CALENDAR_CONNECTOR_UID`, `GOOGLE_DRIVE_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,

@@ -946,6 +946,33 @@ and asks Vercel Connect to revoke the grant; what agents already sent or
 changed in Slack, and the record of it, stays, and a grant Vercel Connect
 could not revoke stays until you remove Vespin in Slack's own settings.
 
+**Gmail, Google Calendar, and Google Drive, where they are offered.** Our
+service offers them only to the accounts of the organization it names, while
+Google's sign-in for them is limited to that organization's Google
+Workspace. Each is connected on its own in Settings › Integrations, which
+signs you in to Google in your browser through Vercel Connect for that one
+product, so connecting Calendar never grants mail. Vercel Connect stores
+Google's token for your account, encrypted, and renews it. Our service
+handles the token as it does Linear's, keeps the same record of your
+connection, and sends it only to Google's MCP server for that product. While
+you are connected, the agents, as for Linear, can do whatever that grant
+allows, through Google's own MCP servers, without asking you first: for
+Gmail, search and read your mail and apply labels, and write drafts, but
+never send one, which you do yourself from Gmail; for Google Calendar, read
+your calendars and read, create, change, and delete your events and respond
+to invitations; for Google Drive, search and read your files and create and
+copy files. What Google answers, which can include other people's messages
+to you, their names and email addresses, and whatever a message or file
+holds, such as a one-time code or a link to reset a password, goes to the
+model that made the call, and each call, with its input and everything
+Google answered, is written to the agent's transcript like any other tool
+call. Disconnecting and deleting your account work as they do for Linear:
+Vespin stops using it from each agent's next step, removes the connection's
+record, and asks Vercel Connect to revoke the grant; what agents already
+drafted or changed, and the record of it, stays, and a grant Vercel Connect
+could not revoke stays until you remove Vespin in your Google Account's
+security settings. "Google user data" below says what we never do with it.
+
 **Granola, Mercury, Neon, PostHog, Stripe, Supabase, Vercel, and Y Combinator,
 if you connect them.** Connecting one signs you in to it in your browser through
 Vercel Connect, which stores its token for your account, encrypted, and renews
@@ -1444,6 +1471,10 @@ only when you press Send.
   Executor's token, and our service sends each Executor call, with its input,
   to Executor's MCP server, which keeps it under Executor's own policy and
   passes it on to the app it names.
+- Vercel Connect and Google, for each of Gmail, Google Calendar, and Google
+  Drive you connect where they are offered: Vercel Connect keeps Google's
+  token, and our service sends each call, with its input, to Google's MCP
+  server for that product, which keeps it under Google's own policy.
 - Vercel Connect and Granola, Mercury, Neon, PostHog, Stripe, Supabase,
   Vercel, or Y Combinator, for each you connect: Vercel Connect keeps its token, and our
   service sends each call, with its input, to that service's MCP server,
@@ -1610,7 +1641,14 @@ Vespin's use of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
 including the Limited Use requirements. We use what Google returns when you
 sign in with it, your name, email address, and profile picture, only to
-identify your account. It is not transferred, sold, or used for advertising.
+identify your account. What Gmail, Google Calendar, and Google Drive answer
+an agent, where you connect them, is used only for the work you or your
+automations ask that agent to do, as "Gmail, Google Calendar, and Google
+Drive" above says: it goes to the model that agent runs on and into the
+agent's transcript, which is kept as every transcript is. None of it is
+transferred or sold, used for advertising, or used to train or improve
+any AI or machine-learning model, ours or anyone's, and no person at Vespin reads it
+unless you ask us to, for security, or where the law requires it.
 
 ## Contact
 
