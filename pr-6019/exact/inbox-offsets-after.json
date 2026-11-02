@@ -1,0 +1,196 @@
+{
+ "dark": [
+  {
+   "row": "Thread search · To you",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": 0.08,
+    "metric": 0.01
+   },
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Inbox rows on three lines · ",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.6,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": 0.08,
+    "metric": 0.01
+   },
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "face": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "face": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Thread search",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "face": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "pencil": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Channels schema",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": null,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "more": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "hovered": true
+  }
+ ],
+ "light": [
+  {
+   "row": "Thread search · To you",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": 0.08,
+    "metric": 0.01
+   },
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Inbox rows on three lines · ",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.6,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": 0.08,
+    "metric": 0.01
+   },
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "face": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "face": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Thread search",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "face": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "pencil": {
+    "ink": 0.07,
+    "metric": 0
+   }
+  },
+  {
+   "row": "Channels schema",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": null,
+   "glyph": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "more": {
+    "ink": 0.07,
+    "metric": 0
+   },
+   "hovered": true
+  }
+ ]
+}

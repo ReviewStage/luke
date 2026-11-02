@@ -1,0 +1,196 @@
+{
+ "dark": [
+  {
+   "row": "Thread search · To you",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": -0.21,
+    "metric": -0.29
+   },
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Inbox rows on three lines · ",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.6,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": -0.21,
+    "metric": -0.29
+   },
+   "glyph": {
+    "ink": 0.4,
+    "metric": 0.32
+   },
+   "face": {
+    "ink": 0.4,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "face": {
+    "ink": 0.39,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Thread search",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "face": {
+    "ink": 0.39,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "pencil": {
+    "ink": -0.61,
+    "metric": -0.68
+   }
+  },
+  {
+   "row": "Channels schema",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": null,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "more": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "hovered": true
+  }
+ ],
+ "light": [
+  {
+   "row": "Thread search · To you",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": -0.21,
+    "metric": -0.29
+   },
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Inbox rows on three lines · ",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.6,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "dot": {
+    "ink": -0.21,
+    "metric": -0.29
+   },
+   "glyph": {
+    "ink": 0.4,
+    "metric": 0.32
+   },
+   "face": {
+    "ink": 0.4,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "face": {
+    "ink": 0.39,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Thread search",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "face": {
+    "ink": 0.39,
+    "metric": 0.32
+   }
+  },
+  {
+   "row": "Sidebar polish",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": 0,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "pencil": {
+    "ink": -0.61,
+    "metric": -0.68
+   }
+  },
+  {
+   "row": "Channels schema",
+   "nameBaseline": 23,
+   "inkCapCentre": 17.61,
+   "metricCapCentre": 17.68,
+   "timeBaselineOffset": null,
+   "glyph": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "more": {
+    "ink": 0.39,
+    "metric": 0.32
+   },
+   "hovered": true
+  }
+ ]
+}
