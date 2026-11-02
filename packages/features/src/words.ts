@@ -113,7 +113,7 @@ export function readingWords(things: string): string {
   return `Reading ${things}`;
 }
 
-/** What a way back says of where it leads, the place named as it stands mid-sentence: "Back to inbox", "Back to MCP servers". */
+/** What a way back says of where it leads, the place named as it stands mid-sentence: "Back to inbox", "Back to Integrations". */
 export function backToWords(place: string): string {
   return `Back to ${place}`;
 }

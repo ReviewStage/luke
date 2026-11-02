@@ -145,7 +145,7 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Attachment", "MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["Attachment", "Integrations", "62% of context used", "Dictate"]);
 });
 
 test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers none of its rows", async () => {
@@ -157,15 +157,15 @@ test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so
   assert.deepEqual(offered, ["62% of context used", "Dictate"]);
 });
 
-test("the + raises a menu of Attachment and MCP servers, whose servers popover stands beside the menu with its search holding the keyboard, and Escape there goes back to the row", async () => {
+test("the + raises a menu of Attachment and Integrations, whose servers popover stands beside the menu with its search holding the keyboard, and Escape there goes back to the row", async () => {
   const box = await drawnAt(CARD.WIDE);
   act(() => box.press("Add files and more").click());
   const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
   assert.deepEqual(
     rows.map((item) => item.textContent),
-    ["Attachment", "MCP servers"],
+    ["Attachment", "Integrations"],
   );
-  const servers = rows[1] ?? assert.fail("MCP servers stands");
+  const servers = rows[1] ?? assert.fail("Integrations stands");
   act(() => servers.click());
 
   const popover =
