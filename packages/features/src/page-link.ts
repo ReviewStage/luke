@@ -39,8 +39,8 @@ export const pageLinkPressSchema = EffectSchema.Struct({
  * window then hears after every listener the page gave it, its own scripts
  * running after this one, so a press the page took for itself
  * (`preventDefault`), on an element or on the window, stays the page's, and
- * the link is read as the page left it, where the page rewrote it as it was
- * pressed. The listener goes once that press reaches it, so a press the page
+ * the link found as the press set out is read as the page left it, where the
+ * page rewrote it, or took what was pressed in it away, as it was pressed. The listener goes once that press reaches it, so a press the page
  * starts inside it is let by, and in any case once the press is done, so one
  * the page stopped short of the window leaves none behind.
  * A link out is one to a web address on another site than the one the page's
@@ -53,9 +53,7 @@ export const PAGE_LINK_SCRIPT = `(() => {
   const WEB = new Set(["http:", "https:"]);
   const LINK = "a[href], area[href]";
 
-  const linkOut = (target) => {
-    const link = target instanceof Element ? target.closest(LINK) : null;
-    if (link === null) return undefined;
+  const linkOut = (link) => {
     let address;
     try {
       address = new URL(link.href);
@@ -67,11 +65,12 @@ export const PAGE_LINK_SCRIPT = `(() => {
   };
 
   addEventListener("click", (event) => {
-    if (event.button !== 0 || !(event.target instanceof Element) || event.target.closest(LINK) === null) return;
+    const link = event.target instanceof Element ? event.target.closest(LINK) : null;
+    if (event.button !== 0 || link === null) return;
     const last = (back) => {
       if (back !== event) return;
       removeEventListener("click", last);
-      const href = event.defaultPrevented ? undefined : linkOut(event.target);
+      const href = event.defaultPrevented ? undefined : linkOut(link);
       if (href === undefined) return;
       event.preventDefault();
       parent.postMessage({ type: TYPE, href }, "*");

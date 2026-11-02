@@ -337,6 +337,7 @@ it.effect(
           '<a id="taken" href="https://example.com/tab">Tab</a>',
           '<a id="delegated" href="https://example.com/preview">Preview</a>',
           '<a id="rewritten" href="https://example.com/old" onclick="this.href = \'https://example.com/new\'">Moved</a>',
+          '<a href="https://example.com/gone"><span id="vanishing" onclick="this.remove()">Gone</span></a>',
           "<script>document.getElementById('taken').addEventListener('click', (event) => event.preventDefault());</script>",
           "<script>addEventListener('click', (event) => { if (event.target.id === 'delegated') event.preventDefault(); });</script>",
         ].join("\n"),
@@ -348,12 +349,15 @@ it.effect(
         return event.defaultPrevented;
       };
 
-      const prevented = ["inner", "within", "taken", "delegated", "rewritten"].map(press);
+      const prevented = ["inner", "within", "taken", "delegated", "rewritten", "vanishing"].map(
+        press,
+      );
 
-      assert.deepEqual(prevented, [true, false, true, true, true]);
+      assert.deepEqual(prevented, [true, false, true, true, true, true]);
       assert.deepEqual(posted, [
         { type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" },
         { type: PAGE_LINK_TYPE, href: "https://example.com/new" },
+        { type: PAGE_LINK_TYPE, href: "https://example.com/gone" },
       ]);
     }),
 );
