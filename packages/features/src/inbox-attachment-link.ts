@@ -1,5 +1,5 @@
 import { type LINK_PLACE, type LinkPlace, linkOf } from "./link-grammar.js";
-import { isLinkHome, LINK_HOME } from "./link-home.js";
+import { isLinkHome, LINK_HOME_PATTERN } from "./link-home.js";
 import { insideCode } from "./mention-link.js";
 import { parsedUrl } from "./parsed-url.js";
 
@@ -44,7 +44,7 @@ const HOLDER_ID = /^[A-Za-z0-9_-]{1,200}$/u;
  * and the picture's id ends the address.
  */
 const ADDRESS_IN_TEXT = new RegExp(
-  `(?:https|${LINK_HOME.APP_SCHEME}):\\/\\/${LINK_HOME.HOST.replaceAll(".", "\\.")}\\/[^\\s/()]{1,200}\\/(?:plan|task|agent)\\/[^\\s/()]{1,200}\\/${INBOX_STEP}\\/([0-9a-f-]{36})\\/${FILES_STEP}\\/([0-9a-f-]{36})(?![\\w-])`,
+  `${LINK_HOME_PATTERN}\\/[^\\s/()]{1,200}\\/(?:plan|task|agent)\\/[^\\s/()]{1,200}\\/${INBOX_STEP}\\/([0-9a-f-]{36})\\/${FILES_STEP}\\/([0-9a-f-]{36})(?![\\w-])`,
   "gu",
 );
 

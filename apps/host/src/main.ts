@@ -52,6 +52,7 @@ import {
   NodeRuntime,
 } from "@effect/platform-node";
 import { HOST_WIRE, hostInstallCommand } from "@luke/features/host-wire";
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
 import {
   connectHostDevice,
@@ -77,7 +78,7 @@ import { ChildProcess } from "effect/process";
 const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
 
 /** The service a box connects to where its install script names none. */
-const DEFAULT_SERVICE_ORIGIN = "https://tryluke.dev";
+const DEFAULT_SERVICE_ORIGIN = LINK_ORIGIN;
 
 /** The public command that installs the host program and connects the box to that service. */
 const DEFAULT_INSTALL_COMMAND = hostInstallCommand(
