@@ -922,10 +922,16 @@ client of ours:
    Program, with the Gmail, Google Calendar, and Google Drive APIs and each
    one's MCP service enabled.
 2. Its OAuth consent screen. While Google is offered only to the team's own
-   Workspace organization, its user type is Internal, which needs no Google
-   verification. Opening it to any other account means an External consent
-   screen and Google's verification, and Gmail's and Drive's restricted
-   scopes add an annual CASA security assessment.
+   accounts (`*_ALLOWED_ACCOUNTS`, below), either user type serves without
+   Google's verification: Internal, for a project inside the team's
+   Workspace organization, which admits every account of it; or External,
+   published unverified, which shows an "unverified app" warning on the
+   consent page and admits at most 100 accounts over the project's life. An
+   External screen left in Testing admits only its listed test users, and
+   Google expires their refresh tokens after seven days, so a grant stands
+   expired each week. Opening it to customers means Google's verification,
+   and Gmail's and Drive's restricted scopes add an annual CASA security
+   assessment.
 3. A Web application OAuth client with "Use this client for an AI-powered
    agent" ticked and `https://connect.vercel.com/callback` among its
    redirect URIs.
@@ -950,9 +956,9 @@ client of ours:
    expired an hour later, the connector is not asking for offline access.
 
 Set `GMAIL_ALLOWED_ACCOUNTS`, `GOOGLE_CALENDAR_ALLOWED_ACCOUNTS`, and
-`GOOGLE_DRIVE_ALLOWED_ACCOUNTS` to the organization's `@domain` while the
-consent screen is Internal, so no account outside it is offered a sign-in
-Google would refuse.
+`GOOGLE_DRIVE_ALLOWED_ACCOUNTS` to the team's `@domain`s, comma separated,
+until the app is verified, so no other account is offered a sign-in Google
+would refuse or count against the unverified cap.
 
 **Granola's, PostHog's, Supabase's, and Y Combinator's connectors.** Each
 is created as above and then corrected in place, its UID unchanged, because
