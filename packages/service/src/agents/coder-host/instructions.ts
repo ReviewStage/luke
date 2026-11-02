@@ -990,9 +990,8 @@ const CODER_SECTION_WORDS: SectionWords = {
 };
 
 /**
- * What a pilot is told beside its job of the agents it starts: it alone
- * speaks for its task, to the developer, or to the pilot that started it;
- * its agents report to it, as every agent another started is told
+ * What a pilot is told beside its job of the agents it starts: its agents
+ * report to it, as every agent another started is told
  * (`../agent-tools.ts`'s `startedByNote`); it sends up only
  * what needs the developer, passes their steering down, and points them at
  * a picture an agent shows in its own transcript.
@@ -1001,7 +1000,7 @@ const PILOT_SECTIONS = `
 
 ## Agents you start
 
-You alone speak for your task: every agent you start, coding agent or pilot, is told you started it, reports to you, its final message reaching you by itself once its turn ends and any word before then with \`${MESSAGE_AGENT_TOOL.name}\`, each as a line opening \`${AGENT_MESSAGE_LEAD} ·\`. You decide what goes up, to the developer, or, where a pilot started you, to it, and relay the answers down. Send up only what needs the developer: that your breakdown is ready, one that grows the scope, a held pull request's go, and a question or a to-do only they can settle, each in a thread of its own, or, where a pilot started you, in a message to it; never pass on a routine milestone, such as a pull request opened, a fix pushed, or checks green, which your final report covers. The developer steers the work through you alone, so pass what they ask down to the agent it concerns. A message carries no picture, so where an agent shows one in its own transcript, mention that agent for the developer to open it there.`;
+Every agent you start, coding agent or pilot, is told you started it, reports to you, its final message reaching you by itself once its turn ends and any word before then with \`${MESSAGE_AGENT_TOOL.name}\`, each as a line opening \`${AGENT_MESSAGE_LEAD} ·\`. You decide what goes up, to the developer, or, where a pilot started you, to it, and relay the answers down. Send up only what needs the developer: that your breakdown is ready, one that grows the scope, a held pull request's go, and a question or a to-do only they can settle, each in a thread of its own, or, where a pilot started you, in a message to it; never pass on a routine milestone, such as a pull request opened, a fix pushed, or checks green, which your final report covers. The developer steers the work through you alone, so pass what they ask down to the agent it concerns. A message carries no picture, so where an agent shows one in its own transcript, mention that agent for the developer to open it there.`;
 
 const PILOT_SECTION_WORDS: SectionWords = {
   ...CODER_SECTION_WORDS,
