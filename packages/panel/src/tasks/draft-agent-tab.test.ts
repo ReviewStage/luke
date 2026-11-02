@@ -379,7 +379,7 @@ test("a reconnect that could not begin says so under the box, and Reconnect is o
 
   await tab.press("Reconnect Slack");
 
-  assert.match(tab.note() ?? "", /could not start reconnecting it/u);
+  assert.match(tab.note() ?? "", /reconnecting it could not start/u);
   assert.ok(tab.button("Reconnect Slack"));
 });
 
