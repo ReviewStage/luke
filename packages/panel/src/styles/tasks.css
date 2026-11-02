@@ -2262,13 +2262,22 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   container: published-row / inline-size;
 }
 
-/* As narrow as a phone's: where it stands goes, so the title has the room;
-   the mark's colour and its words for a reader who cannot see it, and the
-   Pull request tab, still say it. */
+/* As narrow as a phone's: where it stands is drawn nowhere, so the title
+   has the room, and still read to assistive tech, since the row hides its
+   mark from it; the mark's colour, the hint's card, and the Pull request
+   tab still show it. */
 /* off-scale: 420px, a phone's widest card */
 @container published-row (width < 420px) {
   .agent-published-state {
-    display: none;
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 
