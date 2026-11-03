@@ -58,6 +58,7 @@ test("a GitHub merge-queue branch, an agent's branch, a PR media branch, or an e
     "gh-readonly-queue/main/pr-3551-d1c107a6f00dbb4b1e5bd2d1b8f3a5c7e9d01234",
     "gh-readonly-queue/release/1.2/pr-7-0123456789abcdef0123456789abcdef01234567",
     "agent/fix-relay",
+    "luke/fix-relay",
     "pr-assets",
     "pr-assets-card-redesign",
     "evidence/app-267",
