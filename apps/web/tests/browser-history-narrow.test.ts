@@ -130,7 +130,7 @@ it.effect(
 );
 
 it.effect(
-  "on a phone's width a task the tab opened on, with no page behind it, leads with the way to the Tasks page, which Back leaves for the task again",
+  "on a phone's width a task the tab opened on, with no page behind it, leads with the way to Home, which Back leaves for the task again",
   () =>
     Effect.gen(function* () {
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
@@ -144,12 +144,12 @@ it.effect(
         const plan = await view("Plan");
         await act(async () => plan.click());
         await settle();
-        assert.equal(back().textContent, "Tasks");
+        assert.equal(back().textContent, "Home");
 
         await act(async () => back().click());
         await settle();
         assert.equal(document.querySelector(".task-head"), null, "the task is left");
-        assert.ok(document.querySelector('[aria-label="Tasks"]'), "for the Tasks page");
+        assert.ok(document.querySelector('[aria-label="Home"]'), "for Home");
 
         await travel(() => window.history.back());
         assert.equal(addressBar(), FIXTURE_TASK_PATH, "Back opens the task again");
