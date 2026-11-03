@@ -7,7 +7,7 @@
 @layer components {
   /* A region's box thickens the stroke of the ring inside it, since the
      ring itself never knows the size it is drawn at. */
-  .luke-spinner[data-size="region"] {
+  .ui-spinner[data-size="region"] {
     --ui-spinner-stroke: 2px;
   }
 
@@ -15,13 +15,13 @@
      with no end to wait for, so its duration is a literal; it holds still on
      --ui-loop-motion with every other. The panel's plan heading turns on
      the same keyframes (`tasks.css`). */
-  .luke-spinner-ring {
+  .ui-spinner-ring {
     border-width: var(--ui-spinner-stroke, 1.5px);
-    animation: luke-spinner-turn 900ms linear infinite;
+    animation: ui-spinner-turn 900ms linear infinite;
     animation-play-state: var(--ui-loop-motion);
   }
 
-  @keyframes luke-spinner-turn {
+  @keyframes ui-spinner-turn {
     to {
       transform: rotate(360deg);
     }

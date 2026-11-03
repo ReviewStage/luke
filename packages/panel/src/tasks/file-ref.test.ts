@@ -57,15 +57,15 @@ function mount(opened: unknown[][]): HTMLElement {
 test("a code card's head says its lines as Lines 3–5, hangs the file's card naming its repository, and a press on it opens the file on those lines at the item's commit", () => {
   const opened: unknown[][] = [];
   const head = mount(opened).querySelector<HTMLButtonElement>(
-    ".luke-code-card button[data-file-ref]",
+    ".ui-code-card button[data-file-ref]",
   );
   assert.ok(head, "the code card's head opens the file");
   assert.equal(head.textContent, `${PATH}Lines 3–5`);
 
   restOn(head);
-  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, PATH);
-  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, BLOCK.repo);
+  const card = document.querySelector(".ui-tooltip-card [data-file-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, PATH);
+  assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, BLOCK.repo);
 
   act(() => head.click());
   assert.deepEqual(opened, [[{ path: PATH, startLine: 3, endLine: 5 }, BLOCK.sha]]);

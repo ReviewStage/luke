@@ -186,7 +186,7 @@ async function drawn(
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
   ]);
 }
 
@@ -304,7 +304,7 @@ test("an archived agent's chip, which no list the window holds names, wears the 
   const marks = [
     ...container.querySelectorAll<HTMLElement>('[data-mention-ref][data-kind="agent"]'),
   ].map((chip) =>
-    chip.querySelector(".luke-inline-ref-glyph .luke-harness-mark")?.getAttribute("data-provider"),
+    chip.querySelector(".ui-inline-ref-glyph .ui-harness-mark")?.getAttribute("data-provider"),
   );
   assert.deepEqual(marks, [MODEL_PROVIDER.OPENAI, MODEL_PROVIDER.ANTHROPIC]);
 });

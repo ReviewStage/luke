@@ -864,7 +864,7 @@ function ScheduleRows({
                     />
                   ) : (
                     <span
-                      className={`${AUTOMATION_FIELD} automation-time-field [[data-luke-profile=web]_&]:w-automation-time`}
+                      className={`${AUTOMATION_FIELD} automation-time-field [[data-ui-profile=web]_&]:w-automation-time`}
                     >
                       <ClockField
                         inputRef={time}
@@ -2486,7 +2486,7 @@ export function AutomationPageSkeleton({
 }
 
 /** The setup's own scrolling column, which a run with nothing of its own to open hands the keyboard. */
-const SETUP_COLUMN = ".luke-detail-page-main";
+const SETUP_COLUMN = ".ui-detail-page-main";
 
 /** An automation's page's two screens in a narrow room: its setup, toolbar and all, and its runs. */
 const EDITOR_SCREENS: NarrowColumns = {

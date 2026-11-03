@@ -7,7 +7,7 @@
   /* Note that a card that lifts is one that moves among others, as a board's
      cards slide aside under a drag and fade as one is carried, so its slide
      and its fade ride the motion tokens beside its lift. */
-  .luke-card[data-hover="lift"] {
+  .ui-card[data-hover="lift"] {
     transition:
       transform var(--ui-duration-fast) var(--ui-spring-fast),
       border-color var(--ui-duration-hover) var(--ui-motion-exit),

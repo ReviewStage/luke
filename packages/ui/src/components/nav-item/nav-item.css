@@ -14,21 +14,21 @@
 @layer components {
   /* Note that the rest ink is the sidebar's, a step under the primary, as
      the task rows it heads are. */
-  .luke-nav-item {
+  .ui-nav-item {
     background: none;
     color: var(--ui-color-sidebar-ink);
   }
 
-  .luke-nav-item:hover:not(:disabled),
-  .luke-nav-item-frame:hover > .luke-nav-item:not(:disabled),
-  .luke-nav-item[aria-expanded="true"][aria-haspopup="menu"] {
+  .ui-nav-item:hover:not(:disabled),
+  .ui-nav-item-frame:hover > .ui-nav-item:not(:disabled),
+  .ui-nav-item[aria-expanded="true"][aria-haspopup="menu"] {
     background: var(--ui-color-fill-hover);
     color: var(--ui-color-text);
   }
 
   /* The place standing open is drawn in the work sheet's ground, lifted
      by a hairline and a soft shadow. */
-  .luke-nav-item:is([aria-current="page"], [aria-current="location"]) {
+  .ui-nav-item:is([aria-current="page"], [aria-current="location"]) {
     background: var(--ui-color-ground);
     box-shadow:
       0 0 0 1px var(--ui-color-border),
@@ -36,17 +36,17 @@
     color: var(--ui-color-text);
   }
 
-  .luke-nav-item[data-unread="true"] {
+  .ui-nav-item[data-unread="true"] {
     color: var(--ui-color-text);
   }
 
   /* Who or where stands in the primary ink. */
-  .luke-nav-item[data-variant="identity"] {
+  .ui-nav-item[data-variant="identity"] {
     color: var(--ui-color-text);
   }
 
   /* A row's detail ends in an ellipsis where it is cut short. */
-  .luke-nav-item-detail {
+  .ui-nav-item-detail {
     min-width: 0;
     flex: 1 1 0;
     overflow: hidden;
@@ -58,19 +58,19 @@
 
   /* A step's meta line stands whole under its name, in the caption's line,
      rather than giving way beside it. */
-  .luke-nav-item[data-variant="step"] .luke-nav-item-detail {
+  .ui-nav-item[data-variant="step"] .ui-nav-item-detail {
     flex: none;
     line-height: var(--ui-type-caption-leading);
   }
 
   /* A step's glyph and end stand level with its name's first line. */
-  .luke-nav-item[data-variant="step"] > :is(.luke-nav-item-glyph, .luke-nav-item-rest) {
+  .ui-nav-item[data-variant="step"] > :is(.ui-nav-item-glyph, .ui-nav-item-rest) {
     height: var(--ui-type-label-leading);
   }
 
   /* A place's end stands at the row's end. */
-  .luke-nav-item-rest,
-  .luke-nav-item-shortcut {
+  .ui-nav-item-rest,
+  .ui-nav-item-shortcut {
     display: inline-flex;
     flex: none;
     align-items: center;
@@ -79,33 +79,33 @@
 
   /* The count gives way to the actions on their own fade, so the two swap
      as one gesture rather than one snapping as the other fades. */
-  .luke-nav-item-rest {
+  .ui-nav-item-rest {
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-nav-item-count {
+  .ui-nav-item-count {
     color: var(--ui-color-text-muted);
     font-size: var(--ui-type-caption-size);
     font-variant-numeric: tabular-nums;
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-nav-item-count[data-shown="on-hover"] {
+  .ui-nav-item-count[data-shown="on-hover"] {
     opacity: 0;
   }
 
   /* A count of what waits on the reader is in the needs-you tone, as the
      rows it counts are (`tokens/status-tone.css`); a tally keeps the muted ink. */
-  .luke-nav-item-count[data-tone]:not([data-tone="neutral"]) {
+  .ui-nav-item-count[data-tone]:not([data-tone="neutral"]) {
     color: var(--ui-tone-ink);
   }
 
-  .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {
+  .ui-nav-item:focus-visible .ui-nav-item-count[data-shown="on-hover"] {
     opacity: 1;
   }
 
   @media (hover: hover) {
-    .luke-nav-item:hover .luke-nav-item-count[data-shown="on-hover"] {
+    .ui-nav-item:hover .ui-nav-item-count[data-shown="on-hover"] {
       opacity: 1;
     }
   }
@@ -113,45 +113,45 @@
   /* The chord sits in the row's spare width at rest, unseen, so showing it
      moves nothing; where a count or a mark stands, it takes their place
      while the row is hovered or has the keyboard. */
-  .luke-nav-item-shortcut {
+  .ui-nav-item-shortcut {
     opacity: 0;
     transition: opacity var(--ui-duration-quick) var(--ui-motion-exit);
   }
 
-  .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-shortcut {
+  .ui-nav-item:focus-visible:not(:disabled) > .ui-nav-item-shortcut {
     opacity: 1;
   }
 
-  .luke-nav-item-rest + .luke-nav-item-shortcut {
+  .ui-nav-item-rest + .ui-nav-item-shortcut {
     display: none;
   }
 
-  .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
+  .ui-nav-item:focus-visible:not(:disabled) > .ui-nav-item-rest:has(+ .ui-nav-item-shortcut) {
     display: none;
   }
 
-  .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut {
+  .ui-nav-item:focus-visible:not(:disabled) > .ui-nav-item-rest + .ui-nav-item-shortcut {
     display: inline-flex;
   }
 
   @media (hover: hover) {
-    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-shortcut,
-    .luke-nav-item-frame:hover > .luke-nav-item:not(:disabled) > .luke-nav-item-shortcut {
+    .ui-nav-item:hover:not(:disabled) > .ui-nav-item-shortcut,
+    .ui-nav-item-frame:hover > .ui-nav-item:not(:disabled) > .ui-nav-item-shortcut {
       opacity: 1;
     }
 
-    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut),
-    .luke-nav-item-frame:hover
-      > .luke-nav-item:not(:disabled)
-      > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
+    .ui-nav-item:hover:not(:disabled) > .ui-nav-item-rest:has(+ .ui-nav-item-shortcut),
+    .ui-nav-item-frame:hover
+      > .ui-nav-item:not(:disabled)
+      > .ui-nav-item-rest:has(+ .ui-nav-item-shortcut) {
       display: none;
     }
 
-    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut,
-    .luke-nav-item-frame:hover
-      > .luke-nav-item:not(:disabled)
-      > .luke-nav-item-rest
-      + .luke-nav-item-shortcut {
+    .ui-nav-item:hover:not(:disabled) > .ui-nav-item-rest + .ui-nav-item-shortcut,
+    .ui-nav-item-frame:hover
+      > .ui-nav-item:not(:disabled)
+      > .ui-nav-item-rest
+      + .ui-nav-item-shortcut {
       display: inline-flex;
     }
   }
@@ -159,7 +159,7 @@
   /* A row with a ⋯ draws its chord just before it rather than under it: the
      ⋯'s compact width and its inset from the frame's end, a hairline gap,
      less the row's own inset the chord already stands in. */
-  .luke-nav-item-frame[data-actions="true"] > .luke-nav-item > .luke-nav-item-shortcut {
+  .ui-nav-item-frame[data-actions="true"] > .ui-nav-item > .ui-nav-item-shortcut {
     margin-inline-end: calc(
       var(--ui-control-height) -
       2 *
@@ -175,13 +175,12 @@
      mark it would take the place of stays. Note that the focused selectors
      are written again, because they outweigh a bare one. */
   @media (hover: none) and (pointer: coarse) {
-    .luke-nav-item-shortcut,
-    .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut {
+    .ui-nav-item-shortcut,
+    .ui-nav-item:focus-visible:not(:disabled) > .ui-nav-item-rest + .ui-nav-item-shortcut {
       display: none;
     }
 
-    .luke-nav-item:focus-visible:not(:disabled)
-      > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
+    .ui-nav-item:focus-visible:not(:disabled) > .ui-nav-item-rest:has(+ .ui-nav-item-shortcut) {
       display: inline-flex;
     }
   }
@@ -191,14 +190,14 @@
      standing where the count and the mark stood, which give way then.
      Note that an unseen ⋯ takes no press, so a finger, which has no
      hover, reaches the row's menu by its long press and keeps the count. */
-  .luke-nav-item-actions {
+  .ui-nav-item-actions {
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-nav-item-frame:focus-within > .luke-nav-item-actions,
-  .luke-nav-item-actions:has([aria-expanded="true"]) {
+  .ui-nav-item-frame:focus-within > .ui-nav-item-actions,
+  .ui-nav-item-actions:has([aria-expanded="true"]) {
     opacity: 1;
     pointer-events: auto;
   }
@@ -206,26 +205,26 @@
   /* Note that the count gives way by its opacity, never its visibility,
      because a hidden one leaves the row's name, and a reader reaching the
      row would no longer hear what waits in it. */
-  .luke-nav-item-frame[data-actions="true"]:focus-within .luke-nav-item-rest,
-  .luke-nav-item-frame:has(.luke-nav-item-actions [aria-expanded="true"]) .luke-nav-item-rest {
+  .ui-nav-item-frame[data-actions="true"]:focus-within .ui-nav-item-rest,
+  .ui-nav-item-frame:has(.ui-nav-item-actions [aria-expanded="true"]) .ui-nav-item-rest {
     opacity: 0;
   }
 
   /* Under a finger a compact ⋯ is as wide as a finger's target, its glyph
      centred in it, as a list row's is (`list-row.css`). */
   @media (pointer: coarse) {
-    .luke-nav-item-actions .luke-button[data-size="compact"][data-icon-only="true"] {
+    .ui-nav-item-actions .ui-button[data-size="compact"][data-icon-only="true"] {
       min-width: var(--ui-touch-target);
     }
   }
 
   @media (hover: hover) {
-    .luke-nav-item-frame:hover > .luke-nav-item-actions {
+    .ui-nav-item-frame:hover > .ui-nav-item-actions {
       opacity: 1;
       pointer-events: auto;
     }
 
-    .luke-nav-item-frame[data-actions="true"]:hover .luke-nav-item-rest {
+    .ui-nav-item-frame[data-actions="true"]:hover .ui-nav-item-rest {
       opacity: 0;
     }
   }
@@ -235,43 +234,43 @@
      group's head's does, so a click on the row leaves its glyph standing;
      an unseen chevron takes no press, so the row's lead goes
      to its place at rest. A screen with no hover draws it at rest. */
-  .luke-nav-item-fold {
+  .ui-nav-item-fold {
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-nav-item-frame[data-folds="true"] .luke-nav-item-icon {
+  .ui-nav-item-frame[data-folds="true"] .ui-nav-item-icon {
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-nav-item-frame:has(:focus-visible) > .luke-nav-item-fold {
+  .ui-nav-item-frame:has(:focus-visible) > .ui-nav-item-fold {
     opacity: 1;
     pointer-events: auto;
   }
 
-  .luke-nav-item-frame[data-folds="true"]:has(:focus-visible) .luke-nav-item-icon {
+  .ui-nav-item-frame[data-folds="true"]:has(:focus-visible) .ui-nav-item-icon {
     opacity: 0;
   }
 
   @media (hover: hover) {
-    .luke-nav-item-frame:hover > .luke-nav-item-fold {
+    .ui-nav-item-frame:hover > .ui-nav-item-fold {
       opacity: 1;
       pointer-events: auto;
     }
 
-    .luke-nav-item-frame[data-folds="true"]:hover .luke-nav-item-icon {
+    .ui-nav-item-frame[data-folds="true"]:hover .ui-nav-item-icon {
       opacity: 0;
     }
   }
 
   @media (hover: none) {
-    .luke-nav-item-fold {
+    .ui-nav-item-fold {
       opacity: 1;
       pointer-events: auto;
     }
 
-    .luke-nav-item-frame[data-folds="true"] .luke-nav-item-icon {
+    .ui-nav-item-frame[data-folds="true"] .ui-nav-item-icon {
       opacity: 0;
     }
   }

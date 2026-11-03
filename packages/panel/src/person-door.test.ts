@@ -91,9 +91,7 @@ function draw(element: ReactElement, inWindow = true): HTMLElement {
 function cardOf(view: HTMLElement): Element {
   const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");
   restOn(named);
-  return (
-    document.querySelector(".luke-tooltip-card .luke-hover-card") ?? assert.fail("a card hangs")
-  );
+  return document.querySelector(".ui-tooltip-card .ui-hover-card") ?? assert.fail("a card hangs");
 }
 
 function press(element: Element | null | undefined): void {

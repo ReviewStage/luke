@@ -87,23 +87,23 @@ export interface SplitButtonMenu {
  * edge's ink is `split-button.css`'s, set as a button's inks are.
  */
 const SPLIT_BOX = cn(
-  "luke-split-button inline-flex flex-none items-center min-w-0 max-w-full",
-  "[&>.luke-button:first-child]:border-e-0 [&>.luke-button:first-child]:rounded-e-none",
-  "[&>.luke-button:last-child]:rounded-s-none",
-  "fold-folded:[&>.luke-button:first-child]:w-control",
-  "fold-folded:[&>.luke-button:first-child]:p-0",
-  "fold-folded:[&>.luke-button:first-child_.luke-button-words]:sr-only",
-  "fold-bare:[&>.luke-button:first-child]:w-control",
-  "fold-bare:[&>.luke-button:first-child]:p-0",
-  "fold-bare:[&>.luke-button:first-child_.luke-button-words]:sr-only",
-  "fold-bare:[&>.luke-button:first-child]:border-e",
-  "fold-bare:[&>.luke-button:first-child]:rounded-control",
-  "fold-bare:[&>.luke-button:last-child]:hidden",
+  "ui-split-button inline-flex flex-none items-center min-w-0 max-w-full",
+  "[&>.ui-button:first-child]:border-e-0 [&>.ui-button:first-child]:rounded-e-none",
+  "[&>.ui-button:last-child]:rounded-s-none",
+  "fold-folded:[&>.ui-button:first-child]:w-control",
+  "fold-folded:[&>.ui-button:first-child]:p-0",
+  "fold-folded:[&>.ui-button:first-child_.ui-button-words]:sr-only",
+  "fold-bare:[&>.ui-button:first-child]:w-control",
+  "fold-bare:[&>.ui-button:first-child]:p-0",
+  "fold-bare:[&>.ui-button:first-child_.ui-button-words]:sr-only",
+  "fold-bare:[&>.ui-button:first-child]:border-e",
+  "fold-bare:[&>.ui-button:first-child]:rounded-control",
+  "fold-bare:[&>.ui-button:last-child]:hidden",
 );
 
 /** A filled look's halves, parted by a rule in its own ink. */
 const SPLIT_FILLED_RULE =
-  "[&>.luke-button:last-child]:border-s-[color-mix(in_srgb,var(--ui-button-ink)_30%,transparent)]";
+  "[&>.ui-button:last-child]:border-s-[color-mix(in_srgb,var(--ui-button-ink)_30%,transparent)]";
 
 /** The looks drawn on a fill, whose halves a rule in their ink parts rather than a hairline. */
 const FILLED: ReadonlySet<ButtonVariant> = new Set([

@@ -174,7 +174,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+  return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
 }
 

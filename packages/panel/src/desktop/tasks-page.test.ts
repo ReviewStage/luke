@@ -349,10 +349,8 @@ function openOptions(page: HTMLElement, label: string): void {
 function choose(...names: string[]): void {
   for (const name of names) {
     const item = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[role="menu"]:not([data-leaving]) .luke-menu-item',
-      ),
-    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+      ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
+    ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === name);
     assert.ok(item, `${name} is in the menu`);
     act(() => item.click());
   }
@@ -580,7 +578,7 @@ test("in Columns the view options group the columns under Group by", async () =>
 
   const labels = [
     ...document.querySelectorAll(
-      '[role="menu"]:not([data-leaving]) .luke-menu-item .luke-menu-item-label',
+      '[role="menu"]:not([data-leaving]) .ui-menu-item .ui-menu-item-label',
     ),
   ].map((each) => each.textContent);
   assert.ok(labels.includes("Group by"), "the grouping submenu is Group by");
@@ -656,7 +654,7 @@ test("find opened in the List is let go as the Board is chosen", async () => {
 test("a row's words said to a screen reader alone are left out of find, so a key searched is found once", async () => {
   const page = await mountPage();
   const press = rowOf(page, "ACME-44").querySelector("button");
-  const spoken = press?.querySelector(".luke-visually-hidden");
+  const spoken = press?.querySelector(".ui-visually-hidden");
   assert.ok(spoken, "the key and status are said");
   assert.ok(spoken.hasAttribute("data-find-skip"), "find passes over them");
 });
@@ -688,7 +686,7 @@ test("a row's Priority chip sends the priority picked, and its Status chip the s
 /** The words of the menu items standing open now. */
 function menuLabels(): (string | null)[] {
   return [
-    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label'),
+    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) .ui-menu-item-label'),
   ].map((label) => label.textContent);
 }
 
@@ -786,13 +784,13 @@ test("a group's head folds it, its count still standing, and the fold is kept on
     const head = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
       (group) => group.getAttribute("aria-label") === "Todo",
     );
-    const button = head?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
+    const button = head?.querySelector<HTMLButtonElement>(".ui-group-header-head button");
     assert.ok(button, "Todo's head folds it");
     return button;
   };
 
   // Note that a wide page counts a group open and folded alike, never only under the pointer.
-  const count = () => fold().querySelector(".luke-group-header-count");
+  const count = () => fold().querySelector(".ui-group-header-count");
   assert.equal(count()?.getAttribute("data-shown"), "always");
 
   act(() => fold().click());
@@ -865,7 +863,7 @@ test("↓ passes over a folded group's rows, and a key held with ⌘ is left to 
   const todo = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
     (group) => group.getAttribute("aria-label") === "Todo",
   );
-  const fold = todo?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
+  const fold = todo?.querySelector<HTMLButtonElement>(".ui-group-header-head button");
   assert.ok(fold, "Todo's head folds it");
   act(() => fold.click());
 
@@ -878,7 +876,7 @@ test("↓ passes over a folded group's rows, and a key held with ⌘ is left to 
 
 /** The page's one scroller, which holds the List's rows or the Board's columns. */
 function scroller(page: HTMLElement): HTMLElement {
-  const found = page.querySelector<HTMLElement>(".luke-collection-page-scroll");
+  const found = page.querySelector<HTMLElement>(".ui-collection-page-scroll");
   assert.ok(found, "the page scrolls");
   return found;
 }
@@ -1280,10 +1278,10 @@ test("a view that leaves no task standing says so, though an empty section still
 test("a row leads its repository with its owner's picture, one address for every row of that owner, so the window asks GitHub for it once", async () => {
   const page = await mountPage();
   const pictures = [
-    ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.luke-avatar-picture"),
+    ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.ui-avatar-picture"),
   ].map((picture) => picture.getAttribute("src"));
 
-  assert.equal(pictures.length, page.querySelectorAll(".luke-task-row").length);
+  assert.equal(pictures.length, page.querySelectorAll(".ui-task-row").length);
   assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
 });
 
@@ -1296,10 +1294,10 @@ test("the Filter's Repository names each repository as the repository chip does,
   openOptions(page, "Filter");
   choose("Repository");
   const offered = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
   ]
-    .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
-    .map((item) => item.querySelector(".luke-menu-item-detail")?.textContent);
+    .filter((item) => item.querySelector(".ui-menu-item-label")?.textContent === "web")
+    .map((item) => item.querySelector(".ui-menu-item-detail")?.textContent);
 
   assert.deepEqual(offered, ["acme", "beta"]);
 });
@@ -1313,15 +1311,15 @@ test("the Filter's Repository rows each hang the repository's card, its name wit
   openOptions(page, "Filter");
   choose("Repository");
   const row = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
-  ].find((item) => item.querySelector(".luke-menu-item-detail")?.textContent === "beta");
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
+  ].find((item) => item.querySelector(".ui-menu-item-detail")?.textContent === "beta");
   restOn(row ?? assert.fail("the Filter offers beta/web"));
-  const card = document.querySelector(".luke-tooltip-card [data-repository-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-repository-card]");
 
   assert.deepEqual(
     [
-      card?.querySelector(".luke-hover-card-name")?.textContent,
-      card?.querySelector(".luke-hover-card-sub")?.textContent,
+      card?.querySelector(".ui-hover-card-name")?.textContent,
+      card?.querySelector(".ui-hover-card-sub")?.textContent,
     ],
     ["web", "beta"],
   );
@@ -1347,20 +1345,20 @@ test("the Filter's Assignee and Creator list the members as every people menu do
     const items = [
       ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
         .at(-1)
-        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+        ?.querySelectorAll<HTMLElement>(".ui-menu-item") ?? []),
     ];
     offered.push(
       items.map((item) => [
-        item.querySelector(".luke-menu-item-label")?.textContent,
-        item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+        item.querySelector(".ui-menu-item-label")?.textContent,
+        item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
       ]),
     );
     restOn(
       items.find(
-        (item) => item.querySelector(".luke-menu-item-label")?.textContent === "Charles Pan",
+        (item) => item.querySelector(".ui-menu-item-label")?.textContent === "Charles Pan",
       ) ?? assert.fail(`${field} offers Charles Pan`),
     );
-    cards.push(document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent);
+    cards.push(document.querySelector(".ui-tooltip-card .ui-hover-card-name")?.textContent);
     closeMenus();
   }
 
@@ -1393,10 +1391,10 @@ test("the Filter's Assignee says the members could not be read, with Retry, in t
     [
       ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
         .at(-1)
-        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+        ?.querySelectorAll<HTMLElement>(".ui-menu-item") ?? []),
     ].map((item) => [
-      item.querySelector(".luke-menu-item-label")?.textContent,
-      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      item.querySelector(".ui-menu-item-label")?.textContent,
+      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
     ]);
 
   openOptions(page, "Filter");
@@ -1419,9 +1417,9 @@ test("the Filter's Assignee says the members could not be read, with Retry, in t
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
   const page = await mountPage();
   const offered = () =>
-    [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item')]
-      .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
-      .map((item) => item.querySelector("img.luke-avatar-picture")?.getAttribute("src"));
+    [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item')]
+      .filter((item) => item.querySelector(".ui-menu-item-label")?.textContent === "web")
+      .map((item) => item.querySelector("img.ui-avatar-picture")?.getAttribute("src"));
 
   openOptions(page, "Filter");
   choose("Repository");

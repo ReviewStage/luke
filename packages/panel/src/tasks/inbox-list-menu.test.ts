@@ -136,7 +136,7 @@ function mount(
 
 /** The first row of the list, its item. */
 function firstRow(): HTMLElement {
-  const row = document.querySelector<HTMLElement>(".luke-list-row");
+  const row = document.querySelector<HTMLElement>(".ui-list-row");
   if (row === null) throw new Error("No row drawn");
   return row;
 }
@@ -196,7 +196,7 @@ test("a row's ⋯ takes the keyboard's focus, is described by the item's title, 
   closeMenu();
   expect(menuItems()).toEqual([]);
 
-  const press = row.querySelector<HTMLElement>("button.luke-list-row-main");
+  const press = row.querySelector<HTMLElement>("button.ui-list-row-main");
   act(() => {
     press?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
@@ -230,7 +230,7 @@ test("a finger's list standing alone draws no row open and no ⋯ at rest, a lon
   vi.useFakeTimers();
   try {
     act(() => {
-      row.querySelector("button.luke-list-row-main")?.dispatchEvent(
+      row.querySelector("button.ui-list-row-main")?.dispatchEvent(
         new PointerEvent("pointerdown", {
           bubbles: true,
           pointerId: 1,

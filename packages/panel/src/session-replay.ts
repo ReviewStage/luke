@@ -80,8 +80,7 @@ const LAYOUT_DATA = `
   inbox-comment inbox-shown indent indeterminate indicators inherit ink
   inset issue-state item-section item-selected keyboard kind labels-control
   landed late layer layout lead leaving legible level lifted lights line
-  lines lit loaded look luke-boot-sidebar luke-density luke-profile
-  luke-room luke-theme marked measure menu-open meta min-width mobile-bar
+  lines lit loaded look marked measure menu-open meta min-width mobile-bar
   mode motion move moves muted name narrow narrowest nudge numbered open
   opened orientation overflow page pane-beside pane-over panel-open
   panel-toggle pending picked place placed placement playing pointer-opens
@@ -90,7 +89,8 @@ const LAYOUT_DATA = `
   sections selected separator shown side sidebar-collapsed sidebar-overlay
   single size slot stand start state status style submit surface swiped
   thumb tone truncate-container truncate-group-container turn turned type
-  under under-more unread variant whole wide width worded wrap-heading
+  ui-boot-sidebar ui-density ui-profile ui-room ui-theme under under-more
+  unread variant whole wide width worded wrap-heading
   wrapped zoom
 `
   .trim()

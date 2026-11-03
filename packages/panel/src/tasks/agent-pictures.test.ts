@@ -602,7 +602,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     assert.ok(inline, "the video plays where it stands");
     assert.equal(inline.getAttribute("src"), "blob:video-1");
     assert.deepEqual(
-      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(inline.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
@@ -627,7 +627,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     const player = document.querySelector('[role="dialog"] video');
     assert.ok(player, "its Expand opens the viewer, which plays the video");
     assert.deepEqual(
-      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(player.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],
@@ -781,7 +781,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
     assert.ok(inline, "the recording plays though the work before it folded");
     assert.equal(inline.getAttribute("src"), "blob:recording-1");
     assert.deepEqual(
-      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(inline.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Expand", "Full screen"],
@@ -804,7 +804,7 @@ test("a recording a finished browser call kept plays under its row, out of the t
     const player = document.querySelector('[role="dialog"] video');
     assert.ok(player, "its Expand opens the viewer, which plays the recording");
     assert.deepEqual(
-      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+      [...(player.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
       ["Play", "Full screen"],

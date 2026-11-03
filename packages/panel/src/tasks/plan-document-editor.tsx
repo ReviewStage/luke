@@ -98,7 +98,7 @@ function pressesWords(target: EventTarget): boolean {
   return !(
     target instanceof Element &&
     target.closest(
-      "a, button:not(.luke-picture-tile), input, label, [data-mention-ref], .plan-unit-row, .picture-block[data-video] > :not(.picture-caption)",
+      "a, button:not(.ui-picture-tile), input, label, [data-mention-ref], .plan-unit-row, .picture-block[data-video] > :not(.picture-caption)",
     ) !== null
   );
 }

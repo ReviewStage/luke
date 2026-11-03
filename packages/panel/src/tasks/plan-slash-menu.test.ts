@@ -136,7 +136,7 @@ function menuRows(container: HTMLElement): string[] | undefined {
   const menu = container.querySelector<HTMLElement>('[role="listbox"][aria-label="Blocks"]');
   if (menu === null) return undefined;
   return [...menu.querySelectorAll<HTMLElement>('[role="option"]')].map((row) =>
-    (row.querySelector(".luke-combobox-option-label")?.textContent ?? row.textContent ?? "").trim(),
+    (row.querySelector(".ui-combobox-option-label")?.textContent ?? row.textContent ?? "").trim(),
   );
 }
 

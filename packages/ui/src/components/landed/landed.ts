@@ -30,7 +30,7 @@ export type Landed = (typeof LANDED)[keyof typeof LANDED];
 export const LANDED_ATTRIBUTE = "data-landed";
 
 /** The animation whose end is a landing's, heard as the landed element's own `animationend`. */
-export const LANDED_ANIMATION = "luke-landed";
+export const LANDED_ANIMATION = "ui-landed";
 
 /** What a place React draws wears while it is landed on, none while it is not. */
 export function landedMark(

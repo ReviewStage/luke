@@ -99,11 +99,11 @@ import { useTouchHold } from "./touch-hold.js";
  * draws it in the Tailwind theme. A right-click's menu is the same menu
  * hung at the pointer, so `useMenu`'s `contextMenu` stays the spread an
  * element carries rather than a Base UI context menu wrapped around it.
- * Each part keeps its `luke-menu*` name beside its classes, which the
+ * Each part keeps its `ui-menu*` name beside its classes, which the
  * panel's layer rule and the tests find it by.
  *
  * In a phone's layout, the narrow room the document's root says it stands
- * in (`data-luke-room`, the panel's `shell-room.ts`), the same menu rises
+ * in (`data-ui-room`, the panel's `shell-room.ts`), the same menu rises
  * as a sheet from the window's foot instead (`MenuSheet`), whatever opened
  * it and whether a finger or a mouse did: a dialog over the dimmed window,
  * headed by what it acts on, its rows the menu's own at a finger's height,
@@ -639,7 +639,7 @@ function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[])
 /** The slot at a row's end, one glyph wide, after any hint; a setting's check in the text's own ink. */
 function endSlot(afterHint: boolean, setting: boolean): string {
   return cn(
-    "luke-menu-item-end grid size-menu-glyph flex-none place-items-center text-muted-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
+    "ui-menu-item-end grid size-menu-glyph flex-none place-items-center text-muted-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
     !afterHint && "ml-auto",
     setting && "text-foreground",
   );
@@ -648,12 +648,12 @@ function endSlot(afterHint: boolean, setting: boolean): string {
 /** What an item prints at its end: its hint, and after it a setting's switch, the chevron of a list it opens, or a setting's check while it is on. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   const hint =
-    action.hint === undefined ? null : <span className="luke-menu-item-hint">{action.hint}</span>;
+    action.hint === undefined ? null : <span className="ui-menu-item-hint">{action.hint}</span>;
   if (action.mark === MENU_ITEM_MARK.SWITCH && action.checked !== undefined) {
     return (
       <>
         {hint}
-        <span className={cn("luke-menu-item-switch flex flex-none", hint === null && "ml-auto")}>
+        <span className={cn("ui-menu-item-switch flex flex-none", hint === null && "ml-auto")}>
           <SwitchMark checked={action.checked} />
         </span>
       </>
@@ -696,10 +696,10 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
       <>
         <MenuGlyph>{action.icon}</MenuGlyph>
         {action.tag === undefined ? (
-          <OneLine className="luke-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
+          <OneLine className="ui-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
         ) : (
-          <span className="luke-menu-item-tagged flex min-w-0 flex-1 items-center gap-ui-8">
-            <OneLine className="luke-menu-item-label min-w-0">{action.label}</OneLine>
+          <span className="ui-menu-item-tagged flex min-w-0 flex-1 items-center gap-ui-8">
+            <OneLine className="ui-menu-item-label min-w-0">{action.label}</OneLine>
             {action.tag}
           </span>
         )}
@@ -712,17 +712,17 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
       <MenuGlyph>{action.icon}</MenuGlyph>
       <span
         className={cn(
-          "luke-menu-item-copy flex min-w-0 flex-1",
+          "ui-menu-item-copy flex min-w-0 flex-1",
           beside ? "flex-row items-baseline gap-ui-8" : "flex-col gap-ui-2",
         )}
         data-place={beside ? MENU_DETAIL.BESIDE : undefined}
       >
         <OneLine
-          className={cn("luke-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}
+          className={cn("ui-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}
         >
           {action.label}
         </OneLine>
-        <OneLine className={cn("luke-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}>
+        <OneLine className={cn("ui-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}>
           {action.detail}
         </OneLine>
       </span>
@@ -786,7 +786,7 @@ export function MenuItem({
     ...rovingItem(),
     label: action.label,
     "aria-label": heard,
-    className: "luke-menu-item",
+    className: "ui-menu-item",
     "aria-disabled": action.disabled === true ? true : undefined,
     "data-detail": secondLine(action) ? "true" : undefined,
     // Note that the item's press is the menu's alone to answer (`Menu`'s
@@ -850,7 +850,7 @@ function SteeredItem({
     "aria-disabled": off ? "true" : undefined,
     tabIndex: -1,
     // Note that the field holds the one highlight, which the pointer moves too, so the pointer lights nothing of its own.
-    className: cn("luke-menu-item", DROPDOWN_MENU_ITEM, "data-highlighted:bg-secondary"),
+    className: cn("ui-menu-item", DROPDOWN_MENU_ITEM, "data-highlighted:bg-secondary"),
     "data-steered": "true",
     "data-highlighted": steered.highlighted ? "true" : undefined,
     "data-variant": action.danger ? "destructive" : undefined,
@@ -1085,7 +1085,7 @@ function Submenu({
         nativeButton
         render={<button type="button" />}
         label={entry.label}
-        className="luke-menu-item"
+        className="ui-menu-item"
         {...rovingItem()}
         data-open={open ? "true" : undefined}
         endClassName={endSlot(entry.hint !== undefined, false)}
@@ -1103,14 +1103,12 @@ function Submenu({
         }}
       >
         <MenuGlyph>{entry.icon}</MenuGlyph>
-        <OneLine className="luke-menu-item-label min-w-0 flex-1">{entry.label}</OneLine>
-        {entry.hint === undefined ? null : (
-          <span className="luke-menu-item-hint">{entry.hint}</span>
-        )}
+        <OneLine className="ui-menu-item-label min-w-0 flex-1">{entry.label}</OneLine>
+        {entry.hint === undefined ? null : <span className="ui-menu-item-hint">{entry.hint}</span>}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         ref={drawn}
-        className="luke-menu"
+        className="ui-menu"
         aria-label={entry.label}
         layer={layer}
         side="right"
@@ -1202,7 +1200,7 @@ function panelPlace(
 
 /** The layer a panel hangs in beside its menu, over what the menu stands over, fading out as the menu does. */
 const PANEL_LAYER =
-  "luke-menu-panel fixed isolate z-menu data-[layer=dialog]:z-menu-over-dialog data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-menu-leave";
+  "ui-menu-panel fixed isolate z-menu data-[layer=dialog]:z-menu-over-dialog data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-menu-leave";
 
 /**
  * An item that opens a panel beside it: Base UI's menu item, its glyph,
@@ -1228,7 +1226,7 @@ function PanelItem({
       render={<button type="button" />}
       {...rovingItem()}
       label={entry.label}
-      className="luke-menu-item"
+      className="ui-menu-item"
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-controls={open ? controls : undefined}
@@ -1379,11 +1377,11 @@ function MenuPanelLayer({
 
 /** A menu's heading over its rows, muted and pressed by nothing: whose account it is about. */
 const MENU_HEADING =
-  "luke-menu-heading flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit]";
+  "ui-menu-heading flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit]";
 
 /** A menu's footer under its rows, on the same terms: who made what it is about. */
 const MENU_FOOTER =
-  "luke-menu-footer flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit] text-muted-foreground";
+  "ui-menu-footer flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit] text-muted-foreground";
 
 /** What a menu is told: its name, where it hangs, what it acts on, its rows, and its close. */
 interface MenuProps {
@@ -1589,7 +1587,7 @@ function FloatingMenu({
       <DropdownMenuContent
         ref={drawn}
         id={id}
-        className="luke-menu"
+        className="ui-menu"
         aria-label={label}
         layer={layer}
         anchor={anchor}
@@ -1612,12 +1610,12 @@ function FloatingMenu({
               <div className={MENU_HEADING} role="none">
                 {heading}
               </div>
-              <DropdownMenuSeparator className="luke-menu-rule" />
+              <DropdownMenuSeparator className="ui-menu-rule" />
             </>
           )}
           {groups.map((group, index) => (
             <Fragment key={group[0]?.label}>
-              {index > 0 ? <DropdownMenuSeparator className="luke-menu-rule" /> : null}
+              {index > 0 ? <DropdownMenuSeparator className="ui-menu-rule" /> : null}
               {group.map((entry) =>
                 isPanel(entry) ? (
                   <PanelItem
@@ -1655,7 +1653,7 @@ function FloatingMenu({
           ))}
           {footer === undefined ? null : (
             <>
-              <DropdownMenuSeparator className="luke-menu-rule" />
+              <DropdownMenuSeparator className="ui-menu-rule" />
               <div className={MENU_FOOTER} role="none">
                 {footer}
               </div>
@@ -1716,7 +1714,7 @@ function SheetItem({
     type: "button",
     "aria-label": heard,
     disabled: action.disabled,
-    className: cn("luke-menu-item", DROPDOWN_MENU_ITEM, DROPDOWN_MENU_ITEM_LIT),
+    className: cn("ui-menu-item", DROPDOWN_MENU_ITEM, DROPDOWN_MENU_ITEM_LIT),
     "data-variant": action.danger ? "destructive" : undefined,
     "data-danger": action.danger ? "true" : undefined,
     "data-detail": secondLine(action) ? "true" : undefined,
@@ -1768,7 +1766,7 @@ function SheetRows({
     <>
       {groups.map((group, index) => (
         <Fragment key={group[0]?.label}>
-          {index > 0 ? <hr className={cn("luke-menu-rule", DROPDOWN_MENU_RULE)} /> : null}
+          {index > 0 ? <hr className={cn("ui-menu-rule", DROPDOWN_MENU_RULE)} /> : null}
           {group.map((entry) =>
             !("onSelect" in entry) ? (
               <SheetItem
@@ -1812,7 +1810,7 @@ function SheetPanel({
       ref={box}
       role="group"
       aria-label={entry.label}
-      className="luke-menu-sheet-panel flex min-h-0 flex-col"
+      className="ui-menu-sheet-panel flex min-h-0 flex-col"
       onKeyDown={(event) => {
         if (event.defaultPrevented || event.key !== "ArrowLeft" || !leftLeaves(event.target)) {
           return;
@@ -1904,7 +1902,7 @@ function MenuSheet({
     if (list === null || leaving) return;
     const now = document.activeElement;
     if (now instanceof HTMLElement && now !== document.body && now.isConnected) return;
-    (startOf(list, false) ?? list.closest<HTMLElement>(".luke-dialog"))?.focus({
+    (startOf(list, false) ?? list.closest<HTMLElement>(".ui-dialog"))?.focus({
       preventScroll: true,
     });
   });
@@ -1954,7 +1952,7 @@ function MenuSheet({
             id={id}
             role="menu"
             aria-label={page?.label ?? label}
-            className="luke-menu-sheet-rows"
+            className="ui-menu-sheet-rows"
             data-roving={roving["data-roving"]}
             onKeyDown={keyDown}
             onFocus={roving.onFocus}

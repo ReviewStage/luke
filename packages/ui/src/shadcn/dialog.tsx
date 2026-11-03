@@ -83,7 +83,7 @@ function DialogContent({
         data-slot="dialog-viewport"
         className={cn(
           DIALOG_ROOM,
-          "@container/luke-dialog-room box-border grid grid-cols-1 place-items-center bg-scrim p-6 animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
+          "@container/ui-dialog-room box-border grid grid-cols-1 place-items-center bg-scrim p-6 animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
           viewportClassName,
         )}
         {...room}

@@ -34,7 +34,7 @@ export function Swatch({
     <button
       ref={ref}
       type="button"
-      className="luke-swatch"
+      className="ui-swatch"
       aria-label={label}
       aria-pressed={pressed}
       tabIndex={tabbable === false ? -1 : undefined}

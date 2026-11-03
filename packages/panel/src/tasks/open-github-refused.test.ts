@@ -63,7 +63,7 @@ async function mountChip(): Promise<HTMLAnchorElement> {
 
 /** What each toast standing says, oldest first. */
 function toasts(): string[] {
-  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+  return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }

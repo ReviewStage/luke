@@ -26,7 +26,7 @@ export function AccountWords({
 }): React.JSX.Element {
   return (
     <OneLine
-      className="luke-account-words min-w-0 flex-[1_1_0] font-text text-muted-foreground"
+      className="ui-account-words min-w-0 flex-[1_1_0] font-text text-muted-foreground"
       words={words}
     >
       {children}

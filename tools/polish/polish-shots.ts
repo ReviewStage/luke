@@ -14,7 +14,7 @@
  * The catalog is shot beside them, every example its index lists, over its
  * own addresses as `apps/catalog/scripts/shoot.ts` shoots it.
  *
- * Every picture is taken in light and in dark, with `data-luke-theme` held on
+ * Every picture is taken in light and in dark, with `data-ui-theme` held on
  * the root and the machine's appearance emulated to match, at the three sizes
  * the window is checked at: wide, the window Vespin opens in (1280×840,
  * `DESKTOP_WINDOW` in `apps/desktop/src/main/window/panel-manager.ts`); the
@@ -171,12 +171,12 @@ function stillPageScript(theme: Theme): string {
   const style = document.createElement("style");
   style.textContent = ${JSON.stringify(STILL_MOTION_CSS)};
   const hold = (root) => {
-    if (root.getAttribute("data-luke-theme") !== ${JSON.stringify(theme)}) root.setAttribute("data-luke-theme", ${JSON.stringify(theme)});
+    if (root.getAttribute("data-ui-theme") !== ${JSON.stringify(theme)}) root.setAttribute("data-ui-theme", ${JSON.stringify(theme)});
     if (!style.isConnected) root.append(style);
   };
   const lay = (root) => {
     hold(root);
-    new MutationObserver(() => hold(root)).observe(root, { attributes: true, attributeFilter: ["data-luke-theme"] });
+    new MutationObserver(() => hold(root)).observe(root, { attributes: true, attributeFilter: ["data-ui-theme"] });
   };
   if (document.documentElement) lay(document.documentElement);
   else new MutationObserver((_, observer) => { if (document.documentElement) { observer.disconnect(); lay(document.documentElement); } }).observe(document, { childList: true });

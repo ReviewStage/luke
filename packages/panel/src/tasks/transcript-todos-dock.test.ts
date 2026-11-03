@@ -72,7 +72,7 @@ test("a step done springs its check in, the next taken up arrives, and the count
   to(steps(2));
   assert.ok(view.textContent?.includes("2 of 3 done"), view.textContent ?? "");
   const mark = view.querySelector(
-    '.todo-item[data-todo-status="done"] > .luke-glyph-slot[data-arrival="check"]',
+    '.todo-item[data-todo-status="done"] > .ui-glyph-slot[data-arrival="check"]',
   );
   assert.equal(mark?.getAttribute("aria-label"), "Done");
 });

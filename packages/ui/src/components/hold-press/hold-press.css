@@ -2,7 +2,7 @@
    its own: the control it wraps stands in its place. */
 
 @layer components {
-  .luke-hold-press {
+  .ui-hold-press {
     display: contents;
   }
 }

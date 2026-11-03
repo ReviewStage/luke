@@ -30,7 +30,7 @@
    own classes, so its columns are the shell's; only what makes it a frame is
    here. Its sidebar stands where the shell's would stand pinned: where this
    browser last read someone signed in and drew the sidebar pinned
-   (`data-luke-boot-sidebar`, at the width it kept, all of which
+   (`data-ui-boot-sidebar`, at the width it kept, all of which
    `public/app-theme.js` reads), on a stage as wide as `@luke/panel`'s
    `sidebar-collapse.ts` pins one at (`SIDEBAR_COMPACT.ENTER`). The stage is
    the container measured, as the panel measures it (`stage-room.ts`), so a
@@ -54,15 +54,15 @@
 }
 
 @container (width >= 1120px) {
-  :root[data-luke-boot-sidebar="pinned"] .boot-frame .desktop-shell {
+  :root[data-ui-boot-sidebar="pinned"] .boot-frame .desktop-shell {
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   }
 
-  :root[data-luke-boot-sidebar="pinned"] .boot-frame .desktop-sidebar {
+  :root[data-ui-boot-sidebar="pinned"] .boot-frame .desktop-sidebar {
     display: flex;
   }
 
-  :root[data-luke-boot-sidebar="pinned"] .boot-frame-mark {
+  :root[data-ui-boot-sidebar="pinned"] .boot-frame-mark {
     display: none;
   }
 }

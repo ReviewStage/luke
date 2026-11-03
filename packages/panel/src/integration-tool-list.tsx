@@ -169,7 +169,7 @@ export function IntegrationToolList({
               id={idOf?.(tool)}
               ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
               title={
-                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.luke-badge]:flex-none [&>.luke-badge]:self-center">
+                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.ui-badge]:flex-none [&>.ui-badge]:self-center">
                   <OneLine
                     className={
                       namedApart(tool)

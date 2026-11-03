@@ -7,29 +7,29 @@
    here. */
 
 @layer components {
-  .luke-working-mark-dot {
-    animation: luke-working-lap 1.6s step-end infinite;
+  .ui-working-mark-dot {
+    animation: ui-working-lap 1.6s step-end infinite;
     animation-play-state: var(--ui-loop-motion);
   }
 
-  .luke-working-mark-dot[data-dot="lead"] {
+  .ui-working-mark-dot[data-dot="lead"] {
     animation-delay: -1.9s;
   }
 
-  .luke-working-mark-dot[data-dot="lead-tail"] {
+  .ui-working-mark-dot[data-dot="lead-tail"] {
     animation-delay: -1.7s;
   }
 
-  .luke-working-mark-dot[data-dot="trail"] {
+  .ui-working-mark-dot[data-dot="trail"] {
     animation-delay: -1.1s;
   }
 
-  .luke-working-mark-dot[data-dot="trail-tail"] {
+  .ui-working-mark-dot[data-dot="trail-tail"] {
     animation-delay: -0.9s;
   }
 
   /* The lap, round the 3×3 grid's edge from its top-left cell. */
-  @keyframes luke-working-lap {
+  @keyframes ui-working-lap {
     0%,
     100% {
       transform: none;

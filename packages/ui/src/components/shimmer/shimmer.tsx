@@ -17,7 +17,7 @@ export type ShimmerProps = Omit<ComponentProps<"span">, "children" | "className"
 
 export function Shimmer({ children, ...props }: ShimmerProps): ReactNode {
   return (
-    <span className="luke-shimmer" {...props}>
+    <span className="ui-shimmer" {...props}>
       {children}
     </span>
   );

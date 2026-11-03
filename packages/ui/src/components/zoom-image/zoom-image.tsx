@@ -412,5 +412,5 @@ export function ZoomImage({
   src: string;
   alt: string;
 }): React.JSX.Element {
-  return <img className="luke-zoom-image" src={src} alt={alt} {...zoom.imageProps} />;
+  return <img className="ui-zoom-image" src={src} alt={alt} {...zoom.imageProps} />;
 }

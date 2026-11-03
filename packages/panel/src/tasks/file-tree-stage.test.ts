@@ -59,9 +59,9 @@ async function settle(): Promise<void> {
 
 /** The words of every line the host says, alerts, notes and waits alike. */
 function said(): string[] {
-  return [
-    ...document.querySelectorAll(".luke-note-line, .luke-failure-note, .luke-spinner-region"),
-  ].map((line) => line.textContent ?? "");
+  return [...document.querySelectorAll(".ui-note-line, .ui-failure-note, .ui-spinner-region")].map(
+    (line) => line.textContent ?? "",
+  );
 }
 
 /** The host the tree draws in, and whether it is shown. */

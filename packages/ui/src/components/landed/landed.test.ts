@@ -26,7 +26,7 @@ test("a place landed on stays lit until its own light ends", () => {
   land(row);
   expect(row.getAttribute("data-landed")).toBe(LANDED.AROUND);
 
-  ended(row, "luke-press-control");
+  ended(row, "ui-press-control");
   ended(words, LANDED_ANIMATION);
   expect(row.getAttribute("data-landed")).toBe(LANDED.AROUND);
 

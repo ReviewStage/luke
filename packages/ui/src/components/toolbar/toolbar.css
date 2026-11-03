@@ -37,7 +37,7 @@
      words start, a row's inset further in, which is where a row's padding
      puts them; words on no row (a page's title) start there too, so a
      column reads down one edge. */
-  .luke-toolbar {
+  .ui-toolbar {
     --ui-toolbar-column-inset: var(--ui-space-12);
     --ui-toolbar-page-inset: calc(var(--ui-toolbar-column-inset) + var(--ui-row-inset));
     --ui-toolbar-start: var(--ui-toolbar-page-inset);
@@ -59,23 +59,23 @@
 
   /* Only the desktop's window is dragged by its bar, and what stands on the
      bar keeps its presses: the actions, and the buttons of a lead. */
-  [data-luke-profile="desktop"] .luke-toolbar {
+  [data-ui-profile="desktop"] .ui-toolbar {
     -webkit-app-region: drag;
   }
 
-  [data-luke-profile="desktop"] .luke-toolbar-actions {
+  [data-ui-profile="desktop"] .ui-toolbar-actions {
     -webkit-app-region: no-drag;
   }
 
-  .luke-toolbar[data-start="column"] {
+  .ui-toolbar[data-start="column"] {
     --ui-toolbar-start: var(--ui-toolbar-column-inset);
   }
 
-  .luke-toolbar[data-end="column"] {
+  .ui-toolbar[data-end="column"] {
     --ui-toolbar-end: var(--ui-toolbar-column-inset);
   }
 
-  .luke-toolbar-heading {
+  .ui-toolbar-heading {
     min-width: 0;
     flex: 1;
   }
@@ -84,20 +84,20 @@
      does: the last, because a title led by crumbs ends in its own name. A
      detail stands there too, and the title beside it may be cut short once
      the detail has given way. */
-  .luke-toolbar-heading:has(> :is(.luke-toolbar-tag, .luke-toolbar-detail)) {
+  .ui-toolbar-heading:has(> :is(.ui-toolbar-tag, .ui-toolbar-detail)) {
     display: flex;
     align-items: last baseline;
     gap: var(--ui-space-8);
   }
 
-  .luke-toolbar-heading:has(> .luke-toolbar-detail) > .luke-toolbar-title {
+  .ui-toolbar-heading:has(> .ui-toolbar-detail) > .ui-toolbar-title {
     min-width: 0;
   }
 
   /* A phone's look: one control in each corner, one control wide, and the
      title centred between them, cut where it meets them. Each part stands
      in its own column, so a corner left empty leaves the title centred. */
-  .luke-toolbar[data-look="phone"] {
+  .ui-toolbar[data-look="phone"] {
     /* The corners stand at the column's own edge: a phone draws no window
        buttons over them. */
     --ui-toolbar-start-at: initial;
@@ -107,7 +107,7 @@
     grid-template-columns: var(--ui-control-height) minmax(0, 1fr) var(--ui-control-height);
   }
 
-  .luke-toolbar[data-look="phone"] > .luke-toolbar-heading {
+  .ui-toolbar[data-look="phone"] > .ui-toolbar-heading {
     display: flex;
     grid-column: 2;
     align-items: center;
@@ -115,15 +115,15 @@
     gap: var(--ui-space-8);
   }
 
-  .luke-toolbar[data-look="phone"] > .luke-toolbar-heading:has(> .luke-toolbar-tag) {
+  .ui-toolbar[data-look="phone"] > .ui-toolbar-heading:has(> .ui-toolbar-tag) {
     align-items: last baseline;
   }
 
-  .luke-toolbar[data-look="phone"] > .luke-toolbar-heading > .luke-toolbar-title {
+  .ui-toolbar[data-look="phone"] > .ui-toolbar-heading > .ui-toolbar-title {
     min-width: 0;
   }
 
-  .luke-toolbar[data-look="phone"] > .luke-toolbar-actions {
+  .ui-toolbar[data-look="phone"] > .ui-toolbar-actions {
     grid-column: 3;
     justify-content: flex-end;
   }
@@ -134,13 +134,13 @@
      address bar. The actions keep the top row's end, both rows clear of the
      window's buttons at either edge, and the row beneath reaches past that
      clearance to the column's own inset, its whole width. */
-  [data-room="narrow"] .luke-toolbar[data-look="tabs"] {
+  [data-room="narrow"] .ui-toolbar[data-look="tabs"] {
     flex-wrap: wrap;
     padding-right: var(--ui-toolbar-wrap-end, var(--ui-toolbar-end));
     padding-left: var(--ui-toolbar-wrap-start, var(--ui-toolbar-start));
   }
 
-  [data-room="narrow"] .luke-toolbar[data-look="tabs"] > .luke-toolbar-heading {
+  [data-room="narrow"] .ui-toolbar[data-look="tabs"] > .ui-toolbar-heading {
     order: 1;
     flex: 0 0
       calc(
@@ -160,15 +160,15 @@
     );
   }
 
-  [data-room="narrow"] .luke-toolbar[data-look="tabs"] > .luke-toolbar-heading + * {
+  [data-room="narrow"] .ui-toolbar[data-look="tabs"] > .ui-toolbar-heading + * {
     min-height: var(--ui-control-height);
     margin-left: auto;
   }
 
   /* The bar's own width is what its slots' rules answer, so a control folds
      before the title or the tabs beside it do. */
-  .luke-toolbar[data-measure="true"] {
-    container: luke-toolbar / inline-size;
+  .ui-toolbar[data-measure="true"] {
+    container: ui-toolbar / inline-size;
   }
 
   /* A bar whose heading may take a row of its own (`wrapHeading`) answers
@@ -178,7 +178,7 @@
      actions keep the top row's end; narrower still, the lead's labelled
      controls draw their glyphs alone, named still. Note that it wraps only
      by that rule, because the heading's basis is nothing until then. */
-  .luke-toolbar[data-wrap-heading="true"] {
+  .ui-toolbar[data-wrap-heading="true"] {
     /* Where the heading's row stands its words: the column's words inset
        at both edges, less a crumb's pill pad at the start
        (`breadcrumb-pill-inline`), so the crumbs' words, not their pills,
@@ -192,7 +192,7 @@
       var(--ui-toolbar-page-inset)
     );
 
-    container: luke-toolbar / inline-size;
+    container: ui-toolbar / inline-size;
     flex-wrap: wrap;
     row-gap: 0;
   }
@@ -205,12 +205,12 @@
      edge, and reaches past any room the top row keeps for the window's
      buttons to the column's words inset; it is what the bar heads, so the
      window is not dragged by it. */
-  .luke-toolbar[data-wrapped="true"] > :is(.luke-toolbar-lead, .luke-toolbar-actions) {
+  .ui-toolbar[data-wrapped="true"] > :is(.ui-toolbar-lead, .ui-toolbar-actions) {
     min-height: calc(var(--ui-toolbar-height) - 2 * var(--ui-toolbar-edge-block));
     margin-bottom: var(--ui-toolbar-edge-block);
   }
 
-  .luke-toolbar[data-wrapped="true"] > .luke-toolbar-heading {
+  .ui-toolbar[data-wrapped="true"] > .ui-toolbar-heading {
     display: flex;
     order: 1;
     flex: 0 0
@@ -228,22 +228,22 @@
       calc(var(--ui-toolbar-wrap-heading-start) - var(--ui-toolbar-edge-start));
   }
 
-  [data-luke-profile="desktop"] .luke-toolbar[data-wrapped="true"] > .luke-toolbar-heading {
+  [data-ui-profile="desktop"] .ui-toolbar[data-wrapped="true"] > .ui-toolbar-heading {
     -webkit-app-region: no-drag;
   }
 
-  .luke-toolbar[data-wrapped="true"] > .luke-toolbar-actions {
+  .ui-toolbar[data-wrapped="true"] > .ui-toolbar-actions {
     margin-left: auto;
   }
 
-  @container luke-toolbar (width < 360px) {
-    .luke-toolbar[data-wrap-heading="true"] > .luke-toolbar-lead {
+  @container ui-toolbar (width < 360px) {
+    .ui-toolbar[data-wrap-heading="true"] > .ui-toolbar-lead {
       --ui-fold: folded;
     }
   }
 
   /* Every labelled control of the bar draws its glyph alone, named still. */
-  .luke-toolbar[data-folded="true"] {
+  .ui-toolbar[data-folded="true"] {
     --ui-fold: folded;
   }
 
@@ -255,7 +255,7 @@
      once it no longer fits between them. The bar is inset alike on both
      sides, so centred in the bar is centred in the column. */
   @container style(--ui-toolbar-centre: on) {
-    .luke-toolbar {
+    .ui-toolbar {
       display: grid;
       grid-template-columns:
         minmax(
@@ -271,11 +271,11 @@
       padding-left: var(--ui-toolbar-column-inset);
     }
 
-    .luke-toolbar > .luke-toolbar-heading {
+    .ui-toolbar > .ui-toolbar-heading {
       grid-column: 2;
     }
 
-    .luke-toolbar > .luke-toolbar-actions {
+    .ui-toolbar > .ui-toolbar-actions {
       grid-column: 3;
       justify-self: end;
     }
@@ -287,7 +287,7 @@
      after which it is taken from the pointer and stands ready to rise
      again. Reduced motion and a capture run zero the durations, so it
      lands and leaves at once. */
-  .luke-toolbar-pick-up {
+  .ui-toolbar-pick-up {
     display: block;
     min-width: 0;
     opacity: 0;
@@ -299,7 +299,7 @@
       visibility 0s var(--ui-duration-exit);
   }
 
-  .luke-toolbar-pick-up[data-shown="true"] {
+  .ui-toolbar-pick-up[data-shown="true"] {
     opacity: 1;
     transform: none;
     visibility: visible;

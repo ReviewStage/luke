@@ -38,10 +38,10 @@
         ? "dark"
         : "light";
   const root = document.documentElement;
-  root.setAttribute("data-luke-theme", theme);
+  root.setAttribute("data-ui-theme", theme);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", GROUND[theme]);
   if (signedIn === "true" && sidebarCollapsed === "false") {
-    root.setAttribute("data-luke-boot-sidebar", "pinned");
+    root.setAttribute("data-ui-boot-sidebar", "pinned");
     const width = Number(sidebarWidth);
     if (sidebarWidth !== null && sidebarWidth.trim() !== "" && Number.isFinite(width)) {
       const clamped = Math.min(SIDEBAR_WIDTH.MAX, Math.max(SIDEBAR_WIDTH.MIN, Math.round(width)));

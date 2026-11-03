@@ -8,19 +8,19 @@
    filled look draws none, its halves parted by a rule in its own ink. */
 
 @layer components {
-  .luke-split-button {
+  .ui-split-button {
     --ui-split-edge: var(--ui-color-border);
   }
 
-  .luke-split-button:is([data-variant="outline"], [data-variant="danger-outline"]) {
+  .ui-split-button:is([data-variant="outline"], [data-variant="danger-outline"]) {
     --ui-split-edge: var(--ui-color-border-strong);
   }
 
-  .luke-split-button:is([data-variant="primary"], [data-variant="danger"], [data-variant="ink"]) {
+  .ui-split-button:is([data-variant="primary"], [data-variant="danger"], [data-variant="ink"]) {
     --ui-split-edge: transparent;
   }
 
-  .luke-split-button > .luke-button[data-variant] {
+  .ui-split-button > .ui-button[data-variant] {
     --ui-button-edge: var(--ui-split-edge);
   }
 }

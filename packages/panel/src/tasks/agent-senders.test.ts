@@ -224,7 +224,7 @@ async function drawnFor(
 }
 
 /** Where a line names its sender: over its bubble, or, for GitHub's card, on the line under it. */
-const SENDER = ":is(.luke-message-head-sender, .luke-message-line-sender)";
+const SENDER = ":is(.ui-message-head-sender, .ui-message-line-sender)";
 
 /** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
 async function sendersFor(
@@ -237,7 +237,7 @@ async function sendersFor(
     const sender = message.querySelector<HTMLElement>(`${SENDER} [data-actor-ref]`);
     if (sender === null) return [];
     const id = messages[index]?.id ?? "";
-    const name = sender.querySelector(".luke-inline-ref-label")?.textContent ?? "";
+    const name = sender.querySelector(".ui-inline-ref-label")?.textContent ?? "";
     const picture = sender.querySelector("img")?.getAttribute("src");
     const kind = sender.dataset.kind ?? "";
     return [picture == null ? [id, kind, name] : [id, kind, name, picture]];
@@ -288,7 +288,7 @@ test("another agent's message wears the mark of the harness its model runs in, a
     const sender = drawn[MESSAGES.findIndex((message) => message.id === id)]?.querySelector(
       `${SENDER} .actor-mark`,
     );
-    const mark = sender?.querySelector(".luke-harness-mark");
+    const mark = sender?.querySelector(".ui-harness-mark");
     return mark?.getAttribute("data-provider") ?? undefined;
   };
 
@@ -328,7 +328,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const card = document.querySelector(".luke-tooltip-card")?.textContent ?? "";
+  const card = document.querySelector(".ui-tooltip-card")?.textContent ?? "";
   act(() => {
     sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
@@ -337,7 +337,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   assert.ok(card.includes("Split view, merged"), card);
   // The line still wears Claude's mark it was sent under, though the agent runs on Codex now.
   assert.equal(
-    sender.querySelector(".luke-harness-mark")?.getAttribute("data-provider"),
+    sender.querySelector(".ui-harness-mark")?.getAttribute("data-provider"),
     MODEL_PROVIDER.ANTHROPIC,
   );
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, agentId: SENDER_ID }]);

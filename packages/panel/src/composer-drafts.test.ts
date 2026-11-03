@@ -240,10 +240,10 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
     /** Whether an agent's tab in the plan's column wears the Draft pencil. */
     tabDrafted: (label: string) => {
       const tab =
-        [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
-          (each) => each.querySelector(".luke-tab-label")?.textContent === label,
+        [...container.querySelectorAll<HTMLElement>(".ui-tab")].find(
+          (each) => each.querySelector(".ui-tab-label")?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`);
-      return tab.querySelector(`.luke-tab-end-mark [aria-label="${DRAFT_WORD}"]`) !== null;
+      return tab.querySelector(`.ui-tab-end-mark [aria-label="${DRAFT_WORD}"]`) !== null;
     },
   };
 }
@@ -671,7 +671,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   return (name: string) =>
     (
       [...container.querySelectorAll<HTMLElement>("ul > li > button")].find(
-        (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent === name,
+        (row) => row.querySelector(".ui-list-row-title")?.firstChild?.textContent === name,
       ) ?? assert.fail(`the sidebar lists ${name}`)
     ).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
 }
@@ -716,7 +716,7 @@ async function newTaskDrafted(tasks: TasksControl): Promise<boolean> {
   await settle();
   const row =
     [...container.querySelectorAll<HTMLElement>("button")].find((button) =>
-      button.querySelector(".luke-nav-item-name")?.textContent?.startsWith("New task"),
+      button.querySelector(".ui-nav-item-name")?.textContent?.startsWith("New task"),
     ) ?? assert.fail("the sidebar draws New task");
   const drafted = row.querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
   for (const each of roots.splice(0)) act(() => each.unmount());
@@ -860,11 +860,11 @@ async function columnOn(
     rowDrafted: () => container.querySelector(`:scope > ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
-        [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
+        [...container.querySelectorAll<HTMLElement>(".ui-tab")].find(
           // Note that the label's own words are read apart from what follows them, the Inbox's count.
-          (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === label,
+          (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`)
-      ).querySelector(`.luke-tab-end-mark ${pencil}`) !== null,
+      ).querySelector(`.ui-tab-end-mark ${pencil}`) !== null,
     unmount: () => {
       for (const each of roots.splice(0)) act(() => each.unmount());
     },
@@ -1029,7 +1029,7 @@ async function inboxOn(item: InboxItem) {
   await settle();
   // Note that the tab chooses nothing by itself, so the item is opened as a press on its row opens it.
   const row =
-    container.querySelector<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main") ??
+    container.querySelector<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main") ??
     assert.fail("the item's row");
   await act(async () => row.click());
   await settle();

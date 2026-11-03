@@ -70,7 +70,7 @@ test("a popover closed through open keeps what it holds in its layer and hears n
   pressOn(outside);
   const heardOpen = away.count;
   act(() => toggle.click());
-  const held = container.querySelector(".luke-anchored-popover")?.textContent;
+  const held = container.querySelector(".ui-anchored-popover")?.textContent;
   pressOn(outside);
   const heardClosed = away.count;
   act(() => toggle.click());
@@ -109,7 +109,7 @@ test("a popover hung inside a card that scrolls turns below where the card leave
     return this.parentElement;
   });
   const sheet = document.head.appendChild(document.createElement("style"));
-  sheet.textContent = ".luke-anchored-popover { position: absolute; }";
+  sheet.textContent = ".ui-anchored-popover { position: absolute; }";
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -131,7 +131,7 @@ test("a popover hung inside a card that scrolls turns below where the card leave
     ),
   );
 
-  const layer = container.querySelector<HTMLElement>(".luke-anchored-popover");
+  const layer = container.querySelector<HTMLElement>(".ui-anchored-popover");
   const laid = layer === null ? undefined : getComputedStyle(layer).position;
   sheet.remove();
   assert.equal(laid, "absolute", "the layer is laid as the app lays it");

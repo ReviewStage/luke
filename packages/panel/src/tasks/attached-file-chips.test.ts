@@ -123,7 +123,7 @@ function draw(start: readonly AgentAttachment[]) {
 
 /** The chips drawn, in order, by the name their way off is heard by. */
 function chips(): HTMLLIElement[] {
-  return [...document.querySelectorAll<HTMLLIElement>("li.luke-attachment-chip")];
+  return [...document.querySelectorAll<HTMLLIElement>("li.ui-attachment-chip")];
 }
 
 function remove(chip: HTMLLIElement | undefined): void {

@@ -377,7 +377,7 @@ test("a version history whose version could not be read says so on its page and 
   assert.match(sections?.textContent ?? "", /The sections it changed could not be read\./u);
   assert.match(version?.textContent ?? "", /The version could not be read\./u);
   assert.equal(page.querySelector('[role="status"]'), null, "no placeholder stands");
-  assert.equal(page.querySelector(".luke-skeleton"), null, "no block stands");
+  assert.equal(page.querySelector(".ui-skeleton"), null, "no block stands");
   act(() => retryIn(sections)?.click());
   act(() => retryIn(version)?.click());
   assert.equal(retried, 2, "each Retry reads the version again");

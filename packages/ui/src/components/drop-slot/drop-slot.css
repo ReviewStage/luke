@@ -1,7 +1,7 @@
 /* drop-slot.css -- the dashed place a carried row lands in, a row's height. */
 
 @layer components {
-  .luke-drop-slot {
+  .ui-drop-slot {
     box-sizing: border-box;
     height: var(--ui-control-height);
     border: 1px dashed var(--ui-color-border-strong);
@@ -9,7 +9,7 @@
     transition: border-color var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  [data-drop-target="true"] .luke-drop-slot {
+  [data-drop-target="true"] .ui-drop-slot {
     border-color: var(--ui-color-focus-ring);
   }
 }

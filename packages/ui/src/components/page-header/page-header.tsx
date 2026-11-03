@@ -57,14 +57,14 @@ export function PageHeader({
   end?: PageHeaderEnd | undefined;
 }): React.JSX.Element {
   return (
-    <header className="luke-page-header" data-end={end}>
-      <div className="luke-page-header-heading">
+    <header className="ui-page-header" data-end={end}>
+      <div className="ui-page-header-heading">
         <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.H1} id={titleId}>
           {title}
         </Text>
         {said(description) ? <Text tone={TEXT_TONE.MUTED}>{description}</Text> : null}
       </div>
-      {said(actions) ? <div className="luke-page-header-actions">{actions}</div> : null}
+      {said(actions) ? <div className="ui-page-header-actions">{actions}</div> : null}
     </header>
   );
 }

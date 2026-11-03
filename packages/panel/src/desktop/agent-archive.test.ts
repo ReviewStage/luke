@@ -97,9 +97,9 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
   );
   assert.ok(row, "the archived agent is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Retry audit");
-  assert.match(card?.querySelector(".luke-hover-card-corner")?.textContent ?? "", /^Archived · /u);
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Retry audit");
+  assert.match(card?.querySelector(".ui-hover-card-corner")?.textContent ?? "", /^Archived · /u);
 });
 
 /** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
@@ -140,7 +140,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy):
   );
   restOn(row ?? assert.fail("the row is drawn"));
   return [
-    ...document.querySelectorAll(".luke-tooltip-card [data-agent-card] .luke-hover-card-note"),
+    ...document.querySelectorAll(".ui-tooltip-card [data-agent-card] .ui-hover-card-note"),
   ].map((note) => note.textContent ?? "");
 }
 
@@ -216,7 +216,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     const unarchive =
       container.querySelector<HTMLButtonElement>(".task-summary-marks button") ??
       assert.fail("the Unarchive");
-    const ring = () => unarchive.querySelector(".luke-spinner-ring") !== null;
+    const ring = () => unarchive.querySelector(".ui-spinner-ring") !== null;
 
     act(() => unarchive.click());
     assert.equal(unarchive.getAttribute("aria-label"), "Unarchiving");

@@ -1,11 +1,11 @@
 /**
  * surface.ts -- the profile and theme a root or an overlay portal carries, which select the tokens every shared component reads.
  *
- * `tokens.css` keys each app's roles on `data-luke-profile` and its palette
- * on `data-luke-theme`, so a surface is two attributes: the window's root
+ * `tokens.css` keys each app's roles on `data-ui-profile` and its palette
+ * on `data-ui-theme`, so a surface is two attributes: the window's root
  * and anything it portals into `document.body` carry the same pair, and a
  * dialog reads the window's tokens rather than none. A web surface may carry
- * a third, `data-luke-density`, which sets the site's roles at a denser size.
+ * a third, `data-ui-density`, which sets the site's roles at a denser size.
  */
 
 /** Which app's roles a surface is drawn at: the desktop's density, or the site's. */
@@ -54,9 +54,9 @@ export type DensityOf<P extends Profile> = P extends typeof PROFILE.WEB ? Densit
 
 /** The attributes a surface's root wears for `profile` in `theme`, at `density` where it has one. */
 export interface SurfaceAttributes {
-  readonly "data-luke-profile": Profile;
-  readonly "data-luke-theme": Theme;
-  readonly "data-luke-density"?: Density;
+  readonly "data-ui-profile": Profile;
+  readonly "data-ui-theme": Theme;
+  readonly "data-ui-density"?: Density;
 }
 
 /** The attributes a root or a portal spreads to be drawn at `profile` in `theme`, and `density` where given. */
@@ -65,6 +65,6 @@ export function surfaceAttributes<P extends Profile>(
   theme: ThemeOf<P>,
   density?: DensityOf<P>,
 ): SurfaceAttributes {
-  const surface = { "data-luke-profile": profile, "data-luke-theme": theme };
-  return density === undefined ? surface : { ...surface, "data-luke-density": density };
+  const surface = { "data-ui-profile": profile, "data-ui-theme": theme };
+  return density === undefined ? surface : { ...surface, "data-ui-density": density };
 }

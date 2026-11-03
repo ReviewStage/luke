@@ -80,7 +80,7 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
 
 function draw(startsOpen: boolean, width = 900): HTMLElement {
   laid?.remove();
-  laid = layContainersAt({ annotation: width, "luke-room": width });
+  laid = layContainersAt({ annotation: width, "ui-room": width });
   const container = document.body.appendChild(document.createElement("div"));
   container.className = "pull-request-thread-slot";
   const root = createRoot(container);
@@ -140,10 +140,10 @@ test("the head's face stands over every reply's face, and its name over every co
   assert.equal(bodyFace, headFace, "one column of faces");
   assert.equal(bodyWords, headName, "one column of words");
   const [first, reply] = card.querySelectorAll(".annotation-comments > li");
-  assert.equal(first?.querySelector(".luke-comment-face"), null, "the head names the first");
-  assert.ok(reply?.querySelector(".luke-comment-face"), "a reply wears its own face");
+  assert.equal(first?.querySelector(".ui-comment-face"), null, "the head names the first");
+  assert.ok(reply?.querySelector(".ui-comment-face"), "a reply wears its own face");
   assert.match(
-    reply?.querySelector(".luke-comment-head")?.textContent ?? "",
+    reply?.querySelector(".ui-comment-head")?.textContent ?? "",
     /^danak2h/u,
     "a reply says who and how long ago",
   );

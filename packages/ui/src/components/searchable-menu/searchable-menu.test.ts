@@ -60,7 +60,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  document.documentElement.removeAttribute("data-luke-room");
+  document.documentElement.removeAttribute("data-ui-room");
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -446,10 +446,10 @@ function submenuIn(room: number, rowLeft: number, rowRight: number, bounds?: Pop
     this: HTMLElement,
   ) {
     if (this.dataset.popoverRoom !== undefined) return new DOMRect(0, 0, room, 800);
-    if (this.classList.contains("luke-searchable-menu-branch")) {
+    if (this.classList.contains("ui-searchable-menu-branch")) {
       return new DOMRect(rowLeft, 100, rowRight - rowLeft, 32);
     }
-    if (this.classList.contains("luke-searchable-menu-submenu")) {
+    if (this.classList.contains("ui-searchable-menu-submenu")) {
       return new DOMRect(rowRight + 9, 100, 200, 100);
     }
     return new DOMRect(0, 0, 0, 0);
@@ -459,7 +459,7 @@ function submenuIn(room: number, rowLeft: number, rowRight: number, bounds?: Pop
   press({ key: "ArrowUp" });
   press({ key: "ArrowRight" });
   const submenu =
-    document.querySelector<HTMLElement>(".luke-searchable-menu-submenu") ?? assert.fail("it opens");
+    document.querySelector<HTMLElement>(".ui-searchable-menu-submenu") ?? assert.fail("it opens");
   return {
     side: submenu.dataset.side,
     shift: Number.parseFloat(submenu.style.getPropertyValue("--ui-submenu-shift")),
@@ -500,7 +500,7 @@ test("the pointer crossing a pinned row on its way into the submenu beside anoth
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.classList.contains("luke-searchable-menu-submenu")
+    return this.classList.contains("ui-searchable-menu-submenu")
       ? new DOMRect(330, 100, 200, 100)
       : new DOMRect(0, 0, 0, 0);
   });
@@ -537,7 +537,7 @@ test("a row's own end marks stand at its end, after why it cannot be picked now,
     ],
   });
   const ends = [...document.querySelectorAll('[role="option"]')].map((option) => {
-    const end = option.querySelector(".luke-combobox-option-hint");
+    const end = option.querySelector(".ui-combobox-option-hint");
     return end === null
       ? null
       : [...end.childNodes].map((node) =>
@@ -610,13 +610,10 @@ test("rows drawn in place wear their end marks and hang their cards while the po
       button.textContent?.includes(label),
     ) ?? assert.fail(`${label} is drawn`);
   restOn(named("Alerts"));
-  assert.equal(
-    document.querySelector(".luke-tooltip-card [data-card]")?.textContent,
-    "Alerts card",
-  );
+  assert.equal(document.querySelector(".ui-tooltip-card [data-card]")?.textContent, "Alerts card");
   restOn(named("Sweep"));
   assert.ok(
-    [...document.querySelectorAll(".luke-tooltip-card [data-card]")].some(
+    [...document.querySelectorAll(".ui-tooltip-card [data-card]")].some(
       (card) => card.textContent === "Sweep card",
     ),
   );
@@ -624,7 +621,7 @@ test("rows drawn in place wear their end marks and hang their cards while the po
 
 /** The window drawn in a phone's layout, as the panel's shell marks its root. */
 function inPhoneLayout(): void {
-  document.documentElement.setAttribute("data-luke-room", "narrow");
+  document.documentElement.setAttribute("data-ui-room", "narrow");
 }
 
 /** The sheet the menu stands as in a phone's layout. */
@@ -717,6 +714,6 @@ test("a finger dragging the sheet from its field types rather than swiping it aw
     field.dispatchEvent(finger("pointerup", 400));
   });
 
-  assert.equal(document.querySelector<HTMLElement>(".luke-menu-sheet")?.style.translate, "");
+  assert.equal(document.querySelector<HTMLElement>(".ui-menu-sheet")?.style.translate, "");
   assert.deepEqual(asked.said, []);
 });

@@ -413,8 +413,8 @@ async function paste(text: string): Promise<void> {
 
 /** The row a skill's name labels. */
 const rowOf = (name: string) =>
-  [...document.querySelectorAll<HTMLElement>(".luke-settings-row")].find(
-    (each) => each.querySelector(".luke-settings-row-label")?.textContent === name,
+  [...document.querySelectorAll<HTMLElement>(".ui-settings-row")].find(
+    (each) => each.querySelector(".ui-settings-row-label")?.textContent === name,
   ) ?? assert.fail(`no row for ${name}`);
 
 /** The ⋯ of a skill's row, none where it draws none. */
@@ -470,11 +470,11 @@ test("a skill's description stands alone, its source and keep line under it as t
 
   const row = rowOf("release-notes");
   assert.equal(
-    row.querySelector(".luke-settings-row-state")?.textContent,
+    row.querySelector(".ui-settings-row-state")?.textContent,
     "acme/agent-skills @ 3f9c2e1 · by Dean. Follows your workspace.",
   );
   assert.equal(
-    row.querySelector(".luke-settings-row-description")?.firstChild?.textContent,
+    row.querySelector(".ui-settings-row-description")?.firstChild?.textContent,
     "release-notes described",
   );
 });
@@ -499,17 +499,17 @@ test("an empty workspace group says it follows the workspace", async () => {
 test("a skill's row leads with the book in the settings mark slot, and hangs the skill's card, which says whose it is and names no file", async () => {
   await mountPage();
 
-  const row = [...document.querySelectorAll<HTMLElement>(".luke-settings-row")].find((each) =>
+  const row = [...document.querySelectorAll<HTMLElement>(".ui-settings-row")].find((each) =>
     each.textContent?.startsWith("release-notes"),
   );
   assert.ok(row, "the skill has its row");
 
   restOn(row);
 
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release-notes");
-  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "Workspace skill");
-  assert.equal(card?.querySelector('.luke-hover-card-row[data-look="detail"]'), null);
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "/release-notes");
+  assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "Workspace skill");
+  assert.equal(card?.querySelector('.ui-hover-card-row[data-look="detail"]'), null);
 });
 
 test("a GitHub skill whose folder moved offers Update in its ⋯, which updates it and goes", async () => {
@@ -628,8 +628,8 @@ test("an install lights its own rows once", async () => {
   act(() => button("Install 2 skills").click());
   await settle();
 
-  const lit = [...document.querySelectorAll(".luke-settings-row[data-landed]")].map(
-    (each) => each.querySelector(".luke-settings-row-label")?.textContent,
+  const lit = [...document.querySelectorAll(".ui-settings-row[data-landed]")].map(
+    (each) => each.querySelector(".ui-settings-row-label")?.textContent,
   );
   assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
 });
@@ -895,11 +895,11 @@ test("the When-to-use box stops at the description cap and counts toward it", as
     box instanceof HTMLTextAreaElement && box.maxLength,
     TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
   );
-  assert.equal(document.querySelector(".luke-length-counter"), null);
+  assert.equal(document.querySelector(".ui-length-counter"), null);
   typeInto(box, "x".repeat(Math.ceil(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS * 0.9)));
   await settle();
   assert.match(
-    document.querySelector(".luke-length-counter")?.textContent ?? "",
+    document.querySelector(".ui-length-counter")?.textContent ?? "",
     new RegExp(`/${formatCount(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS)}$`, "u"),
   );
 });

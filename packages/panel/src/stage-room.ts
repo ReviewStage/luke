@@ -8,7 +8,7 @@
  * rearranges by it the line it reads: the room (`shell-room.ts`) and the
  * sidebar's fold (`sidebar-collapse.ts`).
  *
- * The room is written on the document's root as `data-luke-room`, the one
+ * The room is written on the document's root as `data-ui-room`, the one
  * attribute the panel's stylesheets read it off, so the layers the panel
  * portals out of the stage, a dialog and the toasts, answer the same room as
  * the shell rather than a breakpoint of their own.
@@ -33,7 +33,7 @@ interface StageLines {
 }
 
 /** The attribute the document's root wears the room in, for what is portalled out of the stage. */
-const ROOM_ATTRIBUTE = "data-luke-room";
+const ROOM_ATTRIBUTE = "data-ui-room";
 
 /** A stage not yet measured: wide, with the sidebar pinned as its choice says. */
 const UNMEASURED: StageLines = { narrow: false, compact: false };

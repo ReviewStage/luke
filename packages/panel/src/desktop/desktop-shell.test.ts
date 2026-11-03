@@ -212,14 +212,14 @@ test("while Settings is still loading its frame stands, a page of placeholder se
   const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
   const bars = page.querySelectorAll(
-    'section[aria-label="Settings"] :is(.desktop-drag-strip, .luke-toolbar)',
+    'section[aria-label="Settings"] :is(.desktop-drag-strip, .ui-toolbar)',
   );
 
   assert.deepEqual(
     [
       page.querySelector('nav[aria-label="Settings pages"]') !== null,
       placeholder?.textContent,
-      placeholder?.querySelectorAll(".luke-settings-section-card").length,
+      placeholder?.querySelectorAll(".ui-settings-section-card").length,
       bars.length,
     ],
     [true, "Reading Settings", 1, 1],
@@ -591,7 +591,7 @@ function mountListing(
 function sidebarRow(name: string): HTMLButtonElement {
   const row = [
     ...document.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
-  ].find((each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === name);
+  ].find((each) => each.querySelector(".ui-list-row-title")?.firstChild?.textContent === name);
   assert.ok(row, `the sidebar lists ${name}`);
   return row;
 }
@@ -609,7 +609,7 @@ function rowReadMark(name: string, choose = false): string | undefined {
   const menu = document.querySelector('[role="menu"]');
   assert.ok(menu, `${name}'s menu opens`);
   // Note that the item is read by its words, since its U is drawn beside them.
-  const words = (each: Element) => each.querySelector(".luke-menu-item-label")?.textContent ?? "";
+  const words = (each: Element) => each.querySelector(".ui-menu-item-label")?.textContent ?? "";
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
     /^Mark as (un)?read$/u.test(words(each)),
   );
@@ -971,7 +971,7 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.equal(loading.querySelector("h1")?.textContent, "Automations");
   const wait = loading.querySelector("[role=status]");
   assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
-  assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);
+  assert.ok((wait?.querySelectorAll(".ui-skeleton").length ?? 0) > 0);
   assert.equal(loading.querySelector("[role=switch]"), null, "their chunk has not loaded yet");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
@@ -1295,8 +1295,8 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
 
   restOn(chip);
 
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);
+  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, DOCUMENT_NAME);
 });
 
 test("⌘K's Admin opens the Admin place for an admin alone, and is offered nothing for anyone else", async () => {
@@ -1400,7 +1400,7 @@ test("on a phone an open task leads its own row with the way back the window's h
     return container;
   };
   const back = (page: HTMLElement) =>
-    page.querySelector<HTMLButtonElement>(".task-head .luke-toolbar-lead button") ??
+    page.querySelector<HTMLButtonElement>(".task-head .ui-toolbar-lead button") ??
     assert.fail("a way back");
 
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);

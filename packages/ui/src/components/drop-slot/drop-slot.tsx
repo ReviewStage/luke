@@ -14,5 +14,5 @@
 
 /** The empty place a carried row lands in. */
 export function DropSlot(): React.JSX.Element {
-  return <div className="luke-drop-slot" aria-hidden="true" />;
+  return <div className="ui-drop-slot" aria-hidden="true" />;
 }

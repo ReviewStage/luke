@@ -7,7 +7,7 @@
  * part of it that keeps what that look has always drawn:
  *
  * - A note (`MARKDOWN_LOOK.NOTE`) is parsed whole through Streamdown's
- *   `Block`, inside this component's own `.luke-markdown` root, with nothing
+ *   `Block`, inside this component's own `.ui-markdown` root, with nothing
  *   of Streamdown's own dress: its headings are paragraphs a step above the
  *   words (styled, never announced), a picture is its alternative words, raw
  *   HTML is text, and only the elements a place hands in are drawn its way.

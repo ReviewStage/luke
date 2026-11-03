@@ -341,9 +341,9 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
 
 test("a Settings page standing alone on a phone is named by its bar, opens a section's gap under the way back, and keeps the places bar with no place current", async () => {
   // Note that the stage wears the web's profile, whose tokens the gap is read in.
-  document.documentElement.dataset.lukeProfile = PROFILE.WEB;
+  document.documentElement.dataset.uiProfile = PROFILE.WEB;
   onTestFinished(() => {
-    delete document.documentElement.dataset.lukeProfile;
+    delete document.documentElement.dataset.uiProfile;
   });
   const page = await mount(PHONE, createElement(SettingsWindow, { link: undefined }));
   press(the(page, SETTINGS_COLUMNS.list), "Appearance");
@@ -352,7 +352,7 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
   assert.equal(bar.querySelector("h1")?.textContent, "Appearance", "the bar names the page");
   assert.equal(item.querySelectorAll("h1").length, 1, "the page draws no second heading");
 
-  const column = the(item, ".luke-settings-page-column");
+  const column = the(item, ".ui-settings-page-column");
   assert.equal(
     wayBackGap(bar, column),
     pixelsOf(column, "var(--ui-section-gap)"),

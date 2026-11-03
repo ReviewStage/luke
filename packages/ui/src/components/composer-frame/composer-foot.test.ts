@@ -162,7 +162,7 @@ test("a note's mend stands under its line, as a closed agent's Continue does", (
       mends: createElement("span", { className: "mend" }, "Continue in new agent"),
     },
   });
-  const note = container.querySelector(".luke-composer-foot-note");
+  const note = container.querySelector(".ui-composer-foot-note");
   expect(note?.querySelector('[role="alert"]')?.textContent).toBe(
     "The agent takes no more messages.",
   );

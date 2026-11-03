@@ -102,7 +102,7 @@ export function SettingsPage({
   const named = useHeadingAway(page, head);
   const phone = look === TOOLBAR_LOOK.PHONE;
   return (
-    <div className="luke-settings-page-frame flex h-full min-h-0 min-w-0 grow basis-0 flex-col">
+    <div className="ui-settings-page-frame flex h-full min-h-0 min-w-0 grow basis-0 flex-col">
       <Toolbar
         lead={lead}
         {...(phone
@@ -118,23 +118,23 @@ export function SettingsPage({
       />
       <div
         ref={page}
-        className="luke-settings-page @container/luke-settings-page box-border min-h-0 min-w-0 grow basis-0 overflow-x-clip overflow-y-auto overscroll-contain scroll-py-page-inset [scrollbar-gutter:stable]"
+        className="ui-settings-page @container/ui-settings-page box-border min-h-0 min-w-0 grow basis-0 overflow-x-clip overflow-y-auto overscroll-contain scroll-py-page-inset [scrollbar-gutter:stable]"
       >
         <div
           className={
             phone
-              ? "luke-settings-page-column mx-auto pt-title-under-bar"
-              : "luke-settings-page-column mx-auto"
+              ? "ui-settings-page-column mx-auto pt-title-under-bar"
+              : "ui-settings-page-column mx-auto"
           }
         >
           {phone ? (
             said(description) ? (
-              <div className="luke-settings-page-head mb-ui-24">
+              <div className="ui-settings-page-head mb-ui-24">
                 <Text tone={TEXT_TONE.MUTED}>{description}</Text>
               </div>
             ) : null
           ) : (
-            <div ref={head} className="luke-settings-page-head mb-ui-24">
+            <div ref={head} className="ui-settings-page-head mb-ui-24">
               <PageHeader
                 title={title}
                 description={description}
@@ -146,7 +146,7 @@ export function SettingsPage({
           <RevealArea root={sections}>
             <div
               ref={sections}
-              className="luke-settings-page-sections flex min-w-0 flex-col gap-page-section-gap"
+              className="ui-settings-page-sections flex min-w-0 flex-col gap-page-section-gap"
               {...revealArea()}
             >
               {children}

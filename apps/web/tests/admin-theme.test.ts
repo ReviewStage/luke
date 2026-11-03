@@ -64,14 +64,14 @@ beforeEach(() => {
 
 afterEach(() => {
   document.head.replaceChildren();
-  document.documentElement.removeAttribute("data-luke-theme");
+  document.documentElement.removeAttribute("data-ui-theme");
   localStorage.clear();
   vi.restoreAllMocks();
 });
 
 function worn() {
   return {
-    theme: document.documentElement.getAttribute("data-luke-theme"),
+    theme: document.documentElement.getAttribute("data-ui-theme"),
     chrome: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
     ground: getComputedStyle(document.documentElement).getPropertyValue("--ui-color-ground").trim(),
   };

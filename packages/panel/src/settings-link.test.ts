@@ -84,7 +84,7 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
   assert.deepEqual(turned, [ACME.id, PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
   assert.equal(landed.on?.querySelector("h2")?.textContent, "Workspace connections");
   assert.ok(
-    [...(landed.on?.querySelectorAll('.luke-settings-row [id$="label"]') ?? [])].some(
+    [...(landed.on?.querySelectorAll('.ui-settings-row [id$="label"]') ?? [])].some(
       (name) => name.textContent === "GitHub",
     ),
     "the group the old GitHub repositories link names holds GitHub's row",

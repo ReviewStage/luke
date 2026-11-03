@@ -273,7 +273,7 @@ const BOARD_CARD_NOTE = "tasks-board-card-note text-caption text-danger";
  * status mark line up on one edge of the card.
  */
 const BOARD_CARD_KEY =
-  "tasks-board-card-key flex ms-[calc(var(--spacing-select-box-inset)-var(--ui-space-4))] group-has-[.luke-card-press:hover]/board-card:invisible group-has-[.luke-card-press:focus-visible]/board-card:invisible group-has-[.luke-select-box:hover]/board-card:invisible group-has-[.luke-select-box[data-shown=true]]/board-card:invisible";
+  "tasks-board-card-key flex ms-[calc(var(--spacing-select-box-inset)-var(--ui-space-4))] group-has-[.ui-card-press:hover]/board-card:invisible group-has-[.ui-card-press:focus-visible]/board-card:invisible group-has-[.ui-select-box:hover]/board-card:invisible group-has-[.ui-select-box[data-shown=true]]/board-card:invisible";
 
 /** A card's foot, standing over its press, which lets the pointer through between its pills. */
 const BOARD_CARD_FOOT =
@@ -281,7 +281,7 @@ const BOARD_CARD_FOOT =
 
 /** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon and its sub-tasks' count, which are no presses and let one through to the card's. */
 const BOARD_CARD_PILLS =
-  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-ui-6 [&>:not(.task-agents-mark,.luke-progress-count)]:pointer-events-auto";
+  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-ui-6 [&>:not(.task-agents-mark,.ui-progress-count)]:pointer-events-auto";
 
 /**
  * A card's repository as a pill: its owner's picture and its own name, its

@@ -82,7 +82,7 @@ function sendHint(container: HTMLElement): { words: string; chord: string | unde
     container.querySelector('button[type="submit"]') ?? assert.fail("the card draws its button"),
   );
   const pill = document.querySelector('[role="tooltip"]') ?? assert.fail("the button's hint shows");
-  const chord = pill.querySelector(".luke-shortcut")?.textContent ?? undefined;
+  const chord = pill.querySelector(".ui-shortcut")?.textContent ?? undefined;
   const words = (pill.textContent ?? "").replace(chord ?? "", "").trim();
   return { words, chord };
 }

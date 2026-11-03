@@ -13,18 +13,18 @@
   /* The measure is the page's, a plan's reading width in the window and the
      admin's wider column on the web; the theme's `max-w-collection-page`
      and `px-collection-page-inset` read them. */
-  .luke-collection-page {
+  .ui-collection-page {
     --ui-collection-page-width: var(--ui-page-measure);
     --ui-collection-page-inset: var(--ui-page-inset);
   }
 
-  [data-luke-profile="web"] .luke-collection-page {
+  [data-ui-profile="web"] .ui-collection-page {
     --ui-collection-page-width: 1040px;
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
   @container (width < 480px) {
-    .luke-collection-page > * {
+    .ui-collection-page > * {
       --ui-collection-page-inset: var(--ui-page-inset-narrow);
     }
   }
@@ -37,7 +37,7 @@
      measure centred under it. Note that it says so in the page's own
      properties, the measure as wide as the room, so whatever reads them
      answers it. */
-  .luke-collection-page[data-frame="toolbar"] > * {
+  .ui-collection-page[data-frame="toolbar"] > * {
     --ui-collection-page-width: 100%;
     --ui-collection-page-inset: calc(var(--ui-space-12) + var(--ui-row-inset));
   }
@@ -47,25 +47,25 @@
      of chips waiting for its first, takes no room, so the line can stand
      ready for a chip to arrive into without a gap where none is, and a rule
      in this layer cannot undo a utility. */
-  .luke-collection-page-filters {
+  .ui-collection-page-filters {
     display: flex;
   }
 
-  .luke-collection-page-filters:not(:has(> :not([hidden]))) {
+  .ui-collection-page-filters:not(:has(> :not([hidden]))) {
     display: none;
   }
 
   /* A filter's search field stands at a search's width, not the line's. */
-  .luke-collection-page-filters > [data-slot="input"],
-  .luke-collection-page-filters > .luke-search-field {
+  .ui-collection-page-filters > [data-slot="input"],
+  .ui-collection-page-filters > .ui-search-field {
     flex: 0 1 240px;
     min-width: 0;
   }
 
   /* A list reaches past the column by its rows' inset, so a row's words
      open on the title's edge and its fill runs out either side. */
-  .luke-collection-page-content > .luke-list,
-  .luke-collection-page-skeleton {
+  .ui-collection-page-content > .ui-list,
+  .ui-collection-page-skeleton {
     margin-inline: calc(-1 * var(--ui-space-12));
   }
 
@@ -73,50 +73,50 @@
      skeleton: a skeleton's elements wear only classes naming themselves a
      skeleton's (`anti-slop/skeleton-through-components`), so they are laid
      out here. */
-  .luke-collection-page-skeleton {
+  .ui-collection-page-skeleton {
     display: flex;
     flex-direction: column;
     gap: var(--ui-list-gap);
   }
 
   /* A loading row stands as tall as a ListRow with a line under its title. */
-  .luke-collection-page-skeleton-row {
+  .ui-collection-page-skeleton-row {
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-2);
     padding: var(--ui-row-inset) var(--ui-list-inset);
   }
 
-  .luke-collection-page-skeleton-title {
+  .ui-collection-page-skeleton-title {
     font-size: var(--ui-type-label-size);
     line-height: var(--ui-type-label-leading);
   }
 
-  .luke-collection-page-skeleton-description {
+  .ui-collection-page-skeleton-description {
     font-size: var(--ui-type-caption-size);
     line-height: var(--ui-type-caption-leading);
   }
 
   /* An empty or failed collection stands its notice a little above the
      room's middle, shared two to three as an empty state stands alone. */
-  .luke-collection-page-notice::before,
-  .luke-collection-page-notice::after {
+  .ui-collection-page-notice::before,
+  .ui-collection-page-notice::after {
     content: "";
   }
 
-  .luke-collection-page-notice::before {
+  .ui-collection-page-notice::before {
     flex: 2 1 0;
   }
 
-  .luke-collection-page-notice::after {
+  .ui-collection-page-notice::after {
     flex: 3 1 0;
   }
 
   /* An EmptyState, a centred ErrorState among them, stands itself a little
      above the middle of the room it fills, so the notice hands it the whole
      room rather than a sixth of it, which clipped a way on under its line. */
-  .luke-collection-page-notice:has(> .luke-empty-state)::before,
-  .luke-collection-page-notice:has(> .luke-empty-state)::after {
+  .ui-collection-page-notice:has(> .ui-empty-state)::before,
+  .ui-collection-page-notice:has(> .ui-empty-state)::after {
     content: none;
   }
 }

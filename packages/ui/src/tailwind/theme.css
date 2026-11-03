@@ -68,9 +68,9 @@
   ); /* off-scale: the empty panel's 300px column */
   --spacing-half-container: 50cqi;
   --animate-card-grow-in:
-    luke-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
-    luke-card-grow var(--ui-duration-fast) var(--ui-spring-fast) both;
-  --animate-card-leave: luke-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
+    ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
+    ui-card-grow var(--ui-duration-fast) var(--ui-spring-fast) both;
+  --animate-card-leave: ui-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   --spacing-control-icon: var(--ui-control-icon);
   --spacing-icon-gap: var(--ui-icon-gap);
   --spacing-menu-row: var(--ui-menu-row-height);
@@ -94,11 +94,11 @@
   --grid-template-columns-version-track: 100% 100%;
   --grid-template-rows-version-track: minmax(0, 1fr);
   --animate-edit-composer-in:
-    luke-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
-    luke-card-grow var(--ui-duration-fast) var(--ui-spring-fast) both;
+    ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
+    ui-card-grow var(--ui-duration-fast) var(--ui-spring-fast) both;
   --animate-edit-composer-out:
-    luke-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) both,
-    luke-card-shrink var(--ui-duration-exit) var(--ui-motion-exit) both;
+    ui-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) both,
+    ui-card-shrink var(--ui-duration-exit) var(--ui-motion-exit) both;
   --radius-ui-6: var(--ui-radius-6);
   --radius-ui-8: var(--ui-radius-8);
   --radius-ui-10: var(--ui-radius-10);
@@ -440,48 +440,48 @@
      dropped and named again replays); a hung panel arrives and drops as a
      menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
      out once seen. */
-  --animate-dialog-scrim: luke-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit);
+  --animate-dialog-scrim: ui-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit);
   /* A phone's sheet rises and sinks on the pane's beat, so its scrim and its card fade on it too. */
-  --animate-sheet-scrim: luke-dialog-fade var(--ui-duration-pane) var(--ui-motion-pane);
+  --animate-sheet-scrim: ui-dialog-fade var(--ui-duration-pane) var(--ui-motion-pane);
   --animate-sheet-leave: leave-fade var(--ui-duration-pane) var(--ui-motion-pane) forwards;
   --animate-dialog-in:
-    luke-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit),
-    luke-dialog-rise var(--ui-duration-fast) var(--ui-spring-fast);
+    ui-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit),
+    ui-dialog-rise var(--ui-duration-fast) var(--ui-spring-fast);
   --animate-dialog-nudge:
-    luke-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit),
-    luke-dialog-rise var(--ui-duration-fast) var(--ui-spring-fast),
-    luke-dialog-nudge var(--ui-duration-fast) var(--ui-spring-fast);
+    ui-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit),
+    ui-dialog-rise var(--ui-duration-fast) var(--ui-spring-fast),
+    ui-dialog-nudge var(--ui-duration-fast) var(--ui-spring-fast);
   --animate-dialog-shake:
-    luke-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit),
-    luke-dialog-rise var(--ui-duration-fast) var(--ui-spring-fast),
-    luke-dialog-shake var(--ui-duration-fast) var(--ui-motion-exit);
+    ui-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit),
+    ui-dialog-rise var(--ui-duration-fast) var(--ui-spring-fast),
+    ui-dialog-shake var(--ui-duration-fast) var(--ui-motion-exit);
   --animate-menu-in:
-    luke-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
-    luke-menu-drop var(--ui-duration-fast) var(--ui-spring-fast) both;
+    ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
+    ui-menu-drop var(--ui-duration-fast) var(--ui-spring-fast) both;
   --animate-tooltip-in:
-    luke-tooltip-fade var(--ui-duration-quick) var(--ui-motion-exit) both,
-    luke-tooltip-grow var(--ui-duration-fast) var(--ui-spring-fast) both;
-  --animate-tooltip-leave: luke-tooltip-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
+    ui-tooltip-fade var(--ui-duration-quick) var(--ui-motion-exit) both,
+    ui-tooltip-grow var(--ui-duration-fast) var(--ui-spring-fast) both;
+  --animate-tooltip-leave: ui-tooltip-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
 
-  @keyframes luke-dialog-fade {
+  @keyframes ui-dialog-fade {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-dialog-rise {
+  @keyframes ui-dialog-rise {
     from {
       transform: scale(0.96);
     }
   }
 
-  @keyframes luke-dialog-nudge {
+  @keyframes ui-dialog-nudge {
     40% {
       transform: scale(1.02);
     }
   }
 
-  @keyframes luke-dialog-shake {
+  @keyframes ui-dialog-shake {
     20% {
       transform: translateX(-6px);
     }
@@ -496,20 +496,20 @@
     }
   }
 
-  @keyframes luke-tooltip-fade {
+  @keyframes ui-tooltip-fade {
     from {
       visibility: hidden;
       opacity: 0;
     }
   }
 
-  @keyframes luke-tooltip-grow {
+  @keyframes ui-tooltip-grow {
     from {
       transform: scale(0.96);
     }
   }
 
-  @keyframes luke-tooltip-leave {
+  @keyframes ui-tooltip-leave {
     to {
       opacity: 0;
     }
@@ -569,7 +569,7 @@
   --tracking-title: var(--ui-type-title-tracking);
   /* A menu's exit, a fade, over `menu.css`'s keyframes; its entrance is the
      overlays' `--animate-menu-in` above. */
-  --animate-menu-leave: luke-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
+  --animate-menu-leave: ui-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   --z-index-menu: var(--ui-z-menu);
   --z-index-menu-over-dialog: calc(var(--ui-z-dialog) + 1);
   --text-dialog: var(--ui-type-dialog-size);
@@ -768,8 +768,7 @@
   );
   --spacing-offline-mark: 24px; /* off-scale: the offline pill, a compact button's height */
   --spacing-offline-glyph: 13px; /* off-scale: the offline pill's glyph */
-  --animate-offline-arrive: luke-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit)
-    backwards;
+  --animate-offline-arrive: ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) backwards;
 
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's
@@ -1214,15 +1213,15 @@
    `components/choice-bar/`). */
 @custom-variant fold-tight (@container style(--ui-fold: tight));
 /* A composer's dialog card on a phone's screen (`../shadcn/dialog.tsx`): a
-   root that measures its own room says so in `data-luke-room` (the panel's
+   root that measures its own room says so in `data-ui-room` (the panel's
    `stage-room.ts`), and one that says nothing is answered by the dimmed
    window's own width. */
 @custom-variant room-narrow {
-  :root[data-luke-room="narrow"] & {
+  :root[data-ui-room="narrow"] & {
     @slot;
   }
-  @container luke-dialog-room (width < 640px) {
-    :root:not([data-luke-room]) & {
+  @container ui-dialog-room (width < 640px) {
+    :root:not([data-ui-room]) & {
       @slot;
     }
   }
@@ -1237,5 +1236,5 @@
 @custom-variant finger (@media (hover: none) and (pointer: coarse));
 
 /* The shell standing as one pane, a phone's, as its root says
-   (`data-luke-room`, the panel's `shell-room.ts`). */
-@custom-variant shell-narrow (:where(:root)[data-luke-room="narrow"] .desktop-shell &);
+   (`data-ui-room`, the panel's `shell-room.ts`). */
+@custom-variant shell-narrow (:where(:root)[data-ui-room="narrow"] .desktop-shell &);

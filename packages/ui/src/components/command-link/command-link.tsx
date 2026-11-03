@@ -51,7 +51,7 @@ export function CommandLink({
     <Tag
       {...data}
       ref={ref as Ref<HTMLHeadingElement & HTMLSpanElement>}
-      className={className === undefined ? "luke-command-link" : `luke-command-link ${className}`}
+      className={className === undefined ? "ui-command-link" : `ui-command-link ${className}`}
       onClick={open}
     >
       {children}

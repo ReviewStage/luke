@@ -9,11 +9,11 @@
  *
  * Words may also give way only while the room around them is narrow
  * (`under`): drawn as any words beside a glyph that says them again, and
- * read, but not drawn, once the nearest `luke-room` container (a card, a
+ * read, but not drawn, once the nearest `ui-room` container (a card, a
  * header) is narrower than the step. The container names itself
- * `luke-room` beside its own name (`container: card luke-room / inline-size`).
+ * `ui-room` beside its own name (`container: card ui-room / inline-size`).
  *
- * Words hidden outright wear `luke-visually-hidden`, whose rule
+ * Words hidden outright wear `ui-visually-hidden`, whose rule
  * (`visually-hidden.css`) other components put on words of their own; words
  * given a step are hidden by Tailwind's `sr-only` under that container
  * width.
@@ -31,7 +31,7 @@ export const VISUALLY_HIDDEN_ELEMENT = {
 export type VisuallyHiddenElement =
   (typeof VISUALLY_HIDDEN_ELEMENT)[keyof typeof VISUALLY_HIDDEN_ELEMENT];
 
-/** How narrow a `luke-room` container must be before words given an `under` step are no longer drawn: a snug room, or a tight one. */
+/** How narrow a `ui-room` container must be before words given an `under` step are no longer drawn: a snug room, or a tight one. */
 export const VISUALLY_HIDDEN_UNDER = {
   SNUG: "snug",
   TIGHT: "tight",
@@ -42,8 +42,8 @@ export type VisuallyHiddenUnder =
 
 /** The container query each step hides its words under: a snug room, 520px, and a tight one, 440px, the lines `Badge` gives its words up at. */
 const UNDER_CLASS = {
-  [VISUALLY_HIDDEN_UNDER.SNUG]: "@max-[520px]/luke-room:sr-only",
-  [VISUALLY_HIDDEN_UNDER.TIGHT]: "@max-[440px]/luke-room:sr-only",
+  [VISUALLY_HIDDEN_UNDER.SNUG]: "@max-[520px]/ui-room:sr-only",
+  [VISUALLY_HIDDEN_UNDER.TIGHT]: "@max-[440px]/ui-room:sr-only",
 } as const satisfies Record<VisuallyHiddenUnder, string>;
 
 /** `children` spoken and not drawn, in `as`, a span unless asked. */
@@ -62,7 +62,7 @@ export function VisuallyHidden({
     <Element
       {...attributes}
       className={
-        under === undefined ? "luke-visually-hidden" : `luke-visually-hidden ${UNDER_CLASS[under]}`
+        under === undefined ? "ui-visually-hidden" : `ui-visually-hidden ${UNDER_CLASS[under]}`
       }
       data-under={under}
     >
