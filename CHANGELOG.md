@@ -166,6 +166,8 @@ notifications in Settings › Workspace turns your DMs off.
 [#6463](https://github.com/ReviewStage/vespin/pull/6463),
 [#6469](https://github.com/ReviewStage/vespin/pull/6469))
 
+![A mockup of acme's Slack: Vespin's DM holds yesterday's notice that #231 is ready for review, a to-do rewritten "Answered in Vespin", and the Invite emails agent's question of how long an invite link should last, with a button for 24 hours, 7 days in green as recommended, 30 days, and Open in Vespin; beside it, a #relay-eng thread where Vespin answers Dean's @Vespin with "On it in acme/relay" and later reports the change on #219.](apps/web/public/changelog/0.25.0/vespin-in-slack.png)
+
 ### Improvements
 
 - Every task menu, from the sidebar, the Tasks page, a Board card, or Recent,
@@ -236,6 +238,9 @@ notifications in Settings › Workspace turns your DMs off.
   ([#6192](https://github.com/ReviewStage/vespin/pull/6192),
   [#6195](https://github.com/ReviewStage/vespin/pull/6195),
   [#6229](https://github.com/ReviewStage/vespin/pull/6229))
+- A to-do step's command draws as a code card with its own Copy, its lines
+  kept as written, and copying it leaves the step unticked
+  ([#6472](https://github.com/ReviewStage/vespin/pull/6472))
 - A withdrawn or replaced ask reads as a line of its thread, as a resolved one
   does ([#6283](https://github.com/ReviewStage/vespin/pull/6283))
 - An agent that marks its task Done settles the task's open asks as your Done
