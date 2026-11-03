@@ -951,15 +951,21 @@ function useWorkspaceSentry(workspaceId: string): SentryOffer {
   return { read, failed, onRetry: retry, installing, refusal, onInstall };
 }
 
-/** The editor over a listed workspace, offered that workspace's Sentry. */
+/** Whether a listed workspace's Slack bot is connected, read as Sentry is; not while the read is out or failed. */
+function useWorkspaceSlackBot(workspaceId: string): boolean {
+  const { read } = useWorkspaceRead(ACT_KIND.WORKSPACE_SLACK_BOT_READ, workspaceId);
+  return read !== undefined && "answer" in read && read.answer.team !== undefined;
+}
+
+/** The editor over a listed workspace, offered that workspace's Sentry and Slack bot. */
 function WorkspaceEditor({
   workspaceId,
   editor,
 }: {
   workspaceId: string;
-  editor: (sentry: SentryOffer) => React.JSX.Element;
+  editor: (sentry: SentryOffer, slackBot: boolean) => React.JSX.Element;
 }): React.JSX.Element {
-  return editor(useWorkspaceSentry(workspaceId));
+  return editor(useWorkspaceSentry(workspaceId), useWorkspaceSlackBot(workspaceId));
 }
 
 /** The Automations pages themselves, under the workspace their links are written in. */
@@ -1023,7 +1029,7 @@ function AutomationsPages({
     );
   }
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
-  const editor = (sentry: SentryOffer) => (
+  const editor = (sentry: SentryOffer, slackBot: boolean) => (
     <AutomationEditor
       key={editing}
       automation={opened}
@@ -1039,6 +1045,7 @@ function AutomationsPages({
       runsShown={view.runs}
       onRuns={view.onRuns}
       sentry={sentry}
+      slackBot={slackBot}
       onDeleted={(automationId) =>
         view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
       }
@@ -1052,7 +1059,7 @@ function AutomationsPages({
     // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
     <Fragment key={workspace?.id}>
       {workspace === undefined ? (
-        editor(SENTRY_UNREAD)
+        editor(SENTRY_UNREAD, false)
       ) : (
         <WorkspaceEditor workspaceId={workspace.id} editor={editor} />
       )}

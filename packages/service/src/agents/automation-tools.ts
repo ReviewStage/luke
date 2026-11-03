@@ -7,6 +7,7 @@ import {
   readAutomation,
 } from "@repo/database/models/automation-store";
 import { workspaceIntegrationInstallations } from "@repo/database/models/integration-installation-store";
+import { workspaceSlackInstallation } from "@repo/database/models/slack-installation-store";
 import { disabledServersSchema } from "@repo/features/agent-wire";
 import { readSchedule, SCHEDULE_REFUSAL } from "@repo/features/automation-schedule";
 import {
@@ -87,7 +88,9 @@ import { workspaceAgent } from "./workspace-agents.js";
  * is never made or set here: its secret is shown once, in the window that
  * minted it (`AGENTS.md`), and no agent's answer may carry it. A Sentry
  * trigger is refused where this deployment configures no Sentry integration
- * or the workspace installed none, since nothing would ever fire it. An automation
+ * or the workspace installed none, since nothing would ever fire it, and a
+ * delivery to Slack where the workspace connected no Slack bot, since
+ * nothing would ever be sent. An automation
  * is made under an id drawn from eve's key for the call (`called-id.ts`),
  * so a call eve runs again names the one it made. Every answer is data the
  * model reads, never a credential.
@@ -139,6 +142,10 @@ export const AUTOMATION_TOOL_REFUSAL = {
     `Not run: the workspace has not installed ${PRODUCT_NAME}'s Sentry integration, so no Sentry event ` +
     "would fire it. A workspace owner or admin installs it in Workspace settings › " +
     "Integrations › Sentry; make it once that is done.",
+  SLACK_NOT_CONNECTED:
+    `Not run: the workspace has not connected ${PRODUCT_NAME}'s Slack bot, so no run's result ` +
+    "could be sent on Slack. A workspace owner or admin connects it in Workspace settings; " +
+    "leave slackDelivery out until that is done.",
   NO_AGENT:
     "Not run: no agent of your workspace has that agentId to hand each run to; " +
     `${AGENT_TOOL.LIST_AGENTS} names them, or leave agentId out for a new agent each run.`,
@@ -213,6 +220,12 @@ const ARCHIVE_SUCCESSFUL = describeWire(
   "Archive each run's agent once it succeeds and leaves no thread open.",
 );
 
+const SLACK_DELIVERY = describeWire(
+  Schema.Boolean,
+  `Send each run's result to the developer on Slack from ${PRODUCT_NAME}'s bot, so the run's ` +
+    "agent needs no Slack of its own; the workspace must have the bot connected.",
+);
+
 const AGENT_ID = describeWire(
   Schema.NullOr(wireUuidSchema),
   `Hand every run to this agent, by its ${AGENT_TOOL.LIST_AGENTS} id, so runs share its ` +
@@ -242,6 +255,7 @@ const AUTOMATION_FIELDS = {
   guards: GUARDS,
   scope: SCOPE,
   archiveSuccessful: ARCHIVE_SUCCESSFUL,
+  slackDelivery: SLACK_DELIVERY,
 };
 
 const CREATE_AUTOMATION_INPUT = Schema.Struct(
@@ -438,6 +452,7 @@ function automationReading(summary: AutomationSummary, whole: boolean): WireReco
     guards: { ...summary.guards },
     scope: summary.scope ?? AUTOMATION_SCOPE.PERSONAL,
     archiveSuccessful: summary.archiveSuccessful ?? false,
+    slackDelivery: summary.slackDelivery ?? false,
     nextRunAt: isoOf(summary.nextRunAt),
     lastRun: summary.lastRun === null ? null : runReading(summary.lastRun),
     madeByYourDeveloper: summary.mine ?? false,
@@ -482,6 +497,14 @@ const sentryRefused = Effect.fn("agents/automationSentryRefused")(function* (
   );
   return installed ? undefined : AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED;
 });
+
+/** Slack's refusal in the model's words, where the call turns delivery to Slack on and the workspace connected no Slack bot. */
+const slackRefused = (workspaceId: string, slackDelivery: boolean | undefined) =>
+  slackDelivery !== true
+    ? Effect.succeed(undefined)
+    : Effect.map(workspaceSlackInstallation(workspaceId), (installation) =>
+        Option.isSome(installation) ? undefined : AUTOMATION_TOOL_REFUSAL.SLACK_NOT_CONNECTED,
+      );
 
 /** The model and effort named, both or neither; undefined for neither, and null where one came without the other. */
 function namedChoice(asked: {
@@ -618,6 +641,8 @@ export function runCreateAutomation(
       if (schedule !== undefined) return agentToolRejected(schedule);
       const sentry = yield* sentryRefused(workspace.value, made.trigger);
       if (sentry !== undefined) return agentToolRejected(sentry);
+      const slack = yield* slackRefused(workspace.value, made.slackDelivery);
+      if (slack !== undefined) return agentToolRejected(slack);
       const model = yield* choiceRefused(userId, choice, "Not made");
       if (model !== undefined) return agentToolRejected(model);
       const landing = yield* landingNamed(
@@ -651,6 +676,7 @@ export function runCreateAutomation(
           ...(made.archiveSuccessful === undefined
             ? undefined
             : { archiveSuccessful: made.archiveSuccessful }),
+          ...(made.slackDelivery === undefined ? undefined : { slackDelivery: made.slackDelivery }),
         },
         SERVER_AUTOMATION_SOURCE.AGENT,
         id,
@@ -718,6 +744,8 @@ export function runUpdateAutomation(
         const sentry = yield* sentryRefused(workspace.value, rest.trigger);
         if (sentry !== undefined) return agentToolRejected(sentry);
       }
+      const slack = yield* slackRefused(workspace.value, rest.slackDelivery);
+      if (slack !== undefined) return agentToolRejected(slack);
       const model = yield* choiceRefused(userId, choice, "Not changed");
       if (model !== undefined) return agentToolRejected(model);
       const landing = yield* landingNamed(userId, workspace.value, agentId, call.caller.agent.id);

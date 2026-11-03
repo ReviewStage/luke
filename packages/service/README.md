@@ -329,6 +329,13 @@ time and keeps the answer, a miss included, in `slack_member`
 (`@repo/database/models/slack-installation-store`). `dm` and `update` log and
 swallow every failure; never yield either inside a transaction.
 
+An automation with "Send the result to me on Slack" on (`automation.slack_delivery`)
+has each run's result sent to its owner by the bot as the run's agent's turn
+settles (`src/automations/automation-slack-delivery.ts`, heard through
+`SettledTurnListener`): the agent's final message as mrkdwn, or that the run
+failed or was stopped, with a link to the agent. The run is claimed first
+(`automation_run.slack_delivered_at`), so each run sends once.
+
 ## The admin resource
 
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted

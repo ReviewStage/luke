@@ -88,7 +88,7 @@ export function writtenFields(
   automation: AutomationSummary,
 ): Pick<AutomationRow, "name" | "enabled" | "trigger" | "action" | "guards" | "nextRunAt"> &
   Partial<AutomationRow> {
-  const { scope, repositories, target, archiveSuccessful } = automation;
+  const { scope, repositories, target, archiveSuccessful, slackDelivery } = automation;
   return {
     name: automation.name,
     enabled: automation.enabled,
@@ -100,6 +100,7 @@ export function writtenFields(
     ...(repositories === undefined ? undefined : { repositories }),
     ...(target === undefined ? undefined : targetFields(target)),
     ...(archiveSuccessful === undefined ? undefined : { archiveSuccessful }),
+    ...(slackDelivery === undefined ? undefined : { slackDelivery }),
   };
 }
 
@@ -120,6 +121,7 @@ function madeRow(automation: AutomationSummary): AutomationRow {
     targetKind: AUTOMATION_TARGET.NEW_AGENT,
     targetAgentId: null,
     archiveSuccessful: false,
+    slackDelivery: false,
     ...writtenFields(automation),
   };
 }

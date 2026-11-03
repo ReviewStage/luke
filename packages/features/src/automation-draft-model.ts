@@ -125,6 +125,8 @@ export interface AutomationDraft {
   readonly choice: ModelChoice | null;
   /** Whether a run's agent is archived once it finishes without failing. */
   readonly archiveSuccessful: boolean;
+  /** Whether each run's result is sent to the automation's owner on Slack. */
+  readonly slackDelivery: boolean;
   /** The owner's MCP servers a run's new agent is not handed, by connection name (`notion`, `notion-2`), as the agent box's servers button switches them. */
   readonly disabledServers: readonly string[];
   /** The guards it runs under: a saved one's, the service's defaults otherwise. */
@@ -420,6 +422,7 @@ export function automationDraft(
       agentId: null,
       choice: null,
       archiveSuccessful: false,
+      slackDelivery: false,
       disabledServers: [],
       guards: null,
       subjectCooldownHours: AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
@@ -452,6 +455,7 @@ export function automationDraft(
       automation.target?.kind === AUTOMATION_TARGET.SAME_AGENT ? automation.target.agentId : null,
     choice: automation.action.choice ?? null,
     archiveSuccessful: automation.archiveSuccessful ?? false,
+    slackDelivery: automation.slackDelivery ?? false,
     disabledServers: automation.action.disabledServers ?? [],
     guards: automation.guards,
     subjectCooldownHours: cooldownOf(automation.guards),
@@ -554,6 +558,7 @@ export function createRequestOf(
     scope: draft.owner,
     target: targetOf(draft),
     archiveSuccessful: draft.archiveSuccessful,
+    slackDelivery: draft.slackDelivery,
     ...(guards === null ? undefined : { guards }),
   } as const;
   return { ...made, repositories: draftRepositories(draft) };
@@ -587,7 +592,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     landingAgent(one) === landingAgent(other) &&
     sameChoice(one.choice, other.choice) &&
     sameSet(one.disabledServers, other.disabledServers) &&
-    one.archiveSuccessful === other.archiveSuccessful
+    one.archiveSuccessful === other.archiveSuccessful &&
+    one.slackDelivery === other.slackDelivery
   );
 }
 
@@ -640,6 +646,7 @@ export function changeOf(
   if (draft.archiveSuccessful !== was.archiveSuccessful) {
     change.archiveSuccessful = draft.archiveSuccessful;
   }
+  if (draft.slackDelivery !== was.slackDelivery) change.slackDelivery = draft.slackDelivery;
   if (repositoryMoved) change.repositories = draftRepositories(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;

@@ -51,12 +51,17 @@ const CUT_MARK = "… (cut to fit; read_agent reads the rest)";
 /** What the line says of a turn that ended in words of its own. */
 const NO_WORDS = "(it said nothing)";
 
-/** The agent's final words: the last text its turn's journal holds, cut to fit; none where it said nothing. */
-function finalWords(journal: StoredUIMessage): string | undefined {
+/** The last text a turn's journal holds, whole; none where it said nothing. */
+export function lastSaid(journal: StoredUIMessage): string | undefined {
   const said = journal.parts.flatMap((part) =>
     isTextUIPart(part) && part.text.trim().length > 0 ? [part.text.trim()] : [],
   );
-  const last = said.at(-1);
+  return said.at(-1);
+}
+
+/** The agent's final words: the last text its turn's journal holds, cut to fit; none where it said nothing. */
+function finalWords(journal: StoredUIMessage): string | undefined {
+  const last = lastSaid(journal);
   if (last === undefined) return undefined;
   return last.length > REPORT_WORDS_CHARS
     ? `${last.slice(0, REPORT_WORDS_CHARS - CUT_MARK.length)}${CUT_MARK}`

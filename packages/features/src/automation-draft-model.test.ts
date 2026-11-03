@@ -181,6 +181,7 @@ test("a new automation is made in its workspace on its schedule, task, repositor
     scope: AUTOMATION_SCOPE.WORKSPACE,
     target: { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: false,
+    slackDelivery: false,
   });
 });
 
