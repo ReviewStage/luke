@@ -6,6 +6,7 @@ const NEW = {
   id: "user-ada",
   fresh: true,
   finished: false,
+  accountRead: true,
   started: false,
   personalOnly: true,
   agent: false,
@@ -16,6 +17,11 @@ test.each([
   {
     case: "a new account whose agent read is out",
     account: { ...NEW, agent: undefined },
+    gate: SETUP_GATE.WAIT,
+  },
+  {
+    case: "a new account whose preferences are still read, which may say it finished elsewhere",
+    account: { ...NEW, accountRead: false },
     gate: SETUP_GATE.WAIT,
   },
   {

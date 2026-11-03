@@ -554,6 +554,12 @@ export class SettingsStore {
    * either wrote, so the later write would drop the other's change.
    */
   readonly #writes = Semaphore.makeUnsafe(1);
+  /**
+   * The account whose preferences the service has answered, or failed to,
+   * since it signed in to this host: until then the preferences this store
+   * holds for it may be none of its own, as on a device it never used.
+   */
+  #accountRead: string | undefined;
 
   get<Field extends AppSettingField>(
     field: Field,
@@ -678,6 +684,15 @@ export class SettingsStore {
     });
   }
 
+  /** That the service answered `accountEmail`'s preferences, or failed to; answers whether that is news. */
+  markAccountRead(accountEmail: string): Effect.Effect<boolean> {
+    return Effect.sync(() => {
+      if (this.#accountRead === accountEmail) return false;
+      this.#accountRead = accountEmail;
+      return true;
+    });
+  }
+
   /** The UTC day one once-a-day usage count was last sent for this account, or nothing. */
   lastProductEventDay(
     name: string,
@@ -733,6 +748,7 @@ export class SettingsStore {
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       const persisted = yield* this.#load();
+      const accountEmail = (yield* this.#accountEmailOf())(persisted);
       return {
         stored: {
           ...storedSettingsFromPersisted(persisted),
@@ -744,7 +760,8 @@ export class SettingsStore {
               ? APP_SETTING_SCHEMA.usageData.default
               : APP_SETTING_SCHEMA.usageData.unpackagedDefault),
         },
-        experiments: experimentsOf(persisted, (yield* this.#accountEmailOf())(persisted)),
+        experiments: experimentsOf(persisted, accountEmail),
+        accountRead: accountEmail !== undefined && this.#accountRead === accountEmail,
       };
     });
   }
@@ -829,6 +846,8 @@ export class SettingsStore {
    */
   clearAccount(): Effect.Effect<AccountSnapshot, PlatformError> {
     const keepsOwnAccount = this.#cipher !== undefined;
+    // Note that the account's preferences go below, so a sign-in again reads them again before they stand.
+    this.#accountRead = undefined;
     return Effect.as(
       this.#mutate((persisted) => {
         if (keepsOwnAccount && !persisted.account) return undefined;
