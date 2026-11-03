@@ -669,6 +669,8 @@ test("each step's address is the path of the link ⇧⌘C copies there", async (
   const listed = { workspaces: [ACME], workspace: ACME };
   const places: TasksControl[] = [
     onTask([ACME]),
+    tasksControl(listed),
+    tasksControl({ ...listed, boardView: { ...tasksControl().boardView, open: true } }),
     tasksControl({ ...listed, inboxView: { ...tasksControl().inboxView, open: true } }),
     tasksControl({
       ...listed,
@@ -706,12 +708,12 @@ test("a new automation's page has no link, so it stands at /app beside the list 
   assert.deepEqual(window.addresses(), ["/workspace-acme/automations", "/app"]);
 });
 
-test("a place with no link stands at /app: the home page, and the Board though a task stands under it", () => {
+test("the home page stands at its workspace's own address, and the Board at its /tasks though a task stands under it", () => {
   const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
   const task = onTask([ACME]);
   window.stand({ ...task, boardView: { ...task.boardView, open: true } });
 
-  assert.deepEqual(window.addresses(), ["/app", "/app"]);
+  assert.deepEqual(window.addresses(), ["/acme", "/acme/tasks"]);
 });
 
 test("the Admin place stands at its workspace's /admin though a task stands under it, a section at /admin/<section> in place, and an account's page at /admin/user/<id> as a step, as Copy link copies each", async () => {
@@ -777,14 +779,25 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
   assert.deepEqual(copied, []);
 });
 
-test("a workspace's slug read after the visit moves the standing step to its address, without a step of its own", () => {
-  const window = mount(onTask([]));
-  const before = window.addresses();
-  window.stand(onTask([ACME]));
+test("a workspace's slug read after the visit moves the standing step to its address, without a step of its own, as the home page a tab opened at /app moves to the workspace's", () => {
+  for (const [unread, read, from, to] of [
+    [
+      onTask([]),
+      onTask([ACME]),
+      `/workspace-acme/task/${DOCUMENT_TASK.id}`,
+      `/acme/task/${DOCUMENT_TASK.id}`,
+    ],
+    [tasksControl(), tasksControl({ workspaces: [ACME], workspace: ACME }), "/app", "/acme"],
+  ] as const) {
+    const window = mount(unread);
+    const before = window.addresses();
+    window.stand(read);
 
-  assert.deepEqual(before, [`/workspace-acme/task/${DOCUMENT_TASK.id}`]);
-  assert.deepEqual(window.addresses(), [`/acme/task/${DOCUMENT_TASK.id}`]);
-  assert.equal(window.history().canGoBack, false);
+    assert.deepEqual(before, [from]);
+    assert.deepEqual(window.addresses(), [to]);
+    assert.equal(window.history().canGoBack, false);
+    unmountAll();
+  }
 });
 
 test("an Inbox told no column of its own until an item stands alone in it takes that item's step, so Back from the item leaves the Inbox rather than landing on a list no column shows", async () => {

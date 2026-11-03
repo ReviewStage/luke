@@ -36,6 +36,8 @@ const HOME = "https://vespin.dev/acme";
 
 /** Every kind of place, and the link it is shared by, spelled out. */
 const LINKS: readonly (readonly [LinkPlace, string])[] = [
+  [{ kind: LINK_PLACE.HOME }, HOME],
+  [{ kind: LINK_PLACE.BOARD }, `${HOME}/tasks`],
   [{ kind: LINK_PLACE.TASK, planId: TASK }, `${HOME}/task/${TASK}`],
   [{ kind: LINK_PLACE.SECTION, planId: TASK, anchor: "rollout" }, `${HOME}/task/${TASK}#rollout`],
   [
@@ -153,6 +155,10 @@ test("a workspace written by id, or by a slug that must be encoded, is read back
 });
 
 test("a link pasted with a trailing slash, a query, or a fragment its kind has no use for still names its place", () => {
+  assert.deepEqual(readLink(`${HOME}/?from=slack#top`), {
+    workspace: "acme",
+    place: { kind: LINK_PLACE.HOME },
+  });
   assert.deepEqual(readLink(`${HOME}/agent/${AGENT}/inbox/${OTHER}/?from=slack#top`), {
     workspace: "acme",
     place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT, itemId: OTHER },
@@ -296,6 +302,11 @@ test("an address that names no place in Vespin names nothing", () => {
     `${HOME}/person/user_9Fq2-x/tasks`,
     `${HOME}/person/charles%40acme.dev`,
     `${HOME}/issue/${OTHER}`,
+    // A page of ours, or a file, is no workspace's Home or Board, whatever its case; nor is a step past the Board.
+    "https://vespin.dev/About/",
+    "https://vespin.dev/sign-in/tasks",
+    "https://vespin.dev/robots.txt",
+    `${HOME}/tasks/${OTHER}`,
     // The Admin place's Overview is the place's own link, and a section, an account, or a day it does not know is no place.
     `${HOME}/admin/dashboard`,
     `${HOME}/admin/animations`,

@@ -43,10 +43,12 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  *
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
- * version history stands, the Inbox, an agent's or a person's page, an
- * automation or the list, the Admin place's view, or a page of Settings. The history
- * writes that link as the step's address, so the address and Copy link
- * never disagree. The Board, a new automation's page, and the home page have none. A narrow
+ * version history stands, the home page, the Board, the Inbox, an agent's or
+ * a person's page, an automation or the list, the Admin place's view, or a
+ * page of Settings. The history writes that link as the step's address, so
+ * the address and Copy link never disagree. A new automation's page has
+ * none, nor has the home page while a launch is still reopening the task
+ * last open, which stands nowhere until it opens. A narrow
  * room, which shows one pane at a time, names the pane it shows as the
  * step: the side panel's tab over the plan, where the tab has a link, the
  * Inbox's item standing alone (as it is in an Inbox showing one column by
@@ -64,6 +66,8 @@ const SIDE_PANEL_SELECTOR = ".side-panel";
 
 /** What a link at hand is called where it is offered: "Copy link to <thing>". */
 const LINK_THING = {
+  HOME: "Home",
+  BOARD: "Tasks",
   TASK: "task",
   VERSION: "version",
   PAGE: "page",
@@ -265,7 +269,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   return order.filter((each): each is LinkAtHand => each !== undefined);
 }
 
-/** Every link the window can copy now, the most specific first; none on the home page, nor for a place whose workspace is unknown. */
+/** Every link the window can copy now, the most specific first; none for a place whose workspace is unknown. */
 function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   return placesAtHand(tasks, at).filter((each) => each.link.workspace !== "");
 }
@@ -355,8 +359,11 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
     return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
   }
-  // The Board has no link of its own either, on the same terms.
-  if (tasks.boardView.open) return [];
+  // The Board stands over the plan, on the same terms; and with no task bound for, the window stands on the home page.
+  if (tasks.boardView.open) return [at_({ kind: LINK_PLACE.BOARD }, LINK_THING.BOARD)];
+  if (tasks.boundFor === undefined && !tasks.restoring) {
+    return [at_({ kind: LINK_PLACE.HOME }, LINK_THING.HOME)];
+  }
   return taskLinks(tasks, at);
 }
 

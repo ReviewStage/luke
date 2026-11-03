@@ -161,6 +161,8 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.ISSUE]: OWN_CARD,
   [THING_KIND.LINK]: OWN_CARD,
   [THING_KIND.MESSAGE]: OWN_CARD,
+  [THING_KIND.HOME]: OWN_CARD,
+  [THING_KIND.BOARD]: OWN_CARD,
   [THING_KIND.INBOX]: OWN_CARD,
   [THING_KIND.INBOX_ITEM]: (item, at) => <InboxItemChipCard place={item} fallback={at.own} />,
   [THING_KIND.CHANNEL]: (channel, at) => (

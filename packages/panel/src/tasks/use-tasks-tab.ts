@@ -2246,7 +2246,7 @@ export function useTasksTab(input: {
   // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
   const restoreNow = useRef(restoreStatuses);
   restoreNow.current = restoreStatuses;
-  const restoring = useLastTask({
+  const { restoring, forgo: forgoReopen } = useLastTask({
     staged: fixture !== undefined,
     account: input.account,
     tasks: tasks.tasks,
@@ -3047,6 +3047,13 @@ export function useTasksTab(input: {
     }
   };
 
+  // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
+  const goHome = () => {
+    setHistoryFor(undefined);
+    if (boundFor === undefined) setStandIn(undefined);
+    else leaveTask();
+  };
+
   /**
    * An app link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
@@ -3059,6 +3066,18 @@ export function useTasksTab(input: {
     // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
     navigations.current += 1;
     switch (place.kind) {
+      // Note that a workspace's Home, and its Board, stand over the launch's reopen of the task last open, since a fresh tab's
+      // address may name either; a slug naming no workspace of the reader's opens it in the one listed, as every link's does.
+      case LINK_PLACE.HOME:
+        forgoReopen();
+        listLinked(workspace);
+        goHome();
+        return;
+      case LINK_PLACE.BOARD:
+        forgoReopen();
+        listLinked(workspace);
+        standInFor({ kind: STAND_IN.BOARD });
+        return;
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
         return;
@@ -3716,12 +3735,7 @@ export function useTasksTab(input: {
       onShowMention: guard(showMention),
     },
     onLeaveTask: guard(() => leaveTask()),
-    // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
-    onGoHome: guard(() => {
-      setHistoryFor(undefined);
-      if (boundFor === undefined) setStandIn(undefined);
-      else leaveTask();
-    }),
+    onGoHome: guard(goHome),
     onRenameTask: renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),

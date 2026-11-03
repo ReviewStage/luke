@@ -38,11 +38,11 @@ test("a browser on no Mac stays on the web, since there is no app to hand to", (
   assert.equal(linkOpenTarget(LINK_OPEN.MAC_APP, LINK_PLATFORM.OTHER, TASK_ADDRESS), undefined);
 });
 
-test("an address with no workspace, or naming no place, stays on the web", () => {
+test("an address with no workspace, a page of ours, or naming no place, stays on the web", () => {
   for (const address of [
     "https://vespin.dev/",
     "https://vespin.dev",
-    "https://vespin.dev/acme",
+    "https://vespin.dev/about",
     "https://vespin.dev/acme/nowhere/1",
     "not an address",
   ]) {

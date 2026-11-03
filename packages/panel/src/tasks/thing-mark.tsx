@@ -4,7 +4,14 @@ import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@repo/feat
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ProviderMark } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, APP_ACTOR } from "@repo/ui/actor-model";
-import { CalendarIcon, GLYPH, HashIcon, MessageSquareIcon, ShieldUserIcon } from "@repo/ui/icons";
+import {
+  CalendarIcon,
+  GLYPH,
+  HashIcon,
+  HouseIcon,
+  MessageSquareIcon,
+  ShieldUserIcon,
+} from "@repo/ui/icons";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
@@ -223,6 +230,8 @@ const THING_MARK: ThingMarks = {
     <ProviderMark provider={"site" in link ? link.site : link.provider} />
   ),
   [THING_KIND.MESSAGE]: () => <MessageSquareIcon aria-hidden="true" />,
+  [THING_KIND.HOME]: () => <HouseIcon aria-hidden="true" />,
+  [THING_KIND.BOARD]: () => <GLYPH.TASK />,
   [THING_KIND.INBOX]: () => <GLYPH.INBOX />,
   [THING_KIND.INBOX_ITEM]: (item) => <InboxItemChipGlyph place={item} />,
   [THING_KIND.CHANNEL]: () => <GLYPH.CHANNEL />,

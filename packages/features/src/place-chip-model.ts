@@ -48,6 +48,8 @@ const KIND_NAME = {
   [LINK_PLACE.TASK]: "Task",
   [LINK_PLACE.SECTION]: "Section",
   [LINK_PLACE.COMMENT]: "Comment",
+  [LINK_PLACE.HOME]: "Home",
+  [LINK_PLACE.BOARD]: "Tasks",
   [LINK_PLACE.VERSION]: "Version",
   [LINK_PLACE.PAGE]: "Page",
   [LINK_PLACE.AGENT]: "Agent",
