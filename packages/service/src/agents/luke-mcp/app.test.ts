@@ -124,7 +124,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  eveDeploymentSecret: undefined,
 };
 
 /** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */
@@ -632,9 +631,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const agent = yield* agentInSandbox;
         const teammate = `user-${randomUUID()}`;
         yield* Database.use((db) =>
-          db
-            .insert(user)
-            .values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
+          db.insert(user).values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
         );
         yield* Database.use((db) =>
           db.insert(messages).values({

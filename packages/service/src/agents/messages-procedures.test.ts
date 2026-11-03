@@ -29,7 +29,6 @@ const AGENT_ID = randomUUID();
 
 const handle = hostedFetch({
   messages: messagesProcedures({
-    eveOrigin: () => undefined,
     resolveUserId: (incoming) =>
       Effect.succeed(
         Option.fromNullishOr(

@@ -154,7 +154,6 @@ export const AUTOMATION_TOOL_REFUSAL = {
   NOT_RUNNABLE:
     "Not run: the developer you work for may read that automation but not run it. A personal " +
     "automation is its creator's to run, and a workspace's every member's.",
-  NO_SERVICE: "Not run: this deployment cannot reach the agents' service.",
   UNAVAILABLE:
     "Not run: the automations could not be written just now. The call may be made again.",
 } as const;
@@ -805,9 +804,6 @@ export function runRunAutomation(
   }
   const { automationId } = asked.success;
   const { eveAs } = call;
-  if (eveAs === undefined) {
-    return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_SERVICE));
-  }
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);

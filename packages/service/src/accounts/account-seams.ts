@@ -6,7 +6,6 @@ import {
 } from "@luke/database/models/account-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
-import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
 import { resolveHostedUserId } from "../auth/bearer.js";
 import type { AccountProcedureSeams } from "./account-procedures.js";
 
@@ -27,7 +26,6 @@ import type { AccountProcedureSeams } from "./account-procedures.js";
 export function accountProcedureSeams(): AccountProcedureSeams {
   return {
     resolveUserId: resolveHostedUserId,
-    eveOrigin: deploymentEveOrigin,
     standingSessions: (userId) => standingSessionsOf(userId),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,

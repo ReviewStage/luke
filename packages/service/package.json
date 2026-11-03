@@ -59,7 +59,6 @@
     "./agents/coder-host/transcript": "./src/agents/coder-host/transcript.js",
     "./agents/coder-host/usage": "./src/agents/coder-host/usage.js",
     "./agents/eve-host/conversation": "./src/agents/eve-host/conversation.js",
-    "./agents/eve-host/eve-origin": "./src/agents/eve-host/eve-origin.js",
     "./agents/eve-host/eve-sessions": "./src/agents/eve-host/eve-sessions.js",
     "./agents/host-install-script-app": "./src/agents/host-install-script-app.js",
     "./agents/luke-mcp/app": "./src/agents/luke-mcp/app.js",

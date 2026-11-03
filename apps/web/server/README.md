@@ -623,17 +623,16 @@ rather than read past to the cookie, and the browser's session cookie only
 where no `Authorization` is carried. `/api/mac-commands` takes the bearer
 alone (`resolveHostedBearerUserId`), because its held read claims commands
 for the one Mac that asks. Everything else takes either, the work that
-reaches an agent's session included: a request that carries a bearer reaches
-it over that bearer, and one that carries only the cookie as the deployment
-acting for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
-`eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
+reaches an agent's session included, which reaches it for the account the
+request resolved to (`packages/service/src/agents/coder-host/runtime-sessions.ts`'s
+`routedSessions`), so an agent's Start, message, and Stop, an inbox answer, a manual
 automation run, a comment's ask of an agent, and a task's delete and the account's, which
 retire the sessions of the agents they delete, all work in a browser. Note that a route
 file's choice of resolver is not a boundary, because every function holding
 a group answers every path the group declares, the one a client names in the
-dispatcher's `route-path` query among them; whom a session is reached as is
-chosen per request in the endpoint instead, so where a request lands changes
-nothing about it. Every route
+dispatcher's `route-path` query among them; the account is resolved per
+request in the endpoint instead, so where a request lands changes nothing
+about it. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
@@ -893,12 +892,10 @@ The terminal relay and the Browser tab's live view are WebSocket functions,
 each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
-keys. `EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`, and an eve
-origin, the deployment's own unless `APP_EVE_ORIGIN` names another, must
-still stand for the deployment to act for an account whose bearer it does not
-hold, although no eve service answers either now
-(`packages/service/README.md`'s "Reaching eve as the deployment"). No
-separate service is deployed.
+keys. A native agent's runner reports to the deployment's own origin, its
+production domain in production and its own host otherwise, unless
+`APP_DEPLOYMENT_ORIGIN` names another (`packages/service/src/deployment-origin.ts`).
+No separate service is deployed.
 
 ## The agents
 

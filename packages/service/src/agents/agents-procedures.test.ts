@@ -197,7 +197,6 @@ const standing = (
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-        eveOrigin: () => undefined,
         sandbox,
         sessionSandboxes,
         keepAwake,

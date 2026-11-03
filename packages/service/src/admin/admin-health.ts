@@ -27,10 +27,6 @@ const ADMIN_INTEGRATION = {
   ANALYTICS_RECORDING: { key: "analytics-recording", label: "Product analytics recording" },
   ANALYTICS_ERASURE: { key: "analytics-erasure", label: "Analytics erasure on account delete" },
   SWEEP: { key: "maintenance-sweep", label: "Scheduled maintenance sweep" },
-  EVE_DEPLOYMENT: {
-    key: "eve-deployment-secret",
-    label: "Deployment acting for accounts at eve (browser, automations)",
-  },
   OWN_KEYS: { key: "own-key-encryption", label: "Encryption of accounts' own API keys" },
 } as const;
 
@@ -43,8 +39,6 @@ export interface AdminIntegrationPresence {
   analyticsRecording: boolean;
   analyticsErasure: boolean;
   sweep: boolean;
-  /** The deployment's own secret at eve's door, read as unset where it is blank or the cron's own value. */
-  eveDeployment: boolean;
   ownKeys: boolean;
   /** Each account integration Vercel Connect grants, by whether its connector is named; a provider with no connector is absent. */
   connectors: ReadonlyMap<IntegrationProvider, boolean>;
@@ -65,7 +59,6 @@ export function adminIntegrations(present: AdminIntegrationPresence): AdminInteg
     { ...ADMIN_INTEGRATION.ANALYTICS_RECORDING, configured: present.analyticsRecording },
     { ...ADMIN_INTEGRATION.ANALYTICS_ERASURE, configured: present.analyticsErasure },
     { ...ADMIN_INTEGRATION.SWEEP, configured: present.sweep },
-    { ...ADMIN_INTEGRATION.EVE_DEPLOYMENT, configured: present.eveDeployment },
     { ...ADMIN_INTEGRATION.OWN_KEYS, configured: present.ownKeys },
     ...connectors,
   ];

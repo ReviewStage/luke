@@ -40,7 +40,6 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   askableAgent,
-  type CommentAskSeams,
   type CommentRecipient,
   commentAskMessage,
   handCommentAskOver,
@@ -78,7 +77,7 @@ import {
  * adds times it out first.
  */
 
-export interface PlanCommentsProcedureSeams extends CommentAskSeams {
+export interface PlanCommentsProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
@@ -138,8 +137,6 @@ interface MentioningComment {
  * it, whose words, not the new ones, say whom it asks.
  */
 const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
   outcome: PlanCommentOutcome,
   comment: MentioningComment,
 ) {
@@ -161,7 +158,7 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
       entry.writer.by?.userId === comment.userId &&
       entry.words === comment.words,
   )
-    ? yield* mentionsHandedOver(seams, request, thread, comment)
+    ? yield* mentionsHandedOver(thread, comment)
     : [];
   return unsent.length === 0 ? answer : { thread, unsent };
 });
@@ -250,8 +247,6 @@ function handedTo(
  * taken back and logged, the words posted all the same.
  */
 const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
   thread: PlanCommentThread,
   comment: MentioningComment,
 ) {
@@ -274,7 +269,7 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     Effect.forEach(
       taking,
       ({ to, agent }) =>
-        handedOver(seams, request, thread, comment, to, agent).pipe(
+        handedOver(thread, comment, to, agent).pipe(
           // Note that one hand-over not taken leaves the others, and the words, as they are.
           Effect.catch((refusal) =>
             Effect.logWarning(`a comment's hand-over was not taken: ${String(refusal)}`),
@@ -288,8 +283,6 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The ask written in the thread and the thread handed to the agent, under a key drawn from the comment's own. */
 const handedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
   thread: PlanCommentThread,
   comment: MentioningComment,
   to: PlanCommentAsked,
@@ -301,7 +294,7 @@ const handedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     actOnPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, taskId, thread.id, ask),
   );
   if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) return;
-  yield* askHandedOver(seams, request, {
+  yield* askHandedOver({
     userId,
     taskId,
     thread: outcome.answer.thread,
@@ -326,18 +319,14 @@ function mentionKey(clientKey: string, to: PlanCommentAsked): string {
  * thread as it now stands, its line taken back where the hand-over fails, so
  * the thread never says someone was asked who was not.
  */
-const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsProcedureSeams,
-  request: Request,
-  input: {
-    readonly userId: string;
-    readonly taskId: string;
-    readonly thread: PlanCommentThread;
-    readonly clientKey: string;
-    readonly words: string;
-    readonly to: CommentRecipient;
-  },
-) {
+const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
+  readonly userId: string;
+  readonly taskId: string;
+  readonly thread: PlanCommentThread;
+  readonly clientKey: string;
+  readonly words: string;
+  readonly to: CommentRecipient;
+}) {
   const { userId, taskId, thread, clientKey, words, to } = input;
   // The member's own newest ask names them, since an earlier one may be another member's.
   const asked = thread.entries.findLast(
@@ -370,7 +359,7 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? undefined
         : { id: thread.page.id, title: shown.title },
   };
-  yield* handCommentAskOver(seams, request, {
+  yield* handCommentAskOver({
     userId,
     to,
     clientKey,
@@ -412,7 +401,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
       const outcome = yield* hostedStoreOrUnavailable(
         startPlanCommentThread(writer, taskId, start),
       );
-      const body = yield* commentAnswer(seams, context.request, outcome, {
+      const body = yield* commentAnswer(outcome, {
         userId: context.userId,
         taskId,
         words: start.words,
@@ -433,7 +422,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
         actOnPlanCommentThread(writer, taskId, threadId, action),
       );
       if (action.action !== PLAN_COMMENT_ACTION.REPLY) return yield* outcomeAnswer(outcome);
-      return yield* commentAnswer(seams, context.request, outcome, {
+      return yield* commentAnswer(outcome, {
         userId: context.userId,
         taskId,
         words: action.words,
