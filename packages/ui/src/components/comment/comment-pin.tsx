@@ -13,13 +13,33 @@ import type { CommentAuthor } from "./comment.js";
  * does, while it stays drawn as small. Its owner stands it where the
  * bubble's pointed corner, its upper end corner, touches the top start corner
  * of what it is on, so it stands beside what it is on, level with its first
- * line, rather than by what comes before it, and hears the pointer over it, which the owner answers by
+ * line, rather than by what comes before it; or, where there is no room
+ * beside it, inside that corner, its upper start corner the point. It hears
+ * the pointer over it, which the owner answers by
  * marking what the pin is on. Over it, the pointer is told the first
  * comment by its writer and its first line, in a hint's card; a finger has
  * no pointer over it, so its press opens the comments at once, which say
  * the same and more. The count is a picture of the number its name says, so
  * it is hidden from a reader.
  */
+
+/**
+ * Where a pin stands by the corner it touches: beside what it is on, its
+ * upper end corner the point, or inside it, its upper start corner the
+ * point, where there is no room beside it.
+ */
+export const COMMENT_PIN_STANDS = {
+  BESIDE: "beside",
+  INSIDE: "inside",
+} as const;
+
+export type CommentPinStands = (typeof COMMENT_PIN_STANDS)[keyof typeof COMMENT_PIN_STANDS];
+
+/** The corner each stand makes its point. */
+const POINT = {
+  [COMMENT_PIN_STANDS.BESIDE]: "rounded-tr-none",
+  [COMMENT_PIN_STANDS.INSIDE]: "rounded-tl-none",
+} as const satisfies Record<CommentPinStands, string>;
 
 /** Whether a node draws anything: none, null, and a boolean, as a condition leaves it, draw nothing. */
 function drawsSomething(node: ReactNode): boolean {
@@ -33,6 +53,7 @@ export function CommentPin({
   label,
   preview,
   open,
+  stands = COMMENT_PIN_STANDS.BESIDE,
   onPress,
   onHover,
 }: {
@@ -46,6 +67,8 @@ export function CommentPin({
   preview: ReactNode;
   /** Whether its comments are open. */
   open: boolean;
+  /** Where it stands by the corner it touches; beside what it is on unless told. */
+  stands?: CommentPinStands | undefined;
   onPress: () => void;
   /** Told the pointer or the focus came onto the pin, and went. */
   onHover: (over: boolean) => void;
@@ -56,7 +79,7 @@ export function CommentPin({
     <Tooltip label={label} card={preview}>
       <button
         type="button"
-        className="luke-comment-pin inline-flex cursor-press items-center gap-luke-2 rounded-luke-full rounded-tr-none border border-border bg-popover p-luke-4 text-caption text-foreground shadow-menu aria-expanded:shadow-menu-open-edge pointer-coarse:relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--luke-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']"
+        className={`luke-comment-pin inline-flex cursor-press items-center gap-luke-2 rounded-luke-full ${POINT[stands]} border border-border bg-popover p-luke-4 text-caption text-foreground shadow-menu aria-expanded:shadow-menu-open-edge pointer-coarse:relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--luke-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']`}
         aria-label={label}
         aria-expanded={open}
         onClick={onPress}

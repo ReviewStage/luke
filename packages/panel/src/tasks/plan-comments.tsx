@@ -35,11 +35,13 @@ import {
   type CardLook,
   CardPress,
   type CardShadow,
+  COMMENT_PIN_STANDS,
   COMPOSER_LOOK,
   CONFIRM_LOSS,
   Comment,
   type CommentAuthor,
   CommentPin,
+  type CommentPinStands,
   CommentsIcon,
   ComposerBody,
   ComposerFoot,
@@ -3122,6 +3124,14 @@ function inWindow(room: HTMLElement | null, box: FrameBox | undefined): FrameBox
   };
 }
 
+/** The room a pin needs beside its element, a face and two figures across, short of which it stands inside the element's corner. */
+const PIN_ROOM = 48;
+
+/** Where an element's pin stands: beside it, or inside its corner where the room left of it is too narrow, as a phone's page inset is. */
+function pinStands(box: FrameBox): CommentPinStands {
+  return box.left < PIN_ROOM ? COMMENT_PIN_STANDS.INSIDE : COMMENT_PIN_STANDS.BESIDE;
+}
+
 /** Where a thread on the whole page is started: the frame's top edge. */
 const PAGE_TOP: FrameBox = { left: 0, top: 0, right: 0, bottom: 0 };
 
@@ -3157,12 +3167,14 @@ function PagePin({
   open,
   onOpen,
   onHint,
+  stands,
 }: {
   threads: readonly PlanCommentThread[];
   doors: Omit<ThreadDoors, "control">;
   open: boolean;
   onOpen: () => void;
   onHint: (over: boolean) => void;
+  stands: CommentPinStands;
 }): React.JSX.Element | null {
   const now = useMinute();
   const first = threads[0]?.entries.find((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
@@ -3175,6 +3187,7 @@ function PagePin({
       count={comments}
       label={`${comments} ${comments === 1 ? "comment" : "comments"}`}
       open={open}
+      stands={stands}
       onPress={onOpen}
       onHover={onHint}
       preview={
@@ -3263,14 +3276,12 @@ export function PageCommentLayer({
   return (
     <div className="page-comment-layer">
       {pins.map(({ path, threads, box }) => (
-        // Note that the bubble's pointed corner, its upper end one, touches its element's top start corner, kept inside the room's edges.
+        // Note that the bubble's pointed corner touches its element's top start corner, beside it, or inside it where the room has none beside it.
         <span
           key={path}
           className="page-comment-pin"
-          style={{
-            left: `max(${box.left}px, var(--luke-space-24))`,
-            top: Math.max(box.top, 0),
-          }}
+          data-stands={pinStands(box)}
+          style={{ left: Math.max(box.left, 0), top: Math.max(box.top, 0) }}
         >
           <PagePin
             threads={threads}
@@ -3284,6 +3295,7 @@ export function PageCommentLayer({
               )
             }
             onHint={(over) => onHint(over ? path : undefined)}
+            stands={pinStands(box)}
           />
         </span>
       ))}
