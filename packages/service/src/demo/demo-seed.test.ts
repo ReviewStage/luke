@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { accountExperimentOn } from "@luke/database/models/account-store";
+import { listWorkspaceAgents, readAgentRouting } from "@luke/database/models/agent-store";
 import { hostBySecret, hostsOf } from "@luke/database/models/host-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
@@ -90,6 +91,12 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
         const caller = yield* hostBySecret(hostSecretHash(HOST_SECRET.secret));
         const pick = yield* readRunsOnPick(DEMO_DEAN.id);
         const ownHosts = yield* accountExperimentOn(DEMO_DEAN.id, EXPERIMENT.BRING_YOUR_OWN_HOST);
+        const agents = yield* listWorkspaceAgents(DEMO_DEAN.id, seeded.workspaceId, { limit: 10 });
+        const payers = yield* Effect.forEach(agents, (agent) =>
+          Effect.map(readAgentRouting(DEMO_DEAN.id, agent.id), (routing) =>
+            Option.getOrUndefined(Option.map(routing, (row) => row.payer)),
+          ),
+        );
         const ring = Result.getOrThrow(parseKeyRing(AGENT_KEY_RING));
         const owner = {
           userId: DEMO_DEAN.id,
@@ -154,6 +161,20 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
         });
         // Bring your own host stays off, since with it on the app would enroll the Mac's own account install with the demo's server.
         assert.equal(ownHosts, false);
+        // The seeded agents are Dean's on that host, paid for by his plan, so a follow-up to one runs there.
+        assert.deepEqual(
+          agents.map((agent) => [agent.userId, agent.machine, agent.deviceId]),
+          [
+            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
+            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
+            [DEMO_DEAN.id, AGENT_MACHINE.DEVICE, DEMO_HOST.id],
+          ],
+        );
+        assert.deepEqual(payers, [
+          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        ]);
       }),
   ),
 );
