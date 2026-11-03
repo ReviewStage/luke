@@ -37,7 +37,8 @@ type ArchivedPress = (typeof ARCHIVED_PRESS)[keyof typeof ARCHIVED_PRESS];
  * why nothing is sent, and Unarchive, after who archived the agent and why
  * where the service said. An agent still running finishes the turn it is
  * on, so its Stop stands beside them. A press that waits on the service
- * shows busy until it settles, and the other waits meanwhile.
+ * shows busy until it settles, a Stop it took until the agent offers none,
+ * and the other waits meanwhile.
  */
 export function ArchivedComposerNote({
   onUnarchive,
@@ -47,17 +48,25 @@ export function ArchivedComposerNote({
   onUnarchive: () => void | Promise<void>;
   /** Who archived the agent and why, where the agent itself was archived and the service said. */
   archivedBy?: ArchivedByReading | undefined;
-  /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
-  stop?: (() => Promise<unknown>) | undefined;
+  /** Stops the agent, while it has a turn to stop; settles once the service has answered, with whether it took the stop. */
+  stop?: (() => Promise<boolean>) | undefined;
 }): React.JSX.Element {
   const [out, setOut] = useState<ArchivedPress | undefined>(undefined);
+  // Note that a Stop the service took reads Stopping until the agent offers none, because the task
+  // list carries the stop a moment after the answer.
+  if (out === ARCHIVED_PRESS.STOP && stop === undefined) setOut(undefined);
   const press = (which: ArchivedPress, run: () => unknown) => {
     if (out !== undefined) return;
     const settles = run();
     // Note that a press that answers at once, as one that asks first does, has nothing to wait on.
     if (!(settles instanceof Promise)) return;
     setOut(which);
-    settles.finally(() => setOut(undefined));
+    settles.then(
+      (took) => {
+        if (which !== ARCHIVED_PRESS.STOP || took !== true) setOut(undefined);
+      },
+      () => setOut(undefined),
+    );
   };
   return (
     <div className={COMPOSER_ROOM_CLASS}>

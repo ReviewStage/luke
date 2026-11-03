@@ -232,6 +232,7 @@ import {
   PullRequestTitleLine,
   PullRequestWriteNote,
   type PullRequestWrites,
+  type ReadAgain,
   usePullRequestWrites,
   WritePlaceProvider,
 } from "./pull-request-writes.js";
@@ -1581,7 +1582,7 @@ interface OverviewParts {
   readonly checks: Part<AgentOverviewChecks>;
   readonly conversation: Part<AgentOverviewConversation>;
   readonly ask: {
-    readonly pullRequest: () => void;
+    readonly pullRequest: ReadAgain;
     readonly checks: () => void;
     readonly conversation: () => void;
   };
@@ -1885,7 +1886,7 @@ function DescriptionPart({
   agentId: string;
   part: Part<AgentOverviewPullRequest>;
   /** Asks the pull request's read again, as an edit of the description does once GitHub answered it. */
-  onRead: () => void;
+  onRead: ReadAgain;
   reactions: readonly ReactionGroup[] | undefined;
   /** The GraphQL id a reaction is given to the description by, which the conversation's read names. */
   subject: string | undefined;
@@ -3047,12 +3048,12 @@ function PullRequestTabBody({
   };
   // Refresh reads again the header's reads, the checks among them, and the chapters once their read was asked,
   // and what the agent published, which names this tab and its pin by the pull request's title.
+  // It settles once the header's reads land, which a change waits on before its press lets go.
   const refresh = () => {
-    ask.pullRequest();
-    ask.conversation();
-    ask.checks();
+    const header = Promise.all([ask.pullRequest(), ask.conversation(), ask.checks()]);
     if (askedYet(chapters)) chapters.ask();
     void source.readPublished().catch(() => undefined);
+    return header;
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -3072,7 +3073,7 @@ function PullRequestTabBody({
   refreshNow.current = refresh;
   // Note that the ⋯'s Refresh reads Files changed again too where its view was shown, because it is the one Refresh
   // on the screen, Files changed's ⋯ offering none of its own; a write reads back without it.
-  const refreshAllNow = useRef(refresh);
+  const refreshAllNow = useRef<() => void>(refresh);
   const url = none ? undefined : held?.url;
   // Note that the copy is read through a ref, because `useCopyToast` answers a new function every draw.
   const copy = useCopyToast();

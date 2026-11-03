@@ -84,8 +84,10 @@ import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
  * sign-in and never as our GitHub App (`pull-request-write-wire.ts`).
  * One is out at a time; while it is, the controls that would send another
  * stand disabled. Once GitHub took it, or refused it, the tab's reads are
- * asked again (`onWritten`), so the header and the page say where the pull
- * request stands now rather than what the press assumed. A refusal stands
+ * asked again (`onWritten`), and the change stays out until they land, so
+ * the header and the page say where the pull request stands now rather
+ * than what the press assumed, and a press never draws the pull request as
+ * it stood before its change for the moment between. A refusal stands
  * on its own line over the header until it is dismissed or the next change
  * is sent: our sentence where GitHub refused the change, with GitHub's own
  * words quoted on a line of their own under it, naming GitHub, never inside
@@ -228,6 +230,9 @@ function outcomeOf(note: WriteNote | undefined): WriteOutcome {
   return { done: false, words: noteWords(note), note };
 }
 
+/** What a change reads again once GitHub answered it: where it answers a promise, the change stays out until it settles. */
+export type ReadAgain = () => unknown;
+
 /** The tab's changes: the one out, if any, what the last one left to say, and the presses. */
 export interface PullRequestWrites {
   /** The change out now; none while nothing is. */
@@ -275,10 +280,10 @@ export function noteOf(
  * The agent's pull request's changes, one at a time, a press while one is
  * out doing nothing; once GitHub
  * answers, whether it took the change or refused it, `onWritten` asks the
- * tab's reads again. A change goes through the source of the tab around it
+ * tab's reads again, and the change stays out until they land. A change goes through the source of the tab around it
  * (`pull-request-source.ts`), or, drawn outside one, to the agent named.
  */
-export function usePullRequestWrites(agentId: string, onWritten: () => void): PullRequestWrites {
+export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): PullRequestWrites {
   const { act } = useAct();
   const number = usePullRequestNumber();
   const source = usePullRequestSource();
@@ -300,7 +305,10 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
             failure: AGENT_CALL_FAILURE.UNANSWERED,
           }),
         )
-        .then((answer) => {
+        .then(async (answer) => {
+          // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again,
+          // and the change stays out until that read lands, so the press never draws the pull request as it stood.
+          if (!("failure" in answer)) await Promise.resolve(onWritten()).catch(() => undefined);
           out.current = false;
           setPending(undefined);
           const note = noteOf(answer);
@@ -308,8 +316,6 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
           if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
             onDone?.();
           }
-          // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again.
-          if (!("failure" in answer)) onWritten();
           return outcomeOf(note);
         });
     },
