@@ -14,10 +14,11 @@ sidebar, one page at a time:
 ```
  ┌──────────────────────────────────────────────────────────────┐
  │  [ Tasks ]   Settings                                        │
- │  ‹  Teammate invitations                               [ ⋯ ]   │
- │     acme/relay                                               │
+ │  [ Plan ]  Inbox  Comments  +                         [ ⋯ ]  │
  │ ──────────────────────────────────────────────────────────── │
+ │  acme/relay  ›  ACME-42                                      │
  │  # Teammate invitations                          (scrolls)   │
+ │  ( In progress )  ( High )  ( Ada )                          │
  │  ## Context                                                  │
  │  Only an admin can add someone to a workspace...             │
  │  ## Goal                                                     │
@@ -49,8 +50,8 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   on its Plan tab beside a column that offers **New agent**.
 - A task stays open while the developer turns to Settings or closes the
   window.
-- A task is left by Back (`‹`) or Escape on its document page, by opening
-  another task, or by a sign-out.
+- A task is left by Back or Escape, by opening another task or page, or by
+  a sign-out.
 - Nothing polls. An agent's saves reach the open task through its tab: once
   the transcript the tab reads shows an `edit_plan` answered, the task is
   read again (`tasks/agent-tab.tsx`).
@@ -99,7 +100,7 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   opens the GitHub page where accounts are added and repositories chosen;
   a member reads it alone. Linear follows, its Disconnect in its ⋯. Every way into Settings at a place takes one typed link,
   `SettingsLink` (`@repo/settings/settings-views`: a page, a section, a workspace),
-  followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
+  followed by `settings-link.ts`. The list, Pinned, and the command palette hold the
   chosen workspace's tasks alone, New task starts in it, the repository chip
   lists only the repositories its GitHub reaches (none, read "No repository",
   where it has no GitHub connected, and the task starts with none), and the
@@ -136,19 +137,12 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   pin. A task's or an agent's place is the account's own, beside its pin, and
   follows it to every Mac; a pinned tab's is this Mac's, as the tab's pin is.
   A folded Pinned is not dragged. ⌘K offers Pin task or
-  Unpin task for the task on screen, through its row menu's own Pin, and
-  none for an archived task.
-- An archived task leaves the list. View options' **Archived tasks** turns
-  the Tasks section to the archived tasks, grouped and ordered as the view
-  says, the pins standing aside, with an Archived chip whose × goes back; it
-  is not remembered, so another workspace or the next launch opens on the
-  tasks.
-  Archiving the open task leaves it for the new-task page, as deleting it
-  does, and back and forward pass archived tasks over. A pin is the account's
-  own and an archive the workspace's (`PATCH /api/plans/{id}`), so a task of
-  a shared workspace one member pinned stands under Pinned for them alone,
-  both follow the account to every Mac, and a Pin, an Archive, or the way back from either is drawn at once and
-  put back, with a quiet note under the task's row, when the service refuses.
+  Unpin task for the task on screen, through its row menu's own Pin.
+- A pin is the account's own (`PATCH /api/plans/{id}`), so a task of a
+  shared workspace one member pinned stands under Pinned for them alone, the
+  pin follows the account to every Mac, and a Pin or Unpin is drawn at once
+  and put back, with a quiet note under the task's row, when the service
+  refuses.
   An agent's pin is the account's own too (`agent_pin`, through
   `PATCH /api/agents/{id}`), drawn at once and put back with a toast when the
   service refuses.
@@ -174,28 +168,38 @@ Dictate, and Start.
 
 ### Header
 
-- `‹`, back to the list, which leaves the task.
-- The task's name. The toolbar is one row, the side panel's bar's height
-  exactly (`--desktop-bar-height`, the one token both take), so their bottom
-  borders are one line across the window.
-- The task's repository is the sidebar's to name: by the group it stands in,
-  or on its row where the list's view groups by creator or not at all.
-  A task with none yet shows a compact `Choose a repository` chip in the toolbar's actions row, left
-  of the ⋯, with the composer's menu: a pick is saved through
-  `PATCH /api/plans/{id}`, and a refusal is said beside it. A task can be
-  used without a repository.
-- **The task's menu**, from the toolbar's ⋯ (drawn while the task's own tab
-  is chosen, not on an agent's tab or the Inbox) and from a right-click on the
-  task in the sidebar alike: Copy plan (the open task's alone), Rename, Pin or
-  Unpin and Archive (an archived task offers Unarchive alone), Change
-  repository… (opens the repository picker, hung from the toolbar, opening
-  the task first where it is not the open one), and Permanently delete, last and red, which asks first in a dialog that points
-  a task not yet archived at Archive instead. ⇧⌘A archives the open task and
-  ⌘⌫ asks to delete it, from any of its tabs.
-- An archived task opened from Archived tasks reads and works as any other,
-  under a quiet line, "This task is archived", with Unarchive beside it.
-- **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
-  toolbar's, heard on every tab of the task. It is always enabled, however much of the plan is written, and
+- In a wide window the task's column has no head of its own: its toolbar
+  is its agents' tab strip ("Agent tabs" below), whose actions are the
+  chosen agent's ⋯ and the summary's toggle, with no Back and no task name
+  (`desktop/desktop-tasks.tsx`). A narrow window draws a head over it
+  (`TaskHead`), with Back, the task's name, and one ⋯. The toolbar is one
+  row, the side panel's bar's height exactly (`--desktop-bar-height`, the
+  one token both take), so their bottom borders are one line across the
+  window.
+- The plan says the rest around its title (`tasks/task-standing.tsx`). Over
+  it stands the task's path: its repository, or "Choose a repository" while
+  it has none, then its parent task where it has one, then its key. The
+  repository's crumb drops the composer's searchable menu, as ⌘K's Change
+  repository does: a pick is saved through `PATCH /api/plans/{id}`, and a
+  refusal is said under the path. A task can be used without a repository.
+  Under the title stand the status, priority, and assignee chips.
+- **The task's menu**, from the ⋯ in the side panel's bar while the Plan tab
+  is chosen and from that tab's right-click, and from a right-click on the
+  task's row in the sidebar alike (`desktop/task-actions.tsx`): Copy plan
+  (the open task's alone) and Copy link, Rename, Version history, Mark as
+  unread, the task's relations, Pin or Unpin, Move to workspace, and
+  Permanently delete, last and red. The Plan tab's menu leaves out the
+  task's status, priority, assignee, and repository, which its chips and
+  path change; a row's menu, with no chips beside it, holds Status,
+  Priority, and Assignee as submenus, and Change repository. Permanently
+  delete asks first in a dialog that offers Mark done instead, and ⌘⌫ asks
+  to delete the open task from any of its tabs. A task is not archived but
+  settled: Mark done, on a sidebar row's hover or in the menu bar, sets it
+  Done as Status's Done does.
+- **Copy plan** stands in the ⋯ menu, with its chord ⌥⌘C, "Copy plan or
+  transcript", which copies what the focused pane shows: the plan where the
+  plan is focused, an agent's transcript where its tab is. ⇧⌘C is Copy link.
+  Copy plan is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an
   agent and never asks the model anything.
 - The side panel's toggle ("Show panel" / "Hide panel", ⌥⌘B) stands at the
@@ -647,8 +651,8 @@ developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## Copy
 
-The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
-toolbar reads `Copied`. The
+The developer chooses `Copy plan` from the ⋯ menu, or presses ⌥⌘C on the
+plan, and the window's toast says "Plan copied". The
 clipboard holds the current document as readable Markdown: the task's name
 as a `#` title over its document exactly as saved, whose assumptions are a
 section like any other (`packages/features/src/plan-markdown.ts`), here for
