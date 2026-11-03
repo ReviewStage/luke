@@ -13,8 +13,8 @@ import { titleAgent } from "../coder-host/title.js";
 /**
  * native-title.ts -- a native agent's title, asked for as its runner's turns start and end, as eve's relay asks for an eve agent's.
  *
- * The title is generated on the account's own API key, as an eve agent's is
- * (`../coder-host/production.ts`'s `titleModel`), preferring the provider of
+ * The title is generated on the account's own API key
+ * (`../coder-host/model.ts`'s `titleModel`), preferring the provider of
  * the agent's own model, and named where none stands
  * (`../coder-host/title.ts`), its untitled task with it. An account that
  * saved no API key, as one on a subscription alone, is titled from its

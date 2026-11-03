@@ -390,7 +390,7 @@ sweep is called in process on the cron's cadence under `CRON_SECRET`.
 It refuses to start beside any `VERCEL*` variable or over a database host off
 the loopback (`@luke/service/local/local-server-guard`), and imports no route
 until it has, because the auth service reads the environment as it loads. It
-sets `LUKE_LOCAL_DEMO` for the routes it mounts, which the service honours only
+sets `APP_LOCAL_DEMO` for the routes it mounts, which the service honours only
 where the same guard passes over its own environment
 (`@luke/service/local/local-demo`): there a Start on a task with no repository
 runs where its agents run on a host. Where
@@ -566,7 +566,7 @@ so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-p
 A test reads the same client through `@luke/database/testing`, which
 chooses its dialect the way its `hosted-store-database.ts` does:
 PGlite in process, so `check.sh` needs no service, or the Postgres named by
-`LUKE_STORE_TEST_DATABASE_URL`, which the CI job points at its service
+`APP_STORE_TEST_DATABASE_URL`, which the CI job points at its service
 container. The Postgres half is the production layer's own client; the PGlite
 half is a small `SqlClient` over `@electric-sql/pglite`, because no
 `@effect/sql-pglite` ships against the 3.x Effect line.
@@ -894,7 +894,7 @@ each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
 keys. `EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`, and an eve
-origin, the deployment's own unless `LUKE_EVE_ORIGIN` names another, must
+origin, the deployment's own unless `APP_EVE_ORIGIN` names another, must
 still stand for the deployment to act for an account whose bearer it does not
 hold, although no eve service answers either now
 (`packages/service/README.md`'s "Reaching eve as the deployment"). No

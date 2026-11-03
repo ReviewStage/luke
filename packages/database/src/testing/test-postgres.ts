@@ -3,7 +3,7 @@ import { Client, escapeIdentifier } from "pg";
 
 /**
  * A Postgres of one test file's own, cloned from the database
- * `LUKE_STORE_TEST_DATABASE_URL` names and dropped when the file is done.
+ * `APP_STORE_TEST_DATABASE_URL` names and dropped when the file is done.
  *
  * Locally every opening of the store harness is a fresh PGlite, so a
  * statement that forgets to scope itself by account or conversation reaches
@@ -29,7 +29,7 @@ import { Client, escapeIdentifier } from "pg";
 
 /** The env var naming a Postgres the store tests should clone from instead of opening PGlite. */
 export const STORE_TEST_DATABASE_ENVIRONMENT = {
-  URL: "LUKE_STORE_TEST_DATABASE_URL",
+  URL: "APP_STORE_TEST_DATABASE_URL",
 } as const;
 
 const CLONE_NAME = {

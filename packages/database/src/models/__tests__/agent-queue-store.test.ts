@@ -11,6 +11,7 @@ import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { turns } from "../../schemas/storage.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import {
   claimQueuedMessage,
@@ -54,6 +55,7 @@ const openAccount = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return { userId, agentId: Option.getOrThrow(started).agent.id };
 });

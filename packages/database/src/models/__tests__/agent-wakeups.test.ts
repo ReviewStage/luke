@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { archiveAgent, createAgent } from "../agent-store.js";
 import {
@@ -49,6 +50,7 @@ const openAgent = (userId: string) =>
       planSnapshot: "# Invitations\n",
       prompt: null,
       repository: "acme/relay",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     return Option.getOrThrow(started).agent.id;
   });

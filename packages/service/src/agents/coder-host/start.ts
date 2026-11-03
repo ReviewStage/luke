@@ -239,11 +239,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * before eve took it, each said as an error naming the agent (`agent-log.ts`).
  * A choice an ask names runs that one agent and is never kept as the
  * account's default, which only
- * Settings writes. Who reaches eve is the caller's: the route holds the developer's
+ * Settings writes. Who reaches the agent is the caller's: the route holds the developer's
  * own bearer, and the voice brain's and a coding agent's tool act as the
- * deployment for the account, which the coder channel's table admits for
- * exactly this opening, and its door for the cancel that stops a
- * continue's source (`coder-host/channel.ts`).
+ * deployment for the account; the agent's harness answers the opening, and
+ * the cancel that stops a continue's source, either way
+ * (`runtime-sessions.ts`).
  */
 
 export type { StartWhere };
@@ -1289,8 +1289,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       const mentioned =
         words === undefined ? undefined : mentionedContext(words, landing.task, reads);
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
-      // who sent it: a native harness's runner names the line back as it takes it (`native-events/`), and
-      // eve's receipt takes it by its words (`relay.ts`'s `#received`) rather than writing a typed line.
+      // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).
       // A launch refused discards the agent, line and all. A line that could not be written discards the
       // agent, as a refused launch does, so a retry under the same key starts it afresh rather than
       // finding an agent that was never launched.

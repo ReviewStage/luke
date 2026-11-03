@@ -10,6 +10,7 @@ import {
   setInstalledSkillEnabled,
 } from "@luke/database/models/installed-skill-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -113,6 +114,7 @@ const startAgent = (repository: string | null, skillsOn = true) =>
       planSnapshot: null,
       prompt: null,
       repository,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     yield* connectWorkspaceGitHub(task.workspaceId, INSTALLATION);
     const { agent } = Option.getOrThrow(started);

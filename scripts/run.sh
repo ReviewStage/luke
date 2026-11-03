@@ -99,7 +99,7 @@ while ((remaining_arguments-- > 0)); do
     if [[ $argument == --instance ]]; then
         if ((remaining_arguments == 0)) || ! luke_is_instance_name "$1"; then
             printf 'error: --instance takes a name of lower-case letters, digits, and single hyphens, at most %s long\n' \
-                "$LUKE_INSTANCE_NAME_MAX_LENGTH" >&2
+                "$APP_INSTANCE_NAME_MAX_LENGTH" >&2
             exit 2
         fi
         instance=$1
@@ -121,7 +121,7 @@ if [[ $use_demo == true ]]; then
 fi
 
 # The preview stands in for production through the one development override
-# the build honours (`LUKE_ACCOUNT_BASE_URL`, apps/desktop/src/main/bootstrap.ts),
+# the build honours (`APP_ACCOUNT_BASE_URL`, apps/desktop/src/main/bootstrap.ts),
 # which a packaged build ignores. The preview's
 # Neon branch is its own database, so the account there starts empty, and no
 # cron tick runs on a preview.
@@ -132,11 +132,11 @@ if [[ $use_preview == true ]]; then
         luke_require_command jq
         preview_address=$("$SCRIPT_DIRECTORY/preview-address.sh")
     fi
-    export LUKE_ACCOUNT_BASE_URL="${preview_address%/}/api/auth"
+    export APP_ACCOUNT_BASE_URL="${preview_address%/}/api/auth"
     if [[ -z $instance ]]; then
         preview_branch=
         if [[ $preview_address_given == false ]]; then
-            preview_branch=$(git -C "$LUKE_REPO_ROOT" symbolic-ref --quiet --short HEAD || true)
+            preview_branch=$(git -C "$APP_REPO_ROOT" symbolic-ref --quiet --short HEAD || true)
         fi
         instance=$(luke_preview_instance "$preview_address" "$preview_branch")
     fi
@@ -147,10 +147,10 @@ fi
 # run reads (apps/desktop/src/main/bootstrap.ts); a plain launch clears one
 # inherited from the shell, so it is always the plain instance.
 if [[ -n $instance ]]; then
-    export LUKE_INSTANCE=$instance
+    export APP_INSTANCE=$instance
     printf 'instance: launching as "%s", beside the plain Vespin Dev\n' "$(luke_instance_app_name "$instance")" >&2
 else
-    unset LUKE_INSTANCE
+    unset APP_INSTANCE
 fi
 
 if [[ $replace_running_app == true ]]; then
@@ -159,7 +159,7 @@ fi
 
 # Live sessions are the default. Pass `--fixture smoke` for deterministic data;
 # the app honours it on its own, so nothing needs injecting here.
-cd "$LUKE_REPO_ROOT"
+cd "$APP_REPO_ROOT"
 if [[ $use_demo == false ]]; then
     exec pnpm start -- "$@"
 fi
@@ -193,7 +193,7 @@ fi
 # handed it, under the name it reads for that kind (apps/web/server/demo-seed.ts),
 # and a value of those names inherited from the shell is dropped first, so
 # the credential comes from these two alone. Only where it came from is said.
-unset LUKE_DEMO_CLAUDE_TOKEN LUKE_DEMO_ANTHROPIC_API_KEY
+unset APP_DEMO_CLAUDE_TOKEN APP_DEMO_ANTHROPIC_API_KEY
 demo_claude_token=
 demo_anthropic_api_key=
 demo_credential_source=
@@ -254,12 +254,12 @@ demo_port=$(demo_free_port)
 demo_origin="http://127.0.0.1:$demo_port"
 (
     export DATABASE_URL="$demo_database_url" PROVIDER_KEY_ENCRYPTION_KEYS="$demo_key_ring" \
-        LUKE_DEMO_HOST_STATE="$demo_profile" LUKE_DEMO_SERVICE_ORIGIN="$demo_origin"
+        APP_DEMO_HOST_STATE="$demo_profile" APP_DEMO_SERVICE_ORIGIN="$demo_origin"
     if [[ -n $demo_claude_token ]]; then
-        export LUKE_DEMO_CLAUDE_TOKEN="$demo_claude_token"
+        export APP_DEMO_CLAUDE_TOKEN="$demo_claude_token"
     fi
     if [[ -n $demo_anthropic_api_key ]]; then
-        export LUKE_DEMO_ANTHROPIC_API_KEY="$demo_anthropic_api_key"
+        export APP_DEMO_ANTHROPIC_API_KEY="$demo_anthropic_api_key"
     fi
     exec pnpm --filter @luke/web demo:seed
 )
@@ -271,7 +271,7 @@ demo_origin="http://127.0.0.1:$demo_port"
 (
     export DATABASE_URL="$demo_database_url" DATABASE_URL_UNPOOLED="$demo_database_url" \
         BETTER_AUTH_SECRET="$demo_auth_secret" PROVIDER_KEY_ENCRYPTION_KEYS="$demo_key_ring" \
-        CRON_SECRET="$demo_cron_secret" BETTER_AUTH_URL="$demo_origin" LUKE_EVE_ORIGIN="$demo_origin"
+        CRON_SECRET="$demo_cron_secret" BETTER_AUTH_URL="$demo_origin" APP_EVE_ORIGIN="$demo_origin"
     cd apps/web
     exec node --import tsx scripts/local-server.ts --port "$demo_port"
 ) >"$demo_folder/server.log" 2>&1 &
@@ -304,7 +304,7 @@ pnpm --filter @luke/host-daemon --filter @luke/agent-runner build >"$demo_folder
 }
 mkdir -p "$demo_folder/host/lib"
 cp apps/host/dist/vespin-host.mjs packages/agent-runner/dist/agent-runner.mjs "$demo_folder/host/lib/"
-env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY LUKE_HOST_STATE_ROOT="$demo_profile" \
+env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY APP_HOST_STATE_ROOT="$demo_profile" \
     node "$demo_folder/host/lib/vespin-host.mjs" run >"$demo_folder/host.log" 2>&1 &
 host_pid=$!
 printf "demo: running this Mac's host for Dean, its log at %s\n" "$demo_folder/host.log" >&2
@@ -313,5 +313,5 @@ printf "demo: running this Mac's host for Dean, its log at %s\n" "$demo_folder/h
 # the member's own workspace, which the seed leaves empty; the app holds the
 # link until it is signed in (`@luke/features/app-links`), and a link among
 # the arguments forwarded, the last, opens in its place.
-export LUKE_ACCOUNT_BASE_URL="$demo_origin/api/auth"
+export APP_ACCOUNT_BASE_URL="$demo_origin/api/auth"
 pnpm start -- "$DEMO_LINK" "$@"

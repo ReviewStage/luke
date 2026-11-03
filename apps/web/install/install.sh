@@ -82,10 +82,10 @@ EARLIER_UNIT_FILE="/etc/systemd/system/luke-host.service"
 # with readlink -f, which macOS has had since 12.3.
 MAC_MIN_VERSION="12.3"
 # The folder that stands where systemd runs the box; a test points it elsewhere.
-SYSTEMD_RUN_DIR="${LUKE_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+SYSTEMD_RUN_DIR="${APP_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 # How long a Mac's install waits for its running LaunchAgent to stop before it
 # swaps the release; a test points it at none.
-MAC_STOP_WAIT_SECONDS="${LUKE_HOST_MAC_STOP_WAIT_SECONDS:-30}"
+MAC_STOP_WAIT_SECONDS="${APP_HOST_MAC_STOP_WAIT_SECONDS:-30}"
 # Whether the box is WSL2, which require_supported_os reads from /proc/version.
 ON_WSL=false
 # The command's link as a person types it, which their own shell expands to
@@ -586,7 +586,7 @@ main() {
 }
 
 # A test sources the script up to here, to call its functions and read what it carries.
-[ -z "${LUKE_HOST_INSTALL_LIBRARY:-}" ] || return 0
+[ -z "${APP_HOST_INSTALL_LIBRARY:-}" ] || return 0
 
 # Note that the whole script is read before any of it runs, since sh reads a piped script as it goes.
 main "$@"

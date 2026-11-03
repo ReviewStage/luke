@@ -8,6 +8,7 @@ import {
   updateAgentBranch,
 } from "@luke/database/models/agent-store";
 import { account, user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import {
   AGENT_AUTHOR,
@@ -252,6 +253,7 @@ const agentPublishing = (userId: string, branch: string, number: number) =>
       planSnapshot: "# Invites\n",
       prompt: null,
       repository: REPOSITORY,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;

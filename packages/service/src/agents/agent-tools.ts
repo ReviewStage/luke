@@ -267,10 +267,10 @@ import {
  * workspace by the page's id, as the caller's member could open it in the
  * side panel, and answers its HTML cut on a line to a bound, which a
  * mention of the page now points the agent at rather than carrying it.
- * Each tool reaches eve as the deployment acting for the caller's member,
- * which the coder channel's table admits for exactly this
- * (`coder-host/channel.ts`). Every answer is data the model reads, never a
- * credential.
+ * Each tool reaches an agent's session as the deployment acting for the
+ * caller's member, and the agent's harness answers it
+ * (`coder-host/runtime-sessions.ts`). Every answer is data the model reads,
+ * never a credential.
  */
 
 /** The most tasks a list of them answers, the newest started first. */

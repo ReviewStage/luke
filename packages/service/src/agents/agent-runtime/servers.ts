@@ -1,9 +1,9 @@
 /**
  * servers.ts -- which integrations' MCP servers one turn of an agent is handed, read as the turn starts.
  *
- * Every agent is handed its account's integrations through one dynamic
- * connection resolved at `turn.started` (`connections.ts`), and what it is
- * handed is its role's connection policy (`role.ts`), among the
+ * Every agent is handed its account's integrations as its launch starts
+ * (`../../integrations/connection-door.ts`), and what it is handed is its
+ * role's connection policy (`role.ts`), among the
  * integrations this deployment offers the account
  * (`accountIntegrationConnect`): one not set up here, or withheld from the
  * account, is handed to none of its agents. The brain agents are handed

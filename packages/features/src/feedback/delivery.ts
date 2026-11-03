@@ -10,7 +10,7 @@ import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
   /** Overrides the endpoint for local testing of the delivery path. */
-  URL: "LUKE_FEEDBACK_URL",
+  URL: "APP_FEEDBACK_URL",
 } as const;
 
 const FEEDBACK_DEFAULTS = {

@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent } from "@luke/database/models/agent-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   PAGE_OWNER,
@@ -99,6 +100,7 @@ it.layer(getTestDB())("an agent's own pages over HTTP", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agentId = Option.getOrThrow(started).agent.id;
         const shower = { kind: PAGE_SHOWER.AGENT, agentId } as const;

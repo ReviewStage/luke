@@ -85,7 +85,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { ChildProcess } from "effect/process";
 
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
-const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
+const VERSION = process.env.APP_HOST_VERSION ?? "0.0.0";
 
 /** The service a box connects to where its install script names none. */
 const DEFAULT_SERVICE_ORIGIN = LINK_ORIGIN;
@@ -164,14 +164,14 @@ const runtimeOfOs = hostRuntime({
 
 /**
  * The runtime the daemon runs as, its state folder named by
- * `LUKE_HOST_STATE_ROOT` where the release's `vespin-host` names it
+ * `APP_HOST_STATE_ROOT` where the release's `vespin-host` names it
  * (`vespin-host.sh`, for the account install), so a command run by hand reads
  * and writes the record its service runs on.
  */
 const runtime: HostRuntime | undefined =
-  runtimeOfOs === undefined || process.env.LUKE_HOST_STATE_ROOT === undefined
+  runtimeOfOs === undefined || process.env.APP_HOST_STATE_ROOT === undefined
     ? runtimeOfOs
-    : { ...runtimeOfOs, stateRoot: process.env.LUKE_HOST_STATE_ROOT };
+    : { ...runtimeOfOs, stateRoot: process.env.APP_HOST_STATE_ROOT };
 
 const nodeServices = Layer.mergeAll(
   NodeChildProcessSpawner.layer.pipe(

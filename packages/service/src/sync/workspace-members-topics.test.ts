@@ -6,6 +6,7 @@ import { createAgent, renameAgent } from "@luke/database/models/agent-store";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { createTask, updateTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { expectTopicsFire } from "@luke/database/testing";
 import {
@@ -198,6 +199,7 @@ it.effect(
           repository: "acme/api",
           planSnapshot: "# Invites\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agentId = Option.getOrThrow(started).agent.id;
         const reader = { userId: owner, workspaceId };

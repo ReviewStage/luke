@@ -35,7 +35,7 @@ export const TEST_TASK = "test:vitest";
  * goes before any `--`, past which turbo hands every word to the task, so a
  * sharded run's `-- --shard=<i>/<n>` never carries the token to vitest.
  *
- * Note also that we name the platform in `LUKE_TURBO_PLATFORM`, which
+ * Note also that we name the platform in `APP_TURBO_PLATFORM`, which
  * `turbo.json` hashes through `globalEnv`, because turbo's own hash covers no
  * OS, CPU architecture, or Node version: without it a check that passed on
  * Linux would replay as a pass on a Mac. A bare `turbo` started past this
@@ -54,6 +54,6 @@ export function turboInvocation(args, env = process.env) {
       ...tokenArguments,
       ...args.slice(passThrough),
     ],
-    env: { ...rest, LUKE_TURBO_PLATFORM: PLATFORM, TURBO_TELEMETRY_DISABLED: "1" },
+    env: { ...rest, APP_TURBO_PLATFORM: PLATFORM, TURBO_TELEMETRY_DISABLED: "1" },
   };
 }

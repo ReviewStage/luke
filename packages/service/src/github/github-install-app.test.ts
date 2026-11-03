@@ -3,7 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { noDatabase } from "@luke/database/testing/no-database";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { test } from "vitest";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -64,7 +64,7 @@ function answer(
   configured = true,
 ): Promise<Response> {
   const { handler } = HttpRouter.toWebHandler(
-    githubInstallApp().pipe(
+    githubInstallApp({ resolveSessionUserId: () => Effect.succeedNone }).pipe(
       HttpRouter.provideRequest(
         Layer.mergeAll(
           github.layer,

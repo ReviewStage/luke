@@ -52,10 +52,15 @@
  * (https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url).
  * That token comes from GitHub's web application flow with PKCE
  * (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app):
- * the code is exchanged, `GET /user/installations` read on the token once,
- * and the token revoked (`DELETE /applications/{client_id}/token`,
- * https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token);
- * nothing of it is stored.
+ * the code is exchanged and `GET /user/installations` read on the token
+ * once. Where the browser GitHub returned is signed in to the account that
+ * asked, the token is the installer's authorization of the App as a GitHub
+ * sign-in is, and is kept as that account's GitHub row, as Better Auth's
+ * `linkSocial` would have written it, so installing the App also links the
+ * member's GitHub. Otherwise, or where another account holds that GitHub
+ * user, the token is revoked (`DELETE /applications/{client_id}/token`,
+ * https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token)
+ * and nothing of it is stored.
  *
  * Signing in with GitHub is also an authorization of the App, and the token
  * Better Auth leaves on the `account` row is read here, refreshed when it is
@@ -94,7 +99,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
+import { generateRandomString, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";
 import {
@@ -168,6 +173,12 @@ const APP_JWT = {
 export const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
+
+/** An account row's id as Better Auth makes one: 32 letters and digits. */
+const ACCOUNT_ID_LENGTH = 32;
+
+/** The scope Better Auth writes on a GitHub row: a GitHub App's user token carries no OAuth scopes. */
+const GITHUB_APP_SCOPE = "";
 
 /** PKCE as GitHub's web flow takes it: the SHA-256 of the verifier, base64url. */
 const PKCE_METHOD = "S256";
@@ -522,15 +533,18 @@ export interface GitHubAppService {
   ) => Effect.Effect<string, GitHubAppNotConfigured>;
   /**
    * The installations the user who authorized can reach: the code exchanged
-   * for a user access token, `GET /user/installations` read on it, and the
-   * token revoked; none where GitHub will not exchange the code.
+   * for a user access token and `GET /user/installations` read on it; none
+   * where GitHub will not exchange the code. The token is kept as the
+   * installer's account's GitHub row where one is named and no other
+   * account holds that GitHub user, and revoked otherwise.
    */
   readonly authorizedInstallations: (
     returned: GitHubAuthorizeReturn,
+    installer: Option.Option<string>,
   ) => Effect.Effect<
     Option.Option<readonly GitHubInstallation[]>,
-    GitHubReadFailure,
-    HttpClient.HttpClient
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
   >;
   /**
    * The repositories of every installation connected to the workspace that
@@ -797,9 +811,17 @@ const RefreshedTokensSchema = Schema.Struct({
 const TokenRefusalSchema = Schema.Struct({ error: Schema.String });
 const RefreshAnswerSchema = Schema.Union([RefreshedTokensSchema, TokenRefusalSchema]);
 
-/** GitHub's answer to a code exchange, read for the token alone; a refusal arrives with status 200 too. */
+/**
+ * GitHub's answer to a code exchange: the expiring pair a sign-in leaves, or
+ * the token alone where the App's user tokens do not expire; a refusal
+ * arrives with status 200 too.
+ */
 const ExchangedTokenSchema = Schema.Struct({ access_token: Schema.String });
-const ExchangeAnswerSchema = Schema.Union([ExchangedTokenSchema, TokenRefusalSchema]);
+const ExchangeAnswerSchema = Schema.Union([
+  RefreshedTokensSchema,
+  ExchangedTokenSchema,
+  TokenRefusalSchema,
+]);
 
 /** GitHub's answer to a token mint, read for the token and when it expires. */
 const InstallationTokenSchema = Schema.Struct({
@@ -893,6 +915,49 @@ const writeSealedTokens = SqlSchema.void({
           updatedAt: sealed.updatedAt,
         })
         .where(eq(account.id, sealed.id)),
+    ),
+});
+
+/** One account's GitHub row for a GitHub user: the row, and whose it is. */
+const GithubHolderSchema = Schema.Struct({ id: Schema.String, userId: Schema.String });
+
+/** Every account's row for the GitHub user given, locked for the transaction around it, the newest first. */
+const lockGithubHolders = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: GithubHolderSchema,
+  execute: (githubUserId) =>
+    Database.use((db) =>
+      db
+        .select({ id: account.id, userId: account.userId })
+        .from(account)
+        .where(and(eq(account.providerId, GITHUB_PROVIDER_ID), eq(account.accountId, githubUserId)))
+        .orderBy(desc(account.updatedAt))
+        .for("update"),
+    ),
+});
+
+/** A new GitHub row for the account, its tokens sealed, as Better Auth's `linkSocial` writes one. */
+const insertGithubAccount = SqlSchema.void({
+  Request: Schema.Struct({
+    ...SealedTokensSchema.fields,
+    userId: Schema.String,
+    githubUserId: Schema.String,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db.insert(account).values({
+        id: row.id,
+        accountId: row.githubUserId,
+        providerId: GITHUB_PROVIDER_ID,
+        userId: row.userId,
+        accessToken: row.accessToken,
+        refreshToken: row.refreshToken,
+        accessTokenExpiresAt: row.accessTokenExpiresAt,
+        refreshTokenExpiresAt: row.refreshTokenExpiresAt,
+        scope: GITHUB_APP_SCOPE,
+        createdAt: row.updatedAt,
+        updatedAt: row.updatedAt,
+      }),
     ),
 });
 
@@ -1341,6 +1406,55 @@ const tokenOfRow = /* @__PURE__ */ Effect.fn("web/githubTokenOfRow")(function* (
   return Redacted.make(fresh.access_token);
 });
 
+/**
+ * The installer's expiring pair kept as their account's GitHub row, as
+ * Better Auth's `linkSocial` keeps a link: the GitHub user read on the token
+ * (`GET /user`), and the row for that user refreshed where the account holds
+ * one, or written where it holds none. False, and nothing written, where
+ * another account holds that GitHub user, as `linkSocial` refuses with
+ * `account_already_linked_to_different_user`. The rows are locked while the
+ * holder is decided, so two installs at once settle one after the other.
+ */
+const keepInstallerTokens = /* @__PURE__ */ Effect.fn("web/githubKeepInstallerTokens")(function* (
+  settings: ReadySettings,
+  userId: string,
+  tokens: typeof RefreshedTokensSchema.Type,
+): Effect.fn.Return<
+  boolean,
+  GitHubUnavailable | StoreFailure,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  const githubUser = yield* Effect.scoped(
+    Effect.flatMap(send(githubRead("/user", Redacted.make(tokens.access_token))), (response) =>
+      readBody(response, UserSchema),
+    ),
+  );
+  const githubUserId = String(githubUser.id);
+  const now = yield* Clock.currentTimeMillis;
+  const sealed = {
+    accessToken: yield* seal(tokens.access_token, settings.sessionSecret),
+    refreshToken: yield* seal(tokens.refresh_token, settings.sessionSecret),
+    accessTokenExpiresAt: new Date(now + tokens.expires_in * 1000),
+    refreshTokenExpiresAt: new Date(now + tokens.refresh_token_expires_in * 1000),
+    updatedAt: new Date(now),
+  };
+  const client = yield* SqlClient.SqlClient;
+  return yield* client.withTransaction(
+    Effect.gen(function* () {
+      const holders = yield* lockGithubHolders(githubUserId);
+      if (holders.some((holder) => holder.userId !== userId)) return false;
+      const [own] = holders;
+      if (own === undefined) {
+        const id = generateRandomString(ACCOUNT_ID_LENGTH, "a-z", "A-Z", "0-9");
+        yield* insertGithubAccount({ id, userId, githubUserId, ...sealed });
+      } else {
+        yield* writeSealedTokens({ id: own.id, ...sealed });
+      }
+      return true;
+    }),
+  );
+});
+
 function githubAppService(
   settings: GitHubAppSettings | undefined,
   missing: readonly string[],
@@ -1727,7 +1841,7 @@ function githubAppService(
       const answer = yield* Effect.scoped(
         Effect.flatMap(send(request), (response) => readBody(response, ExchangeAnswerSchema)),
       );
-      return "error" in answer ? Option.none() : Option.some(Redacted.make(answer.access_token));
+      return "error" in answer ? Option.none() : Option.some(answer);
     });
 
   /** The user access token revoked, under the App's client credentials. */
@@ -1921,13 +2035,20 @@ function githubAppService(
           url.searchParams.set("code_challenge_method", PKCE_METHOD);
           return url.toString();
         }),
-      authorizedInstallations: (returned) =>
+      authorizedInstallations: (returned, installer) =>
         Effect.gen(function* () {
           const app = yield* ready;
-          const token = yield* exchangeCode(app, returned);
-          if (Option.isNone(token)) return Option.none();
-          const installations = yield* installationsOnToken(token.value);
-          yield* revokeToken(app, token.value);
+          const exchanged = yield* exchangeCode(app, returned);
+          if (Option.isNone(exchanged)) return Option.none();
+          const tokens = exchanged.value;
+          const token = Redacted.make(tokens.access_token);
+          const installations = yield* installationsOnToken(token);
+          // Note that a token without a refresh token is never kept, because no read of the row takes one (`tokenOfRow`).
+          const kept =
+            Option.isSome(installer) && "refresh_token" in tokens
+              ? yield* keepInstallerTokens(app, installer.value, tokens)
+              : false;
+          if (!kept) yield* revokeToken(app, token);
           return Option.some(installations);
         }),
       workspaceRepositories: (organizationId) =>

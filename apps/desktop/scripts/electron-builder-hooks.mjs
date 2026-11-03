@@ -17,7 +17,7 @@ import {
   stapleWithRetry,
 } from "./release-config.mjs";
 
-const ELECTRON_BUILDER_NOTARIZE_ENV = "LUKE_ELECTRON_BUILDER_NOTARIZE";
+const ELECTRON_BUILDER_NOTARIZE_ENV = "APP_ELECTRON_BUILDER_NOTARIZE";
 
 function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);

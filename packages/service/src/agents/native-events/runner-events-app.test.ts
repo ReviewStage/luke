@@ -1169,7 +1169,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             "output-available",
             {
               output:
-                'LUKE_PROBE_SCAN {"uid":1001,"user":"vercel-sandbox","capEff":"0000000000000000","ownEnvHasAccessToken":false,"environsReadable":2,"environsDenied":14,"processesWithAccessToken":[],"filesScanned":0,"filesDenied":0,"jwtSha256":[]}\n',
+                'APP_PROBE_SCAN {"uid":1001,"user":"vercel-sandbox","capEff":"0000000000000000","ownEnvHasAccessToken":false,"environsReadable":2,"environsDenied":14,"processesWithAccessToken":[],"filesScanned":0,"filesDenied":0,"jwtSha256":[]}\n',
               exitCode: 0,
             },
           ],

@@ -61,7 +61,7 @@ const installScriptWrites = (home: string, statements: string, name: Name) => {
     "sh",
     ["-c", `. "${INSTALL_SCRIPT}"; account_paths; ${statements}; cat "$OUT"; rm -rf "\${OUT%/*}"`],
     {
-      env: { PATH: process.env.PATH, HOME: home, OUT: out, LUKE_HOST_INSTALL_LIBRARY: "1" },
+      env: { PATH: process.env.PATH, HOME: home, OUT: out, APP_HOST_INSTALL_LIBRARY: "1" },
       encoding: "utf8",
     },
   );

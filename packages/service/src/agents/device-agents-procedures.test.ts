@@ -11,6 +11,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent, latestTurnsOfReached } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import {
@@ -197,6 +198,7 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
       prompt: null,
       repository: null,
       ...(deviceId === null ? {} : { machine: AGENT_MACHINE.DEVICE, deviceId }),
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { conversationId } = Option.getOrThrow(started).agent;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -344,6 +346,7 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         repository: null,
         machine: AGENT_MACHINE.DEVICE,
         deviceId: host.deviceId,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       });
       const live = (secret: string, deviceId: string) =>
         answerOf(request(secret, PATH.LIVE_AGENTS, { deviceId, version: HOST_VERSION.FLOOR }));

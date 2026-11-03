@@ -9,6 +9,7 @@ import {
   claimChapterGeneration,
 } from "@luke/database/models/pull-request-chapters-store";
 import { accountPreference } from "@luke/database/schemas/preferences";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
@@ -233,6 +234,7 @@ const standing = (
         model: AGENT_DEFAULT_CHOICE.model,
         effort: "low",
         repository: RELAY_FULL_NAME,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
     ).agent;
     yield* updateAgentBranch(owner, agent.id, BRANCH);

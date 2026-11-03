@@ -191,6 +191,7 @@ const openAgent = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   return { userId, agent: started.value.agent };

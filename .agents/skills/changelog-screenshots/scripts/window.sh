@@ -3,7 +3,7 @@ set -euo pipefail
 
 # window.sh <out.png> [electron args...] -- runs the staged build in fixture
 # mode with the given args (`--profile shot-<name>`), captures its real window
-# with shadow and traffic lights, and quits it (LUKE_SHOT_SETTLE seconds after
+# with shadow and traffic lights, and quits it (APP_SHOT_SETTLE seconds after
 # launch, 8 unless set). Frame the capture afterwards
 # with scripts/changelog-screenshot.sh --from.
 #
@@ -23,7 +23,7 @@ park=${TMPDIR:-/tmp}/luke-changelog-park-cursor
 if [[ ! -x $park || $here/park-cursor.swift -nt $park ]]; then
     xcrun swiftc -O -o "$park" "$here/park-cursor.swift"
 fi
-export LUKE_SHOT_SIZE=${LUKE_SHOT_SIZE:-1600x1000}
+export APP_SHOT_SIZE=${APP_SHOT_SIZE:-1600x1000}
 profile=$(mktemp -d /tmp/luke-shot.XXXX)
 # Note that we quit the build and remove its profile on every exit, because a failed capture must not leave either behind.
 # Note that we wait for the build to quit before removing its profile, because it is still writing there as it goes.
@@ -38,8 +38,8 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$(dirname -- "$out")"
 (cd "$worktree/apps/desktop" && ./node_modules/.bin/electron . --user-data-dir="$profile" --fixture smoke "$@" >/tmp/luke-shot-window.log 2>&1 &)
-# Note that LUKE_SHOT_SETTLE gives a shot that stages late (a menu reopened after the activation) longer to draw.
-sleep "${LUKE_SHOT_SETTLE:-8}"
+# Note that APP_SHOT_SETTLE gives a shot that stages late (a menu reopened after the activation) longer to draw.
+sleep "${APP_SHOT_SETTLE:-8}"
 id=0
 owner=0
 for pid in $(pgrep -f "user-data-dir=$profile"); do
@@ -50,8 +50,8 @@ if [[ $id == 0 ]]; then
     printf 'error: no window; see /tmp/luke-shot-window.log\n' >&2
     exit 1
 fi
-export LUKE_SHOT_ZOOM=${LUKE_SHOT_ZOOM:-1}
-expected=$(awk -v w="${LUKE_SHOT_SIZE%x*}" -v z="$LUKE_SHOT_ZOOM" 'BEGIN { printf "%d", w * z * 2 }')
+export APP_SHOT_ZOOM=${APP_SHOT_ZOOM:-1}
+expected=$(awk -v w="${APP_SHOT_SIZE%x*}" -v z="$APP_SHOT_ZOOM" 'BEGIN { printf "%d", w * z * 2 }')
 # Note that we park the pointer on the menu bar, because a window as large as the screen draws a hover wherever the pointer rests.
 "$park"
 key=0

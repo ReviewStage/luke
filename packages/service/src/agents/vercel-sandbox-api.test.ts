@@ -325,7 +325,7 @@ it.effect(
       const { api, command } = yield* commandStarted;
       command.exitCode = 1;
       command.stderr =
-        "agent-runner: RunnerFailed: LUKE_RUNNER_TOKEN is not set (was sk-ant-oat01-abcdefghijklmnopqrstuvwxyz0123)\n";
+        "agent-runner: RunnerFailed: APP_RUNNER_TOKEN is not set (was sk-ant-oat01-abcdefghijklmnopqrstuvwxyz0123)\n";
 
       command.stderr += "bearer was a/b+c\n";
       const tail = yield* api.commandStderrTail(SESSION, command.id, ["a/b+c"]);
@@ -334,7 +334,7 @@ it.effect(
 
       assert.equal(
         tail,
-        "agent-runner: RunnerFailed: LUKE_RUNNER_TOKEN is not set (was [redacted]) bearer was [redacted]",
+        "agent-runner: RunnerFailed: APP_RUNNER_TOKEN is not set (was [redacted]) bearer was [redacted]",
       );
       assert.equal(yield* silent.api.commandStderrTail(SESSION, silent.command.id), undefined);
     }),

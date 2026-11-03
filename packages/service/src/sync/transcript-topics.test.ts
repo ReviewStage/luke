@@ -7,9 +7,6 @@ import {
   readAgentQueue,
   takeQueuedMessage,
 } from "@luke/database/models/agent-queue-store";
-import { writeDelegation } from "@luke/database/models/agent-store";
-import { fillChildTitle } from "@luke/database/models/child-titles";
-import { childConversationId } from "@luke/database/models/ids";
 import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { agentTable } from "@luke/database/schemas/agent";
@@ -21,7 +18,6 @@ import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { CURSOR_START, transcriptNow, transcriptPast } from "../agents/coder-host/transcript.js";
-import { openChildConversation } from "../agents/eve-host/conversation.js";
 import {
   AssistantMessageBuilder,
   MESSAGE_ROLE,
@@ -46,10 +42,8 @@ import type { LiveParams } from "./live-query.js";
  * holds for a developer's line, a turn queued, started, and settled, and the
  * journal it writes, which notify the conversation, a turn the agent's, its
  * task's, and its workspace's too, so every view of the agent's status
- * hears it; and for a worker opened, its delegation recorded, and its title
- * filled, which notify the agent's own conversation, whose transcript lists
- * its workers. A transcript read held on Sync answers the agent's
- * message within a coalesce window of the write.
+ * hears it. A transcript read held on Sync answers the agent's message
+ * within a coalesce window of the write.
  *
  * Synthetic accounts, workspaces, tasks, agents, and turns throughout.
  */
@@ -203,37 +197,6 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
             at: NOW,
           }),
           agentTopics,
-          params,
-        );
-      }),
-  );
-
-  it.effect(
-    "a worker opened, its delegation recorded, and its title filled each notify the agent's own conversation, which the transcript of the agent and of the worker wake on",
-    () =>
-      Effect.gen(function* () {
-        const { target, params } = yield* openAgent;
-        const callId = `call_${randomUUID()}`;
-        const workerId = childConversationId(target.conversationId, callId);
-        const worker: readonly SyncTopic[] = [
-          [TOPIC.CONVERSATION, workerId],
-          [TOPIC.CONVERSATION, target.conversationId],
-        ];
-        const workersRead = { ...params, conversationId: workerId };
-
-        yield* wakesTheTranscript(
-          openChildConversation(target, workerId, "researcher"),
-          worker,
-          params,
-        );
-        yield* wakesTheTranscript(
-          writeDelegation(workerId, callId, { model: "anthropic/claude-opus-5.5", effort: "high" }),
-          [[TOPIC.CONVERSATION, target.conversationId]],
-          workersRead,
-        );
-        yield* wakesTheTranscript(
-          fillChildTitle(target, workerId, "Invite research"),
-          worker,
           params,
         );
       }),

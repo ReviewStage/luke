@@ -31,7 +31,7 @@ import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../wri
  * second send waits on the claim holding nothing and reaches eve after it,
  * and a task's finish or an agent's delete reads the line as work under way
  * without waiting. This file runs in CI's Postgres job, where
- * `LUKE_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
+ * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
 const SENDER = { kind: MESSAGE_SENDER.LUKE } as const;

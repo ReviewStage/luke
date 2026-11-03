@@ -73,7 +73,7 @@ const GITHUB = { HOST: "github.com", USER: "x-access-token" } as const;
 const CREDENTIAL_HELPER_KEY = "credential.https://github.com.helper";
 
 /** The variable the repository's helper script reads the helper from, so no path is spliced into shell text. */
-const HELPER_VARIABLE = "LUKE_GIT_CREDENTIAL_HELPER";
+const HELPER_VARIABLE = "APP_GIT_CREDENTIAL_HELPER";
 
 /**
  * What sets gh's helper in the agent's repository, run in it: any helper

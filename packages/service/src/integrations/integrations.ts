@@ -11,7 +11,7 @@
  * from and the one naming the accounts it is offered to
  * (`integration-connect.ts`) and the one that holds it to one account, the
  * server every agent's connection is opened to and what the model is told of
- * it (`integration-connection.ts`), and, where its grant names no account,
+ * it (`connection-door.ts`), and, where its grant names no account,
  * where it answers whose account a token is (`integrations-procedures.ts`).
  * Its routes,
  * its row, and its landing page are the same for every provider. Every tool
@@ -441,9 +441,8 @@ export const INTEGRATION = {
 /**
  * What an agent is told of one integration's connection: its description and,
  * where the member holds more than one account there, the note naming which
- * account this one is. The one formula eve's connection
- * (`integration-connection.ts`) and the connection door's MCP server
- * (`connection-door.ts`) both say.
+ * account this one is, as the connection door's MCP server
+ * (`connection-door.ts`) says it.
  */
 export function integrationInstructions(
   provider: IntegrationProvider,

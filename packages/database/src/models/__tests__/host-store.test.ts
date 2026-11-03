@@ -14,6 +14,7 @@ import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { task } from "../../schemas/task.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import {
   createAgent,
@@ -193,6 +194,7 @@ it.layer(getTestDB())("the host store", (it) => {
             planSnapshot: "# Invitations\n",
             prompt: null,
             repository: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             ...runsOn,
           }),
         );

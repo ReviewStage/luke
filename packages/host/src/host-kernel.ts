@@ -46,7 +46,7 @@ export interface HostKernel {
  * — so it stops at the packaging boundary rather than shipping inside a signed
  * binary.
  */
-export const ACCOUNT_BASE_URL_VARIABLE = "LUKE_ACCOUNT_BASE_URL";
+export const ACCOUNT_BASE_URL_VARIABLE = "APP_ACCOUNT_BASE_URL";
 
 const ACCOUNT_BASE_URL = `${LINK_ORIGIN}/api/auth`;
 

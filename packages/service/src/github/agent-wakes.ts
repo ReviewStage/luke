@@ -106,7 +106,7 @@ import {
  *
  * That wait is the fourth thing told: every check on the pull request's
  * head finished, told only to an agent at work on it, so the message ends
- * the `sleep` it waits in after a push (`coder-host/sleep.ts`) as any
+ * the wakeup it waits on after a push (`coder-host/instructions.ts`) as any
  * message steered into its turn does, rather than the agent holding its
  * sandbox up to watch CI. A check suite completed (all of its check runs
  * completed, with a conclusion), a check run completed, or a commit status

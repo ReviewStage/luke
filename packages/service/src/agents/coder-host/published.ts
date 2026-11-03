@@ -42,13 +42,11 @@ import { CODER } from "./bounds.js";
 /**
  * published.ts -- what a coding agent published: the branch its sandbox stands on and the pull request from it, confirmed on GitHub.
  *
- * The agent reaches GitHub through `git` and `gh` in its shell alone, and
- * the branch it is on as a turn ends is the one its pull request is on,
- * whatever it cut, switched, or deleted on the way: the session's turn-end
- * hook reads that branch off the checkout and writes it on the agent's row
- * (`coder-host/host.ts`'s `recordBranch`), and this module reads the row.
- * A row with no branch, as before the first turn ends in the sandbox or
- * where the checkout stood detached, published nothing, and GitHub is not
+ * The agent pushes through `git` in its shell, and the service opens its
+ * pull request and writes the branch it was opened from on the agent's row
+ * (`pull-request.ts`'s `recordOpened`), and this module reads the row.
+ * A row with no branch, as before the agent opens its pull request,
+ * published nothing, and GitHub is not
  * asked. GitHub then says what stands, once the installation of the task's
  * workspace is confirmed to reach the repository as a Start confirms it,
  * on a token minted for that one repository with pull requests read: a row

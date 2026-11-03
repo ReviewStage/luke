@@ -9,6 +9,7 @@ import { queueMacCommand } from "@luke/database/models/mac-command-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { inboxItem } from "@luke/database/schemas/inbox";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
@@ -369,6 +370,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const { agent } = Option.getOrThrow(coder);
         const tab = yield* upsertBrowserTab({
@@ -598,6 +600,7 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(started));
         const posted = yield* postInboxThread(
@@ -684,6 +687,7 @@ it.layer(getTestDB())("a workspace's channels list's live read", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(started));
         const posted = yield* postInboxThread(
@@ -813,6 +817,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(started));
         const { agent } = started.value;
@@ -1002,6 +1007,7 @@ it.layer(getTestDB())("a plan's and an agent's inbox live reads", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(started));
         const scopes = [

@@ -77,7 +77,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
       repository,
       machine: AGENT_MACHINE.DEVICE,
       deviceId,
-      ...(options.runtime === undefined ? undefined : { runtime: options.runtime }),
+      runtime: options.runtime ?? CONVERSATION_RUNTIME.CLAUDE_CODE,
       ...(options.onMacLogin === true ? { payer: AGENT_PAYER.MAC_SIGN_IN } : undefined),
     });
     const { agent } = Option.getOrThrow(started);

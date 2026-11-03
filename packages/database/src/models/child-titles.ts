@@ -18,32 +18,6 @@ import type { ConversationTarget } from "./writer.js";
 
 type ChildTitleEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
-const fillTitle = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    parentConversationId: Schema.String,
-    childConversationId: Schema.String,
-    title: Schema.String,
-  }),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, parentConversationId, childConversationId, title }) =>
-    Database.use((db) =>
-      db
-        .update(conversations)
-        .set({ title })
-        .where(
-          and(
-            eq(conversations.id, childConversationId),
-            eq(conversations.userId, userId),
-            eq(conversations.parentConversationId, parentConversationId),
-            isNull(conversations.title),
-            isNull(conversations.deletedAt),
-          ),
-        )
-        .returning({ id: conversations.id }),
-    ),
-});
-
 const findTitles = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -67,23 +41,6 @@ const findTitles = SqlSchema.findAll({
         ),
     ),
 });
-
-/** The title written on this child of the account's conversation where it has none yet; answers whether it was written. */
-export function fillChildTitle(
-  parent: ConversationTarget,
-  childConversationId: string,
-  title: string,
-): ChildTitleEffect<boolean> {
-  return Effect.map(
-    fillTitle({
-      userId: parent.userId,
-      parentConversationId: parent.conversationId,
-      childConversationId,
-      title,
-    }),
-    (rows) => rows.length > 0,
-  );
-}
 
 /** The title of each of these children of the account's conversation that has one, by child; none asked, none read. */
 export function childTitlesOf(

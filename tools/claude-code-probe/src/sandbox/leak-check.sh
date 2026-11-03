@@ -26,6 +26,6 @@ shadow_readable=$(flag head -c 1 /etc/shadow)
 anthropic_http=$(curl -s -o /dev/null -w '%{http_code}' -m 15 -X POST https://api.anthropic.com/v1/messages \
   -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d '{}' 2>/dev/null)
 
-printf 'LUKE_PROBE_LEAK_CHECK {"user":"%s","sudo":%s,"env_token":%s,"proc_environ_with_token":%d,"files_with_token_shape":%d,"agent_home_listable":%s,"cap_eff":"%s","shadow_readable":%s,"anthropic_http":"%s"}\n' \
+printf 'APP_PROBE_LEAK_CHECK {"user":"%s","sudo":%s,"env_token":%s,"proc_environ_with_token":%d,"files_with_token_shape":%d,"agent_home_listable":%s,"cap_eff":"%s","shadow_readable":%s,"anthropic_http":"%s"}\n' \
   "$user" "$sudo" "$env_token" "$proc_environ_with_token" "$files_with_token_shape" "$agent_home_listable" \
   "${cap_eff:-unknown}" "$shadow_readable" "${anthropic_http:-000}"

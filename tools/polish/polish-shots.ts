@@ -35,7 +35,7 @@
  * `pnpm package:dir` makes, because that bundle's Node inspector fuse is
  * burnt off (`electron-builder-config.mjs`) and Playwright attaches through
  * the inspector. Each launch runs as a named instance of its own
- * (`LUKE_INSTANCE`), so it holds a lock and a state folder no other launch
+ * (`APP_INSTANCE`), so it holds a lock and a state folder no other launch
  * shares and never replaces the Vespin a developer has open; the folder is
  * deleted once that launch has exited, which it is made to do past its quit
  * guard and so leaves its state unclosed. The motion tokens are zeroed as a capture run
@@ -584,7 +584,7 @@ async function shootDesktop(
         "--profile",
         shot.scene.profile,
       ],
-      env: { ...process.env, LUKE_INSTANCE: instance },
+      env: { ...process.env, APP_INSTANCE: instance },
       timeout: READY_TIMEOUT_MS,
     })
     // Note that Playwright kills a launch it gave up on, so the folder that launch may have made goes with it.

@@ -31,8 +31,6 @@
   "src/agents/agent-pull-request-procedures.test.ts": 2412,
   "src/agents/agent-runtime/agent-servers.test.ts": 2297,
   "src/agents/agent-runtime/prepare-script.test.ts": 860,
-  "src/agents/agent-runtime/sandbox-idle.test.ts": 152,
-  "src/agents/agent-runtime/sandbox-resume.test.ts": 31,
   "src/agents/agents-procedures.test.ts": 3084,
   "src/agents/attached-files.test.ts": 21,
   "src/agents/browser/agent-browser.test.ts": 106,

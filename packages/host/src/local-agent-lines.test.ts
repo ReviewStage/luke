@@ -83,7 +83,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
     readonly env: Readonly<Record<string, string>>;
   }) => ({
     command: node,
-    args: [env.LUKE_RUNNER_TOKEN ?? ""],
+    args: [env.APP_RUNNER_TOKEN ?? ""],
     env: {},
   }),
   tools: {
@@ -306,7 +306,7 @@ const launching = (workStands: boolean) =>
                 firstSequence: 0,
               },
             },
-            secrets: { env: { LUKE_RUNNER_TOKEN: "runner-secret" }, stdin: RESUMING_LINES },
+            secrets: { env: { APP_RUNNER_TOKEN: "runner-secret" }, stdin: RESUMING_LINES },
           });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES:
           if (init?.method === "POST") {

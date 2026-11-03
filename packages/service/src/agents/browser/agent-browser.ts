@@ -4,7 +4,7 @@
  * A sandbox is found as the Terminal tab finds it, by the eve session it is
  * tagged with (`vercel-sandbox-api.ts`): a root session's own id, which a
  * worker's session names as its root, since a worker works in its parent's
- * sandbox (`agent-runtime/role.ts`'s `SANDBOX_POLICY.PARENT`). The brain's
+ * sandbox. The brain's
  * sandbox and a coding agent's are reached alike. Making sure of the
  * browser resumes a stopped sandbox, as an agent's own step would, waits for
  * it to run, and runs the start (`sandbox-browser.ts`), which attaches to a

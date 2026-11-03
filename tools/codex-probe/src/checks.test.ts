@@ -204,7 +204,7 @@ describe("judge over the token's seats", () => {
 
 describe("readScan", () => {
   it("reads the scanner's line out of a command's surrounding output", () => {
-    const line = `LUKE_PROBE_SCAN ${JSON.stringify({ ...CLEAN_SCAN, processesWithAccessToken: [{ pid: 7, comm: "codex" }] })}`;
+    const line = `APP_PROBE_SCAN ${JSON.stringify({ ...CLEAN_SCAN, processesWithAccessToken: [{ pid: 7, comm: "codex" }] })}`;
     expect(readScan(`noise\n${line}\nmore`)).toEqual({
       ...CLEAN_SCAN,
       processesWithAccessToken: ["7:codex"],
