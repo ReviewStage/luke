@@ -16,7 +16,7 @@ import { bayerAt, fitCanvas, heldStill, paintLoop, roleChannels } from "./landin
  * Decorative: a canvas with no words of its own, which a reader passes over.
  */
 
-/** Cells across the foot, which a desktop's 1440px draws 6px apart, and across the 404's numerals; and how much of its cell a dot fills. */
+/** Cells across the foot, which a desktop's 1440px draws about 5px apart between its rails, and across the 404's numerals; and how much of its cell a dot fills. */
 const GRID = { ACROSS: 240, NUMERAL_ACROSS: 140, DOT: 0.42, LEAST: 1.5 } as const;
 
 /** How wide the wordmark runs across the foot, and how far down its top stands. */
