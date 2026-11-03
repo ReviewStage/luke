@@ -929,7 +929,7 @@ async function main(): Promise<void> {
 
   // Playwright is looked for first, so a machine without it fails before the long builds.
   const playwright = loadPlaywright();
-  const catalogBuild = mkdtempSync(path.join(tmpdir(), "luke-polish-catalog-"));
+  const catalogBuild = mkdtempSync(path.join(tmpdir(), "polish-catalog-"));
   const served: Served[] = [];
   let browser: PlaywrightBrowser | undefined;
   try {

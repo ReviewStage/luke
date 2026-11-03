@@ -27,13 +27,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const read = yield* settingsOver({
-        [SENTRY_APP_ENVIRONMENT.SLUG]: " luke ",
+        [SENTRY_APP_ENVIRONMENT.SLUG]: " vespin ",
         [SENTRY_APP_ENVIRONMENT.CLIENT_ID]: "client-id",
         [SENTRY_APP_ENVIRONMENT.CLIENT_SECRET]: "not-a-real-secret\n",
       });
 
       assert.ok(Result.isSuccess(read));
-      assert.equal(read.success.slug, "luke");
+      assert.equal(read.success.slug, "vespin");
       assert.equal(read.success.clientId, "client-id");
       assert.equal(Redacted.value(read.success.clientSecret), "not-a-real-secret");
     }),

@@ -22,12 +22,12 @@ import { PINS, PROBE_SANDBOX } from "./pins.js";
 const { AGENT_USER, ROOT, CHECKOUT } = PROBE_SANDBOX;
 
 /** A name for `$0` when a script runs under `bash -c`, so `$1` is the first argument. */
-export const SCRIPT_NAME = "luke-probe";
+export const SCRIPT_NAME = "agent-probe";
 
 /** The commit identity the agent's commits carry; the probe's own, never the developer's. */
 const PROBE_COMMITTER = {
   NAME: "Vespin probe",
-  EMAIL: "luke-probe@users.noreply.github.com",
+  EMAIL: "agent-probe@users.noreply.github.com",
 } as const;
 
 /** What P03 would add to the image, run as root before the checkout. */

@@ -8,11 +8,11 @@
     ],
     [
       "set-cookie",
-      "luke.session_token=abc; Path=/; HttpOnly; SameSite=Lax"
+      "app.session_token=abc; Path=/; HttpOnly; SameSite=Lax"
     ],
     [
       "set-cookie",
-      "luke.session_data=def; Path=/; HttpOnly"
+      "app.session_data=def; Path=/; HttpOnly"
     ],
     [
       "x-better-auth",

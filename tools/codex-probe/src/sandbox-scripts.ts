@@ -15,11 +15,11 @@ import { AGENT_USER, CHATGPT_PROVIDER, CODEX, PROBE_MCP } from "./app-server.js"
 
 /** Where the probe's own scripts live in the sandbox. */
 export const PROBE_FILES = {
-  DIRECTORY: "/opt/luke-probe",
-  SCANNER: "/opt/luke-probe/scan.mjs",
+  DIRECTORY: "/opt/agent-probe",
+  SCANNER: "/opt/agent-probe/scan.mjs",
   MCP: PROBE_MCP.SCRIPT,
-  CI_WATCH: "/opt/luke-probe/ci-watch",
-  REPOSITORY: "/srv/luke-probe-repo",
+  CI_WATCH: "/opt/agent-probe/ci-watch",
+  REPOSITORY: "/srv/agent-probe-repo",
 } as const;
 
 /** The marker a scanner's report line starts with, so it is found inside a command's output. */
@@ -97,12 +97,12 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   try { message = JSON.parse(line); } catch { return; }
   if (message.id === undefined) return;
   if (message.method === "initialize") {
-    send({ id: message.id, result: { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "luke-probe", version: "1" } } });
+    send({ id: message.id, result: { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "agent-probe", version: "1" } } });
   } else if (message.method === "tools/list") {
     send({ id: message.id, result: { tools: [{ name: "${PROBE_MCP.TOOL}", description: "Echo the text back. Vespin's probe uses it to prove MCP tool calls work.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }] } });
   } else if (message.method === "tools/call") {
     const text = String(message.params?.arguments?.text ?? "");
-    send({ id: message.id, result: { content: [{ type: "text", text: "luke-probe-echo:" + text + " access_token_in_env=" + ("${CHATGPT_PROVIDER.ENV_KEY}" in process.env) }] } });
+    send({ id: message.id, result: { content: [{ type: "text", text: "agent-probe-echo:" + text + " access_token_in_env=" + ("${CHATGPT_PROVIDER.ENV_KEY}" in process.env) }] } });
   } else {
     send({ id: message.id, error: { code: -32601, message: "method not found" } });
   }
@@ -129,7 +129,7 @@ export const PROBE_SCRIPTS: readonly { readonly path: string; readonly source: s
 
 /** Where a script is staged by the SDK's file write (as the default user) before root installs it. */
 export function stagedPath(path: string): string {
-  return `/tmp/luke-probe-stage-${path.split("/").at(-1) ?? "file"}`;
+  return `/tmp/agent-probe-stage-${path.split("/").at(-1) ?? "file"}`;
 }
 
 /**

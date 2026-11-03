@@ -25,7 +25,7 @@ const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
 /** The words the probe's turns end on (`tools/claude-code-probe/src/verdict.ts`'s `TURN_DONE`). */
-export const TURN_DONE = { FIRST: "LUKE-PROBE-TURN-1-DONE" } as const;
+export const TURN_DONE = { FIRST: "AGENT-PROBE-TURN-1-DONE" } as const;
 
 /** The marker of the probe's stopped command (`tools/claude-code-probe/src/turns.ts`'s `STOPPED_COMMAND`). */
 export const STOPPED_COMMAND = "sleep 600";
@@ -124,7 +124,7 @@ const BACKGROUND_SLEEP: BackgroundTaskSummary = {
   type: "shell",
   status: "running",
   description: "sleep 45",
-  command: `sleep 45 && echo luke-probe-background-${NONCE}`,
+  command: `sleep 45 && echo agent-probe-background-${NONCE}`,
 };
 export const WAKEUP: SessionCronSummary = {
   id: "cron_1",
@@ -154,13 +154,13 @@ export type Step =
  */
 export const WORKFLOW_TURN: readonly Step[] = [
   { emit: INIT },
-  { emit: toolUse("Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }) },
+  { emit: toolUse("Write", { file_path: `agent-probe/${NONCE}.txt`, content: NONCE }) },
   { emit: toolResult("toolu_Write", "File created") },
-  { emit: toolUse("Bash", { command: "bash /opt/luke-probe/leak-check.sh" }) },
+  { emit: toolUse("Bash", { command: "bash /opt/agent-probe/leak-check.sh" }) },
   { emit: toolResult("toolu_Bash", 'APP_PROBE_LEAK_CHECK {"user":"agent","sudo":false}\n') },
   {
     emit: toolUse("Bash", {
-      command: `sleep 45 && echo luke-probe-background-${NONCE}`,
+      command: `sleep 45 && echo agent-probe-background-${NONCE}`,
       run_in_background: true,
     }),
   },
@@ -174,7 +174,7 @@ export const WORKFLOW_TURN: readonly Step[] = [
   },
   { stopHook: { background_tasks: [BACKGROUND_SLEEP], session_crons: [WAKEUP] } },
   { emit: result("success") },
-  { emit: partial("LUKE-PROBE-") },
+  { emit: partial("AGENT-PROBE-") },
   { emit: partial("TURN-1-DONE") },
   { emit: said(TURN_DONE.FIRST) },
   { stopHook: NOTHING_IN_FLIGHT },

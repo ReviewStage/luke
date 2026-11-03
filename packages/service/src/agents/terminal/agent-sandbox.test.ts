@@ -90,8 +90,7 @@ function vercel(
         const tmuxArgs = args.slice(scriptAt + 2);
         if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
         if (tmuxArgs[0] === "new-session") return commandStream(0);
-        // A command on one shell names it by its id, its first argument.
-        const named = tmuxArgs[0] === SHELL;
+        const named = tmuxArgs.some((arg) => arg.startsWith(`=terminal-${SHELL}`));
         // The shell check exits its own code for a session tmux does not hold, or what a tmux that would not start exits.
         if (args[scriptAt]?.includes("has-session"))
           return commandStream(named ? 0 : shellCheckExit);

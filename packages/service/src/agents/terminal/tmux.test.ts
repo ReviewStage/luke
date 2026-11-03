@@ -67,10 +67,8 @@ test("starting, naming, and ending a shell target its session exactly and carry 
     assert.ok(!scriptOf(ask)?.includes(hostile), "nothing typed is spliced into the script");
   }
   // tmux would take a bare name as a prefix of another session's; an option command takes the session's own pane.
-  assert.ok(started.args.includes(`${exact}:`));
-  assert.match(scriptOf(renamed) ?? "", /-t "=\$session:"/);
-  assert.match(scriptOf(killed) ?? "", /-t "=\$session"/);
-  assert.ok(renamed.args.includes(SHELL_A) && killed.args.includes(SHELL_A));
+  assert.ok(started.args.includes(`${exact}:`) && renamed.args.includes(`${exact}:`));
+  assert.ok(killed.args.includes(exact));
   assert.equal(started.args.at(-1), hostile);
   assert.equal(renamed.args.at(-1), hostile);
   assert.ok(startTerminal(SHELL_A, undefined).args.includes(TMUX.START_DIRECTORY));
@@ -96,12 +94,12 @@ test("every command runs with every capability dropped, on a tmux server of its 
   }
 });
 
-test("a list reads back a tab's shells oldest first, named and marked running as they stand, those a server from before the rename holds among them, and nothing else tmux holds", () => {
+test("a list reads back a tab's shells oldest first, named and marked running as they stand, and nothing else tmux holds", () => {
   const stdout = [
     listed(`terminal-${SHELL_B}`, 200, "dev server", "node", "/workspace/repository/apps/web"),
     listed("main", 50, "", "bash", "/root"),
     listed("terminal-not-an-id", 60, "", "bash", "/root"),
-    listed(`luke-${SHELL_A}`, 100, "", "zsh", "/workspace/repository"),
+    listed(`terminal-${SHELL_A}`, 100, "", "zsh", "/workspace/repository"),
     "",
   ].join("\n");
 

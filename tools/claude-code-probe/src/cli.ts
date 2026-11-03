@@ -86,7 +86,7 @@ const SOURCES = {
 } as const;
 
 /** Where the sources are written before root installs them, since the file API writes as the default user. */
-const UPLOAD_DIRECTORY = "/tmp/luke-probe-upload";
+const UPLOAD_DIRECTORY = "/tmp/agent-probe-upload";
 
 const WAIT = {
   INIT: Duration.minutes(3),
@@ -102,7 +102,7 @@ const WAIT = {
 const FINDING_MAX_CHARS = 4_000;
 
 /** What the run's own consumer offers once a launch's output has ended, which no SDK message is. */
-const STREAM_END: WireRecord = { type: "luke_probe_stream_end" };
+const STREAM_END: WireRecord = { type: "agent_probe_stream_end" };
 
 const LAUNCH = { FIRST: "first", RESUMED: "resumed" } as const;
 type Launch = (typeof LAUNCH)[keyof typeof LAUNCH];
@@ -177,8 +177,8 @@ function scrubberOf(settings: Settings): Sanitizer {
   return sanitizer({
     secrets: [Redacted.value(settings.claudeToken), Redacted.value(settings.githubToken)],
     replacements: [
-      [settings.repository, "luke-probe-owner/throwaway"],
-      [owner, "luke-probe-owner"],
+      [settings.repository, "agent-probe-owner/throwaway"],
+      [owner, "agent-probe-owner"],
       [homedir(), "~"],
       // Note that a login too short to be told from a word is left alone, since replacing it would garble the stream.
       [userInfo().username.length >= MIN_LOGIN_CHARS ? userInfo().username : "", "developer"],
@@ -429,7 +429,7 @@ const firstLaunch = Effect.fn("probe/firstLaunch")(function* (
   if (yield* waitFor(driver, WAIT.FIRST_TURN, says(TURN_DONE.FIRST))) {
     yield* waitFor(driver, WAIT.RESULT, isResult);
   }
-  const branch = `luke-probe/${recording.nonce}`;
+  const branch = `agent-probe/${recording.nonce}`;
   const remote = yield* run(scrub, recording, sandbox, "the pushed branch on GitHub", {
     script: 'git ls-remote --heads origin "$1"',
     args: [branch],
@@ -720,7 +720,7 @@ const main = Effect.gen(function* () {
   );
   const sandbox = yield* attempt(scrub, "open the sandbox", () =>
     Sandbox.create({
-      name: `luke-probe-${recording.nonce}`,
+      name: `agent-probe-${recording.nonce}`,
       timeout: PROBE_SANDBOX.TIMEOUT_MS,
       resources: { vcpus: PROBE_SANDBOX.VCPUS },
       persistent: true,

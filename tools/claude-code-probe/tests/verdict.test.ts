@@ -53,7 +53,7 @@ function init(sessionId: string, apiKeySource = "none"): WireValue {
 }
 
 function account(subscriptionType: string): WireValue {
-  return { type: "luke_probe_account", subscriptionType, apiProvider: "firstParty" };
+  return { type: "agent_probe_account", subscriptionType, apiProvider: "firstParty" };
 }
 
 function toolUse(name: string, input: WireValue): WireValue {
@@ -101,8 +101,8 @@ function firstLaunch(
   return [
     init(SESSION, overrides.apiKeySource),
     account("max"),
-    toolUse("Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }),
-    toolUse("Bash", { command: "bash /opt/luke-probe/leak-check.sh" }),
+    toolUse("Write", { file_path: `agent-probe/${NONCE}.txt`, content: NONCE }),
+    toolUse("Bash", { command: "bash /opt/agent-probe/leak-check.sh" }),
     leakResult(
       overrides.agentReport ?? {
         user: "agent",
@@ -136,7 +136,7 @@ function observations(overrides: Partial<ProbeObservations> = {}): ProbeObservat
     ],
     resumedLaunch: [
       init(SESSION),
-      said(`luke-probe/${NONCE}.txt\n${TURN_DONE.RESUMED}`),
+      said(`agent-probe/${NONCE}.txt\n${TURN_DONE.RESUMED}`),
       result(SESSION),
     ],
     terminalAsToday: TERMINAL_CAPS_DROPPED,
@@ -283,7 +283,7 @@ describe("verdict", () => {
           observations({
             resumedLaunch: [
               init(SESSION),
-              said(`luke-probe/${NONCE}.txt\n${TURN_DONE.RESUMED}`),
+              said(`agent-probe/${NONCE}.txt\n${TURN_DONE.RESUMED}`),
               result(SESSION, "error_during_execution"),
             ],
           }),

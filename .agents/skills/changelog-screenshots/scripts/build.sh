@@ -4,16 +4,16 @@ set -euo pipefail
 # build.sh <commit> <staging.patch> -- checks a throwaway worktree out at a
 # release commit, applies the shot staging patch, and builds the desktop app.
 #
-# The worktree is $SHOTS_WORKTREE (default ~/Developer/luke-changelog-shots),
-# added from the clone at $APP_REPO (default ~/Developer/luke) the first time.
+# The worktree is $SHOTS_WORKTREE (default ~/Developer/changelog-shots),
+# added from the clone at $APP_REPO (default ~/Developer/vespin) the first time.
 # Every build wipes it, node_modules included, because switching releases over
 # an old install leaves packages missing. APP_SHOT_PATCH_DIST=0 skips the
 # post-build window patches, for the notch era.
 
 commit=${1:?usage: build.sh <commit> <staging.patch>}
 patch=${2:?usage: build.sh <commit> <staging.patch>}
-repo=${APP_REPO:-$HOME/Developer/luke}
-worktree=${SHOTS_WORKTREE:-$HOME/Developer/luke-changelog-shots}
+repo=${APP_REPO:-$HOME/Developer/vespin}
+worktree=${SHOTS_WORKTREE:-$HOME/Developer/changelog-shots}
 here=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ ! -d $worktree ]]; then
@@ -32,12 +32,12 @@ git checkout --quiet --force --detach "$commit"
 git clean -fdqx -e .build
 git apply "$patch"
 find . -name node_modules -type d -prune -exec rm -rf {} +
-pnpm install --frozen-lockfile >/tmp/luke-shots-install.log 2>&1 || { tail -20 /tmp/luke-shots-install.log; exit 1; }
+pnpm install --frozen-lockfile >/tmp/release-shots-install.log 2>&1 || { tail -20 /tmp/release-shots-install.log; exit 1; }
 cd apps/desktop
 # Note that we let the bundle budget move, because the staging embeds pictures a release build never carries.
 # The variable only matters for releases cut before the budget was removed; a later checkout has no gate and ignores it.
-(APP_UPDATE_BUNDLE_BUDGET=1 pnpm build:native && APP_UPDATE_BUNDLE_BUDGET=1 pnpm build) >/tmp/luke-shots-build.log 2>&1 ||
-    { tail -30 /tmp/luke-shots-build.log; exit 1; }
+(APP_UPDATE_BUNDLE_BUDGET=1 pnpm build:native && APP_UPDATE_BUNDLE_BUDGET=1 pnpm build) >/tmp/release-shots-build.log 2>&1 ||
+    { tail -30 /tmp/release-shots-build.log; exit 1; }
 # Note that a notch-era build (before 0.7.0) skips the window patches, because it is captured with its own --capture-evidence and its staging isolates its own state.
 if [[ ${APP_SHOT_PATCH_DIST:-1} == 1 ]]; then
     bash "$here/patch-dist.sh"

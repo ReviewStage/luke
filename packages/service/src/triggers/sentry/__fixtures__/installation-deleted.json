@@ -5,7 +5,7 @@
     "installation": {
       "status": "installed",
       "organization": { "slug": "acme" },
-      "app": { "uuid": "2ebf071f-28df-4989-aca9-c37c763b278f", "slug": "luke" },
+      "app": { "uuid": "2ebf071f-28df-4989-aca9-c37c763b278f", "slug": "vespin" },
       "uuid": "a8e5d37a-696c-4c54-adb5-b3f28d64c7de"
     }
   },

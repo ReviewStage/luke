@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 /** A `/proc` that cannot be read, which reads as a process of the agent's running. */
-export const UNREAD_PROC = "/nonexistent/luke-proc";
+export const UNREAD_PROC = "/nonexistent/agent-proc";
 
 /** The whole capability set, as the sandbox's own processes hold it. */
 const FULL_SET = "000001ffffffffff";
@@ -45,7 +45,7 @@ function statusFile({ pid, parent, emptied, session = pid }: FakeProcess): strin
 export const fakeProc = (processes: readonly FakeProcess[]) =>
   Effect.acquireRelease(
     Effect.sync(() => {
-      const root = mkdtempSync(join(tmpdir(), "luke-proc-"));
+      const root = mkdtempSync(join(tmpdir(), "agent-proc-"));
       for (const process of processes) {
         mkdirSync(join(root, String(process.pid)));
         writeFileSync(join(root, String(process.pid), "status"), statusFile(process));
