@@ -11,7 +11,7 @@ import {
 } from "@repo/features/github-token-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind } from "@repo/host/contract";
-import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import type { SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { act, createElement } from "react";
