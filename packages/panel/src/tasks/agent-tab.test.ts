@@ -1146,6 +1146,39 @@ test("a teammate's message on a thread is headed by who sent it, what they did a
   );
 });
 
+test("a comment that reached the agent is headed as a comment on the page it is on, its member's words under what it is on, never the instructions the agent was handed", () => {
+  fakeAppBridge({});
+  const container = agentMessageDrawn(
+    {
+      id: "comment-line",
+      role: MESSAGE_ROLE.USER,
+      parts: [
+        {
+          type: "text",
+          text: 'Ada Lovelace sent you a comment thread on the page "Invite funnel" of the task "Invites" to answer (thread 7c6d).\n\nRead the thread and the page with `read_page`, then answer in this thread.',
+        },
+      ],
+      metadata: {
+        channel: "comment",
+        thread_id: "7c6d5e4f-3a2b-4c1d-8e9f-0a1b2c3d4e5f",
+        task_id: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+        page_id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+        page_title: "Invite funnel",
+        quote: "Expired 9",
+        words: "Can this row say how many were sent again?",
+      },
+    },
+    TASK_PAGE,
+    TASK_AGENT,
+    { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: "Ada Lovelace" },
+  );
+  const head = container.querySelector<HTMLElement>("[data-comment-line]");
+  assert.match(head?.textContent ?? "", /^Comment on.*Invite funnel/u);
+  const content = container.querySelector(".message-content")?.textContent ?? "";
+  assert.match(content, /Expired 9\s*Can this row say how many were sent again\?/u);
+  assert.doesNotMatch(content, /read_page/u, "the instructions stay the agent's");
+});
+
 /** The head that folds a GitHub card, by which a reader names it: who did what to which pull request. */
 function cardHead(card: HTMLElement): HTMLElement {
   return card.querySelector<HTMLElement>("summary") ?? assert.fail("The card has no head");

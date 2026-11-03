@@ -85,9 +85,11 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { MESSAGE_BLOCK, messageText } from "@luke/ui/reply-quote";
 import {
   ACTION_RESULT_STATUS,
   type AgentMessageMetadata,
+  type CommentLineMetadata,
   GITHUB_CHECK_CONCLUSION,
   GITHUB_LINE_EVENT,
   type GitHubCheckConclusion,
@@ -1661,6 +1663,27 @@ export function agentMessageOf(message: AgentTranscriptMessage): AgentMessageMet
 export function threadLineOf(message: AgentTranscriptMessage): ThreadLineMetadata | undefined {
   const read = userMetadataOf(message);
   return read?.channel === MESSAGE_CHANNEL.THREAD ? read : undefined;
+}
+
+/**
+ * What a comment thread that reached the agent carries for a window to draw
+ * it by, its member's words among them; nothing for any other line, or for
+ * a comment line kept before it carried them, which draws as the words the
+ * agent read.
+ */
+export function commentLineOf(message: AgentTranscriptMessage): CommentLineMetadata | undefined {
+  const read = userMetadataOf(message);
+  return read?.channel === MESSAGE_CHANNEL.COMMENT && read.words !== undefined ? read : undefined;
+}
+
+/** A comment line's words as a transcript draws them: what its thread is on, quoted, over the member's own words. */
+export function commentLineWords(line: CommentLineMetadata): string {
+  const words = line.words ?? "";
+  if (line.quote === undefined || line.quote === "") return words;
+  return messageText([
+    { kind: MESSAGE_BLOCK.QUOTE, words: line.quote },
+    { kind: MESSAGE_BLOCK.WORDS, lines: words.split("\n") },
+  ]);
 }
 
 /** What GitHub said on the agent's pull request that a line steered into the agent carries; nothing for any other line. */

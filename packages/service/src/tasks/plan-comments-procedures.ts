@@ -359,7 +359,26 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
       : { page: { title: page.value.page.title, newestVersion: page.value.newestVersion } }),
   });
   const threadId = thread.id;
-  yield* handCommentAskOver(seams, request, { userId, to, clientKey, text, threadId, words }).pipe(
+  const shown = page === undefined ? undefined : Option.getOrUndefined(page)?.page;
+  // Note that a thread on a whole page quotes the page's title, which its line names already, so it quotes nothing.
+  const line = {
+    taskId,
+    quote:
+      thread.page !== undefined && thread.page.element === undefined ? undefined : thread.quote,
+    page:
+      thread.page === undefined || shown === undefined
+        ? undefined
+        : { id: thread.page.id, title: shown.title },
+  };
+  yield* handCommentAskOver(seams, request, {
+    userId,
+    to,
+    clientKey,
+    text,
+    threadId,
+    words,
+    line,
+  }).pipe(
     Effect.onError(() =>
       withdrawPlanCommentAsk(taskId, clientKey).pipe(
         Effect.tapError(logStoreFailure),

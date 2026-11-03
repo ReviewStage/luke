@@ -139,6 +139,18 @@ export const GITHUB_LINE_BOUNDS = {
 } as const;
 
 /**
+ * The most a comment line's metadata holds: a comment's words and the quote
+ * of what its thread is on within the bounds a comment keeps them to
+ * (`@luke/features/plan-comment-wire`'s `PLAN_COMMENT_BOUNDS`), which wire,
+ * beneath features, cannot read, and a page's title within a page's.
+ */
+export const COMMENT_LINE_BOUNDS = {
+  WORDS_CHARS: 8_000,
+  QUOTE_CHARS: 2_000,
+  TITLE_CHARS: 80,
+} as const;
+
+/**
  * What a runtime note is about: the words a turn opened with that no one
  * typed, spoke, or sent. The turn's origin names the first three the way the
  * turns table does; the rest are the notes the host hands a turn beside its
@@ -253,10 +265,29 @@ const THREAD_LINE_METADATA = EffectSchema.Struct({
 
 export type ThreadLineMetadata = EffectSchema.Schema.Type<typeof THREAD_LINE_METADATA>;
 
-/** A comment line is a plan's comment thread a member sent the agent to answer: the thread it hands over. */
+/**
+ * A comment line is a comment thread on a plan, or on one of its task's
+ * pages, that reached the agent: the thread it hands over, and, so a window
+ * draws the line from these rather than from the text the model reads, the
+ * task it is on, what it is on (the plan's words, a page's element, or a
+ * page as a whole), the page by its id and title where it is on one, and
+ * the member's own words. Each of these is absent from a line kept before
+ * it was said.
+ */
 const COMMENT_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.COMMENT),
   thread_id: identifier,
+  task_id: EffectSchema.optional(identifier),
+  quote: EffectSchema.optional(
+    EffectSchema.String.check(EffectSchema.isMaxLength(COMMENT_LINE_BOUNDS.QUOTE_CHARS)),
+  ),
+  page_id: EffectSchema.optional(identifier),
+  page_title: EffectSchema.optional(
+    EffectSchema.String.check(EffectSchema.isMaxLength(COMMENT_LINE_BOUNDS.TITLE_CHARS)),
+  ),
+  words: EffectSchema.optional(
+    EffectSchema.String.check(EffectSchema.isMaxLength(COMMENT_LINE_BOUNDS.WORDS_CHARS)),
+  ),
 });
 
 export type CommentLineMetadata = EffectSchema.Schema.Type<typeof COMMENT_LINE_METADATA>;

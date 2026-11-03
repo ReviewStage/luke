@@ -129,6 +129,8 @@ import {
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
   CONTINUE_LABEL,
+  commentLineOf,
+  commentLineWords,
   continuedByIds,
   continuedByTitles,
   delegates,
@@ -189,7 +191,7 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
-import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
+import { CommentLineHead, GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
 import { CHIP_OR_LINK_FRAME, ChipOrLink, linkChip } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
 import {
@@ -1497,9 +1499,15 @@ export function AgentMessage({
   if (github !== undefined) return <GitHubLineRow message={message} line={github} sender={named} />;
   if (message.role === MESSAGE_ROLE.USER) {
     const sentAt = message.sentAt;
-    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent.
+    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent; a comment's by the plan or page it is on, its member's words under what it is on, never the instructions the agent was handed.
     const thread = threadLineOf(message);
-    const shown = thread === undefined ? words : threadLineWords(words, thread.event);
+    const comment = commentLineOf(message);
+    const shown =
+      comment !== undefined
+        ? commentLineWords(comment)
+        : thread === undefined
+          ? words
+          : threadLineWords(words, thread.event);
     // A line open for writing again is written where it stands.
     if (drawnEditor !== undefined) {
       return (
@@ -1518,7 +1526,9 @@ export function AgentMessage({
     // A line anyone but the reader sent (a teammate's, an automation's, the app's) stands at the left under its sender, as another agent's message does, so the reader's own alone stands at the right.
     const received = sender !== undefined;
     const threadHead =
-      thread === undefined ? null : (
+      comment !== undefined ? (
+        <CommentLineHead line={comment} fit={received ? SUBJECT_FIT.OWN : undefined} />
+      ) : thread === undefined ? null : (
         <ThreadLineHead line={thread} words={words} fit={received ? SUBJECT_FIT.OWN : undefined} />
       );
     return (
@@ -1547,7 +1557,8 @@ export function AgentMessage({
               words={shown}
               copyable={shown !== ""}
               messageId={message.id}
-              rewind={shown === "" ? undefined : REWIND_ACTION.EDIT}
+              // Note that a comment's line is drawn from what it carries rather than its words, so it is written again nowhere, as GitHub's is not.
+              rewind={shown === "" || comment !== undefined ? undefined : REWIND_ACTION.EDIT}
             />
           }
         />
