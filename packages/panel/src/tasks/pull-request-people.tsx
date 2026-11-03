@@ -90,7 +90,7 @@ const REVIEW_TONE = {
 export function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span
-      className={`review-state inline-grid place-items-center [&>svg]:size-luke-12 ${REVIEW_TONE[state].ink}`}
+      className={`review-state inline-grid place-items-center [&>svg]:size-ui-12 ${REVIEW_TONE[state].ink}`}
       data-review-state={state}
     >
       {REVIEW_GLYPHS[state]}
@@ -107,7 +107,7 @@ export function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Elemen
 function FaceBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span
-      className={`review-state review-face-badge inline-grid size-review-badge place-items-center rounded-luke-full text-ground data-[review-state=requested]:size-status-dot ${REVIEW_TONE[state].disc}`}
+      className={`review-state review-face-badge inline-grid size-review-badge place-items-center rounded-ui-full text-ground data-[review-state=requested]:size-status-dot ${REVIEW_TONE[state].disc}`}
       data-review-state={state}
     >
       {FACE_GLYPHS[state]}

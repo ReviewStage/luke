@@ -21,11 +21,11 @@ import { ignoredByReplay } from "../session-replay-marks.js";
 
 /** The track: a pill in the switch's track ink that takes its "on" ink while checked. */
 export const SWITCH_TRACK =
-  "peer group/switch relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full border-0 bg-switch-track p-0.5 transition-colors duration-(--luke-duration-hover) ease-motion-exit data-checked:bg-switch-on data-disabled:opacity-disabled cursor-press data-disabled:cursor-default";
+  "peer group/switch relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full border-0 bg-switch-track p-0.5 transition-colors duration-(--ui-duration-hover) ease-motion-exit data-checked:bg-switch-on data-disabled:opacity-disabled cursor-press data-disabled:cursor-default";
 
 /** The thumb: a round of the switch's thumb ink, lifted by its shadow, slid by transform alone, and giving a little under a press held on an enabled switch. */
 export const SWITCH_THUMB =
-  "pointer-events-none block size-4 rounded-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--luke-duration-fast) ease-spring-fast data-checked:translate-x-3.5 group-data-checked/switch:translate-x-3.5 group-[:active:not([data-disabled])]/switch:scale-[0.85]";
+  "pointer-events-none block size-4 rounded-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--ui-duration-fast) ease-spring-fast data-checked:translate-x-3.5 group-data-checked/switch:translate-x-3.5 group-[:active:not([data-disabled])]/switch:scale-[0.85]";
 
 export function ShadcnSwitch({ className, ...props }: SwitchPrimitive.Root.Props) {
   return (

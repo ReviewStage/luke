@@ -3099,7 +3099,7 @@ test("a press outside the review panel closes it, its words kept, and one on a s
       tab.querySelector<HTMLElement>(".luke-anchored-popover") ??
       assert.fail("the panel hangs from Review");
     assert.equal(layer.dataset.side, "below");
-    assert.equal(layer.style.getPropertyValue("--luke-popover-room"), `${768 - 328 - 4 - 8}px`);
+    assert.equal(layer.style.getPropertyValue("--ui-popover-room"), `${768 - 328 - 4 - 8}px`);
 
     writeReview(panel, "Half a thought");
     act(() => {
@@ -3700,7 +3700,7 @@ test("a label chosen stands under the title before GitHub answers, in the colour
       ...tab.querySelectorAll<HTMLElement>(
         ".pull-request-header .pull-request-label > .luke-badge",
       ),
-    ].map((label) => [label.textContent, label.style.getPropertyValue("--luke-badge-fill-light")]);
+    ].map((label) => [label.textContent, label.style.getPropertyValue("--ui-badge-fill-light")]);
 
   act(() =>
     (

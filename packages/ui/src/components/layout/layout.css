@@ -14,6 +14,6 @@
   }
 
   .luke-inline[data-grow-first] > :first-child {
-    flex: 1 1 var(--luke-select-field-width);
+    flex: 1 1 var(--ui-select-field-width);
   }
 }

@@ -78,7 +78,7 @@ import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
 /** How tall a list engine's box stands: capped as every list is, or filling the column it stands in. */
 export const COMBOBOX_LIST_HEIGHT = {
-  /** At most `--luke-combobox-list-max`, as a list under a field stands. */
+  /** At most `--ui-combobox-list-max`, as a list under a field stands. */
   CAPPED: "capped",
   /** Whatever room is left in the flex column it stands in, as a palette's results fill its card. */
   FILL: "fill",
@@ -421,9 +421,7 @@ export function ComboboxList({
         <p className={cn("luke-combobox-empty", COMBOBOX_EMPTY)}>{empty}</p>
       ) : null}
       {note === undefined || note === null ? null : (
-        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-luke-4")}>
-          {note}
-        </div>
+        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-ui-4")}>{note}</div>
       )}
     </div>
   );

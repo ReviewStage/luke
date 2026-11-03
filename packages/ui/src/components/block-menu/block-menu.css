@@ -9,7 +9,7 @@
   }
 
   .luke-block-menu-markdown {
-    font-family: var(--luke-font-mono);
-    font-size: var(--luke-type-caption-size);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-type-caption-size);
   }
 }

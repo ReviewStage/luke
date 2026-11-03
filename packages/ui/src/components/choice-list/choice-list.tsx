@@ -133,7 +133,7 @@ const LIST_LOOK = {
  * where a utility would outrank it.
  */
 const ROW =
-  "luke-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-press transition-[--luke-choice-fill,background-color] duration-(--luke-duration-hover) ease-motion-exit";
+  "luke-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--ui-focus-ring-width))] font-ui text-body text-left cursor-press transition-[--ui-choice-fill,background-color] duration-(--ui-duration-hover) ease-motion-exit";
 
 /**
  * Each look's own row. A pill's corners are half its one-line height
@@ -145,7 +145,7 @@ const ROW =
 const ROW_LOOK = {
   plain: "",
   marked: "",
-  pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--luke-control-height)/2)] text-caption leading-body",
+  pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--ui-control-height)/2)] text-caption leading-body",
   card: "p-0",
 } as const satisfies Record<ChoiceLook, string>;
 
@@ -158,7 +158,7 @@ const ROW_ACROSS = "flex-[1_1_0] items-start";
  * in a radio and a tick in a box.
  */
 const CONTROL =
-  "luke-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--luke-duration-hover) ease-motion-exit";
+  "luke-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--ui-duration-hover) ease-motion-exit";
 
 /**
  * A checked control's fill: the accent, or what picking it means, going
@@ -188,8 +188,8 @@ const CONTROL_INK = {
 const CARD = "luke-choice-card flex flex-col gap-2 p-3 rounded-control";
 
 const CARD_RING = {
-  rest: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border)]",
-  picked: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border-selected)]",
+  rest: "[box-shadow:inset_0_0_0_1px_var(--ui-color-border)]",
+  picked: "[box-shadow:inset_0_0_0_1px_var(--ui-color-border-selected)]",
 } as const;
 
 /** One option: the value it chooses, its words, and what stands beside them. */
@@ -390,7 +390,7 @@ function ChoiceControl({
         // Note that an unsaved credential's radio in a card cannot be picked, so its ring steps back while its label stays readable.
         inCard
           ? "mt-0 self-center [:disabled>&]:opacity-disabled"
-          : "self-start mt-[calc((var(--luke-type-body-leading)-var(--luke-space-16))/2)]",
+          : "self-start mt-[calc((var(--ui-type-body-leading)-var(--ui-space-16))/2)]",
         !checked && "border-muted-foreground",
         checked && (toned ? CONTROL_TONE_FILL : CONTROL_ACCENT_FILL),
         checked && CONTROL_MARK[shape],

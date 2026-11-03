@@ -15,17 +15,17 @@
   /* The thumb stands where the row last measured its chosen option; it
      slides on its transform alone, its box landing at once. */
   .luke-choice-bar-thumb {
-    width: var(--luke-choice-bar-thumb-width);
-    height: var(--luke-choice-bar-thumb-height);
-    transform: translate(var(--luke-choice-bar-thumb-x), var(--luke-choice-bar-thumb-y))
-      scale(var(--luke-choice-bar-thumb-scale-x), var(--luke-choice-bar-thumb-scale-y));
+    width: var(--ui-choice-bar-thumb-width);
+    height: var(--ui-choice-bar-thumb-height);
+    transform: translate(var(--ui-choice-bar-thumb-x), var(--ui-choice-bar-thumb-y))
+      scale(var(--ui-choice-bar-thumb-scale-x), var(--ui-choice-bar-thumb-scale-y));
   }
 
   /* Narrower than its options need, a fill bar shows an option other than
      the chosen one by its glyph alone. Note that it does so only while one
      is chosen, because a clearable bar with none chosen would otherwise
      name none of its options; and that it marks the name it folds
-     (`--luke-choice-bar-name`), which `choice-bar.tsx` reads to raise the
+     (`--ui-choice-bar-name`), which `choice-bar.tsx` reads to raise the
      name in the option's hint, since script cannot ask a container query. */
   /* off-scale: 520px, where a fill bar's options stop fitting */
   @container luke-choice-bar (width < 520px) {
@@ -33,7 +33,7 @@
       .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
       .luke-choice-bar-icon
       + .luke-choice-bar-label {
-      --luke-choice-bar-name: folded;
+      --ui-choice-bar-name: folded;
       position: absolute;
       overflow: hidden;
       width: 1px;
@@ -66,24 +66,24 @@
      a bar with nothing past its end has no scroll to read, which leaves the
      chevron unseen. */
   .luke-choice-bar[data-fold="words"] {
-    --luke-scroll-fade: var(--luke-space-48);
+    --ui-scroll-fade: var(--ui-space-48);
   }
 
   .luke-choice-bar-frame {
-    --luke-scroll-fade: var(--luke-space-48);
-    timeline-scope: --luke-choice-bar-scroll;
+    --ui-scroll-fade: var(--ui-space-48);
+    timeline-scope: --ui-choice-bar-scroll;
   }
 
   .luke-choice-bar-frame > .luke-choice-bar {
-    scroll-timeline: --luke-choice-bar-scroll inline;
+    scroll-timeline: --ui-choice-bar-scroll inline;
   }
 
   .luke-choice-bar-more {
     opacity: 0;
     animation-name: luke-choice-bar-more;
     animation-fill-mode: both;
-    animation-timeline: --luke-choice-bar-scroll;
-    animation-range: calc(100% - var(--luke-scroll-fade)) 100%;
+    animation-timeline: --ui-choice-bar-scroll;
+    animation-range: calc(100% - var(--ui-scroll-fade)) 100%;
   }
 
   @keyframes luke-choice-bar-more {

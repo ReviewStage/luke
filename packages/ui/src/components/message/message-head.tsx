@@ -28,7 +28,7 @@ export function MessageHead({
   children?: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="luke-message-head flex min-w-0 max-w-full flex-wrap items-center gap-x-luke-6 gap-y-luke-2 px-luke-4 text-caption-inline text-muted-foreground">
+    <div className="luke-message-head flex min-w-0 max-w-full flex-wrap items-center gap-x-ui-6 gap-y-ui-2 px-ui-4 text-caption-inline text-muted-foreground">
       <span className="luke-message-head-sender flex min-w-0 max-w-full items-center">
         {sender}
       </span>

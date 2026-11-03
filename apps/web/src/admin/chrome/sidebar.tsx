@@ -276,7 +276,7 @@ export function AdminShell({
           its toolbar past the one button. */}
       <div
         ref={shell}
-        className="desktop-shell [--sidebar-toggle-clearance:calc(var(--title-bar-left)_+_var(--luke-control-height)_+_var(--luke-control-gap))]"
+        className="desktop-shell [--sidebar-toggle-clearance:calc(var(--title-bar-left)_+_var(--ui-control-height)_+_var(--ui-control-gap))]"
         data-room={stage.room}
         data-sidebar-collapsed={String(collapsed)}
         data-sidebar-overlay={overlay}

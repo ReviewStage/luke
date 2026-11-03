@@ -25,7 +25,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * folding-button.tsx -- a toolbar's labelled button whose words a narrow toolbar folds away, leaving its glyph, named by its hint.
  *
  * A toolbar too narrow for every act's words folds them by a container query
- * of its own, which sets `--luke-fold: folded` on an element holding its
+ * of its own, which sets `--ui-fold: folded` on an element holding its
  * buttons, so its acts keep their places as glyphs rather than crowding the
  * title beside them off its line or drawing over it. Folded, the button is
  * a square around its glyph, and its words are still there for a reader,
@@ -48,7 +48,7 @@ import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * The box's own classes, and the fold it lays on its button: under a
- * `--luke-fold` of `folded`, a square around the glyph, its words drawn
+ * `--ui-fold` of `folded`, a square around the glyph, its words drawn
  * nowhere though a reader still has them. Note that the fold is drawn from
  * the box, whose child selectors outweigh the button's own utilities, so it
  * needs no class on the button, which takes none.
@@ -64,7 +64,7 @@ const FOLDING_BOX = cn(
 /** A row-look box, the row's whole width, as the look says. */
 const FOLDING_ROW = "flex w-full";
 
-/** The value of `--luke-fold` that folds every folding button under it. */
+/** The value of `--ui-fold` that folds every folding button under it. */
 const FOLDED = "folded";
 
 /** What a hint hands the box it wraps, which the box hands on to its button: when to show and go, and what it says of the button. */
@@ -95,7 +95,7 @@ function useFolded(): [(box: HTMLElement | null) => (() => void) | undefined, bo
   const measured = useCallback((box: HTMLElement | null) => {
     if (box === null) return undefined;
     const observer = new ResizeObserver(() =>
-      setFolded(getComputedStyle(box).getPropertyValue("--luke-fold").trim() === FOLDED),
+      setFolded(getComputedStyle(box).getPropertyValue("--ui-fold").trim() === FOLDED),
     );
     observer.observe(box);
     return () => observer.disconnect();

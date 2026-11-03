@@ -156,7 +156,7 @@ function ReviewPanel({
       onDismiss={onClose}
       onLeave={onLeave}
     >
-      <p className="m-0 -mt-luke-8 text-muted-foreground">
+      <p className="m-0 -mt-ui-8 text-muted-foreground">
         {REVIEW_WORDS.LEAD}
         {pending == null || pending.comments === 0
           ? null

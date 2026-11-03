@@ -31,7 +31,7 @@ function Empty({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty"
       className={cn(
-        "luke-empty-state-body m-auto box-border flex max-w-empty-state flex-col items-center gap-luke-12 p-luke-24 text-center",
+        "luke-empty-state-body m-auto box-border flex max-w-empty-state flex-col items-center gap-ui-12 p-ui-24 text-center",
         className,
       )}
       {...props}
@@ -43,7 +43,7 @@ function EmptyHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty-header"
-      className={cn("luke-empty-state-words flex flex-col gap-luke-4", className)}
+      className={cn("luke-empty-state-words flex flex-col gap-ui-4", className)}
       {...props}
     />
   );
@@ -54,7 +54,7 @@ function EmptyMedia({ className, ...props }: React.ComponentProps<"span">) {
     <span
       data-slot="empty-icon"
       className={cn(
-        "luke-empty-state-icon flex text-muted-foreground opacity-60 [&_svg]:size-luke-40 [&_svg]:stroke-[1.4]",
+        "luke-empty-state-icon flex text-muted-foreground opacity-60 [&_svg]:size-ui-40 [&_svg]:stroke-[1.4]",
         className,
       )}
       {...props}

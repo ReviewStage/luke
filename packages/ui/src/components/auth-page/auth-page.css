@@ -8,14 +8,14 @@
 
 @layer components {
   .luke-auth-card {
-    padding: var(--luke-space-40) var(--luke-space-32);
+    padding: var(--ui-space-40) var(--ui-space-32);
   }
 
   /* Under a phone's width the card gives its inset back to what it holds. */
   /* off-scale: 400px, a phone's card */
   @container (width < 400px) {
     .luke-auth-card {
-      padding: var(--luke-space-32) var(--luke-space-20);
+      padding: var(--ui-space-32) var(--ui-space-20);
     }
   }
 

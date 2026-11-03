@@ -46,7 +46,7 @@
  * do, by Escape while focus is in it, by a sideways swipe, or by whoever showed it
  * withdrawing what it is about. One with no action is never pointed at, so
  * clicks pass through it. It arrives on the pair
- * every arriving element rides and leaves first over `--luke-duration-exit`, held
+ * every arriving element rides and leaves first over `--ui-duration-exit`, held
  * mounted through its leaving; the ones its coming or going moves glide
  * there, so reduced motion and a capture run hold all of it still at the
  * tokens.
@@ -154,7 +154,7 @@ export type ToastNotice = {
 /** A notice as the stack keeps it: one saying a failure with the details of its report a person may copy. */
 type KeptNotice = ToastNotice & { readonly details?: string | undefined };
 
-/** How long a toast takes to leave, as `--luke-duration-exit` says it. */
+/** How long a toast takes to leave, as `--ui-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
 
 /** How many toasts stand at once: three, or two in a window no taller than `SHORT_WINDOW`. */

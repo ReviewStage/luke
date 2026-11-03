@@ -33,23 +33,23 @@
   }
 
   .luke-task-row {
-    --luke-task-row-more-room: calc(var(--luke-space-24) + var(--luke-icon-gap));
-    --luke-task-row-aside: calc(-1 * var(--luke-task-row-more-room));
+    --ui-task-row-more-room: calc(var(--ui-space-24) + var(--ui-icon-gap));
+    --ui-task-row-aside: calc(-1 * var(--ui-task-row-more-room));
   }
 
   .luke-task-row:dir(rtl) {
-    --luke-task-row-aside: var(--luke-task-row-more-room);
+    --ui-task-row-aside: var(--ui-task-row-more-room);
   }
 
   .luke-task-row-more {
     position: absolute;
     inset-block: 0;
-    inset-inline-end: var(--luke-row-inset);
+    inset-inline-end: var(--ui-row-inset);
     pointer-events: none;
   }
 
   .luke-task-row-cell[data-under-more="true"] {
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .luke-task-row:is(:has(:focus-visible), [data-menu-open="true"]) .luke-task-row-more {
@@ -72,7 +72,7 @@
 
   @media (hover: none) {
     .luke-task-row-after {
-      transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+      transition: transform var(--ui-duration-fast) var(--ui-spring-fast);
     }
 
     .luke-task-row-more {
@@ -83,21 +83,21 @@
         > .luke-task-row-cell[data-under-more="true"]
       )
       .luke-task-row-after {
-      transform: translateX(var(--luke-task-row-aside));
+      transform: translateX(var(--ui-task-row-aside));
     }
 
     .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
         > .luke-task-row-cell[data-under-more="true"]
       )
       > [data-cell="name"] {
-      padding-inline-end: var(--luke-task-row-more-room);
+      padding-inline-end: var(--ui-task-row-more-room);
     }
   }
 
   .luke-task-row-draft .luke-task-row-press {
     display: flex;
     overflow: visible;
-    gap: var(--luke-item-gap);
+    gap: var(--ui-item-gap);
   }
 
   .luke-task-row-draft .luke-task-row-press > [data-slot="input"] {
@@ -106,6 +106,6 @@
   }
 
   .luke-task-row-draft[data-pending="true"] .luke-task-row-press {
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 }

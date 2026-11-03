@@ -5,41 +5,41 @@
 
 @layer components {
   .luke-file-text {
-    --luke-file-text-peek: calc(var(--luke-type-caption-leading) * 6);
-    --luke-file-text-whole: calc(var(--luke-type-caption-leading) * 18);
+    --ui-file-text-peek: calc(var(--ui-type-caption-leading) * 6);
+    --ui-file-text-whole: calc(var(--ui-type-caption-leading) * 18);
 
     box-sizing: border-box;
     min-width: 0;
-    padding: var(--luke-row-inset) var(--luke-list-inset);
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-control-radius);
-    background: var(--luke-color-code-ground);
+    padding: var(--ui-row-inset) var(--ui-list-inset);
+    border: 1px solid var(--ui-color-border);
+    border-radius: var(--ui-control-radius);
+    background: var(--ui-color-code-ground);
   }
 
   .luke-file-text-words {
     margin: 0;
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-mono);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
+    color: var(--ui-color-text);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
 
   .luke-file-text[data-extent="peek"] {
-    max-height: calc(var(--luke-file-text-peek) + var(--luke-space-16));
+    max-height: calc(var(--ui-file-text-peek) + var(--ui-space-16));
     overflow: clip;
-    mask-image: linear-gradient(to bottom, black calc(100% - var(--luke-scroll-fade)), transparent);
+    mask-image: linear-gradient(to bottom, black calc(100% - var(--ui-scroll-fade)), transparent);
   }
 
   .luke-file-text[data-extent="whole"] {
-    max-height: calc(var(--luke-file-text-whole) + var(--luke-space-16));
+    max-height: calc(var(--ui-file-text-whole) + var(--ui-space-16));
     overflow: auto;
     overscroll-behavior: contain;
   }
 
   .luke-file-text[data-extent="brief"] {
-    max-height: calc(var(--luke-file-text-peek) + var(--luke-space-16));
+    max-height: calc(var(--ui-file-text-peek) + var(--ui-space-16));
     overflow: auto;
     overscroll-behavior: contain;
   }

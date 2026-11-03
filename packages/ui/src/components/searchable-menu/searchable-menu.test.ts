@@ -462,7 +462,7 @@ function submenuIn(room: number, rowLeft: number, rowRight: number, bounds?: Pop
     document.querySelector<HTMLElement>(".luke-searchable-menu-submenu") ?? assert.fail("it opens");
   return {
     side: submenu.dataset.side,
-    shift: Number.parseFloat(submenu.style.getPropertyValue("--luke-submenu-shift")),
+    shift: Number.parseFloat(submenu.style.getPropertyValue("--ui-submenu-shift")),
   };
 }
 

@@ -5,7 +5,7 @@
  * an Inbox item, and the Automations list each stand under this one bar; a
  * document (a plan, Settings, a person, the automation editor) heads itself
  * in its page instead (`PageHeader`). The bar is one row at the window's bar
- * height (`--luke-toolbar-height`, which the shell sets level with its title
+ * height (`--ui-toolbar-height`, which the shell sets level with its title
  * bar), and its slots stand in one order, each drawn only where it says
  * something:
  *
@@ -33,7 +33,7 @@
  * actions (`wrapHeading`: an Inbox item's) answers its own
  * width: under 360px the lead's labelled controls draw their glyphs alone,
  * named still, and once one row would show less of the page's own name than
- * reads (`--luke-title-floor`, `use-wrap-when-cut.ts`), the heading takes a
+ * reads (`--ui-title-floor`, `use-wrap-when-cut.ts`), the heading takes a
  * row of its own under the lead and the actions, one pane bar high, rather
  * than cutting the name to a few letters; above the floor the name fades
  * where it is cut, on the one row.
@@ -122,8 +122,7 @@ const TAG = "luke-toolbar-tag flex-none";
 /** Quiet words after the title, in the body's type, on one line cut short, fading, before the title is. */
 const DETAIL = "luke-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
-const TITLE =
-  "luke-toolbar-title m-0 -ml-luke-6 pl-luke-6 text-dialog-size font-dialog tracking-title";
+const TITLE = "luke-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
 
 /** Where a bar's heading stands its title on one row: the page's own name, its last words. */
 const HEADING_SEAT: TitleSeat = {

@@ -422,7 +422,7 @@ function PathParts({ path }: { path: string }): React.JSX.Element {
         </OneLine>
       )}
       <OneLine
-        className="diff-list-name max-w-full flex-none font-luke-medium group-data-moved/part:text-muted-foreground group-data-moved/part:[font-weight:inherit]"
+        className="diff-list-name max-w-full flex-none font-ui-medium group-data-moved/part:text-muted-foreground group-data-moved/part:[font-weight:inherit]"
         words={path.slice(cut)}
       >
         <bdi>{path.slice(cut)}</bdi>
@@ -533,7 +533,7 @@ export function FileHead({
   const letter = (
     <span
       ref={partAt(1)}
-      className="file-view-status inline-flex h-luke-16 flex-none items-center justify-center rounded-luke-6 bg-status-letter font-mono text-caption-inline font-luke-semibold text-attention data-[status=added]:text-complete data-[status=deleted]:text-danger data-[status=renamed]:text-working"
+      className="file-view-status inline-flex h-ui-16 flex-none items-center justify-center rounded-ui-6 bg-status-letter font-mono text-caption-inline font-ui-semibold text-attention data-[status=added]:text-complete data-[status=deleted]:text-danger data-[status=renamed]:text-working"
       data-status={file.status}
     >
       {STATUS_LETTER[file.status]}

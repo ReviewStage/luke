@@ -33,8 +33,8 @@
   /* A detail's words: a caption, muted. They are drawn here rather than in
      utilities, so a row's own words cannot outrank them. */
   .luke-menu-item-detail {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
   }
 
   /* A row's shortcut at its end, the way a system menu prints a chord,
@@ -44,9 +44,9 @@
     flex: 0 0 auto;
     align-items: center;
     margin-left: auto;
-    padding-left: var(--luke-space-16);
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+    padding-left: var(--ui-space-16);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
     white-space: nowrap;
   }
 
@@ -66,7 +66,7 @@
 
   @keyframes luke-menu-drop {
     from {
-      transform: translateY(calc(-1 * var(--luke-space-4)));
+      transform: translateY(calc(-1 * var(--ui-space-4)));
     }
   }
 
@@ -86,22 +86,21 @@
      let go short, since a spring's overshoot would lift it off the window's
      foot. */
   .luke-menu-sheet {
-    --luke-menu-row-height: var(--luke-touch-target);
-    --luke-combobox-list-max: none;
+    --ui-menu-row-height: var(--ui-touch-target);
+    --ui-combobox-list-max: none;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
-    padding: 0 var(--luke-menu-inset)
-      calc(var(--luke-menu-inset) + env(safe-area-inset-bottom, 0px));
-    border: 1px solid var(--luke-color-border-strong);
+    padding: 0 var(--ui-menu-inset) calc(var(--ui-menu-inset) + env(safe-area-inset-bottom, 0px));
+    border: 1px solid var(--ui-color-border-strong);
     border-bottom: 0;
-    border-radius: var(--luke-dialog-radius) var(--luke-dialog-radius) 0 0;
-    background: var(--luke-color-overlay);
-    box-shadow: var(--luke-menu-shadow);
-    color: var(--luke-color-text);
-    animation: luke-menu-sheet-rise var(--luke-duration-pane) var(--luke-motion-pane);
-    transition: translate var(--luke-duration-pane) var(--luke-motion-pane);
+    border-radius: var(--ui-dialog-radius) var(--ui-dialog-radius) 0 0;
+    background: var(--ui-color-overlay);
+    box-shadow: var(--ui-menu-shadow);
+    color: var(--ui-color-text);
+    animation: luke-menu-sheet-rise var(--ui-duration-pane) var(--ui-motion-pane);
+    transition: translate var(--ui-duration-pane) var(--ui-motion-pane);
   }
 
   .luke-menu-sheet[data-dragging] {
@@ -109,7 +108,7 @@
   }
 
   .luke-menu-sheet[data-leaving="true"] {
-    animation: luke-menu-sheet-sink var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+    animation: luke-menu-sheet-sink var(--ui-duration-pane) var(--ui-motion-pane) forwards;
   }
 
   /* The head stays put over the rows that scroll under it, and is what a
@@ -118,32 +117,31 @@
     display: flex;
     flex: none;
     flex-direction: column;
-    padding: var(--luke-space-6) calc(var(--luke-menu-inset) + var(--luke-row-inset))
-      var(--luke-space-8);
-    border-bottom: 1px solid var(--luke-color-border);
-    margin: 0 calc(-1 * var(--luke-menu-inset)) var(--luke-menu-inset);
+    padding: var(--ui-space-6) calc(var(--ui-menu-inset) + var(--ui-row-inset)) var(--ui-space-8);
+    border-bottom: 1px solid var(--ui-color-border);
+    margin: 0 calc(-1 * var(--ui-menu-inset)) var(--ui-menu-inset);
     touch-action: none;
   }
 
   .luke-menu-sheet-grip {
-    width: var(--luke-space-32);
-    height: var(--luke-space-4);
-    margin: 0 auto var(--luke-space-8);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-border-strong);
+    width: var(--ui-space-32);
+    height: var(--ui-space-4);
+    margin: 0 auto var(--ui-space-8);
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-color-border-strong);
   }
 
   .luke-menu-sheet-title {
     display: flex;
     align-items: center;
-    gap: var(--luke-icon-gap);
+    gap: var(--ui-icon-gap);
     min-width: 0;
-    min-height: var(--luke-control-height);
+    min-height: var(--ui-control-height);
   }
 
   /* The way back folds to its glyph, its words a reader's alone. */
   .luke-menu-sheet-back {
-    --luke-fold: folded;
+    --ui-fold: folded;
     display: flex;
     flex: none;
   }
@@ -170,20 +168,20 @@
   .luke-menu-sheet-field {
     display: flex;
     flex-direction: column;
-    margin-top: var(--luke-space-8);
+    margin-top: var(--ui-space-8);
   }
 
   .luke-menu-sheet-name {
     display: flex;
     min-width: 0;
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--ui-weight-medium);
   }
 
   .luke-menu-sheet-detail {
     display: flex;
     min-width: 0;
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
   }
 
   .luke-menu-sheet-rows {

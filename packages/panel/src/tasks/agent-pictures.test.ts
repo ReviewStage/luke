@@ -149,7 +149,7 @@ test("a set the agent showed stays out of the finished turn's fold, each picture
   const tiles = [...container.querySelectorAll<HTMLElement>(SHOWN_TILES)];
   assert.equal(tiles.length, 2, "the set is drawn though the work before it folded");
   assert.deepEqual(
-    tiles.map((tile) => tile.style.getPropertyValue("--luke-picture-ratio")),
+    tiles.map((tile) => tile.style.getPropertyValue("--ui-picture-ratio")),
     [String(1200 / 720), String(390 / 700)],
   );
   assert.deepEqual(

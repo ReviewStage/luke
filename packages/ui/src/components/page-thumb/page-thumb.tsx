@@ -112,7 +112,7 @@ export function PageThumb({
       {video === undefined ? null : <VideoStill dataUrl={video} />}
       {frame === undefined ? null : (
         <iframe
-          className="luke-page-thumb-frame pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0 opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit group-data-[loaded=true]/page-thumb:opacity-100"
+          className="luke-page-thumb-frame pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-data-[loaded=true]/page-thumb:opacity-100"
           title={frame.title}
           src={frame.src}
           sandbox={frame.sandbox}

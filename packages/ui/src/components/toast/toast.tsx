@@ -27,7 +27,7 @@ import { useToastSwipe } from "./toast-swipe.js";
  * itself is handed that hold as `countdown`, and drains a thin bar along its
  * foot over it, paused while it is held. It arrives on the pair every
  * arriving element rides and leaves
- * first, over `--luke-duration-exit`, once `leaving` says so; whoever owns
+ * first, over `--ui-duration-exit`, once `leaving` says so; whoever owns
  * its life holds it mounted through that.
  *
  * What it says aloud is the stack's (`ToastStack`), so the words here are
@@ -233,8 +233,8 @@ export function Toast({
           className={TOAST_COUNTDOWN}
           aria-hidden="true"
           style={cssCustomProperties({
-            "--luke-toast-hold": `${countdown}ms`,
-            "--luke-toast-seconds": Math.max(1, Math.round(countdown / SECOND_MS)),
+            "--ui-toast-hold": `${countdown}ms`,
+            "--ui-toast-seconds": Math.max(1, Math.round(countdown / SECOND_MS)),
           })}
         />
       )}

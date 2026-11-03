@@ -1159,7 +1159,7 @@ function RepositorySection({
         count={foldedCount(folded, group.rows.length, TASK_NOUN)}
         mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
-            <span className="sidebar-repository-pinned inline-flex flex-none text-muted-foreground [&_svg]:size-luke-12">
+            <span className="sidebar-repository-pinned inline-flex flex-none text-muted-foreground [&_svg]:size-ui-12">
               <PinIcon />
               <VisuallyHidden>(pinned)</VisuallyHidden>
             </span>

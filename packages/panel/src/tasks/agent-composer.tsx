@@ -315,7 +315,7 @@ function useFootFold(card: RefObject<HTMLDivElement | null>): FoldWidth | undefi
  * draft's box take the room in as their own sheets say.
  */
 export const COMPOSER_ROOM_CLASS =
-  "agent-composer relative flex flex-col gap-control-gap px-luke-16 pt-0 pb-list-inset";
+  "agent-composer relative flex flex-col gap-control-gap px-ui-16 pt-0 pb-list-inset";
 
 /**
  * What docks over the composer, the to-do list, the pull request's row, and
@@ -323,11 +323,11 @@ export const COMPOSER_ROOM_CLASS =
  * composer's line up; a column or a panel that pads the composer in pads
  * these in alike.
  */
-export const COMPOSER_DOCK_CLASS = "px-luke-16 pt-0 pb-row-inset";
+export const COMPOSER_DOCK_CLASS = "px-ui-16 pt-0 pb-row-inset";
 
 /**
  * A log that runs right up to the card's top edge, its words dissolving
- * over `--luke-scroll-fade` just above it rather than being sliced short of
+ * over `--ui-scroll-fade` just above it rather than being sliced short of
  * the card: its foot pads past the fade, so the newest line stands whole
  * above it.
  */

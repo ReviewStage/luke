@@ -101,7 +101,7 @@ function StateBar({
   useAnnounceShown(ANNOUNCE.POLITE, bar.late && !revealed ? "" : bar.words);
   return (
     <div
-      className="terminal-bar flex min-h-7 flex-none flex-wrap items-center gap-x-control-gap gap-y-list-gap whitespace-nowrap border-b border-border bg-muted py-tight-gap pr-list-inset pl-luke-16 font-mono text-caption text-muted-foreground"
+      className="terminal-bar flex min-h-7 flex-none flex-wrap items-center gap-x-control-gap gap-y-list-gap whitespace-nowrap border-b border-border bg-muted py-tight-gap pr-list-inset pl-ui-16 font-mono text-caption text-muted-foreground"
       data-late={String(bar.late)}
       onAnimationEnd={() => setRevealed(true)}
     >
@@ -124,7 +124,7 @@ function StateBar({
             {action.label}
             <Shortcut
               chord={{ key: SHORTCUT_KEY.ENTER, bare: true }}
-              className="ms-tight-gap [--luke-shortcut-ink:currentColor]"
+              className="ms-tight-gap [--ui-shortcut-ink:currentColor]"
             />
           </TextButton>
         )}

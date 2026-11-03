@@ -69,7 +69,7 @@ export type DetailPageInset = (typeof DETAIL_PAGE_INSET)[keyof typeof DETAIL_PAG
  * inside it, because the page clips anything drawn past its edge.
  */
 const COLUMN_CLASS =
-  "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--luke-focus-ring-inset)]";
+  "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--ui-focus-ring-inset)]";
 
 /** A column's content, ending on the page's inset or clear of a phone's call card, whichever is more, a long word broken rather than run past the column. */
 const CONTENT_CLASS = "pb-detail-page-end wrap-anywhere";

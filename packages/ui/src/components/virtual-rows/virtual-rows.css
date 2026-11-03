@@ -23,6 +23,6 @@
 
   .luke-virtual-row + .luke-virtual-row,
   .luke-virtual-items > * + * {
-    margin-block-start: var(--luke-virtual-gap);
+    margin-block-start: var(--ui-virtual-gap);
   }
 }

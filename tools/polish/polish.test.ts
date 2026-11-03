@@ -78,8 +78,8 @@ describe("the scroll fade pin", () => {
     const { document } = dom.window;
     // jsdom runs no scroll timeline, so the box is given the depths one would have eased it to.
     const depths: Record<string, string> = {
-      "--luke-scroll-area-fade-start": "0px",
-      "--luke-scroll-area-fade-end": "24px",
+      "--ui-scroll-area-fade-start": "0px",
+      "--ui-scroll-area-fade-end": "24px",
     };
     dom.window.getComputedStyle = ((box: Element) => ({
       animationName:
@@ -90,8 +90,8 @@ describe("the scroll fade pin", () => {
     dom.window.eval(PIN_SCROLL_FADES_SCRIPT);
 
     const faded = document.getElementById("faded")?.style;
-    expect(faded?.getPropertyValue("--luke-scroll-area-fade-end")).toBe("24px");
-    expect(faded?.getPropertyPriority("--luke-scroll-area-fade-end")).toBe("important");
+    expect(faded?.getPropertyValue("--ui-scroll-area-fade-end")).toBe("24px");
+    expect(faded?.getPropertyPriority("--ui-scroll-area-fade-end")).toBe("important");
     expect(document.getElementById("plain")?.style.length).toBe(0);
   });
 });

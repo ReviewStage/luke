@@ -69,11 +69,11 @@ import { Highlighted } from "./search-field.js";
 
 /** A value a parameter takes, as a chip in the code face, its default outlined. */
 const PARAMETER_VALUE =
-  "rounded-luke-6 bg-fill-strong px-tight-gap font-mono text-caption text-muted-foreground data-[default=true]:text-foreground data-[default=true]:shadow-tool-default";
+  "rounded-ui-6 bg-fill-strong px-tight-gap font-mono text-caption text-muted-foreground data-[default=true]:text-foreground data-[default=true]:shadow-tool-default";
 
 /** A tool's page's title, in the head's weight, given way before the name after it. */
 const DETAIL_TITLE =
-  "integration-tool-detail-title m-0 flex-initial text-section font-luke-semibold text-foreground";
+  "integration-tool-detail-title m-0 flex-initial text-section font-ui-semibold text-foreground";
 
 /** Keeps a row inside its scroller's view, scrolling only the scroller (the renderer's rule against `scrollIntoView`). */
 export function keepInView(list: HTMLElement | null, row: Element | null): void {
@@ -182,7 +182,7 @@ export function IntegrationToolList({
                   </OneLine>
                   {namedApart(tool) ? (
                     <OneLine
-                      className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-luke-regular text-muted-foreground"
+                      className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-ui-regular text-muted-foreground"
                       words={tool.name}
                     >
                       <Highlighted text={tool.name} tokens={tokens} />
@@ -246,7 +246,7 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
                   {parameter.type}
                 </span>
                 {parameter.required ? (
-                  <span className="integration-tool-parameter-required ml-auto text-caption-inline font-luke-semibold text-attention">
+                  <span className="integration-tool-parameter-required ml-auto text-caption-inline font-ui-semibold text-attention">
                     required
                   </span>
                 ) : null}

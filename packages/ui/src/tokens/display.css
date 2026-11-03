@@ -6,14 +6,14 @@
 
 [data-luke-profile="web"] {
   /* The landing page's one line, which steps down once on a phone. */
-  --luke-display-hero-size: 2.25rem;
-  --luke-display-hero-size-narrow: 1.75rem;
-  --luke-display-hero-leading: 1.1;
-  --luke-display-hero-weight: 600;
-  --luke-display-hero-tracking: -0.02em;
+  --ui-display-hero-size: 2.25rem;
+  --ui-display-hero-size-narrow: 1.75rem;
+  --ui-display-hero-leading: 1.1;
+  --ui-display-hero-weight: 600;
+  --ui-display-hero-tracking: -0.02em;
 
   /* The product's name beside the mark, in the wordmark's face. */
-  --luke-display-wordmark-size: 1rem;
-  --luke-display-wordmark-weight: 700;
-  --luke-display-wordmark-tracking: -0.01em;
+  --ui-display-wordmark-size: 1rem;
+  --ui-display-wordmark-weight: 700;
+  --ui-display-wordmark-tracking: -0.01em;
 }

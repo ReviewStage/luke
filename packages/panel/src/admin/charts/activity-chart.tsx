@@ -32,19 +32,19 @@ const ACTIVITY_PLOT_HEIGHT = "15rem";
 const ACTIVITY_CHART = {
   [ACTIVITY_FEATURE.AGENTS_STARTED]: {
     label: "Agents started",
-    color: "var(--luke-color-chart-1)",
+    color: "var(--ui-color-chart-1)",
   },
   [ACTIVITY_FEATURE.PLAN_REVISIONS]: {
     label: "Plan revisions",
-    color: "var(--luke-color-chart-2)",
+    color: "var(--ui-color-chart-2)",
   },
   [ACTIVITY_FEATURE.INBOX_ANSWERED]: {
     label: "Inbox items answered",
-    color: "var(--luke-color-chart-3)",
+    color: "var(--ui-color-chart-3)",
   },
   [ACTIVITY_FEATURE.AUTOMATION_RUNS]: {
     label: "Automation runs",
-    color: "var(--luke-color-chart-4)",
+    color: "var(--ui-color-chart-4)",
   },
 } satisfies ChartConfig & Record<ActivityFeature, { label: string; color: string }>;
 

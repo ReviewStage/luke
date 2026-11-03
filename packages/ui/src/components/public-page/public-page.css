@@ -11,10 +11,10 @@
   /* The theme's `pt-public-page-start` and `pb-public-page-end` read the
      first two. */
   .luke-public-page {
-    --luke-public-page-start: var(--luke-space-48);
-    --luke-public-page-end: var(--luke-space-64);
-    --luke-public-page-rhythm: var(--luke-space-64);
-    --luke-public-page-ruled: var(--luke-space-48);
+    --ui-public-page-start: var(--ui-space-48);
+    --ui-public-page-end: var(--ui-space-64);
+    --ui-public-page-rhythm: var(--ui-space-64);
+    --ui-public-page-ruled: var(--ui-space-48);
   }
 
   /* Under 520px of room the page opens and closes nearer its words and
@@ -22,10 +22,10 @@
   /* off-scale: 520px, a phone's landing */
   @container (width < 520px) {
     .luke-public-page > * {
-      --luke-public-page-start: var(--luke-space-32);
-      --luke-public-page-end: var(--luke-space-40);
-      --luke-public-page-rhythm: var(--luke-space-40);
-      --luke-public-page-ruled: var(--luke-space-40);
+      --ui-public-page-start: var(--ui-space-32);
+      --ui-public-page-end: var(--ui-space-40);
+      --ui-public-page-rhythm: var(--ui-space-40);
+      --ui-public-page-ruled: var(--ui-space-40);
     }
   }
 
@@ -33,7 +33,7 @@
      window has no display type, so on the desktop profile it falls back to
      the page title. */
   .luke-public-page-title[data-style="hero"] {
-    font-size: var(--luke-display-hero-size, var(--luke-type-title-size));
+    font-size: var(--ui-display-hero-size, var(--ui-type-title-size));
   }
 
   /* At 2.25rem the hero needs about 490px, so it steps down before the
@@ -41,12 +41,12 @@
   /* off-scale: 576px, where the hero's 2.25rem title needs about 490px and steps down before the column squeezes it */
   @container (width < 576px) {
     .luke-public-page-title[data-style="hero"] {
-      font-size: var(--luke-display-hero-size-narrow, var(--luke-type-title-size));
+      font-size: var(--ui-display-hero-size-narrow, var(--ui-type-title-size));
     }
   }
 
   .luke-public-section + .luke-public-section {
-    margin-top: var(--luke-public-page-rhythm);
+    margin-top: var(--ui-public-page-rhythm);
   }
 
   /* Ruled sections each open under a rule across the column and keep their
@@ -54,8 +54,8 @@
      one closes on its own room, with no rule under it. */
   .luke-public-page-sections[data-sections="ruled"] > .luke-public-section {
     margin-top: 0;
-    padding-block: var(--luke-public-page-ruled);
-    border-top: 1px solid var(--luke-color-border);
+    padding-block: var(--ui-public-page-ruled);
+    border-top: 1px solid var(--ui-color-border);
   }
 
   /* What a picture or a recording hands the media fills its frame. */

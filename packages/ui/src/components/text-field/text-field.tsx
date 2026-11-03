@@ -99,7 +99,7 @@ export const TEXT_AREA_SUBMIT = {
 
 export type TextAreaSubmit = (typeof TEXT_AREA_SUBMIT)[keyof typeof TEXT_AREA_SUBMIT];
 
-/** How a text area stands: in a field's well, or bare in a card that is its well, at the insets the card sets (`--luke-text-area-inset-*`). */
+/** How a text area stands: in a field's well, or bare in a card that is its well, at the insets the card sets (`--ui-text-area-inset-*`). */
 export const TEXT_AREA_LOOK = {
   WELL: "well",
   BARE: "bare",
@@ -135,7 +135,7 @@ const TEXT_FIELD_SIZE_CLASS = {
     "h-auto p-0 border-0 bg-transparent focus:bg-transparent text-title font-title tracking-title outline-none",
   /** A step under a control, on the well's ground, its edge lighting while it holds the caret; 16px words under a finger. */
   [TEXT_FIELD_SIZE.COMPACT]:
-    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
+    "h-control-compact rounded-control-compact border-border bg-well px-ui-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
 } as const satisfies Record<TextFieldSize, string | undefined>;
 
 /**
@@ -396,7 +396,7 @@ export function TextArea({
       enterKeyHint={enterKeyHint}
       // Note that a growing note sizes to its words, which the browser does
       // without reading `rows`, so its rows reach its stylesheet as its least height.
-      style={grow ? cssCustomProperties({ "--luke-text-area-rows": rows }) : undefined}
+      style={grow ? cssCustomProperties({ "--ui-text-area-rows": rows }) : undefined}
       {...entryAttributes(props)}
       value={props.value}
       readOnly={busy || props.readOnly}

@@ -278,10 +278,10 @@ function RunsBody({
     <ScrollArea fade={SCROLL_FADE.START}>
       <div
         ref={body}
-        className="automation-runs-body flex min-h-full flex-col gap-control-gap p-luke-16"
+        className="automation-runs-body flex min-h-full flex-col gap-control-gap p-ui-16"
       >
         {headed ? (
-          <div className="automation-runs-head px-luke-2">
+          <div className="automation-runs-head px-ui-2">
             <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
               Runs
             </Text>

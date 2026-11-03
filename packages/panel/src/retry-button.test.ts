@@ -47,7 +47,7 @@ function layOut(folded: boolean): void {
     const style = computed(element);
     const read = style.getPropertyValue.bind(style);
     style.getPropertyValue = (name) =>
-      name === "--luke-fold" ? (folded ? "folded" : "") : read(name);
+      name === "--ui-fold" ? (folded ? "folded" : "") : read(name);
     return style;
   });
 }

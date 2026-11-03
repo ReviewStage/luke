@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
  */
 
 /** The classes a mark wears, for a mark drawn outside React. */
-export const SEARCH_MATCH_CLASS = "search-match rounded-luke-6 bg-match text-inherit";
+export const SEARCH_MATCH_CLASS = "search-match rounded-ui-6 bg-match text-inherit";
 
 /** `children`, the words a query landed on, marked. */
 export function SearchMatch({ children }: { children: ReactNode }): React.JSX.Element {

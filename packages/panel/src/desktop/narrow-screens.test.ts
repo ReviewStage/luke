@@ -355,7 +355,7 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
   const column = the(item, ".luke-settings-page-column");
   assert.equal(
     wayBackGap(bar, column),
-    pixelsOf(column, "var(--luke-section-gap)"),
+    pixelsOf(column, "var(--ui-section-gap)"),
     "the page's first line stands a section's gap under the way back",
   );
 

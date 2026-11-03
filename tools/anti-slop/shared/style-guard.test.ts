@@ -9,12 +9,12 @@ import {
 } from "./style-guard.ts";
 
 const THEME = `@theme inline {
-  --color-primary: var(--luke-color-text);
-  --text-body: var(--luke-type-body-size);
-  --text-body--line-height: var(--luke-type-body-leading);
-  --radius-menu: var(--luke-menu-radius);
-  --ease-pane: var(--luke-motion-pane);
-  --animate-menu-in: luke-menu-in var(--luke-duration-quick) var(--luke-spring-fast);
+  --color-primary: var(--ui-color-text);
+  --text-body: var(--ui-type-body-size);
+  --text-body--line-height: var(--ui-type-body-leading);
+  --radius-menu: var(--ui-menu-radius);
+  --ease-pane: var(--ui-motion-pane);
+  --animate-menu-in: luke-menu-in var(--ui-duration-quick) var(--ui-spring-fast);
 }`;
 const NAMES = themeNames(THEME);
 const SHEET = "packages/ui/src/components/thing/thing.css";
@@ -37,7 +37,7 @@ describe("a stylesheet", () => {
       STYLE_RULE.COLOUR,
       STYLE_RULE.COLOUR,
     ]);
-    expect(sheetRules(".a { color: var(--luke-color-text); border-color: currentColor; }")).toEqual(
+    expect(sheetRules(".a { color: var(--ui-color-text); border-color: currentColor; }")).toEqual(
       [],
     );
   });
@@ -63,10 +63,10 @@ describe("a stylesheet", () => {
       font-size: 0.9em;
     }
     .b {
-      font-size: var(--luke-type-body-size);
-      font-weight: var(--luke-weight-medium);
+      font-size: var(--ui-type-body-size);
+      font-weight: var(--ui-weight-medium);
       font: inherit;
-      font-size: calc(var(--luke-avatar-size) * 0.5);
+      font-size: calc(var(--ui-avatar-size) * 0.5);
     }`;
     expect(sheetRules(css)).toEqual([
       STYLE_RULE.TYPE,
@@ -78,8 +78,8 @@ describe("a stylesheet", () => {
 
   it("refuses a literal radius, 50% among them, and passes a role or a factor of one", () => {
     const css = `.a { border-radius: 50%; border-top-left-radius: 4px; }
-      .b { border-radius: var(--luke-radius-full); border-radius: 0;
-           border-radius: calc(var(--luke-control-height) / 2); }`;
+      .b { border-radius: var(--ui-radius-full); border-radius: 0;
+           border-radius: calc(var(--ui-control-height) / 2); }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.RADIUS, STYLE_RULE.RADIUS]);
   });
 
@@ -92,14 +92,14 @@ describe("a stylesheet", () => {
 
   it("refuses a literal duration or delay, and passes a token or none", () => {
     const css = `.a { transition: opacity 200ms; animation-delay: 1s; }
-      .b { transition: opacity var(--luke-duration-quick); transition-delay: 0s; }`;
+      .b { transition: opacity var(--ui-duration-quick); transition-delay: 0s; }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.DURATION, STYLE_RULE.DURATION]);
   });
 
   it("passes a literal duration on an endless loop that answers a play-state token", () => {
     const loop = `.spin {
       animation: turn 900ms linear infinite;
-      animation-play-state: var(--luke-loop-motion);
+      animation-play-state: var(--ui-loop-motion);
     }`;
     expect(sheetRules(loop)).toEqual([]);
     const unanswered = ".spin { animation: turn 900ms infinite; }";
@@ -109,23 +109,23 @@ describe("a stylesheet", () => {
   it("still refuses a transition beside a loop, and a finite animation that answers the loop token", () => {
     const beside = `.spin {
       animation: turn 900ms linear infinite;
-      animation-play-state: var(--luke-loop-motion);
+      animation-play-state: var(--ui-loop-motion);
       transition: opacity 200ms ease;
     }`;
     expect(sheetRules(beside)).toEqual([STYLE_RULE.DURATION]);
     const finite = `.pop {
       animation: pop 300ms both;
-      animation-play-state: var(--luke-loop-motion);
+      animation-play-state: var(--ui-loop-motion);
     }`;
     expect(sheetRules(finite)).toEqual([STYLE_RULE.DURATION]);
   });
 
   it("refuses a literal easing in a transition or animation, and passes a token", () => {
-    const css = `.a { transition: opacity var(--luke-duration-hover) ease; }
+    const css = `.a { transition: opacity var(--ui-duration-hover) ease; }
       .b { transition-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
       .c { --wobble: steps(4); }
-      .d { transition: transform var(--luke-duration-fast) var(--luke-spring-fast); }
-      .e { transition: opacity var(--luke-duration-hover); }`;
+      .d { transition: transform var(--ui-duration-fast) var(--ui-spring-fast); }
+      .e { transition: opacity var(--ui-duration-hover); }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.EASING, STYLE_RULE.EASING, STYLE_RULE.EASING]);
   });
 
@@ -134,8 +134,8 @@ describe("a stylesheet", () => {
     const css = `.mention-menu { width: 360px; max-width: 100%; }
       .composer .skill-menu { min-width: 20rem; }
       .settings-picker, .thing { max-width: 420px; }
-      .a-popover { width: calc(100% - 2 * var(--luke-space-8)); max-width: 100%; }
-      .b-menu { width: var(--luke-popover-width-regular); }
+      .a-popover { width: calc(100% - 2 * var(--ui-space-8)); max-width: 100%; }
+      .b-menu { width: var(--ui-popover-width-regular); }
       .issue-picker-detail > svg { width: 12px; }
       .menubar { width: 200px; }
       .automation-field { width: 200px; }`;
@@ -151,9 +151,9 @@ describe("a stylesheet", () => {
     const panel = "packages/panel/src/styles/tasks.css";
     const css = `.a { padding: 8px 12px; margin-left: -5px; gap: 0.5rem; row-gap: 6px; }
       .b { padding-block: max(0px, calc((14px - 1lh) / 2)); margin-inline-start: 4PX; }
-      .c { padding: var(--luke-row-inset) var(--luke-list-inset); gap: var(--luke-space-6); }
+      .c { padding: var(--ui-row-inset) var(--ui-list-inset); gap: var(--ui-space-6); }
       .d { margin: 0 auto; padding: 0px; gap: 0; margin-top: 1px; margin-bottom: -1px; }
-      .e { padding: var(--luke-card-inset, 12px); margin-left: 0.3em; width: 12px; top: 8px; }
+      .e { padding: var(--ui-card-inset, 12px); margin-left: 0.3em; width: 12px; top: 8px; }
       .f { --people-gap: 8px; scroll-margin-top: 8px; }
       :root { --column-inset: 12px; }`;
     expect(sheetRules(css, panel)).toEqual([
@@ -215,8 +215,8 @@ describe("a stylesheet", () => {
     ]);
     const sheet = `.desktop-shell :is(.luke-pane-bar, .luke-toolbar):not(.x :not(.y) *) {
         border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }
-      .luke-toolbar-heading, .a:not(.luke-pane-bar), .b:has(> .luke-toolbar) { border-radius: var(--luke-radius-6); }
-      .luke-pane-bar .luke-chip { border-radius: var(--luke-radius-6); }`;
+      .luke-toolbar-heading, .a:not(.luke-pane-bar), .b:has(> .luke-toolbar) { border-radius: var(--ui-radius-6); }
+      .luke-pane-bar .luke-chip { border-radius: var(--ui-radius-6); }`;
     expect(sheetRules(sheet, SHELL_SHEET)).toEqual([]);
     expect(
       sheetRules(
@@ -244,11 +244,11 @@ describe("a stylesheet", () => {
   it("refuses the hand spelled out or a cursor chosen per profile, and passes the press and link roles and the other cursors", () => {
     const css = `.a { cursor: pointer; }
       [data-luke-profile="desktop"] .b { cursor: default; }
-      .c { cursor: var(--luke-cursor-press); }
-      .d { cursor: var(--luke-cursor-link); }
+      .c { cursor: var(--ui-cursor-press); }
+      .d { cursor: var(--ui-cursor-link); }
       .e { cursor: col-resize; }
       .f:disabled { cursor: default; }
-      .g { --luke-cursor-press: pointer; }`;
+      .g { --ui-cursor-press: pointer; }`;
     expect(sheetRules(css)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
   });
 
@@ -298,7 +298,7 @@ describe("a module's class strings", () => {
   });
 
   it("passes the utilities @luke/ui's theme maps onto tokens", () => {
-    const source = `const card = cn("text-body bg-primary rounded-menu ease-pane animate-menu-in rounded-full", \`data-open:duration-(--luke-duration-quick) \${x}\`);`;
+    const source = `const card = cn("text-body bg-primary rounded-menu ease-pane animate-menu-in rounded-full", \`data-open:duration-(--ui-duration-quick) \${x}\`);`;
     expect(classRules(source)).toEqual([]);
   });
 

@@ -8,35 +8,35 @@
    in Tailwind utilities over the theme (`toast.tsx`, `toast-stack.tsx`,
    `toast-actions.tsx`). What stays here is what those cannot say: where the
    stack stands, which reads the window's keyboard inset; the card's motion,
-   which is keyframes and the offset its swipe writes (`--luke-toast-drag`);
+   which is keyframes and the offset its swipe writes (`--ui-toast-drag`);
    the countdown's drain, over the hold and the seconds the card writes
-   (`--luke-toast-hold`, `--luke-toast-seconds`); and what takes the
+   (`--ui-toast-hold`, `--ui-toast-seconds`); and what takes the
    pointer, which reads `:has()` and the screen's hover. */
 
 @layer components {
   /* The stack's corner, a step in from the window's, above the on-screen
      keyboard while it is up. */
   .luke-toast-stack {
-    right: var(--luke-space-16);
-    bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
-    width: min(340px, calc(var(--luke-stage-width) - 2 * var(--luke-space-16)));
+    right: var(--ui-space-16);
+    bottom: calc(var(--ui-space-16) + var(--ui-keyboard-inset));
+    width: min(340px, calc(var(--ui-stage-width) - 2 * var(--ui-space-16)));
   }
 
   /* On a phone the stack keeps off the notch and the home indicator, since
      it is fixed to the page rather than the stage. The room is the document
      root's, because the stack is portalled out of the shell. */
   :root[data-luke-room="narrow"] .luke-toast-stack {
-    right: calc(var(--luke-space-8) + env(safe-area-inset-right, 0px));
+    right: calc(var(--ui-space-8) + env(safe-area-inset-right, 0px));
     bottom: calc(
-      max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
-      var(--luke-space-8)
+      max(var(--ui-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
+      var(--ui-space-8)
     );
     width: min(
       340px,
       calc(
-        var(--luke-stage-width) -
+        var(--ui-stage-width) -
         2 *
-        var(--luke-space-8) -
+        var(--ui-space-8) -
         env(safe-area-inset-left, 0px) -
         env(safe-area-inset-right, 0px)
       )
@@ -49,63 +49,63 @@
      the departures below, which carry it on from there. */
   .luke-toast {
     pointer-events: none;
-    translate: var(--luke-toast-drag, 0px) 0;
+    translate: var(--ui-toast-drag, 0px) 0;
     animation:
-      luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit),
-      luke-toast-rise var(--luke-duration-fast) var(--luke-spring-fast);
+      luke-toast-fade var(--ui-duration-quick) var(--ui-motion-exit),
+      luke-toast-rise var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
   .luke-toast[data-leaving="true"] {
     opacity: 0;
-    transform: translateX(var(--luke-space-8));
+    transform: translateX(var(--ui-space-8));
     transition:
-      opacity var(--luke-duration-exit) var(--luke-motion-exit),
-      transform var(--luke-duration-exit) var(--luke-motion-exit),
-      translate var(--luke-duration-exit) var(--luke-motion-exit);
+      opacity var(--ui-duration-exit) var(--ui-motion-exit),
+      transform var(--ui-duration-exit) var(--ui-motion-exit),
+      translate var(--ui-duration-exit) var(--ui-motion-exit);
   }
 
   /* One swiped away goes on off the side it was sent to, from where the
      drag let go of it, rather than back past where it stood. */
   .luke-toast[data-leaving="true"][data-swiped="right"] {
     transform: none;
-    translate: calc(100% + var(--luke-space-16)) 0;
+    translate: calc(100% + var(--ui-space-16)) 0;
   }
 
   .luke-toast[data-leaving="true"][data-swiped="left"] {
     transform: none;
-    translate: calc(-100% - var(--luke-space-16)) 0;
+    translate: calc(-100% - var(--ui-space-16)) 0;
   }
 
   /* As its tone turns, the glyph it led with fades out under the one it now
      leads with, which grows in on the spring, in the one cell they share. */
   .luke-toast-glyph > [data-turn="was"] {
-    animation: luke-toast-glyph-out var(--luke-duration-quick) var(--luke-motion-exit) forwards;
+    animation: luke-toast-glyph-out var(--ui-duration-quick) var(--ui-motion-exit) forwards;
   }
 
   .luke-toast[data-turned="true"] .luke-toast-glyph > [data-turn="now"] {
     animation:
-      luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit),
-      luke-toast-glyph-in var(--luke-duration-fast) var(--luke-spring-fast);
+      luke-toast-fade var(--ui-duration-quick) var(--ui-motion-exit),
+      luke-toast-glyph-in var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
   /* Its words, turned with its tone, fade in anew in the place they held. */
   .luke-toast[data-turned="true"] .luke-toast-text {
-    animation: luke-toast-fade var(--luke-duration-quick) var(--luke-motion-exit);
+    animation: luke-toast-fade var(--ui-duration-quick) var(--ui-motion-exit);
   }
 
   /* How much of its hold is left: the bar drains toward its start over the
      hold the host hands it, a wait rather than a motion, so its length is
      the hold's own; it stops while the card is held and holds still on
-     --luke-wait-motion on a capture run. Under reduced motion it still says
+     --ui-wait-motion on a capture run. Under reduced motion it still says
      the time left, a notch a second rather than a glide. */
   .luke-toast-countdown {
-    animation: luke-toast-drain var(--luke-toast-hold) linear forwards;
-    animation-play-state: var(--luke-wait-motion);
+    animation: luke-toast-drain var(--ui-toast-hold) linear forwards;
+    animation-play-state: var(--ui-wait-motion);
   }
 
   @media (prefers-reduced-motion: reduce) {
     .luke-toast-countdown {
-      animation-timing-function: steps(var(--luke-toast-seconds), end);
+      animation-timing-function: steps(var(--ui-toast-seconds), end);
     }
   }
 
@@ -135,8 +135,8 @@
     transform: scale(0.85);
     pointer-events: none;
     transition:
-      opacity var(--luke-duration-hover) var(--luke-motion-exit),
-      transform var(--luke-duration-hover) var(--luke-motion-exit);
+      opacity var(--ui-duration-hover) var(--ui-motion-exit),
+      transform var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .luke-toast:focus-within .luke-toast-dismiss {
@@ -208,7 +208,7 @@
 
   @keyframes luke-toast-rise {
     from {
-      transform: translateY(var(--luke-space-12));
+      transform: translateY(var(--ui-space-12));
     }
   }
 }

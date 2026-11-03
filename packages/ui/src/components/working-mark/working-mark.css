@@ -1,6 +1,6 @@
 /* working-mark.css -- the lap an agent at work's mark runs: each pixel
    steps a cell, 5px, on one 200ms beat, lapping the eight cells in 1.6s. An
-   endless motion held by `--luke-loop-motion`; every delay is the pixel's
+   endless motion held by `--ui-loop-motion`; every delay is the pixel's
    lag behind the lead, less a lap, less 0.3s, so a held mark lands mid-lap,
    the chasers a cell past their tails, rather than on the first frame. The
    mark is drawn in utilities (`working-mark.tsx`); only the lap stands
@@ -9,7 +9,7 @@
 @layer components {
   .luke-working-mark-dot {
     animation: luke-working-lap 1.6s step-end infinite;
-    animation-play-state: var(--luke-loop-motion);
+    animation-play-state: var(--ui-loop-motion);
   }
 
   .luke-working-mark-dot[data-dot="lead"] {

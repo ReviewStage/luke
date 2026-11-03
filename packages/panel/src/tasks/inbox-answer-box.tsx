@@ -402,7 +402,7 @@ function NewThreadChoice({
   onChange: (checked: boolean) => void;
 }): React.JSX.Element {
   return (
-    <div className="inbox-new-thread flex min-w-0 pt-luke-8 pl-luke-4 text-muted-foreground">
+    <div className="inbox-new-thread flex min-w-0 pt-ui-8 pl-ui-4 text-muted-foreground">
       <Checkbox checked={checked} disabled={held} onChange={onChange}>
         {SEND_AS_NEW} {offer.agent}
         {offer.channel === undefined ? null : (

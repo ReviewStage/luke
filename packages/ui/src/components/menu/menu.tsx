@@ -130,7 +130,7 @@ type MenuGrow = (typeof MENU_GROW)[keyof typeof MENU_GROW];
 
 /** The gap a menu keeps from the window's edges, in CSS pixels. */
 const MENU_MARGIN = 8;
-/** The menu's own padding around its items, `--luke-menu-inset`, which a submenu rises by so its first item is level with its opener. */
+/** The menu's own padding around its items, `--ui-menu-inset`, which a submenu rises by so its first item is level with its opener. */
 const MENU_INSET = 4;
 /** How a setting in a menu says whether it is on: a check at its end while it is, or a switch. */
 export const MENU_ITEM_MARK = {
@@ -698,7 +698,7 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
         {action.tag === undefined ? (
           <OneLine className="luke-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
         ) : (
-          <span className="luke-menu-item-tagged flex min-w-0 flex-1 items-center gap-luke-8">
+          <span className="luke-menu-item-tagged flex min-w-0 flex-1 items-center gap-ui-8">
             <OneLine className="luke-menu-item-label min-w-0">{action.label}</OneLine>
             {action.tag}
           </span>
@@ -713,7 +713,7 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
       <span
         className={cn(
           "luke-menu-item-copy flex min-w-0 flex-1",
-          beside ? "flex-row items-baseline gap-luke-8" : "flex-col gap-luke-2",
+          beside ? "flex-row items-baseline gap-ui-8" : "flex-col gap-ui-2",
         )}
         data-place={beside ? MENU_DETAIL.BESIDE : undefined}
       >
@@ -929,7 +929,7 @@ function cutRows(area: HTMLElement): void {
     "border-bottom-width",
   ]);
   const room = Number.parseFloat(shape.maxHeight) - chrome;
-  const fade = Number.parseFloat(getComputedStyle(area).getPropertyValue("--luke-scroll-fade"));
+  const fade = Number.parseFloat(getComputedStyle(area).getPropertyValue("--ui-scroll-fade"));
   if (!Number.isFinite(room) || !Number.isFinite(fade)) return;
   const cut = menuCut(linesOf(column), column.getBoundingClientRect().height, room, fade);
   if (cut !== undefined) popup.style.maxHeight = `${cut + chrome}px`;
@@ -1347,7 +1347,7 @@ function MenuPanelLayer({
         left: place?.left ?? 0,
         top: place?.top ?? 0,
         width: askedStyleWidth(entry.width ?? POPOVER_WIDTH.REGULAR),
-        ...cssCustomProperties({ "--luke-popover-room": `${seen.height - 2 * MENU_MARGIN}px` }),
+        ...cssCustomProperties({ "--ui-popover-room": `${seen.height - 2 * MENU_MARGIN}px` }),
       }}
       // The pointer arriving in a panel the pointer opened hands it the keyboard, as resting on a submenu's item focuses it.
       onPointerEnter={(event) => {
@@ -1379,11 +1379,11 @@ function MenuPanelLayer({
 
 /** A menu's heading over its rows, muted and pressed by nothing: whose account it is about. */
 const MENU_HEADING =
-  "luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]";
+  "luke-menu-heading flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit]";
 
 /** A menu's footer under its rows, on the same terms: who made what it is about. */
 const MENU_FOOTER =
-  "luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground";
+  "luke-menu-footer flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit] text-muted-foreground";
 
 /** What a menu is told: its name, where it hangs, what it acts on, its rows, and its close. */
 interface MenuProps {

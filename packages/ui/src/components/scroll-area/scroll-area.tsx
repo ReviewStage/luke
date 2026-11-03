@@ -20,7 +20,7 @@ import { ScrollArea as ShadcnScrollArea } from "../../shadcn/scroll-area.js";
  *   column, or as tall as what it holds, shrinking to the room where that
  *   runs short; and
  * - its edge fade (`fade`): where content runs past an edge something
- *   pinned stands at, it dissolves over the profile's `--luke-scroll-fade`
+ *   pinned stands at, it dissolves over the profile's `--ui-scroll-fade`
  *   rather than being sliced there, the start edge alone or both. The fade
  *   eases in over the first stretch of scrolling, so an area at rest at its
  *   start, or one with nothing to scroll, is left whole. Where a band stands
@@ -76,7 +76,7 @@ export type ScrollFade = (typeof SCROLL_FADE)[keyof typeof SCROLL_FADE];
 
 /**
  * Where an up-and-down area's start fade begins: at its edge, or beneath a
- * band of the profile's `--luke-scroll-band` stuck at its start, which
+ * band of the profile's `--ui-scroll-band` stuck at its start, which
  * stands whole while what scrolls under it dissolves just below it. What
  * the keys move to clears both.
  */

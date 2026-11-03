@@ -78,7 +78,7 @@ import { useHeldFocus } from "./held-focus.js";
  * measure, wider for a note being written, fitted edge to edge to a file
  * shown, or, bare, the dimmed window's own room, a small margin from its
  * edges and its top clear of the traffic lights where the window draws them
- * (`--luke-dialog-window-top`, which the window sets), where its owner
+ * (`--ui-dialog-window-top`, which the window sets), where its owner
  * draws its own card (`DialogCard`) and what stands beside it on the dimmed
  * window; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
  * card while a drag it would take is over it.
@@ -175,7 +175,7 @@ const CARD_LOOK = [
   "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
-  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:min-h-0 data-[size=window]:min-w-0 data-[size=window]:gap-0 data-[size=window]:rounded-none data-[size=window]:border-0 data-[size=window]:bg-transparent data-[size=window]:p-0 data-[size=window]:shadow-none data-[size=window]:mx-luke-16 data-[size=window]:mb-luke-16 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-luke-48 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-luke-24",
+  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:min-h-0 data-[size=window]:min-w-0 data-[size=window]:gap-0 data-[size=window]:rounded-none data-[size=window]:border-0 data-[size=window]:bg-transparent data-[size=window]:p-0 data-[size=window]:shadow-none data-[size=window]:mx-ui-16 data-[size=window]:mb-ui-16 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-ui-48 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-ui-24",
   "data-[size=sheet]:w-dialog-wide data-[size=sheet]:gap-0 data-[size=sheet]:rounded-none data-[size=sheet]:border-0 data-[size=sheet]:bg-transparent data-[size=sheet]:p-0 data-[size=sheet]:shadow-none data-[size=sheet]:animate-none data-[size=sheet]:data-ending-style:animate-sheet-leave",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",
@@ -198,7 +198,7 @@ const CARD_LOOK = [
  * so its field yields to a short window (`desktop.css`) and its foot stays.
  */
 const MIDDLE =
-  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=window]:contents data-[size=sheet]:contents data-[size=composer]:overflow-visible";
+  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--ui-focus-ring-offset:var(--ui-focus-ring-inset)] data-[size=media]:contents data-[size=window]:contents data-[size=sheet]:contents data-[size=composer]:overflow-visible";
 
 /** What marks the part of a bare dialog that stands for the dimmed window. */
 const VEIL_ATTRIBUTE = "data-dialog-veil";

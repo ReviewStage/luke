@@ -45,7 +45,7 @@
     const width = Number(sidebarWidth);
     if (sidebarWidth !== null && sidebarWidth.trim() !== "" && Number.isFinite(width)) {
       const clamped = Math.min(SIDEBAR_WIDTH.MAX, Math.max(SIDEBAR_WIDTH.MIN, Math.round(width)));
-      root.style.setProperty("--luke-boot-sidebar-width", `${clamped}px`);
+      root.style.setProperty("--ui-boot-sidebar-width", `${clamped}px`);
     }
   }
 })();

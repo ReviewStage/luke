@@ -51,13 +51,13 @@ const SHOWN_ATTRIBUTE = "data-shown";
  * press's reach, a layer up, so a press on it is its own.
  */
 const BOX =
-  "luke-select-box absolute z-1 opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit hover:opacity-100 peer-hover/card-press:opacity-100 peer-focus-visible/card-press:opacity-100 data-[shown=true]:opacity-100";
+  "luke-select-box absolute z-1 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit hover:opacity-100 peer-hover/card-press:opacity-100 peer-focus-visible/card-press:opacity-100 data-[shown=true]:opacity-100";
 
 /** Where each place stands the box in its row. */
 const PLACED: Record<SelectBoxPlace, string> = {
   [SELECT_BOX_PLACE.GUTTER]: "top-1/2 left-row-inset -translate-y-1/2",
   [SELECT_BOX_PLACE.CARD_HEAD]:
-    "top-[calc(var(--spacing-row-inset)+(var(--spacing-luke-20)-var(--spacing-select-box))/2)] left-[calc(var(--spacing-list-inset)-var(--luke-space-4)+var(--spacing-select-box-inset))]",
+    "top-[calc(var(--spacing-row-inset)+(var(--spacing-ui-20)-var(--spacing-select-box))/2)] left-[calc(var(--spacing-list-inset)-var(--ui-space-4)+var(--spacing-select-box-inset))]",
 };
 
 /** The box of the row keyed `selectKey`, in the selection it stands in; nothing outside one. */

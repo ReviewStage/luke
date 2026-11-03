@@ -169,7 +169,7 @@ function AccountHeading({
           as={TEXT_ELEMENT.SPAN}
           variant={TEXT_VARIANT.INHERIT}
           truncate
-          className="account-menu-name font-luke-semibold text-foreground"
+          className="account-menu-name font-ui-semibold text-foreground"
         >
           {account.name}
         </Text>

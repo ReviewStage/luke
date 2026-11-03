@@ -208,7 +208,7 @@ function MoveTaskCard({
           onChoose={onChoose}
         />
         {chosen === undefined ? null : (
-          <ul className="move-effects m-0 grid gap-tight-gap rounded-control bg-muted p-card-inset-snug pl-luke-24 text-body-foreground text-caption">
+          <ul className="move-effects m-0 grid gap-tight-gap rounded-control bg-muted p-card-inset-snug pl-ui-24 text-body-foreground text-caption">
             <li>{lossLine(from, chosen)}</li>
             <li>{gainLine(chosen)}</li>
             <li>{`Its agents keep running, now in ${chosen.name}.`}</li>

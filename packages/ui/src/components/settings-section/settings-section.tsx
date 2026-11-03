@@ -82,7 +82,7 @@ export type SettingsSkeletonControl =
   (typeof SETTINGS_SKELETON_CONTROL)[keyof typeof SETTINGS_SKELETON_CONTROL];
 
 /** The width of the mark a provider's or a service's row leads with (`SettingsRowMark`), read inside the row. */
-export const SETTINGS_ROW_MARK_WIDTH = "var(--luke-settings-row-mark-size)";
+export const SETTINGS_ROW_MARK_WIDTH = "var(--ui-settings-row-mark-size)";
 
 /** One placeholder row, shaped as the row that lands: whether it is described, what it leads with, and what it ends in. */
 export interface SettingsRowSkeletonShape {
@@ -115,11 +115,11 @@ const SKELETON_ROW_WIDTHS = [
  * token, and a field's is the controls' whole width, as a text field's is.
  */
 const SKELETON_CONTROL_BLOCK = {
-  [SETTINGS_SKELETON_CONTROL.BUTTON]: "calc(3 * var(--luke-control-height))",
-  [SETTINGS_SKELETON_CONTROL.MORE]: "var(--luke-control-height)",
-  [SETTINGS_SKELETON_CONTROL.SELECT]: "var(--luke-select-field-width)",
-  [SETTINGS_SKELETON_CONTROL.SWITCH]: "calc(var(--luke-control-height) + var(--luke-space-4))",
-  [SETTINGS_SKELETON_CONTROL.CHOICE]: "calc(7.5 * var(--luke-control-height))",
+  [SETTINGS_SKELETON_CONTROL.BUTTON]: "calc(3 * var(--ui-control-height))",
+  [SETTINGS_SKELETON_CONTROL.MORE]: "var(--ui-control-height)",
+  [SETTINGS_SKELETON_CONTROL.SELECT]: "var(--ui-select-field-width)",
+  [SETTINGS_SKELETON_CONTROL.SWITCH]: "calc(var(--ui-control-height) + var(--ui-space-4))",
+  [SETTINGS_SKELETON_CONTROL.CHOICE]: "calc(7.5 * var(--ui-control-height))",
   [SETTINGS_SKELETON_CONTROL.FIELD]: "100%",
   [SETTINGS_SKELETON_CONTROL.VALUE]: "100%",
 } as const satisfies Record<SettingsSkeletonControl, string>;
@@ -281,16 +281,14 @@ function SectionFrame({
       className={
         rows
           ? "luke-settings-section flex min-w-0 flex-col gap-tight-gap"
-          : "luke-settings-section flex min-w-0 flex-col gap-luke-8"
+          : "luke-settings-section flex min-w-0 flex-col gap-ui-8"
       }
       data-frame={frame}
       aria-labelledby={labelledBy}
       {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
     >
       {head === undefined ? null : (
-        <div
-          className={rows ? "luke-settings-section-head" : "luke-settings-section-head px-luke-2"}
-        >
+        <div className={rows ? "luke-settings-section-head" : "luke-settings-section-head px-ui-2"}>
           {head}
         </div>
       )}

@@ -526,7 +526,7 @@ export function TabSkeleton(): React.JSX.Element {
 
 /** The block standing in the "+" while its strip is read: an icon press's square, as tall as it is wide. */
 export function AddTabSkeleton(): React.JSX.Element {
-  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />;
+  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--ui-control-height)" />;
 }
 
 /**

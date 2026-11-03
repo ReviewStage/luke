@@ -37,11 +37,11 @@ function draw(config: ChartConfig): HTMLElement {
 
 test("single-color series ride the container's style and write no stylesheet", () => {
   const chart = draw({
-    calls: { label: "Calls", color: "var(--luke-color-chart-1)" },
+    calls: { label: "Calls", color: "var(--ui-color-chart-1)" },
     tasks: { label: "Tasks", color: "#336699" },
   });
 
-  expect(chart.style.getPropertyValue("--color-calls")).toBe("var(--luke-color-chart-1)");
+  expect(chart.style.getPropertyValue("--color-calls")).toBe("var(--ui-color-chart-1)");
   expect(chart.style.getPropertyValue("--color-tasks")).toBe("#336699");
   expect(chart.querySelector("style")).toBeNull();
 });

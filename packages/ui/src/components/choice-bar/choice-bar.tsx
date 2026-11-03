@@ -133,7 +133,7 @@ export type ChoiceBarFocus = (typeof CHOICE_BAR_FOCUS)[keyof typeof CHOICE_BAR_F
  * width; or their names not fitting (`together`), measured, every option
  * then drawn by its glyph alone at once, the chosen one too, so none is
  * named while the others are not. A bar folding together also takes its
- * options' room in where its toolbar sets `--luke-fold: tight`, which it
+ * options' room in where its toolbar sets `--ui-fold: tight`, which it
  * does before their names stop fitting. A bar a finger works (`words`) never
  * folds: every option is named in words alone, with no glyph a finger could
  * not hover for its name, and a row too long scrolls sideways.
@@ -172,7 +172,7 @@ const FOLDABLE_PART =
   ".luke-choice-bar-option:has(> .luke-choice-bar-icon) .luke-count-part[data-folds]";
 
 /** The custom property `choice-bar.css` sets on a name its own fold draws nowhere, and what it sets. */
-const NAME_FOLD = "--luke-choice-bar-name";
+const NAME_FOLD = "--ui-choice-bar-name";
 const NAME_FOLDED = "folded";
 
 /** No option's name folded. */
@@ -229,7 +229,7 @@ const SEGMENTED_WIDTH = {
 
 /**
  * A fill bar folding together, or named in words alone, takes its options'
- * room in where its toolbar says `--luke-fold: tight`. Note that each is
+ * room in where its toolbar says `--ui-fold: tight`. Note that each is
  * keyed on the bar's `data-fold`, which outweighs the room it takes in.
  */
 const FILL_TIGHT_BAR = "fold-tight:data-[fold]:gap-0";
@@ -247,8 +247,8 @@ const FILL_TIGHT_OPTION = "fold-tight:[[data-fold]_&]:gap-1 fold-tight:[[data-fo
  */
 const OPTION = cn(
   "luke-choice-bar-option relative inline-flex items-center justify-center m-0 [border:0] [background:none]",
-  "outline-offset-[var(--luke-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
-  "[transition:background-color_var(--luke-duration-hover)_var(--luke-motion-exit),color_var(--luke-duration-hover)_var(--luke-motion-exit)]",
+  "outline-offset-[var(--ui-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
+  "[transition:background-color_var(--ui-duration-hover)_var(--ui-motion-exit),color_var(--ui-duration-hover)_var(--ui-motion-exit)]",
   "cursor-press disabled:cursor-default disabled:opacity-disabled",
   "[&:hover:not(:disabled)]:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
 );
@@ -289,17 +289,17 @@ const OPTION_FLEX = {
  * thumb raised on a hairline and a soft shadow.
  */
 const THUMB_BOX =
-  "luke-choice-bar-thumb absolute top-0 left-0 hidden [[data-thumb]_&]:block origin-top-left pointer-events-none motion-safe:[[data-thumb=sliding]_&]:[transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast)]";
+  "luke-choice-bar-thumb absolute top-0 left-0 hidden [[data-thumb]_&]:block origin-top-left pointer-events-none motion-safe:[[data-thumb=sliding]_&]:[transition:transform_var(--ui-duration-fast)_var(--ui-spring-fast)]";
 
 const THUMB_LOOK = {
   fill: "rounded-control bg-fill-strong",
   segmented:
-    "rounded-choice-segment bg-choice-thumb [box-shadow:0_0_0_0.5px_var(--luke-color-border-strong),0_1px_2px_var(--luke-color-shadow-soft)]",
+    "rounded-choice-segment bg-choice-thumb [box-shadow:0_0_0_0.5px_var(--ui-color-border-strong),0_1px_2px_var(--ui-color-shadow-soft)]",
 } as const satisfies Record<ChoiceBarLook, string>;
 
-/** The glyph slot says its size (`--luke-glyph-size`), which a glyph the app seats in it, a `GlyphSlot`, reads. */
+/** The glyph slot says its size (`--ui-glyph-size`), which a glyph the app seats in it, a `GlyphSlot`, reads. */
 const ICON =
-  "luke-choice-bar-icon inline-flex [--luke-glyph-size:var(--luke-control-icon)] [&>svg]:size-control-icon";
+  "luke-choice-bar-icon inline-flex [--ui-glyph-size:var(--ui-control-icon)] [&>svg]:size-control-icon";
 
 /**
  * The count lays its parts out as a row centred on the option rather than
@@ -321,24 +321,24 @@ interface ThumbBox {
 /** Sets where the thumb stands, its box, and the scale it is drawn at from its corner. */
 function setThumb(bar: HTMLElement, box: ThumbBox, scaleX: number, scaleY: number): void {
   const style = bar.style;
-  style.setProperty("--luke-choice-bar-thumb-x", `${box.x}px`);
-  style.setProperty("--luke-choice-bar-thumb-y", `${box.y}px`);
-  style.setProperty("--luke-choice-bar-thumb-width", `${box.width}px`);
-  style.setProperty("--luke-choice-bar-thumb-height", `${box.height}px`);
-  style.setProperty("--luke-choice-bar-thumb-scale-x", String(scaleX));
-  style.setProperty("--luke-choice-bar-thumb-scale-y", String(scaleY));
+  style.setProperty("--ui-choice-bar-thumb-x", `${box.x}px`);
+  style.setProperty("--ui-choice-bar-thumb-y", `${box.y}px`);
+  style.setProperty("--ui-choice-bar-thumb-width", `${box.width}px`);
+  style.setProperty("--ui-choice-bar-thumb-height", `${box.height}px`);
+  style.setProperty("--ui-choice-bar-thumb-scale-x", String(scaleX));
+  style.setProperty("--ui-choice-bar-thumb-scale-y", String(scaleY));
 }
 
 /** Whether the thumb already stands, unscaled, on `box`. */
 function thumbStands(bar: HTMLElement, box: ThumbBox): boolean {
   const style = bar.style;
   return (
-    style.getPropertyValue("--luke-choice-bar-thumb-x") === `${box.x}px` &&
-    style.getPropertyValue("--luke-choice-bar-thumb-y") === `${box.y}px` &&
-    style.getPropertyValue("--luke-choice-bar-thumb-width") === `${box.width}px` &&
-    style.getPropertyValue("--luke-choice-bar-thumb-height") === `${box.height}px` &&
-    style.getPropertyValue("--luke-choice-bar-thumb-scale-x") === "1" &&
-    style.getPropertyValue("--luke-choice-bar-thumb-scale-y") === "1"
+    style.getPropertyValue("--ui-choice-bar-thumb-x") === `${box.x}px` &&
+    style.getPropertyValue("--ui-choice-bar-thumb-y") === `${box.y}px` &&
+    style.getPropertyValue("--ui-choice-bar-thumb-width") === `${box.width}px` &&
+    style.getPropertyValue("--ui-choice-bar-thumb-height") === `${box.height}px` &&
+    style.getPropertyValue("--ui-choice-bar-thumb-scale-x") === "1" &&
+    style.getPropertyValue("--ui-choice-bar-thumb-scale-y") === "1"
   );
 }
 
@@ -527,7 +527,7 @@ function foldedAs(folded: ReadonlySet<string>, value: string, now: boolean): Rea
  * Which options of a fill bar folding by its own width it draws by their
  * glyphs alone, by value, read as each option resizes, which folding its
  * name or naming it again does. Note that the name's own style is read,
- * where the sheet marks it folded (`--luke-choice-bar-name`), because a
+ * where the sheet marks it folded (`--ui-choice-bar-name`), because a
  * container query decides it, which script cannot ask, as a folding button
  * reads its fold; and that an option is observed rather than its name,
  * because a name folded from the first frame reports no change of size.

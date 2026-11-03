@@ -89,11 +89,11 @@ function ContextBody({
   return (
     <>
       <p className="m-0 flex justify-between gap-control-gap tabular-nums">
-        <span className="font-luke-semibold">{contextFullLine(context)}</span>
+        <span className="font-ui-semibold">{contextFullLine(context)}</span>
         <span className="text-muted-foreground">{contextTotalLine(context)}</span>
       </p>
       <div
-        className="flex h-1.5 gap-list-gap overflow-hidden rounded-luke-full bg-fill-strong"
+        className="flex h-1.5 gap-list-gap overflow-hidden rounded-ui-full bg-fill-strong"
         aria-hidden="true"
       >
         {rows.map((row) => (
@@ -109,7 +109,7 @@ function ContextBody({
         {rows.map((row) => (
           <li key={row.part} className="flex items-center gap-icon-gap" data-part={row.part}>
             <span
-              className={`size-luke-8 flex-none rounded-luke-6 ${PART_GROUND[row.part]}`}
+              className={`size-ui-8 flex-none rounded-ui-6 ${PART_GROUND[row.part]}`}
               aria-hidden="true"
             />
             <span className="m-0 min-w-0 flex-1 text-muted-foreground">{row.label}</span>

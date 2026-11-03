@@ -10,28 +10,28 @@
      and its exit instead. */
   .luke-attachment-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
-      luke-chip-fade-in var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      luke-chip-fade-in var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      luke-chip-pop var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   /* Where no share of an upload is known, a third of the track sweeps across
      it from its middle, an endless loop with no end to wait for, so its
-     duration is a literal held still on --luke-loop-motion. */
+     duration is a literal held still on --ui-loop-motion. */
   .luke-attachment-chip-meter[data-indeterminate="true"] > .luke-attachment-chip-meter-fill {
     width: 34%;
-    animation: luke-attachment-chip-sweep 1200ms var(--luke-motion-pane) infinite;
-    animation-play-state: var(--luke-loop-motion);
+    animation: luke-attachment-chip-sweep 1200ms var(--ui-motion-pane) infinite;
+    animation-play-state: var(--ui-loop-motion);
   }
 
   /* A file that lands takes a check on its corner, which springs in on the
      pair an arriving element rides and fades once it has stood as long as
-     any confirmation does (`--luke-confirm-delay`). */
+     any confirmation does (`--ui-confirm-delay`). */
   .luke-attachment-chip-landed {
     animation:
-      luke-attachment-chip-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-attachment-chip-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards,
-      luke-attachment-chip-leave var(--luke-duration-exit) var(--luke-motion-exit)
-      var(--luke-confirm-delay) forwards;
+      luke-attachment-chip-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      luke-attachment-chip-spring var(--ui-duration-fast) var(--ui-spring-fast) backwards,
+      luke-attachment-chip-leave var(--ui-duration-exit) var(--ui-motion-exit)
+      var(--ui-confirm-delay) forwards;
   }
 
   /* Note that the sweep starts with its segment in the track's middle

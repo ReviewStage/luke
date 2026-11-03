@@ -9,13 +9,13 @@ import { useSettled } from "./settle-wait.js";
  * Every wait is drawn with this one ring, so a region still reading, a menu
  * still listing, and a button whose press is out read as one object. The
  * ring is an arc in the ink around it over a faint track, and holds still on
- * `--luke-loop-motion` under reduced motion and a capture run, still reading as a
+ * `--ui-loop-motion` under reduced motion and a capture run, still reading as a
  * wait. Its words are said to a reader alone, in a fixed phrase ("Reading the
  * transcript"), from a status line that stands from the start, empty until
  * the ring shows, because a reader announces a line filling more surely than
  * one arriving.
  *
- * A wait shows its ring only once it has stood a moment (`--luke-settle-delay`,
+ * A wait shows its ring only once it has stood a moment (`--ui-settle-delay`,
  * 180ms, `settle-wait.ts`), because a ring that flashes for a read that
  * landed at once is noise; each mount waits afresh, and its status line stands
  * from the start. A wait whose ring must stand at once says `delay={false}`.

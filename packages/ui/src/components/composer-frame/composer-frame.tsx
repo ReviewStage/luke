@@ -47,7 +47,7 @@ const LOOK_CLASS: Record<ComposerLook, string> = {
   [COMPOSER_LOOK.CARD]: "rounded-dialog border border-border bg-surface shadow-composer",
   [COMPOSER_LOOK.FIELD]: "rounded-control border border-border bg-ground",
   [COMPOSER_LOOK.INPUT]:
-    "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit focus-within:bg-field-focus",
+    "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit focus-within:bg-field-focus",
   [COMPOSER_LOOK.BARE]: "rounded-dialog border-0 bg-transparent",
 };
 

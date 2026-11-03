@@ -5,11 +5,11 @@
 
 @layer components {
   .luke-checkbox {
-    color: var(--luke-color-text);
+    color: var(--ui-color-text);
   }
 
   .luke-checkbox[data-disabled="true"] {
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 
   /* A box beside words is pressed anywhere on its row, the words too, and
@@ -29,8 +29,8 @@
       z-index: -1;
       top: 50%;
       left: 0;
-      width: max(100%, var(--luke-touch-target));
-      height: max(100%, var(--luke-touch-target));
+      width: max(100%, var(--ui-touch-target));
+      height: max(100%, var(--ui-touch-target));
       transform: translateY(-50%);
       content: "";
     }

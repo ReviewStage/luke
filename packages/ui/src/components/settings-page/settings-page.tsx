@@ -67,7 +67,7 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * height across. Note that it is a length rather than a share, because the
  * title's line is only as wide as what it holds.
  */
-const SKELETON_TITLE_WIDTH = "calc(5 * var(--luke-control-height))";
+const SKELETON_TITLE_WIDTH = "calc(5 * var(--ui-control-height))";
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -129,12 +129,12 @@ export function SettingsPage({
         >
           {phone ? (
             said(description) ? (
-              <div className="luke-settings-page-head mb-luke-24">
+              <div className="luke-settings-page-head mb-ui-24">
                 <Text tone={TEXT_TONE.MUTED}>{description}</Text>
               </div>
             ) : null
           ) : (
-            <div ref={head} className="luke-settings-page-head mb-luke-24">
+            <div ref={head} className="luke-settings-page-head mb-ui-24">
               <PageHeader
                 title={title}
                 description={description}

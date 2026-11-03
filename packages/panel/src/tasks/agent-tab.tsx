@@ -350,7 +350,7 @@ export const AGENT_LEAD: TranscriptLead = {
 /** The plan's own tab, which a task's name over its plan's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 
-/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--luke-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
+/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--ui-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
 const ROW_ESTIMATE_PX = 172;
 
 /**
@@ -2347,7 +2347,7 @@ function AgentTranscriptView({
               {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
               {olderFailed && onOlder !== undefined ? (
                 <div
-                  className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
+                  className={`${FLOATING_OVER_LOG_CLASS} top-ui-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
                 >
                   <ErrorState
                     failure={unreadShown(FAILURE_SURFACE.AGENT_TRANSCRIPT_OLDER_READ)}

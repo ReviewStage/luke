@@ -6,8 +6,8 @@
     min-width: 0;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-control-radius);
+    border: 1px solid var(--ui-color-border);
+    border-radius: var(--ui-control-radius);
     list-style: none;
   }
 
@@ -15,11 +15,11 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: var(--luke-item-gap);
-    padding: var(--luke-row-inset);
+    gap: var(--ui-item-gap);
+    padding: var(--ui-row-inset);
   }
 
   .luke-block-list-item + .luke-block-list-item {
-    border-top: 1px solid var(--luke-color-border);
+    border-top: 1px solid var(--ui-color-border);
   }
 }

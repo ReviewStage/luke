@@ -82,7 +82,7 @@ const TABLE_MIN_WIDTH =
   "data-[min-width=narrow]:min-w-data-table-narrow data-[min-width=medium]:min-w-data-table-medium data-[min-width=wide]:min-w-data-table-wide";
 
 /** A row's fill eases in and out under the pointer. */
-const ROW = "transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+const ROW = "transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
 /** A row that opens something: lit under the pointer, and pressed with the web's pointing hand but a Mac list's arrow on the desktop. */
 const PRESSABLE_ROW = "cursor-press [&:hover]:bg-muted";

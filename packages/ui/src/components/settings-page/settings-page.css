@@ -9,7 +9,7 @@
 
 /* The depth of the top's fade, a registered length so a scroll timeline can
    ease it from none to the whole fade over the page's first scroll. */
-@property --luke-settings-page-fade {
+@property --ui-settings-page-fade {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
@@ -17,11 +17,11 @@
 
 @keyframes luke-settings-page-fade {
   from {
-    --luke-settings-page-fade: 0px;
+    --ui-settings-page-fade: 0px;
   }
 
   to {
-    --luke-settings-page-fade: var(--luke-space-24);
+    --ui-settings-page-fade: var(--ui-space-24);
   }
 }
 
@@ -34,11 +34,11 @@
      whose timeline never runs, is left whole. A scroll timeline is not
      motion, so reduced motion leaves it be. */
   .luke-settings-page {
-    --luke-settings-page-measure: var(--luke-settings-measure);
-    mask-image: linear-gradient(to bottom, transparent, #000 var(--luke-settings-page-fade));
+    --ui-settings-page-measure: var(--ui-settings-measure);
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--ui-settings-page-fade));
     animation: luke-settings-page-fade linear both;
     animation-timeline: scroll(self block);
-    animation-range: 0 var(--luke-space-24);
+    animation-range: 0 var(--ui-space-24);
   }
 
   /* Note that the column's box, measure, and inset stay here rather than in
@@ -46,8 +46,8 @@
      undo them, and a rule in this layer cannot undo a utility. */
   .luke-settings-page-column {
     box-sizing: content-box;
-    max-width: var(--luke-settings-page-measure);
-    padding: var(--luke-page-inset);
+    max-width: var(--ui-settings-page-measure);
+    padding: var(--ui-page-inset);
   }
 
   /* A page whose content is an empty state gives it the room under the
@@ -66,7 +66,7 @@
     flex-direction: column;
     flex: 1 0 auto;
     width: 100%;
-    max-width: calc(var(--luke-settings-page-measure) + 2 * var(--luke-page-inset));
+    max-width: calc(var(--ui-settings-page-measure) + 2 * var(--ui-page-inset));
   }
 
   .luke-settings-page-sections:has(> .luke-empty-state) {
@@ -77,7 +77,7 @@
      width is written here (`tokens/profiles.css`). */
   @container luke-settings-page (width < 480px) {
     .luke-settings-page-column {
-      padding: var(--luke-page-inset-narrow);
+      padding: var(--ui-page-inset-narrow);
     }
   }
 }

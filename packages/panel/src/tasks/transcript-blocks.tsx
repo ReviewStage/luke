@@ -1550,7 +1550,7 @@ function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boo
         )}
       </GlyphSlot>
       <span
-        className={`min-w-0 wrap-anywhere transition-[color] duration-(--luke-duration-quick) ease-motion-exit${done ? " text-muted-foreground" : ""}`}
+        className={`min-w-0 wrap-anywhere transition-[color] duration-(--ui-duration-quick) ease-motion-exit${done ? " text-muted-foreground" : ""}`}
       >
         {todo.content}
       </span>

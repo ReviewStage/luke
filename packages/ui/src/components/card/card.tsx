@@ -179,13 +179,13 @@ function cornerClass(look: CardLook, corner: CardCorner): string {
 function overflowClass(look: CardLook, padding: CardPadding): string {
   if (look === CARD_LOOK.RAISED) return "overflow-visible";
   if (padding !== CARD_PADDING.FLUSH) return "";
-  return "overflow-clip [--luke-focus-ring-offset:var(--luke-focus-ring-inset)]";
+  return "overflow-clip [--ui-focus-ring-offset:var(--ui-focus-ring-inset)]";
 }
 
 /** The edge's fade, a well's alone, since a card that lifts rides its own (`card.css`). */
 function transitionClass(look: CardLook, hover: CardHover): string {
   if (look !== CARD_LOOK.WELL || hover === CARD_HOVER.LIFT) return "";
-  return "transition-[border-color] duration-(--luke-duration-hover) ease-plain";
+  return "transition-[border-color] duration-(--ui-duration-hover) ease-plain";
 }
 
 /** Every class a card's frame wears for the choices made, its owner's last. */

@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 /** The motion token reduced motion zeroes, which says motion is held still. */
-const DURATION_FAST = "--luke-duration-fast";
+const DURATION_FAST = "--ui-duration-fast";
 
 /** A WebM's bytes as a picture read answers them; the stand-in element never decodes them. */
 const WEBM_URL = "data:video/webm;base64,GkXfow==";

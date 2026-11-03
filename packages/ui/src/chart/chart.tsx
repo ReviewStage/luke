@@ -5,7 +5,7 @@
  * registry file expects — `cn` from `@/lib/utils` — is this package's own
  * `cn`. Exported at `@luke/ui/chart` alone, so recharts rides into no bundle
  * behind the barrel. Its frame and tooltip are drawn by `chart.css` in the
- * shared `--luke-*` tokens, not the stock utilities, so the chart reads
+ * shared `--ui-*` tokens, not the stock utilities, so the chart reads
  * alike whichever app mounts it; a caller's `className` on the container
  * sizes it and nothing more. The tooltip's indicator is the swatch alone,
  * stock's line and dashed variants having no caller. Series colors

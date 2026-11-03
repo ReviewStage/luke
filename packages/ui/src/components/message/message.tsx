@@ -37,7 +37,7 @@ const FRAME = "luke-message group/message";
 
 /** The bar, hidden and taking no pointer until the turn, its keyboard, or its hover card asks it up. */
 const ACTIONS =
-  "luke-message-actions pointer-events-none flex flex-none items-center gap-luke-2 opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit focus-within:pointer-events-auto focus-within:opacity-100 has-[[aria-describedby]]:pointer-events-auto has-[[aria-describedby]]:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100 no-hover:group-data-[actions-shown=true]/message:pointer-events-auto no-hover:group-data-[actions-shown=true]/message:opacity-100";
+  "luke-message-actions pointer-events-none flex flex-none items-center gap-ui-2 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit focus-within:pointer-events-auto focus-within:opacity-100 has-[[aria-describedby]]:pointer-events-auto has-[[aria-describedby]]:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100 no-hover:group-data-[actions-shown=true]/message:pointer-events-auto no-hover:group-data-[actions-shown=true]/message:opacity-100";
 
 export function MessageFrame({
   revealActionsOnTap = false,

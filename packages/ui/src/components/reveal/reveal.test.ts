@@ -29,12 +29,12 @@ const ROW = 40;
 
 /** The motion tokens the area reads, as an app's sheets set them. */
 const TOKENS = {
-  "--luke-duration-exit": "90ms",
-  "--luke-motion-exit": "ease",
-  "--luke-duration-quick": "140ms",
-  "--luke-duration-shape": "460ms",
-  "--luke-spring": "ease-out",
-  "--luke-row-stagger": "32ms",
+  "--ui-duration-exit": "90ms",
+  "--ui-motion-exit": "ease",
+  "--ui-duration-quick": "140ms",
+  "--ui-duration-shape": "460ms",
+  "--ui-spring": "ease-out",
+  "--ui-row-stagger": "32ms",
 } as const;
 
 /** The clips a reveal's rows unroll from and to. */

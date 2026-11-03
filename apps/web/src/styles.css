@@ -30,21 +30,21 @@
    drift waiting to happen. Every value is a shared role's, merely aliased
    here, so the utilities and the plain-CSS blocks draw the same vocabulary.
    No colour is aliased: the page and the admin dashboard spell a role
-   directly (`text-(--luke-color-text-muted)`), and the chart configs read
-   `--luke-color-chart-*`. */
+   directly (`text-(--ui-color-text-muted)`), and the chart configs read
+   `--ui-color-chart-*`. */
 @theme inline {
-  --radius-sm: var(--luke-radius-6);
-  --radius-md: var(--luke-control-radius);
+  --radius-sm: var(--ui-radius-6);
+  --radius-md: var(--ui-control-radius);
 
-  --font-sans: var(--luke-font-sans);
-  --font-mono: var(--luke-font-mono);
-  --font-brand: var(--luke-font-display);
+  --font-sans: var(--ui-font-sans);
+  --font-mono: var(--ui-font-mono);
+  --font-brand: var(--ui-font-display);
 }
 
 :root {
   /* The page's palette, its fonts, its 4px space scale, and its corner are
      the web profile's in `@luke/ui` (`tokens/palettes.css`, `profiles.css`),
-     read here as its `--luke-*` roles. A page is light unless its root asks for the dark
+     read here as its `--ui-*` roles. A page is light unless its root asks for the dark
      theme: the app and the admin dashboard ask for it from the account's
      Theme setting (`public/app-theme.js`), the OAuth cards by their own page. */
   font-optical-sizing: auto;
@@ -71,18 +71,18 @@
 
 @layer base {
   html {
-    font-family: var(--luke-font-sans);
+    font-family: var(--ui-font-sans);
   }
 
   body {
-    background: var(--luke-color-ground);
-    color: var(--luke-color-text);
-    line-height: var(--luke-type-reading-leading);
+    background: var(--ui-color-ground);
+    color: var(--ui-color-text);
+    line-height: var(--ui-type-reading-leading);
     -webkit-font-smoothing: antialiased;
   }
 
   :focus-visible {
-    outline: 2px solid var(--luke-color-focus-ring);
+    outline: 2px solid var(--ui-color-focus-ring);
     outline-offset: 3px;
   }
 

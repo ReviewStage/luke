@@ -585,7 +585,7 @@ export function AssigneeFaceHeard({ face }: { face: AssigneeFace }): React.JSX.E
  * before the badge does.
  */
 const QUIET_BADGE =
-  "shrink-0 rounded-luke-6 bg-fill-strong px-tight-gap text-caption font-luke-medium text-muted-foreground";
+  "shrink-0 rounded-ui-6 bg-fill-strong px-tight-gap text-caption font-ui-medium text-muted-foreground";
 
 /** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
@@ -994,7 +994,7 @@ function CardedFace({
         {face.badge === undefined ? null : (
           // Note that the badge stands over the next face, which overlaps this one's corner.
           <span
-            className="actor-stack-badge absolute -right-luke-4 -bottom-luke-4 z-1 grid size-actor-badge place-items-center rounded-disc bg-actor-stack-ground [&_svg]:size-actor-badge-glyph [&_svg]:stroke-3"
+            className="actor-stack-badge absolute -right-ui-4 -bottom-ui-4 z-1 grid size-actor-badge place-items-center rounded-disc bg-actor-stack-ground [&_svg]:size-actor-badge-glyph [&_svg]:stroke-3"
             aria-hidden="true"
           >
             {face.badge}
@@ -1073,7 +1073,7 @@ const MORE_FACES_LABEL = "Everyone else";
  * ringed by the ground as the faces are.
  */
 const PILE_COUNT =
-  "actor-stack-more inline-grid h-avatar-stack min-w-avatar-stack place-items-center rounded-luke-full bg-actor-tile px-tight-gap text-caption-inline font-luke-semibold text-muted-foreground tabular-nums shadow-actor-ring";
+  "actor-stack-more inline-grid h-avatar-stack min-w-avatar-stack place-items-center rounded-ui-full bg-actor-tile px-tight-gap text-caption-inline font-ui-semibold text-muted-foreground tabular-nums shadow-actor-ring";
 
 /**
  * How far a pile's face or count stands from the one before it: each

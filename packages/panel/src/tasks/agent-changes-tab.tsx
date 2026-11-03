@@ -697,7 +697,7 @@ function entryOf(
     pictured !== undefined ? (
       <ImageDiff file={file} sides={pictured} />
     ) : notice === undefined ? undefined : (
-      <p className="diff-list-notice m-0 py-list-inset pr-list-inset pl-luke-40 text-caption-inline text-muted-foreground">
+      <p className="diff-list-notice m-0 py-list-inset pr-list-inset pl-ui-40 text-caption-inline text-muted-foreground">
         {notice}
         {shown}
       </p>
@@ -731,7 +731,7 @@ function entryOf(
       side: DIFF_SELECTION_SIDE.ADDITIONS,
       line: FILE_NOTE_LINE,
       content: (
-        <p className="m-0 py-tight-gap pr-list-inset pl-luke-40 text-caption-inline text-muted-foreground">
+        <p className="m-0 py-tight-gap pr-list-inset pl-ui-40 text-caption-inline text-muted-foreground">
           {EXPANSION_REFUSED_WORDS[gaps.refused]}
         </p>
       ),

@@ -8,7 +8,7 @@
   .luke-row-more {
     display: flex;
     opacity: 0;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   [data-row-menu]:is(:has(:focus-visible), [data-menu-open="true"]) .luke-row-more {

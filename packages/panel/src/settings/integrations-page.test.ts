@@ -1840,7 +1840,7 @@ function offerThree(): void {
 test("with motion held still, an integration that connects takes its place and nothing plays", async () => {
   const motions = playListMotions();
   try {
-    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+    for (const name of ["--ui-duration-exit", "--ui-duration-shape"]) {
       document.documentElement.style.setProperty(name, "0ms");
     }
     offerThree();
@@ -1897,8 +1897,8 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
   const motions = playListMotions();
   // Note that the arrival's fade and stagger are tokens the list motion's helper leaves unset.
   for (const [name, value] of [
-    ["--luke-duration-quick", "140ms"],
-    ["--luke-row-stagger", "32ms"],
+    ["--ui-duration-quick", "140ms"],
+    ["--ui-row-stagger", "32ms"],
   ] as const) {
     document.documentElement.style.setProperty(name, value);
   }
@@ -1936,8 +1936,8 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
     act(() => motions.played.findLast((each) => each.element === box)?.finish());
     assert.equal(box?.isConnected, false);
   } finally {
-    document.documentElement.style.removeProperty("--luke-duration-quick");
-    document.documentElement.style.removeProperty("--luke-row-stagger");
+    document.documentElement.style.removeProperty("--ui-duration-quick");
+    document.documentElement.style.removeProperty("--ui-row-stagger");
     motions.remove();
   }
 });
@@ -1945,7 +1945,7 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
 test("with motion held still, a row's tools show at once and fold at once", async () => {
   const motions = playListMotions();
   try {
-    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+    for (const name of ["--ui-duration-exit", "--ui-duration-shape"]) {
       document.documentElement.style.setProperty(name, "0ms");
     }
     connectVercelAndLinear();

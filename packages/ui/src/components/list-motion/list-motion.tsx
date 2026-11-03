@@ -22,8 +22,8 @@
  * has played. What leaves goes first, so what it moved glides after it. An
  * entry listed again before its exit finished, an Undo, stands again and
  * comes back the way it went. A row arriving rides the pair every arriving
- * element rides, opacity over `--luke-duration-quick` and its travel on
- * `--luke-spring`, rows that arrive together a `--luke-row-stagger` apart. A
+ * element rides, opacity over `--ui-duration-quick` and its travel on
+ * `--ui-spring`, rows that arrive together a `--ui-row-stagger` apart. A
  * list that was not drawn before the change, a fold opened, draws its rows
  * at once, and nothing plays the first time a list is drawn. While what the
  * lists draw is still being read (`reading`), as an Inbox's reads land one
@@ -77,7 +77,7 @@
  * scroller's: a list scrolled to its end that grows shorter is scrolled back
  * by the browser as much as it shrank, which carries every row in sight
  * down. So the root holds its height while a row leaves, as far down as the
- * scroller shows it, through `--luke-list-held-height` (a root that reads
+ * scroller shows it, through `--ui-list-held-height` (a root that reads
  * it as its `min-height`), and gives it back only as the reader scrolls up.
  */
 
@@ -109,10 +109,10 @@ const DRAGGING_ATTRIBUTE = "data-dragging";
 const MOVER = `[${ROWS_ATTRIBUTE}] > *`;
 
 /** The property the root holds its height by while a row leaves. */
-const HELD_HEIGHT = "--luke-list-held-height";
+const HELD_HEIGHT = "--ui-list-held-height";
 
 /** How far a row travels as it arrives or leaves, the list role's length. */
-const TRAVEL = "--luke-list-travel";
+const TRAVEL = "--ui-list-travel";
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
 const STILL = 0.5;

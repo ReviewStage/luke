@@ -68,7 +68,7 @@ const NAME = "luke-comment-name min-w-0";
 // Note that a name followed by what its writer did is cut on its own, because a long name, as an agent's often is, would otherwise cut what they did off the line.
 const NAME_SAYING = "luke-comment-name flex min-w-0 items-baseline";
 const WHO = "luke-comment-who";
-const SAID = "luke-comment-said flex-none whitespace-pre font-luke-regular text-muted-foreground";
+const SAID = "luke-comment-said flex-none whitespace-pre font-ui-regular text-muted-foreground";
 const TIME = "luke-comment-time flex-none";
 // Note that the trailing slot is the head's line tall, its controls centred on it and standing over its edges, because a control's height would push every comment's words down by a different amount.
 const TRAILING =

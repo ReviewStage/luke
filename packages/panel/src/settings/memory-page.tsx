@@ -165,7 +165,7 @@ const MEMORIES_SKELETON: readonly {
  * link, and the ⋯, lifted over the press so a press on one is its own.
  */
 const MEMORY_ROW =
-  "memory-row relative list-none rounded-control px-row-inset ps-select-gutter py-luke-8 [&:hover]:bg-muted";
+  "memory-row relative list-none rounded-control px-row-inset ps-select-gutter py-ui-8 [&:hover]:bg-muted";
 const MEMORY_NOTE = "memory-note pointer-events-none";
 const LIFTED = "pointer-events-auto relative z-1";
 const MEMORY_WORDS = "memory-words [&_a]:pointer-events-auto [&_a]:relative [&_a]:z-1";
@@ -175,11 +175,11 @@ const SEARCH_LINE =
   "memory-search flex items-center gap-control-gap [&>:first-child]:min-w-0 [&>:first-child]:flex-1";
 
 /** The memories' list, a column of rows. */
-const MEMORY_LIST = "memory-list m-0 flex flex-col gap-luke-2 p-0";
+const MEMORY_LIST = "memory-list m-0 flex flex-col gap-ui-2 p-0";
 
 /** Where the selection bar floats: at the foot of the page, over the rows, as the Tasks list's does. */
 const SELECTION_FOOT =
-  "memory-selection pointer-events-none sticky bottom-luke-16 z-4 flex justify-center *:pointer-events-auto";
+  "memory-selection pointer-events-none sticky bottom-ui-16 z-4 flex justify-center *:pointer-events-auto";
 
 /** A Markdown node, as far as its words go: the words it holds itself, and what it holds. */
 interface WordsNode {

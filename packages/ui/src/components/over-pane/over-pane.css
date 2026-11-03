@@ -4,7 +4,7 @@
 
 @layer components {
   .luke-over-pane {
-    animation: luke-over-pane-in-right var(--luke-duration-pane) var(--luke-motion-pane) backwards;
+    animation: luke-over-pane-in-right var(--ui-duration-pane) var(--ui-motion-pane) backwards;
   }
 
   .luke-over-pane[data-edge="left"] {
@@ -13,12 +13,12 @@
 
   /* A peek waits a beat before it slides, so a pointer passing on its way elsewhere leaves before anything is covered. */
   .luke-over-pane[data-arrival="peek"] {
-    animation-delay: var(--luke-duration-quick);
+    animation-delay: var(--ui-duration-quick);
   }
 
   /* On its way out it slides past its edge and holds there until it is let go. */
   .luke-over-pane[data-state="leaving"] {
-    animation: luke-over-pane-out-right var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+    animation: luke-over-pane-out-right var(--ui-duration-pane) var(--ui-motion-pane) forwards;
   }
 
   .luke-over-pane[data-state="leaving"][data-edge="left"] {

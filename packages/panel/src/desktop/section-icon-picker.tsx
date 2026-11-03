@@ -602,7 +602,7 @@ function ColorChoices({
   );
   return (
     <fieldset
-      className="section-icon-colors m-0 flex flex-none gap-luke-4 border-0 p-0"
+      className="section-icon-colors m-0 flex flex-none gap-ui-4 border-0 p-0"
       onKeyDown={stepGrid}
       onFocus={standTabStop}
     >

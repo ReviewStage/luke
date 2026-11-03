@@ -420,12 +420,12 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
 /** The list motion's tokens, as the app's sheets set them, and an engine that records each motion rather than playing it; answers what was played and a way to take both away. */
 function recordMotions() {
   const tokens = {
-    "--luke-duration-exit": "90ms",
-    "--luke-motion-exit": "ease",
-    "--luke-duration-quick": "140ms",
-    "--luke-duration-shape": "460ms",
-    "--luke-spring": "ease-out",
-    "--luke-row-stagger": "32ms",
+    "--ui-duration-exit": "90ms",
+    "--ui-motion-exit": "ease",
+    "--ui-duration-quick": "140ms",
+    "--ui-duration-shape": "460ms",
+    "--ui-spring": "ease-out",
+    "--ui-row-stagger": "32ms",
   };
   for (const [name, value] of Object.entries(tokens)) {
     document.documentElement.style.setProperty(name, value);

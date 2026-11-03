@@ -386,7 +386,7 @@ function Generating({
 function RiskMark({ risk }: { risk: Chapter["risk"] }): React.JSX.Element {
   return (
     <span
-      className="block size-luke-8 rounded-luke-full data-[risk=high]:bg-danger data-[risk=low]:bg-complete data-[risk=medium]:bg-attention"
+      className="block size-ui-8 rounded-ui-full data-[risk=high]:bg-danger data-[risk=low]:bg-complete data-[risk=medium]:bg-attention"
       data-risk={risk ?? undefined}
     />
   );

@@ -110,12 +110,12 @@ function fillColours(colour: string): CSSProperties | undefined {
     lightness >= DARK_GROUND_WORDS ? 0 : (DARK_GROUND_WORDS - lightness) / (1 - lightness);
   const words = hexOf(mixed(rgb, 255, lift));
   return cssCustomProperties({
-    "--luke-badge-fill-light": fill,
-    "--luke-badge-edge-light": hexOf(mixed(rgb, 0, EDGE_SHADE)),
-    "--luke-badge-words-light": lightness > LIGHT_FILL ? DARK_WORDS : LIGHT_WORDS,
-    "--luke-badge-fill-dark": `${fill}${TINT_ALPHA}`,
-    "--luke-badge-edge-dark": `${words}${EDGE_ALPHA}`,
-    "--luke-badge-words-dark": words,
+    "--ui-badge-fill-light": fill,
+    "--ui-badge-edge-light": hexOf(mixed(rgb, 0, EDGE_SHADE)),
+    "--ui-badge-words-light": lightness > LIGHT_FILL ? DARK_WORDS : LIGHT_WORDS,
+    "--ui-badge-fill-dark": `${fill}${TINT_ALPHA}`,
+    "--ui-badge-edge-dark": `${words}${EDGE_ALPHA}`,
+    "--ui-badge-words-dark": words,
   });
 }
 

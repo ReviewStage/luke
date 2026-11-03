@@ -47,7 +47,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * baseline is its bottom edge), and a pill stands proud of the name on
  * padding its margins take back. A wash bleeds by a ring of its own colour
  * rather than padding, so the words around it keep their spacing, and hands
- * the wash on (`--luke-inline-ref-wash`) for a mark inside that rings itself
+ * the wash on (`--ui-inline-ref-wash`) for a mark inside that rings itself
  * in the ground. A cut name's fade is `inline-ref.css`'s, as a chip's is.
  */
 
@@ -131,9 +131,9 @@ const ROOT =
 const LOOK_ROOT = {
   [INLINE_REF_LOOK.LINK]: "gap-icon-gap bg-transparent",
   [INLINE_REF_LOOK.WASH]:
-    "gap-luke-4 rounded-luke-6 bg-transparent transition-[background-color,box-shadow,color] duration-(--luke-duration-hover) ease-motion-exit [&:hover]:bg-muted [&:hover]:text-foreground [&:hover]:shadow-inline-ref-wash [&:hover]:[--luke-inline-ref-wash:var(--luke-color-fill-hover)]",
+    "gap-ui-4 rounded-ui-6 bg-transparent transition-[background-color,box-shadow,color] duration-(--ui-duration-hover) ease-motion-exit [&:hover]:bg-muted [&:hover]:text-foreground [&:hover]:shadow-inline-ref-wash [&:hover]:[--ui-inline-ref-wash:var(--ui-color-fill-hover)]",
   [INLINE_REF_LOOK.PILL]:
-    "-my-[0.075em] gap-luke-4 rounded-luke-6 py-[0.075em] pr-luke-6 pl-luke-4 text-foreground data-[look=pill]:leading-[1.2] data-[look=pill]:font-tag transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit",
+    "-my-[0.075em] gap-ui-4 rounded-ui-6 py-[0.075em] pr-ui-6 pl-ui-4 text-foreground data-[look=pill]:leading-[1.2] data-[look=pill]:font-tag transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit",
 } as const satisfies Record<InlineRefLook, string>;
 
 /** How a token's root is drawn: its look, its ink, a pointer where it presses, and a pill's fill lifting under the pointer or the keyboard, or with the row it stands inert in, unless what it names is gone. */
@@ -202,7 +202,7 @@ function labelClass({
 function stateClass(look: InlineRefLook): string {
   const state = "luke-inline-ref-state flex-none self-baseline text-muted-foreground";
   return look === INLINE_REF_LOOK.PILL
-    ? `${state} border-l border-border-strong pl-luke-4 font-caption`
+    ? `${state} border-l border-border-strong pl-ui-4 font-caption`
     : state;
 }
 

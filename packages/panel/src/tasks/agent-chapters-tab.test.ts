@@ -319,7 +319,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   for (const style of document.head.querySelectorAll("style")) style.remove();
-  document.body.style.removeProperty("--luke-duration-pane");
+  document.body.style.removeProperty("--ui-duration-pane");
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -961,7 +961,7 @@ function railToggle(tab: HTMLElement): HTMLButtonElement {
 /** A narrow panel with the chapters read and the rail away. */
 async function narrowChapters(): Promise<HTMLElement> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   layContainersAt({ "side-panel": 500 });
   const tab = await draw(
     controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),

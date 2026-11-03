@@ -261,7 +261,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   document.head.innerHTML = "";
-  document.body.style.removeProperty("--luke-duration-pane");
+  document.body.style.removeProperty("--ui-duration-pane");
   vi.restoreAllMocks();
 });
 
@@ -1438,7 +1438,7 @@ function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
 /** A panel too narrow for the shells beside the screen, the list closed. */
 async function narrowTab() {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   // Only the sheet that draws the toggles, since each style read weighs every rule laid.
   layContainersAt({ "side-panel": 400 }, { only: ["./tasks.css"] });
   return mount(true, false);

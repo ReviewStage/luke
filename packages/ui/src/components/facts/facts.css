@@ -7,27 +7,27 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: var(--luke-space-6);
+    gap: var(--ui-space-6);
     margin: 0;
     padding: 0;
   }
 
   .luke-facts[data-ruled="true"] {
-    padding-top: var(--luke-space-12);
-    border-top: 1px solid var(--luke-color-border);
+    padding-top: var(--ui-space-12);
+    border-top: 1px solid var(--ui-color-border);
   }
 
   .luke-fact {
     display: flex;
     align-items: center;
-    gap: var(--luke-icon-gap);
+    gap: var(--ui-icon-gap);
   }
 
   .luke-fact-label {
     flex: 1;
     min-width: 0;
     margin: 0;
-    color: var(--luke-color-text-muted);
+    color: var(--ui-color-text-muted);
   }
 
   .luke-fact-value {

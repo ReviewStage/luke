@@ -82,9 +82,9 @@ const DEFAULT_WIDTH = 340;
 
 /** The token each named width is drawn at. */
 const WIDTH_TOKEN: Record<PopoverWidth, string> = {
-  [POPOVER_WIDTH.NARROW]: "--luke-popover-width-narrow",
-  [POPOVER_WIDTH.REGULAR]: "--luke-popover-width-regular",
-  [POPOVER_WIDTH.WIDE]: "--luke-popover-width-wide",
+  [POPOVER_WIDTH.NARROW]: "--ui-popover-width-narrow",
+  [POPOVER_WIDTH.REGULAR]: "--ui-popover-width-regular",
+  [POPOVER_WIDTH.WIDE]: "--ui-popover-width-wide",
 };
 
 /** The box that bounds a popover beside the window's: the desktop's side panel, which marks itself so. */
@@ -93,7 +93,7 @@ const POPOVER_ROOM = "[data-popover-room]";
 /**
  * The layer's inline place: its asked edge's inset, as `left` or `right`,
  * its width, and, once measured, the height its side leaves it as
- * `--luke-popover-room`, which a popover taller than a menu bounds itself by.
+ * `--ui-popover-room`, which a popover taller than a menu bounds itself by.
  */
 function placeStyle(
   align: PopoverAlign,
@@ -104,7 +104,7 @@ function placeStyle(
   const edge = align === POPOVER_ALIGN.START ? { left: inset, width } : { right: inset, width };
   return room === undefined
     ? edge
-    : { ...edge, ...cssCustomProperties({ "--luke-popover-room": `${room}px` }) };
+    : { ...edge, ...cssCustomProperties({ "--ui-popover-room": `${room}px` }) };
 }
 
 /** The box marking the room around `element` where its popover keeps to one, or none. */

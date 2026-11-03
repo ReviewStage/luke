@@ -6,10 +6,10 @@
 @layer components {
   .luke-saved-tick {
     animation:
-      luke-saved-tick-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-saved-tick-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards,
-      luke-saved-tick-out var(--luke-duration-exit) var(--luke-motion-exit)
-      calc(var(--luke-duration-fast) + var(--luke-confirm-delay)) forwards;
+      luke-saved-tick-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      luke-saved-tick-pop var(--ui-duration-fast) var(--ui-spring-fast) backwards,
+      luke-saved-tick-out var(--ui-duration-exit) var(--ui-motion-exit)
+      calc(var(--ui-duration-fast) + var(--ui-confirm-delay)) forwards;
   }
 
   @keyframes luke-saved-tick-fade {

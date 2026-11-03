@@ -56,14 +56,14 @@ export function layTitle(layout: TitleLayout): { restore: () => void } {
     return 0;
   };
   globalThis.ResizeObserver = StillObserver as unknown as typeof ResizeObserver;
-  document.documentElement.style.setProperty("--luke-title-floor", `${layout.floor}px`);
+  document.documentElement.style.setProperty("--ui-title-floor", `${layout.floor}px`);
   return {
     restore: () => {
       if (rect !== undefined) Object.defineProperty(proto, "getBoundingClientRect", rect);
       if (scroll !== undefined) Object.defineProperty(proto, "scrollWidth", scroll);
       globalThis.requestAnimationFrame = frame;
       globalThis.ResizeObserver = observer;
-      document.documentElement.style.removeProperty("--luke-title-floor");
+      document.documentElement.style.removeProperty("--ui-title-floor");
     },
   };
 }

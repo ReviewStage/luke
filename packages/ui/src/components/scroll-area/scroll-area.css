@@ -1,7 +1,7 @@
 /* scroll-area.css -- what a scroll area's utilities (`./scroll-area.tsx`)
    cannot say: the edges it fades dissolving into whatever ground it stands
    on, eased in by a scroll timeline over registered lengths, and the depth of
-   both read from the profile's `--luke-scroll-fade` and `--luke-scroll-band`,
+   both read from the profile's `--ui-scroll-fade` and `--ui-scroll-band`,
    which an app may set (a pull request's band). The lengths and keyframes are
    also what a transcript's table and a note's table fade with (`@luke/panel`'s
    tasks.css, `../prose/prose.css`). */
@@ -14,13 +14,13 @@
    sideways area eases the same two along its inline axis. They do not
    inherit, so as they ease only the area is restyled, never what it
    holds. */
-@property --luke-scroll-area-fade-start {
+@property --ui-scroll-area-fade-start {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
 }
 
-@property --luke-scroll-area-fade-end {
+@property --ui-scroll-area-fade-end {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
@@ -29,7 +29,7 @@
 /* How far below the area's start edge its start fade begins: none, or a
    stuck band's height. It does not inherit either, so an area inside one
    with a band begins its own fade at its edge. */
-@property --luke-scroll-area-fade-inset {
+@property --ui-scroll-area-fade-inset {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
@@ -37,21 +37,21 @@
 
 @keyframes luke-scroll-area-fade-start {
   from {
-    --luke-scroll-area-fade-start: 0px;
+    --ui-scroll-area-fade-start: 0px;
   }
 
   to {
-    --luke-scroll-area-fade-start: var(--luke-scroll-fade);
+    --ui-scroll-area-fade-start: var(--ui-scroll-fade);
   }
 }
 
 @keyframes luke-scroll-area-fade-end {
   from {
-    --luke-scroll-area-fade-end: var(--luke-scroll-fade);
+    --ui-scroll-area-fade-end: var(--ui-scroll-fade);
   }
 
   to {
-    --luke-scroll-area-fade-end: 0px;
+    --ui-scroll-area-fade-end: 0px;
   }
 }
 
@@ -96,24 +96,24 @@
   .luke-scroll-area:not([data-fade="none"]) {
     mask-image: linear-gradient(
       to bottom,
-      #000 var(--luke-scroll-area-fade-inset),
-      transparent var(--luke-scroll-area-fade-inset),
-      #000 calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-area-fade-start)),
-      #000 calc(100% - var(--luke-scroll-area-fade-end)),
+      #000 var(--ui-scroll-area-fade-inset),
+      transparent var(--ui-scroll-area-fade-inset),
+      #000 calc(var(--ui-scroll-area-fade-inset) + var(--ui-scroll-area-fade-start)),
+      #000 calc(100% - var(--ui-scroll-area-fade-end)),
       transparent
     );
-    scroll-padding-block-start: calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-fade));
+    scroll-padding-block-start: calc(var(--ui-scroll-area-fade-inset) + var(--ui-scroll-fade));
     animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
     animation-timing-function: linear;
     animation-fill-mode: both;
     animation-timeline: scroll(self block), scroll(self block);
     animation-range:
-      0 var(--luke-scroll-fade),
-      calc(100% - var(--luke-scroll-fade)) 100%;
+      0 var(--ui-scroll-fade),
+      calc(100% - var(--ui-scroll-fade)) 100%;
   }
 
   .luke-scroll-area[data-fade-inset="band"] {
-    --luke-scroll-area-fade-inset: var(--luke-scroll-band);
+    --ui-scroll-area-fade-inset: var(--ui-scroll-band);
   }
 
   /* The end's depth stays at none where the start alone fades. */
@@ -122,7 +122,7 @@
   }
 
   .luke-scroll-area[data-fade="both"] {
-    scroll-padding-block-end: var(--luke-scroll-fade);
+    scroll-padding-block-end: var(--ui-scroll-fade);
   }
 
   /* A sideways area fades along its inline axis, on its inline timeline. */
@@ -130,17 +130,17 @@
     mask-image: linear-gradient(
       to right,
       transparent,
-      #000 var(--luke-scroll-area-fade-start),
-      #000 calc(100% - var(--luke-scroll-area-fade-end)),
+      #000 var(--ui-scroll-area-fade-start),
+      #000 calc(100% - var(--ui-scroll-area-fade-end)),
       transparent
     );
     scroll-padding-block-start: 0;
-    scroll-padding-inline-start: var(--luke-scroll-fade);
+    scroll-padding-inline-start: var(--ui-scroll-fade);
     animation-timeline: scroll(self inline), scroll(self inline);
   }
 
   .luke-scroll-area[data-axis="horizontal"][data-fade="both"] {
     scroll-padding-block-end: 0;
-    scroll-padding-inline-end: var(--luke-scroll-fade);
+    scroll-padding-inline-end: var(--ui-scroll-fade);
   }
 }

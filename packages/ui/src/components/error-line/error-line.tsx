@@ -70,7 +70,7 @@ export function ErrorLine({
       inert={shown.leaving}
     >
       {drawn === undefined ? null : (
-        <span className="luke-error-line-said flex min-w-0 items-center gap-luke-4">
+        <span className="luke-error-line-said flex min-w-0 items-center gap-ui-4">
           <span ref={words} className="luke-error-line-words min-w-0">
             {drawn.words}
           </span>

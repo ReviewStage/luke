@@ -10,7 +10,7 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  *
  * Every tab's bar is this one (File, Changes, Page, Terminal, Browser, Pull
  * request) and a dock's head beside them, so a tab reads down from the strip
- * above it on one height (`--luke-pane-bar-height`): a control's, a tight
+ * above it on one height (`--ui-pane-bar-height`): a control's, a tight
  * gap over and under it, and the hairline it stands on, whether it holds
  * words alone, buttons, or nothing yet. Its words are in the caption's type.
  *
@@ -58,7 +58,7 @@ const END = "luke-pane-bar-end flex flex-none items-center";
 const MARK = "luke-pane-bar-mark flex flex-none items-center [&>svg]:size-control-icon";
 const MIDDLE = "luke-pane-bar-middle flex min-w-0 flex-auto items-center gap-control-gap";
 /** The actions at the end, their glyphs close. */
-const ACTIONS = "luke-pane-bar-actions ml-auto flex flex-none items-center gap-luke-2";
+const ACTIONS = "luke-pane-bar-actions ml-auto flex flex-none items-center gap-ui-2";
 /** A bar whose title has a row of its own lays its parts on two rows, the title's last. */
 const WRAPPED = "flex-wrap gap-y-0";
 /** The title's own row: the bar wide, a control high, its words where the lead's start. */

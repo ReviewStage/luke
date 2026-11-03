@@ -70,7 +70,7 @@ export function OfflineMark(): React.JSX.Element | null {
         ref={shown.ref}
         data-leaving={shown.leaving ? "true" : undefined}
         inert={shown.leaving}
-        className="offline-mark inline-flex h-offline-mark flex-none animate-offline-arrive data-[leaving=true]:animate-leave items-center gap-tight-gap self-center whitespace-nowrap rounded-luke-full bg-attention-tint px-row-inset text-caption-inline font-luke-semibold text-attention [&_svg]:size-offline-glyph"
+        className="offline-mark inline-flex h-offline-mark flex-none animate-offline-arrive data-[leaving=true]:animate-leave items-center gap-tight-gap self-center whitespace-nowrap rounded-ui-full bg-attention-tint px-row-inset text-caption-inline font-ui-semibold text-attention [&_svg]:size-offline-glyph"
         role="img"
         aria-label={word}
       >

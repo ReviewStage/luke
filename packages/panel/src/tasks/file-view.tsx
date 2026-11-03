@@ -255,7 +255,7 @@ export interface PaneOver {
   readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
 }
 
-/** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--luke-space-6`. */
+/** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--ui-space-6`. */
 const PEEK_EDGE = 6;
 
 /** The toggle that opens the pane beside the tab, which the stylesheet draws only where the pane can stand there. */

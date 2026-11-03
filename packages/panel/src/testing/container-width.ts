@@ -172,7 +172,7 @@ function resolvedAt(css: string, resolution: Resolution): string {
 
 /** jsdom plays no animation, so the sheets are laid with their motion held still, as a capture run holds it: a test that wants motion hands the window its own tokens inline, as `playMotions` does. */
 const STILL_MOTION =
-  ":root { --luke-duration-shape: 0s; --luke-duration-exit: 0s; --luke-duration-quick: 0s; --luke-duration-fast: 0s; --luke-duration-pane: 0s; }";
+  ":root { --ui-duration-shape: 0s; --ui-duration-exit: 0s; --ui-duration-quick: 0s; --ui-duration-fast: 0s; --ui-duration-pane: 0s; }";
 
 /** Lays the stylesheets into the document for named containers of the widths given, the nearest one's, and the device given, answering the style element, which the caller removes. */
 export function layContainersAt(

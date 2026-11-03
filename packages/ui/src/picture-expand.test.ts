@@ -39,8 +39,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   played = [];
-  document.documentElement.style.setProperty("--luke-duration-fast", "280ms");
-  document.documentElement.style.setProperty("--luke-spring-fast", "ease-out");
+  document.documentElement.style.setProperty("--ui-duration-fast", "280ms");
+  document.documentElement.style.setProperty("--ui-spring-fast", "ease-out");
   // Note that jsdom lays nothing out and plays no animation, so the browser's
   // layout and its animation are what stand in here, at that boundary.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -179,7 +179,7 @@ test("a viewer whose tile is gone by the close is put away at once", () => {
 });
 
 test("under reduced motion a picture closes at once, as every dialog does", () => {
-  document.documentElement.style.setProperty("--luke-duration-fast", "0ms");
+  document.documentElement.style.setProperty("--ui-duration-fast", "0ms");
   const closed: string[] = [];
   const page = mountPage(closed);
 
