@@ -340,6 +340,7 @@ export function NewTaskComposer({
   onStarting,
   onLeave,
   focusedByOwner = false,
+  takesFocus = true,
   titleId,
   listSide,
   purpose = NEW_TASK_PURPOSE.TASK,
@@ -353,6 +354,8 @@ export function NewTaskComposer({
   onLeave: () => void;
   /** Whether the owner hands the words focus as the card first draws, as the dialog does; the words take it themselves otherwise. */
   focusedByOwner?: boolean;
+  /** Whether the words take the caret as the card shows at all; none on a phone's Home, where the keyboard would cover the places bar. */
+  takesFocus?: boolean;
   /** The id the head row's title stands under, which names the dialog's card. */
   titleId?: string | undefined;
   /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on Home, whose card stands near the page's top, where a list risen over it is cut off under the page's head. */
@@ -727,6 +730,7 @@ export function NewTaskComposer({
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
+        takesFocus={takesFocus}
         listSide={listSide}
         tools={
           runsOnStands ? (

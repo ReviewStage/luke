@@ -13,15 +13,19 @@ import {
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handInboxItems, handState } from "../testing/app-state.js";
+import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopHome } from "./desktop-home.js";
 
@@ -87,7 +91,12 @@ const RETRY_429 = item(1, "Retry 429s too?", 8 * MINUTE);
 
 let root: Root | undefined;
 
+// Landed before any page renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
+  installScrollIntoView();
+  installEditorLayout();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
   fakeActPort({
@@ -106,7 +115,11 @@ afterEach(() => {
 });
 
 /** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`; each task and item it opens recorded. */
-function mount(overrides: Partial<TasksControl> = {}, items: readonly InboxItem[] = [RETRY_429]) {
+function mount(
+  overrides: Partial<TasksControl> = {},
+  items: readonly InboxItem[] = [RETRY_429],
+  room: ShellRoom = SHELL_ROOM.WIDE,
+) {
   const opened: { tasks: string[]; items: InboxChoice[] } = { tasks: [], items: [] };
   handInboxItems({
     rows: {
@@ -142,7 +155,7 @@ function mount(overrides: Partial<TasksControl> = {}, items: readonly InboxItem[
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopHome, { tasks, accountName: DEAN.name, staged: true }),
+        createElement(DesktopHome, { tasks, room, accountName: DEAN.name, staged: true }),
       ),
     ),
   );
@@ -228,4 +241,20 @@ test("an account with nothing yet is welcomed in Home's place", async () => {
   await settle();
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
   assert.equal(page.querySelector("section.home-section"), null);
+});
+
+test("the composer's words take the caret as Home shows, but on a phone, whose places bar a field typed in puts away, they leave it", async () => {
+  const wide = mount();
+  await settle();
+  assert.ok(
+    document.activeElement === composerEditor(wide.page),
+    "beside the sidebar the words take it",
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const phone = mount({}, [RETRY_429], SHELL_ROOM.NARROW);
+  await settle();
+  assert.ok(composerEditor(phone.page), "the composer stands");
+  assert.ok(document.activeElement !== composerEditor(phone.page), "on a phone they leave it");
 });

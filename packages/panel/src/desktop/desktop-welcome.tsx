@@ -47,7 +47,14 @@ export function welcomed(tasks: TasksControl): boolean {
 }
 
 /** A new account's welcome, in the task's place while no task is open; nothing for any other account. */
-export function DesktopWelcome({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
+export function DesktopWelcome({
+  tasks,
+  takesFocus = true,
+}: {
+  tasks: TasksControl;
+  /** Whether the composer's words take the caret as the welcome shows; none on a phone, whose places bar steps aside while a field is typed in. */
+  takesFocus?: boolean;
+}): React.JSX.Element | null {
   if (!welcomed(tasks)) return null;
   return (
     <Fill
@@ -69,6 +76,7 @@ export function DesktopWelcome({ tasks }: { tasks: TasksControl }): React.JSX.El
           newTask={{ ...tasks.newTask, preset: undefined }}
           workspaceId={tasks.newTask.workspaceId}
           onLeave={letGoOfFocus}
+          takesFocus={takesFocus}
           listSide={MENTION_MENU_SIDE.BELOW}
         />
       </div>

@@ -50,7 +50,8 @@ import { RecentRow } from "./recent-row.js";
  * The composer starts the task in the listed workspace, as the dialog
  * would. The dialog stays for ⌘N and every other New task press; only Home
  * and the welcome hold the card inline. Its words take the caret as the page
- * shows, unless the developer is typing in a field elsewhere, and Escape
+ * shows, unless the developer is typing in a field elsewhere or the room is a
+ * phone's, whose places bar a field typed in puts away, and Escape
  * there with nothing in it to close takes the caret out of the words. Its
  * words and files are New task's draft in the workspace, which the dialog
  * shares, so leaving Home keeps them.
@@ -211,7 +212,13 @@ function HomeRecent({
  * start. An `@` or `/` list opens under the caret's line, because one risen
  * over it from the page's top is cut off under the page's head.
  */
-function HomeComposer({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
+function HomeComposer({
+  tasks,
+  takesFocus,
+}: {
+  tasks: TasksControl;
+  takesFocus: boolean;
+}): React.JSX.Element | null {
   if (!tasks.signedIn) return null;
   return (
     <div className="home-composer ph-no-capture mb-page-section-gap">
@@ -219,6 +226,7 @@ function HomeComposer({ tasks }: { tasks: TasksControl }): React.JSX.Element | n
         newTask={{ ...tasks.newTask, preset: undefined }}
         workspaceId={tasks.newTask.workspaceId}
         onLeave={letGoOfFocus}
+        takesFocus={takesFocus}
         listSide={MENTION_MENU_SIDE.BELOW}
       />
     </div>
@@ -254,14 +262,16 @@ export function DesktopHome({
 }): React.JSX.Element {
   // The rows of both sections, one walk for ↑ and ↓ from the first Inbox item to the last task.
   const roving = useRovingKeys<HTMLDivElement>();
-  if (welcomed(tasks)) return <DesktopWelcome tasks={tasks} />;
+  // Note that on a phone the words leave the caret alone, because a field typed in puts the places bar away (`mobile-bar.tsx`).
+  const takesFocus = room !== SHELL_ROOM.NARROW;
+  if (welcomed(tasks)) return <DesktopWelcome tasks={tasks} takesFocus={takesFocus} />;
   const reading = !tasks.listRead && !tasks.listFailed;
   return (
     <DetailPage
       frame={PAGE_FRAME.PAGE}
       title={reading ? <GreetingSkeleton /> : greeting(accountName)}
     >
-      <HomeComposer tasks={tasks} />
+      <HomeComposer tasks={tasks} takesFocus={takesFocus} />
       {/* Note that the box lays nothing out: it only hears the arrows its rows walk by. */}
       <div className="home-rows contents" {...roving}>
         {reading ? (
