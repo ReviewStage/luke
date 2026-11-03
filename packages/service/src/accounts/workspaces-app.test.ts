@@ -475,7 +475,7 @@ it.effect(
           {
             id: first[0]?.id,
             name: "Ada Lovelace",
-            slug: `personal-${ada}`,
+            slug: "ada-lovelace",
             role: WORKSPACE_ROLE.OWNER,
             github: null,
             githubInstallations: [],
@@ -1930,7 +1930,7 @@ it.effect(
         assert.deepEqual(byAdmin, refused);
         assert.deepEqual(yield* organizationOf(personal.value), {
           name: "Ada Lovelace",
-          slug: `personal-${ada}`,
+          slug: "ada-lovelace",
         });
       }).pipe(Effect.provide(plugin.database));
     }),

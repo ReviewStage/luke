@@ -45,14 +45,16 @@ import {
  * take. A workspace is made through the plugin's server-only
  * `createOrganization` (`workspace-seams.ts`), so the organization and its
  * owner are the plugin's own rows. The account's first workspace is made the
- * first time it is asked for, under the account's name, its metadata marked
- * personal, and named the account's in `personal_workspace`. That row is
- * how a start or a listing finds the account's default, and how every read
+ * first time it is asked for, under the account's name and a slug spelled
+ * from it (`personalSlugsOf`), its metadata marked personal, and named the
+ * account's in `personal_workspace`. That row, never the slug, is how a
+ * start or a listing finds the account's default, and how every read
  * names the workspace for its owner as the owner is called now
  * (`WORKSPACE_NAME`) and lists it as personal, so it has no name of its own
- * and is never renamed; nothing reads the mark, and it is otherwise a
- * workspace like any other. That write is no transaction: Better
- * Auth writes over its own pool, outside the fiber's `SqlClient`, so two Macs
+ * and is never renamed; the mark is read only by a racing ensure, to know
+ * its own, and it is otherwise a workspace like any other. That write is
+ * no transaction: Better Auth writes over its own pool, outside the fiber's
+ * `SqlClient`, so two Macs
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
  * Whether an account is in a workspace is one condition, its `member` row,
@@ -73,8 +75,11 @@ import {
  * Every function is an effect over the ambient `Database`.
  */
 
-/** The slug every account's first workspace is made under, one per account, which is what makes the plugin refuse a second. */
+/** The slug an account's first workspace falls back to where its name spells none free, one per account, and the one every first workspace before readable slugs was made under. */
 const PERSONAL_SLUG_PREFIX = "personal-";
+
+/** How many hex characters of the account's id digest suffix its first workspace's slug where the readable one is taken. */
+const PERSONAL_SUFFIX_CHARS = 8;
 
 /** How many hex characters of a photo's digest name its version: enough that two photos of one workspace never share one. */
 const PHOTO_VERSION_CHARS = 16;
@@ -149,11 +154,17 @@ const findPersonalWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-const findAccountName = SqlSchema.findOneOption({
+const findAccountFace = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ name: Schema.String }),
+  Result: Schema.Struct({ name: Schema.String, githubLogin: Schema.NullOr(Schema.String) }),
   execute: (userId) =>
-    Database.use((db) => db.select({ name: user.name }).from(user).where(eq(user.id, userId))),
+    Database.use((db) =>
+      db
+        .select({ name: user.name, githubLogin: githubPersonalToken.githubLogin })
+        .from(user)
+        .leftJoin(githubPersonalToken, eq(githubPersonalToken.userId, user.id))
+        .where(eq(user.id, userId)),
+    ),
 });
 
 const findAccountNames = SqlSchema.findAll({
@@ -180,7 +191,7 @@ const findOrganizationBySlug = SqlSchema.findOneOption({
     ),
 });
 
-const findOwnedOrganization = SqlSchema.findOneOption({
+const findOwnedPersonalOrganization = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: OrganizationIdSchema,
   execute: ({ userId, organizationId }) =>
@@ -188,11 +199,14 @@ const findOwnedOrganization = SqlSchema.findOneOption({
       db
         .select({ organizationId: member.organizationId })
         .from(member)
+        .innerJoin(organization, eq(organization.id, member.organizationId))
         .where(
           and(
             eq(member.userId, userId),
             eq(member.organizationId, organizationId),
             eq(member.role, WORKSPACE_ROLE.OWNER),
+            eq(organization.metadata, JSON.stringify(PERSONAL_WORKSPACE_METADATA)),
+            sql`not exists (select 1 from ${personalWorkspace} as "other" where "other"."organization_id" = ${organization.id} and "other"."user_id" <> ${userId})`,
           ),
         )
         .limit(1),
@@ -437,8 +451,12 @@ function workspaceOfRow(
 /** The longest slug spelled from a workspace's name, before any suffix. */
 const MAX_SLUG_CHARS = 48;
 
-/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under or one our own pages stand under. */
-function slugOf(name: string): string {
+/**
+ * A slug spelled from a name: lowercase letters and digits, a hyphen between
+ * runs of them, and never one an account's first workspace falls back to or
+ * one our own pages stand under; empty where the name has no letter or digit.
+ */
+function spelledSlugOf(name: string): string {
   const spelled = name
     .normalize("NFKD")
     .toLowerCase()
@@ -446,18 +464,39 @@ function slugOf(name: string): string {
     .replace(/^-+|-+$/gu, "")
     .slice(0, MAX_SLUG_CHARS)
     .replace(/-+$/u, "");
-  if (spelled === "") return "workspace";
-  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there, nor a step of our own paths.
+  if (spelled === "") return "";
+  // Note that no name takes the slug an account's first workspace falls back to, so an ensure finds its own there, nor a step of our own paths.
   const own = spelled.startsWith(PERSONAL_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
   return own ? `workspace-${spelled}` : spelled;
+}
+
+/** A workspace's slug spelled from its name, "workspace" where the name has none. */
+function slugOf(name: string): string {
+  return spelledSlugOf(name) || "workspace";
 }
 
 /** Whether an organization already stands for what a workspace is being made for, as the caller reads it. */
 type OrganizationLinked = (organizationId: string) => WorkspaceStoreEffect<boolean>;
 
-/** The slug an account's first workspace is made under. */
-function personalSlugOf(userId: string): string {
-  return `${PERSONAL_SLUG_PREFIX}${userId}`;
+/**
+ * The slugs an account's first workspace is tried under, in order: spelled
+ * from the account's name, else its GitHub login, then that with a suffix
+ * of the account's own, then `personal-<id>`, and last that with a suffix
+ * nobody can know beforehand. Note that every slug but the last is the
+ * same for every ensure of the account, so two racing ensures meet on one
+ * and the loser adopts the winner's, rather than each making its own.
+ */
+function personalSlugsOf(
+  userId: string,
+  name: string,
+  githubLogin: string | null,
+): readonly [string, ...string[]] {
+  const fallback = `${PERSONAL_SLUG_PREFIX}${userId}`;
+  const last = `${fallback}-${randomUUID()}`;
+  const readable = spelledSlugOf(name) || spelledSlugOf(githubLogin ?? "");
+  if (readable === "") return [fallback, last];
+  const suffix = createHash("sha256").update(userId).digest("hex").slice(0, PERSONAL_SUFFIX_CHARS);
+  return [readable, `${readable}-${suffix}`, fallback, last];
 }
 
 /**
@@ -494,16 +533,19 @@ function createLinkedOrganization(
 }
 
 /**
- * Whether the organization under the account's first workspace's slug is
- * its own: the account is its owner member, which a racing ensure makes it
- * before it writes the row naming it the account's, and which no one else's
- * organization makes it.
+ * Whether the organization under one of the account's first workspace's
+ * slugs is its own: the account is its owner member and its metadata marks
+ * it personal, which a racing ensure makes it before it writes the row
+ * naming it the account's, and no row names it another account's. Note
+ * that the mark is asked as well as the owner, because a readable slug is
+ * one a workspace the account made itself may stand under, which is never
+ * its first.
  */
 function isOwnPersonalOrganization(
   userId: string,
   organizationId: string,
 ): WorkspaceStoreEffect<boolean> {
-  return Effect.map(findOwnedOrganization({ userId, organizationId }), Option.isSome);
+  return Effect.map(findOwnedPersonalOrganization({ userId, organizationId }), Option.isSome);
 }
 
 /** The condition that the account is a member of the workspace a statement names, by its id or a column standing for it. */
@@ -630,13 +672,12 @@ export function ensurePersonalWorkspace(
   return Effect.gen(function* () {
     const standing = yield* personalWorkspaceOf(userId);
     if (Option.isSome(standing)) return standing;
-    const account = yield* findAccountName(userId);
+    const account = yield* findAccountFace(userId);
     if (Option.isNone(account)) return Option.none();
-    const slug = personalSlugOf(userId);
+    const { name, githubLogin } = account.value;
     const organizationId = yield* createLinkedOrganization(
-      { name: account.value.name, userId, metadata: PERSONAL_WORKSPACE_METADATA },
-      // Note that the second slug is one nobody can know beforehand, for a first taken by someone else.
-      [slug, `${slug}-${randomUUID()}`],
+      { name, userId, metadata: PERSONAL_WORKSPACE_METADATA },
+      personalSlugsOf(userId, name, githubLogin),
       (candidate) => isOwnPersonalOrganization(userId, candidate),
       seams,
     );

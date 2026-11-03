@@ -132,9 +132,15 @@ it.effect(
       const plugin = yield* openWorkspacePlugin;
       yield* Effect.gen(function* () {
         const userId = yield* openAccount("Ada Lovelace");
-        // Note that the workspace is made first under the account's own slug, as a racing ensure
-        // would have made it, so the ensure held below adopts it and writes only the row naming it.
-        const workspaceId = yield* openTeam(plugin, userId, `personal-${userId}`);
+        // Note that the workspace is made first under the account's own slug and marked personal,
+        // as a racing ensure would have made it, so the ensure held below adopts it and writes only
+        // the row naming it.
+        const { id: workspaceId } = yield* plugin.seams.createOrganization({
+          name: "Ada Lovelace",
+          slug: "ada-lovelace",
+          userId,
+          metadata: { personal: true },
+        });
 
         yield* wakesTheWorkspaces(
           ensurePersonalWorkspace(userId, plugin.seams),
