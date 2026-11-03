@@ -14,7 +14,17 @@
  * reaches it.
  */
 
+import { BRAND_PALETTE } from "@repo/brand";
 import { RECORDING_CURSOR_FONT } from "./recording-cursor-font.js";
+
+// The pointer's copper over a light page and a dark one, the brand's accent in either theme.
+const POINTER = { LIGHT: BRAND_PALETTE.LIGHT.ACCENT, DARK: BRAND_PALETTE.DARK.ACCENT } as const;
+
+/** A `#rrggbb` colour as `rgba()` at an opacity written as the source writes it (`.42`), for the glow round the pointer. */
+function rgba(hex: string, alpha: string): string {
+  const value = Number.parseInt(hex.slice(1), 16);
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+}
 
 /**
  * Where the sandbox image keeps the pointer's source, every user's to read,
@@ -46,9 +56,10 @@ export const RECORDING_CURSOR_FILE = {
  * (`recording-cursor-font.ts`), since the sandbox's Linux has neither and
  * its fallback faces set each glyph in a weight of its own. The panel's
  * tokens are
- * no part of the page, so their values are written out here: hold them to
- * `--agent-pointer`, its `-on-dark`, `-edge`, `-shadow`, `-glow`, and
- * `-glow-on-dark` siblings,
+ * no part of the page, so their values are written out here: the pointer's
+ * copper and its glow from the brand's accent (`BRAND_PALETTE`), as the
+ * panel's `--agent-pointer` and its `-on-dark` and `-glow` siblings are; hold
+ * the rest to its `-edge` and `-shadow`,
  * to the `.cloud-browser-cursor` rules, and to `--ui-color-tooltip`, its edge,
  * text, and chord inks, `--ui-tooltip-radius`, and `--ui-tooltip-shadow`; the
  * caps stand larger than a tooltip's words, which a compressed video blurs. Note that it does not rock while
@@ -85,7 +96,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });
-  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,rgba(167,97,27,.42),transparent);opacity:0;transition:opacity " + GLIDE + "ms " + EXIT + "}.c.dark .h{background:radial-gradient(closest-side,rgba(207,123,38,.5),transparent)}.c.t .h{opacity:1}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:#a7611b;stroke:#fff;stroke-width:2.4;stroke-linejoin:round;paint-order:stroke;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35));transform-origin:0 0}.c.dark .a{fill:#cf7b26}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1.5px solid #a7611b;border-radius:50%;opacity:0}.r.dark{border-color:#cf7b26}.k{position:absolute;left:50%;bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:#0b0b0c;box-shadow:0 4px 14px rgba(0,0,0,.12);color:rgba(255,255,255,.5);font:500 17px/1 " + FAMILY + ",-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}.k span:last-child{color:rgba(255,255,255,.95)}.k svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}";
+  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,${rgba(POINTER.LIGHT, ".42")},transparent);opacity:0;transition:opacity " + GLIDE + "ms " + EXIT + "}.c.dark .h{background:radial-gradient(closest-side,${rgba(POINTER.DARK, ".5")},transparent)}.c.t .h{opacity:1}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:${POINTER.LIGHT};stroke:#fff;stroke-width:2.4;stroke-linejoin:round;paint-order:stroke;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35));transform-origin:0 0}.c.dark .a{fill:${POINTER.DARK}}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1.5px solid ${POINTER.LIGHT};border-radius:50%;opacity:0}.r.dark{border-color:${POINTER.DARK}}.k{position:absolute;left:50%;bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:#0b0b0c;box-shadow:0 4px 14px rgba(0,0,0,.12);color:rgba(255,255,255,.5);font:500 17px/1 " + FAMILY + ",-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}.k span:last-child{color:rgba(255,255,255,.95)}.k svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}";
   // A constructed sheet, since a page's own style-src may refuse a style element.
   if ("adoptedStyleSheets" in shadow && typeof CSSStyleSheet.prototype.replaceSync === "function") {
     const sheet = new CSSStyleSheet();

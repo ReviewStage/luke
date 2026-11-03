@@ -30,8 +30,9 @@
   --ui-color-danger: light-dark(#e23242, #fb817f);
   --ui-color-danger-text: light-dark(#b42e36, #fe908d);
   --ui-color-danger-fill: #db3643;
-  --ui-color-attention: light-dark(#925103, #fd9836);
-  --ui-color-attention-fill: #b16203;
+  --ui-color-attention: light-dark(#8e5323, #f19a4b);
+  --ui-color-attention-fill: #a7611b;
+  --ui-color-working: light-dark(#1666aa, #76bafe);
   --ui-color-complete: light-dark(#067040, #56d089);
   --ui-color-merged: light-dark(#744caf, #c29fff);
 }
@@ -63,8 +64,9 @@
   --ui-color-danger: #e23242;
   --ui-color-danger-text: #b42e36;
   --ui-color-danger-fill: #db3643;
-  --ui-color-attention: #925103;
-  --ui-color-attention-fill: #b16203;
+  --ui-color-attention: #8e5323;
+  --ui-color-attention-fill: #a7611b;
+  --ui-color-working: #1666aa;
   --ui-color-complete: #067040;
   --ui-color-merged: #744caf;
 }
@@ -95,8 +97,17 @@
   --ui-color-danger: #fb817f;
   --ui-color-danger-text: #fe908d;
   --ui-color-danger-fill: #db3643;
-  --ui-color-attention: #fd9836;
-  --ui-color-attention-fill: #b16203;
+  --ui-color-attention: #f19a4b;
+  --ui-color-attention-fill: #a7611b;
+  --ui-color-working: #76bafe;
   --ui-color-complete: #56d089;
   --ui-color-merged: #c29fff;
+}
+
+/* The accent over a ground no theme chooses, someone else's page, where the
+   agent's pointer is drawn: the light theme's over a light page and the dark
+   theme's over a dark one, whatever the window's own theme. */
+[data-ui-profile] {
+  --ui-color-accent-on-light: #a7611b;
+  --ui-color-accent-on-dark: #cf7b26;
 }
