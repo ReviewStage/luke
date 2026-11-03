@@ -106,16 +106,32 @@ function reachesField(words: Element, range: Range): boolean {
   );
 }
 
+/** The run of words a reply may quote that `node` lies in, if any. */
+function scopeOf(node: Node): Element | null {
+  return (node instanceof Element ? node : node.parentElement)?.closest(SCOPE_SELECTOR) ?? null;
+}
+
+/**
+ * `range` cut to what it holds of `words`, or nothing where what it holds
+ * past them is more than blank: as a triple-click's selection of a run's
+ * last paragraph holds, which runs on to the start of the next block.
+ */
+function cutTo(words: Element, range: Range): Range | undefined {
+  const cut = range.cloneRange();
+  if (!words.contains(range.startContainer)) cut.setStart(words, 0);
+  if (!words.contains(range.endContainer)) cut.setEnd(words, words.childNodes.length);
+  return cut.toString().trim() === range.toString().trim() ? cut : undefined;
+}
+
 /** The selection inside one run of words a reply may quote under `scope`, as Reply answers it; nothing for any other. */
 function pickedIn(scope: HTMLElement): Picked | undefined {
   const selection = window.getSelection();
   if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return undefined;
-  const range = selection.getRangeAt(0);
-  const common = range.commonAncestorContainer;
-  const words = (common instanceof Element ? common : common.parentElement)?.closest(
-    SCOPE_SELECTOR,
-  );
-  if (words === null || words === undefined || !scope.contains(words)) return undefined;
+  const whole = selection.getRangeAt(0);
+  const words = scopeOf(whole.commonAncestorContainer) ?? scopeOf(whole.startContainer);
+  if (words === null || !scope.contains(words)) return undefined;
+  const range = cutTo(words, whole);
+  if (range === undefined) return undefined;
   // Note that words a hidden pane holds keep their selection, as the narrow Inbox's item does behind its list, but are no longer on screen to reply to.
   if (words.closest("[hidden]") !== null) return undefined;
   if (reachesField(words, range)) return undefined;

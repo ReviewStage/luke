@@ -280,6 +280,27 @@ test("a selection outside the agent's words, in its thought or the developer's w
   assert.equal(tab.reply() === undefined, true);
 });
 
+test("words selected by a triple-click, which runs on to the start of the next block, are offered Reply over the words alone", async () => {
+  const tab = await mounted();
+  const words = [...tab.container.querySelectorAll("p")].find(
+    (each) => each.textContent === AGENT_WORDS,
+  );
+  const next = [...tab.container.querySelectorAll("p")].find(
+    (each) => each.textContent === DEVELOPER_WORDS,
+  );
+  assert.ok(words && next);
+  const range = document.createRange();
+  range.setStart(words, 0);
+  range.setEnd(next, 0);
+  act(() => {
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    words.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+  await tab.pressReply();
+  assert.deepEqual(tab.blocks(), [`> ${AGENT_WORDS}`, ""]);
+});
+
 test("a message that did not go comes back with its quotes as blocks, a quote's way off takes it out, and a quote alone sends as any words do", async () => {
   const tab = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   tab.select(AGENT_WORDS, "Option A", "today.");
