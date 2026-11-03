@@ -10,9 +10,14 @@ import { PLAN_COMMENT_BOUNDS } from "./plan-comment-wire.js";
  * agent's HTML (`withPageScripts`), beside the find's and the link's: at the
  * panel's asking it outlines the element under the pointer, takes the next
  * press for itself rather than the page's, and posts what was pressed back
- * to the panel by its path from the document's root, its words, and the
- * heading of the section it stands in; and it outlines the element a thread
- * is on and brings it into view, where the version drawn still holds it.
+ * to the panel by its path from the document's root, its words, the
+ * heading of the section it stands in, and where it stands in the frame; it
+ * outlines the element a thread is on and brings it into view, where the
+ * version drawn still holds it; it says where each element the panel marks
+ * stands, again as the page scrolls, resizes, or changes, so the panel pins
+ * the threads on it over the frame; and it posts the words selected in the
+ * page, with where they stand and the element holding them, as a press or
+ * a key lets them go, or a finger's rests, and that none are once they go.
  * The outline is a stylesheet the document adopts over an attribute set on
  * the element, so the page's own tree is never rewritten.
  *
@@ -37,26 +42,50 @@ export const PAGE_PICK_ACT = {
   STOP: "stop",
   /** Outline the element a path names and bring it into view; an empty path outlines none. */
   SHOW: "show",
+  /** Say where the elements the paths name stand, now and each time they move. */
+  MARK: "mark",
+  /** Let go of the words selected, as a reply quoting them was pressed. */
+  UNSELECT: "unselect",
 } as const;
 
 /** A message the panel posts to the frame. */
 export type PagePickAsk =
   | {
       readonly type: typeof PAGE_PICK_TYPE;
-      readonly act: typeof PAGE_PICK_ACT.START | typeof PAGE_PICK_ACT.STOP;
+      readonly act:
+        | typeof PAGE_PICK_ACT.START
+        | typeof PAGE_PICK_ACT.STOP
+        | typeof PAGE_PICK_ACT.UNSELECT;
     }
   | {
       readonly type: typeof PAGE_PICK_TYPE;
       readonly act: typeof PAGE_PICK_ACT.SHOW;
       readonly path: string;
+    }
+  | {
+      readonly type: typeof PAGE_PICK_TYPE;
+      readonly act: typeof PAGE_PICK_ACT.MARK;
+      readonly paths: readonly string[];
     };
 
-/** An element picked in the frame, as it posts it: its path, its words, and the heading it stands under. */
+/** Where something stands in the frame, in its own viewport's pixels. */
+const frameBoxSchema = EffectSchema.Struct({
+  left: EffectSchema.Finite,
+  top: EffectSchema.Finite,
+  right: EffectSchema.Finite,
+  bottom: EffectSchema.Finite,
+});
+
+export type FrameBox = typeof frameBoxSchema.Type;
+
+const elementPathSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS),
+);
+
+/** An element picked in the frame, as it posts it: its path, its words, the heading it stands under, and where it stands. */
 const pickedSchema = EffectSchema.Struct({
-  path: EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS),
-  ),
+  path: elementPathSchema,
   quote: EffectSchema.String.check(
     EffectSchema.isPattern(/\S/u),
     EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
@@ -64,16 +93,32 @@ const pickedSchema = EffectSchema.Struct({
   section: EffectSchema.String.check(
     EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS),
   ),
+  box: frameBoxSchema,
 });
 
 export type PagePicked = typeof pickedSchema.Type;
 
-/** A message the frame posts to the panel: the element picked, or that the pick was let go, by Escape in the page. */
+/**
+ * A message the frame posts to the panel: the element picked; that the pick
+ * was let go, by Escape in the page; where each element marked stands, or
+ * none where the page holds it no more; or the words selected, in the shape
+ * of an element picked whose quote they are, or none once they go.
+ */
 export const pagePickAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ type: EffectSchema.Literal(PAGE_PICK_TYPE), picked: pickedSchema }),
   EffectSchema.Struct({
     type: EffectSchema.Literal(PAGE_PICK_TYPE),
     stopped: EffectSchema.Literal(true),
+  }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(PAGE_PICK_TYPE),
+    marks: EffectSchema.Array(
+      EffectSchema.Struct({ path: elementPathSchema, box: EffectSchema.NullOr(frameBoxSchema) }),
+    ).check(EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN)),
+  }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(PAGE_PICK_TYPE),
+    selected: EffectSchema.NullOr(pickedSchema),
   }),
 ]);
 
@@ -172,6 +217,72 @@ export const PAGE_PICK_SCRIPT = `(() => {
 
   const target = (event) => (event.target instanceof Element ? event.target : null);
 
+  const boxOf = (rect) => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+
+  const find = (path) => {
+    try {
+      return path === "" ? null : document.querySelector(path);
+    } catch {
+      return null;
+    }
+  };
+
+  const told = { paths: [], marks: "[]", selected: "", queued: false, settle: undefined };
+
+  // The words selected, as an element picked whose quote they are: none where none are, or they stand in a field.
+  const selected = () => {
+    const selection = getSelection();
+    if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return null;
+    const words = cut(String(selection).trim(), MAX_QUOTE);
+    const range = selection.getRangeAt(0);
+    const node = range.commonAncestorContainer;
+    const element = node instanceof Element ? node : node.parentElement;
+    if (words === "" || element === null || element.closest("input, textarea, select, [contenteditable]") !== null) return null;
+    return { path: pathOf(element), quote: words, section: sectionOf(element), box: boxOf(range.getBoundingClientRect()) };
+  };
+
+  // What the panel holds of the page told again where it moved: each element marked, and the words selected.
+  const tell = () => {
+    told.queued = false;
+    const marks = told.paths.map((path) => {
+      const element = find(path);
+      return { path, box: element === null ? null : boxOf(element.getBoundingClientRect()) };
+    });
+    const said = JSON.stringify(marks);
+    if (said !== told.marks) {
+      told.marks = said;
+      post({ marks });
+    }
+    if (told.selected !== "" && told.selected !== "null") tellSelected();
+  };
+
+  const tellSelected = () => {
+    const now = selected();
+    const said = JSON.stringify(now);
+    if (said === told.selected) return;
+    told.selected = said;
+    post({ selected: now });
+  };
+
+  const moved = () => {
+    if (told.queued) return;
+    told.queued = true;
+    (typeof requestAnimationFrame === "function" ? requestAnimationFrame : setTimeout)(tell);
+  };
+
+  addEventListener("scroll", moved, true);
+  addEventListener("resize", moved);
+  new MutationObserver(moved).observe(document, { childList: true, subtree: true, characterData: true, attributes: true });
+
+  // Note that words are offered as a press or a key lets them go, a finger's once they rest, and taken away at once.
+  addEventListener("pointerup", () => setTimeout(tellSelected, 0), true);
+  addEventListener("keyup", tellSelected, true);
+  document.addEventListener("selectionchange", () => {
+    clearTimeout(told.settle);
+    if (getSelection()?.isCollapsed !== false) tellSelected();
+    else told.settle = setTimeout(tellSelected, 300);
+  });
+
   addEventListener("pointerover", (event) => {
     if (pick.on) mark("hovered", target(event));
   }, true);
@@ -184,7 +295,7 @@ export const PAGE_PICK_SCRIPT = `(() => {
       const element = target(event);
       if (name !== "click" || element === null) return;
       stop();
-      post({ picked: { path: pathOf(element), quote: quoteOf(element), section: sectionOf(element) } });
+      post({ picked: { path: pathOf(element), quote: quoteOf(element), section: sectionOf(element), box: boxOf(element.getBoundingClientRect()) } });
     }, true);
   }
 
@@ -201,15 +312,15 @@ export const PAGE_PICK_SCRIPT = `(() => {
     if (event.source !== parent || ask === null || typeof ask !== "object" || ask.type !== TYPE) return;
     if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.START)}) pick.on = true;
     else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.STOP)}) stop();
-    else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.SHOW)} && typeof ask.path === "string") {
-      let element = null;
-      try {
-        element = ask.path === "" ? null : document.querySelector(ask.path);
-      } catch {
-        element = null;
-      }
+    else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.UNSELECT)}) getSelection()?.removeAllRanges();
+    else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.MARK)} && Array.isArray(ask.paths)) {
+      told.paths = ask.paths.filter((path) => typeof path === "string");
+      told.marks = "";
+      tell();
+    } else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.SHOW)} && typeof ask.path === "string") {
+      const element = find(ask.path);
       mark("shown", element);
-      element?.scrollIntoView({ block: "center", inline: "nearest" });
+      element?.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
   });
 })();`;

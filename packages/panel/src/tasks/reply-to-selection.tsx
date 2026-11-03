@@ -88,12 +88,9 @@ const selectionSettleAtom = () =>
   );
 
 /** A selection Reply answers: its words as the reply, the words it lies in, and where the press stands. */
-interface Picked {
+interface Picked extends PressPlace {
   readonly reply: string;
   readonly words: Element;
-  readonly left: number;
-  readonly top: number;
-  readonly below: boolean;
 }
 
 /**
@@ -124,16 +121,31 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
   if (reachesField(words, range)) return undefined;
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
-  const box = range.getBoundingClientRect();
+  return { reply, words, ...pressPlace(range.getBoundingClientRect()) };
+}
+
+/** Where Reply stands by words drawn in a box of the window, the middle of its edge, kept in from the window's sides. */
+export interface PressPlace {
+  readonly left: number;
+  readonly top: number;
+  /** Whether it stands under the words rather than over them. */
+  readonly below: boolean;
+}
+
+/** Where Reply stands by words drawn in `box`, in window coordinates: over them, or under where the room above runs short or a finger made the selection. */
+export function pressPlace(box: {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}): PressPlace {
   const seen = visibleViewport();
   // Note that a finger's press stands under the words, clear of the system's menu over them, unless the window ends first.
   const finger =
     coarsePointerNow() && box.bottom + FINGER_SELECTION_GAP + PRESS_ROOM <= seen.bottom;
   const below = finger || box.top - seen.top < PRESS_ROOM;
-  const centre = box.left + box.width / 2;
+  const centre = (box.left + box.right) / 2;
   return {
-    reply,
-    words,
     left: Math.min(Math.max(centre, seen.left + PRESS_MARGIN), seen.right - PRESS_MARGIN),
     top: below ? box.bottom + (finger ? FINGER_SELECTION_GAP : PRESS_GAP) : box.top - PRESS_GAP,
     below,
@@ -207,12 +219,23 @@ export function ReplyToSelection({
   useAppCommand(APP_COMMAND.REPLY_TO_SELECTION, reply);
 
   if (picked === undefined || reply === undefined) return null;
+  return <ReplyPress place={picked} onReply={reply} />;
+}
+
+/** Reply standing by words selected, where `pressPlace` put it, over everything in the window; a press hands the reply on. */
+export function ReplyPress({
+  place,
+  onReply,
+}: {
+  place: PressPlace;
+  onReply: () => void;
+}): React.JSX.Element {
   return createPortal(
     <MenuSurface
       flow={MENU_SURFACE_FLOW.TOOLBAR}
       className="reply-to-selection fixed z-menu -translate-x-1/2 -translate-y-full data-below:translate-y-0"
-      data-below={picked.below ? "" : undefined}
-      style={{ left: picked.left, top: picked.top }}
+      data-below={place.below ? "" : undefined}
+      style={{ left: place.left, top: place.top }}
     >
       <Tooltip label={REPLY_WORDS.REPLY} command={APP_COMMAND.REPLY_TO_SELECTION}>
         <Button
@@ -220,7 +243,7 @@ export function ReplyToSelection({
           // Note that the press keeps the selection and the focus where they stand until it lands.
           keepFocus
           onPointerDown={(event) => event.preventDefault()}
-          onClick={reply}
+          onClick={onReply}
         >
           {REPLY_WORDS.REPLY}
         </Button>

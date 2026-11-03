@@ -1,7 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@luke/features/agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { PagePicked } from "@luke/features/page-pick";
+import type { FrameBox, PagePicked } from "@luke/features/page-pick";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
@@ -59,6 +59,8 @@ import {
   MoreButton,
   moreLabel,
   PaneBar,
+  POPOVER_SIDE,
+  RectFloat,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
@@ -102,6 +104,7 @@ import {
   type PlanCommentsControl,
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
+import { MESSAGE_BLOCK, messageBlocks, messageText, replyOf } from "@luke/ui/reply-quote";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -163,6 +166,7 @@ import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { CommentFiles } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
+import { ComposerQuoteView, pressPlace, ReplyPress } from "./reply-to-selection.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -961,6 +965,7 @@ function MentionCommentText({
       onPasteCut={onPasteCut}
       onTrigger={() => undefined}
       chip={() => null}
+      quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}
       mentions={{
         onTrigger: picker.onTrigger,
         chip: (mention, node) => (
@@ -1437,9 +1442,10 @@ function GoneQuote({
   );
 }
 
-/** What a thread's quote says: the words it is on, or, for a thread on a whole page, that it is. */
+/** What a thread's quote says: the words of the plan it is on; on a page, the way to its element, whose words its comments quote, or that it is on the whole page. */
 function quoteWords(thread: PlanCommentThread): string {
-  return thread.scope === PLAN_COMMENT_SCOPE.PAGE ? COMMENT_WORDS.WHOLE_PAGE : thread.quote;
+  if (thread.scope === PLAN_COMMENT_SCOPE.PAGE) return COMMENT_WORDS.WHOLE_PAGE;
+  return thread.scope === PLAN_COMMENT_SCOPE.ELEMENT ? COMMENT_WORDS.SHOW_ELEMENT : thread.quote;
 }
 
 /** A thread's quote over it: its words, or a press that shows them in the plan, or its element on the page, where it is offered. */
@@ -2898,9 +2904,34 @@ export function PlanCommentsTab({
   );
 }
 
-/** What a thread being started on a page is on: the element picked in its frame, or none for the whole page. */
+/** What a thread being started on a page stands on: the element it was started from, picked or holding the words selected, and where it stood in the frame; neither for the whole page. */
 export interface PageCommentOn {
-  readonly element: PagePicked | undefined;
+  readonly element:
+    | { readonly path: string; readonly quote: string; readonly section: string }
+    | undefined;
+  readonly box: FrameBox | undefined;
+}
+
+/** What a page's thread being started is kept under in its draft: the page, one for each page. */
+function pageDraftOn(pageId: string) {
+  return { quote: pageId, scope: PLAN_COMMENT_SCOPE.PAGE } as const;
+}
+
+/** The draft a page's thread being started is written in, one for each page, the quotes it was started from among its words. */
+export function pageDraftPlace(planId: string, pageId: string): PlanCommentPlace {
+  return { kind: DRAFT_PLACE.PLAN_COMMENT, planId, on: pageDraftOn(pageId) };
+}
+
+/** A comment's words with `words` quoted after them, as the agent box's Reply lays a quote in, and an empty line under it to write on. */
+export function withQuote(text: string, words: string): string {
+  const kept = messageBlocks(text).filter(
+    (block) => block.kind === MESSAGE_BLOCK.QUOTE || block.lines.some((line) => line.trim() !== ""),
+  );
+  return messageText([
+    ...kept,
+    { kind: MESSAGE_BLOCK.QUOTE, words: replyOf(words) },
+    { kind: MESSAGE_BLOCK.WORDS, lines: [""] },
+  ]);
 }
 
 /** What a page's comments column says over a list holding nothing, by its filter. */
@@ -2912,88 +2943,35 @@ const NO_PAGE_COMMENTS = {
   [COMMENTS_FILTER.RESOLVED]: NO_COMMENTS[COMMENTS_FILTER.RESOLVED],
 } as const satisfies Record<CommentsFilter, { title: string; line: string | undefined }>;
 
-/** No threads, which a page's column lists while an element is picked. */
-const NO_THREADS: readonly PlanCommentThread[] = [];
-
-/** What a page's comments column says and offers while a comment's element is picked. */
-const PICK_WORDS = {
+/** What commenting on a page says and offers. */
+export const PAGE_COMMENT_WORDS = {
   COMMENT: "Comment on the page",
-  PICKING: "Press an element of the page to comment on it.",
+  PICKING: "Press an element of the page to comment on it",
   WHOLE_PAGE: "Whole page",
 } as const;
 
 /**
- * A page's comments, in a column beside it: its threads, open or resolved,
- * listed as the Comments tab lists the plan's, each quote showing its
- * element on the page, and over them the thread being started. Comment asks
- * the page's frame for an element, which a press there picks, or Whole page
- * comments on the page as a whole; either opens the first comment's field
- * under its quote, which starts the thread on the version shown. While an
- * element is picked the column lists nothing but the pick's line.
+ * A page's comments, in a column beside it for reference: its threads, open
+ * or resolved, listed as the Comments tab lists the plan's, each quote
+ * opening its element's threads on the page. Comment asks the page for an
+ * element to comment on, as the page's bar does.
  */
 export function PageComments({
   control,
   doors,
-  page,
-  picking,
-  pending,
   onComment,
-  onWholePage,
-  onCancel,
   onShowElement,
 }: {
   /** The page's threads, as `usePlanComments` holds them for the page. */
   control: PlanCommentsControl;
   doors: Omit<ThreadDoors, "control">;
-  /** The page and the version shown, which a thread is started on. */
-  page: { readonly id: string; readonly version: number };
-  /** Whether the frame is picking an element for a comment. */
-  picking: boolean;
-  /** The thread being started, once its element is picked or the whole page chosen. */
-  pending: PageCommentOn | undefined;
-  /** Asks the frame for an element to comment on. */
   onComment: () => void;
-  onWholePage: () => void;
-  /** Lets go of the pick, or the thread being started. */
-  onCancel: () => void;
-  /** Shows a thread's element in the frame. */
+  /** Opens the threads on a thread's element, on the page. */
   onShowElement: (thread: PlanCommentThread) => void;
 }): React.JSX.Element {
   const [filter, setFilter] = useKept(KEPT.FILTER, COMMENTS_FILTER.OPEN);
   const listed = control.threads.filter((thread) =>
     filter === COMMENTS_FILTER.OPEN ? openThread(thread) : !openThread(thread),
-  );
-  const full = { ...doors, control };
-  const quote = pending?.element?.quote ?? COMMENT_WORDS.WHOLE_PAGE;
-  const lead = picking ? (
-    <CommentCard place={THREAD_PLACE.LIST} open>
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-        {PICK_WORDS.PICKING}
-      </Text>
-      <div className="mt-list-gap flex justify-end gap-item-gap">
-        <Button onClick={onCancel}>{COMMENT_WORDS.CANCEL}</Button>
-        <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onWholePage}>
-          {PICK_WORDS.WHOLE_PAGE}
-        </Button>
-      </div>
-    </CommentCard>
-  ) : pending === undefined ? undefined : (
-    <PendingCard
-      on={{
-        quote,
-        scope: pending.element === undefined ? PLAN_COMMENT_SCOPE.PAGE : PLAN_COMMENT_SCOPE.ELEMENT,
-      }}
-      place={THREAD_PLACE.LIST}
-      head={<blockquote className={QUOTE_CLASS}>{quote}</blockquote>}
-      doors={full}
-      begin={(first) => ({
-        ...first,
-        page: { id: page.id, version: page.version },
-        ...(pending.element === undefined ? undefined : { element: pending.element }),
-      })}
-      onStarted={onCancel}
-      onCancel={onCancel}
-    />
   );
   return (
     <Fill className="page-comments relative h-full">
@@ -3003,12 +2981,11 @@ export function PageComments({
           detail={listed.length}
           actions={
             <>
-              <Tooltip label={PICK_WORDS.COMMENT}>
+              <Tooltip label={PAGE_COMMENT_WORDS.COMMENT}>
                 <IconButton
                   icon={<MessageSquarePlusIcon />}
-                  label={PICK_WORDS.COMMENT}
-                  pressed={picking}
-                  onClick={picking ? onCancel : onComment}
+                  label={PAGE_COMMENT_WORDS.COMMENT}
+                  onClick={onComment}
                 />
               </Tooltip>
               <ResolvedOnly
@@ -3021,19 +2998,202 @@ export function PageComments({
           }
         />
         <ScrollArea fade={SCROLL_FADE.BOTH}>
-          {/* Note that while an element is picked the list holds the pick's line alone, so a column standing over a narrow page leaves the page to press. */}
           <ThreadList
             control={control}
-            listed={picking ? NO_THREADS : listed}
+            listed={listed}
             empty={NO_PAGE_COMMENTS[filter]}
-            doors={full}
-            lead={lead}
+            doors={{ ...doors, control }}
             onShowWords={(thread) =>
-              thread.page?.element === undefined ? undefined : () => onShowElement(thread)
+              thread.page?.element === undefined || !openThread(thread)
+                ? undefined
+                : () => onShowElement(thread)
             }
           />
         </ScrollArea>
       </WordsDatePickerRoom>
     </Fill>
   );
+}
+
+/** A box of the frame as the window measures it, from where the frame's room stands; none where either is not drawn. */
+function inWindow(room: HTMLElement | null, box: FrameBox | undefined): FrameBox | undefined {
+  if (room === null || box === undefined) return undefined;
+  const at = room.getBoundingClientRect();
+  return {
+    left: at.left + box.left,
+    top: at.top + box.top,
+    right: at.left + box.right,
+    bottom: at.top + box.bottom,
+  };
+}
+
+/** Where a thread on the whole page is started: the frame's top edge. */
+const PAGE_TOP: FrameBox = { left: 0, top: 0, right: 0, bottom: 0 };
+
+/** The open threads on each element of the page, by its path, in the order they were started. */
+function threadsByElement(
+  threads: readonly PlanCommentThread[],
+): ReadonlyMap<string, readonly PlanCommentThread[]> {
+  const by = new Map<string, PlanCommentThread[]>();
+  for (const thread of threads) {
+    const path = thread.page?.element;
+    if (path === undefined || !openThread(thread)) continue;
+    by.set(path, [...(by.get(path) ?? []), thread]);
+  }
+  return by;
+}
+
+/**
+ * A page's comments over the page itself, as annotations: a count pinned to
+ * each element holding open threads, which opens them in a card by it; the
+ * thread being started, in a card by the element it was started from; while
+ * the page is picking an element, a line saying so, with Whole page and
+ * Cancel; and Reply by words selected in the page, which quotes them into
+ * the comment being written, or starts one on the element holding them. It
+ * stands over the frame's room, where every box the frame says it measured
+ * in its own viewport stands as it is, and takes no press but its own.
+ */
+export function PageCommentLayer({
+  control,
+  doors,
+  page,
+  room,
+  marks,
+  selected,
+  picking,
+  pending,
+  open,
+  onOpen,
+  onReply,
+  onWholePage,
+  onStopPick,
+  onStarted,
+  onCancel,
+}: {
+  control: PlanCommentsControl;
+  doors: Omit<ThreadDoors, "control">;
+  /** The page and the version shown, which a thread is started on. */
+  page: { readonly id: string; readonly version: number };
+  /** The frame's room, which the layer fills. */
+  room: RefObject<HTMLElement | null>;
+  /** Where each element holding threads stands in the frame, by its path; none where the page holds it no more. */
+  marks: ReadonlyMap<string, FrameBox | null>;
+  /** The words selected in the page, as the frame said them. */
+  selected: PagePicked | undefined;
+  picking: boolean;
+  pending: PageCommentOn | undefined;
+  /** The element whose threads are open by it, by its path. */
+  open: string | undefined;
+  onOpen: (path: string | undefined) => void;
+  onReply: (selected: PagePicked) => void;
+  onWholePage: () => void;
+  onStopPick: () => void;
+  onStarted: (thread: PlanCommentThread) => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const full = { ...doors, control };
+  const byElement = threadsByElement(control.threads);
+  const opened = open === undefined ? [] : (byElement.get(open) ?? []);
+  const pins = [...byElement].flatMap(([path, threads]) => {
+    const box = marks.get(path);
+    // Note that an element scrolled up out of the frame is pinned nowhere until it comes back, and one below it stands past the room's foot, which clips it.
+    if (box === undefined || box === null || box.bottom < 0) return [];
+    return [{ path, threads, box }];
+  });
+  const fromPin = (target: Node) =>
+    target instanceof Element && target.closest(".page-comment-pin") !== null;
+  return (
+    <div className="page-comment-layer">
+      {pins.map(({ path, threads, box }) => (
+        // Note that a count stands on the menus' raised surface, as the Reply over words does, since it stands over whatever the page draws.
+        <MenuSurface
+          key={path}
+          flow={MENU_SURFACE_FLOW.TOOLBAR}
+          className="page-comment-pin"
+          style={{
+            left: `min(${box.right}px, calc(100% - var(--luke-touch-target) - var(--luke-space-24)))`,
+            top: Math.max(box.top, 0),
+          }}
+        >
+          <Button
+            icon={<MessageSquareIcon />}
+            label={`${threads.length} ${threads.length === 1 ? "comment" : "comments"}`}
+            aria-expanded={open === path}
+            onClick={() => onOpen(open === path ? undefined : path)}
+          >
+            {threads.length}
+          </Button>
+        </MenuSurface>
+      ))}
+      <RectFloat
+        open={opened.length > 0}
+        anchor={() =>
+          inWindow(room.current, open === undefined ? undefined : (marks.get(open) ?? undefined))
+        }
+        side={POPOVER_SIDE.BELOW}
+        onPressAway={() => onOpen(undefined)}
+        holds={fromPin}
+      >
+        <div className="page-comment-float">
+          {opened.map((thread) => (
+            <ThreadCard
+              key={thread.id}
+              thread={thread}
+              open
+              place={THREAD_PLACE.FLOAT}
+              doors={full}
+            />
+          ))}
+        </div>
+      </RectFloat>
+      <RectFloat
+        open={pending !== undefined}
+        anchor={() => inWindow(room.current, pending?.box ?? PAGE_TOP)}
+        side={POPOVER_SIDE.BELOW}
+      >
+        {pending === undefined ? null : (
+          <div className="page-comment-float">
+            <PendingCard
+              on={pageDraftOn(page.id)}
+              place={THREAD_PLACE.FLOAT}
+              doors={full}
+              begin={(first) => ({
+                ...first,
+                page: { id: page.id, version: page.version },
+                ...(pending.element === undefined ? undefined : { element: pending.element }),
+              })}
+              onStarted={onStarted}
+              onCancel={onCancel}
+            />
+          </div>
+        )}
+      </RectFloat>
+      {picking ? (
+        <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR} className="page-comment-hint">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+            {PAGE_COMMENT_WORDS.PICKING}
+          </Text>
+          <Button onClick={onWholePage}>{PAGE_COMMENT_WORDS.WHOLE_PAGE}</Button>
+          <Button onClick={onStopPick}>{COMMENT_WORDS.CANCEL}</Button>
+        </MenuSurface>
+      ) : selected === undefined ? null : (
+        <SelectedReply room={room} selected={selected} onReply={onReply} />
+      )}
+    </div>
+  );
+}
+
+/** Reply by the words selected in the page, where they stand in the window. */
+function SelectedReply({
+  room,
+  selected,
+  onReply,
+}: {
+  room: RefObject<HTMLElement | null>;
+  selected: PagePicked;
+  onReply: (selected: PagePicked) => void;
+}): React.JSX.Element | null {
+  const box = inWindow(room.current, selected.box);
+  if (box === undefined) return null;
+  return <ReplyPress place={pressPlace(box)} onReply={() => onReply(selected)} />;
 }

@@ -382,7 +382,7 @@ it.effect(
 );
 
 it.effect(
-  "a pick asked of the page takes the next press for itself and hands the panel the element's path, words, and section; the press after it is the page's",
+  "a pick asked of the page takes the next press for itself and hands the panel the element's path, words, section, and box; the press after it is the page's; and the elements marked are said where they stand, or none where the page holds none",
   () =>
     Effect.gen(function* () {
       const { frame, ask, posted } = yield* draw(
@@ -406,11 +406,25 @@ it.effect(
           path: "body > div:nth-of-type(1) > p:nth-of-type(2)",
           quote: "12 sent",
           section: "Totals",
+          box: { left: 0, top: 0, right: 0, bottom: 0 },
         },
       });
       assert.equal(page.body.dataset.pressed, undefined, "the page heard no press while picking");
       press();
       assert.equal(page.body.dataset.pressed, "yes");
       assert.equal(posted.length, 1);
+
+      ask({
+        type: PAGE_PICK_TYPE,
+        act: PAGE_PICK_ACT.MARK,
+        paths: ["body > h2:nth-of-type(1)", "#gone"],
+      });
+      assert.deepEqual(posted.at(-1), {
+        type: PAGE_PICK_TYPE,
+        marks: [
+          { path: "body > h2:nth-of-type(1)", box: { left: 0, top: 0, right: 0, bottom: 0 } },
+          { path: "#gone", box: null },
+        ],
+      });
     }),
 );
