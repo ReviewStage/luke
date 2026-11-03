@@ -41,10 +41,11 @@ import { useMentionedPlace } from "./mentioned-agent-card.js";
  * still waiting, else its own card.
  */
 
-/** Where a link to an item says it stands: under a task, or under an agent with no task. */
+/** Where a link to an item says it stands: under a task, under an agent with no task, or nowhere, by its id alone. */
 type InboxItemPlace =
   | { readonly planId: string; readonly itemId: string }
-  | { readonly agentId: string; readonly itemId: string };
+  | { readonly agentId: string; readonly itemId: string }
+  | { readonly itemId: string };
 
 /** The agent with no task an item stands under, as the Inbox groups it: the brief main holds of a waiting one, else the agent's own row among the window's agents (`inboxAgentOf`). */
 function tasklessAgentOf(
@@ -63,17 +64,34 @@ function waitingTaskOf(inbox: AppInboxSlice | undefined, itemId: string): string
   return inbox?.waiting.find((task) => task.items.some((each) => each.id === itemId))?.taskId;
 }
 
-/** The item a link names as the feed holds it, and the plan the feed holds it under where the link named its agent alone; none where the feed holds no such item. */
-function fedItemOf(
-  fed: AppInboxItems | undefined,
-  place: InboxItemPlace,
-): { readonly item: InboxItem; readonly planId: string | undefined } | undefined {
+/** An item the feed holds, and the plan it holds it under where it holds it under one. */
+interface FedItem {
+  readonly item: InboxItem;
+  readonly planId: string | undefined;
+}
+
+/** The item the feed holds by its id alone, under its agent or its plan; none where it holds no such item. */
+function fedItemById(fed: AppInboxItems, itemId: string): FedItem | undefined {
+  for (const items of Object.values(fed[INBOX_SCOPE_KIND.AGENT])) {
+    const item = items.find((each) => each.id === itemId);
+    if (item !== undefined) return { item, planId: undefined };
+  }
+  for (const [planId, items] of Object.entries(fed[INBOX_SCOPE_KIND.PLAN])) {
+    const item = items.find((each) => each.id === itemId);
+    if (item !== undefined) return { item, planId };
+  }
+  return undefined;
+}
+
+/** The item a link names as the feed holds it, and the plan the feed holds it under where the link named no plan; none where the feed holds no such item. */
+function fedItemOf(fed: AppInboxItems | undefined, place: InboxItemPlace): FedItem | undefined {
   if (fed === undefined) return undefined;
   const byId = (item: InboxItem) => item.id === place.itemId;
   if ("planId" in place) {
     const item = fed[INBOX_SCOPE_KIND.PLAN][place.planId]?.find(byId);
     return item === undefined ? undefined : { item, planId: place.planId };
   }
+  if (!("agentId" in place)) return fedItemById(fed, place.itemId);
   const own = fed[INBOX_SCOPE_KIND.AGENT][place.agentId]?.find(byId);
   if (own !== undefined) return { item: own, planId: undefined };
   // Note that an agent on a plan posts under the plan, so its item is looked for among every plan's.
@@ -90,24 +108,22 @@ function fedItemOf(
  * item, or where the window holds neither its task nor its agent. Note that
  * a link under its agent leaves its task to be found: by the plan the feed
  * holds the item under, else by main's brief while it waits, else by the
- * window's agents with no task.
+ * window's agents with no task; and a link by the item's id alone leaves its
+ * agent to be found too, by the item the feed holds.
  */
 function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const planId = "planId" in place ? place.planId : undefined;
-  const agentId = "agentId" in place ? place.agentId : undefined;
+  const namedAgent = "agentId" in place ? place.agentId : undefined;
   const { itemId } = place;
   const fed = useHostRead(LIVE_READ.INBOX_ITEMS).rows;
   const tasks = useAppSlice(APP_SLICE.TASKS);
   const inbox = useAppSlice(APP_SLICE.INBOX);
-  const found = useMemo(
-    () =>
-      fedItemOf(
-        fed,
-        planId === undefined ? { agentId: agentId ?? "", itemId } : { planId, itemId },
-      ),
-    [fed, planId, agentId, itemId],
-  );
+  const found = useMemo(() => {
+    if (planId !== undefined) return fedItemOf(fed, { planId, itemId });
+    return fedItemOf(fed, namedAgent === undefined ? { itemId } : { agentId: namedAgent, itemId });
+  }, [fed, planId, namedAgent, itemId]);
   const item = found?.item;
+  const agentId = namedAgent ?? item?.agentId;
   const linkedTask =
     planId ?? found?.planId ?? (agentId === undefined ? undefined : waitingTaskOf(inbox, itemId));
   const taskless = useMemo(

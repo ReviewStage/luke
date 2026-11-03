@@ -21,6 +21,8 @@ import type {
   AgentInboxAttachmentParams,
   AgentInboxAttachmentView,
   AgentInboxCloseParams,
+  AgentInboxItemHomeParams,
+  AgentInboxItemHomeView,
   AgentInboxMessagedView,
   AgentInboxMessageParams,
   AgentInboxReadAllParams,
@@ -51,6 +53,8 @@ export interface AgentInboxProceduresDependencies {
     agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
     agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
     agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
+    /** Where one item stands, as a link by its id alone is opened. */
+    agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
     agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
     agentInboxAttachment(
       params: AgentInboxAttachmentParams,
@@ -128,6 +132,12 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentInboxReadState(input);
+    }),
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentInboxItemHome(input);
     }),
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL

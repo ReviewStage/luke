@@ -14,6 +14,7 @@ import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import type { InboxItemPlace } from "@repo/features/inbox-attachment-link";
+import type { InboxItemHome } from "@repo/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
@@ -246,6 +247,8 @@ export type InboxChoice =
   (
     | { readonly taskId: string; readonly itemAgentId?: string; readonly itemId: string }
     | { readonly agentId: string; readonly itemId: string }
+    // An item a link named by its id alone that the account may not read, which the Inbox says is missing.
+    | { readonly itemId: string }
   ) & {
     /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
     readonly opened?: true;
@@ -1186,6 +1189,35 @@ function taskHolds(inbox: boolean): TaskHolds {
   };
 }
 
+/** The Inbox's choice of the item a link names: under its task, its agent, or by its id alone. */
+function inboxChoiceOf(place: InboxItemPlace): InboxChoice {
+  if ("planId" in place) return { taskId: place.planId, itemId: place.itemId };
+  return "agentId" in place
+    ? { agentId: place.agentId, itemId: place.itemId }
+    : { itemId: place.itemId };
+}
+
+/** The task an Inbox choice stands on; none for one on no task, or named by its id alone. */
+function choiceTaskOf(choice: InboxChoice): string | undefined {
+  return "taskId" in choice ? choice.taskId : undefined;
+}
+
+/** The agent with no task an Inbox choice stands on; none for one on a task, or named by its id alone. */
+function choiceAgentOf(choice: InboxChoice): string | undefined {
+  return "agentId" in choice ? choice.agentId : undefined;
+}
+
+/** Where an item stands, as the service says for one the account may read; nothing for one it may not, one that does not exist, or where the read failed. */
+function readInboxItemHome(
+  act: ActHandle["act"],
+  itemId: string,
+): Promise<InboxItemHome | undefined> {
+  return act(ACT_KIND.AGENTS_INBOX_ITEM_HOME, { itemId }).then(
+    (answer) => ("failure" in answer ? undefined : answer),
+    () => undefined,
+  );
+}
+
 export function useTasksTab(input: {
   acts: Pick<ActHandle, "act" | "press" | "tell">;
   /** The tasks main holds, the account's; a fixture run's own stand in for them. */
@@ -1511,10 +1543,8 @@ export function useTasksTab(input: {
   // While the Inbox stands, the panel beside it is the chosen item's task's, or its agent's where it
   // has no task, as that agent's page's is: what the item opens there, its files, its task's pages,
   // and its agents' pull requests, and none of the fixed kinds, which the task's page draws.
-  const inboxTask =
-    inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
-  const inboxAgent =
-    inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
+  const inboxTask = inboxChosen === undefined ? undefined : choiceTaskOf(inboxChosen);
+  const inboxAgent = inboxChosen === undefined ? undefined : choiceAgentOf(inboxChosen);
   // Note that the pages are held in the host while drawn and a while after, so choosing another item of the task, or the task again, reads none anew.
   // Note that an item of an agent on no task opens that agent's own pages beside it (`inbox-panel-link.ts`).
   const inboxPages = useHostRead(
@@ -1692,9 +1722,7 @@ export function useTasksTab(input: {
     sidePanel.open;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
-      ? inboxChosen !== undefined && "taskId" in inboxChosen
-        ? inboxChosen.taskId
-        : null
+      ? (inboxTask ?? null)
       : panelShown && sidePanel.tab === SIDE_PANEL_TAB.INBOX
         ? (pageAgent ?? viewed.activeTaskId ?? null)
         : null;
@@ -2940,12 +2968,27 @@ export function useTasksTab(input: {
     }
     // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
     if (channelsOn) openChannelThread(place.itemId);
-    standInFor({
-      kind: STAND_IN.INBOX,
-      chosen:
-        "planId" in place
-          ? { taskId: place.planId, itemId: place.itemId, opened: true }
-          : { agentId: place.agentId, itemId: place.itemId, opened: true },
+    standInFor({ kind: STAND_IN.INBOX, chosen: { ...inboxChoiceOf(place), opened: true } });
+  };
+
+  /**
+   * An Inbox item opened by its id alone, as a link written so names it: the
+   * service says where it stands, its agent, task, and workspace, for an item
+   * the account may read, and it then opens as a link under its agent does;
+   * one it may not read, or that does not exist, opens on the Inbox saying it
+   * is missing. Note that the workspace is the service's, never the link's
+   * slug, which may name a workspace by a slug it has since given up.
+   */
+  const openInboxItemById = (place: InboxItemPlace) => {
+    const mine = navigations.current;
+    readInboxItemHome(act, place.itemId).then((home) => {
+      if (navigations.current !== mine) return;
+      if (home === undefined) {
+        standInFor({ kind: STAND_IN.INBOX, chosen: { itemId: place.itemId, opened: true } });
+        return;
+      }
+      const found = { kind: LINK_PLACE.INBOX_ITEM, agentId: home.agentId, itemId: place.itemId };
+      openInboxItemOn(home.workspaceId, found, home.planId);
     });
   };
 
@@ -2959,6 +3002,7 @@ export function useTasksTab(input: {
   const openInboxItem = (workspace: string, place: InboxItemPlace) => {
     const open = tasks.activeTaskId;
     if ("planId" in place) openInboxItemOn(workspace, place, place.planId);
+    else if (!("agentId" in place)) openInboxItemById(place);
     else if (open !== undefined && agents.agentIds?.includes(place.agentId))
       openInboxItemOn(workspace, place, open);
     else if (tasklessAgents?.some((agent) => agent.id === place.agentId))

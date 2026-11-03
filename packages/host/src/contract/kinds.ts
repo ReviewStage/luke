@@ -216,6 +216,8 @@ export const AGENT_INBOX_ACT_KIND = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
+  /** Where one item stands, its agent, task, and workspace, as a link by its id alone is opened; it reads, and changes nothing. */
+  AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
   AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */

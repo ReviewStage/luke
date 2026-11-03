@@ -1119,6 +1119,19 @@ export function inboxStartTitle(
   return shortTitle(line ?? request.attachments?.[0]?.name ?? STARTED_TITLE_FALLBACK);
 }
 
+/**
+ * Where one item stands, as a link naming it by its id alone is opened
+ * (`link-grammar.ts`): the agent that posted it, its task, null for an
+ * agent with no task, and its workspace.
+ */
+export const inboxItemHomeSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  planId: EffectSchema.NullOr(wireUuidSchema),
+  workspaceId: EffectSchema.NonEmptyString,
+});
+
+export type InboxItemHome = typeof inboxItemHomeSchema.Type;
+
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({
   id: wireUuidSchema,

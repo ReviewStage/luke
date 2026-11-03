@@ -50,6 +50,7 @@ import {
   type InboxItem,
   inboxAnsweredSchema,
   inboxAnswerSchema,
+  inboxItemHomeSchema,
   inboxMessagedSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
@@ -1290,6 +1291,31 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [INBOX_MESSAGE_AUTHOR.AGENT, DEPLOY.body, INBOX_ASK_STATUS.OPEN, undefined],
         ]);
         assert.equal(countedFor(inbox.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 0);
+      }),
+  );
+
+  it.effect(
+    "a member finds where an item stands by its id alone, its agent, task, and workspace, and an account outside the workspace is answered as for an item that does not exist",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask, post } = yield* openInbox();
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const { id } = asked.success;
+        const home = (itemId: string, bearer = owner) =>
+          ask(request(INBOX_ITEM, bearer, { method: "GET", id: itemId }));
+
+        assert.deepEqual(readAnswer(inboxItemHomeSchema, HOSTED_HTTP_STATUS.OK, yield* home(id)), {
+          agentId: agent.id,
+          planId: task.id,
+          workspaceId: task.workspaceId,
+        });
+        const unknown = yield* home(randomUUID());
+        assert.deepEqual(
+          unknown,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(yield* home(id, other), unknown);
       }),
   );
 

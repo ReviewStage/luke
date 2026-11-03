@@ -20,6 +20,9 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { oc } from "@orpc/contract";
+import { openapi } from "@orpc/openapi";
+import { implement } from "@orpc/server";
 import { ADMIN_ERROR } from "@repo/features/admin-wire";
 import { HOSTED_ERRORS, type hostedContract } from "@repo/features/contract";
 import { CHAPTERS_BOUNDS } from "@repo/service/chapters/chapters-generator";
@@ -29,9 +32,6 @@ import { hostedFetch } from "@repo/service/orpc/handler";
 import { POSTHOG_ENVIRONMENT } from "@repo/service/providers/posthog";
 import { recordingSentry } from "@repo/service/testing/sentry-transport";
 import { HTTP_METHOD } from "@repo/wire";
-import { oc } from "@orpc/contract";
-import { openapi } from "@orpc/openapi";
-import { implement } from "@orpc/server";
 import { Duration, Effect, Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { hostedProcedureRoutes, type ProcedureRoute } from "../server/api-callers.js";
@@ -340,9 +340,10 @@ test("the inbox's parameterized paths reach their procedures through the committ
   assert.deepEqual(await answer(HTTP_METHOD.PUT, `/api/inbox/${id}/read`), unsigned);
   assert.deepEqual(await answer(HTTP_METHOD.DELETE, `/api/inbox/${id}/read`), unsigned);
   assert.deepEqual(await answer(HTTP_METHOD.PUT, "/api/inbox/read"), unsigned);
+  assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}`), unsigned);
   // A method no procedure takes at a matched path is the hosted 405, so each path is the procedure's own.
   assert.deepEqual(await answer(HTTP_METHOD.POST, `/api/inbox/${id}/read`), otherMethod);
-  assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}`), otherMethod);
+  assert.deepEqual(await answer(HTTP_METHOD.PUT, `/api/inbox/${id}`), otherMethod);
   assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}/messages`), otherMethod);
   assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}/close`), otherMethod);
   assert.deepEqual(await answer(HTTP_METHOD.DELETE, "/api/inbox/read"), otherMethod);

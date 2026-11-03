@@ -341,7 +341,10 @@ function sameSubStep(one: Place, other: Place): boolean {
 /** Whether two Inbox items are the same item of the same holder. */
 function sameInboxChoice(one: InboxChoice | undefined, other: InboxChoice | undefined): boolean {
   if (one === undefined || other === undefined) return one === other;
-  const holder = (choice: InboxChoice) => ("taskId" in choice ? choice.taskId : choice.agentId);
+  const holder = (choice: InboxChoice) => {
+    if ("taskId" in choice) return choice.taskId;
+    return "agentId" in choice ? choice.agentId : undefined;
+  };
   return one.itemId === other.itemId && holder(one) === holder(other);
 }
 

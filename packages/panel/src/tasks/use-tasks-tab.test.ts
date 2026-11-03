@@ -1231,6 +1231,47 @@ test("a Vespin link to an Inbox item opens it in its task's own Inbox tab in the
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
+test("a Vespin link to an Inbox item by its id alone opens it where the service says it stands, in the workspace the service names whatever the slug, and one the service does not find opens the Inbox on it", async () => {
+  const alerts = "alerts";
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const unknownId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
+  // The service finds the first item, and then not the second.
+  const homes = [
+    { agentId: AGENT_ID, planId: alerts, workspaceId: ACME.id },
+    { failure: AGENT_CALL_FAILURE.NOT_FOUND },
+  ] as const;
+  let asked = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () => Promise.resolve(homes[asked++] ?? homes[1]),
+    },
+  );
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.INBOX_ITEM, itemId },
+    }),
+  );
+  await settle();
+  const reveal = tab.control().inboxItemReveal;
+  const listed = tab.control().workspace?.id;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX_ITEM, itemId: unknownId },
+    }),
+  );
+  await settle();
+
+  assert.deepEqual(reveal, { planId: alerts, itemId, ask: 1 });
+  assert.equal(listed, ACME.id);
+  assert.equal(tab.control().inboxView.open, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { itemId: unknownId, opened: true });
+});
+
 /** The window's channel place as a surface drawing it reads it now. */
 function channelPlaceNow(): () => ChannelPlaceControl {
   let seen: ChannelPlaceControl | undefined;

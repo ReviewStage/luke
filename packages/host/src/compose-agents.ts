@@ -9,6 +9,7 @@ import {
   type AgentGitHubImageView,
   type AgentInboxAnsweredView,
   type AgentInboxAttachmentView,
+  type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
   type AgentInboxReadAllView,
   type AgentInboxReadStateView,
@@ -36,6 +37,7 @@ import {
   agentInboxAnswerParamsSchema,
   agentInboxAttachmentParamsSchema,
   agentInboxCloseParamsSchema,
+  agentInboxItemHomeParamsSchema,
   agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
@@ -241,6 +243,7 @@ export type AgentClient = Pick<
   | "messageInbox"
   | "startInboxThread"
   | "markInboxItemRead"
+  | "inboxItemHome"
   | "markInboxItemUnread"
   | "markInboxRead"
   | "taskInboxLive"
@@ -1166,6 +1169,15 @@ function composed(
           true,
         );
         return carried<AgentInboxReadStateView>(answer);
+      }),
+    [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>
+      Effect.gen(function* () {
+        const { itemId } = yield* readParams(
+          agentInboxItemHomeParamsSchema,
+          params,
+          "finding where an inbox item stands names the item",
+        );
+        return carried<AgentInboxItemHomeView>(yield* asked(client.inboxItemHome(itemId)));
       }),
     [GATEWAY_METHOD.AGENTS_INBOX_READ_ALL]: (params) =>
       Effect.gen(function* () {
