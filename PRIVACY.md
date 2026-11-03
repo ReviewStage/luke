@@ -59,8 +59,10 @@ stay in memory only.
 None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Every agent can run any shell
-command on your Mac, as many at a time as you allow; the workers an agent hands work to cannot, and run their own commands in the agent's
-sandbox with no network at all. This holds whenever Vespin is open on the Mac and
+command on your Mac, as many at a time as you allow; the workers a Claude Code
+agent hands work to cannot, and run their own commands where the agent's own
+commands run: in its sandbox, with the same network, or, for a local agent, on
+your Mac or the host. This holds whenever Vespin is open on the Mac and
 signed in to your account, and Settings › This Mac is not on Never. It has
 three modes: Ask every time, the default, where you see a prompt and can deny
 the command; Always allow, which runs it at once; and Never. The mode is kept
@@ -325,10 +327,10 @@ on the same bounds as a file you attach. Any
 other file, and an image not kept that way, such as one past the transcript's
 200 MB of pictures, is stored in the transcript as sent, except that the
 prompt an agent is started on keeps a PDF, or an image not kept, by name
-alone. An agent that runs on Vespin's own agent has its images and PDFs copied
-into its sandbox too; one that runs on Claude Code or Codex is handed them in
-its messages and never as files in its sandbox. They go when the transcript
-does; the sandbox's snapshot and the agent's session history keep them on the
+alone. An agent is handed a PNG, JPEG, GIF, or WebP image in its message; any
+other file, a PDF among it, is written into its sandbox (for a local agent,
+into its folder on your Mac or the host), and the message tells it where.
+They go when the transcript does; the sandbox's snapshot and the agent's session history keep them on the
 terms under "Who we send it to".
 
 **Pictures in a tool's answer.** When a tool answers an agent
@@ -535,11 +537,10 @@ its enroll or its first call after you approve it, keeping none from the ask
 for a code, lists them only to your own account's apps, and keeps them for as
 long as it keeps the host, which goes with your account.
 
-**An agent that runs on Claude Code.** For the accounts in the early
-test of Claude plans, an agent your Claude plan pays for runs on
-Anthropic's Claude Code, and so does a Claude agent your own Anthropic
-API key pays for, in that agent's own Vercel Sandbox, rather than on
-Vespin's own agent. Its sandbox's disk holds the agent's checkout of the
+**An agent that runs on Claude Code.** Every Claude agent runs on
+Anthropic's Claude Code, whether your Claude plan or your own Anthropic API
+key pays for it, in that agent's own Vercel Sandbox unless it is a local
+agent, as above. Its sandbox's disk holds the agent's checkout of the
 repository and Claude Code's own session files: its record of the session,
 which it picks up again from there when the agent is next messaged. Both stay
 on that disk between turns and in the snapshot Vercel keeps when the sandbox
@@ -553,10 +554,9 @@ from there; a message the runner never took is handed to the agent's next launch
 within five minutes of your sending it, or not at all. A line is deleted once
 it is a day old and a later one is sent to that agent, and with the agent.
 
-**An agent that runs on Codex.** On the same terms, for the accounts in
-the early test of ChatGPT plans, an agent your ChatGPT plan pays for
-runs on OpenAI's Codex, in that agent's own Vercel Sandbox, and so does a GPT
-agent your own OpenAI API key pays for. Its sandbox's
+**An agent that runs on Codex.** On the same terms, every GPT agent runs
+on OpenAI's Codex, whether your ChatGPT plan or your own OpenAI API key pays
+for it. Its sandbox's
 disk holds the agent's checkout and Codex's own thread files (under its
 `CODEX_HOME`): its record of the thread, which it resumes from there when the
 agent is next messaged. Both stay on that disk between turns and in the
@@ -905,10 +905,8 @@ that mentions Linear, one of its tools, or one of its pages hands it Linear
 for the turn that message opens, or, sent while a turn is under way, for its
 next one, even while Linear is switched off for that agent, and leaves the
 switch as it is; a message from another agent or a reviewer hands it
-none. The workers are told to change
-something only when their subagent task asks for
-it. What Linear answers goes to the model that made the call, and each call,
-with its input and everything Linear answered, is written to the agent's
+none. The workers are told to use it only to read. What Linear answers goes
+to the model that made the call, and each call, with its input and everything Linear answered, is written to the agent's
 transcript like any other tool call. Disconnecting stops Vespin
 using it from each agent's next step, removes the connection's record, and
 asks Vercel Connect to revoke the grant; what agents already changed in
@@ -1452,11 +1450,11 @@ only when you press Send.
 - Anthropic or OpenAI, for web search. An agent and its workers search
   the web with the search tool of the provider its model is on (Anthropic's
   for a Claude model, OpenAI's for a GPT one), inside that model call and on
-  your own key for that provider. A page an agent reads is fetched by our service itself,
-  from a public HTTPS address, with no cookie or credential, so the site sees
-  our service's address rather than your Mac's; up to a megabyte is read and
-  20,000 characters kept. The query, what the search found, and the page's
-  text are stored with the agent's transcript like any other tool call.
+  the plan or key that pays for the agent. A page an agent reads is fetched
+  by Claude Code or Codex where the agent runs, in its sandbox or, for a local
+  agent, on your Mac or the host, so the site sees that machine's address. The
+  query, what the search found, and what the agent read of the page are
+  stored with the agent's transcript like any other tool call.
 - OpenAI, for dictation. Pressing the microphone in a message box records it,
   in memory and never on disk, until you press ✓ or Enter (or for two minutes
   at most); ✕ or Escape discards the recording. It goes through our service,
@@ -1500,8 +1498,8 @@ only when you press Send.
 - Anthropic and OpenAI, for an agent. When you, or another
   agent, start one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
-  and whatever model it picks for each worker it hands work to, which may be
-  the other provider's: Anthropic for a Claude model, OpenAI for a GPT model,
+  and whatever model of the same provider it picks for each worker it hands
+  work to: Anthropic for a Claude model, OpenAI for a GPT model,
   on the subscription or API key you added for that provider, never ours; with
   neither, the agent does not start. A call on your own key is billed to you
   by the provider, and if our service can no longer read your key the agent
@@ -1510,9 +1508,11 @@ only when you press Send.
   grants that key fast mode. Each call carries the plan's text, the agent's
   conversation so far, any files you attached, and what it read of the
   repository, the web, your integrations, its skills, and your Mac; the
-  provider keeps it under its own retention policy. The agent's workers can
-  read the checkout, the web, and your integrations, but only the agent edits
-  the checkout, and only the agent reaches your Mac. The agent's transcript — its
+  provider keeps it under its own retention policy. The agent's workers are
+  told to only read the checkout, the web, and your integrations and to leave
+  every change to the agent, though nothing but those words holds them to it,
+  and a Claude Code agent's workers cannot run commands on your Mac as the
+  agent can. The agent's transcript — its
   words, reasoning summaries, and tool calls with their input (such as the few
   words it gives to describe a command) and output — is written to your
   account's conversation as described under "Your account". Archiving an agent
@@ -1547,8 +1547,7 @@ only when you press Send.
   key where you saved only that), never ours, for a short title, sending
   your first message (for an agent started on the plan, the plan's text), your
   latest one, and the agent's latest answer, as text alone cut to 2,000
-  characters each. A worker that an agent hands work to is
-  titled from the whole subagent task it was handed. Each title is stored with the agent or worker; Anthropic keeps the
+  characters each. Each title is stored with the agent; Anthropic keeps the
   request and its reply under its own retention policy.
 - GitHub, through the Vespin GitHub App, for an agent's work. The agent
   checks the repository out and pushes its branch with an installation token
