@@ -39,7 +39,7 @@ demo_free_port() {
 }
 
 # The folders of the agents the host with the state given made, removed, as
-# `luke-host uninstall` removes its own (apps/host/scripts/luke-host.sh), so
+# `vespin-host uninstall` removes its own (apps/host/scripts/vespin-host.sh), so
 # no other install's agent beside them in the home's folder is touched. An
 # entry that is not an agent's id is passed over.
 demo_agents_removed() {
@@ -170,7 +170,7 @@ fi
 # (`demo:seed`), and the local server over it (`local-server`) on a free
 # loopback port, which signs the app in as Dean
 # (apps/web/server/local-sign-in.ts). Dean's agents run on a host of the
-# run's own on this Mac: `luke-host run` built from this checkout, its state
+# run's own on this Mac: `vespin-host run` built from this checkout, its state
 # the demo profile, enrolled by the seed as Dean's with every task running
 # on it. So neither it nor the app, for which Dean's Bring your own host
 # stays off, touches the Mac's own host (~/.local/state/luke-host).
@@ -303,9 +303,9 @@ pnpm --filter @luke/host-daemon --filter @luke/agent-runner build >"$demo_folder
     exit 1
 }
 mkdir -p "$demo_folder/host/lib"
-cp apps/host/dist/luke-host.mjs packages/agent-runner/dist/agent-runner.mjs "$demo_folder/host/lib/"
+cp apps/host/dist/vespin-host.mjs packages/agent-runner/dist/agent-runner.mjs "$demo_folder/host/lib/"
 env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY LUKE_HOST_STATE_ROOT="$demo_profile" \
-    node "$demo_folder/host/lib/luke-host.mjs" run >"$demo_folder/host.log" 2>&1 &
+    node "$demo_folder/host/lib/vespin-host.mjs" run >"$demo_folder/host.log" 2>&1 &
 host_pid=$!
 printf "demo: running this Mac's host for Dean, its log at %s\n" "$demo_folder/host.log" >&2
 
