@@ -2134,6 +2134,12 @@ export interface SidePanelDrawing {
   /** The exit has played: draw the panel as asked. */
   onLeft: () => void;
   edge: ResizeEdgeHandle;
+  /**
+   * Whether the chat stands at the right of the panel (Chat on the right):
+   * the panel then fills the middle, and its kept width and its edge are the
+   * chat's, the column standing at the right of it.
+   */
+  chatOnRight: boolean;
 }
 
 /** An exit under way, and the panel it holds drawn. */
@@ -2184,8 +2190,16 @@ function exitFor(
  * what it last held until its exit has played, as docs/DESIGN.md asks of
  * anything leaving. The edge's drag is held here rather than in the panel,
  * because a drag that shuts the panel goes on, and may open it again.
+ *
+ * With the chat at the right (`chatOnRight`), the kept width is the chat's,
+ * so the edge's two snaps trade places: dragging the chat narrower than its
+ * least width gives the panel the whole window, and dragging it over the room
+ * the panel keeps shuts the panel, leaving the chat the whole page.
  */
-export function useSidePanelDrawing(panel: SidePanelControl): SidePanelDrawing {
+export function useSidePanelDrawing(
+  panel: SidePanelControl,
+  chatOnRight = false,
+): SidePanelDrawing {
   const [last, setLast] = useState(panel);
   const [held, setHeld] = useState<HeldPanel | undefined>(undefined);
   if (!sameDrawing(last, panel)) {
@@ -2201,14 +2215,15 @@ export function useSidePanelDrawing(panel: SidePanelControl): SidePanelDrawing {
     reserve: documentReserve,
     label: "Resize panel",
     onResize: panel.onResize,
-    onToggleCollapsed: panel.onToggle,
-    onToggleExpanded: panel.onToggleFullScreen,
+    onToggleCollapsed: chatOnRight ? panel.onToggleFullScreen : panel.onToggle,
+    onToggleExpanded: chatOnRight ? panel.onToggle : panel.onToggleFullScreen,
   });
   return {
     panel: drawn.open ? drawn : undefined,
     leaving: held?.leaving ?? PANEL_LEAVING.NONE,
     onLeft,
     edge,
+    chatOnRight,
   };
 }
 
@@ -2257,6 +2272,7 @@ export function SidePanel({
   leaving,
   onLeft,
   edge,
+  chatOnRight,
   unread,
   holder,
   taskId,
@@ -2563,6 +2579,7 @@ export function SidePanel({
       leaving={leaving}
       onLeft={onLeft}
       edge={edge}
+      chatOnRight={chatOnRight}
       label="Panel"
       banner={banner}
       switched={switched}
@@ -2840,12 +2857,15 @@ function PanelPhoneHead({
  * be uncovered as the panel goes back. Where the room holds it only full
  * screen it has neither the button nor the edge, and keeps no room. It plays its own exits (`playExit`);
  * its arrival is played by the pane motion around it (`pane-motion.tsx`).
+ * With the chat at its right it takes what the chat leaves rather than a
+ * width of its own, and its edge stands at its right (desktop.css).
  */
 function PanelFrame({
   panel,
   leaving,
   onLeft,
   edge,
+  chatOnRight,
   label,
   tabs,
   actions,
@@ -2875,6 +2895,8 @@ function PanelFrame({
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;
     return playExit(aside.current, room.current, leaving, onLeft);
   }, [leaving, onLeft]);
+  // Note that the chat at the right holds the kept width, so the panel then takes what it leaves.
+  const width = chatOnRight ? undefined : { width: panel.width };
   return (
     <>
       {/* Shut, it gives the document its room back at once, to glide into. A
@@ -2883,7 +2905,7 @@ function PanelFrame({
         <div
           ref={room}
           className="side-panel-room min-w-0 max-w-side-panel flex-none"
-          style={{ width: panel.width }}
+          style={width}
         />
       ) : null}
       <aside
@@ -2895,7 +2917,7 @@ function PanelFrame({
         data-pane-switch={switched ? "" : undefined}
         data-leaving={leaving === PANEL_LEAVING.NONE ? undefined : leaving}
         data-popover-room=""
-        style={panel.fullScreen ? undefined : { width: panel.width }}
+        style={panel.fullScreen ? undefined : width}
       >
         {/* The row is a drag region and each control in it is not; Chromium
             takes regions in document order, so the controls follow it. */}

@@ -269,6 +269,7 @@ export const PRODUCT_EXPERIMENT = {
   PILOT: "pilot",
   SKILLS: "skills",
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
+  CHAT_ON_THE_RIGHT: "chat-on-the-right",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];

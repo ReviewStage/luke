@@ -8,8 +8,10 @@ import type {
 } from "@repo/features/task-wire";
 import { readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
+  cssCustomProperties,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -68,6 +70,7 @@ import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/u
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { DesktopHome } from "./desktop-home.js";
@@ -165,16 +168,22 @@ const ACTION_SKELETON_WIDTHS = { START: "104px" } as const;
 /** An icon press's width, the task's ⋯'s and the summary's toggle's, as tall as it is wide. */
 const ICON_PRESS_WIDTH = "var(--ui-control-height)";
 
+/** Where the chat stands beside the open panel while Chat on the right is on, as desktop.css reads it. */
+const CHAT_SIDE = { RIGHT: "right" } as const;
+
 /**
  * The task's page as it and its placeholder stand it: the column, its
  * toolbar over its body, and what stands beside it, the side panel; the
  * column hidden rather than left out while the panel fills the window.
+ * With Chat on the right and the panel open, the panel fills the middle and
+ * the column stands at its right at the panel's kept width (desktop.css).
  */
 function TaskPage({
   areaRef,
   columnRef,
   panelOpen,
   fullScreen,
+  chatWidth,
   column,
   children,
 }: {
@@ -182,14 +191,19 @@ function TaskPage({
   columnRef: (column: HTMLElement | null) => void;
   panelOpen: boolean;
   fullScreen: boolean;
+  /** The column's width where it stands at the right of the open panel, the panel's kept width; none where it stands in the middle. */
+  chatWidth: number | undefined;
   column: React.ReactNode;
   children?: React.ReactNode;
 }): React.JSX.Element {
+  const chatOnRight = panelOpen && chatWidth !== undefined;
   return (
     <div
       ref={areaRef}
       className="desktop-task relative flex min-h-0 flex-1"
       data-panel-open={String(panelOpen)}
+      data-chat-side={chatOnRight ? CHAT_SIDE.RIGHT : undefined}
+      style={chatOnRight ? cssCustomProperties({ "--chat-width": `${chatWidth}px` }) : undefined}
     >
       <Fill ref={columnRef} className="desktop-task-main" hidden={fullScreen}>
         {column}
@@ -252,6 +266,7 @@ function TaskPageSkeleton({
         columnRef={onColumn}
         panelOpen={panel !== undefined}
         fullScreen={panel?.fullScreen === true}
+        chatWidth={frame.chatOnRight ? panel?.width : undefined}
         column={
           <>
             <Toolbar
@@ -398,7 +413,9 @@ function PlanDocument({
     if (activityAsked?.opening && panelOpen)
       setActivityAsked({ ...activityAsked, tab: panelTab, opening: false });
   }, [activityAsked, panelOpen, panelTab]);
-  const drawing = useSidePanelDrawing(tasks.sidePanel);
+  // Note that a narrow room holds the panel only full screen, so it has no side for the chat to stand on.
+  const chatOnRight = useExperiment(EXPERIMENT.CHAT_ON_THE_RIGHT) && room !== SHELL_ROOM.NARROW;
+  const drawing = useSidePanelDrawing(tasks.sidePanel, chatOnRight);
   const views = useTabViews();
   const { act } = useAct();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
@@ -1145,6 +1162,7 @@ function PlanDocument({
                     columnRef={setColumn}
                     panelOpen={sidePanel.open}
                     fullScreen={sidePanel.fullScreen}
+                    chatWidth={drawing.chatOnRight ? sidePanel.width : undefined}
                     column={
                       <>
                         <Toolbar
