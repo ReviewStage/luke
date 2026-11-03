@@ -17,6 +17,7 @@ import {
   type PullRequestThreadView,
 } from "@repo/features/link-grammar";
 import { MENTION_KIND } from "@repo/features/mention-link";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
   PLAN_ACTOR,
@@ -66,7 +67,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { FAKE_ANSWER, fakeActPort, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handHostReads, handState, holdPages } from "../testing/app-state.js";
+import { handHostReads, handState, holdPages, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -1131,7 +1132,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
   // Note that a panel's pages are held through the window's act port and laid on the document, as the host lays them.
-  const asked = holdPages(handHostReads({}).deliverPages, () => [page]);
+  const asked = holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
   // A fresh registry reads the document handed here, rather than one an earlier test handed.
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
@@ -1149,14 +1150,24 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   await settle();
 
   assert.equal(tab.control().agentView.agentId, AGENT_ID);
-  assert.deepEqual(asked, [{ agentId: AGENT_ID }]);
+  // Note that the open task's pages stay held beneath the agent's page.
+  assert.deepEqual(asked, [{ taskId: TASK.id }, { agentId: AGENT_ID }]);
   assert.deepEqual(tab.control().agentView.pages, [page]);
   assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
 
 test("a Vespin link to a page of the task, as Open in browser lands on, opens the task's side panel on the page's tab", async () => {
   const page = { id: "page-1", title: "Invite funnel", version: 1, at: 1 };
-  const tab = mount({ shown: true, tasks: { ...withAgents([RUNNING_AGENT]), pages: [page] } });
+  fakeActs({
+    act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
+  holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
+  // A fresh registry reads the document handed here, rather than one an earlier test handed.
+  const tab = mount(
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
+    {},
+    AtomRegistryModule.make(),
+  );
   await settle();
 
   act(() =>
@@ -1713,20 +1724,33 @@ test("a press while a reopen waits on its plan takes no tab of another plan, whi
 /** A third task, which neither tab was closed on. */
 const THIRD_TASK_ID = "4e6a8c0e-2a4c-4e6a-8c0e-2a4c6e8a0c2e";
 
-test("a tab its strip no longer draws, its page gone since, is passed over for the tab closed before it", () => {
+test("a tab its strip no longer draws, its page gone since, is passed over for the tab closed before it", async () => {
   const page = {
     id: "6c8e0a2c-4e6a-4c8e-8a2c-4e6a8c0e2a4c",
     title: "Invite flow",
     version: 1,
     at: 1,
   };
-  const tab = mount({ shown: true, tasks: { ...OPEN, pages: [page] } });
+  fakeActs({
+    act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
+  // Note that the open task's pages are held through the window's act port and laid on the document, as the host lays them.
+  const reads = handHostReads({});
+  const asked = holdPages(reads.deliverPages, () => ({ rows: [page] }));
+  // A fresh registry reads the document handed here, rather than one an earlier test handed.
+  const tab = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.deepEqual(asked, [{ taskId: TASK.id }]);
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onChoose({ page: page.id }));
   act(() => panel().onClose({ page: page.id }));
-  tab.stand({ tasks: { ...OPEN, pages: [] } });
+  // The page is gone since: the task's pages, read again, hold none.
+  act(() =>
+    reads.deliverPages({ [PAGE_OWNER.TASK]: { [TASK.id]: { rows: [] } }, [PAGE_OWNER.AGENT]: {} }),
+  );
+  await settle();
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
@@ -2567,7 +2591,13 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const checks = mount({ ...run, profile: RUN_PROFILE.AGENT_CHECKS });
   const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
-  const page = mount({ ...run, profile: RUN_PROFILE.AGENT_PAGE });
+  // Note that the page profile's page is held on the open task's pages, as its fixture run's document lays it (`fixtureAppState`).
+  handState(
+    {},
+    { run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE } },
+  );
+  const page = mount({ ...run, profile: RUN_PROFILE.AGENT_PAGE }, {}, AtomRegistryModule.make());
+  await settle();
 
   assert.deepEqual(tasks.control().agents.agents, []);
   assert.deepEqual(

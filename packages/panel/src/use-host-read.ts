@@ -117,9 +117,13 @@ function useHolderInbox(key: InboxHolderKey | undefined): HostRead<readonly Inbo
 
 /**
  * One task's pages, or one agent's on no task, held by this surface while
- * `place` names one, as a holder's inbox is. Note that it offers no Try
- * again, because the host reads pages that did not answer again on its own
- * (`@repo/host`'s `live-push.ts`).
+ * `place` names one, as a holder's inbox is: the open task's page, the
+ * panel beside an Inbox item, an agent's page, and a page's card or frame
+ * each hold the pages they draw. Note that it offers no Try again, because
+ * the host reads pages that did not answer again on its own, and pages it
+ * was refused, a plan's or an agent's the reader cannot reach, stand failed
+ * until every surface lets them go and one holds them anew (`@repo/host`'s
+ * `live-push.ts`).
  */
 function useHolderPages(place: PagePlace | undefined): HeldRead<readonly PageLine[]> {
   const kind =

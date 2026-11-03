@@ -52,8 +52,6 @@ import {
   type TasksPageAnswer,
   type TasksPageParams,
   type TasksPageSourceAnswer,
-  type TasksPagesAnswer,
-  type TasksPagesParams,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPictureKeepParams,
@@ -132,7 +130,6 @@ export interface TasksProceduresDependencies {
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
     tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
-    tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
     /** A plan's or agent's pages held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
     tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
@@ -568,14 +565,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return streamed(yield* Stream.toAsyncIterableEffect(pages));
       },
     ),
-    [TASKS_ACT_KIND.TASKS_PAGES]: actPort[TASKS_ACT_KIND.TASKS_PAGES].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.tasksPages(input);
-    }),
     // Note that the picture's answer, a failure among them, is the panel's to
     // read, as a workspace photo's is, because a picture that hears none
     // draws its words rather than a refusal.

@@ -23,11 +23,9 @@ import {
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
 import {
-  pageLineSchema,
   pagePlaceSchema,
   pageVersionNumberSchema,
   planPageVersionAnswerSchema,
-  taskPagesAnswerSchema,
 } from "./page-wire.js";
 import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
@@ -240,13 +238,6 @@ export const tasksViewSchema = EffectSchema.Struct({
   /** The one active task, absent while the window has none open. */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
   document: tasksDocumentSchema,
-  /**
-   * The pages agents wrote for the active plan, each by its newest version,
-   * the most recently written first, as last read with the task; absent with
-   * none, and cleared as the task is left. Their HTML is never held here: the
-   * frame that draws a page reads it alone (`brain.page`).
-   */
-  pages: EffectSchema.optionalKey(EffectSchema.Array(pageLineSchema)),
 });
 
 export type TasksView = typeof tasksViewSchema.Type;
@@ -880,20 +871,7 @@ export const tasksPageAnswerSchema = EffectSchema.Union([
 
 export type TasksPageAnswer = typeof tasksPageAnswerSchema.Type;
 
-/** One plan's pages, as the window's Inbox names the plan whose item it shows, or one coding agent's on no task, as its page names it. */
-export const tasksPagesParamsSchema = pagePlaceSchema;
-
-export type TasksPagesParams = typeof tasksPagesParamsSchema.Type;
-
-/** A plan's pages as the window hears them, each by its newest version, or that the service did not answer. */
-export const tasksPagesAnswerSchema = EffectSchema.Union([
-  taskPagesAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
-
-export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
-
-/** One plan's pages, held by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
+/** One plan's pages, or one coding agent's on no task, held by a window while a surface of it draws them. */
 export const taskPagesFollowSchema = pagePlaceSchema;
 
 export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;

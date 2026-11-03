@@ -32,6 +32,7 @@ import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@repo/host/fixture-stage";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import {
   agentActAnswer,
+  agentAppState,
   agentColumnTab,
   agentSidePanel,
   agentTasksView,
@@ -665,10 +666,12 @@ export function fixtureActAnswer(
 /**
  * Main's document as a fixture run draws it (`use-app-state.ts`): with the
  * synthetic account signed in under the profiles that stage one
- * (`settings-fixture.ts`), and as main holds it under any other.
+ * (`settings-fixture.ts`), the open task's pages held with the page its
+ * agent showed under the agent profiles (`agent-fixture.ts`), and as main
+ * holds it under any other.
  */
 export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
-  return settingsAppState(state.run.profile, state);
+  return agentAppState(settingsAppState(state.run.profile, state), FIXTURE_TASK_ID);
 }
 
 /**

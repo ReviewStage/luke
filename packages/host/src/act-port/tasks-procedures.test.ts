@@ -104,7 +104,6 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_REVISION]: "Could not read that version on this system.",
   [TASKS_ACT_KIND.TASKS_RESTORE]: "Could not restore that version on this system.",
   [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: "Could not read that page's source on this system.",
-  [TASKS_ACT_KIND.TASKS_PAGES]: "Could not read that plan's pages on this system.",
   [TASKS_ACT_KIND.TASKS_PICTURE_READ]: "Could not read that picture on this system.",
   [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: "Could not keep that picture on this system.",
   [TASKS_ACT_KIND.TASKS_COMMENTS]: "Could not read the task's comments on this system.",
@@ -124,8 +123,6 @@ const EDIT = { ...TASK, edit: { document: { base: "", value: "Invites expire." }
 const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
 /** The one picture the fake host holds. */
 const PICTURE_ID = "picture-1";
-/** The one page the fake host lists, by its id as the service spells one. */
-const PAGE_LINE_ID = "5a1c3f7e-8b2d-4e6f-9a0b-1c2d3e4f5a6b";
 const PLAN = { planId: "plan-1" };
 const PLACE = { workspaceId: "workspace-acme", repository: "acme/relay" };
 const PAGE = { ...TASK, pageId: "page-funnel", version: 2 };
@@ -240,7 +237,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_REVISION, payload: { ...TASK, seq: 3 } },
   { kind: TASKS_ACT_KIND.TASKS_RESTORE, payload: { ...TASK, seq: 3 } },
   { kind: TASKS_ACT_KIND.TASKS_PAGE_SOURCE, payload: PAGE },
-  { kind: TASKS_ACT_KIND.TASKS_PAGES, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_PICTURE_READ, payload: { ...PLAN, attachmentId: PICTURE_ID } },
   {
     kind: TASKS_ACT_KIND.TASKS_PICTURE_KEEP,
@@ -438,10 +434,6 @@ function windowPort(
         if (html === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
         return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
       }),
-    tasksPages: (params) =>
-      ask(`pages:${pagePlaceId(params)}`, () => ({
-        pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }],
-      })),
     tasksPagesFollow: (scope) => ask(`pages-follow:${pagePlaceId(scope)}`, () => undefined),
     tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${pagePlaceId(scope)}`, () => undefined),
     tasksBrowserTabsFollow: (scope) =>
@@ -808,9 +800,6 @@ it("what a task holds is read through the host from a panel, and answers what it
     answer: { failure: TASK_CALL_FAILURE.UNANSWERED },
   });
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_RESTORE, { ...TASK, seq: 3 }), { answer: true });
-  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_PAGES, TASK), {
-    answer: { pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }] },
-  });
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_COMMENT_START, COMMENT_START), {
     answer: { refused: PLAN_COMMENT_REFUSAL.TOO_MANY },
   });
@@ -823,7 +812,6 @@ it("what a task holds is read through the host from a panel, and answers what it
     `revisions:${TASK_ID}:undefined`,
     "revision:3",
     "restore:3",
-    `pages:${TASK_ID}`,
     "comment:plan-1",
   ]);
 });

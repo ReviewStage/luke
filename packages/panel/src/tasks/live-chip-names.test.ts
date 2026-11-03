@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import { type TaskSummary, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -107,7 +109,12 @@ const STATE: AppStateSnapshot = stateWith(
         },
       ],
       activeTaskId: TASK_ID,
-      pages: [{ id: PAGE_ID, title: "Invite funnel", version: 2, at: AT }],
+    },
+    [LIVE_READ.PAGES]: {
+      [PAGE_OWNER.TASK]: {
+        [TASK_ID]: { rows: [{ id: PAGE_ID, title: "Invite funnel", version: 2, at: AT }] },
+      },
+      [PAGE_OWNER.AGENT]: {},
     },
   },
 );
