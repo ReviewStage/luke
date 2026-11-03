@@ -827,14 +827,14 @@ export function agentIsWoken(
   wake: AgentWake,
   agent: Pick<Agent, "archivedAt" | "createdAt">,
   turn: AgentLatestTurn | undefined,
-  lukeLogin: string | undefined,
+  appLogin: string | undefined,
   now: number,
 ): boolean {
   if (agent.archivedAt !== null) return false;
   const atWork = AT_WORK.has(agentStatusOf(turn, { createdAt: agent.createdAt, now }));
   if (wake.kind === AGENT_WAKE.CHECKS_COMPLETED) return atWork;
-  const byLuke = lukeLogin !== undefined && wake.by.toLowerCase() === lukeLogin.toLowerCase();
-  if (wake.kind !== AGENT_WAKE.CHECK_FAILED && !byLuke) return true;
+  const byApp = appLogin !== undefined && wake.by.toLowerCase() === appLogin.toLowerCase();
+  if (wake.kind !== AGENT_WAKE.CHECK_FAILED && !byApp) return true;
   const settledAt = turn?.settledAt?.getTime();
   return !atWork && (settledAt === undefined || settledAt < wake.at);
 }
@@ -951,7 +951,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
   eveFor: EveForAccount,
   wake: AgentWake,
   deliveryId: string,
-  lukeLogin: string | undefined,
+  appLogin: string | undefined,
   readChecks: HeadChecksRead = headChecksFor,
 ): Effect.fn.Return<number, never, WakeServices> {
   // A delivery with no id has no key to be told once under, so it tells nobody.
@@ -962,7 +962,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
     const agents = yield* agentsOf(wake);
     const turns = yield* latestTurnsOfReached(agents.map(({ agent }) => agent.conversationId));
     const admitted = agents.filter(({ agent }) =>
-      agentIsWoken(wake, agent, turns.get(agent.conversationId), lukeLogin, now),
+      agentIsWoken(wake, agent, turns.get(agent.conversationId), appLogin, now),
     );
     // Checks finished on a commit an agent has pushed past end none of its waits.
     const woken = checksCompleted

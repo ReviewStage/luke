@@ -632,9 +632,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const agent = yield* agentInSandbox;
         const teammate = `user-${randomUUID()}`;
         yield* Database.use((db) =>
-          db
-            .insert(user)
-            .values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
+          db.insert(user).values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
         );
         yield* Database.use((db) =>
           db.insert(messages).values({

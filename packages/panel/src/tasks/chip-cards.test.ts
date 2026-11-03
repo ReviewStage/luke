@@ -96,7 +96,7 @@ const ROLLOUT_PAGE: PageLine = {
   title: "Rollout tracker",
   version: 1,
   at: AT,
-  shownBy: { kind: PAGE_SHOWER.LUKE },
+  shownBy: { kind: PAGE_SHOWER.APP },
 };
 
 const SAM = "user-sam";
@@ -252,7 +252,7 @@ const STATE: AppStateSnapshot = (() => {
           title: "Unfurl matrix",
           version: 3,
           at: AT,
-          shownBy: { kind: PAGE_SHOWER.LUKE },
+          shownBy: { kind: PAGE_SHOWER.APP },
         },
       ],
     },

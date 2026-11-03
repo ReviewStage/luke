@@ -630,7 +630,7 @@ test("a tick saved on one task is not carried into another whose plan reads the 
 
 test("a plan drawn anew while a tick is out is what the next tick is written over", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] Two\n";
-  const lukes = `${body}\nLuke's line.\n`;
+  const appText = `${body}\nLuke's line.\n`;
   const first = Promise.withResolvers<TasksEditAnswer>();
   const sent: PlanEditRequest[] = [];
   const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
@@ -645,7 +645,7 @@ test("a plan drawn anew while a tick is out is what the next tick is written ove
   act(() => one.click());
   await settle();
 
-  render({ ...DOCUMENT_TASK, document: { body: lukes, assumptions: [] } }, door);
+  render({ ...DOCUMENT_TASK, document: { body: appText, assumptions: [] } }, door);
   first.resolve({ saved: true });
   await settle();
   const two = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="Two"]');
@@ -654,8 +654,8 @@ test("a plan drawn anew while a tick is out is what the next tick is written ove
   await settle();
 
   assert.deepEqual(sent.at(-1)?.document, {
-    base: lukes,
-    value: lukes.replace("[ ] Two", "[x] Two"),
+    base: appText,
+    value: appText.replace("[ ] Two", "[x] Two"),
   });
 });
 
@@ -1067,27 +1067,27 @@ test("Keep mine in the open editor over a teammate's change to another section l
 });
 
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Vespin's", async () => {
-  const lukes = `${BODY}Vespin's.\n`;
+  const appText = `${BODY}Vespin's.\n`;
   const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: false };
-  const lukesNote = "Vespin changed this section while you were editing.";
-  const { container, sent, render } = mount([{ conflict: { current: lukes, by } }]);
+  const appNote = "Vespin changed this section while you were editing.";
+  const { container, sent, render } = mount([{ conflict: { current: appText, by } }]);
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
   act(() => block(container, "Goal").click());
   act(() => open().onDraft(`${BODY}Mine.\n`));
   act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
-  assert.ok(container.textContent?.includes(lukesNote), "the conflict holds the editor open");
+  assert.ok(container.textContent?.includes(appNote), "the conflict holds the editor open");
 
   render(other);
   await settle();
 
   assert.equal(sent.length, 1, "a conflict sends nothing more as the plan is left");
-  assert.equal(newestToastSays(), `Your plan edits could not be saved.${lukesNote}Keep mine`);
+  assert.equal(newestToastSays(), `Your plan edits could not be saved.${appNote}Keep mine`);
 
   act(() => newestToastAction()?.click());
   await settle();
 
-  assert.deepEqual(sent.at(-1), { document: { base: lukes, value: `${lukes}Mine.\n` } });
+  assert.deepEqual(sent.at(-1), { document: { base: appText, value: `${appText}Mine.\n` } });
   assert.equal(newestToastSays(), undefined);
   render(DOCUMENT_TASK);
   await settle();

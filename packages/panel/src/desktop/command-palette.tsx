@@ -766,7 +766,7 @@ function steppedFilter(
 
 /** The word a task the app or an agent made is also found by, beside its maker's name. */
 const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
-  [ACTOR_KIND.LUKE]: "luke",
+  [ACTOR_KIND.APP]: "app",
   [ACTOR_KIND.AGENT]: "agent",
   [ACTOR_KIND.AUTOMATION]: "automation",
 };

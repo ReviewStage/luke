@@ -1337,7 +1337,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
             owner,
             taskPageOwner(taskId),
             { title: "Invite funnel", html: "<p>v1</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         const version = (asker: string, pageId: string, number: string, method?: string) =>
@@ -1356,7 +1356,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
               title: "Invite funnel",
               version: 1,
               at: page.at,
-              shownBy: { kind: PAGE_SHOWER.LUKE },
+              shownBy: { kind: PAGE_SHOWER.APP },
               html: "<p>v1</p>",
             },
           },
@@ -1496,8 +1496,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const taskId = startedId(
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
-        const lukes = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
-        yield* makeDocumentTask(taskId, lukes);
+        const appText = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
+        yield* makeDocumentTask(taskId, appText);
         const edit = (id: string, value: string) =>
           ask(
             request(EDIT(id), owner, {
@@ -1523,7 +1523,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
 
         assert.ok("plan" in merged);
-        const mergedText = lukes.replace("Only an admin", "Only an owner");
+        const mergedText = appText.replace("Only an admin", "Only an owner");
         assert.equal(merged.plan.document.body, mergedText);
         assert.deepEqual(conflicted, {
           status: HOSTED_HTTP_STATUS.OK,

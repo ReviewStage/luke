@@ -47,7 +47,7 @@ export const ADMIN_ATTENTION_LIMIT = 50;
  */
 export interface AdminReliabilitySource {
   daily: {
-    lukeTurns: ReadonlyMap<string, AdminFailureCount>;
+    appTurns: ReadonlyMap<string, AdminFailureCount>;
     agentRuns: ReadonlyMap<string, AdminFailureCount>;
     abandonedTurns: ReadonlyMap<string, number>;
     automationRuns: ReadonlyMap<string, AdminAutomationCount>;
@@ -89,7 +89,7 @@ export function buildAdminReliability(
   const of = <Count>(map: ReadonlyMap<string, Count>, empty: Count) =>
     dayKeys.map((day) => map.get(day) ?? empty);
 
-  const lukeTurns = of(source.daily.lukeTurns, NO_FAILURES);
+  const appTurns = of(source.daily.appTurns, NO_FAILURES);
   const agentRuns = of(source.daily.agentRuns, NO_FAILURES);
   const automationRuns = of(source.daily.automationRuns, NO_AUTOMATION_RUNS);
 
@@ -97,7 +97,7 @@ export function buildAdminReliability(
     generatedAt: now,
     windowDays,
     headline: {
-      lukeTurns: totalOf(lukeTurns),
+      appTurns: totalOf(appTurns),
       agentRuns: totalOf(agentRuns),
       abandonedTurns: sum(of(source.daily.abandonedTurns, 0)),
       automationRuns: {
@@ -107,7 +107,7 @@ export function buildAdminReliability(
     },
     daily: dayKeys.map((day, index) => ({
       day,
-      lukeTurns: failureShare(lukeTurns[index] ?? NO_FAILURES),
+      appTurns: failureShare(appTurns[index] ?? NO_FAILURES),
       agentRuns: failureShare(agentRuns[index] ?? NO_FAILURES),
       automationRuns: failureShare(automationRuns[index] ?? NO_AUTOMATION_RUNS),
     })),

@@ -223,7 +223,7 @@ const KEPT: AgentTranscriptMessage = {
       mediaType: "image/png",
       filename: "kept.png",
       url: "",
-      providerMetadata: { luke: { attachmentId: "picture-1" } },
+      providerMetadata: { app: { attachmentId: "picture-1" } },
     },
   ],
 };

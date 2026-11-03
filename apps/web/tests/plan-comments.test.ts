@@ -284,7 +284,7 @@ const agentLink = (taskId: string, agentId: string) =>
   `[@Invite email](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
 
 /** A task's mention of the app, as a chip wrote it while a task had one. */
-const lukeLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
+const appLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
 
 /** A start of a thread on the sentence above. */
 function startBody(comment: string) {
@@ -604,7 +604,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
               commentsPath(taskId),
               teammate,
               {},
-              startBody(`${lukeLink(taskId)} is withdrawing in v1?`),
+              startBody(`${appLink(taskId)} is withdrawing in v1?`),
             ),
           ),
         );
@@ -618,7 +618,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
               {
                 action: PLAN_COMMENT_ACTION.REPLY,
                 clientKey: randomUUID(),
-                words: `${lukeLink(taskId)} what do you think?`,
+                words: `${appLink(taskId)} what do you think?`,
               },
             ),
           ),

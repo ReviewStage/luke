@@ -1390,7 +1390,7 @@ test("the line a thread's ask leaves is not drawn, since the mention in its word
           actor: PLAN_COMMENT_ACTOR.MEMBER,
           by: { userId: "u-dean", name: "Dean Stratakos" },
         },
-        asked: { actor: PLAN_COMMENT_ACTOR.LUKE },
+        asked: { actor: PLAN_COMMENT_ACTOR.APP },
         at: 2,
       },
     ],

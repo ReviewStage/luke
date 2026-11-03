@@ -64,7 +64,7 @@ export interface CommentAsk {
 /** Who wrote an entry, as the words handed over name them: the app's own name among them only in a thread written before the task's own assistant was gone. */
 function writerName(entry: PlanCommentThread["entries"][number]): string {
   switch (entry.writer.actor) {
-    case PLAN_COMMENT_ACTOR.LUKE:
+    case PLAN_COMMENT_ACTOR.APP:
       return PRODUCT_NAME;
     case PLAN_COMMENT_ACTOR.AGENT:
       return "An agent";

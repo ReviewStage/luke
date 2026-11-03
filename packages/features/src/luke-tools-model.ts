@@ -322,7 +322,7 @@ const OUTSIDE_WORDS_FROM = {
   [MESSAGE_SENDER.AGENT]: "A teammate's agent's message",
   [MESSAGE_SENDER.AUTOMATION]: "An automation's webhook or event",
   [MESSAGE_SENDER.GITHUB]: "A review or comment on its pull request",
-  [MESSAGE_SENDER.LUKE]: "A message",
+  [MESSAGE_SENDER.APP]: "A message",
 } as const satisfies Record<MessageSender, string>;
 
 /**

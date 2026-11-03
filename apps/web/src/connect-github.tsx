@@ -116,7 +116,7 @@ async function connect(intent: string): Promise<View> {
     );
   }
   if (claim === GITHUB_CONNECT_CLAIM.EXPIRED) return said(LANDING_OUTCOME.EXPIRED);
-  if (claim === CLAIM_UNSETTLED.UNANSWERED) return said(LANDING_OUTCOME.LUKE_UNREACHABLE);
+  if (claim === CLAIM_UNSETTLED.UNANSWERED) return said(LANDING_OUTCOME.SERVICE_UNREACHABLE);
   const linked = await authClient.linkSocial({
     provider: SOCIAL_PROVIDER.GITHUB,
     callbackURL: `${GITHUB_CONNECT_PAGE.PATH}?${GITHUB_CONNECT_PAGE.DONE_PARAM}=${GITHUB_CONNECT_PAGE.FLAG}`,

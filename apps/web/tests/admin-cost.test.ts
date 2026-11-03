@@ -21,7 +21,7 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const DAY = {
   day: "2026-10-17",
   agents: 12.5,
-  luke: 3,
+  app: 3,
   dictation: 0.01,
 };
 

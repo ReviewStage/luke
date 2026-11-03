@@ -89,7 +89,7 @@ import {
   usePressAway,
   VisuallyHidden,
 } from "@luke/ui";
-import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import { type Actor, APP_ACTOR } from "@luke/ui/actor-model";
 import {
   CheckIcon,
   CircleCheckIcon,
@@ -481,8 +481,8 @@ function useWriter(
   agents: EditAgents | undefined,
 ): { author: CommentAuthor; nameRef: ReactNode } {
   const person = usePerson(writer.by);
-  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) {
-    return { author: commentAuthor(LUKE_ACTOR), nameRef: <ActorRef actor={LUKE_ACTOR} nameOnly /> };
+  if (writer.actor === PLAN_COMMENT_ACTOR.APP) {
+    return { author: commentAuthor(APP_ACTOR), nameRef: <ActorRef actor={APP_ACTOR} nameOnly /> };
   }
   if (
     writer.actor === PLAN_COMMENT_ACTOR.AGENT &&
@@ -544,7 +544,7 @@ function WriterMark({
 }): ReactNode {
   const person = usePerson(writer.by);
   let actor: Actor = person;
-  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) actor = LUKE_ACTOR;
+  if (writer.actor === PLAN_COMMENT_ACTOR.APP) actor = APP_ACTOR;
   else if (
     writer.actor === PLAN_COMMENT_ACTOR.AGENT &&
     writer.agentId !== undefined &&

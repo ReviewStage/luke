@@ -262,9 +262,9 @@ test("the time opens the version history, on the plan as it stands or on the sec
 });
 
 test("a section's byline shows only the writer's face and a few letters of time, so it keeps to its heading's end, and its card says the rest", async () => {
-  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, duringCall: false, by: CHARLES };
+  const byApp = { actor: PLAN_ACTOR.NOTETAKER, duringCall: false, by: CHARLES };
   const lastYear = new Date(new Date().getFullYear() - 1, 9, 1).getTime();
-  const old = await draw(editedAs(byLuke, lastYear));
+  const old = await draw(editedAs(byApp, lastYear));
   assert.equal(
     shownWords(old.querySelector(".plan-unit-byline")),
     " Oct 1",
@@ -272,7 +272,7 @@ test("a section's byline shows only the writer's face and a few letters of time,
   );
   act(() => root?.unmount());
 
-  const view = await draw(editedAs(byLuke), { readerId: DEAN.userId });
+  const view = await draw(editedAs(byApp), { readerId: DEAN.userId });
   const byline = view.querySelector(".plan-unit-byline");
   assert.equal(shownWords(byline), " now");
   assert.equal(byline?.querySelectorAll(".actor-mark").length, 1);
@@ -302,18 +302,18 @@ test("a teammate's card says who they are and what they last changed in the plan
 
 test("Vespin's card says when it wrote, and what it wrote", async () => {
   const at = Date.now();
-  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: false };
+  const byApp = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: false };
   const task: Task = {
     ...TASK,
-    lastEdit: byLuke,
+    lastEdit: byApp,
     sectionEdits: [
-      { section: "Goal", ...byLuke },
-      { section: "Risks", ...byLuke },
+      { section: "Goal", ...byApp },
+      { section: "Risks", ...byApp },
     ],
   };
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
-  assert.ok(card.querySelector('[data-actor-card="luke"]'), "Vespin's card hangs");
+  assert.ok(card.querySelector('[data-actor-card="app"]'), "Vespin's card hangs");
   assert.match(card.textContent ?? "", /^VespinnowEdited Goal and Risks$/u);
 });
 
@@ -369,7 +369,7 @@ test("the sections changed since the last look are counted beside a face for eac
     [...line.querySelectorAll(".actor-stack .actor-mark")].map((mark) =>
       mark.getAttribute("data-kind"),
     ),
-    ["person", "luke"],
+    ["person", "app"],
   );
   assert.equal(line.querySelector(".luke-visually-hidden")?.textContent, "Charles Pan, Vespin");
   act(() => line.querySelector("button")?.click());

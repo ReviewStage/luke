@@ -447,7 +447,7 @@ test("a replayed line is named under its sender as a transcript names one: Vespi
     ...(sender === undefined ? undefined : { sender }),
   });
   const steps: Replay["steps"] = [
-    line("Vespin: Go.", { kind: REPLAY_SENDER.LUKE }),
+    line("Vespin: Go.", { kind: REPLAY_SENDER.APP }),
     line("Nightly: deploy: Go.", { kind: REPLAY_SENDER.AUTOMATION }),
     line("octocat: Go.", { kind: REPLAY_SENDER.GITHUB }),
     line("The developer: Go.", { kind: REPLAY_SENDER.DEVELOPER }),
@@ -470,7 +470,7 @@ test("a replayed line is named under its sender as a transcript names one: Vespi
     return [ref?.dataset.kind ?? "", name ?? ""];
   });
   assert.deepEqual(senders, [
-    [ACTOR_KIND.LUKE, "Vespin"],
+    [ACTOR_KIND.APP, "Vespin"],
     [ACTOR_KIND.AUTOMATION, "Nightly: deploy"],
     [ACTOR_KIND.GITHUB, "octocat"],
     null,

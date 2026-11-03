@@ -80,8 +80,8 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  APP_ACTOR,
   githubLoginActor,
-  LUKE_ACTOR,
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
@@ -237,7 +237,7 @@ export function archivedByReading(
   const archiver =
     by.by === AGENT_ARCHIVER.MEMBER
       ? member
-      : by.by === AGENT_ARCHIVER.LUKE
+      : by.by === AGENT_ARCHIVER.APP
         ? `${PRODUCT_NAME}${forMember}`
         : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
   const archived = by.withTask === true ? "Archived with its task" : "Archived";
@@ -323,8 +323,8 @@ export function lineSender(
     };
   }
   switch (sentBy.kind) {
-    case AGENT_SENDER.LUKE:
-      return LUKE_ACTOR;
+    case AGENT_SENDER.APP:
+      return APP_ACTOR;
     case AGENT_SENDER.AUTOMATION:
       return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
     case AGENT_SENDER.GITHUB:
@@ -1667,7 +1667,7 @@ export function agentMessageOf(message: AgentTranscriptMessage): AgentMessageMet
  * its head says the agent woke up.
  */
 export function isWakeupLine(message: AgentTranscriptMessage): boolean {
-  return userMetadataOf(message)?.channel === MESSAGE_CHANNEL.LUKE;
+  return userMetadataOf(message)?.channel === MESSAGE_CHANNEL.APP;
 }
 
 /** A second, in the milliseconds a wakeup's wait is told in. */

@@ -33,7 +33,7 @@ import { createTask, deleteTask } from "../task-store.js";
  * Synthetic accounts and pages throughout.
  */
 
-const LUKE: PageShower = { kind: PAGE_SHOWER.LUKE };
+const LUKE: PageShower = { kind: PAGE_SHOWER.APP };
 
 const onTask = (taskId: string): PageOwner => ({ kind: PAGE_OWNER.TASK, taskId });
 

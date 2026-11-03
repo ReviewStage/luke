@@ -327,7 +327,7 @@ const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[])
 
 /** The names a line is sent under where no member's account names it: the app's, and a member's whose account is gone. */
 const SENDER_NAME = {
-  LUKE: PRODUCT_NAME,
+  APP: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",
 } as const;
 
@@ -346,8 +346,8 @@ function senderOf(sent: LineSent): AgentSender {
       return sent.member === undefined
         ? { name: SENDER_NAME.FORMER_MEMBER, kind: AGENT_SENDER.FORMER }
         : { ...sent.member, kind: AGENT_SENDER.MEMBER };
-    case MESSAGE_SENDER.LUKE:
-      return { name: SENDER_NAME.LUKE, kind: AGENT_SENDER.LUKE };
+    case MESSAGE_SENDER.APP:
+      return { name: SENDER_NAME.APP, kind: AGENT_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
       return { name: sent.name, kind: AGENT_SENDER.AUTOMATION };
     case MESSAGE_SENDER.GITHUB:

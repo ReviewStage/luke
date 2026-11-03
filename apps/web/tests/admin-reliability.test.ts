@@ -39,14 +39,14 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
     generatedAt: Date.UTC(2026, 9, 17, 12),
     windowDays: 7,
     headline: {
-      lukeTurns: { failed: 412, total: 29_880 },
+      appTurns: { failed: 412, total: 29_880 },
       agentRuns: { failed: 68, total: 1000 },
       abandonedTurns: 37,
       automationRuns: { failed: 43, skipped: 90, total: 1000 },
     },
     daily: [
-      { day: "2026-10-16", lukeTurns: 0.01, agentRuns: 0.05, automationRuns: 0.04 },
-      { day: "2026-10-17", lukeTurns: 0.02, agentRuns: null, automationRuns: null },
+      { day: "2026-10-16", appTurns: 0.01, agentRuns: 0.05, automationRuns: 0.04 },
+      { day: "2026-10-17", appTurns: 0.02, agentRuns: null, automationRuns: null },
     ],
     agentFailures: [{ failure: AGENT_FAILURE.MODEL, count: 40 }],
     automationReasons: [{ reason: AUTOMATION_RUN_REASON.CONCURRENCY, skipped: 90, failed: 0 }],

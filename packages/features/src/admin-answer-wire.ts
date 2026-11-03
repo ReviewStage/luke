@@ -361,7 +361,7 @@ export interface AdminAutomationCount extends AdminFailureCount {
  */
 export interface AdminReliabilityDay {
   day: string;
-  lukeTurns: number | null;
+  appTurns: number | null;
   agentRuns: number | null;
   automationRuns: number | null;
 }
@@ -404,7 +404,7 @@ export interface AdminReliability {
   generatedAt: number;
   windowDays: number;
   headline: {
-    lukeTurns: AdminFailureCount;
+    appTurns: AdminFailureCount;
     agentRuns: AdminFailureCount;
     /** Turns of any kind the maintenance sweep settled as abandoned. */
     abandonedTurns: number;

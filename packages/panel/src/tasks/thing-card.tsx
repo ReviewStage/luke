@@ -2,7 +2,7 @@ import type { MentionLines } from "@luke/features/mention-link";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
 import { HoverCardSkeleton } from "@luke/ui";
 import type { ReactNode } from "react";
-import { LukeCard } from "../actor-ref.js";
+import { AppCard } from "../actor-ref.js";
 import { tabCard } from "../desktop/tab-card.js";
 import { ChannelChipCard } from "./channel-card.js";
 import {
@@ -145,7 +145,7 @@ export const THING_CARD: ThingCards = {
     />
   ),
   [THING_KIND.WORKER]: OWN_CARD,
-  [THING_KIND.LUKE]: () => <LukeCard />,
+  [THING_KIND.APP]: () => <AppCard />,
   [THING_KIND.CHANGES]: (changes, at) => (
     <AgentPullRequestChipCard
       agentId={changes.agentId}

@@ -1493,7 +1493,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         // Our line from a call, an automation's run's, and another coding agent's, written as their sends write them.
         for (const [text, sender] of [
-          ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
+          ["Rebase on main.", { kind: MESSAGE_SENDER.APP }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
           [
             "Take the split view.",
@@ -1527,7 +1527,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ["Use seven days.", { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
           ["Not five.", { userId: other, name: "Charles Pan", kind: AGENT_SENDER.MEMBER }],
           // The app and an automation are named by kind, so the window draws each as itself.
-          ["Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.LUKE }],
+          ["Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.APP }],
           ["Triage the failures.", { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION }],
           // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [
@@ -1626,7 +1626,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             title: "Invites by week",
             html: "<h1>Invites by week</h1>",
           },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
         assert.ok(Option.isSome(shown));
         const place = { workspace: "acme", repository: task.repository };

@@ -508,10 +508,10 @@ test("a sidebar task Vespin or a coding agent made wears who is on it rather tha
   };
   const deans = { ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN };
   const byAgent = { ...deans, origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" } } as const;
-  const byLuke = { ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } } as const;
+  const byApp = { ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } } as const;
   assert.deepEqual(marks(byAgent), ["unassigned"]);
-  assert.deepEqual(marks({ ...byLuke, assignee: DEAN }), []);
-  assert.deepEqual(marks({ ...byLuke, assignee: CHARLES }), ["person"]);
+  assert.deepEqual(marks({ ...byApp, assignee: DEAN }), []);
+  assert.deepEqual(marks({ ...byApp, assignee: CHARLES }), ["person"]);
 
   const { asked } = openTab();
   const listed = tasksControl({ me: DEAN.userId, tasks: [byAgent] });

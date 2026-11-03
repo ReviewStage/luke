@@ -156,7 +156,7 @@ test("an archived agent's card says who archived it, an agent or Vespin for a me
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
-  const byLuke = archivedCardNotes("user-dean", { by: AGENT_ARCHIVER.LUKE, member: dean });
+  const byApp = archivedCardNotes("user-dean", { by: AGENT_ARCHIVER.APP, member: dean });
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
@@ -171,7 +171,7 @@ test("an archived agent's card says who archived it, an agent or Vespin for a me
     "Archived by Bill by seat for Dean Stratakos",
     "Its pull request merged.",
   ]);
-  assert.deepEqual(byLuke, ["Archived by Vespin for you"]);
+  assert.deepEqual(byApp, ["Archived by Vespin for you"]);
   assert.deepEqual(withTask, ["Archived with its task by Dean Stratakos"]);
 });
 

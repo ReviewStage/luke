@@ -540,11 +540,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               }),
               (started) => Option.getOrThrow(started).agent,
             );
-          const lukes = yield* onEveAs(owner, taskId, AGENT_PAYER.LUKE);
+          const appText = yield* onEveAs(owner, taskId, AGENT_PAYER.APP);
           const unrecorded = yield* onEveAs(bare, bareTask.id, undefined);
           const eveKeyRemoved = yield* onEveAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
           for (const [starter, agent] of [
-            [owner, lukes],
+            [owner, appText],
             [bare, unrecorded],
             [bare, eveKeyRemoved],
           ] as const) {
@@ -575,7 +575,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             });
 
           for (const [name, starter, agent] of [
-            ["Vespin's key paid, an API key saved since", owner, lukes],
+            ["Vespin's key paid, an API key saved since", owner, appText],
             ["no payer recorded, no API key", bare, unrecorded],
             ["its API key removed", bare, eveKeyRemoved],
             ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
@@ -596,8 +596,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 agent === nativeKeyRemoved ? "claude_code" : "eve",
                 agent === unrecorded
                   ? null
-                  : agent === lukes
-                    ? AGENT_PAYER.LUKE
+                  : agent === appText
+                    ? AGENT_PAYER.APP
                     : AGENT_PAYER.API_KEY,
               ],
               name,

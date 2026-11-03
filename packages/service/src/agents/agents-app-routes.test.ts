@@ -149,7 +149,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           owner,
           taskPageOwner(task.id),
           { title: "Chart", html: "<h1>Chart</h1>" },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
         assert.ok(Option.isSome(shown));
         const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: task.repository })}.`;

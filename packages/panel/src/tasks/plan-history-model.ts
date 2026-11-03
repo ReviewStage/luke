@@ -13,8 +13,8 @@ import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
+  APP_ACTOR,
   actorName,
-  LUKE_ACTOR,
   type PersonActor,
   personActor,
   SOMEONE_REASON,
@@ -119,7 +119,7 @@ export function revisionAuthorOf(
     case PLAN_ACTOR.DEVELOPER:
       return personOf(lastEdit.by, reader);
     case PLAN_ACTOR.NOTETAKER:
-      return LUKE_ACTOR;
+      return APP_ACTOR;
     case PLAN_ACTOR.AGENT: {
       const agent = agents.find((each) => each.id === line.agentId);
       return {

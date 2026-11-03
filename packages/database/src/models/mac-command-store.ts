@@ -36,7 +36,7 @@ import { agentTable } from "../schemas/agent.js";
 import { automationRun } from "../schemas/automation.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import { conversations, messages, standingLine } from "../schemas/storage.js";
-import { MESSAGE_SENDER } from "../storage-vocabulary.js";
+import { MESSAGE_SENDER, messageSenderSchema } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
@@ -289,7 +289,7 @@ const GITHUB_LINE_HAS_PERSONS_WORDS = and(
 
 /** A line another account put into a conversation: what kind of sender put it there, none for a line kept before senders were, when, and whether the transcript shows it, which a line its hand-over withdrew it does not. */
 const ForeignLineSchema = Schema.Struct({
-  sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
+  sender: Schema.NullOr(messageSenderSchema),
   createdAt: InstantColumnSchema,
   shown: Schema.Boolean,
 });

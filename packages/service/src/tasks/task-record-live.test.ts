@@ -118,7 +118,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             owner,
             taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         live = yield* liveRecordOf(owner, task.id);
@@ -130,7 +130,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             owner,
             taskPageOwner(task.id),
             { pageId: shown.id, title: "Invite funnel", html: "<p>Two</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
 
@@ -141,7 +141,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             owner,
             taskPageOwner(other.id),
             { title: "Billing funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {

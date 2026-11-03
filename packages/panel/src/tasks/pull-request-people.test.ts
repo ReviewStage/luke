@@ -59,18 +59,18 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-const LUKE_BOT = { login: "luke-agent[bot]", bot: true };
+const APP_BOT = { login: "luke-agent[bot]", bot: true };
 const CHARLES_ON_GITHUB = { login: "charlespan", bot: false, userId: CHARLES.userId };
 const OCTOCAT = { login: "octocat", bot: false };
 const DEVIN = { login: "devin-ai-integration[bot]", bot: true };
 
 const PEOPLE: AgentChangesPeople = {
-  author: LUKE_BOT,
+  author: APP_BOT,
   reviewers: [
     { by: CHARLES_ON_GITHUB, state: REVIEW_STATE.APPROVED },
     { by: OCTOCAT, state: REVIEW_STATE.REQUESTED },
     { by: DEVIN, state: REVIEW_STATE.COMMENTED },
-    { by: LUKE_BOT, state: REVIEW_STATE.COMMENTED },
+    { by: APP_BOT, state: REVIEW_STATE.COMMENTED },
   ],
   comments: [
     { by: DEVIN, state: REVIEW_STATE.COMMENTED, excerpt: "Found 1 potential issue.", at: 1_000 },
@@ -227,8 +227,8 @@ test("who opened the pull request is named alone, whoever the agent wrote as", a
   assert.deepEqual(
     [
       await opener({ author: CHARLES_ON_GITHUB, writtenAs: AGENT_AUTHOR.DEVELOPER }),
-      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.APP_UNLINKED }),
-      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.DEVELOPER }),
+      await opener({ author: APP_BOT, writtenAs: AGENT_AUTHOR.APP_UNLINKED }),
+      await opener({ author: APP_BOT, writtenAs: AGENT_AUTHOR.DEVELOPER }),
     ],
     [
       ["Charles Pan", false],

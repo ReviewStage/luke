@@ -829,7 +829,7 @@ test("an image a line's row names by the picture it was kept as is read through 
         mediaType: INBOX_IMAGE_TYPE.PNG,
         filename: "flow.png",
         url: "",
-        providerMetadata: { luke: { attachmentId: kept.id } },
+        providerMetadata: { app: { attachmentId: kept.id } },
       },
       {
         type: "file",

@@ -8,6 +8,7 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorActivity,
+  APP_ACTOR,
   accountActor,
   activityWords,
   actorName,
@@ -19,7 +20,6 @@ import {
   githubActor,
   identityHue,
   identityLetter,
-  LUKE_ACTOR,
   latestActivity,
   originActor,
   personActor,
@@ -65,7 +65,7 @@ test("an actor is named as the reader says them, in a sentence and as whose", ()
       actorName(you, { possessive: true }),
       actorName(you, { sentence: true, possessive: true }),
       actorName(sam, { possessive: true }),
-      actorName(LUKE_ACTOR, { sentence: true }),
+      actorName(APP_ACTOR, { sentence: true }),
       actorName(agent, { sentence: true }),
       actorName({ kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED }, { sentence: true }),
     ],
@@ -126,13 +126,13 @@ function said(activity: ActorActivity | undefined): string | undefined {
 }
 
 test("a plan's edit is named by who wrote it: a member as the members read them, Vespin, an agent by its name, and nobody before history", () => {
-  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: false };
+  const byApp = { actor: PLAN_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: false };
   const byAgent = { actor: PLAN_ACTOR.AGENT, label: "Fix auth flow", at: 0, duringCall: false };
   const byDana = { actor: PLAN_ACTOR.DEVELOPER, by: DANA_REF, at: 0, duringCall: false };
 
   assert.equal(editActor(byDana, SAM_READS)?.kind, ACTOR_KIND.PERSON);
   assert.equal(called(editActor(byDana, { ...SAM_READS, readerId: DANA.userId })), "You");
-  assert.deepEqual(editActor(byLuke, SAM_READS), LUKE_ACTOR);
+  assert.deepEqual(editActor(byApp, SAM_READS), APP_ACTOR);
   assert.deepEqual(
     editActor(byAgent, SAM_READS, { provider: "anthropic", state: ACTOR_STATE.WORKING }),
     {
@@ -167,7 +167,7 @@ test("what someone last did in a plan is the sections whose last change is their
 
   assert.deepEqual(danas, { sections: ["Opening", "Goal"], at: 5 });
   assert.equal(said(danas), "Edited Opening and Goal");
-  assert.equal(said(latestActivity(edits, LUKE_ACTOR)), "Edited Approach");
+  assert.equal(said(latestActivity(edits, APP_ACTOR)), "Edited Approach");
   assert.equal(
     activityWords({ sections: ["Goal", "Approach", "Rollout", "Risks", "Open questions"], at: 0 }),
     "Edited Goal, Approach, Rollout, Risks, and Open questions",
@@ -182,11 +182,7 @@ test("a facepile of who did a thing draws each of them once, where they first st
   const dana = personActor(DANA_REF, [DANA, SAM], SAM.userId);
   const sam = personActor(SAM, [DANA, SAM], SAM.userId);
 
-  assert.deepEqual(distinctActors([dana, LUKE_ACTOR, dana, sam, LUKE_ACTOR]), [
-    dana,
-    LUKE_ACTOR,
-    sam,
-  ]);
+  assert.deepEqual(distinctActors([dana, APP_ACTOR, dana, sam, APP_ACTOR]), [dana, APP_ACTOR, sam]);
 });
 
 test("two who left under one name each keep a face, told apart by their account ids", () => {
@@ -381,7 +377,7 @@ test("a linked GitHub login who left keeps their picture and their account's nam
 
 test("a task Vespin or an agent made names them, the automation whose run started the agent in its place, and an agent the window does not hold as an agent; a task made by hand names nobody", () => {
   assert.equal(originActor(undefined, undefined), undefined);
-  assert.equal(originActor({ actor: PLAN_ACTOR.NOTETAKER }, undefined), LUKE_ACTOR);
+  assert.equal(originActor({ actor: PLAN_ACTOR.NOTETAKER }, undefined), APP_ACTOR);
   const held = {
     name: "Teammate invitations",
     provider: MODEL_PROVIDER.ANTHROPIC,

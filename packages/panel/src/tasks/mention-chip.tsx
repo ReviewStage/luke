@@ -282,7 +282,7 @@ function pressOf(
     case MENTION_KIND.CHANNEL:
       return () => openLink(target);
     // The app has no tab of its own on a task, so its chip opens the task it thinks about.
-    case MENTION_KIND.LUKE:
+    case MENTION_KIND.APP:
       return () => doors.onOpenTask({ kind: MENTION_KIND.TASK, taskId: mention.taskId });
   }
 }

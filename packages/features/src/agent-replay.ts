@@ -80,7 +80,7 @@ export type ReplayValueForm = (typeof REPLAY_VALUE_FORM)[keyof typeof REPLAY_VAL
 export const REPLAY_SENDER = {
   DEVELOPER: "developer",
   MEMBER: "member",
-  LUKE: "app",
+  APP: "app",
   AUTOMATION: "automation",
   GITHUB: "github",
   AGENT: "agent",
@@ -349,7 +349,7 @@ function lineFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "
 /** A line's sender read back from its marker; none where it names none it knows. */
 function senderFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender"> {
   const spelled = attributes.get("sender") ?? "";
-  const kind = spelled === LEGACY_APP_SENDER ? REPLAY_SENDER.LUKE : spelled;
+  const kind = spelled === LEGACY_APP_SENDER ? REPLAY_SENDER.APP : spelled;
   if (!SENDER_KINDS.has(kind)) return {};
   const member = attributes.get("member");
   // SAFETY: the kind was checked against the vocabulary just above.

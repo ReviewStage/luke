@@ -1295,7 +1295,7 @@ function EditorToolbar({
 const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: string }[] = [
   { value: GITHUB_SENDER.PEOPLE, label: "From people" },
   {
-    value: GITHUB_SENDER.LUKE_AGENTS,
+    value: GITHUB_SENDER.APP_AGENTS,
     label: `From ${PRODUCT_NAME}'s agents`,
     detail: `What ${PRODUCT_NAME}'s agents open, as you or as the workspace's GitHub App.`,
   },

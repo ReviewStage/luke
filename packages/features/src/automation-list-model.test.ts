@@ -115,7 +115,7 @@ test("a GitHub event is said as what happens, by whom, where, and the labels, br
     "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
   assert.equal(
-    automationTriggerText(event({ senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.LUKE_AGENTS] }), [
+    automationTriggerText(event({ senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.APP_AGENTS] }), [
       "acme/ledger",
     ]),
     "When a pull request by people or Vespin's agents is opened, marked ready, or pushed to in acme/ledger",

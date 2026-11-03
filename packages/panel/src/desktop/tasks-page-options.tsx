@@ -24,9 +24,9 @@ import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
+  APP_ACTOR,
   actorName,
   creatorActor,
-  LUKE_ACTOR,
   memberActor,
   personActor,
 } from "@luke/ui/actor-model";
@@ -169,7 +169,7 @@ const COMPLETED_WORDS = {
 const MAKER_WORDS = {
   [TASK_MAKER.PERSON]: "People",
   [TASK_MAKER.AGENT]: "Agents and automations",
-  [TASK_MAKER.LUKE]: PRODUCT_NAME,
+  [TASK_MAKER.APP]: PRODUCT_NAME,
 } as const satisfies Record<TaskMaker, string>;
 
 const MAKER_ACTOR = {
@@ -179,7 +179,7 @@ const MAKER_ACTOR = {
     provider: undefined,
     state: ACTOR_STATE.REST,
   },
-  [TASK_MAKER.LUKE]: LUKE_ACTOR,
+  [TASK_MAKER.APP]: APP_ACTOR,
 } as const satisfies Record<Exclude<TaskMaker, typeof TASK_MAKER.PERSON>, Actor>;
 
 /** What a grouping is called. */

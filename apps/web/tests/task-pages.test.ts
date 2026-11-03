@@ -37,7 +37,7 @@ const openTask = Effect.gen(function* () {
 /** A write the test expects to land, as the page it left. */
 const written = (userId: string, taskId: string, write: Parameters<typeof writePage>[2]) =>
   Effect.map(
-    writePage(userId, taskPageOwner(taskId), write, { kind: PAGE_SHOWER.LUKE }),
+    writePage(userId, taskPageOwner(taskId), write, { kind: PAGE_SHOWER.APP }),
     Option.getOrThrow,
   );
 
@@ -52,7 +52,7 @@ it.layer(getTestDB())("a plan's pages", (it) => {
       assert.ok(Option.isNone(yield* readPageVersion(other, taskPageOwner(taskId), chart.id, 1)));
       assert.ok(
         Option.isNone(
-          yield* writePage(other, taskPageOwner(taskId), MOCKUP, { kind: PAGE_SHOWER.LUKE }),
+          yield* writePage(other, taskPageOwner(taskId), MOCKUP, { kind: PAGE_SHOWER.APP }),
         ),
       );
       assert.ok(
@@ -61,7 +61,7 @@ it.layer(getTestDB())("a plan's pages", (it) => {
             other,
             taskPageOwner(taskId),
             { pageId: chart.id, ...MOCKUP },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         ),
       );

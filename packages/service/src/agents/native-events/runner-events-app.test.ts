@@ -1862,10 +1862,10 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         yield* post(onKey.bearer, refusedLaunch(onKey.lineId, 0, expired));
 
-        const onLuke = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.LUKE }, [
+        const onApp = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.APP }, [
           "Fix the test.",
         ]);
-        yield* post(onLuke.bearer, refusedLaunch(onLuke.lineId, 0, expired));
+        yield* post(onApp.bearer, refusedLaunch(onApp.lineId, 0, expired));
 
         const keyRows = yield* listProviderKeyRows(onKey.userId, PROVIDER_KEY_KIND.API_KEY);
         assert.deepEqual(
@@ -1874,7 +1874,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         assert.deepEqual(
           reported.map((attributes) => attributes.agentId),
-          [onLuke.agentId],
+          [onApp.agentId],
         );
         // The starter's own key reads as a key to replace; Fullspin's own key refused is no key of theirs.
         const db = yield* Database;
@@ -1893,7 +1893,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         assert.deepEqual(yield* failureOf(onKey.target.conversationId), [
           AGENT_FAILURE.PROVIDER_KEY,
         ]);
-        assert.deepEqual(yield* failureOf(onLuke.target.conversationId), [AGENT_FAILURE.MODEL]);
+        assert.deepEqual(yield* failureOf(onApp.target.conversationId), [AGENT_FAILURE.MODEL]);
       }),
   );
 

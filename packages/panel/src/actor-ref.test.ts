@@ -77,7 +77,7 @@ test("a picture that fails leaves the letter standing", () => {
 test("each kind of actor stands on its own kind of mark, which a screen reader skips for the name beside it", () => {
   const actors: Actor[] = [
     DANA,
-    { kind: ACTOR_KIND.LUKE },
+    { kind: ACTOR_KIND.APP },
     AGENT,
     { kind: ACTOR_KIND.AUTOMATION, name: "Morning triage", state: ACTOR_STATE.REST },
     { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER, name: "Lee Park" },
@@ -236,7 +236,7 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
       null,
       createElement(ActorRef, { actor: dependabot }),
       createElement(ActorRef, { actor: octocat }),
-      createElement(ActorRef, { actor: { kind: ACTOR_KIND.LUKE } }),
+      createElement(ActorRef, { actor: { kind: ACTOR_KIND.APP } }),
     ),
   );
   const [bot, person, luke] = [...view.querySelectorAll<HTMLElement>("[data-actor-ref]")];

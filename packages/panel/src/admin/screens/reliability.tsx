@@ -230,8 +230,8 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "luke-turns",
     label: () => `${PRODUCT_NAME} turns failed`,
-    value: ({ headline }) => formatPercent(share(headline.lukeTurns), RATE_PLACES),
-    hint: ({ headline, windowDays }) => ofHint(headline.lukeTurns, "turns", windowDays),
+    value: ({ headline }) => formatPercent(share(headline.appTurns), RATE_PLACES),
+    hint: ({ headline, windowDays }) => ofHint(headline.appTurns, "turns", windowDays),
   },
   {
     key: "agent-runs",

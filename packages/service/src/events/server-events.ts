@@ -222,7 +222,8 @@ export const SERVER_SIGN_IN_METHOD = {
 
 /** What kind of machine first connected: a box on its approved pairing, or the Mac's own desktop. */
 export const SERVER_HOST_KIND = {
-  LUKE_HOST: "luke_host",
+  // Note that the box's word keeps the host program's old name, because the counted events before the rename carry it and a new word would split their history.
+  BOX_HOST: "luke_host",
   THIS_MAC: "this_mac",
 } as const;
 

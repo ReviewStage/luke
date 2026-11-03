@@ -68,7 +68,7 @@ import {
   useComboboxField,
   useMinute,
 } from "@luke/ui";
-import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import { type Actor, APP_ACTOR } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import { GLYPH } from "@luke/ui/icons";
 import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@luke/ui/search-score";
@@ -1181,8 +1181,8 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       );
     case MENTION_KIND.CHANNEL:
       return <GLYPH.CHANNEL />;
-    case MENTION_KIND.LUKE:
-      return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
+    case MENTION_KIND.APP:
+      return <ActorMark actor={APP_ACTOR} size={ACTOR_SIZE.INLINE} />;
     case MENTION_KIND.DATE:
       return <CalendarIcon aria-hidden="true" />;
   }

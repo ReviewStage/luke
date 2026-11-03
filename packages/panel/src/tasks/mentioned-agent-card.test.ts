@@ -20,7 +20,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { ACTOR_KIND, ACTOR_STATE, LUKE_ACTOR } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, APP_ACTOR } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -587,11 +587,11 @@ test("an agent named as an actor leads its card with its tile while its read is 
 
 test("a chip of Vespin hangs Vespin's own card", async () => {
   const container = await drawn(
-    `Ask ${mentionMarkdown({ kind: MENTION_KIND.LUKE, taskId: BILLING.id }, "Vespin", PLACE)}.`,
+    `Ask ${mentionMarkdown({ kind: MENTION_KIND.APP, taskId: BILLING.id }, "Vespin", PLACE)}.`,
   );
 
   const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
-  assert.deepEqual([card.actor, card.name], [ACTOR_KIND.LUKE, "Vespin"]);
+  assert.deepEqual([card.actor, card.name], [ACTOR_KIND.APP, "Vespin"]);
 });
 
 test("Vespin and an agent named as actors hang Vespin's card and the agent's tab's card, the agent's read as it is hung", async () => {
@@ -599,7 +599,7 @@ test("Vespin and an agent named as actors hang Vespin's card and the agent's tab
     createElement(
       "p",
       null,
-      createElement(ActorRef, { actor: LUKE_ACTOR }),
+      createElement(ActorRef, { actor: APP_ACTOR }),
       createElement(ActorRef, {
         actor: {
           kind: ACTOR_KIND.AGENT,
@@ -616,7 +616,7 @@ test("Vespin and an agent named as actors hang Vespin's card and the agent's tab
 
   const lukeCard = await cardOf(luke);
   const agentCard = await cardOf(agent);
-  assert.equal(lukeCard.actor, ACTOR_KIND.LUKE);
+  assert.equal(lukeCard.actor, ACTOR_KIND.APP);
   assert.deepEqual(
     [agentCard.agent, agentCard.led, agentCard.name, agentCard.foot],
     [true, true, "Prorate seat changes", "On Billing by seat"],

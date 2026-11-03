@@ -59,7 +59,7 @@ import {
  */
 
 /** The app, whose browser a tab is in, wearing a plain glyph. */
-const LUKE_OWNER = { name: "Vespin", icon: createElement("span") };
+const APP_OWNER = { name: "Vespin", icon: createElement("span") };
 
 /** An agent whose browser a draft opens in. */
 const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
@@ -306,7 +306,7 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -371,7 +371,7 @@ test("a pane's view closes while its window's page is hidden, and a new one open
     draw(
       createElement(CloudBrowserPane, {
         tab: LISTED,
-        owner: LUKE_OWNER,
+        owner: APP_OWNER,
         shown: true,
         memberName: () => undefined,
       }),
@@ -420,7 +420,7 @@ it.effect(
             registry,
             createElement(CloudBrowserPane, {
               tab: LISTED,
-              owner: LUKE_OWNER,
+              owner: APP_OWNER,
               shown: true,
               memberName: () => undefined,
             }),
@@ -455,7 +455,7 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -518,7 +518,7 @@ test("off a Mac, while the member drives, a Ctrl chord the window has a command 
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -743,7 +743,7 @@ test("a live tab's bar opens a typed address and steps back, forward, and reload
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: (userId) => (userId === "user-ada" ? "Ada" : undefined),
     }),
@@ -790,7 +790,7 @@ test("a bar's steps say why they are off while the tab is not live, reachable by
   draw(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -863,7 +863,7 @@ test("plain words typed in a cloud tab's bar search the web, in a draft and on a
   draft.rerender(
     createElement(CloudBrowserPane, {
       tab: LISTED,
-      owner: LUKE_OWNER,
+      owner: APP_OWNER,
       shown: true,
       memberName: () => undefined,
     }),

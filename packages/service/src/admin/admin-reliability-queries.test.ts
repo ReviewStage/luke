@@ -250,7 +250,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
 
         const answer = yield* read(ADMIN_METRICS_SCOPE.NON_ADMINS);
         assert.deepEqual(answer.headline, {
-          lukeTurns: { failed: 2, total: 6 },
+          appTurns: { failed: 2, total: 6 },
           agentRuns: { failed: 4, total: 5 },
           abandonedTurns: 1,
           automationRuns: { failed: 1, skipped: 1, total: 4 },
@@ -274,12 +274,12 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
             { reason: AUTOMATION_RUN_REASON.UNAVAILABLE, skipped: 0, failed: 1 },
           ],
         );
-        assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.lukeTurns, null);
+        assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.appTurns, null);
         assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.agentRuns, 1);
         assert.equal(answer.systemHealth.database.reachable, true);
 
         const everyone = yield* read(ADMIN_METRICS_SCOPE.ALL);
-        assert.deepEqual(everyone.headline.lukeTurns, { failed: 3, total: 7 });
+        assert.deepEqual(everyone.headline.appTurns, { failed: 3, total: 7 });
       }),
   );
 });

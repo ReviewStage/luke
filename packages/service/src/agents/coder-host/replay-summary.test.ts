@@ -143,7 +143,7 @@ it.effect("each line the summary call reads names its sender where it has one", 
   Effect.gen(function* () {
     const { summary, asked } = scripted(() => "Recap.");
     const fromGithub: ReplayStep = { ...said(1), sender: { kind: REPLAY_SENDER.GITHUB } };
-    const fromApp: ReplayStep = { ...said(2), sender: { kind: REPLAY_SENDER.LUKE } };
+    const fromApp: ReplayStep = { ...said(2), sender: { kind: REPLAY_SENDER.APP } };
     yield* summarizeSteps(summary, [said(0), fromGithub, fromApp], 200_000);
 
     assert.match(asked[0] ?? "", /\[from github\] Said: Step 1\./u);

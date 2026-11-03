@@ -153,7 +153,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
             owner,
             taskPageOwner(taskId),
             { title: "Invite funnel", html: "<p>12 sent</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         const started = yield* startPlanCommentThread(writer.writer, taskId, {

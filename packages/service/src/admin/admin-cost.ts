@@ -220,7 +220,7 @@ function emptyDay(day: string): AdminCostDay {
   return {
     day,
     [COST_SOURCE.AGENTS]: 0,
-    [COST_SOURCE.LUKE]: 0,
+    [COST_SOURCE.APP]: 0,
     [COST_SOURCE.DICTATION]: 0,
   };
 }
