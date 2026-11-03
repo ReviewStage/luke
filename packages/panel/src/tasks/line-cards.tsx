@@ -10,6 +10,7 @@ import {
   DISCLOSURE_FILL,
   type EventNote,
   EventNotes,
+  OneLine,
   type SubjectFit,
   SubjectLine,
 } from "@luke/ui";
@@ -285,16 +286,23 @@ export function GitHubLineCard({
       open={folds ? undefined : false}
       fill={DISCLOSURE_FILL.ACTIONS}
       actions={
-        <>
-          <span className="github-line-head flex min-w-0 flex-1 items-center gap-tight-gap overflow-hidden whitespace-nowrap">
-            {sender == null ? null : <span className="inline-flex min-w-0">{sender}</span>}
-            <span className="flex-none text-muted-foreground">{head.does}</span>
+        // Note that a head too narrow for one line puts what was done on a line of its own under who did it, rather than shrinking a chip under the words beside it; there the count fades first, then the words, and the pull request's chip stays whole.
+        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-tight-gap overflow-clip py-row-inset">
+          {sender == null ? null : (
+            <span className="inline-flex min-w-0 max-w-full overflow-clip">{sender}</span>
+          )}
+          <span className="flex min-w-0 max-w-full flex-1 basis-auto items-center gap-tight-gap whitespace-nowrap">
+            <OneLine className="min-w-0 text-muted-foreground">{head.does}</OneLine>
             <span className="inline-flex flex-none">
               <ChipOrLink href={pullRequestPage(line)} words={head.target} doors={doors} />
             </span>
+            {count === "" ? null : (
+              <OneLine className="ms-auto min-w-0 shrink-[1000] grow-0 basis-auto ps-tight-gap text-muted-foreground">
+                {count}
+              </OneLine>
+            )}
           </span>
-          {count === "" ? null : <span className="flex-none text-muted-foreground">{count}</span>}
-        </>
+        </span>
       }
     >
       <PlanHeader folds={folds} aria-label={count === "" ? named : `${named}, ${count}`}>
