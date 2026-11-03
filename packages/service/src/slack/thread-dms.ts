@@ -5,17 +5,22 @@
  * the bot to the member it waits on (`WAITS_ON`: the member it is addressed
  * to, else its task's assignee, else the agent's starter), where the
  * workspace's bot is connected, the member's email matches someone in its
- * team, and the member's own switch is on (`slackNotificationsOn`). A
- * follow-up that asks nothing new on a thread still open writes nothing.
+ * team, and the member's own switch is on (`slackNotificationsOn`). Once a
+ * thread has a DM, every later post of the agent's on it that waits on the
+ * same member is a reply in that DM's Slack thread, whether it asks or not;
+ * before then, a follow-up that asks nothing new on a thread still open
+ * writes nothing. Nothing written back in Slack reaches the thread.
  * The DM says the thread's title, the post's words as Slack draws
  * Markdown (`slackMarkdownBlock`), and an
  * open button to the thread; a decide ask that takes one option offers each
  * as a button beside it (`SlackChoice`), which our Slack route answers the
  * ask with (`slack-events-app.ts`), and every other ask is the link alone.
  *
- * The DM is kept on the agent's message (`inbox_message.slack_dm`). Once
- * the message's ask is answered, withdrawn, or replaced, `settleThreadDms`
- * rewrites the DM to say so and forgets it, so it is rewritten once.
+ * Each DM, a reply among them, is kept on the agent's message it said
+ * (`inbox_message.slack_dm`), with the member it went to and, for a reply,
+ * the DM whose thread it stands in. Once the message's ask is answered,
+ * withdrawn, or replaced, `settleThreadDms` rewrites the DM to say so and
+ * marks it settled, so it is rewritten once and still found as the thread's.
  *
  * Every call here waits on Slack, so each is handed to `afterResponse` by
  * its caller and never yielded inside a transaction; a runtime that holds
@@ -40,7 +45,7 @@ import {
 } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import {
@@ -112,6 +117,13 @@ function openingMessage(item: InboxItem): InboxMessage | undefined {
   const thread = item.thread ?? [];
   const asking = thread.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN);
   return asking ?? thread.findLast((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT);
+}
+
+/** The agent's message the post wrote: the ask it opened where it asked, else the agent's latest. */
+function postedMessage(item: InboxItem, asked: boolean): InboxMessage | undefined {
+  return asked
+    ? openingMessage(item)
+    : item.thread?.findLast((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT);
 }
 
 /**
@@ -215,7 +227,14 @@ const findItemPlace = SqlSchema.findOneOption({
     ),
 });
 
-const SlackDmSchema = Schema.Struct({ channel: Schema.String, ts: Schema.String });
+/** A DM as a message keeps it: where it is, the member it went to, the DM whose thread a reply stands in, and whether its ask has settled. */
+const SlackDmSchema = Schema.Struct({
+  channel: Schema.String,
+  ts: Schema.String,
+  to: Schema.optionalKey(Schema.String),
+  thread: Schema.optionalKey(Schema.String),
+  settled: Schema.optionalKey(Schema.Boolean),
+});
 
 const recordDm = SqlSchema.void({
   Request: Schema.Struct({ messageId: Schema.String, dm: SlackDmSchema }),
@@ -225,12 +244,41 @@ const recordDm = SqlSchema.void({
     ),
 });
 
+/** Whether a message holds a DM its ask has not yet settled. */
+function unsettledDm() {
+  return and(
+    isNotNull(inboxMessage.slackDm),
+    sql`coalesce((${inboxMessage.slackDm} ->> 'settled')::boolean, false) = false`,
+  );
+}
+
+/** The item's newest DM that opened a Slack thread, a reply's own left out, settled or not. */
+const findThreadDm = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ dm: SlackDmSchema }),
+  execute: (itemId) =>
+    Database.use((db) =>
+      db
+        .select({ dm: inboxMessage.slackDm })
+        .from(inboxMessage)
+        .where(
+          and(
+            eq(inboxMessage.itemId, itemId),
+            isNotNull(inboxMessage.slackDm),
+            sql`${inboxMessage.slackDm} ->> 'thread' is null`,
+          ),
+        )
+        .orderBy(desc(inboxMessage.createdAt))
+        .limit(1),
+    ),
+});
+
 /**
- * The DMs of the item's messages whose ask has settled, each forgotten as it
- * is read, with the message's words and where its ask stands. Note that the
- * outer statement asks again that a DM stands, because a second caller
- * blocked on the row rechecks it once the first commits and so takes none,
- * and no DM is rewritten twice.
+ * The DMs of the item's messages whose ask has settled, each marked settled
+ * as it is read, with the message's words and where its ask stands. Note
+ * that the outer statement asks again that a DM is unsettled, because a
+ * second caller blocked on the row rechecks it once the first commits and
+ * so takes none, and no DM is rewritten twice.
  */
 const claimSettledDms = SqlSchema.findAll({
   Request: Schema.String,
@@ -248,16 +296,16 @@ const claimSettledDms = SqlSchema.findAll({
         .where(
           and(
             eq(inboxMessage.itemId, itemId),
-            isNotNull(inboxMessage.slackDm),
+            unsettledDm(),
             sql`${inboxMessage.ask} ->> 'status' <> ${INBOX_ASK_STATUS.OPEN}`,
           ),
         )
         .as("settled");
       return db
         .update(inboxMessage)
-        .set({ slackDm: null })
+        .set({ slackDm: sql`${inboxMessage.slackDm} || '{"settled":true}'::jsonb` })
         .from(settled)
-        .where(and(eq(inboxMessage.id, settled.id), isNotNull(inboxMessage.slackDm)))
+        .where(and(eq(inboxMessage.id, settled.id), unsettledDm()))
         .returning({
           id: inboxMessage.id,
           dm: settled.dm,
@@ -360,11 +408,12 @@ export function settleThreadDms(
 }
 
 /**
- * Writes the member the post's thread waits on, where the post opened the
- * thread or asks anew on it, and keeps the DM on the post's message; first
- * rewrites the DMs of the asks the post replaced. Nothing where the
- * runtime holds no bot, the post is a follow-up, the thread waits on
- * nobody, or the member turned their switch off.
+ * Writes the member the post's thread waits on, as a reply in the thread's
+ * DM to them where it has one, else where the post opened the thread or
+ * asks anew on it, and keeps the DM on the post's message; first rewrites
+ * the DMs of the asks the post replaced. Nothing where the runtime holds
+ * no bot, the post is a follow-up on a thread with no DM to that member,
+ * the thread waits on nobody, or the member turned their switch off.
  */
 export function dmThreadPost(
   post: ThreadDmPost,
@@ -374,16 +423,26 @@ export function dmThreadPost(
     if (Option.isNone(bot) || !bot.value.configured) return;
     const { item, organizationId } = post;
     yield* settleThreadDms(item.id);
-    const message = openingMessage(item);
-    // A post opens the thread where it asks anew or none stood open; a follow-up does neither.
-    if ((post.wasOpen && !post.asked) || message === undefined) return;
+    const message = postedMessage(item, post.asked);
     const recipient = item.waitsOn?.userId;
-    if (recipient === undefined || !(yield* slackNotificationsOn(recipient))) return;
+    if (message === undefined || recipient === undefined) return;
+    if (!(yield* slackNotificationsOn(recipient))) return;
+    const thread = Option.getOrUndefined(
+      Option.filter(yield* findThreadDm(item.id), ({ dm }) => dm.to === recipient),
+    )?.dm;
+    // A post opens a DM where it asks anew or none stood open; a follow-up does neither, but replies in a DM there is.
+    if (thread === undefined && post.wasOpen && !post.asked) return;
     const place = yield* findItemPlace(item.id);
     if (Option.isNone(place)) return;
     const view = { title: item.title, text: message.text, link: threadLink(item.id, place.value) };
     const content = threadDmContent(view, undefined, choiceButtons(item.id, message));
-    const sent = yield* bot.value.dm(organizationId, recipient, content);
-    if (Option.isSome(sent)) yield* recordDm({ messageId: message.id, dm: sent.value });
+    const sent = yield* bot.value.dm(organizationId, recipient, content, thread);
+    if (Option.isNone(sent)) return;
+    const dm = {
+      ...sent.value,
+      to: recipient,
+      ...(thread === undefined ? {} : { thread: thread.ts }),
+    };
+    yield* recordDm({ messageId: message.id, dm });
   });
 }
