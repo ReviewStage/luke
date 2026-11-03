@@ -41,7 +41,7 @@ export function DocumentScroll({
     // unset, the caret, the writing ring, and the fresh tint all drew nothing.
     <ScrollArea ref={ref} fade={SCROLL_FADE.BOTH} gutter={SCROLL_GUTTER.STABLE}>
       <div
-        className={`${DOCUMENT_BODY_CLASS} py-list-inset px-ui-2 select-text [--accent:var(--voice-luke)]`}
+        className={`${DOCUMENT_BODY_CLASS} py-list-inset px-ui-2 select-text [--accent:var(--voice-app)]`}
       >
         {children}
       </div>

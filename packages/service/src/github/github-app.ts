@@ -94,6 +94,7 @@ import {
 } from "@repo/database/models/github-repositories";
 import { account } from "@repo/database/schemas/auth";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   GITHUB_SSO_URL_PATTERN,
   REPOSITORY_UNREACHED,
@@ -144,10 +145,12 @@ const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
 const GITHUB_AUTHORIZE_ENDPOINT = "https://github.com/login/oauth/authorize";
 const GITHUB_APPS = "https://github.com/apps";
 const GITHUB_WEB = "https://github.com";
+/** The client this service names itself to GitHub as. */
+export const GITHUB_USER_AGENT = `${PRODUCT_NAME.toLowerCase()}-github-app`;
 const GITHUB_HEADERS = {
   accept: "application/vnd.github+json",
   "x-github-api-version": "2022-11-28",
-  "user-agent": "luke-github-app",
+  "user-agent": GITHUB_USER_AGENT,
 } as const;
 
 /** Better Auth's id for the GitHub social provider, which is the `provider_id` of the account row. */

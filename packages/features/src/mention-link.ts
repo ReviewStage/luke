@@ -848,7 +848,7 @@ function withoutControls(words: string): string {
 /**
  * A page's web address as a mention's name reads it: the last steps of its
  * path, the step before a kind's word kept with it (`relay/pull/123`,
- * `LUKE-142/fix-the-thing`), cut from the front to its bound; the host
+ * `ACME-142/fix-the-thing`), cut from the front to its bound; the host
  * where the path has no step. Note that the name is read off the address
  * alone, since the page's own title is the provider's to answer and no
  * search here asks it.

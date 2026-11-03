@@ -47,7 +47,7 @@ const COMMIT = "4f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39";
 const PULL_REQUEST = `https://github.com/${REPOSITORY}/pull/42`;
 const LINES = `https://github.com/${REPOSITORY}/blob/${COMMIT}/apps/web/rollout-store.ts#L3-L5`;
 const PAGE = linkOf({ kind: LINK_PLACE.PAGE, planId: TASK_ID, pageId: PAGE_ID }, "acme");
-const LINEAR = "https://linear.app/acme/issue/LUKE-142";
+const LINEAR = "https://linear.app/acme/issue/ACME-142";
 
 /** A picture's bytes as the Inbox holds them once read. */
 const HELD: InboxImage = { url: "data:image/png;base64,iVBORw0KGgo=" };
@@ -347,10 +347,10 @@ test("an Inbox link block draws as the link alone in its words does: a pull requ
 
   // A label with brackets and an address with parentheses are the link's, not the markdown's.
   const issue = drawn(
-    inPane(createElement(LinkBlock, { url: `${LINEAR}?a=(b)`, label: "[LUKE-142] fails" })),
+    inPane(createElement(LinkBlock, { url: `${LINEAR}?a=(b)`, label: "[ACME-142] fails" })),
   );
   assert.equal(issue.querySelectorAll(".lone-link-card").length, 0);
-  assert.deepEqual(chipsInWords(issue), ["[LUKE-142] fails"]);
+  assert.deepEqual(chipsInWords(issue), ["[ACME-142] fails"]);
 
   const inert = drawn(
     inPane(createElement(LinkBlock, { url: "file:///tmp/notes.txt", label: "Notes" })),

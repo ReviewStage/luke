@@ -403,7 +403,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           eve,
           yield* pullRequestRun(
             automation,
-            "Fix [@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)",
+            "Fix [@ACME-142 Token refresh fails](https://linear.app/acme/issue/ACME-142)",
           ),
         );
 

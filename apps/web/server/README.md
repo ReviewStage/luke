@@ -238,7 +238,7 @@ each over the plugin on PGlite, and `packages/service/src/accounts/member-seams.
 plugin's own refusals.
 
 Dynamic client registration stays disabled. One public client is compiled in:
-**`luke-desktop`** (`packages/service/src/auth/oauth-clients.ts`), the macOS companion app. It
+**`desktop`** (`packages/service/src/auth/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
 during sign-in, holds no client secret, requires PKCE, and skips consent as a
 trusted first-party app.

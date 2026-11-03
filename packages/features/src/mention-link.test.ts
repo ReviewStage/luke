@@ -263,7 +263,7 @@ test("a file of a plan with no repository is written in the form that names none
 
 test("a link that names no mention reads as none", () => {
   for (const target of [
-    "https://example.com/luke/issue/LUKE-142",
+    "https://example.com/acme/issue/ACME-142",
     "https://vespin.dev/changelog",
     `https://vespin.dev//plan/${TASK_ID}`,
     `https://vespin.dev/acme/plan/${TASK_ID}/more`,
@@ -309,9 +309,9 @@ test("any link whose target names a mention is one, whatever its label says, nam
     "the rollout",
   ]);
   assert.deepEqual(read("the store", lines), [MENTION_KIND.FILE, "the store"]);
-  assert.deepEqual(read("LUKE-142", "https://linear.app/acme/issue/LUKE-142/fix"), [
+  assert.deepEqual(read("ACME-142", "https://linear.app/acme/issue/ACME-142/fix"), [
     MENTION_KIND.LINK,
-    "LUKE-142",
+    "ACME-142",
   ]);
   assert.equal(read("the docs", "https://example.com/docs"), undefined);
   assert.equal(read("@the docs", "https://example.com/docs"), undefined);
@@ -332,20 +332,20 @@ test("a bare address is named by what it says of the thing: a file's name and li
   assert.equal(named(encodeMention(ROLLOUT, PLACE)), "rollout");
   assert.equal(named(encodeMention(TASK, PLACE)), "Plan");
   assert.equal(
-    named("https://linear.app/acme/issue/LUKE-142/fix-the-thing"),
-    "LUKE-142/fix-the-thing",
+    named("https://linear.app/acme/issue/ACME-142/fix-the-thing"),
+    "ACME-142/fix-the-thing",
   );
   assert.equal(named("https://github.com/acme/relay/pull/123"), "relay/pull/123");
 });
 
 test("a label that spells another address than its target is the author's words, kept as its name", () => {
-  const issue = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+  const issue = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
 
   assert.equal(
     linkMention("https://example.com/notes", issue, REPOSITORY)?.name,
     "https://example.com/notes",
   );
-  assert.equal(linkMention(issue, issue, REPOSITORY)?.name, "LUKE-142/fix-the-thing");
+  assert.equal(linkMention(issue, issue, REPOSITORY)?.name, "ACME-142/fix-the-thing");
 });
 
 test("a target may name a mention when it names one with no repository, or is any page of GitHub's, however long", () => {
@@ -355,7 +355,7 @@ test("a target may name a mention when it names one with no repository, or is an
   assert.equal(mayNameMention(long), true);
   assert.equal(decodeMention(long, REPOSITORY)?.kind, MENTION_KIND.FILE);
   assert.equal(mayNameMention(encodeMention(ROLLOUT, PLACE)), true);
-  assert.equal(mayNameMention("https://linear.app/acme/issue/LUKE-142"), true);
+  assert.equal(mayNameMention("https://linear.app/acme/issue/ACME-142"), true);
   assert.equal(mayNameMention("https://example.com/docs"), false);
 });
 
@@ -602,11 +602,11 @@ test("a tool named by a step an address resolves away is no tool a mention can c
 
 test("a page on an integration's host, its own or one under it, reads as that integration's link, and any other page as no mention", () => {
   assert.deepEqual(
-    decodeMention("https://linear.app/acme/issue/LUKE-142/fix-the-thing", REPOSITORY),
+    decodeMention("https://linear.app/acme/issue/ACME-142/fix-the-thing", REPOSITORY),
     {
       kind: MENTION_KIND.LINK,
       provider: INTEGRATION_PROVIDER.LINEAR,
-      url: "https://linear.app/acme/issue/LUKE-142/fix-the-thing",
+      url: "https://linear.app/acme/issue/ACME-142/fix-the-thing",
     },
   );
   assert.equal(
@@ -666,8 +666,8 @@ test("words pasted whole that are one integration's page become its mention, nam
   const named = (words: string) => pastedLinkMention(words, REPOSITORY)?.name;
 
   assert.equal(
-    named(" https://linear.app/acme/issue/LUKE-142/fix-the-thing\n"),
-    "LUKE-142/fix-the-thing",
+    named(" https://linear.app/acme/issue/ACME-142/fix-the-thing\n"),
+    "ACME-142/fix-the-thing",
   );
   assert.equal(named("https://github.com/acme/relay/pull/123"), "relay/pull/123");
   assert.equal(named("https://acme.sentry.io/issues/12345/"), "issues/12345");
@@ -717,9 +717,9 @@ test("a GitHub page that is a file of the plan stays the file's mention, while o
 test("a plain place says each link by its name, a mention's without its @, and never its address", () => {
   assert.equal(
     linkLabels(
-      `Review [@store.ts](https://github.com/${REPOSITORY}/blob/HEAD/store.ts) and [LUKE-142](https://linear.app/acme/issue/LUKE-142) for [the \\[draft\\]](https://example.com/a)`,
+      `Review [@store.ts](https://github.com/${REPOSITORY}/blob/HEAD/store.ts) and [ACME-142](https://linear.app/acme/issue/ACME-142) for [the \\[draft\\]](https://example.com/a)`,
     ),
-    "Review store.ts and LUKE-142 for the [draft]",
+    "Review store.ts and ACME-142 for the [draft]",
   );
   assert.equal(
     linkLabels("See https://linear.app/acme/issue/LUKE-9"),

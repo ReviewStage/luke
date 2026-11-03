@@ -39,8 +39,8 @@ const section = (heading: string) => named(sectionAnchors([heading])[0] ?? "", h
 const TEXT = `## Goal\n\nShip as ${section("Rollout")} says.\n\n## Rollout\n\nStore first.\n`;
 
 /** A page of an integration's, as the panel names it. */
-const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
-const ISSUE = { name: "LUKE-142/fix-the-thing", target: ISSUE_URL };
+const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
+const ISSUE = { name: "ACME-142/fix-the-thing", target: ISSUE_URL };
 
 const editors: PlanEditorHandle[] = [];
 
@@ -291,7 +291,7 @@ test("a page of an integration's pasted whole is laid in as its mention, written
   task.paste(ISSUE_URL);
 
   assert.ok(
-    task.last().includes(`Store first. See [@LUKE-142/fix-the-thing](${ISSUE_URL})`),
+    task.last().includes(`Store first. See [@ACME-142/fix-the-thing](${ISSUE_URL})`),
     task.last(),
   );
   assert.ok(task.drawn.some((mention) => mention.target === ISSUE_URL));

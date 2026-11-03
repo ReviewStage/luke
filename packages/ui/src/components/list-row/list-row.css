@@ -618,7 +618,7 @@
   }
 
   .ui-list-row-end[data-chevron="meta"] > .ui-list-row-meta {
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   .ui-list-row:is(:has(:focus-visible), [data-current="true"])

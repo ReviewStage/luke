@@ -150,8 +150,8 @@ test("a press that leaves the app is a link to its address, which the press open
   const view = draw(
     createElement(InlineRef, {
       look: INLINE_REF_LOOK.PILL,
-      label: "LUKE-142",
-      linkHref: "https://linear.app/acme/issue/LUKE-142",
+      label: "ACME-142",
+      linkHref: "https://linear.app/acme/issue/ACME-142",
       leaves: true,
       onPress: (event) => {
         opened.push(event.defaultPrevented ? "by the press" : "by the browser");
@@ -160,7 +160,7 @@ test("a press that leaves the app is a link to its address, which the press open
   );
   assert.equal(view.querySelector("button"), null);
   const link = view.querySelector("a") ?? assert.fail("the token is a link");
-  assert.equal(link.getAttribute("href"), "https://linear.app/acme/issue/LUKE-142");
+  assert.equal(link.getAttribute("href"), "https://linear.app/acme/issue/ACME-142");
   act(() => link.click());
   assert.deepEqual(opened, ["by the press"]);
 });

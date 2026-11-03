@@ -38,6 +38,7 @@ import {
   type IntegrationToolParameter,
   integrationToolAnnotationsSchema,
 } from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   isRecord,
   isWireString,
@@ -412,7 +413,7 @@ function inMcpSession<A>(
       yield* send(MCP_METHOD.INITIALIZE, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
-        clientInfo: { name: "luke", version: "1" },
+        clientInfo: { name: PRODUCT_NAME, version: "1" },
       });
       opened = true;
       yield* send(MCP_METHOD.INITIALIZED, {}, true);

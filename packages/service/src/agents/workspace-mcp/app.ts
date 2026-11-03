@@ -398,7 +398,7 @@ function listWorkspaceTools(
 }
 
 /** Our own server, over the doors the edge composes. */
-function lukeServer(doors: WorkspaceMcpDoors): McpServer {
+function workspaceServer(doors: WorkspaceMcpDoors): McpServer {
   return {
     name: WORKSPACE_MCP_SERVER,
     instructions: () => Effect.succeedNone,
@@ -513,7 +513,7 @@ function answerMessage(
 function bearerRefused(): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.jsonUnsafe(HOSTED_REFUSAL.INVALID_TOKEN, {
     status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
-    headers: { "www-authenticate": 'Bearer realm="luke"' },
+    headers: { "www-authenticate": `Bearer realm="${PRODUCT_NAME}"` },
   });
 }
 
@@ -575,9 +575,9 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMcpEndpoint")(functi
 
 /** The group: our server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
 export function workspaceMcpApp(doors: WorkspaceMcpDoors): WebRoutes<WorkspaceMcpServices> {
-  const luke = Option.some(lukeServer(doors));
+  const server = Option.some(workspaceServer(doors));
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, WORKSPACE_MCP_PATH, hostedRefusing(mcpEndpoint(() => luke))),
+    HttpRouter.add(ANY_METHOD, WORKSPACE_MCP_PATH, hostedRefusing(mcpEndpoint(() => server))),
     HttpRouter.add(
       ANY_METHOD,
       `${WORKSPACE_INTEGRATION_MCP_PATH}/:connection`,
