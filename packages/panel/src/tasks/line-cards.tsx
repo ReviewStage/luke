@@ -11,6 +11,7 @@ import {
   type EventNote,
   EventNotes,
   OneLine,
+  SUBJECT_FIT,
   type SubjectFit,
   SubjectLine,
 } from "@repo/ui";
@@ -148,30 +149,35 @@ export function CommentLineHead({
   );
 }
 
-/** What a Slack line leads with, as a comment's leads with what it is. */
-export const SLACK_LINE_LEAD = "Message in";
+/** What a Slack line leads with: after its sender's name, as GitHub's card says what its author did, or opening the line where it is the reader's own. */
+export const SLACK_LINE_LEAD = { AFTER_NAME: "wrote in", OWN: "Wrote in" } as const;
 
 /** What a Slack line's chip names: Slack, whose mark the chip wears for a link to it. */
 export const SLACK_LINE_SUBJECT = "Slack";
 
 /**
  * The head of a member's message to the Slack bot, drawn in place of the
- * prompt the agent was handed, as a comment's line is headed: that it is a
- * message in Slack, and Slack's chip, which opens the message there; Slack
- * in words where Slack answered no link.
+ * prompt the agent was handed: that they wrote it in Slack, and Slack's
+ * chip, which opens the message there; Slack in words where Slack answered
+ * no link. Its chip takes its own width, so the head ends where the bubble
+ * under it does on the reader's own line.
  */
 export function SlackLineHead({
   line,
-  fit,
+  received,
 }: {
   line: SlackLineMetadata;
-  /** How much of the line the chip takes: the rest of it alone, or its own width beside its sender (`MessageHead`). */
-  fit?: SubjectFit | undefined;
+  /** Whether the line is another's, its head following their name (`MessageHead`); the reader's own opens with its lead. */
+  received: boolean;
 }): React.JSX.Element {
   const doors = useMentionDoors();
   const chip = line.url === undefined ? undefined : linkChip(line.url, SLACK_LINE_SUBJECT, doors);
   return (
-    <SubjectLine lead={SLACK_LINE_LEAD} fit={fit} data-slack-line="">
+    <SubjectLine
+      lead={received ? SLACK_LINE_LEAD.AFTER_NAME : SLACK_LINE_LEAD.OWN}
+      fit={SUBJECT_FIT.OWN}
+      data-slack-line=""
+    >
       {chip ?? SLACK_LINE_SUBJECT}
     </SubjectLine>
   );
