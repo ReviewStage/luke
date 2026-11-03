@@ -10,7 +10,6 @@ export * from "./agent-wakeup.js";
 export * from "./attachment.js";
 export * from "./auth.js";
 export * from "./automation.js";
-export * from "./channel.js";
 export * from "./device.js";
 export * from "./device-agent.js";
 export * from "./favorite.js";

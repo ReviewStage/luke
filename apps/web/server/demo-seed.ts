@@ -104,7 +104,7 @@ const seedConfiguredDatabase = Effect.gen(function* () {
     Option.map(host, ({ minted }) => ({ secretHash: minted.hash })),
   ).pipe(Effect.provide(sqlClientOverUrl(url.success)));
   yield* Effect.logInfo(
-    `Seeded the acme world: ${seeded.taskIds.length} tasks, ${seeded.channelIds.length} channels, ${seeded.memberIds.length + 1} members`,
+    `Seeded the acme world: ${seeded.taskIds.length} tasks, ${seeded.memberIds.length + 1} members`,
     { deanId: seeded.deanId, workspaceId: seeded.workspaceId },
   );
   if (Option.isSome(credential)) {

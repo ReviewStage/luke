@@ -40,8 +40,8 @@ import { parsedUrl } from "./parsed-url.js";
  *   reader's to find, by the agent, to open the item in that task's Inbox;
  *   or by its id alone, `/inbox/<itemId>`, whose agent, task, and workspace
  *   are the reader's to ask the service for, by the item;
- * - a channel of the workspace, `/channel/<channelId>`, whose threads are
- *   those Inbox items, each still linked under its agent;
+ * - the Inbox again, `/channel/<id>`, which a link written before the
+ *   Inbox's channels were removed spells, read and never written;
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - a page of Settings, `/settings[/<page>]`;
@@ -137,7 +137,6 @@ export const LINK_PLACE = {
   MESSAGE: "message",
   INBOX: "inbox",
   INBOX_ITEM: "inbox-item",
-  CHANNEL: "channel",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   AUTOMATION_RUN: "automation-run",
@@ -185,6 +184,7 @@ const STEP = {
   MESSAGE: "message",
   FILES: "files",
   INBOX: "inbox",
+  /** A link written before the Inbox's channels were removed, read as the Inbox. */
   CHANNEL: "channel",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
@@ -415,7 +415,6 @@ const linkPlaceSchema = EffectSchema.Union([
     itemId: idSchema,
   }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.INBOX_ITEM), itemId: idSchema }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.CHANNEL), channelId: idSchema }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.AUTOMATIONS) }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.AUTOMATION),
@@ -588,9 +587,7 @@ function placeFields(steps: readonly string[]) {
     case STEP.INBOX:
       return inboxFields(id, rest);
     case STEP.CHANNEL:
-      return id === undefined || rest.length > 0
-        ? undefined
-        : { kind: LINK_PLACE.CHANNEL, channelId: id };
+      return id === undefined || rest.length > 0 ? undefined : { kind: LINK_PLACE.INBOX };
     case STEP.AUTOMATIONS:
       return id === undefined ? { kind: LINK_PLACE.AUTOMATIONS } : undefined;
     case STEP.AUTOMATION:
@@ -690,8 +687,6 @@ function placePath(place: LinkPlace): readonly string[] {
       return "agentId" in place
         ? [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId]
         : [STEP.INBOX, place.itemId];
-    case LINK_PLACE.CHANNEL:
-      return [STEP.CHANNEL, place.channelId];
     case LINK_PLACE.AUTOMATIONS:
       return [STEP.AUTOMATIONS];
     case LINK_PLACE.AUTOMATION:

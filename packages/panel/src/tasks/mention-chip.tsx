@@ -285,11 +285,10 @@ function pressOf(
             ? mention
             : { kind: MENTION_KIND.TASK, taskId: mention.taskId },
         );
-    // A page, an agent, a person, or a channel opens as its app link does, through the window's opener, under the workspace it was written in.
+    // A page, an agent, or a person opens as its app link does, through the window's opener, under the workspace it was written in.
     case MENTION_KIND.PAGE:
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
-    case MENTION_KIND.CHANNEL:
       return () => openLink(target);
     // The app has no tab of its own on a task, so its chip opens the task it thinks about.
     case MENTION_KIND.APP:

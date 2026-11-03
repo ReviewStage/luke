@@ -15,10 +15,8 @@ import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
-  channelsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
-  workspaceChannelsLiveStatements,
 } from "../inbox/inbox-store.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -93,16 +91,6 @@ function liveStatements() {
       ),
     ),
     "sidebar.pins": Option.getOrThrow(repositoryPinsLiveStatement(USER_ID)),
-    ...Object.fromEntries(
-      Object.entries(Option.getOrThrow(channelsLiveStatements(USER_ID, randomUUID()))).map(
-        ([part, query]) => [`channels.${part}`, query],
-      ),
-    ),
-    ...Object.fromEntries(
-      Object.entries(Option.getOrThrow(workspaceChannelsLiveStatements(USER_ID, randomUUID()))).map(
-        ([part, query]) => [`workspace-channels.${part}`, query],
-      ),
-    ),
   };
 }
 

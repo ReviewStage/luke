@@ -27,8 +27,6 @@ import {
   attachmentSync,
   automationRunSync,
   automationSync,
-  channelLookSync,
-  channelSync,
   conversationsSync,
   deviceAgentLineSync,
   deviceSync,
@@ -72,10 +70,8 @@ import {
 import {
   accountInboxLiveStatements,
   accountItemsLiveStatements,
-  channelsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
-  workspaceChannelsLiveStatements,
 } from "../inbox/inbox-store.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
@@ -318,46 +314,6 @@ export const agentInboxLive = defineLiveQuery({
   reads: SCOPE_INBOX_READS,
   topics: ({ agentId }) => [[TOPIC.AGENT, agentId]],
   statements: ({ userId, agentId }) => memberAgentInboxLiveStatements(userId, agentId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * One workspace's channels and where each one's threads stand, as released
- * desktops follow it to hear which channels moved and list them again; a
- * build since reads the list itself (`workspaceChannelsLive`). Woken by a
- * channel or an item written in any of the account's workspaces, both of
- * which name every member (`channelSync`, `inboxItemSync`), and by what
- * admits the account to a workspace or a repository. Note that an agent or
- * a task written itself wakes none, because the read only asks whether the
- * reader sees each thread's agent and its task (`itemVisibleTo`), which
- * their GitHub reach decides.
- */
-export const channelsLive = defineLiveQuery({
-  name: "channels",
-  params: ["userId", "workspaceId"],
-  reads: [channelSync, inboxItemSync, agentSync, taskSync, ...ITEM_GATES],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId, workspaceId }) => channelsLiveStatements(userId, workspaceId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * One workspace's channels list as its reader reads it, every channel open
- * or archived with what each holds for the reader (`inbox-store.ts`'s
- * `workspaceChannelsLiveStatements`), woken on the reader's topic as the
- * released read is, and by the reader's own look at a channel
- * (`channelLookSync`), which names only them. Note that it takes no
- * workspace's topic, because every plan save names one: an item written
- * anywhere in the account's workspaces wakes it, and one that moves nothing
- * the list shows leaves its digest where it stood, so its poll answers
- * nobody.
- */
-export const workspaceChannelsLive = defineLiveQuery({
-  name: LIVE_READ.CHANNELS,
-  params: ["userId", "workspaceId"],
-  reads: [channelSync, channelLookSync, inboxItemSync, agentSync, taskSync, ...ITEM_GATES],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId, workspaceId }) => workspaceChannelsLiveStatements(userId, workspaceId),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -691,8 +647,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   inboxItemsLive,
   taskInboxLive,
   agentInboxLive,
-  channelsLive,
-  workspaceChannelsLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
   automationsLive,

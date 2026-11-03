@@ -880,11 +880,6 @@ export const inboxItemSchema = EffectSchema.Struct({
    * which the desktop reads as read.
    */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /**
-   * The channel of its workspace the thread lives in (`channel-wire.ts`),
-   * which a link to the item opens it in. Absent from a service before it.
-   */
-  channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type InboxItem = typeof inboxItemSchema.Type;
@@ -927,9 +922,8 @@ function inboxAsksOpen(item: InboxItem): boolean {
 
 /**
  * Whether a thread needs the reader: its ask stands open and waits on them.
- * The one reading of it, which a channel's count (`inbox-store.ts`'s
- * `askingReader`) must agree with and its stream, Needs me, and the tint
- * all draw from.
+ * The one reading of it, which a to-do count (`inbox-store.ts`'s
+ * `askingReader`) must agree with and Needs me and the tint draw from.
  */
 export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
   return readerId !== undefined && inboxAsksOpen(item) && inboxWaitsOn(item)?.userId === readerId;

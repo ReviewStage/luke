@@ -17,7 +17,6 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import type { StoredPullRequest } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { channel } from "../../schemas/channel.js";
 import { inboxItem } from "../../schemas/inbox.js";
 import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
@@ -30,7 +29,6 @@ import {
   openWorkspace,
 } from "../../testing/index.js";
 import { archiveAgent, readAgent, recordAgentPublished } from "../agent-store.js";
-import { ensureGeneralChannel } from "../channel-store.js";
 import {
   archiveAgentOfDoneTask,
   assignUnassignedTask,
@@ -384,58 +382,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         yield* updateTask(dean, taskId, { organizationId: elsewhere });
         assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(elsewhere));
         assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.none());
-      }),
-  );
-
-  it.effect(
-    "a plan's threads keep their channel through a change naming its workspace, and go to #general where it moves",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const { dean, taskId } = yield* openSharedTask;
-        const workspace = Option.getOrThrow(yield* readTaskWorkspace(dean, taskId));
-        const agentId = yield* openTaskAgent(dean, workspace, taskId);
-        const now = new Date(yield* Clock.currentTimeMillis);
-        const [bugs] = yield* db
-          .insert(channel)
-          .values({
-            organizationId: workspace,
-            name: "bugs",
-            purpose: "What broke.",
-            project: false,
-            createdAt: now,
-          })
-          .returning({ id: channel.id });
-        assert.ok(bugs);
-        yield* db.insert(inboxItem).values({
-          userId: dean,
-          taskId,
-          organizationId: workspace,
-          agentId,
-          channelId: bugs.id,
-          key: "flaky-login",
-          revision: 1,
-          version: 5,
-          title: "Login test is flaky",
-          needsReply: false,
-          status: INBOX_STATUS.OPEN,
-          postedAt: now,
-          updatedAt: now,
-        });
-        const channelOfThread = Effect.map(
-          db
-            .select({ channelId: inboxItem.channelId })
-            .from(inboxItem)
-            .where(eq(inboxItem.agentId, agentId)),
-          (rows) => rows.map((row) => row.channelId),
-        );
-
-        yield* updateTask(dean, taskId, { organizationId: workspace });
-        assert.deepEqual(yield* channelOfThread, [bugs.id]);
-
-        const elsewhere = yield* openWorkspace(dean);
-        yield* updateTask(dean, taskId, { organizationId: elsewhere });
-        assert.deepEqual(yield* channelOfThread, [yield* ensureGeneralChannel(elsewhere, now)]);
       }),
   );
 

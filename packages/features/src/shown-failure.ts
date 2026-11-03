@@ -91,14 +91,6 @@ export const FAILURE_SURFACE = {
   AUTOMATION_TOGGLE: "automation.toggle",
   BROWSER_OPEN: "browser.open",
   BUNDLE_LOAD: "bundle.load",
-  CHANNELS_ARCHIVED_READ: "channels_archived.read",
-  CHANNELS_READ: "channels.read",
-  CHANNEL_ARCHIVE: "channel.archive",
-  CHANNEL_MOVE: "channel.move",
-  CHANNEL_POST: "channel.post",
-  CHANNEL_READ: "channel.read",
-  CHANNEL_UNARCHIVE: "channel.unarchive",
-  CHANNEL_WRITE: "channel.write",
   CHAPTERS_MODEL_READ: "chapters_model.read",
   COPY: "copy",
   DICTATION: "dictation",
@@ -251,7 +243,6 @@ export interface FailureAbout {
   readonly callId?: string | undefined;
   readonly inboxItemId?: string | undefined;
   readonly automationId?: string | undefined;
-  readonly channelId?: string | undefined;
   readonly pullRequest?: number | undefined;
 }
 
@@ -346,7 +337,6 @@ const ABOUT_ATTRIBUTE = {
   callId: "call.id",
   inboxItemId: "inbox_item.id",
   automationId: "automation.id",
-  channelId: "channel.id",
   pullRequest: "pull_request.number",
 } as const satisfies { readonly [Key in keyof Required<FailureAbout>]: string };
 
@@ -617,7 +607,6 @@ export function failureAboutOf(payload: unknown): FailureAbout {
     turnId: stringOf(payload, "turnId"),
     inboxItemId: stringOf(payload, "inboxItemId"),
     automationId: stringOf(payload, "automationId"),
-    channelId: stringOf(payload, "channelId"),
     pullRequest: numberOf(payload, "pullRequest"),
   };
 }

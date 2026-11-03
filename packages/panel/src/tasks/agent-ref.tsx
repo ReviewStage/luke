@@ -1,5 +1,4 @@
 import type { AgentStatus, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
-import type { ChannelThreadAgent } from "@repo/features/channel-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { CatalogModel } from "@repo/features/models-wire";
 import type { TaskAgentLine } from "@repo/features/task-wire";
@@ -233,10 +232,13 @@ export function tasklessSubject(
   return { name, tile, read: () => reading };
 }
 
-/** An agent as a line read beside its thread names it: its task's row, or its channel thread; where it stands, where the line says so. */
-export type AgentLine = ChannelThreadAgent & {
+/** An agent as a line read beside its thread names it: its title, null where it has none; its model; the automation whose run started it, which an untitled one goes by; and where it stands, where the line says so. */
+export interface AgentLine {
+  readonly title: string | null;
+  readonly model: string;
+  readonly automationName?: string | undefined;
   readonly status?: AgentStatus | undefined;
-};
+}
 
 /**
  * An agent named by id on the task whose agents `agents` reads, archived

@@ -9,7 +9,7 @@ import {
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 
 /**
- * demo-world.ts -- the acme world the demo seed writes, as data: its people, its workspace, its tasks and their plans, the comments on them, and its channels.
+ * demo-world.ts -- the acme world the demo seed writes, as data: its people, its workspace, its tasks and their plans, the comments on them, and the threads its agents posted.
  *
  * The world is the changelog screenshots' (`.claude/skills/changelog-screenshots/WORLD.md`):
  * acme builds Relay, and Dean Stratakos owns its workspace beside Dana,
@@ -30,7 +30,6 @@ export const DEMO_ID_KIND = {
   ORGANIZATION: "de300002",
   MEMBER: "de300003",
   TASK: "de300004",
-  CHANNEL: "de300005",
   /** An agent's turn, and the key its opening line is sent under. */
   TURN: "de300006",
   /** A tool call of a turn. */
@@ -415,46 +414,6 @@ export const DEMO_TASKS: readonly DemoTask[] = [
   DEMO_INVITATIONS_TASK,
 ];
 
-/* ----- The channels ----- */
-
-/** One channel of acme's beside #general, and who made it. */
-export interface DemoChannel {
-  readonly id: string;
-  readonly name: string;
-  readonly purpose: string;
-  readonly by: DemoPerson;
-}
-
-export const DEMO_PRODUCT_CHANNEL: DemoChannel = {
-  id: demoId(DEMO_ID_KIND.CHANNEL, 1),
-  name: "product",
-  purpose: "What Relay does next, and the decisions behind it",
-  by: DEMO_DEAN,
-};
-
-export const DEMO_ENGINEERING_CHANNEL: DemoChannel = {
-  id: demoId(DEMO_ID_KIND.CHANNEL, 2),
-  name: "engineering",
-  purpose: "Relay's services, database, deploys, and CI",
-  by: DANA,
-};
-
-export const DEMO_DESIGN_CHANNEL: DemoChannel = {
-  id: demoId(DEMO_ID_KIND.CHANNEL, 3),
-  name: "design",
-  purpose: "Screens, emails, and design reviews",
-  by: THEO,
-};
-
-export const DEMO_CHANNELS: readonly DemoChannel[] = [
-  DEMO_PRODUCT_CHANNEL,
-  DEMO_ENGINEERING_CHANNEL,
-  DEMO_DESIGN_CHANNEL,
-];
-
-/** When the channels were made, before any task. */
-export const DEMO_CHANNELS_AGO = 30 * DAY;
-
 /* ----- The agents ----- */
 
 /** One tool call of a step, as Claude Code names its tools: what it was handed, and what it answered. */
@@ -715,11 +674,10 @@ export interface DemoAnswer {
   readonly ago: number;
 }
 
-/** One thread an agent posted: its key, where it went, what it says and asks, and what came after. */
+/** One thread an agent posted: its key, what it says and asks, and what came after. */
 export interface DemoThread {
   readonly agent: DemoAgent;
   readonly key: string;
-  readonly channel: DemoChannel;
   readonly title: string;
   readonly body: string;
   readonly ask: InboxAsk | undefined;
@@ -738,12 +696,11 @@ export interface DemoThread {
   }[];
 }
 
-/** The threads, oldest first, so each channel lists its newest on top. */
+/** The threads, oldest first, so the Inbox lists the newest on top. */
 export const DEMO_THREADS: readonly DemoThread[] = [
   {
     agent: DEMO_ONBOARDING_AGENT,
     key: "checklist-placement",
-    channel: DEMO_DESIGN_CHANNEL,
     title: "Where should the onboarding checklist sit?",
     body: "The checklist is built and ticks itself from what the workspace already has. It needs a place on the dashboard, and each spot pushes something else down.",
     ask: {
@@ -769,7 +726,6 @@ export const DEMO_THREADS: readonly DemoThread[] = [
   {
     agent: DEMO_WEBHOOKS_AGENT,
     key: "retries-shipped",
-    channel: DEMO_ENGINEERING_CHANNEL,
     title: "Shipped: webhook retries",
     body: "Failed deliveries now retry 5 times over about 15 hours, then stand dead until an admin replays them from **Settings › Webhooks**. The worker's attempts are in the new `delivery_attempts` table.",
     ask: undefined,
@@ -781,7 +737,6 @@ export const DEMO_THREADS: readonly DemoThread[] = [
   {
     agent: DEMO_INVITATIONS_AGENT,
     key: "withdraw-invite",
-    channel: DEMO_PRODUCT_CHANNEL,
     title: "Who may withdraw a pending invite?",
     body: "The plan leaves this open. `withdrawInvite` in `src/members/invite.ts` checks one rule, and the members list shows Withdraw to whoever it allows.",
     ask: {
@@ -811,7 +766,6 @@ export const DEMO_THREADS: readonly DemoThread[] = [
   {
     agent: DEMO_INVITATIONS_AGENT,
     key: "link-expiry",
-    channel: DEMO_PRODUCT_CHANNEL,
     title: "Should invite links last 7 days or 14?",
     body: "The plan assumes 7 days, and `INVITE_TTL_MS` says so for now. An invite sent on a Friday to someone away the next week runs out before they see it; a Resend action on a pending invite would cover that without a longer link.",
     ask: {
@@ -834,7 +788,6 @@ export const DEMO_THREADS: readonly DemoThread[] = [
   {
     agent: DEMO_INVITATIONS_AGENT,
     key: "postmark-token",
-    channel: DEMO_ENGINEERING_CHANNEL,
     title: "Add the Postmark token to the preview environment",
     body: "Invite emails send through Postmark, and the preview deploy has no server token, so every invite sent there fails. I can't reach the hosting settings myself.",
     ask: {
@@ -853,7 +806,6 @@ export const DEMO_THREADS: readonly DemoThread[] = [
   {
     agent: DEMO_INVITATIONS_AGENT,
     key: "invite-email-copy",
-    channel: DEMO_DESIGN_CHANNEL,
     title: "What should the invite email say?",
     body: "The invite email is a placeholder. A few details decide its copy and layout.",
     ask: {
@@ -878,7 +830,6 @@ export const DEMO_THREADS: readonly DemoThread[] = [
   {
     agent: DEMO_INVITATIONS_AGENT,
     key: "pending-invites-shown",
-    channel: DEMO_DESIGN_CHANNEL,
     title: "Pending invites now show on Settings › Members",
     body: 'Each pending invite has its own row under the members, with the email, who sent it, when it runs out, and **Withdraw**. A withdrawn link reads "This invite is no longer valid".',
     ask: undefined,

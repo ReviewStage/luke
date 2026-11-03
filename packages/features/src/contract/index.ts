@@ -12,7 +12,6 @@ import { agentPagesContract } from "./agent-pages.js";
 import { agentPullRequestsContract } from "./agent-pull-requests.js";
 import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
-import { channelsContract } from "./channels.js";
 import { deviceAgentsContract } from "./device-agents.js";
 import { dictationContract } from "./dictation.js";
 import { eventsContract } from "./events.js";
@@ -55,7 +54,6 @@ export const hostedContract = {
   agentPullRequests: agentPullRequestsContract,
   agents: agentsContract,
   automations: automationsContract,
-  channels: channelsContract,
   dictation: dictationContract,
   events: eventsContract,
   github: githubContract,

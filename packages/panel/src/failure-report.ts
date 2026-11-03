@@ -124,7 +124,6 @@ const ABOUT_KEYS = [
   "callId",
   "inboxItemId",
   "automationId",
-  "channelId",
   "pullRequest",
 ] as const satisfies readonly (keyof FailureAbout)[];
 

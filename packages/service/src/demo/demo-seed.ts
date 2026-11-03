@@ -1,7 +1,6 @@
 import type { DB } from "@better-auth/drizzle-adapter";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { type Agent, createAgent } from "@repo/database/models/agent-store";
-import { createChannel } from "@repo/database/models/channel-store";
 import { enrollOwnDevice } from "@repo/database/models/host-store";
 import {
   actOnPlanCommentThread,
@@ -75,8 +74,6 @@ import {
 import { providerKeyHint } from "../providers/provider-key-check.js";
 import {
   DEMO_AGENTS,
-  DEMO_CHANNELS,
-  DEMO_CHANNELS_AGO,
   DEMO_DEAN,
   DEMO_HOST,
   DEMO_ID_KIND,
@@ -130,7 +127,7 @@ import {
  * internal adapter, and workspaces and members its organization plugin's,
  * on a Better Auth of the seed's own (`demoAuth`) whose id generator counts
  * up from fixed ids, so two seeds of two fresh databases write the same
- * accounts, workspaces, members, tasks, and channels. Note that the agents,
+ * accounts, workspaces, members, and tasks. Note that the agents,
  * their messages, the threads, and the comments take the ids their models
  * mint, because no model takes one from its caller, and a demo run starts
  * from an empty profile that holds none of them.
@@ -184,7 +181,6 @@ export interface DemoSeeded {
   readonly workspaceId: string;
   readonly memberIds: readonly string[];
   readonly taskIds: readonly string[];
-  readonly channelIds: readonly string[];
 }
 
 /** Every way the seed fails: a refused step, Better Auth's own failure, or the store's. */
@@ -337,21 +333,6 @@ function seedPeople(auth: DemoAuth, clock: SeedClock) {
     }
     return { personalWorkspaceId, workspaceId, memberIds };
   });
-}
-
-/** #product, #engineering, and #design, each made by its maker, #general minted before them. */
-function seedChannels(workspaceId: string, clock: SeedClock) {
-  return Effect.forEach(DEMO_CHANNELS, (channel) =>
-    Effect.flatMap(
-      createChannel(
-        channel.by.id,
-        workspaceId,
-        { id: channel.id, name: channel.name, purpose: channel.purpose, project: false },
-        new Date(clock.start - DEMO_CHANNELS_AGO),
-      ),
-      (made) => Effect.map(written(`#${channel.name}`, made), (row) => row.id),
-    ),
-  );
 }
 
 /* ----- The tasks ----- */
@@ -628,7 +609,7 @@ function seedAnswer(
   });
 }
 
-/** One thread the agent posted to its channel, the answer to its ask, its word after, and the members' replies. */
+/** One thread the agent posted, the answer to its ask, its word after, and the members' replies. */
 function seedThread(thread: DemoThread, poster: InboxAgent, clock: SeedClock, key: () => string) {
   return Effect.gen(function* () {
     const posted = yield* clock.ago(
@@ -639,7 +620,6 @@ function seedThread(thread: DemoThread, poster: InboxAgent, clock: SeedClock, ke
         body: thread.body,
         ask: thread.ask,
         needsReply: thread.needsReply,
-        channelId: thread.channel.id,
         addresseeId: thread.addressee?.id,
       }),
     );
@@ -785,7 +765,6 @@ export function seedDemoWorld(
     const key = clientKeys();
     const { personalWorkspaceId, workspaceId, memberIds } = yield* seedPeople(auth, clock);
     const runsOn = Option.isSome(host) ? yield* seedHost(host.value) : TASK_RUNS_IN_CLOUD;
-    const channelIds = yield* seedChannels(workspaceId, clock);
     const taskIds = yield* Effect.forEach(DEMO_TASKS, (task) =>
       seedTask(workspaceId, task, runsOn, clock, key),
     );
@@ -803,7 +782,6 @@ export function seedDemoWorld(
       workspaceId,
       memberIds,
       taskIds,
-      channelIds,
     };
   });
 }

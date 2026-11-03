@@ -447,8 +447,6 @@ function handedMention(
     case MENTION_KIND.APP:
     // A date's words are the date in full, which is all there is to hand.
     case MENTION_KIND.DATE:
-    // A channel's link names it; nothing more is handed.
-    case MENTION_KIND.CHANNEL:
       return undefined;
   }
 }

@@ -995,7 +995,7 @@ export const agentSummarySchema = EffectSchema.Struct({
    * The pilot that started the agent and that it reports to: a coding agent
    * or a sub-pilot in a pilot tree, which takes no member's message, since a
    * member talks to the top pilot alone. Named by its id, its task, its
-   * title, and its model, as a channel thread names its agent, since a
+   * title, and its model, as the account's inbox names its agent, since a
    * sub-pilot's pilot stands on another task, whose list the reader may not
    * hold. Absent for an agent a member or any other kind of agent started,
    * from the held reads, which do not read it, and from a service before it.

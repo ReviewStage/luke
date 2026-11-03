@@ -1150,8 +1150,6 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       ) : (
         <ActorMark actor={row.actor} size={ACTOR_SIZE.INLINE} />
       );
-    case MENTION_KIND.CHANNEL:
-      return <GLYPH.CHANNEL />;
     case MENTION_KIND.APP:
       return <ActorMark actor={APP_ACTOR} size={ACTOR_SIZE.INLINE} />;
     case MENTION_KIND.DATE:
