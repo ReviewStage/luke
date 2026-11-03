@@ -412,6 +412,8 @@ function windowPort(
               } as const,
             },
       ),
+    tasksFind: (params) =>
+      ask(`find:${params.workspace}:${params.number}`, () => ({ taskId: TASK_ID })),
     tasksRevisions: (params) =>
       ask(`revisions:${params.taskId}:${params.before}`, () => ({ revisions: [] })),
     tasksRevision: (params) =>

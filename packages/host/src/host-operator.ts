@@ -253,6 +253,8 @@ import {
   type TasksEditParams,
   type TasksFileAnswer,
   type TasksFileParams,
+  type TasksFindAnswer,
+  type TasksFindParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
@@ -328,6 +330,7 @@ import {
   tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
+  tasksFindAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
@@ -527,6 +530,8 @@ export interface HostOperator {
   tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
   /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
+  /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
+  tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -1350,6 +1355,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           address: params.address,
         }),
         answerOf(tasksBrowserTabOpenAnswerSchema, TASK_UNANSWERED),
+      ),
+    tasksFind: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_FIND, {
+          workspace: params.workspace,
+          number: params.number,
+        }),
+        answerOf(tasksFindAnswerSchema, TASK_UNANSWERED),
       ),
     tasksRevisions: (params) =>
       Effect.map(

@@ -68,6 +68,16 @@ test("a task's address a later build writes under task reads as the one written 
   assert.equal(decodeMention(`https://vespin.dev/acme/tasks/${TASK_ID}`, null), undefined);
 });
 
+test("a task's address naming it by its number in the workspace is no mention, since a mention names a task by its id alone", () => {
+  for (const target of [
+    "https://vespin.dev/acme/task/42",
+    "https://vespin.dev/acme/task/42#rollout",
+    "https://vespin.dev/acme/task/42/app",
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
 test("every form written before the link was settled reads as the mention the settled form names", () => {
   assert.deepEqual(decodeMention(`luke://plan/${TASK_ID}`, null), TASK);
   assert.deepEqual(decodeMention(`luke://plan/${TASK_ID}#Rollout`, null), ROLLOUT);

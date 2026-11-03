@@ -165,7 +165,7 @@ export const taskAssigneeIdSchema = EffectSchema.String.check(
 );
 
 /** A task's number in its workspace, counted from one; its key is the workspace's prefix and this (`workspace-key.ts`). */
-const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+export const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /**
  * A workspace's id as the service minted it: Better Auth's own generated
@@ -1007,6 +1007,11 @@ export const taskStartAnswerSchema = EffectSchema.Struct({
 });
 
 export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
+
+/** The task a link names by its workspace and its number (GET), by its id, which every other read names it by. */
+export const taskFoundAnswerSchema = EffectSchema.Struct({ taskId: EffectSchema.String });
+
+export type TaskFoundAnswer = typeof taskFoundAnswerSchema.Type;
 
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
 export const taskDeleteAnswerSchema = EffectSchema.Struct({

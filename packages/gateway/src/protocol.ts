@@ -62,6 +62,8 @@ export const GATEWAY_METHOD = {
   TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
+  /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
+  TASKS_FIND: "tasks.find",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */

@@ -41,6 +41,8 @@ import {
   type TasksEditParams,
   type TasksFileAnswer,
   type TasksFileParams,
+  type TasksFindAnswer,
+  type TasksFindParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
@@ -125,6 +127,7 @@ export interface TasksProceduresDependencies {
     tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
     tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
     onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
+    tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
     tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
@@ -487,6 +490,14 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* dependencies.colourCode(input.language, input.code);
       },
     ),
+    [TASKS_ACT_KIND.TASKS_FIND]: actPort[TASKS_ACT_KIND.TASKS_FIND].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksFind(input);
+    }),
     [TASKS_ACT_KIND.TASKS_REVISIONS]: actPort[TASKS_ACT_KIND.TASKS_REVISIONS].effect(function* ({
       input,
       context,

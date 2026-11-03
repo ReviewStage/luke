@@ -15,7 +15,13 @@ import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import type { InboxItemPlace } from "@repo/features/inbox-attachment-link";
 import type { InboxItemHome } from "@repo/features/inbox-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import {
+  LINK_PLACE,
+  type LinkPlace,
+  type ReadLink,
+  taskNumberOf,
+  withTaskId,
+} from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
@@ -2927,6 +2933,31 @@ export function useTasksTab(input: {
   };
 
   /**
+   * An app link opened as `openPlace` opens its place, once a task it names
+   * by its number in the link's workspace is found by its id on the
+   * service. One not found, or not answered, opens by the number as an id
+   * naming no task does, its read saying it is not there; nothing opens
+   * where the window moved on before the service answered.
+   */
+  const openLink = (link: ReadLink) => {
+    const number = taskNumberOf(link.place);
+    if (number === undefined) {
+      openPlace(link);
+      return;
+    }
+    navigations.current += 1;
+    const mine = navigations.current;
+    const opened = (taskId: string | undefined) => {
+      if (navigations.current !== mine) return;
+      openPlace(taskId === undefined ? link : { ...link, place: withTaskId(link.place, taskId) });
+    };
+    act(ACT_KIND.TASKS_FIND, { workspace: link.workspace, number }).then(
+      (found) => opened("taskId" in found ? found.taskId : undefined),
+      () => opened(undefined),
+    );
+  };
+
+  /**
    * An agent's place opened on its task where it has one, else on its page.
    * Note that a link names the task only where it was written under it, so
    * one naming none finds the task by the agent: at once where the agent is
@@ -3024,7 +3055,7 @@ export function useTasksTab(input: {
    * that nothing is checked here: a place the account cannot read is read
    * all the same, and its read says it is not there.
    */
-  const openLink = ({ workspace, place }: ReadLink) => {
+  const openPlace = ({ workspace, place }: ReadLink) => {
     // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
     navigations.current += 1;
     switch (place.kind) {

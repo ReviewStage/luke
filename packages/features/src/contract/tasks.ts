@@ -1,5 +1,5 @@
 /**
- * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its blocks, its parent, a relation moved, its edit, and its history.
+ * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan found by its number, opened, changed, or deleted, its blocks, its parent, a relation moved, its edit, and its history.
  *
  * Every path names the plan by its id (`{id}`), which the handler reads as
  * the old routes read it: an id that is no UUID names no plan, and answers
@@ -25,7 +25,9 @@ import {
   taskBlockRequestSchema,
   taskCreateRequestSchema,
   taskDeleteAnswerSchema,
+  taskFoundAnswerSchema,
   taskListAnswerSchema,
+  taskNumberSchema,
   taskParentRequestSchema,
   taskRelationChangeRequestSchema,
   taskRestoreAnswerSchema,
@@ -56,6 +58,14 @@ const taskParams = { id: EffectSchema.String };
 /** A revision's number as a path or a query carries it, read as the whole number from one it must be. */
 const revisionSeqText = EffectSchema.NumberFromString.pipe(
   EffectSchema.decodeTo(planRevisionSeqSchema),
+);
+
+/** The most a task's number may be, Postgres's integer, so a number past it names no task rather than failing its read. */
+const MAX_TASK_NUMBER = 2_147_483_647;
+
+/** A task's number as a path carries it, read as the whole number from one it must be. */
+const taskNumberText = EffectSchema.NumberFromString.pipe(
+  EffectSchema.decodeTo(taskNumberSchema.check(EffectSchema.isLessThanOrEqualTo(MAX_TASK_NUMBER))),
 );
 
 /** The statuses a start answers: created, or a retry answered with what its first request made. */
@@ -93,6 +103,20 @@ export const tasksContract = {
     )
     .input(exactInput(taskCreateRequestSchema))
     .output(EffectSchema.flip(startedSchema)),
+  /**
+   * The task a link names by its workspace, by the slug or the id the link
+   * spells it by, and its number there (`/<slug>/task/<number>`), as its id;
+   * one the caller does not reach answers as none.
+   */
+  find: hostedProcedure
+    .meta(
+      openapi({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES}/{workspace}/tasks/{number}`,
+      }),
+    )
+    .input(EffectSchema.Struct({ workspace: EffectSchema.String, number: taskNumberText }))
+    .output(EffectSchema.flip(taskFoundAnswerSchema)),
   open: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: PLAN }))
     .input(EffectSchema.Struct(taskParams))
