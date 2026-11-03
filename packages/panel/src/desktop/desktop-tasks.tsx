@@ -1404,9 +1404,6 @@ export const DesktopTasks = memo(function DesktopTasks({
     // With no task open the column is Home, and ⌘N's dialog stands over it
     // as it stands over a task.
     case TASKS_PAGE.HOME:
-      // A launch reopening the task last open draws the window's ground
-      // alone until it opens, so Home never flashes before it.
-      if (tasks.restoring) return <div className="desktop-drag-strip" />;
       return (
         <>
           <div className="desktop-drag-strip" />

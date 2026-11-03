@@ -48,8 +48,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  * a person's page, an automation or the list, the Admin place's view, or a
  * page of Settings. The history writes that link as the step's address, so
  * the address and Copy link never disagree. A new automation's page has
- * none, nor has the home page while a launch is still reopening the task
- * last open, which stands nowhere until it opens. A narrow
+ * none. A narrow
  * room, which shows one pane at a time, names the pane it shows as the
  * step: the side panel's tab over the plan, where the tab has a link, the
  * Inbox's item standing alone (as it is in an Inbox showing one column by
@@ -329,7 +328,7 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
   if (tasks.unknownWorkspace.open) return [];
   // The Board stands over the plan, on the same terms; and with no task bound for, the window stands on the home page.
   if (tasks.boardView.open) return [at_({ kind: LINK_PLACE.BOARD }, LINK_THING.BOARD)];
-  if (tasks.boundFor === undefined && !tasks.restoring) {
+  if (tasks.boundFor === undefined) {
     return [at_({ kind: LINK_PLACE.HOME }, LINK_THING.HOME)];
   }
   return taskLinks(tasks, at);

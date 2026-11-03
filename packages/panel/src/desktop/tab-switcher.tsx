@@ -311,7 +311,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
         : { userId: personView.userId, name: personView.name, workspaceId: personView.workspaceId },
     board: tasks.boardView.open,
     automations: tasks.automationsView.open,
-    home: tasks.page === TASKS_PAGE.HOME && !tasks.adminView.open && !tasks.restoring,
+    home: tasks.page === TASKS_PAGE.HOME && !tasks.adminView.open,
     boundFor: tasks.boundFor,
     openTaskId: tasks.activeTaskId,
     column,

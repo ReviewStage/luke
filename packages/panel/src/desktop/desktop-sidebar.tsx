@@ -1856,10 +1856,10 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onGoHome();
   };
-  // Home is the place shown while no task is open, nothing stands in its
-  // place, and no launch is still reopening a task. New task's composer is
-  // on it, so its row draws no Draft pencil for the words shown there.
-  const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME && !tasks.restoring;
+  // Home is the place shown while no task is open and nothing stands in its
+  // place. New task's composer is on it, so its row draws no Draft pencil
+  // for the words shown there.
+  const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME;
   const newTaskIn = (repository: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onNewTaskIn(repository);

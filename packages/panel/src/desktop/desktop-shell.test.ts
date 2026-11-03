@@ -159,7 +159,6 @@ function shellProps(
  */
 function mount(
   inboxOpen: boolean,
-  restoring = false,
   overrides: Partial<TasksControl> = {},
   tab: PanelTab = PANEL_TAB.TASKS,
   onTabChange: (tab: PanelTab) => void = ignore,
@@ -174,7 +173,6 @@ function mount(
     const [asked, setAsked] = useState(false);
     const tasks = tasksControl({
       page: TASKS_PAGE.HOME,
-      restoring,
       inboxView: {
         open: inboxOpen,
         chosen: undefined,
@@ -207,7 +205,7 @@ function titleBarButtons(page: HTMLElement): string[] {
 
 test("while Settings is still loading its frame stands, a page of placeholder sections under the one bar Settings stands under beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
   const tabs: PanelTab[] = [];
-  const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  const page = mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
   const bars = page.querySelectorAll(
     'section[aria-label="Settings"] :is(.desktop-drag-strip, .ui-toolbar)',
@@ -439,11 +437,6 @@ test("an account with no plan is welcomed on New task's composer, and the title 
   );
 });
 
-test("while a launch reopens the plan last open, the column draws no welcome to flash before it", () => {
-  const page = mount(false, true);
-  assert.equal(page.querySelector('section[aria-label="Welcome"]'), null);
-});
-
 /** The sidebar's row named `name`: the button whose first words a reader hears are it. */
 function rowNamed(within: ParentNode, name: string): HTMLButtonElement | undefined {
   return [...within.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -463,23 +456,21 @@ function homeRow(page: HTMLElement): HTMLButtonElement {
   return placeRow(page, "Home") ?? assert.fail("the Home row stands");
 }
 
-test("the sidebar's Home row is the place shown on Home, and neither over the Inbox nor while a launch reopens a plan", () => {
+test("the sidebar's Home row is the place shown on Home, and not over the Inbox", () => {
   assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
   act(() => root?.unmount());
   assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
-  act(() => root?.unmount());
-  assert.equal(homeRow(mount(false, true)).getAttribute("aria-current"), null);
 });
 
 test("Home, pressed or by its chord from Settings, brings the Tasks tab forward on Home", () => {
   let home = 0;
   const tabs: PanelTab[] = [];
-  mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  mount(false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   act(() => runAppCommand(APP_COMMAND.HOME));
   assert.deepEqual([home, tabs], [1, [PANEL_TAB.TASKS]]);
   act(() => root?.unmount());
 
-  const tasks = mount(false, false, { onGoHome: () => (home += 1) });
+  const tasks = mount(false, { onGoHome: () => (home += 1) });
   act(() => homeRow(tasks).click());
   assert.equal(home, 2);
 });
@@ -496,7 +487,6 @@ test("the window is called by what stands in it: the plan on screen in its own w
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
-      false,
       {
         signedIn,
         workspaces,
@@ -521,7 +511,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
     [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Vespin", DOCUMENT_NAME],
   );
 
-  mount(false, false, {
+  mount(false, {
     workspaces: [ACME],
     workspace: ACME,
     automationsView: { ...tasksControl().automationsView, open: true },
@@ -536,7 +526,6 @@ test("a plan opened with its Inbox tab shown rather than its plan is read at onc
     window.localStorage.setItem("app.planLooksSeeded", "1");
     const page = mount(
       inboxOpen,
-      false,
       {
         page: TASKS_PAGE.DOCUMENT,
         tasks: [DOCUMENT_TASK],
@@ -700,7 +689,7 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
 
 test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   const told: SidebarCollapse["overlay"][] = [];
-  const page = mount(false, false, {}, PANEL_TAB.TASKS, ignore, {
+  const page = mount(false, {}, PANEL_TAB.TASKS, ignore, {
     overlay: SIDEBAR_OVERLAY.OPEN,
     onOverlay: (next) => told.push(next),
   });
@@ -909,7 +898,7 @@ test("⇧⌘B opens the Tasks page, bringing the Tasks tab forward from Settings
   handState({});
   const went: string[] = [];
   const boardView = { ...tasksControl().boardView, onOpen: () => went.push("tasks page") };
-  mount(false, false, { boardView }, PANEL_TAB.SETTINGS, (tab) => went.push(tab));
+  mount(false, { boardView }, PANEL_TAB.SETTINGS, (tab) => went.push(tab));
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.TASKS), true);
   assert.deepEqual(went, [PANEL_TAB.TASKS, "tasks page"]);
@@ -934,7 +923,6 @@ test("while the Automations pages are still loading their frame stands the list 
   handState({});
   mount(
     false,
-    false,
     { workspaces: [ACME], workspace: ACME, automationsView },
     PANEL_TAB.TASKS,
     ignore,
@@ -947,7 +935,6 @@ test("while the Automations pages are still loading their frame stands the list 
 
   // Note that the window's state has landed in the registry, so Automations opens within one render, before their chunk can.
   const page = mount(
-    false,
     false,
     { workspaces: [ACME], workspace: ACME, automationsView: { ...automationsView, open: true } },
     PANEL_TAB.TASKS,
@@ -973,7 +960,7 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
   handState({});
-  const page = mount(false, false, { history });
+  const page = mount(false, { history });
   const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
   assert.ok(versions, "the versions' column stands");
   assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
@@ -1021,7 +1008,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   };
 
   handState({});
-  const page = mount(false, false, overrides);
+  const page = mount(false, overrides);
   await settle();
   assert.ok(page.querySelector("section[aria-label=Automations]"));
   assert.equal(document.title, "Automations — Acme");
@@ -1253,7 +1240,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
 test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
   const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
-  const page = mount(false, false, {
+  const page = mount(false, {
     page: TASKS_PAGE.DOCUMENT,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     tasks: [DOCUMENT_TASK],
@@ -1285,14 +1272,14 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   let opened = 0;
   const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
   handState({}, { access: { admin: false } });
-  mount(false, false, { adminView });
+  mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), false);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   handState({}, { access: { admin: true } });
-  mount(false, false, { adminView });
+  mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), true);
   assert.equal(opened, 1);
@@ -1300,7 +1287,7 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
 
 test("Admin stands in the plan's place beside the sidebar, its row marked, with no way back of its own", async () => {
   handState({}, { access: { admin: true } });
-  const page = mount(false, false, { adminView: { ...tasksControl().adminView, open: true } });
+  const page = mount(false, { adminView: { ...tasksControl().adminView, open: true } });
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
   assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page");

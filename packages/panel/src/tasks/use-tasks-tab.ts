@@ -175,7 +175,6 @@ import type { ThreadReveal } from "./thread-reveal.js";
 import { type AgentsControl, type ModelsRead, readAgentById, useAgents } from "./use-agents.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
-import { useLastTask } from "./use-last-task.js";
 import {
   type MainTab,
   type MainTabsControl,
@@ -556,8 +555,6 @@ export interface NewTaskStart {
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
   page: TasksPage;
-  /** Whether a launch is still opening the task last open, while the page with no task open waits rather than flash before it (`use-last-task.ts`). */
-  restoring: boolean;
   /**
    * The line New task's agent start under way opens its agent on, which the
    * window draws on a task's page in its shape until the start answers
@@ -2230,16 +2227,6 @@ export function useTasksTab(input: {
   // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
   const restoreNow = useRef(restoreStatuses);
   restoreNow.current = restoreStatuses;
-  const { restoring, forgo: forgoReopen } = useLastTask({
-    staged: fixture !== undefined,
-    account: input.account,
-    tasks: tasks.tasks,
-    listStatus: tasks.listStatus,
-    openTaskId,
-    boundFor,
-    narrow: input.room === SHELL_ROOM.NARROW,
-    select,
-  });
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
@@ -3048,9 +3035,6 @@ export function useTasksTab(input: {
   const openPlace = ({ workspace, place }: ReadLink) => {
     // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
     navigations.current += 1;
-    // Note that every link stands over the launch's reopen of the task last open, since a fresh tab's address may name any
-    // place, and a reopen landing while a link's read is out would take the window from under the place it names.
-    forgoReopen();
     switch (place.kind) {
       // A step naming no workspace of the reader's, by id, slug, or former slug, is not there for them, so it stands as not
       // found rather than opening the listed workspace or where the window rests.
@@ -3420,7 +3404,6 @@ export function useTasksTab(input: {
 
   return useSteadyDoors({
     page,
-    restoring,
     starting,
     shown,
     signedIn,

@@ -1210,7 +1210,6 @@ export function useWindowHistory(input: {
     | "boardView"
     | "unknownWorkspace"
     | "adminView"
-    | "restoring"
     | "leaveGuard"
     | "sidePanel"
     | "mainTabs"
@@ -1269,9 +1268,7 @@ export function useWindowHistory(input: {
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
   const adminAccess = adminOn || adminPending;
-  // A launch reopening the task last open stands nowhere until it opens, so
-  // the home page it waits on is no place to go back to.
-  const known = input.known && !tasks.restoring;
+  const known = input.known;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const task of tasks.tasks) everListed.add(task.id);
@@ -1553,7 +1550,7 @@ export function useWindowHistory(input: {
       }
       up({ kind: PLACE_KIND.TASK, taskId: boundFor, panel: { open: false, tab: undefined } }, shut);
     },
-    // Note that a task with no step behind it, as one a launch reopened or a link loaded, is left as ever.
+    // Note that a task with no step behind it, as one a reloaded tab or a link loaded, is left as ever.
     task: () => {
       if (!stepBack()) tasks.onLeaveTask();
     },

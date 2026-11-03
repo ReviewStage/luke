@@ -233,7 +233,6 @@ export function agentHoldingsOf(
 export function tasksControl(overrides: Partial<TasksControl> = {}): TasksControl {
   return {
     page: TASKS_PAGE.HOME,
-    restoring: false,
     starting: undefined,
     shown: true,
     signedIn: true,
