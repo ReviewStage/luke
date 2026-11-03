@@ -90,7 +90,7 @@ export type TextElement = (typeof TEXT_ELEMENT)[keyof typeof TEXT_ELEMENT];
 
 /** What every role is drawn with: no margin, words broken anywhere at the box's edge, and a tone or a face asked on the element over the role's own. */
 const TEXT_BASE =
-  "luke-text m-0 wrap-anywhere data-[tone=muted]:text-muted-foreground data-[font=mono]:font-mono";
+  "ui-text m-0 wrap-anywhere data-[tone=muted]:text-muted-foreground data-[font=mono]:font-mono";
 
 /** A role's own type, face, and ink; `inherit` takes all three from around it, and a group's heading is a tone below the words it heads. */
 function roleClass(variant: TextVariant): string {

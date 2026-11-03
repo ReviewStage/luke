@@ -79,7 +79,7 @@ export const STYLE_RULES: Readonly<
   },
   [STYLE_RULE.BAR_CORNER]: {
     refuses:
-      "a corner radius on a bar's own box (`.luke-pane-bar`, `.luke-toolbar`), in a stylesheet or as a `rounded-*` beside its class: the sheet rounds the bar standing at its top, once, in `packages/panel/src/styles/shell.css` (\"The sheet's top\"), so no page rounds its own",
+      "a corner radius on a bar's own box (`.ui-pane-bar`, `.ui-toolbar`), in a stylesheet or as a `rounded-*` beside its class: the sheet rounds the bar standing at its top, once, in `packages/panel/src/styles/shell.css` (\"The sheet's top\"), so no page rounds its own",
     backlog: false,
   },
   [STYLE_RULE.CRUMB_WIDTH]: {
@@ -465,7 +465,7 @@ function holdsForeignInk(block: CssBlock, property: string): boolean {
 const POINTER_CURSOR = /(?<![\w-])pointer(?![\w-])/u;
 
 /** A selector or a Tailwind variant that picks a profile, as a cursor of its own per app would. */
-const PROFILE_PICK = /luke-profile/u;
+const PROFILE_PICK = /ui-profile/u;
 
 /**
  * Whether a declaration chooses its own cursor where the one rule goes: the
@@ -479,7 +479,7 @@ function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
 }
 
 /** A path's landmark, whose list items are its crumbs (`@luke/ui`'s `Breadcrumbs`). */
-const PATH_CLASS = /\.luke-breadcrumbs\b/u;
+const PATH_CLASS = /\.ui-breadcrumbs\b/u;
 
 /** A selector with what its brackets and parentheses hold taken out, so `:has(> .x)` splits as one compound. */
 function withoutArguments(selector: string): string {
@@ -571,7 +571,7 @@ function widensCrumb(declaration: CssDeclaration, block: CssBlock, capped: boole
 }
 
 /** The classes a bar's own box wears: `PaneBar`'s and `Toolbar`'s. */
-const BAR_CLASS = /\.luke-(?:pane-bar|toolbar)(?![\w-])/u;
+const BAR_CLASS = /\.ui-(?:pane-bar|toolbar)(?![\w-])/u;
 
 /** The sheet that rounds a bar at a sheet's top, and the radius its one rule publishes there. */
 const SHEET_CORNER_FILE = "packages/panel/src/styles/shell.css";

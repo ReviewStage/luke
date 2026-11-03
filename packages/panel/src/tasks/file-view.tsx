@@ -265,7 +265,7 @@ const BESIDE_TOGGLE = '.file-tree-toggle[data-place="beside"]';
 const OVER_TOGGLE = '.file-tree-toggle[data-place="over"]';
 
 /** The pane floated over the tab, whose box the pointer may be in. */
-const OVER_PANE = ".luke-over-pane";
+const OVER_PANE = ".ui-over-pane";
 
 /** The strip a closed pane may leave in its place, which peeks the pane over the tab (`changes-strip.tsx`). */
 const PANE_STRIP = ".file-tree-strip";

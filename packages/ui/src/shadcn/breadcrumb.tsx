@@ -69,7 +69,7 @@ function BreadcrumbLink({ className, render, ...props }: useRender.ComponentProp
     props: mergeProps<"a">(
       {
         className: cn(
-          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-fill-selected [&:hover]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]",
+          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-fill-selected [&:hover]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag]",
           className,
         ),
       },

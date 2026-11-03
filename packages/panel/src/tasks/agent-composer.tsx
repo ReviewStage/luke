@@ -804,7 +804,7 @@ export function AgentComposer({
     const more = card.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const press = more?.querySelector<HTMLElement>("button") ?? null;
     const returning =
-      !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
+      !open && (document.activeElement?.closest(".ui-anchored-popover") ?? null) !== null;
     set(open);
     if (returning && more !== null && press !== null && getComputedStyle(more).display !== "none") {
       queueMicrotask(() => press.focus());

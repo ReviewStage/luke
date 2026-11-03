@@ -56,7 +56,7 @@ export function LinkField({
   }
   const linked = href !== undefined;
   return (
-    <MenuSurface ref={ref} className="luke-link-field" flow={MENU_SURFACE_FLOW.ROW}>
+    <MenuSurface ref={ref} className="ui-link-field" flow={MENU_SURFACE_FLOW.ROW}>
       <TextField
         label={LINK_FIELD_WORDS.LABEL}
         type={TEXT_FIELD_TYPE.URL}

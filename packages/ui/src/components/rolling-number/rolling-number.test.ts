@@ -40,14 +40,14 @@ function drawn(value: number): { view: HTMLElement; to: (next: number) => void }
 
 /** The digits rolling in, by their way. */
 function rolling(view: HTMLElement): string[] {
-  return [...view.querySelectorAll(".luke-rolling-number-digit[data-roll]")].map(
+  return [...view.querySelectorAll(".ui-rolling-number-digit[data-roll]")].map(
     (digit) => `${digit.textContent ?? ""}:${digit.getAttribute("data-roll") ?? ""}`,
   );
 }
 
 /** The digits leaving, by their way. */
 function leaving(view: HTMLElement): string[] {
-  return [...view.querySelectorAll(".luke-rolling-number-leaving")].map(
+  return [...view.querySelectorAll(".ui-rolling-number-leaving")].map(
     (digit) => `${digit.getAttribute("data-digit") ?? ""}:${digit.getAttribute("data-roll") ?? ""}`,
   );
 }
@@ -84,7 +84,7 @@ test("a count that falls rolls down, and one that gains a digit rolls the new on
 test("a digit leaving is taken out once its exit has run, the one arriving left as it is", () => {
   const { view, to } = drawn(4);
   to(5);
-  const exit = view.querySelector(".luke-rolling-number-leaving") ?? assert.fail("a digit leaving");
+  const exit = view.querySelector(".ui-rolling-number-leaving") ?? assert.fail("a digit leaving");
   act(() => {
     // Note that React hears the end under whichever name the engine says it has, which jsdom leaves it to guess.
     for (const name of ["animationend", "webkitAnimationEnd"]) {

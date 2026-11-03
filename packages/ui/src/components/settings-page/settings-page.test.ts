@@ -119,7 +119,7 @@ test("on a phone the bar names the page and ends with its actions, and the page 
   ]);
   expect(container.querySelectorAll("h1").length).toBe(1);
   expect(bar?.querySelector("h1")?.textContent).toBe("Voice");
-  expect(container.querySelector(".luke-settings-page-head")?.textContent).toBe("Kept on this Mac");
+  expect(container.querySelector(".ui-settings-page-head")?.textContent).toBe("Kept on this Mac");
 });
 
 test("a page with no actions holds only its title in its head", async () => {

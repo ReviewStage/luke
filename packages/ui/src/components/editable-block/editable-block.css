@@ -3,17 +3,17 @@
    edits them, and a block the keyboard selects wears a soft tint of the
    focus colour a little past its words, as a document editor marks a
    selected block. */
-.luke-editable-block {
+.ui-editable-block {
   position: relative;
   isolation: isolate;
   cursor: text;
 }
 
-.luke-editable-block:focus-visible {
+.ui-editable-block:focus-visible {
   outline: none; /* no ring: the tint below marks the block */
 }
 
-.luke-editable-block:focus-visible::before {
+.ui-editable-block:focus-visible::before {
   position: absolute;
   z-index: -1;
   inset: calc(var(--ui-space-2) * -1) calc(var(--ui-space-6) * -1);

@@ -264,7 +264,7 @@ const EFFORTS = [
 ] as const;
 
 /** The attribute the panel's shell marks the document's root with in a phone's layout (`stage-room.ts`). */
-const ROOM_ATTRIBUTE = "data-luke-room";
+const ROOM_ATTRIBUTE = "data-ui-room";
 
 /** The model menu from a button that opens it as a phone's layout does, as a sheet. */
 function PhoneSheet(): React.JSX.Element {

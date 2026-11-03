@@ -174,7 +174,7 @@ test("on a phone a revision's sections are headed by the way back to every versi
 
   assert.deepEqual(readPhoneHead(view, "version-log").start, ["All versions"]);
   assert.ok(
-    ![...view.querySelectorAll(".luke-nav-item-name")].some(
+    ![...view.querySelectorAll(".ui-nav-item-name")].some(
       (each) => each.textContent === "All versions",
     ),
     "no All versions row",

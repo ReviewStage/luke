@@ -64,7 +64,7 @@ function pressK(held: "ctrlKey" | "metaKey"): void {
 
 /** The palette's hint as its keys read, one word or glyph to a key. */
 function hint(): string {
-  return [...document.querySelectorAll(".luke-shortcut-glyph")]
+  return [...document.querySelectorAll(".ui-shortcut-glyph")]
     .map((glyph) => glyph.textContent)
     .join(" ");
 }

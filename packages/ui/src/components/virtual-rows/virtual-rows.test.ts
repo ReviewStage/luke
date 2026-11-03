@@ -76,7 +76,7 @@ test("a run read from its top, placed by a box inside its scroller, draws the ro
   vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
-    if (this.classList.contains("luke-virtual-rows")) return box("body");
+    if (this.classList.contains("ui-virtual-rows")) return box("body");
     return this.id === "body" || this.id === "scroller" ? box("list") : null;
   });
   vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (

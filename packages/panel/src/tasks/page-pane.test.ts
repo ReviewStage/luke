@@ -308,7 +308,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+  return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
 }
 
@@ -550,7 +550,7 @@ test("Comment asks the frame for an element, an element holding threads is pinne
     { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.STOP },
   ]);
   assert.ok(
-    container.querySelector('button.luke-comment-pin[aria-label="1 comment"]'),
+    container.querySelector('button.ui-comment-pin[aria-label="1 comment"]'),
     "the element is pinned",
   );
   const field = container.querySelector(".page-comment-float");
@@ -560,7 +560,7 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   // A press in the page, selecting nothing, is a press away, which lets go of a comment holding no words of its own.
   postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, pressed: true });
   const standing = container.querySelector(
-    ".luke-rect-float:not([data-leaving]) .page-comment-float",
+    ".ui-rect-float:not([data-leaving]) .page-comment-float",
   );
   assert.ok(standing === null, "the comment being started goes");
 });

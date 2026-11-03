@@ -136,7 +136,7 @@ test("an inbox item's code is a code card: its header names the file and the lin
   const copied: string[] = [];
   fakeAppPlatform(copyingInto(copied));
   const container = await draw(inboxCode());
-  const head = container.querySelector(".luke-code-card figcaption") ?? assert.fail("no header");
+  const head = container.querySelector(".ui-code-card figcaption") ?? assert.fail("no header");
   assert.match(head.textContent ?? "", /seats\.ts/u);
   assert.match(head.textContent ?? "", /Line 5/u);
   assert.ok(head.querySelector('button[aria-label="Open file"]'), "the file opens from the header");

@@ -66,7 +66,7 @@ function heightOf(element: Element): number {
 /** Where the layout given draws an element's top: under what is laid out before it in its parent. */
 function topOf(element: Element): number {
   const parent = element.parentElement;
-  if (parent === null || element.matches(".luke-settings-section-card")) return 0;
+  if (parent === null || element.matches(".ui-settings-section-card")) return 0;
   if (element instanceof HTMLElement && element.style.position === "absolute") {
     return topOf(parent) + Number.parseFloat(element.style.top);
   }
@@ -138,7 +138,7 @@ function rowOf(words: string): Element | undefined {
 
 /** The box a reveal draws its rows in, by the words of its first. */
 function boxOf(words: string): Element | null | undefined {
-  return rowOf(words)?.closest(".luke-reveal");
+  return rowOf(words)?.closest(".ui-reveal");
 }
 
 /** The motions played on `element`, by their keyframes. */

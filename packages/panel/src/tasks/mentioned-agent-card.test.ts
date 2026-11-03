@@ -307,21 +307,19 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the agent is drawn as its chip");
   restOn(chip);
   await settle();
-  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     agent: card.matches("[data-agent-card]"),
     pullRequest: card.matches("[data-pull-request-card]"),
     reading: card.matches("[data-hover-card-skeleton]"),
-    led: card.querySelector(".luke-hover-card-lead") !== null,
+    led: card.querySelector(".ui-hover-card-lead") !== null,
     actor: card.getAttribute("data-actor-card") ?? undefined,
-    name: card.querySelector(".luke-hover-card-name")?.textContent,
+    name: card.querySelector(".ui-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
-    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
-    working:
-      card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
-    foot: card.querySelector(".luke-hover-card-row:last-child .luke-hover-card-row-label")
-      ?.textContent,
+    corner: card.querySelector(".ui-hover-card-corner")?.textContent,
+    working: card.querySelector('.ui-hover-card-lead .state-glyph[data-state="working"]') !== null,
+    foot: card.querySelector(".ui-hover-card-row:last-child .ui-hover-card-row-label")?.textContent,
     words: card.textContent,
   };
   act(() => {
@@ -344,7 +342,7 @@ test("a chip of an agent the window lists not reads the workspace's agents its n
   const chip = container.querySelector("[data-mention-ref]") ?? undefined;
 
   assert.ok(
-    chip?.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
+    chip?.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
     "the chip wears its harness",
   );
   const card = await cardOf(chip);
@@ -385,7 +383,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
   );
 
   assert.ok(
-    container.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
+    container.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
     "the box's chip wears its harness",
   );
 });
@@ -418,7 +416,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
   );
 
   assert.ok(
-    container.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
+    container.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
     "the box's chip wears its harness",
   );
 });

@@ -55,7 +55,7 @@ async function drawn(element: ReactElement): Promise<HTMLElement> {
 
 /** Each row of the block drawn, as what it does and the words it shows. */
 function rowsOf(drawing: HTMLElement): { kind: string | null; text: string | null }[] {
-  return [...drawing.querySelectorAll(".luke-code-card-row")].map((row) => ({
+  return [...drawing.querySelectorAll(".ui-code-card-row")].map((row) => ({
     kind: row.getAttribute("data-row"),
     text: row.textContent,
   }));

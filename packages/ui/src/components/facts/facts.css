@@ -3,7 +3,7 @@
    set under what stands over it. */
 
 @layer components {
-  .luke-facts {
+  .ui-facts {
     display: flex;
     min-width: 0;
     flex-direction: column;
@@ -12,25 +12,25 @@
     padding: 0;
   }
 
-  .luke-facts[data-ruled="true"] {
+  .ui-facts[data-ruled="true"] {
     padding-top: var(--ui-space-12);
     border-top: 1px solid var(--ui-color-border);
   }
 
-  .luke-fact {
+  .ui-fact {
     display: flex;
     align-items: center;
     gap: var(--ui-icon-gap);
   }
 
-  .luke-fact-label {
+  .ui-fact-label {
     flex: 1;
     min-width: 0;
     margin: 0;
     color: var(--ui-color-text-muted);
   }
 
-  .luke-fact-value {
+  .ui-fact-value {
     margin: 0;
     font-variant-numeric: tabular-nums;
   }

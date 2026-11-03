@@ -99,7 +99,7 @@ const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
  * slide stays in `over-pane.css`, keyframes being what a utility cannot say.
  */
 const PANE =
-  "luke-over-pane absolute inset-y-0 z-1 flex w-over-pane min-w-0 flex-col bg-popover shadow-menu outline-none data-[width=column]:w-over-pane-column data-[width=full]:w-full data-[width=full]:shadow-none data-[edge=left]:left-0 data-[edge=left]:not-data-[width=full]:border-r data-[edge=left]:border-border-strong data-[edge=right]:right-0 data-[edge=right]:not-data-[width=full]:border-l data-[edge=right]:border-border-strong";
+  "ui-over-pane absolute inset-y-0 z-1 flex w-over-pane min-w-0 flex-col bg-popover shadow-menu outline-none data-[width=column]:w-over-pane-column data-[width=full]:w-full data-[width=full]:shadow-none data-[edge=left]:left-0 data-[edge=left]:not-data-[width=full]:border-r data-[edge=left]:border-border-strong data-[edge=right]:right-0 data-[edge=right]:not-data-[width=full]:border-l data-[edge=right]:border-border-strong";
 
 /**
  * How long the pane's slide out runs, read as the token stands on the body,
@@ -246,7 +246,7 @@ function useEscapedPeek(peeking: boolean, onClose: () => void): void {
     const onEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
       const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest(`${KEY_LAYERS}, .luke-over-pane`) != null) return;
+      if (target?.closest(`${KEY_LAYERS}, .ui-over-pane`) != null) return;
       event.preventDefault();
       close.current();
     };

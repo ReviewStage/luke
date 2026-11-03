@@ -343,7 +343,7 @@ function VersionPageFrame({
 }): React.JSX.Element {
   // Note that only a phone leads the bar with a way back, the version standing there alone.
   const titled = (
-    <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
+    <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="ui-toolbar-title">
       {title}
     </OneLine>
   );

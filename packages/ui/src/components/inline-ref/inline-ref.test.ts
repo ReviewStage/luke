@@ -141,7 +141,7 @@ test("a reader hears its kind before its name, where its glyph says it to the ey
     }),
   );
   const button = view.querySelector("button") ?? assert.fail("the token is a button");
-  assert.equal(button.querySelector(".luke-inline-ref-glyph")?.getAttribute("aria-hidden"), "true");
+  assert.equal(button.querySelector(".ui-inline-ref-glyph")?.getAttribute("aria-hidden"), "true");
   assert.equal(button.textContent, "pull request #42 Fix the refreshOpen");
 });
 

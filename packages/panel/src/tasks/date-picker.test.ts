@@ -278,7 +278,7 @@ test("a day picked names the chip anew in place once the picker closes, and undo
   pickDay(dialog, "Saturday, October 24, 2026");
   await pressKey(dialog, "Escape");
   const picked = mentionsIn(editor);
-  const chip = chipIn(container).querySelector(".luke-inline-ref-label")?.textContent;
+  const chip = chipIn(container).querySelector(".ui-inline-ref-label")?.textContent;
   act(() => {
     editor.commands.undo();
   });
@@ -313,7 +313,7 @@ test("End date switched on and closed at once writes the range it shows, to the 
   const end = fieldOf(dialog, "End");
   const shown = [start.value, end.value];
   // Note that each date stands in its field, under its name, so the row is the line the two fields share.
-  const oneRow = start.closest(".luke-inline") === end.closest(".luke-inline");
+  const oneRow = start.closest(".ui-inline") === end.closest(".ui-inline");
   await pressKey(dialog, "Escape");
 
   assert.deepEqual(shown, ["Oct 23, 2026", "Oct 24, 2026"]);
@@ -388,7 +388,7 @@ test("Include time puts a time on the day, spelled with the offset the reader's 
   assert.equal(mention?.target, `luke://date/2026-10-23T09:00${offset}`);
   assert.match(mention?.name ?? "", /^Oct 23, 2026, 9:00 AM /u);
   assert.equal(
-    chipIn(container).querySelector(".luke-inline-ref-label")?.textContent,
+    chipIn(container).querySelector(".ui-inline-ref-label")?.textContent,
     "Friday 9:00 AM",
   );
 });
@@ -528,7 +528,7 @@ test("words naming a time typed into a day's field put the time on, the date wri
 
   assert.match(mention?.target ?? "", /^luke:\/\/date\/2026-10-28T15:00[+-]\d\d:\d\d$/u);
   assert.equal(
-    chipIn(container).querySelector(".luke-inline-ref-label")?.textContent,
+    chipIn(container).querySelector(".ui-inline-ref-label")?.textContent,
     "Oct 28 3:00 PM",
   );
 });
@@ -662,7 +662,7 @@ test("a day picked from the plan at rest saves the plan with the date named anew
 
 test("a day picked from the plan at rest whose save is refused leaves the date as it was and says the plan could not be saved", async () => {
   const { container, saves } = drawnAtRest();
-  const before = chipAtRest(container).querySelector(".luke-inline-ref-label")?.textContent;
+  const before = chipAtRest(container).querySelector(".ui-inline-ref-label")?.textContent;
 
   act(() => chipAtRest(container).click());
   await act(async () => undefined);
@@ -676,7 +676,7 @@ test("a day picked from the plan at rest whose save is refused leaves the date a
 
   assert.equal(saves.length, 1, "the save was asked");
   assert.equal(
-    chipAtRest(container).querySelector(".luke-inline-ref-label")?.textContent,
+    chipAtRest(container).querySelector(".ui-inline-ref-label")?.textContent,
     before,
     "the chip names the date as it was",
   );
@@ -815,7 +815,7 @@ test("a date chip in a plan that takes no change opens no picker", () => {
   act(() => chip.click());
 
   assert.equal(chip.tagName, "SPAN");
-  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Friday");
+  assert.equal(chip.querySelector(".ui-inline-ref-label")?.textContent, "Friday");
   assert.equal(picker(container), null);
 });
 
@@ -828,7 +828,7 @@ test("Pick a date in the @ list narrowed to dates opens the picker, and the day 
     editor.view.dispatch(editor.state.tr.insertText(" Due @dates:"));
   });
   await act(async () => undefined);
-  const rows = [...container.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+  const rows = [...container.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (row) => row.textContent,
   );
   const key = (name: string) =>

@@ -243,7 +243,7 @@ test("a plan's Inbox tab whose read holds nothing says Nothing here under the In
   const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
   assert.ok(tab, "the plan's Inbox tab");
   assert.match(tab.textContent ?? "", /Nothing here/u);
-  assert.equal(tab.querySelector(".luke-empty-state button"), null, "it offers no press");
+  assert.equal(tab.querySelector(".ui-empty-state button"), null, "it offers no press");
   // Too narrow for the pane beside it, the list standing alone says so.
   vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ width: 700, height: 800 }),
@@ -256,7 +256,7 @@ test("a plan's Inbox tab whose read holds nothing says Nothing here under the In
   assert.equal(
     shown
       .find((column) => column.classList.contains("inbox-tasks"))
-      ?.querySelector(".luke-empty-state")?.textContent,
+      ?.querySelector(".ui-empty-state")?.textContent,
     "Nothing here",
     "the list standing alone stands the Inbox's empty state",
   );
@@ -400,12 +400,12 @@ async function narrowTaskInbox(
     title: () => tab.querySelector("[data-inbox-title]")?.textContent,
     /** The list's head as a reader meets it: its name, and whether it offers a view's menu. */
     head: () => [
-      tab.querySelector(".inbox-tasks .luke-pane-bar-title")?.textContent,
+      tab.querySelector(".inbox-tasks .ui-pane-bar-title")?.textContent,
       tab.querySelector('button[aria-label="View options"]') !== null,
     ],
     rows: () =>
-      [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
-    pager: () => tab.querySelector(".luke-pager-count")?.textContent ?? null,
+      [...tab.querySelectorAll(".inbox-tasks .ui-list-row-title")].map((row) => row.textContent),
+    pager: () => tab.querySelector(".ui-pager-count")?.textContent ?? null,
     /** What the list's foot says of a refresh that did not land, and whether it offers Retry. */
     refreshFailure: () => {
       const alert = tab.querySelector('.inbox-tasks [role="alert"]');
@@ -415,13 +415,13 @@ async function narrowTaskInbox(
       return [alert?.firstElementChild?.nextElementSibling?.textContent ?? null, retry];
     },
     back: () =>
-      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button")].find(
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .ui-toolbar button")].find(
         (button) => button.textContent === "Inbox",
       ) ?? null,
     row: (title: string) =>
-      [
-        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
-      ].find((each) => each.textContent?.includes(title)),
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main")].find(
+        (each) => each.textContent?.includes(title),
+      ),
     unmount: () => {
       act(() => root.unmount());
       container.remove();
@@ -548,10 +548,10 @@ test("while a task's Inbox is first read, its list stands placeholder rows under
   const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
   assert.equal(wait?.textContent, "Reading your inbox…");
   assert.ok(
-    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    (wait?.querySelectorAll(".ui-list-row .ui-skeleton").length ?? 0) > 0,
     "placeholder rows stand in the items' place",
   );
-  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+  assert.equal(list.querySelector(".ui-spinner"), null, "no ring stands in the list's corner");
 
   await read.settle({ items: [asked], cursor: "1" });
   assert.equal(list.querySelector('[aria-busy="true"]'), null);
@@ -754,7 +754,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   );
   const chip = (name: string) =>
     [...container.querySelectorAll<HTMLButtonElement>(".desktop-document [data-mention-ref]")].find(
-      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
+      (each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#42");

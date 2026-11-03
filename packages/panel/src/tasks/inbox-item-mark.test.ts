@@ -99,7 +99,7 @@ test("an item an archived agent posted wears the harness that agent ran on, read
   });
 
   assert.ok(
-    container.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    container.querySelector(".actor-mark .ui-harness-mark[data-provider='openai']"),
     "the row wears Codex's mark",
   );
 });

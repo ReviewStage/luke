@@ -234,5 +234,5 @@ test("a Settings row keeps its ⋯, named for its menu, and says so on the point
   restOn(ellipsis);
 
   assert.equal(ellipsis.textContent, "", "with no words of its own");
-  assert.equal(document.querySelector(".luke-tooltip")?.textContent, "Linear actions");
+  assert.equal(document.querySelector(".ui-tooltip")?.textContent, "Linear actions");
 });

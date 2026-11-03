@@ -80,7 +80,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   window[mark] = true;
   const svg = "http://www.w3.org/2000/svg";
   const host = document.createElement("div");
-  host.setAttribute("data-luke-recording-cursor", "");
+  host.setAttribute("data-ui-recording-cursor", "");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });

@@ -145,7 +145,7 @@ test("a model nothing pays for says Connect Claude, and its pick lands on Claude
 test("a choice nothing pays for says it cannot run under the pinned rows, and their Connect lands on Claude's row", () => {
   const { menu, opened, chose } = open(OPUS);
 
-  const foot = menu.querySelector<HTMLElement>(".luke-searchable-menu-foot");
+  const foot = menu.querySelector<HTMLElement>(".ui-searchable-menu-foot");
   assert.ok(foot, "the pinned rows stand");
   assert.match(
     foot.textContent ?? "",
@@ -164,7 +164,7 @@ test("a choice nothing pays for says it cannot run under the pinned rows, and th
 test("a running agent's chip says nothing of connecting for a model the reader's account lacks, since its starter's credentials pay, and keeps its plan's line", () => {
   const { menu } = open(OPUS, OWNER.CHIP);
 
-  const foot = menu.querySelector<HTMLElement>(".luke-searchable-menu-foot")?.textContent ?? "";
+  const foot = menu.querySelector<HTMLElement>(".ui-searchable-menu-foot")?.textContent ?? "";
   assert.doesNotMatch(foot, /cannot run|Connect/u);
   assert.match(foot, /Using ChatGPT plan/u);
 });
@@ -172,6 +172,6 @@ test("a running agent's chip says nothing of connecting for a model the reader's
 test("a choice something pays for says nothing of connecting", () => {
   const { menu } = open(GPT);
 
-  const foot = menu.querySelector<HTMLElement>(".luke-searchable-menu-foot")?.textContent ?? "";
+  const foot = menu.querySelector<HTMLElement>(".ui-searchable-menu-foot")?.textContent ?? "";
   assert.doesNotMatch(foot, /cannot run|Connect/u);
 });

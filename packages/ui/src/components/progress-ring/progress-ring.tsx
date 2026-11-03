@@ -57,7 +57,7 @@ export function ProgressRing({
   const filled = Math.min(1, Math.max(0, share)) * RING_LENGTH;
   return (
     <svg
-      className="luke-progress-ring size-control-icon flex-none -rotate-90 fill-none"
+      className="ui-progress-ring size-control-icon flex-none -rotate-90 fill-none"
       viewBox="0 0 16 16"
       aria-hidden="true"
     >
@@ -112,13 +112,13 @@ export function ProgressCount({
   );
   if (look === PROGRESS_COUNT_LOOK.BADGE) {
     return (
-      <span className="luke-progress-count inline-flex flex-none tabular-nums">
+      <span className="ui-progress-count inline-flex flex-none tabular-nums">
         <Badge icon={ring}>{figures}</Badge>
       </span>
     );
   }
   return (
-    <span className="luke-progress-count inline-flex flex-none items-center gap-tight-gap text-caption-inline text-muted-foreground tabular-nums">
+    <span className="ui-progress-count inline-flex flex-none items-center gap-tight-gap text-caption-inline text-muted-foreground tabular-nums">
       {ring}
       {figures}
     </span>

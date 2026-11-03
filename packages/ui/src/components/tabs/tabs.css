@@ -11,7 +11,7 @@
      strip asks room for all of them at that width by their count
      (`--ui-tab-count`, the one thing it is told), giving way from there;
    - a tab other than the chosen one gives way as the strip's `data-fold`
-     says: below 72px as its glyph alone (`@container luke-tab`), or keeping
+     says: below 72px as its glyph alone (`@container ui-tab`), or keeping
      a short label while the strip scrolls;
    - the chosen tab keeps its glyph, its label, and its × at a share of its
      own;
@@ -29,7 +29,7 @@
    query. */
 
 @layer components {
-  .luke-tabs {
+  .ui-tabs {
     --ui-tab-widest: 200px;
     /* What the strip's fades and the pinned tab paint over the tabs passing
        beneath them: a side panel's well, or a column's ground. */
@@ -50,11 +50,11 @@
     padding: var(--ui-space-8) var(--ui-focus-ring-reach);
   }
 
-  .luke-tabs[data-ground="ground"] {
+  .ui-tabs[data-ground="ground"] {
     --ui-tabs-ground: var(--ui-color-ground);
   }
 
-  .luke-tabs[data-ground="frame"] {
+  .ui-tabs[data-ground="frame"] {
     --ui-tabs-ground: var(--ui-color-sidebar);
   }
 
@@ -69,8 +69,8 @@
      first tab and the last. An engine with no scroll timelines draws no
      fade, rather than running the animation once and keeping its last
      frame. */
-  .luke-tabs::before,
-  .luke-tabs::after {
+  .ui-tabs::before,
+  .ui-tabs::after {
     position: sticky;
     z-index: 1;
     flex: 0 0 var(--ui-scroll-fade);
@@ -80,38 +80,38 @@
     pointer-events: none;
   }
 
-  .luke-tabs::before {
+  .ui-tabs::before {
     left: calc(-1 * var(--ui-focus-ring-reach));
     margin-right: calc(-1 * var(--ui-scroll-fade) - var(--ui-list-gap));
     background: linear-gradient(to right, var(--ui-tabs-ground), transparent);
   }
 
-  .luke-tabs::after {
+  .ui-tabs::after {
     right: calc(-1 * var(--ui-focus-ring-reach));
     margin-left: calc(-1 * var(--ui-scroll-fade) - var(--ui-list-gap));
     background: linear-gradient(to left, var(--ui-tabs-ground), transparent);
   }
 
   @supports (animation-timeline: scroll()) {
-    .luke-tabs::before,
-    .luke-tabs::after {
+    .ui-tabs::before,
+    .ui-tabs::after {
       animation-timing-function: linear;
       animation-fill-mode: both;
       animation-timeline: scroll(nearest inline);
     }
 
-    .luke-tabs::before {
-      animation-name: luke-tabs-fade-in;
+    .ui-tabs::before {
+      animation-name: ui-tabs-fade-in;
       animation-range: 0 var(--ui-scroll-fade);
     }
 
-    .luke-tabs::after {
-      animation-name: luke-tabs-fade-out;
+    .ui-tabs::after {
+      animation-name: ui-tabs-fade-out;
       animation-range: calc(100% - var(--ui-scroll-fade)) 100%;
     }
   }
 
-  @keyframes luke-tabs-fade-in {
+  @keyframes ui-tabs-fade-in {
     from {
       opacity: 0;
     }
@@ -121,7 +121,7 @@
     }
   }
 
-  @keyframes luke-tabs-fade-out {
+  @keyframes ui-tabs-fade-out {
     from {
       opacity: 1;
     }
@@ -131,7 +131,7 @@
     }
   }
 
-  .luke-tab {
+  .ui-tab {
     /* The pill's insets about its glyph and label, and the ×'s box with its
        inset from the pill's end. */
     --ui-tab-start: var(--ui-space-8);
@@ -153,7 +153,7 @@
     /* Every tab asks for an equal share and narrows by it, down to a
        glyph's width; each is a container of its own width, so it can stand
        as its glyph alone once it is narrow (below). */
-    container: luke-tab / inline-size;
+    container: ui-tab / inline-size;
     /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
        dragged past it, and home again, on the bounce small elements ride. */
     transition:
@@ -163,18 +163,18 @@
       transform var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
-  [data-luke-profile="desktop"] .luke-tab {
+  [data-ui-profile="desktop"] .ui-tab {
     -webkit-app-region: no-drag;
   }
 
-  .luke-tab:hover {
+  .ui-tab:hover {
     background: var(--ui-color-fill-hover);
     color: var(--ui-color-text);
   }
 
   /* The tab holding the keyboard stands over its neighbours, so the chosen
      tab's fill beside it leaves its ring whole. */
-  .luke-tab:has(:focus-visible) {
+  .ui-tab:has(:focus-visible) {
     z-index: 1;
   }
 
@@ -182,7 +182,7 @@
      fill made opaque on the strip's ground, and a shadow beneath. It follows
      the pointer frame for frame, so its own transform eases nothing. The
      chosen tab, pinned, keeps standing over it (below). */
-  .luke-tab[data-dragging="true"] {
+  .ui-tab[data-dragging="true"] {
     z-index: 1;
     background:
       linear-gradient(var(--ui-color-fill-strong), var(--ui-color-fill-strong)),
@@ -198,7 +198,7 @@
      × at every width, and stands pinned at whichever edge of the strip it
      would scroll past, on its ground, so the tabs passing beneath it are
      hidden. */
-  .luke-tab[data-selected="true"] {
+  .ui-tab[data-selected="true"] {
     position: sticky;
     z-index: 2;
     right: calc(-1 * var(--ui-focus-ring-reach));
@@ -217,7 +217,7 @@
   /* On the frame the chosen tab is lifted in the sheet's ground beneath it,
      by a hairline and a soft shadow, as the sidebar draws the place standing
      open (nav-item.css), so the strip and the sidebar choose alike. */
-  .luke-tabs[data-ground="frame"] .luke-tab[data-selected="true"] {
+  .ui-tabs[data-ground="frame"] .ui-tab[data-selected="true"] {
     background: var(--ui-color-ground);
     box-shadow:
       0 0 0 1px var(--ui-color-border),
@@ -226,7 +226,7 @@
 
   /* A chosen tab alone in its strip keeps no share for others: it takes a
      tab's own width, as any tab does. */
-  .luke-tab[data-selected="true"]:only-child {
+  .ui-tab[data-selected="true"]:only-child {
     flex-shrink: 1;
     flex-basis: var(--ui-tab-widest);
   }
@@ -234,7 +234,7 @@
   /* Pinned, it fades the tabs passing beneath its inner edge as the strip's
      ends do. */
   @container pinned scroll-state(stuck: left) {
-    .luke-tab-button::after {
+    .ui-tab-button::after {
       position: absolute;
       top: calc(-1 * var(--ui-space-8));
       bottom: calc(-1 * var(--ui-space-8));
@@ -247,7 +247,7 @@
   }
 
   @container pinned scroll-state(stuck: right) {
-    .luke-tab-button::after {
+    .ui-tab-button::after {
       position: absolute;
       top: calc(-1 * var(--ui-space-8));
       right: 100%;
@@ -262,22 +262,22 @@
   /* Only the chosen tab keeps room for its ×, so the strip holds more before
      it scrolls; another tab's × comes over the end of its label, which fades
      beneath it. */
-  .luke-tab[data-closable="true"][data-selected="true"] {
+  .ui-tab[data-closable="true"][data-selected="true"] {
     --ui-tab-end: calc(var(--ui-tab-close) + 2 * var(--ui-tab-close-inset));
   }
 
-  .luke-tab-button {
+  .ui-tab-button {
     padding: 0 var(--ui-tab-end) 0 var(--ui-tab-start);
   }
 
-  .luke-tab[data-closable="true"][data-selected="false"]:hover .luke-tab-button {
+  .ui-tab[data-closable="true"][data-selected="false"]:hover .ui-tab-button {
     mask-image: var(--ui-tab-close-fade);
   }
 
   /* A screen with no hover fades a label under its × at rest, as under the
      pointer, but a marked tab's, which keeps room for its mark. */
   @media (hover: none) {
-    .luke-tab[data-closable="true"][data-selected="false"][data-marked="false"] .luke-tab-button {
+    .ui-tab[data-closable="true"][data-selected="false"][data-marked="false"] .ui-tab-button {
       mask-image: var(--ui-tab-close-fade);
     }
   }
@@ -287,44 +287,44 @@
      (use-clipped.ts) fades, so a short one ends on its last letter. The mask
      fades the words themselves, so it reads alike over every fill a tab
      wears, at rest, hovered, chosen, or dragged. */
-  .luke-tab-label[data-overflow="true"] {
+  .ui-tab-label[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
     text-overflow: clip;
   }
 
   /* A tab something arrived on reads in the heavier weight and the primary
      ink until it is chosen, as a chat app's channels do. */
-  .luke-tab[data-unread="true"] .luke-tab-label {
+  .ui-tab[data-unread="true"] .ui-tab-label {
     color: var(--ui-color-text);
     font-weight: var(--ui-type-emphasis-weight);
   }
 
   /* A preview tab, which the next one opened takes the place of, wears its
      name in italics until it is kept, as VS Code draws one. */
-  .luke-tab[data-preview="true"] .luke-tab-label {
+  .ui-tab[data-preview="true"] .ui-tab-label {
     font-style: italic;
   }
 
   /* Renamed in place, the label gives way to a field in the same type,
      ringed rather than bordered so nothing moves. */
-  .luke-tab-button[data-editing="true"] {
+  .ui-tab-button[data-editing="true"] {
     box-shadow: inset 0 0 0 1px var(--ui-color-border-selected);
   }
 
   /* The ×, a row's compact mark, stands at the pill's end, out of the
      label's way. */
-  .luke-tab-close {
+  .ui-tab-close {
     display: flex;
     opacity: 0;
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-tab[data-selected="true"] .luke-tab-close {
+  .ui-tab[data-selected="true"] .ui-tab-close {
     opacity: 1;
   }
 
   @media (hover: hover) {
-    .luke-tab:hover .luke-tab-close {
+    .ui-tab:hover .ui-tab-close {
       opacity: 1;
     }
   }
@@ -335,7 +335,7 @@
      Every other glyph button keeps its press a finger's width across
      (button.css). */
   @media (pointer: coarse) {
-    .luke-tab-close .luke-button::before {
+    .ui-tab-close .ui-button::before {
       width: 100%;
     }
   }
@@ -344,7 +344,7 @@
      faded end as under the pointer, but a marked tab's, whose mark keeps
      the place, its Close in its menu. */
   @media (hover: none) {
-    .luke-tab[data-marked="false"] .luke-tab-close {
+    .ui-tab[data-marked="false"] .ui-tab-close {
       opacity: 1;
     }
   }
@@ -352,23 +352,23 @@
   /* A tab's end mark, a failed run's, stands in the ×'s place with room
      kept for it, as the chosen tab keeps it, and trades places with the ×
      under the pointer, as an editor's tab trades its unsaved dot. */
-  .luke-tab[data-marked="true"] {
+  .ui-tab[data-marked="true"] {
     --ui-tab-end: calc(var(--ui-tab-close) + 2 * var(--ui-tab-close-inset));
   }
 
   /* Note that the mark and the × trade places on the hover's fade, as every
      other reveal under the pointer does. */
-  .luke-tab-end-mark {
+  .ui-tab-end-mark {
     display: flex;
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
   @media (hover: hover) {
-    .luke-tab:hover .luke-tab-end-mark {
+    .ui-tab:hover .ui-tab-end-mark {
       opacity: 0;
     }
 
-    .luke-tab[data-marked="true"]:not(:hover) .luke-tab-close {
+    .ui-tab[data-marked="true"]:not(:hover) .ui-tab-close {
       opacity: 0;
     }
   }
@@ -376,7 +376,7 @@
   /* Note that with no hover the swap never comes, so a marked tab's mark
      keeps its place, the chosen tab's too. */
   @media (hover: none) {
-    .luke-tab[data-marked="true"] .luke-tab-close {
+    .ui-tab[data-marked="true"] .ui-tab-close {
       opacity: 0;
     }
   }
@@ -388,26 +388,26 @@
      fade makes room for a × it no longer has, or is wider than the glyph's
      whole side of the pill. */
   /* off-scale: 72px, a tab that is only its glyph and a pill's padding */
-  @container luke-tab (width < 72px) {
-    .luke-tabs[data-fold="glyph"]
-      .luke-tab:not([data-selected="true"])
-      :is(.luke-tab-label, .luke-tab-end-mark, .luke-tab-close) {
+  @container ui-tab (width < 72px) {
+    .ui-tabs[data-fold="glyph"]
+      .ui-tab:not([data-selected="true"])
+      :is(.ui-tab-label, .ui-tab-end-mark, .ui-tab-close) {
       display: none;
     }
 
-    .luke-tabs[data-fold="glyph"] .luke-tab:not([data-selected="true"]) .luke-tab-button {
+    .ui-tabs[data-fold="glyph"] .ui-tab:not([data-selected="true"]) .ui-tab-button {
       justify-content: center;
       padding: 0;
     }
 
-    .luke-tabs .luke-tab[data-closable="true"][data-selected="false"]:hover .luke-tab-button {
+    .ui-tabs .ui-tab[data-closable="true"][data-selected="false"]:hover .ui-tab-button {
       mask-image: none;
     }
 
     @media (hover: none) {
-      .luke-tabs
-        .luke-tab[data-closable="true"][data-selected="false"][data-marked="false"]
-        .luke-tab-button {
+      .ui-tabs
+        .ui-tab[data-closable="true"][data-selected="false"][data-marked="false"]
+        .ui-tab-button {
         mask-image: none;
       }
     }
@@ -418,19 +418,19 @@
      along past the ones that do not fit. On a screen with no hover a tab
      other than the chosen one gives its ×'s place to its label, its Close
      standing in its menu, and on it once chosen. */
-  .luke-tabs[data-fold="label"] .luke-tab {
+  .ui-tabs[data-fold="label"] .ui-tab {
     --ui-tab-widest: 160px;
     min-width: 96px;
   }
 
   @media (hover: none) {
-    .luke-tabs[data-fold="label"] .luke-tab[data-selected="false"] .luke-tab-close {
+    .ui-tabs[data-fold="label"] .ui-tab[data-selected="false"] .ui-tab-close {
       visibility: hidden;
     }
 
-    .luke-tabs[data-fold="label"]
-      .luke-tab[data-closable="true"][data-selected="false"]
-      .luke-tab-button {
+    .ui-tabs[data-fold="label"]
+      .ui-tab[data-closable="true"][data-selected="false"]
+      .ui-tab-button {
       mask-image: none;
     }
   }
@@ -439,14 +439,14 @@
      with no still yet wears its glyph, large and quiet; where it stands,
      under the name, is inset to the name's words, and the line stands empty
      where a card has none, so every card is one height. */
-  .luke-tab-card-detail {
+  .ui-tab-card-detail {
     --ui-glyph-size: var(--ui-type-caption-size);
     min-height: calc(var(--ui-type-caption-size) * 1.4);
     padding-left: calc(var(--ui-space-2) + var(--ui-menu-glyph) + var(--ui-icon-gap));
   }
 
   /* The detail's glyph, a step smaller than the name's. */
-  .luke-tab-card-detail > :is(svg, img) {
+  .ui-tab-card-detail > :is(svg, img) {
     width: var(--ui-type-caption-size);
     height: var(--ui-type-caption-size);
     flex: 0 0 auto;

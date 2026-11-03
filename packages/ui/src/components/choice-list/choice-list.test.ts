@@ -277,7 +277,7 @@ test("a read-only list keeps its pick checked and takes no press, key, or Tab, y
     key(row(page, "Retry 3 times"), "ArrowDown");
     assert.equal(heard(page), "", "nothing is handed on");
     const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
-    row(page, "Never retry").querySelector(".luke-choice-label")?.dispatchEvent(down);
+    row(page, "Never retry").querySelector(".ui-choice-label")?.dispatchEvent(down);
     assert.equal(down.defaultPrevented, false, "the pointer starts a selection on its words");
   }
   const page = render(createElement(Held, { readOnly: true, start: ["never"] }));
@@ -323,9 +323,9 @@ test("a card list holds each option's controls under its radio, and a key presse
       ],
     }),
   );
-  const cards = [...container.querySelectorAll(".luke-choice-card")];
+  const cards = [...container.querySelectorAll(".ui-choice-card")];
   assert.equal(cards.length, 2);
-  assert.ok(cards[0]?.querySelector(".luke-choice-aside a"));
+  assert.ok(cards[0]?.querySelector(".ui-choice-aside a"));
   const input = cards[0]?.querySelector('input[aria-label="Token"]');
   assert.ok(input);
   assert.equal(input.closest('[role="radio"]'), null);

@@ -176,7 +176,7 @@ function accountItem(label: string): HTMLButtonElement {
   const item = accountMenuColumn().find(
     (line): line is HTMLButtonElement =>
       line instanceof HTMLButtonElement &&
-      line.querySelector(".luke-menu-item-label")?.textContent === label,
+      line.querySelector(".ui-menu-item-label")?.textContent === label,
   );
   return item ?? assert.fail(`the account's menu offers ${label}`);
 }

@@ -54,7 +54,7 @@ export function Slider({
 }): React.JSX.Element {
   return (
     <ShadcnSlider
-      className={cn("luke-slider", LENGTH[length])}
+      className={cn("ui-slider", LENGTH[length])}
       data-length={length}
       min={min}
       max={max}

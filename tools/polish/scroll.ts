@@ -38,7 +38,7 @@ export const PIN_SCROLL_FADES_SCRIPT = `(() => {
   const depths = ["--ui-scroll-area-fade-start", "--ui-scroll-area-fade-end"];
   for (const box of document.querySelectorAll("*")) {
     const style = getComputedStyle(box);
-    if (!style.animationName.includes("luke-scroll-area-fade")) continue;
+    if (!style.animationName.includes("ui-scroll-area-fade")) continue;
     for (const depth of depths) box.style.setProperty(depth, style.getPropertyValue(depth), "important");
   }
 })()`;

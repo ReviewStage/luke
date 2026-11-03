@@ -189,14 +189,14 @@ function picker() {
   return {
     question: dialog.querySelector("input")?.getAttribute("placeholder"),
     rows: [...dialog.querySelectorAll('[role="option"]')].map((row) => ({
-      name: row.querySelector(".luke-combobox-option-label")?.textContent,
-      detail: row.querySelector(".luke-combobox-option-detail")?.textContent,
+      name: row.querySelector(".ui-combobox-option-label")?.textContent,
+      detail: row.querySelector(".ui-combobox-option-detail")?.textContent,
       working: row.querySelector('[role="img"][aria-label="Working"]') !== null,
       chosen: row.getAttribute("aria-selected") === "true",
     })),
     choose: async (name: string) => {
       const row = [...dialog.querySelectorAll<HTMLElement>('[role="option"]')].find(
-        (each) => each.querySelector(".luke-combobox-option-label")?.textContent === name,
+        (each) => each.querySelector(".ui-combobox-option-label")?.textContent === name,
       );
       assert.ok(row, `a row named ${name}`);
       await act(async () => row.click());
@@ -298,12 +298,12 @@ test("the panel's + lists each agent's terminal under Terminal, says how it stan
   await act(async () => add.click());
   await settle();
   const rows = [
-    ...document.querySelectorAll<HTMLElement>('.luke-searchable-menu [role="option"]'),
+    ...document.querySelectorAll<HTMLElement>('.ui-searchable-menu [role="option"]'),
   ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Terminal") === true);
   assert.deepEqual(
     rows.map((row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent,
-      row.querySelector(".luke-combobox-option-hint") !== null,
+      row.querySelector(".ui-combobox-option-label")?.textContent,
+      row.querySelector(".ui-combobox-option-hint") !== null,
     ]),
     [
       ["Invite flow", false],
@@ -320,11 +320,11 @@ function menuItem(label: string) {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+    (each) => each.querySelector(".ui-menu-item-label")?.textContent === label,
   );
   assert.ok(item, `the menu offers ${label}`);
   return {
-    hint: item.querySelector(".luke-menu-item-hint")?.textContent,
+    hint: item.querySelector(".ui-menu-item-hint")?.textContent,
     press: async () => {
       await act(async () => item.click());
       await settle();
@@ -335,7 +335,7 @@ function menuItem(label: string) {
 /** Opens the right-click menu of the task's column's tab named `name`. */
 function rightClickTab(name: string): void {
   const tab = [
-    ...document.querySelectorAll<HTMLElement>('.desktop-task-main .luke-toolbar [role="tab"]'),
+    ...document.querySelectorAll<HTMLElement>('.desktop-task-main .ui-toolbar [role="tab"]'),
   ].find((each) => each.textContent?.includes(name) === true);
   assert.ok(tab, `the column has a tab named ${name}`);
   act(() => {
@@ -377,7 +377,7 @@ test("an agent's tab offers Show terminal on its right-click, which opens that a
 function menuLabels(): string[] {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
-  return [...menu.querySelectorAll(".luke-menu-item-label")].map((each) => each.textContent ?? "");
+  return [...menu.querySelectorAll(".ui-menu-item-label")].map((each) => each.textContent ?? "");
 }
 
 /** The task drawn as `mount` draws it, on a platform offering `capabilities`. */
@@ -415,7 +415,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
-  const groups = [...document.querySelectorAll('.luke-searchable-menu [role="group"]')].map(
+  const groups = [...document.querySelectorAll('.ui-searchable-menu [role="group"]')].map(
     (group) => group.textContent ?? "",
   );
 
@@ -455,7 +455,7 @@ test("while the plan's agents are still being read, the picker says so and offer
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, []);
   assert.equal(
-    document.querySelector('[role="dialog"] .luke-note-line')?.textContent,
+    document.querySelector('[role="dialog"] .ui-note-line')?.textContent,
     "Reading the task’s agents",
   );
   assert.deepEqual(task.shown, []);
@@ -479,6 +479,6 @@ test("a row at rest hangs its agent's card beside it, naming the agent", async (
   assert.ok(row, "a row");
   restOn(row);
   await settle();
-  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Expiry job");
+  const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Expiry job");
 });

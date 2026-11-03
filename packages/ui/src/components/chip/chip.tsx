@@ -188,7 +188,7 @@ export type ChipProps = ButtonChipProps | LinkChipProps | RemovableChipProps;
 
 /** What every chip draws: a control's box, its words at the label's type, and the group its parts answer. */
 const CHIP_BASE =
-  "luke-chip group/chip m-0 inline-flex items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--ui-duration-hover) ease-plain";
+  "ui-chip group/chip m-0 inline-flex items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * Each look's face at rest and under the pointer, while its menu is open,
@@ -202,7 +202,7 @@ const LOOK_FACE = {
   [CHIP_LOOK.FIELD]:
     "border-border bg-transparent text-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-fill-selected aria-expanded:bg-fill-selected active:not-disabled:not-aria-disabled:bg-fill-pressed",
   [CHIP_LOOK.PILL]:
-    "border-chip-edge bg-chip text-muted-foreground in-data-[luke-profile=web]:text-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-chip-hover [&:hover:not(:disabled,[aria-disabled=true])]:text-foreground aria-expanded:bg-chip-hover aria-expanded:text-foreground",
+    "border-chip-edge bg-chip text-muted-foreground in-data-[ui-profile=web]:text-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-chip-hover [&:hover:not(:disabled,[aria-disabled=true])]:text-foreground aria-expanded:bg-chip-hover aria-expanded:text-foreground",
   [CHIP_LOOK.FILTER]:
     "border-chip-edge bg-chip text-muted-foreground [&:hover:not(:disabled,[aria-disabled=true],[aria-pressed=true])]:bg-chip-hover [&:hover:not(:disabled,[aria-disabled=true],[aria-pressed=true])]:text-foreground aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-ink-foreground",
 } as const satisfies Record<ChipLook, string>;
@@ -258,7 +258,7 @@ const WIDTH_BOX = {
 
 /** The face inside a chip, holding all it draws, so an unavailable chip fades it once. */
 const FACE_BASE =
-  "luke-chip-face inline-flex min-w-0 items-center gap-[inherit] [&>:is(svg,img)]:flex-none [&>svg.settings-chevron]:size-chip-chevron [&>svg.settings-chevron]:text-muted-foreground";
+  "ui-chip-face inline-flex min-w-0 items-center gap-[inherit] [&>:is(svg,img)]:flex-none [&>svg.settings-chevron]:size-chip-chevron [&>svg.settings-chevron]:text-muted-foreground";
 
 /** What every chip draws, as one class list, worked out from its options. */
 function chipClasses(
@@ -346,7 +346,7 @@ function faceAttributes({
 
 /** The × ending a removable chip: a round press inside its capsule, lighting under the pointer. */
 const REMOVE =
-  "luke-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
+  "ui-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
 
 /** A removable chip's words as a press of their own, which opens what it names: no box of their own, so the chip's face is the one drawn. */
 const OPEN_FACE = "m-0 border-0 bg-transparent p-0 text-inherit font-[inherit] cursor-press";
@@ -456,7 +456,7 @@ type ChipNameProps = {
 
 /** A chip's words on one line, and, drawn as its mark alone, read and drawn nowhere; a field's lead and fill it. */
 const NAME =
-  "luke-chip-name overflow-hidden whitespace-nowrap group-data-[look=field]/chip:flex-1 group-data-[look=field]/chip:text-left group-data-[icon-only=true]/chip:absolute group-data-[icon-only=true]/chip:-m-px group-data-[icon-only=true]/chip:size-px group-data-[icon-only=true]/chip:[clip-path:inset(50%)]";
+  "ui-chip-name overflow-hidden whitespace-nowrap group-data-[look=field]/chip:flex-1 group-data-[look=field]/chip:text-left group-data-[icon-only=true]/chip:absolute group-data-[icon-only=true]/chip:-m-px group-data-[icon-only=true]/chip:size-px group-data-[icon-only=true]/chip:[clip-path:inset(50%)]";
 
 /** A name cut in its middle: the start, which gives way first, fading out where it is measured cut short. */
 function ChipNameStart({ children }: { children: string }): React.JSX.Element {
@@ -464,7 +464,7 @@ function ChipNameStart({ children }: { children: string }): React.JSX.Element {
   return (
     <span
       ref={measured}
-      className="luke-chip-name-start min-w-0 overflow-hidden whitespace-pre"
+      className="ui-chip-name-start min-w-0 overflow-hidden whitespace-pre"
       data-overflow={String(clipped)}
     >
       {children}
@@ -500,7 +500,7 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
       ) : (
         <>
           <ChipNameStart>{props.children.slice(0, -kept.length)}</ChipNameStart>
-          <span className="luke-chip-name-end">{kept}</span>
+          <span className="ui-chip-name-end">{kept}</span>
         </>
       )}
     </span>
@@ -517,7 +517,7 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
 export function ChipCount({ children }: { children: string }): React.JSX.Element {
   return (
     <span
-      className="luke-chip-count text-muted-foreground tabular-nums group-aria-pressed/chip:text-chip-count-pressed"
+      className="ui-chip-count text-muted-foreground tabular-nums group-aria-pressed/chip:text-chip-count-pressed"
       aria-hidden="true"
     >
       {children}

@@ -8,7 +8,7 @@
  * long line of code, or on a field, such as a video's scrubber, is never
  * claimed. A second finger going down makes it a pinch, which is no swipe.
  *
- * While the finger holds it, the surface is marked `data-luke-page-swipe`
+ * While the finger holds it, the surface is marked `data-ui-page-swipe`
  * and how far the finger has gone, in CSS pixels, is written to
  * `--ui-page-swipe-offset` on it, which the page shown reads as its
  * `translate`, so nothing renders per move. Let go, where the release lands
@@ -43,7 +43,7 @@ const PAGE_SWIPE = {
 } as const;
 
 /** The surface's mark while a finger holds it, and how far the finger has gone. */
-const SWIPE_ATTRIBUTE = "data-luke-page-swipe";
+const SWIPE_ATTRIBUTE = "data-ui-page-swipe";
 const OFFSET_PROPERTY = "--ui-page-swipe-offset";
 
 /** The boxes that take a sideways drag of their own: a field, and a slider, whose thumb and track are no field (`@luke/ui`'s Slider, as a video's scrubber). */

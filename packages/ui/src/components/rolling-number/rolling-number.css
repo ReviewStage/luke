@@ -7,58 +7,58 @@
    stand here. */
 
 @layer components {
-  .luke-rolling-number-leaving {
+  .ui-rolling-number-leaving {
     animation:
-      luke-rolling-number-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards,
-      luke-rolling-number-out-up var(--ui-duration-fast) var(--ui-spring-fast) forwards;
+      ui-rolling-number-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards,
+      ui-rolling-number-out-up var(--ui-duration-fast) var(--ui-spring-fast) forwards;
   }
 
-  .luke-rolling-number-digit[data-roll] {
+  .ui-rolling-number-digit[data-roll] {
     animation:
-      luke-rolling-number-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
-      luke-rolling-number-in-up var(--ui-duration-fast) var(--ui-spring-fast) backwards;
+      ui-rolling-number-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-rolling-number-in-up var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   /* A count that falls turns the wheel the other way. */
-  .luke-rolling-number-digit[data-roll="down"] {
-    animation-name: luke-rolling-number-fade, luke-rolling-number-in-down;
+  .ui-rolling-number-digit[data-roll="down"] {
+    animation-name: ui-rolling-number-fade, ui-rolling-number-in-down;
   }
 
-  .luke-rolling-number-leaving[data-roll="down"] {
-    animation-name: luke-rolling-number-leave, luke-rolling-number-out-down;
+  .ui-rolling-number-leaving[data-roll="down"] {
+    animation-name: ui-rolling-number-leave, ui-rolling-number-out-down;
   }
 
-  @keyframes luke-rolling-number-fade {
+  @keyframes ui-rolling-number-fade {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-rolling-number-leave {
+  @keyframes ui-rolling-number-leave {
     to {
       opacity: 0;
     }
   }
 
-  @keyframes luke-rolling-number-in-up {
+  @keyframes ui-rolling-number-in-up {
     from {
       transform: translateY(100%);
     }
   }
 
-  @keyframes luke-rolling-number-in-down {
+  @keyframes ui-rolling-number-in-down {
     from {
       transform: translateY(-100%);
     }
   }
 
-  @keyframes luke-rolling-number-out-up {
+  @keyframes ui-rolling-number-out-up {
     to {
       transform: translateY(-100%);
     }
   }
 
-  @keyframes luke-rolling-number-out-down {
+  @keyframes ui-rolling-number-out-down {
     to {
       transform: translateY(100%);
     }

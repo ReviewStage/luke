@@ -124,7 +124,7 @@ export const TASKS_DROP_ZONE = "tasks";
 export const PINNED_DROP_ZONE = "pinned";
 
 /** What a press must land in to drag a section rather than one of its tasks. */
-const SECTION_HANDLE = ".luke-group-header-head";
+const SECTION_HANDLE = ".ui-group-header-head";
 
 /** Why a blank title was not kept. */
 const TITLE_ASKED = "Name the section.";
@@ -831,7 +831,7 @@ function SidebarSection({
   // Note that a head named in place by a key takes the focus back once it is drawn again.
   useLayoutEffect(() => {
     if (edits.focusing !== section.id || edits.inPlace !== undefined) return;
-    root.current?.querySelector<HTMLElement>(".luke-group-header-lead")?.focus();
+    root.current?.querySelector<HTMLElement>(".ui-group-header-lead")?.focus();
     edits.focused();
   });
   const renaming =

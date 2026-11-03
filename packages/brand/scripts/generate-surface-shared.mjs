@@ -234,16 +234,16 @@ function uiBrandCss() {
    The brand's colours on @luke/ui's roles, both profiles, both themes. The
    roles no brand changes are palettes.css's. */
 
-[data-luke-profile="desktop"] {
+[data-ui-profile="desktop"] {
 ${block(pair)}
 }
 
-[data-luke-profile="web"],
-[data-luke-profile="web"][data-luke-theme="light"] {
+[data-ui-profile="web"],
+[data-ui-profile="web"][data-ui-theme="light"] {
 ${block((key) => BRAND.LIGHT[key])}
 }
 
-[data-luke-profile="web"][data-luke-theme="dark"] {
+[data-ui-profile="web"][data-ui-theme="dark"] {
 ${block((key) => BRAND.DARK[key])}
 }
 `;

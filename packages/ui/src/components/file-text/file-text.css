@@ -4,7 +4,7 @@
    inside a peek's. */
 
 @layer components {
-  .luke-file-text {
+  .ui-file-text {
     --ui-file-text-peek: calc(var(--ui-type-caption-leading) * 6);
     --ui-file-text-whole: calc(var(--ui-type-caption-leading) * 18);
 
@@ -16,7 +16,7 @@
     background: var(--ui-color-code-ground);
   }
 
-  .luke-file-text-words {
+  .ui-file-text-words {
     margin: 0;
     color: var(--ui-color-text);
     font-family: var(--ui-font-mono);
@@ -26,19 +26,19 @@
     overflow-wrap: anywhere;
   }
 
-  .luke-file-text[data-extent="peek"] {
+  .ui-file-text[data-extent="peek"] {
     max-height: calc(var(--ui-file-text-peek) + var(--ui-space-16));
     overflow: clip;
     mask-image: linear-gradient(to bottom, black calc(100% - var(--ui-scroll-fade)), transparent);
   }
 
-  .luke-file-text[data-extent="whole"] {
+  .ui-file-text[data-extent="whole"] {
     max-height: calc(var(--ui-file-text-whole) + var(--ui-space-16));
     overflow: auto;
     overscroll-behavior: contain;
   }
 
-  .luke-file-text[data-extent="brief"] {
+  .ui-file-text[data-extent="brief"] {
     max-height: calc(var(--ui-file-text-peek) + var(--ui-space-16));
     overflow: auto;
     overscroll-behavior: contain;

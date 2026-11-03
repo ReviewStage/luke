@@ -334,7 +334,7 @@ test("the Inbox's chevron folds the channels under it, the channel shown still s
     { currentId: "c-app" },
   );
   const rows = () =>
-    [...sidebar.querySelectorAll('[role="group"][aria-label="Channels"] .luke-nav-item')].map(
+    [...sidebar.querySelectorAll('[role="group"][aria-label="Channels"] .ui-nav-item')].map(
       (row) => row.textContent,
     );
   assert.deepEqual(rows(), ["general", "app", "launch"]);

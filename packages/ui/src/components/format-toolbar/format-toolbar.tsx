@@ -196,14 +196,14 @@ export function FormatToolbar({
     <MenuSurface
       {...roving}
       ref={box}
-      className="luke-format-toolbar"
+      className="ui-format-toolbar"
       flow={MENU_SURFACE_FLOW.TOOLBAR}
       role="toolbar"
       aria-label={FORMAT_TOOLBAR_WORDS.GROUP}
     >
       {groups.map((group, groupAt) => (
         <Fragment key={group[0]?.key}>
-          {groupAt === 0 ? null : <span className="luke-format-toolbar-rule" aria-hidden="true" />}
+          {groupAt === 0 ? null : <span className="ui-format-toolbar-rule" aria-hidden="true" />}
           {group.map((press) => (
             <Fragment key={press.key}>{press.draw()}</Fragment>
           ))}

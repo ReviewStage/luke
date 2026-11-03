@@ -85,7 +85,7 @@ function stageLayout(): void {
       const width = fast ? CHIP_WIDTH.FAST : CHIP_WIDTH.STANDARD;
       return box(CHIP_RIGHT - width, 700, width, 24);
     }
-    if (this.classList.contains("luke-anchored-popover")) return box(0, 0, 340, MENU_HEIGHT);
+    if (this.classList.contains("ui-anchored-popover")) return box(0, 0, 340, MENU_HEIGHT);
     return box(0, 0, 0, 0);
   });
 }
@@ -108,7 +108,7 @@ function Owned(): React.JSX.Element {
 /** Where the open menu's left edge is drawn in the window: its layer's inset from whichever chip edge it is held by. */
 function menuLeft(view: HTMLElement): number {
   const anchor = view.querySelector(".agent-model-chip");
-  const layer = view.querySelector<HTMLElement>(".luke-anchored-popover");
+  const layer = view.querySelector<HTMLElement>(".ui-anchored-popover");
   assert.ok(anchor !== null && layer !== null, "the menu is open over the chip");
   const chip = anchor.getBoundingClientRect();
   const width = Number.parseFloat(layer.style.width);
@@ -213,7 +213,7 @@ function openMenuOn(
   act(() => chip.click());
   const menu = view.querySelector('[role="dialog"]');
   assert.ok(menu, "the menu is open");
-  const foot = menu.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
+  const foot = menu.querySelector(".ui-searchable-menu-foot")?.textContent ?? "";
   const listed = [...menu.querySelectorAll('[role="listbox"] [role="option"]')].map(
     (row) => row.textContent ?? "",
   );
@@ -323,7 +323,7 @@ test("an automation's chip, whose choice a new agent starts on, says a model not
     const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");
     assert.ok(chip);
     act(() => chip.click());
-    const foot = view.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
+    const foot = view.querySelector(".ui-searchable-menu-foot")?.textContent ?? "";
     act(() => chip.click());
     return foot;
   };

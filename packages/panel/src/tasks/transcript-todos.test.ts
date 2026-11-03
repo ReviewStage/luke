@@ -92,7 +92,7 @@ test("a write that failed says why under its list", () => {
 test("only the list the agent is at wears the working mark on its item in progress", () => {
   const working = (surface: HTMLElement): string[] =>
     items(surface)
-      .filter((item) => item.seat.querySelector(".luke-working-mark") !== null)
+      .filter((item) => item.seat.querySelector(".ui-working-mark") !== null)
       .map((item) => item.status);
   assert.deepEqual(working(transcriptList(undefined, true)), [AGENT_TODO_STATUS.IN_PROGRESS]);
   assert.deepEqual(working(transcriptList()), []);

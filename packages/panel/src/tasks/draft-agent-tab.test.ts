@@ -211,7 +211,7 @@ function mount(
     [...container.querySelectorAll("button")].find(
       (each) =>
         each.getAttribute("aria-label") === words ||
-        each.querySelector(".luke-button-words")?.textContent === words ||
+        each.querySelector(".ui-button-words")?.textContent === words ||
         [...each.childNodes].some(
           (node) => node.nodeType === Node.TEXT_NODE && node.textContent === words,
         ),
@@ -226,8 +226,8 @@ function mount(
       pressInComposer(container, "Enter");
       await settle();
     },
-    note: () => container.querySelector(".luke-composer-foot-note")?.textContent ?? undefined,
-    words: () => sentence(container.querySelector(".luke-composer-foot-note [role='alert']")),
+    note: () => container.querySelector(".ui-composer-foot-note")?.textContent ?? undefined,
+    words: () => sentence(container.querySelector(".ui-composer-foot-note [role='alert']")),
     draft: () => composerEditor(container).textContent,
     button,
     press: async (words: string) => {
@@ -444,7 +444,7 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
       words:
         row.querySelector(".agent-servers-problem, .agent-servers-waiting")?.textContent ??
         undefined,
-      buttons: [...row.querySelectorAll(".luke-list-row-actions button")].map(
+      buttons: [...row.querySelectorAll(".ui-list-row-actions button")].map(
         (button) => button.textContent,
       ),
     };

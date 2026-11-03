@@ -6,7 +6,7 @@
    are hidden by `visually-hidden.tsx`'s container query instead. */
 
 @layer components {
-  .luke-visually-hidden:not([data-under]) {
+  .ui-visually-hidden:not([data-under]) {
     position: absolute;
     overflow: hidden;
     width: 1px;

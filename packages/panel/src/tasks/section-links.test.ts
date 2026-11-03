@@ -58,12 +58,12 @@ const UNIT_LINK = '.plan-unit-more button[aria-label="Copy link"]';
 /** The sections' Copy link buttons, the title's left out. */
 function sectionLinks(container: HTMLElement): HTMLButtonElement[] {
   return [...container.querySelectorAll<HTMLButtonElement>(UNIT_LINK)].filter(
-    (button) => button.closest(".luke-page-header-actions") === null,
+    (button) => button.closest(".ui-page-header-actions") === null,
   );
 }
 
 /** The title's Copy link button, which ends its line in the header's acts. */
-const TITLE_LINK = '.luke-page-header-actions button[aria-label="Copy link"]';
+const TITLE_LINK = '.ui-page-header-actions button[aria-label="Copy link"]';
 
 const roots: Root[] = [];
 const copied: string[] = [];
@@ -99,7 +99,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
 
 function chipNamed(container: HTMLElement, name: string): HTMLButtonElement {
   const chip = [...container.querySelectorAll<HTMLButtonElement>("[data-mention-ref]")].find(
-    (each) => each.querySelector(".luke-inline-ref-label")?.textContent === name,
+    (each) => each.querySelector(".ui-inline-ref-label")?.textContent === name,
   );
   assert.ok(chip, `a chip named ${name}`);
   return chip;
@@ -262,7 +262,7 @@ test("copying a section's link from its button opens no editor, as a click into 
   const afterCopy = container.querySelector(".plan-document-editor");
   act(() =>
     rollout
-      ?.querySelector("p:not(.luke-markdown-heading)")
+      ?.querySelector("p:not(.ui-markdown-heading)")
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
   );
 
@@ -406,7 +406,7 @@ test("a folder's chip, and a file's where no file opens from here, hang their ca
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
 
   assert.deepEqual(
-    chips.map((chip) => [chip.querySelector(".luke-inline-ref-label")?.textContent, chip.tagName]),
+    chips.map((chip) => [chip.querySelector(".ui-inline-ref-label")?.textContent, chip.tagName]),
     [
       ["session-store.ts", "SPAN"],
       ["auth/", "SPAN"],
@@ -434,7 +434,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
     ),
   );
   const folder = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].find(
-    (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent === "auth/",
+    (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent === "auth/",
   );
   assert.ok(folder);
 

@@ -83,21 +83,19 @@ export function MessageLine({
   const actionsFirst = align === MESSAGE_LINE_ALIGN.END;
   return (
     <div
-      className={`luke-message-line flex max-w-full items-center gap-ui-2 text-caption-inline text-muted-foreground ${align === MESSAGE_LINE_ALIGN.START ? "justify-start" : "justify-end"}${wrap ? " flex-wrap gap-y-ui-2" : ""}`}
+      className={`ui-message-line flex max-w-full items-center gap-ui-2 text-caption-inline text-muted-foreground ${align === MESSAGE_LINE_ALIGN.START ? "justify-start" : "justify-end"}${wrap ? " flex-wrap gap-y-ui-2" : ""}`}
       data-align={align}
       data-wrap={wrap ? "true" : undefined}
     >
       {actionsFirst ? actions : null}
       {named ? (
-        <span
-          className={`luke-message-line-sender flex min-w-0 items-center ${senderInset(inset)}`}
-        >
+        <span className={`ui-message-line-sender flex min-w-0 items-center ${senderInset(inset)}`}>
           {sender}
         </span>
       ) : null}
       {at === undefined ? null : (
         <span
-          className={`luke-message-line-time flex flex-none items-center gap-ui-6 whitespace-nowrap tabular-nums ${timeInset(named, align, inset)}`}
+          className={`ui-message-line-time flex flex-none items-center gap-ui-6 whitespace-nowrap tabular-nums ${timeInset(named, align, inset)}`}
         >
           {named ? <span aria-hidden="true">·</span> : null}
           <Time at={at} look={TIME_LOOK.DAY} />
