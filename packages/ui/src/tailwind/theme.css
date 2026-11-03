@@ -828,7 +828,7 @@
   --color-code-removed: color-mix(in srgb, var(--ui-color-danger) 14%, transparent);
   --container-inline-ref-pill: min(var(--ui-inline-ref-pill-width), 100%);
   --container-inline-ref-pill-stated: min(var(--ui-inline-ref-pill-stated-width), 100%);
-  --shadow-inline-ref-wash: 0 0 0 3px var(--ui-color-fill-hover); /* off-scale: the wash's bleed */
+  --shadow-inline-ref-wash: 0 0 0 var(--ui-inline-ref-bleed) var(--ui-color-fill-hover);
   --spacing-inline-ref-mark: max(0px, calc((16px - 1lh) / 2)); /* off-scale: the mark's 16px */
 
   /* Rows and navigation (`components/list-row/`, `nav-item/`, `disclosure/`,

@@ -2,7 +2,8 @@
    cut short fades out over its last few pixels, as a chip's does, so a
    short one ends on its last letter; a path is cut from its left, so its
    last part stays in sight, and fades there. The token itself is drawn in
-   utilities; the fade stands here beside the chip's and the badge's. */
+   utilities; the fade stands here beside the chip's and the badge's, as
+   does the room a box cutting a wash leaves its ring. */
 
 @layer components {
   .ui-inline-ref-label[data-overflow="true"] {
@@ -11,5 +12,14 @@
 
   .ui-inline-ref-label[data-name="path"][data-overflow="true"] {
     mask-image: linear-gradient(to right, transparent, #000 var(--ui-label-fade));
+  }
+
+  /* A wash bleeds past its box by a ring, which a box cutting the words
+     right around it would slice off at the box's edge, its corners filled
+     in square; so that box leaves the ring its room. Note that the room is
+     kept only where the box cuts by `overflow: clip`, as `Text`'s cut does,
+     because `overflow: hidden` ignores it. */
+  :has(> .ui-inline-ref[data-look="wash"]) {
+    overflow-clip-margin: var(--ui-inline-ref-bleed);
   }
 }

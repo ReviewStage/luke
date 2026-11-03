@@ -46,9 +46,11 @@ import { Tooltip } from "../tooltip/hint.js";
  * baseline from the items that are, and otherwise from its glyph, whose
  * baseline is its bottom edge), and a pill stands proud of the name on
  * padding its margins take back. A wash bleeds by a ring of its own colour
- * rather than padding, so the words around it keep their spacing, and hands
- * the wash on (`--ui-inline-ref-wash`) for a mark inside that rings itself
- * in the ground. A cut name's fade is `inline-ref.css`'s, as a chip's is.
+ * rather than padding, so the words around it keep their spacing, which a
+ * box cutting the words right around it leaves room for (`inline-ref.css`)
+ * rather than cutting it square, and hands the wash on
+ * (`--ui-inline-ref-wash`) for a mark inside that rings itself in the
+ * ground. A cut name's fade is `inline-ref.css`'s, as a chip's is.
  */
 
 /** How a token is drawn, by the place it stands. */
