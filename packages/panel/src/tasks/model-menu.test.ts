@@ -110,7 +110,7 @@ function open(
             closes += 1;
           },
           onLeave: () => undefined,
-          ...(owner === OWNER.START ? { startsNew: true } : { planNote: PLAN_NOTE }),
+          ...(owner === OWNER.START ? { startsNew: true } : { lastLine: { words: PLAN_NOTE } }),
         }),
       ),
     ),
@@ -118,6 +118,11 @@ function open(
   const menu = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Model"]');
   assert.ok(menu, "the menu is open");
   return { menu, opened, chose, closed: () => closes };
+}
+
+/** The menu's last line, under the pinned rows; empty where it has none. */
+function lastLine(menu: HTMLElement): string {
+  return menu.querySelector(".ui-searchable-menu-last-line")?.textContent ?? "";
 }
 
 /** The listed row whose words begin with `name`. */
@@ -147,9 +152,9 @@ test("a choice nothing pays for says it cannot run under the pinned rows, and th
 
   const foot = menu.querySelector<HTMLElement>(".ui-searchable-menu-foot");
   assert.ok(foot, "the pinned rows stand");
-  assert.match(
-    foot.textContent ?? "",
-    /Opus 5\.5 cannot run until you connect Claude with a subscription or an API key\./u,
+  assert.equal(
+    lastLine(menu),
+    "Opus 5.5 cannot run until you connect Claude with a subscription or an API key.",
   );
   const connect = [...foot.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
     (each) => each.textContent === "Connect Claude",
@@ -166,12 +171,13 @@ test("a running agent's chip says nothing of connecting for a model the reader's
 
   const foot = menu.querySelector<HTMLElement>(".ui-searchable-menu-foot")?.textContent ?? "";
   assert.doesNotMatch(foot, /cannot run|Connect/u);
-  assert.match(foot, /Using ChatGPT plan/u);
+  assert.equal(lastLine(menu), PLAN_NOTE);
 });
 
 test("a choice something pays for says nothing of connecting", () => {
   const { menu } = open(GPT);
 
   const foot = menu.querySelector<HTMLElement>(".ui-searchable-menu-foot")?.textContent ?? "";
-  assert.doesNotMatch(foot, /cannot run|Connect/u);
+  assert.doesNotMatch(foot, /Connect/u);
+  assert.equal(lastLine(menu), "");
 });

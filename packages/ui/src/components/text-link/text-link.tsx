@@ -19,7 +19,8 @@
  * target is the contract's without moving a word.
  *
  * An `external` link wears a small ↗ after its words, which says a press
- * leaves the place, and lights under the pointer with the link; one that
+ * leaves the place, held to their last letter so a line never breaks between
+ * them, and lights under the pointer with the link; one that
  * opens in a `newTab` tells the page it opens nothing of the opener's. A
  * link with no `href` is the same words going nowhere, for a place that
  * opens no links or an address it refuses. A link takes no class or style:
@@ -122,6 +123,33 @@ export const TEXT_LINK_MARK_CLASS = linkClass(
   true,
 );
 
+/** The last letter of a link's words and the ↗ after it, which no line breaks between, since a drawn glyph is a place a line may break. */
+const OUT_HELD = "ui-text-link-out-held whitespace-nowrap";
+
+/** A link's words with the ↗ after them, held to their last letter where the words are plain text. */
+function outWords(children: ReactNode): ReactNode {
+  if (typeof children !== "string" || children === "") {
+    return (
+      <>
+        {children}
+        <ArrowUpRightIcon />
+      </>
+    );
+  }
+  // Note that we split by code point, so a letter outside the basic plane stays whole.
+  const letters = Array.from(children);
+  const last = letters.pop();
+  return (
+    <>
+      {letters.join("")}
+      <span className={OUT_HELD}>
+        {last}
+        <ArrowUpRightIcon />
+      </span>
+    </>
+  );
+}
+
 type HintProps = {
   onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
   onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
@@ -163,12 +191,7 @@ export function TextLink({
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const words = (
-    <>
-      {children}
-      {external ? <ArrowUpRightIcon /> : null}
-    </>
-  );
+  const words = external ? outWords(children) : children;
   const face = {
     "data-look": look,
     "data-variant": variant,
