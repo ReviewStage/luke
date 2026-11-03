@@ -59,6 +59,9 @@ const WORDMARK = {
 // The lockup: the disc 1.3 times the cap height, centred on it, a third of
 // the disc from the word.
 const LOCKUP = { DISC: 1.3, GAP: 0.34 };
+// The stacked lockup: the disc twice the cap height, under half the
+// word's width, centred over it, and 0.45 of the cap height above the i's dot.
+const STACKED = { DISC: 2, GAP: 0.45 };
 
 // ---------- Palette ----------
 // Inks are named for the UI mode they serve: the dark-mode asset is light.
@@ -97,6 +100,25 @@ function lockup(ink) {
   return { body, box };
 }
 
+// The stacked lockup in one ink, in the word's own units, and its ink box.
+function stackedLockup(ink) {
+  const { CAP_HEIGHT, INK } = WORDMARK;
+  const disc = CAP_HEIGHT * STACKED.DISC;
+  const top = INK.TOP - CAP_HEIGHT * STACKED.GAP - disc;
+  const left = (INK.LEFT + INK.RIGHT) / 2 - disc / 2;
+  const body = markAt(left, top, disc, ink) + `<path d="${WORDMARK.PATH}" fill="${ink}"/>`;
+  return { body, box: { left: INK.LEFT, right: INK.RIGHT, top, bottom: INK.BOTTOM } };
+}
+
+// A lockup's body scaled to `fill` of a width-by-height canvas and centred on
+// its ink box.
+function centred({ body, box }, width, height, fill) {
+  const k = (width * fill) / (box.right - box.left);
+  const tx = width / 2 - (k * (box.left + box.right)) / 2;
+  const ty = height / 2 - (k * (box.top + box.bottom)) / 2;
+  return `<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(k)})">${body}</g>`;
+}
+
 // ---------- Emission ----------
 // `--check` reports whether the committed outputs still match what this script
 // produces, without touching any of them, for running by hand.
@@ -121,23 +143,31 @@ function emit(relPath, svg, title) {
   written.push(relPath);
 }
 
-// Wordmark and logo, per mode, on a transparent ground: the wordmark is the
+// Wordmark and logos, per mode, on a transparent ground: the wordmark is the
 // name alone, for where the mark already stands nearby; the logo is the
-// lockup, for headers and docs.
+// lockup, for headers and docs, and its stacked cut for a square-ish space.
 const PAD = 6;
+const padded = (box) =>
+  svgOpenAt(
+    box.left - PAD,
+    box.top - PAD,
+    box.right - box.left + 2 * PAD,
+    box.bottom - box.top + 2 * PAD,
+  );
 for (const [mode, ink] of Object.entries(INKS)) {
   const { INK } = WORDMARK;
   emit(
-    `wordmark-${mode}.svg`,
-    `${svgOpenAt(INK.LEFT - PAD, INK.TOP - PAD, INK.RIGHT - INK.LEFT + 2 * PAD, INK.BOTTOM - INK.TOP + 2 * PAD)}<path d="${WORDMARK.PATH}" fill="${ink}"/></svg>`,
+    `wordmark/wordmark-${mode}.svg`,
+    `${padded({ left: INK.LEFT, right: INK.RIGHT, top: INK.TOP, bottom: INK.BOTTOM })}<path d="${WORDMARK.PATH}" fill="${ink}"/></svg>`,
     PRODUCT_NAME,
   );
-  const { body, box } = lockup(ink);
-  emit(
-    `logo/logo-${mode}.svg`,
-    `${svgOpenAt(box.left - PAD, box.top - PAD, box.right - box.left + 2 * PAD, box.bottom - box.top + 2 * PAD)}${body}</svg>`,
-    PRODUCT_NAME,
-  );
+  for (const [name, cut] of [
+    ["logo", lockup],
+    ["logo-stacked", stackedLockup],
+  ]) {
+    const { body, box } = cut(ink);
+    emit(`logo/${name}-${mode}.svg`, `${padded(box)}${body}</svg>`, PRODUCT_NAME);
+  }
 }
 
 // The share of an app icon's tile the disc spans, in every app icon alike:
@@ -200,47 +230,25 @@ const FAVICON = { side: 240, inset: 8, radius: 52 };
   );
 }
 
-// Square mark: the disc with a twelfth of air on each side, corners left
-// square, per mode, tiled and transparent. The tiled pair is the shape for
-// surfaces that round a square's corners themselves (GitHub's organization
-// avatar among them); the transparent pair is the mark in each mode's ink.
+// Mark: the disc alone on transparency with a twelfth of air on each side,
+// in each mode's ink, and in pure black, the one-ink glyph a partner surface
+// tints for its own theme, such as an integration's icon on Sentry, which
+// takes no colour but black. The disc on a tile is the avatar, below.
 const SQUARE = { side: 120, disc: 100 };
 {
   const at = (SQUARE.side - SQUARE.disc) / 2;
   const open = svgOpen(SQUARE.side, SQUARE.side);
-  const ground = (fill) => `<rect width="${SQUARE.side}" height="${SQUARE.side}" fill="${fill}"/>`;
-  for (const [mode, { tile, ink }] of Object.entries(TILES)) {
-    emit(
-      `mark/mark-square-${mode}.svg`,
-      `${open}${ground(tile)}${markAt(at, at, SQUARE.disc, ink)}</svg>`,
-      PRODUCT_NAME,
-    );
-    emit(
-      `mark/mark-square-transparent-${mode}.svg`,
-      `${open}${markAt(at, at, SQUARE.disc, INKS[mode])}</svg>`,
-      PRODUCT_NAME,
-    );
+  for (const [name, ink] of [...Object.entries(INKS), ["monochrome", "#000000"]]) {
+    emit(`mark/mark-${name}.svg`, `${open}${markAt(at, at, SQUARE.disc, ink)}</svg>`, PRODUCT_NAME);
   }
-  // On true black, for surfaces that want the mark on black.
-  emit(
-    "mark/mark-square-black.svg",
-    `${open}${ground("#000000")}${markAt(at, at, SQUARE.disc, "#ffffff")}</svg>`,
-    PRODUCT_NAME,
-  );
-  // In pure black on transparency: the one-ink glyph a partner surface tints
-  // for its own theme, such as an integration's icon on Sentry, which takes
-  // no colour but black.
-  emit(
-    "mark/mark-square-monochrome.svg",
-    `${open}${markAt(at, at, SQUARE.disc, "#000000")}</svg>`,
-    PRODUCT_NAME,
-  );
 }
 
-// Avatar: the disc spanning ICON_MARK of the square, as in the app icons,
-// so the circle a profile photo is cut to (GitHub, X, Slack, LinkedIn) still
-// leaves a ring of the tile round the rim. Opaque tiles, because a profile
-// photo rarely shows through.
+// Avatar: the disc on a square tile, per mode and on flat black, spanning
+// ICON_MARK of it, as in the app icons, so the circle a profile photo is cut
+// to (GitHub, X, Slack, LinkedIn) still leaves a ring of the tile round the
+// rim, and a surface that rounds a square's corners itself (GitHub's
+// organization avatar) clips nothing. Opaque tiles, because a profile photo
+// rarely shows through.
 const AVATAR = { side: 100, disc: 100 * ICON_MARK };
 {
   const at = (AVATAR.side - AVATAR.disc) / 2;
@@ -265,16 +273,36 @@ const AVATAR = { side: 100, disc: 100 * ICON_MARK };
 // crop takes the top and bottom edges. One card, dark only: a link preview
 // follows no UI theme. Its PNG is cut into apps/web/public/.
 const CARD = { WIDTH: 1200, HEIGHT: 630, FILL: 0.56 };
-{
-  const { body, box } = lockup(INKS.dark);
-  const k = (CARD.WIDTH * CARD.FILL) / (box.right - box.left);
-  const tx = CARD.WIDTH / 2 - (k * (box.left + box.right)) / 2;
-  const ty = CARD.HEIGHT / 2 - (k * (box.top + box.bottom)) / 2;
-  emit(
-    "social/og-card.svg",
-    `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${BRAND.DARK.GROUND}"/><g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(k)})">${body}</g></svg>`,
-    PRODUCT_NAME,
-  );
+emit(
+  "social/og-card.svg",
+  `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${BRAND.DARK.GROUND}"/>${centred(lockup(INKS.dark), CARD.WIDTH, CARD.HEIGHT, CARD.FILL)}</svg>`,
+  PRODUCT_NAME,
+);
+
+// Banners: the lockup centred on a flat ground, for a profile's or a page's
+// cover (LinkedIn's 1584 by 396, X's 1500 by 500, a slide or a call's
+// background at 16:9), drawn at twice the size each asks for so it stays
+// sharp on a dense screen. The lockup spans FILL of the width, leaving the
+// lower left clear where LinkedIn sets the profile photo over it. Three
+// grounds: each mode's, and the light icon's copper tile under white.
+const BANNER_GROUNDS = {
+  dark: { ground: BRAND.DARK.GROUND, ink: INKS.dark },
+  light: { ground: BRAND.LIGHT.GROUND, ink: INKS.light },
+  copper: { ground: TILES.light.tile, ink: TILES.light.ink },
+};
+const BANNERS = {
+  "4x1": { WIDTH: 3168, HEIGHT: 792, FILL: 0.36 },
+  "3x1": { WIDTH: 3000, HEIGHT: 1000, FILL: 0.4 },
+  "16x9": { WIDTH: 3840, HEIGHT: 2160, FILL: 0.44 },
+};
+for (const [shape, { WIDTH, HEIGHT, FILL }] of Object.entries(BANNERS)) {
+  for (const [name, { ground, ink }] of Object.entries(BANNER_GROUNDS)) {
+    emit(
+      `banner/banner-${name}-${shape}.svg`,
+      `${svgOpen(WIDTH, HEIGHT)}<rect width="${WIDTH}" height="${HEIGHT}" fill="${ground}"/>${centred(lockup(ink), WIDTH, HEIGHT, FILL)}</svg>`,
+      PRODUCT_NAME,
+    );
+  }
 }
 
 // CTA button: a download link drawn as the site's own primary button, for a
