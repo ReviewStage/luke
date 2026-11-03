@@ -1,7 +1,7 @@
 import type { FileChip } from "@repo/features/attachment-model";
 import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { ErrorState } from "@repo/ui";
+import { cssCustomProperties, ErrorState, joinRefs, useNearView } from "@repo/ui";
 import { PICTURE_STATE } from "@repo/ui/picture-cache";
 import {
   createContext,
@@ -17,7 +17,7 @@ import {
   useState,
 } from "react";
 import { unreadShown } from "../failure-report.js";
-import { PictureBlock } from "../picture-block.js";
+import { PICTURE_BLOCK_CLASS, PictureBlock } from "../picture-block.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
@@ -36,8 +36,14 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * bytes are held, and one whose read failed is left out. A WebM the agent
  * recorded is drawn and walked as a picture is, as its still, and the viewer
  * plays it. The bytes are the Inbox's own reads (`use-task-inbox.ts`), asked
- * for as a picture is first drawn, so one inside a card no one opened is
- * never fetched. A
+ * for as a picture first comes within a screenful of the screen, so one
+ * inside a card no one opened, or far up a thread no one scrolled, is never
+ * fetched; the viewer walks the pictures read so far. A picture or video
+ * held is drawn only while it stands near the screen (`@repo/ui`'s
+ * `useNearView`), and a box as tall as it stood everywhere else, so a long
+ * thread of screenshots and recordings holds a few screens' worth of
+ * decoded pictures and players at once rather than all of them, which a
+ * phone's browser cannot. A
  * picture a comment carried that its words do not draw, a member's file,
  * is drawn after them by the same `InboxPicture` and walked with the rest. A
  * picture of another item, one copied across, is that item's to read, and
@@ -95,8 +101,9 @@ function viewerFile(alt: string, name: string | undefined, url: string): FileChi
  * up to the column's width and a screenful's height, once its bytes are
  * held, its caption under it, pressed to open the item's pictures larger
  * over the window from it; a quiet box while they are read, and a line
- * with Retry where the read did not answer. It asks for its bytes as it is
- * first drawn. Nothing is drawn outside `InboxPictures`.
+ * with Retry where the read did not answer. It asks for its bytes as it
+ * first comes near the screen, and away from it stands as a box of the
+ * height it last stood. Nothing is drawn outside `InboxPictures`.
  */
 export function InboxPicture({
   attachmentId,
@@ -113,23 +120,36 @@ export function InboxPicture({
   const door = useContext(InboxPicturesContext);
   const key = useId();
   const anchor = useRef<HTMLElement | null>(null);
+  const [place, { near, height }] = useNearView();
+  const placed = useMemo(() => joinRefs(anchor, place), [place]);
   const itemId = door?.itemId;
   const onImage = door?.onImage;
   const register = door?.register;
   const image = door?.images.get(attachmentId);
   const held = image !== undefined;
   useEffect(() => {
-    if (!held && itemId !== undefined) onImage?.(itemId, attachmentId);
-  }, [held, itemId, attachmentId, onImage]);
+    if (near && !held && itemId !== undefined) onImage?.(itemId, attachmentId);
+  }, [near, held, itemId, attachmentId, onImage]);
   useLayoutEffect(
     () => register?.(key, { attachmentId, alt, name, anchor }),
     [register, key, attachmentId, alt, name],
   );
   if (door === undefined) return null;
-  if (image === undefined) {
+  // Away from the screen, a picture once drawn holds its place and lets its bytes' drawing go.
+  if (!near && height !== undefined) {
+    return (
+      <span
+        ref={placed}
+        className={`${PICTURE_BLOCK_CLASS} h-picture-held`}
+        style={cssCustomProperties({ "--picture-held-height": `${height}px` })}
+        data-state="away"
+      />
+    );
+  }
+  if (image === undefined || !near) {
     return (
       <PictureBlock
-        ref={anchor}
+        ref={placed}
         state={{ kind: PICTURE_STATE.READING }}
         alt={alt}
         caption={caption}
@@ -139,7 +159,7 @@ export function InboxPicture({
   if ("failed" in image) {
     return (
       <span
-        ref={anchor}
+        ref={placed}
         className="picture-block my-block-gap block w-fit max-w-full"
         data-inbox-image-failed=""
       >
@@ -154,7 +174,7 @@ export function InboxPicture({
   }
   return (
     <PictureBlock
-      ref={anchor}
+      ref={placed}
       state={{ kind: PICTURE_STATE.READY, url: image.url }}
       alt={alt}
       caption={caption}
