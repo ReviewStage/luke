@@ -276,7 +276,7 @@ function installationJson(installation: InstallationFixture) {
  * but a suspended one, which GitHub refuses as forbidden;
  * GitHub's web flow exchanges any code but the refused one for an expiring
  * user access token, the fixture member's, that sees every installation
- * given, and revokes it; the App's
+ * given, and revokes it, and refreshes no token; the App's
  * bot is the one given, the fixture's own when unsaid; and a repository
  * answers from the script given where a test hands one. Nothing else: any
  * other request fails.
@@ -291,7 +291,10 @@ export function githubReaching(
   const notFound = () => Response.json({ message: "Not Found" }, { status: 404 });
   return fakeGitHub(async (sent) => {
     if (sent.url === TOKEN_ENDPOINT) {
-      return new URLSearchParams(sent.body).get("code") === GITHUB_FIXTURE_REFUSED_CODE
+      const asked = new URLSearchParams(sent.body);
+      // Note that only the web flow's exchange is answered: a refresh finds GitHub unavailable.
+      if (!asked.has("code")) return new Response(null, { status: 503 });
+      return asked.get("code") === GITHUB_FIXTURE_REFUSED_CODE
         ? Response.json({ error: "bad_verification_code" })
         : Response.json({
             access_token: GITHUB_FIXTURE_AUTHORIZED_TOKEN,
