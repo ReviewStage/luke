@@ -97,6 +97,7 @@ export const NOT_FOUND_THING = {
   AUTOMATION: "automation",
   PERSON: "profile",
   ACCOUNT: "account",
+  WORKSPACE: "workspace",
 } as const;
 
 export type NotFoundThing = (typeof NOT_FOUND_THING)[keyof typeof NOT_FOUND_THING];

@@ -1746,6 +1746,26 @@ test("the Inbox opens on nothing chosen, from its row and from a link, whatever 
   assert.equal(fromLink, undefined);
 });
 
+test("a workspace's Board link opens in the workspace its step names, and one naming none of the reader's stands as not found rather than in the workspace listed", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const open = (workspace: string) =>
+    act(() => tab.control().onOpenLink({ workspace, place: { kind: LINK_PLACE.BOARD } }));
+
+  open("acme");
+  const named = [tab.control().workspace?.id, tab.control().boardView.open];
+  open("xyz");
+
+  assert.deepEqual(named, [ACME.id, true]);
+  assert.deepEqual(
+    [
+      tab.control().workspace?.id,
+      tab.control().boardView.open,
+      tab.control().unknownWorkspace.open,
+    ],
+    [ACME.id, false, true],
+  );
+});
+
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
