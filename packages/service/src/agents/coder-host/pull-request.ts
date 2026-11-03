@@ -1,16 +1,16 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   recordAgentAuthor,
   updateAgentBranch,
   type WithRepository,
-} from "@luke/database/models/agent-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/database/models/agent-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { AGENT_AUTHOR, type AgentAuthor } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, type Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -419,13 +419,17 @@ export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(
   const read = readInput(input);
   if (result.status === ACTION_RESULT_STATUS.ACCEPTED && Result.isSuccess(read)) {
     yield* recordOpened(target, agent, read.success.head);
-    yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_CREATE, target.userId, {
-      opened_as:
-        result.openedAs === OPENED_AS.DEVELOPER
-          ? SERVER_PULL_REQUEST_OPENER.DEVELOPER
-          : SERVER_PULL_REQUEST_OPENER.APP,
-      is_draft: read.success.draft ?? false,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.PULL_REQUEST_CREATE,
+      { userId: target.userId, workspaceId: agent.organizationId },
+      {
+        opened_as:
+          result.openedAs === OPENED_AS.DEVELOPER
+            ? SERVER_PULL_REQUEST_OPENER.DEVELOPER
+            : SERVER_PULL_REQUEST_OPENER.APP,
+        is_draft: read.success.draft ?? false,
+      },
+    );
   }
   return result;
 });

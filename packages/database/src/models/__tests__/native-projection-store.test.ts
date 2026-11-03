@@ -6,6 +6,7 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { createAgent, recordAgentRunnerToken } from "../agent-store.js";
 import {
@@ -26,7 +27,7 @@ const openConversation = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   // Note that each agent's runner holds a digest of its own, which the store keeps unique.
   const digest = randomUUID();
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -36,6 +37,7 @@ const openConversation = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agent = Option.getOrThrow(started).agent;
   assert.equal(yield* recordAgentRunnerToken(userId, agent.id, digest), true);

@@ -1,12 +1,12 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readQueuedFile } from "@luke/database/models/agent-queue-store";
-import { hasRepository } from "@luke/database/models/agent-store";
-import { readConversationPicture } from "@luke/database/models/conversation-pictures";
-import { childConversationId } from "@luke/database/models/ids";
-import { agentCallIdSchema } from "@luke/features/agent-wire";
-import { githubImageOf } from "@luke/features/github-image";
-import { HTTP_METHOD } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readQueuedFile } from "@repo/database/models/agent-queue-store";
+import { hasRepository } from "@repo/database/models/agent-store";
+import { readConversationPicture } from "@repo/database/models/conversation-pictures";
+import { childConversationId } from "@repo/database/models/ids";
+import { agentCallIdSchema } from "@repo/features/agent-wire";
+import { githubImageOf } from "@repo/features/github-image";
+import { HTTP_METHOD } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Layer, Option, Result, type Scope } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
@@ -156,8 +156,9 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
 
 /**
  * GET serves one picture a tool answered an agent, kept beside its
- * transcript (`eve-host/relay-pictures.ts`), as its bytes under the media
- * type the service sniffed them to be, to whoever may read the agent; one of
+ * transcript (`coder-host/show-image.ts`, `browser/browser-tool.ts`), as
+ * its bytes under the media type the service sniffed them to be, to whoever
+ * may read the agent; one of
  * its workers' where the path names the delegation call, read from that
  * worker's own transcript. A picture of another agent's transcript, or of
  * another worker's, is not found, as an agent the account cannot reach is.

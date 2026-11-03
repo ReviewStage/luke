@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { INBOX_ASK_STATUS, INBOX_STATUS } from "@luke/features/inbox-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { INBOX_ASK_STATUS, INBOX_STATUS } from "@repo/features/inbox-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -39,7 +39,7 @@ import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-s
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

@@ -1,5 +1,5 @@
 {
-  "instead": "Draw a message box's foot with ComposerFoot from @luke/ui, and take its files through useAttachedFiles; the send button and the file readers are private to them.",
+  "instead": "Draw a message box's foot with ComposerFoot from @repo/ui, and take its files through useAttachedFiles; the send button and the file readers are private to them.",
   "classes": [
     { "class": "prompt-input-footer", "allow": ["packages/ui/src/components/composer-frame/"] },
     { "class": "prompt-input-tools", "allow": ["packages/ui/src/components/composer-frame/"] },

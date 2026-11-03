@@ -4,25 +4,25 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Database } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { savePlanText } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, messages } from "@luke/database/schemas/storage";
-import { fakeWorkspaceSeams, startTask } from "@luke/database/testing";
-import { firstMessageParts } from "@luke/features/agent-replay";
+import { Database } from "@repo/database/core/query";
+import { readAgent } from "@repo/database/models/agent-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { savePlanText } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { user } from "@repo/database/schemas/auth";
+import { conversations, messages } from "@repo/database/schemas/storage";
+import { fakeWorkspaceSeams, startTask } from "@repo/database/testing";
+import { firstMessageParts } from "@repo/features/agent-replay";
 import {
   type AgentTranscriptMessage,
   agentAnswerSchema,
   agentMessageAnswerSchema,
   agentMessagesAnswerSchema,
-} from "@luke/features/agent-wire";
-import { INBOX_ASK_STATUS, INBOX_IMAGE_TYPE, type InboxItem } from "@luke/features/inbox-wire";
-import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/agent-wire";
+import { INBOX_ASK_STATUS, INBOX_IMAGE_TYPE, type InboxItem } from "@repo/features/inbox-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import {
   Clock,
   type Context,
@@ -99,7 +99,7 @@ import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integr
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 
-export const ORIGIN = "https://luke.test";
+export const ORIGIN = "https://app.test";
 export const TASK_AGENTS = "/api/plans/agents";
 export const AGENT_MESSAGES = "/api/agents/messages";
 export const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
@@ -111,7 +111,7 @@ export const WORKSPACE_STARTS = "/api/workspaces/agents";
 export const AGENT = "/api/agents/agent";
 export const AGENT_INBOX = "/api/agents/{id}/inbox";
 /** Our own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
-export const AGENT_LUKE_TOOLS = "/api/agents/luke-tools";
+export const AGENT_WORKSPACE_TOOLS = "/api/agents/workspace-tools";
 export const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
 export const AGENT_OVERVIEW = [
@@ -343,7 +343,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -383,7 +382,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
-  ["/api/agents/luke-tools", (id: string) => `/api/agents/${id}/luke-tools`],
+  ["/api/agents/workspace-tools", (id: string) => `/api/agents/${id}/workspace-tools`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
   ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
   ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],
@@ -446,7 +445,6 @@ export const standing = (
           (input) =>
             Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
         ),
-      eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
       // The deployment acting for an account, an agent's starter for another agent's message or the
       // account a cookie named, which the fake writes down apart from any bearer.
@@ -689,7 +687,7 @@ const otherAccount = (token: string | null | undefined) =>
     }
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     return userId;
   });
 

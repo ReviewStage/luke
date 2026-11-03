@@ -1,7 +1,7 @@
 /**
  * main.ts -- the runner's process: stdin and the environment in, one launch run, and the process's exit code out; or, started as Codex's token command, the plan's access token out.
  *
- * Bundled with the SDK into one file (`pnpm --filter @luke/agent-runner
+ * Bundled with the SDK into one file (`pnpm --filter @repo/agent-runner
  * build`), which the service uploads to the agent's sandbox and starts there as the
  * agent user (P08). Exit 0 is a launch that ended as the service asked or as the
  * turn did; anything else is one we show as interrupted.

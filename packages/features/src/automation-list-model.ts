@@ -52,7 +52,7 @@ const WEEKDAY_NAMES = [
   "Saturdays",
 ] as const;
 
-/** Why a run did not start, as its row's line says it. */
+/** Why a run did not start, or what a started one did beside its start, as its row's line says it. */
 const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.CONCURRENCY]: "Skipped: an earlier run's agent was still at work.",
   [AUTOMATION_RUN_REASON.DAILY_CAP]:
@@ -73,6 +73,8 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.AGENT_GONE]: "The agent its runs go to is gone or archived.",
   // Note that the cooldown is not named, because a run does not keep the one it was skipped under.
   [AUTOMATION_RUN_REASON.SAME_SUBJECT]: "Skipped: already ran for this issue within its cooldown.",
+  [AUTOMATION_RUN_REASON.AGENT_REPLACED]:
+    "Started a fresh agent: the one its runs went to was gone or archived.",
 } as const satisfies Record<AutomationRunReason, string>;
 
 /** Each GitHub event as a trigger's sentence says what happens, after "When". */
@@ -89,7 +91,7 @@ const GITHUB_EVENT_WORDS = {
 /** Whose events a GitHub trigger hears, as its sentence names them after "by". */
 const GITHUB_SENDER_WORDS = {
   [GITHUB_SENDER.PEOPLE]: "people",
-  [GITHUB_SENDER.LUKE_AGENTS]: `${PRODUCT_NAME}'s agents`,
+  [GITHUB_SENDER.APP_AGENTS]: `${PRODUCT_NAME}'s agents`,
   [GITHUB_SENDER.OTHER_BOTS]: "other bots",
 } as const satisfies Record<GitHubSender, string>;
 
@@ -394,12 +396,16 @@ export function automationRunPlace(
   };
 }
 
-/** A run's line: why it did not start, where it did not, else where its agent stands, or that it waits to start. */
+/** A run's line: why it did not start, where it did not, else where its agent stands and what its start noted, or that it waits to start. */
 export function automationRunLine(
   run: AutomationRunSummary,
   /** Whose key the run's agent ran on where it is not the reader's: its creator, whose Settings the reader cannot mend. */
   keyHolder?: string | undefined,
 ): string {
+  if (run.status === AUTOMATION_RUN_STATUS.STARTED) {
+    const standing = run.agent === null ? "Its agent is gone" : agentLine(run.agent, keyHolder);
+    return run.reason === null ? standing : `${standing} · ${RUN_REASON_WORDS[run.reason]}`;
+  }
   if (run.reason !== null) return RUN_REASON_WORDS[run.reason];
   switch (run.status) {
     case AUTOMATION_RUN_STATUS.QUEUED:
@@ -408,7 +414,5 @@ export function automationRunLine(
       return "Couldn't start";
     case AUTOMATION_RUN_STATUS.SKIPPED:
       return "Skipped";
-    case AUTOMATION_RUN_STATUS.STARTED:
-      return run.agent === null ? "Its agent is gone" : agentLine(run.agent, keyHolder);
   }
 }

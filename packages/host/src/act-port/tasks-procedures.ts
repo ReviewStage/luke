@@ -13,9 +13,9 @@ import {
   type AdminFavoriteParams,
   type AdminReadAnswer,
   type AdminReadParams,
-} from "@luke/features/admin-wire";
-import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
-import { pagePlaceId } from "@luke/features/page-wire";
+} from "@repo/features/admin-wire";
+import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import { pagePlaceId } from "@repo/features/page-wire";
 import {
   type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
@@ -41,6 +41,8 @@ import {
   type TasksEditParams,
   type TasksFileAnswer,
   type TasksFileParams,
+  type TasksFindAnswer,
+  type TasksFindParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
@@ -79,7 +81,7 @@ import {
   type TasksTreeAnswer,
   type TasksTreeParams,
   type TasksWriteSectionParams,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
@@ -125,6 +127,7 @@ export interface TasksProceduresDependencies {
     tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
     tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
     onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
+    tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
     tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
@@ -159,7 +162,7 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 /**
  * A page's HTML as its tab's source reads it: line by line, plain, since the
  * panel draws it as every code is, through Pierre's diffs, which colours it
- * (`@luke/panel`'s `whole-file.tsx`).
+ * (`@repo/panel`'s `whole-file.tsx`).
  */
 function pageSourceLines(html: string): CodeLines {
   return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
@@ -487,6 +490,14 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* dependencies.colourCode(input.language, input.code);
       },
     ),
+    [TASKS_ACT_KIND.TASKS_FIND]: actPort[TASKS_ACT_KIND.TASKS_FIND].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksFind(input);
+    }),
     [TASKS_ACT_KIND.TASKS_REVISIONS]: actPort[TASKS_ACT_KIND.TASKS_REVISIONS].effect(function* ({
       input,
       context,

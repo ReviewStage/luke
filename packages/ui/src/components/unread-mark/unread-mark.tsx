@@ -7,7 +7,7 @@
  * alone says nothing to a reader who cannot see it. The gutter sets its
  * line in a title's type, so its baseline is the title's, and the dot
  * stands centred on the title's capitals rather than on its line's box,
- * or on the capitals a row names as its own (`--luke-mark-cap`), a lead
+ * or on the capitals a row names as its own (`--ui-mark-cap`), a lead
  * line's. The dot is the accent's ink rather than its fill, because the web's cyan
  * fill reads at 1.7:1 on its light page, under a mark's 3:1.
  */
@@ -16,11 +16,11 @@
 export function UnreadMark({ unread }: { unread: boolean }): React.JSX.Element {
   return (
     <span
-      className="luke-unread-gutter block w-status-dot flex-none text-center text-label"
+      className="ui-unread-gutter block w-status-dot flex-none text-center text-label"
       aria-hidden="true"
     >
       {unread ? (
-        <span className="luke-unread-dot inline-block size-status-dot rounded-disc bg-accent-ink align-[calc(var(--luke-mark-cap,1cap)/2-var(--spacing-status-dot)/2)]" />
+        <span className="ui-unread-dot inline-block size-status-dot rounded-disc bg-accent-ink align-[calc(var(--ui-mark-cap,1cap)/2-var(--spacing-status-dot)/2)]" />
       ) : null}
     </span>
   );

@@ -1,4 +1,4 @@
-import { VIRTUAL_ROW_KEY_ATTRIBUTE, type VirtualRowsHandle } from "@luke/ui/virtual-rows";
+import { VIRTUAL_ROW_KEY_ATTRIBUTE, type VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { type RefObject, useEffect, useState } from "react";
 import { type FIND_STEP, type FindSource, type FindTally, useFindSource } from "../find-in-tab.js";
 import {

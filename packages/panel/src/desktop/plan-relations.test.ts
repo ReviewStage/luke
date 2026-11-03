@@ -7,9 +7,9 @@ import {
   type TaskBlockRelation,
   type TaskRelationChangeRequest,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/task-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -22,7 +22,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { PlanRelations } from "./plan-relations.js";
 
 /**
- * plan-relations.test.ts -- the open task's Sub-tasks and Relations groups:
+ * plan-relations.test.ts -- the open task's Sub-tasks and Task relations groups:
  * a sub-task's own nested under it once its fold opens, a group drawn only
  * while it holds a row, and a relation's kind moved from its pill in one
  * call, never a block taken away and added again, and Remove relation
@@ -115,7 +115,7 @@ function rowIds(container: HTMLElement, list: string): (string | null)[] {
   );
 }
 
-test("a sub-task's own stand under it once its fold opens, and a task with no relations draws no Relations group", () => {
+test("a sub-task's own stand under it once its fold opens, and a task with no relations draws no Task relations group", () => {
   const sent = { changes: [], removed: [] };
   const container = draw(
     [summary("t-2", 2, DOCUMENT_TASK.id), summary("t-3", 3, "t-2"), summary("t-4", 4)],
@@ -124,7 +124,7 @@ test("a sub-task's own stand under it once its fold opens, and a task with no re
   );
 
   assert.deepEqual(rowIds(container, "Sub-tasks"), ["t-2"]);
-  assert.equal(container.querySelector("ul[aria-label='Relations']"), null);
+  assert.equal(container.querySelector("ul[aria-label='Task relations']"), null);
 
   act(() =>
     container.querySelector<HTMLButtonElement>("button[aria-label='Sub-tasks of Task 2']")?.click(),
@@ -140,7 +140,7 @@ test("a relation stands while the list does not hold its task, and picking anoth
   const container = draw([summary("t-5", 5)], { blockedBy: ["t-5"], blocks: ["t-9"] }, sent);
   assert.equal(container.querySelector("ul[aria-label='Sub-tasks']"), null);
   // Note that a task the list does not hold yet still stands, so a list still read hides no relation.
-  assert.deepEqual(rowIds(container, "Relations"), ["t-5", "t-9"]);
+  assert.deepEqual(rowIds(container, "Task relations"), ["t-5", "t-9"]);
   const unlisted = container.querySelector("li[data-task-id='t-9']");
   assert.equal(
     unlisted?.querySelector("[data-cell='status'] button"),

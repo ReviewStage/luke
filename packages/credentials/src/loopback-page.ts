@@ -1,4 +1,4 @@
-import { FACE_ART, GITHUB_PATH, GOOGLE_MARK_LAYERS } from "@luke/brand";
+import { BRAND_PALETTE, GITHUB_PATH, GOOGLE_MARK_LAYERS, MARK_ART } from "@repo/brand";
 
 /**
  * The page the browser is left on after the OAuth redirect lands on the
@@ -39,19 +39,13 @@ interface LoopbackPage {
 }
 
 /**
- * The face, drawn from the same generated constants the renderer draws it
- * from, so this copy cannot drift from the artwork. The tight viewBox is the
- * mark's own, as the landing page crops it.
+ * The product's mark, drawn from the same generated constants the renderer
+ * draws it from, so this copy cannot drift from the artwork.
  */
 function markSvg(ink = "currentColor", className = "mark"): string {
-  const { MARK_VIEW_BOX, TILT, SMILE, STROKE_WIDTH, EYE_X, EYE_Y, EYE_RADIUS } = FACE_ART;
   return (
-    `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" viewBox="${MARK_VIEW_BOX}" fill="none" aria-hidden="true">` +
-    `<g transform="${TILT}">` +
-    `<path d="${SMILE}" fill="none" stroke="${ink}" stroke-width="${STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>` +
-    `<circle cx="${EYE_X.LEFT}" cy="${EYE_Y}" r="${EYE_RADIUS}" fill="${ink}"/>` +
-    `<circle cx="${EYE_X.RIGHT}" cy="${EYE_Y}" r="${EYE_RADIUS}" fill="${ink}"/>` +
-    `</g></svg>`
+    `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" viewBox="${MARK_ART.VIEW_BOX}" aria-hidden="true">` +
+    `<path d="${MARK_ART.PATH}" fill="${ink}"/></svg>`
   );
 }
 
@@ -93,13 +87,16 @@ function connectionGraphic(source: LoopbackConnectionSource | undefined): string
   );
 }
 
+/** The page's colours: the brand's dark theme, since the page is drawn dark. */
+const INK = BRAND_PALETTE.DARK;
+
 const PAGE_STYLE = `
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: #08090b;
-    color: rgba(255, 255, 255, 0.92);
+    background: ${INK.GROUND};
+    color: ${INK.TEXT};
     font-family: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -109,12 +106,12 @@ const PAGE_STYLE = `
     padding: 40px 32px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
-    background: #101114;
+    background: ${INK.OVERLAY};
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
     text-align: center;
   }
   .solo-mark { display: inline-flex; margin-bottom: 4px; }
-  .mark { width: 52px; height: auto; color: rgba(255, 255, 255, 0.92); }
+  .mark { width: 52px; height: auto; color: ${INK.TEXT}; }
   .connection {
     display: flex;
     align-items: center;
@@ -122,11 +119,11 @@ const PAGE_STYLE = `
     gap: 16px;
     margin: 0 auto 20px;
   }
-  .provider-mark { display: block; width: 38px; height: 38px; flex: 0 0 auto; color: rgba(255, 255, 255, 0.92); }
+  .provider-mark { display: block; width: 38px; height: 38px; flex: 0 0 auto; color: ${INK.TEXT}; }
   .provider-mark-google { width: 38px; height: 38px; }
   .provider-mark-github { width: 38px; height: 38px; }
   .mark-connection { width: 48px; flex: 0 0 auto; }
-  .arrow { width: 24px; height: 24px; color: rgba(255, 255, 255, 0.56); flex: 0 0 auto; }
+  .arrow { width: 24px; height: 24px; color: ${INK.TEXT_MUTED}; flex: 0 0 auto; }
   .pill {
     display: inline-block;
     padding: 3px 11px;
@@ -134,19 +131,19 @@ const PAGE_STYLE = `
     font-size: 0.75rem;
     font-weight: 650;
     letter-spacing: 0.2px;
-    background: rgba(111, 220, 164, 0.14);
-    color: #6fdca4;
+    background: color-mix(in srgb, ${INK.COMPLETE} 14%, transparent);
+    color: ${INK.COMPLETE};
   }
-  .pill[data-tone="attention"] { background: rgba(255, 160, 73, 0.14); color: #ffa049; }
+  .pill[data-tone="attention"] { background: color-mix(in srgb, ${INK.ATTENTION} 14%, transparent); color: ${INK.ATTENTION}; }
   h1 { margin: 12px 0 8px; font-size: 1.375rem; line-height: 1.2; }
-  p { margin: 0; color: rgba(255, 255, 255, 0.56); font-size: 0.9375rem; line-height: 1.6; }
+  p { margin: 0; color: ${INK.TEXT_MUTED}; font-size: 0.9375rem; line-height: 1.6; }
 `;
 
 export function accountLoopbackPage(page: LoopbackPage): string {
   // The same mark as the tab's icon, travelling inside the document like
   // everything else on it: a data URL fetches nothing from anywhere. Inked
   // outright, because `currentColor` resolves to black outside the page.
-  const favicon = encodeURIComponent(markSvg("#f5f5f7"));
+  const favicon = encodeURIComponent(markSvg(INK.TEXT));
   return (
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +

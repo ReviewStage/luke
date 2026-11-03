@@ -1,8 +1,9 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
+  LIST_ROW_CHEVRON,
   LIST_ROW_CURRENT,
   LIST_ROW_CURRENT_LOOK,
   LIST_ROW_INK,
@@ -20,8 +21,8 @@ import {
   Switch,
   TrashIcon,
   UserIcon,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -429,7 +430,7 @@ function ListRows(): React.JSX.Element {
           <List label="Plans" density={LIST_DENSITY.DENSE}>
             <ListRow
               title="Ship the release"
-              description="luke"
+              description="web"
               meta="2h"
               current={LIST_ROW_CURRENT.ITEM}
               onPress={() => undefined}
@@ -438,7 +439,7 @@ function ListRows(): React.JSX.Element {
             />
             <ListRow
               title="Draw the sidebar with the shared rows"
-              description="luke"
+              description="web"
               meta="1d"
               onPress={() => undefined}
               actionsAt={LIST_ROW_ACTIONS.HOVER}
@@ -488,6 +489,23 @@ function ListRows(): React.JSX.Element {
               chevron
               onPress={() => undefined}
             />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-chevron-meta" title="A chevron in its metadata's place">
+        <div className="catalog-narrow">
+          <List label="Servers" density={LIST_DENSITY.COMPACT}>
+            {[LIST_ROW_CHEVRON.ROOM, LIST_ROW_CHEVRON.META].map((at) => (
+              <ListRow
+                key={at}
+                title="search_issues_across_every_repository_of_an_organization"
+                meta="24 tools"
+                chevron
+                chevronAt={at}
+                actions={<Switch checked label={`Chevron ${at}`} onChange={() => undefined} />}
+                onPress={() => undefined}
+              />
+            ))}
           </List>
         </div>
       </CatalogSection>

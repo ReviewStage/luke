@@ -2,7 +2,7 @@ import {
   ACCOUNT_PROVIDER,
   accountSnapshotSchema,
   signInAnswerSchema,
-} from "@luke/credentials/snapshot";
+} from "@repo/credentials/snapshot";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { ACCOUNT_ACT_KIND } from "./kinds.js";

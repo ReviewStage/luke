@@ -1,5 +1,5 @@
 {
-  "name": "@luke/claude-code-probe",
+  "name": "@repo/claude-code-probe",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@luke/service": "workspace:*",
-    "@luke/wire": "workspace:*",
+    "@repo/service": "workspace:*",
+    "@repo/wire": "workspace:*",
     "@vercel/sandbox": "3.8.0",
     "effect": "catalog:"
   },

@@ -1,0 +1,17 @@
+User-agent: *
+Disallow: /api/
+Disallow: /app$
+Disallow: /app/
+Disallow: /app.html
+Disallow: /admin$
+Disallow: /admin.html
+Disallow: /accept-invitation.html
+Disallow: /connect-github.html
+Disallow: /consent.html
+Disallow: /desktop-session.html
+Disallow: /github-installed.html
+Disallow: /integration-connected.html
+Disallow: /page-in-mac-app.html
+Disallow: /sign-in.html
+
+Sitemap: https://vespin.dev/sitemap.xml

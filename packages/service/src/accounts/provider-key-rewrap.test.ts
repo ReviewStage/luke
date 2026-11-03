@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { readGitHubTokenRow, saveGitHubToken } from "@luke/database/models/github-token-store";
+import { Database } from "@repo/database/core/query";
+import { readGitHubTokenRow, saveGitHubToken } from "@repo/database/models/github-token-store";
 import {
   type KeyRing,
   openGitHubToken,
@@ -10,18 +10,18 @@ import {
   parseKeyRing,
   sealGitHubToken,
   sealProviderKey,
-} from "@luke/database/models/provider-key-seal";
-import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
-import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { user } from "@luke/database/schemas/auth";
-import { githubPersonalToken } from "@luke/database/schemas/github-personal-token";
-import { getTestDB } from "@luke/database/testing";
+} from "@repo/database/models/provider-key-seal";
+import { listProviderKeyRows, saveProviderKey } from "@repo/database/models/provider-key-store";
+import { accountProviderKey } from "@repo/database/schemas/account-provider-key";
+import { user } from "@repo/database/schemas/auth";
+import { githubPersonalToken } from "@repo/database/schemas/github-personal-token";
+import { getTestDB } from "@repo/database/testing";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyKind,
   type ProviderKeyProvider,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -106,7 +106,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           `user-${randomUUID()}`,
         ];
         for (const id of [first, second, subscriber]) {
-          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
         }
         yield* storeKey(
           ring(KEK.ONE),
@@ -192,7 +192,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         const owner = `user-${randomUUID()}`;
         yield* db
           .insert(user)
-          .values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
+          .values({ id: owner, name: "Test User", email: `${owner}@app.test` });
         yield* storeKey(
           ring(KEK.ONE),
           owner,
@@ -210,7 +210,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         ) =>
           Effect.gen(function* () {
             const response = yield* handleProviderKeyRewrap({
-              request: new Request("https://luke.test/api/maintenance/provider-keys-rewrap", {
+              request: new Request("https://app.test/api/maintenance/provider-keys-rewrap", {
                 method: init.method ?? "POST",
                 headers:
                   init.bearer === undefined ? {} : { authorization: `Bearer ${init.bearer}` },

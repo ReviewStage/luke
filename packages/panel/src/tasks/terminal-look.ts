@@ -1,5 +1,5 @@
 /**
- * terminal-look.ts -- the classes a Terminal tab's room wears, an agent's sandbox's (`terminal-tab.tsx`) and the Mac's own (`mac-terminal-tab.tsx`) alike.
+ * terminal-look.ts -- the classes an agent's Terminal tab's room wears (`terminal-tab.tsx`).
  *
  * The screen and the shells beside it stand in a body on the terminal's own
  * ground; the list slides in past the body's right edge and out over the

@@ -1,7 +1,7 @@
-import { GITHUB_PAGE, gitHubPageLink } from "@luke/features/link-grammar";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
-import type { TasksFileAnswer } from "@luke/features/tasks-view";
+import { GITHUB_PAGE, gitHubPageLink } from "@repo/features/link-grammar";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@repo/features/task-wire";
+import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**

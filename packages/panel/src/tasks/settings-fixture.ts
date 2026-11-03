@@ -16,13 +16,13 @@
  * and an expired sign-in by its status, which carries nothing secret.
  */
 
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { AdminMetrics, AdminRetentionCohort } from "@luke/features/admin-answer-wire";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import type { AdminMetrics, AdminRetentionCohort } from "@repo/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
   FUNNEL_STEP,
   REACH_FEATURE,
-} from "@luke/features/admin-overview-vocabulary";
+} from "@repo/features/admin-overview-vocabulary";
 import {
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
@@ -32,17 +32,17 @@ import {
   ADMIN_UNANSWERED,
   adminMetricsScope,
   adminMetricsWindow,
-} from "@luke/features/admin-wire";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
+} from "@repo/features/admin-wire";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+} from "@repo/features/device-agent-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -50,17 +50,17 @@ import {
   type IntegrationAccount,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import type { MemorySummary } from "@luke/features/memory-wire";
-import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import type { TasksView } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+} from "@repo/features/integration-wire";
+import type { MemorySummary } from "@repo/features/memory-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import type { TasksView } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 
 /** When the fixture stands, from which every instant here is counted: a fixed one, never the clock. */
 const NOW = Date.parse("2026-10-24T09:00:00Z");
@@ -115,7 +115,7 @@ const BEATING_HOSTS = [
 ] as const;
 
 /** Where the staged install commands fetch their script. */
-const STAGED_INSTALL_SCRIPT = "https://luke.test/install.sh";
+const STAGED_INSTALL_SCRIPT = "https://app.test/install.sh";
 
 /** The page each Settings profile opens on, and the workspace it shows where that is not the sidebar's first. */
 const SETTINGS_LINKS: ReadonlyMap<string, SettingsLink> = new Map<string, SettingsLink>([
@@ -705,6 +705,15 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     configured: true,
     installations:
       workspaceId === WORKSPACE.ACME ? [{ installationId: "sentry-acme", account: "acme" }] : [],
+  }),
+  [ACT_KIND.WORKSPACE_SLACK_BOT_READ]: ({ workspaceId }) =>
+    workspaceId === WORKSPACE.ACME
+      ? { configured: true, team: { id: "T0ACME", name: "Acme" }, notifications: true }
+      : { configured: true },
+  [ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: ({ notifications }) => ({
+    configured: true,
+    team: { id: "T0ACME", name: "Acme" },
+    notifications,
   }),
   [ACT_KIND.INSTALLED_SKILLS_LIST]: ({ workspaceId }) => ({ skills: skills(workspaceId) }),
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>

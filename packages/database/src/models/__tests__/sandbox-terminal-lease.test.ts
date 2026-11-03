@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
@@ -42,7 +42,7 @@ const openAgent = (turn?: TurnStatus) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const sessionId = `wrun_${randomUUID()}`;
     const [row] = yield* db
       .insert(conversations)

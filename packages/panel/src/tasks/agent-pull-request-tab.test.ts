@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   AGENT_CALL_FAILURE,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestWriteAnswerView,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentOverviewChecks,
@@ -33,8 +33,8 @@ import {
   REVIEW_DECISION,
   REVIEW_STATE,
   type ReviewThread,
-} from "@luke/features/agent-wire";
-import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@luke/features/link-grammar";
+} from "@repo/features/agent-wire";
+import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@repo/features/link-grammar";
 import {
   FILE_VIEWED_STATE,
   MERGE_METHOD,
@@ -44,13 +44,13 @@ import {
   REACTION,
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
-} from "@luke/features/pull-request-write-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { timeRuntime } from "@luke/ui";
+} from "@repo/features/pull-request-write-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import { timeRuntime } from "@repo/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Clock, Context, Effect } from "effect";
@@ -398,13 +398,10 @@ function held<A>() {
 function Switching({
   control,
   first,
-  onRun,
 }: {
   control: AgentsControl;
   /** The tab it opens on, as the chip that opened it asked. */
   first: PullRequestView;
-  /** Runs the branch on this Mac, as the side panel offers where the platform has a Mac terminal; none elsewhere. */
-  onRun?: () => void;
 }) {
   const [view, setView] = useState<PullRequestView>(first);
   const [actions, setActions] = useState<TabActionGroups | undefined>(undefined);
@@ -421,7 +418,6 @@ function Switching({
       view,
       onView: setView,
       onActions: setActions,
-      onRun,
     }),
   );
 }
@@ -439,7 +435,7 @@ function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
           type: "button",
           disabled: "disabled" in action ? action.disabled : undefined,
           onClick: (event: React.MouseEvent<HTMLElement>) => {
-            if ("items" in action) return;
+            if ("items" in action || "panel" in action) return;
             if ("onAsk" in action) action.onAsk(event.currentTarget);
             else action.onSelect();
           },
@@ -573,6 +569,11 @@ function tabCount(tab: HTMLElement, name: string): string {
   return (option(tab, name).textContent ?? "").slice(name.length);
 }
 
+/** The lines the header counts after the branches, once it draws them. */
+function headerLines(tab: HTMLElement): string | undefined {
+  return tab.querySelector(".pull-request-lines")?.textContent ?? undefined;
+}
+
 /** How the Checks tab's glyph says its checks went, in its words. */
 function checksGlyph(tab: HTMLElement): string | null | undefined {
   return option(tab, "Checks").querySelector('[role="img"]')?.getAttribute("aria-label");
@@ -649,9 +650,9 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
   const merge = mergeControl(tab) ?? assert.fail("an open pull request has a merge control");
-  assert.equal(merge.querySelector(".luke-badge")?.textContent, "Conflicts");
+  assert.equal(merge.querySelector(".ui-badge")?.textContent, "Conflicts");
   assert.equal(
-    merge.querySelector(".merge-chip .luke-visually-hidden")?.textContent,
+    merge.querySelector(".merge-chip .ui-visually-hidden")?.textContent,
     ": Conflicts with main",
     "an open pull request says whether it would merge",
   );
@@ -659,7 +660,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     tab.querySelector(".pull-request-people [data-actor-ref]") ??
     assert.fail("who opened it is named");
   assert.deepEqual(
-    [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
+    [opener.querySelector(".ui-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
     "Vespin's own App's bot opened it, an App's bot on GitHub like any other",
   );
@@ -682,9 +683,9 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     /@charlespan asked\./u,
     "a mention stands as GitHub drew it",
   );
-  assert.equal(description.querySelector(".luke-code-card-title")?.textContent, "TypeScript");
+  assert.equal(description.querySelector(".ui-code-card-title")?.textContent, "TypeScript");
   assert.equal(
-    description.querySelector(".luke-code-card-body")?.textContent,
+    description.querySelector(".ui-code-card-body")?.textContent,
     "const days = 7;\n\nexport default days;",
     "a highlighted block is the window's own code block in its language, a blank line in it kept",
   );
@@ -693,11 +694,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "Sweep",
     "a task list stands, each box named by its item",
   );
-  assert.equal(
-    description.querySelectorAll(".luke-code-card").length,
-    1,
-    "inline code stays inline",
-  );
+  assert.equal(description.querySelectorAll(".ui-code-card").length, 1, "inline code stays inline");
   assert.match(description.textContent ?? "", /Run pnpm test first\./u);
   assert.equal(description.querySelector("script"), null, "a script never stands");
   assert.ok(!("stolen" in window), "nor does it run");
@@ -751,13 +748,13 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     checks.querySelector(".pull-request-count")?.textContent,
     "1 failed, 1 running, 1 passed",
   );
-  assert.deepEqual(words(tab, "li .luke-list-row-title"), [
+  assert.deepEqual(words(tab, "li .ui-list-row-title"), [
     "lint, failed",
     "build, running",
     "test, passed",
   ]);
   assert.deepEqual(
-    words(tab, 'li .luke-list-row-meta:not(:has([role="timer"]))'),
+    words(tab, 'li .ui-list-row-meta:not(:has([role="timer"]))'),
     ["1m 5s", "1m 5s"],
     "a finished check says how long it ran",
   );
@@ -808,7 +805,7 @@ it.effect(
       yield* TestClock.adjust("1 second");
       yield* Effect.promise(settle);
       assert.deepEqual(words(tab, '[role="timer"]'), ["1m 6s"], "the running one counts on");
-      assert.deepEqual(words(tab, 'li .luke-list-row-meta:not(:has([role="timer"]))'), [
+      assert.deepEqual(words(tab, 'li .ui-list-row-meta:not(:has([role="timer"]))'), [
         "1m 5s",
         "1m 5s",
       ]);
@@ -922,7 +919,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
       {
         environment: "Preview – luke-web",
         state: DEPLOYMENT_STATE.READY,
-        url: "https://luke-web-git-expiry.vercel.app",
+        url: "https://web-git-expiry.vercel.app",
         avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
       },
       { environment: "staging", state: DEPLOYMENT_STATE.FAILED, url: null },
@@ -947,11 +944,8 @@ test("the Checks tab lists the head's deployments over its checks: each environm
     tab.querySelector<HTMLElement>('[aria-label="Deployments"]') ??
     assert.fail("the deployments stand");
   assert.equal(deployments.querySelector(".pull-request-count")?.textContent, "2");
-  assert.deepEqual(words(deployments, "li .luke-list-row-title"), [
-    "Preview – luke-web",
-    "staging",
-  ]);
-  assert.deepEqual(words(deployments, "li .luke-list-row-description"), ["Deployed", "Failed"]);
+  assert.deepEqual(words(deployments, "li .ui-list-row-title"), ["Preview – luke-web", "staging"]);
+  assert.deepEqual(words(deployments, "li .ui-list-row-description"), ["Deployed", "Failed"]);
   assert.equal(
     deployments.querySelector("img")?.getAttribute("src"),
     "https://avatars.githubusercontent.com/in/8329?v=4&s=32",
@@ -960,7 +954,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
   assert.equal(buttons.length, 1, "a deployment naming no address opens nothing");
   act(() => buttons[0]?.click());
   await settle();
-  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+  assert.deepEqual(opened, ["https://web-git-expiry.vercel.app"]);
 
   act(() => root?.unmount());
   const none = await draw(controlAnswering());
@@ -985,7 +979,7 @@ test("the header offers Preview once the checks land, before their tab is shown:
           pullRequest: {
             ...CHECKS,
             deployments: [
-              ready("Preview – luke-web", "https://luke-web-git-expiry.vercel.app"),
+              ready("Preview – luke-web", "https://web-git-expiry.vercel.app"),
               { environment: "docs", state: DEPLOYMENT_STATE.PENDING, url: null },
               { environment: "staging", state: DEPLOYMENT_STATE.FAILED, url: null },
             ],
@@ -995,10 +989,10 @@ test("the header offers Preview once the checks land, before their tab is shown:
   );
   const single = preview(one) ?? assert.fail("the header offers Preview");
   assert.equal(single.tagName, "A", "one deployment is a link to the address it serves");
-  assert.equal(single.getAttribute("href"), "https://luke-web-git-expiry.vercel.app");
+  assert.equal(single.getAttribute("href"), "https://web-git-expiry.vercel.app");
   act(() => single.click());
   await settle();
-  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+  assert.deepEqual(opened, ["https://web-git-expiry.vercel.app"]);
 
   act(() => root?.unmount());
   opened = [];
@@ -1009,7 +1003,7 @@ test("the header offers Preview once the checks land, before their tab is shown:
           pullRequest: {
             ...CHECKS,
             deployments: [
-              ready("Preview – luke-web", "https://luke-web-git-expiry.vercel.app"),
+              ready("Preview – luke-web", "https://web-git-expiry.vercel.app"),
               ready("Preview – docs", "https://docs-git-expiry.vercel.app"),
             ],
           },
@@ -1058,7 +1052,7 @@ test("every check is listed, however many there are, those that failed first, th
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: many }) }),
   );
   await choose(tab, "Checks");
-  assert.deepEqual(words(tab, "li .luke-list-row-title"), [
+  assert.deepEqual(words(tab, "li .ui-list-row-title"), [
     "lint, failed",
     "types, failed",
     "build, running",
@@ -1289,7 +1283,7 @@ test("the description, a comment, a review, and a thread comment wear their reac
       pill.textContent,
       pill.getAttribute("aria-label"),
       pill.getAttribute("aria-pressed") ??
-        String(pill.querySelector('.luke-badge[data-lit="true"]') !== null),
+        String(pill.querySelector('.ui-badge[data-lit="true"]') !== null),
     ]);
   assert.deepEqual(pills(tab.querySelector('[aria-label="Description"]')), [
     ["👍12", "Charles Pan, you, and 10 more reacted with thumbs up", "true"],
@@ -1299,7 +1293,7 @@ test("the description, a comment, a review, and a thread comment wear their reac
   assert.deepEqual(
     pills(
       reviewed?.querySelector(
-        ":scope > .luke-comment > .luke-comment-body > .pull-request-reactions",
+        ":scope > .ui-comment > .ui-comment-body > .pull-request-reactions",
       ) ?? null,
     ),
     [["🎉1", "Charles Pan reacted with hooray", "false"]],
@@ -1492,7 +1486,7 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
 function filter(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>(
-      `section[aria-label="Conversation"] > .luke-disclosure-frame > .luke-disclosure-actions .pull-request-filter button[aria-label="${name}"]`,
+      `section[aria-label="Conversation"] > .ui-disclosure-frame > .ui-disclosure-actions .pull-request-filter button[aria-label="${name}"]`,
     ) ?? assert.fail(`the conversation offers ${name}`)
   );
 }
@@ -1501,7 +1495,7 @@ function filter(tab: HTMLElement, name: string): HTMLButtonElement {
 function sectionHead(tab: HTMLElement, name: string): HTMLElement {
   return (
     tab.querySelector<HTMLElement>(
-      `section[aria-label="${name}"] > .luke-disclosure-frame > details.pull-request-section-fold > summary`,
+      `section[aria-label="${name}"] > .ui-disclosure-frame > details.pull-request-section-fold > summary`,
     ) ?? assert.fail(`the ${name} folds under its heading`)
   );
 }
@@ -1516,7 +1510,7 @@ function filterNote(tab: HTMLElement, name: string): string {
 function drawnEntries(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll(".pull-request-entry")].map(
     (entry) =>
-      `${entry.querySelector(".luke-comment-head .luke-inline-ref-label")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
+      `${entry.querySelector(".ui-comment-head .ui-inline-ref-label")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
   );
 }
 
@@ -1666,7 +1660,7 @@ test("a phone draws the filters as one chip saying what is hidden, whose menu tu
   );
   const actions =
     tab.querySelector<HTMLElement>(
-      'section[aria-label="Conversation"] > .luke-disclosure-frame > .luke-disclosure-actions',
+      'section[aria-label="Conversation"] > .ui-disclosure-frame > .ui-disclosure-actions',
     ) ?? assert.fail("the Conversation's heading has an end");
   const chip = () =>
     actions.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
@@ -1705,7 +1699,7 @@ test("a phone draws the filters as one chip saying what is hidden, whose menu tu
 
 test("where the filters leave nothing of the conversation, it says no comment matches", async () => {
   window.localStorage.setItem(
-    "luke.conversation-filters",
+    "app.conversation-filters",
     JSON.stringify({ hideBots: true, hideResolved: false }),
   );
   const tab = await draw(
@@ -1813,7 +1807,7 @@ test("opened on its files, as a link to its changes opens it, the header stands 
   );
 
   await choose(tab, "Checks");
-  assert.deepEqual(words(shownPanel()[0] ?? tab, "li .luke-list-row-title"), [
+  assert.deepEqual(words(shownPanel()[0] ?? tab, "li .ui-list-row-title"), [
     "lint, failed",
     "build, running",
     "test, passed",
@@ -1883,7 +1877,7 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
     /^https:\/\/avatars\.githubusercontent\.com\/in\/4242\?/u,
   );
   assert.ok(
-    [...tab.querySelectorAll(".pull-request-entry .luke-comment-face img")].some((each) =>
+    [...tab.querySelectorAll(".pull-request-entry .ui-comment-face img")].some((each) =>
       (each.getAttribute("src") ?? "").startsWith(
         "https://avatars.githubusercontent.com/in/811515?",
       ),
@@ -1892,7 +1886,7 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
   );
 });
 
-test("each tab counts what Vespin holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
+test("each tab counts what Vespin holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files how many were published", async () => {
   const checks = held<AgentOverviewChecksAnswerView>();
   const tab = await draw(controlAnswering({ checks: checks.read }));
   assert.equal(tabCount(tab, "Conversation"), "2");
@@ -1902,7 +1896,7 @@ test("each tab counts what Vespin holds of it: the conversation its comments, re
     "how the checks went, as published, stands before they are read",
   );
   assert.equal(tabCount(tab, "Checks"), "", "how many waits on their read");
-  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
+  assert.equal(tabCount(tab, "Files changed"), "1");
 
   checks.answer({ pullRequest: CHECKS });
   await settle();
@@ -1971,7 +1965,7 @@ test("a check that ran for no time, skipped or cancelled before it began, says n
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: none }) }),
   );
   await choose(tab, "Checks");
-  assert.deepEqual(words(tab, "li .luke-list-row-meta"), ["1m 5s"]);
+  assert.deepEqual(words(tab, "li .ui-list-row-meta"), ["1m 5s"]);
 });
 
 test("a merged pull request says so on its pill, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {
@@ -2176,7 +2170,7 @@ test("the pill, the title, and the files' count stand from what Vespin holds bef
     "Expire invitations #42",
     "the title is what Vespin held of the pull request",
   );
-  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
+  assert.equal(tabCount(tab, "Files changed"), "1");
   assert.deepEqual(waiting(tab), [
     "Reading pull request",
     "Reading description",
@@ -2204,7 +2198,7 @@ test("the pill, the title, and the files' count stand from what Vespin holds bef
   checks.answer({ pullRequest: CHECKS });
   await settle();
   assert.deepEqual(waiting(tab), []);
-  assert.deepEqual(words(section("Checks"), "li .luke-list-row-title"), [
+  assert.deepEqual(words(section("Checks"), "li .ui-list-row-title"), [
     "lint, failed",
     "build, running",
     "test, passed",
@@ -2253,7 +2247,7 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
     assert.fail("the failed section offers a retry");
   act(() => retry.click());
   await settle();
-  assert.deepEqual(words(tab, "li .luke-list-row-title"), ["retried, passed"]);
+  assert.deepEqual(words(tab, "li .ui-list-row-title"), ["retried, passed"]);
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations #42",
@@ -2263,7 +2257,7 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
 
   await pressToolbar(tab, "Refresh");
   await settle();
-  assert.deepEqual(words(tab, "li .luke-list-row-title"), ["refreshed, passed"]);
+  assert.deepEqual(words(tab, "li .ui-list-row-title"), ["refreshed, passed"]);
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations weekly #42",
@@ -2523,12 +2517,12 @@ function mergePresses(tab: HTMLElement): HTMLButtonElement[] {
 function mergeShown(tab: HTMLElement) {
   const control = mergeControl(tab);
   if (control === null) return undefined;
-  const badge = control.querySelector(".merge-chip .luke-badge");
+  const badge = control.querySelector(".merge-chip .ui-badge");
   const [press] = mergePresses(tab);
   return {
     chip: badge?.textContent,
     tone: badge?.getAttribute("data-tone"),
-    sentence: control.querySelector(".merge-chip .luke-visually-hidden")?.textContent?.slice(2),
+    sentence: control.querySelector(".merge-chip .ui-visually-hidden")?.textContent?.slice(2),
     press: press?.textContent,
     look: press?.getAttribute("data-variant"),
     chevron: control.querySelector('[aria-label="Choose how to merge"]') !== null,
@@ -2758,14 +2752,14 @@ test("an open tab reads its checks and merge state again as the task list pushes
     }),
   );
   await choose(tab, "Checks");
-  const running = words(tab, "li .luke-list-row-title");
+  const running = words(tab, "li .ui-list-row-title");
   assert.notDeepEqual(running, ["build, passed"]);
   assert.equal(mergeShown(tab)?.chip, "Checking");
 
   push(CHECK_SUMMARY.PENDING);
   await settle();
   assert.deepEqual(
-    words(tab, "li .luke-list-row-title"),
+    words(tab, "li .ui-list-row-title"),
     running,
     "nothing moved, so nothing is read",
   );
@@ -2773,7 +2767,7 @@ test("an open tab reads its checks and merge state again as the task list pushes
 
   push(CHECK_SUMMARY.PASSING);
   await settle();
-  assert.deepEqual(words(tab, "li .luke-list-row-title"), ["build, passed"]);
+  assert.deepEqual(words(tab, "li .ui-list-row-title"), ["build, passed"]);
   assert.equal(mergeShown(tab)?.chip, undefined);
   assert.equal(mergeShown(tab)?.press, "Squash and merge");
 
@@ -2909,7 +2903,7 @@ test("Review stands at the end of the tabs' row however the pull request stands,
       ),
     );
     const row =
-      tab.querySelector<HTMLElement>(".pull-request-tab > .luke-pane-bar") ??
+      tab.querySelector<HTMLElement>(".pull-request-tab > .ui-pane-bar") ??
       assert.fail("the tabs' row stands");
     const review = buttonWith(row, /^Review$/u);
     assert.equal(review !== undefined, offered, state);
@@ -2931,7 +2925,7 @@ test("Review stands at the end of the tabs' row however the pull request stands,
 /** The Review press at the end of the tabs' row. */
 function reviewPress(tab: HTMLElement): HTMLButtonElement {
   return (
-    buttonWith(tab.querySelector(".pull-request-tab > .luke-pane-bar") ?? tab, /^Review$/u) ??
+    buttonWith(tab.querySelector(".pull-request-tab > .ui-pane-bar") ?? tab, /^Review$/u) ??
     assert.fail("an open pull request's tabs offer Review")
   );
 }
@@ -3086,7 +3080,7 @@ test("a press outside the review panel closes it, its words kept, and one on a s
     if (this.classList.contains("pull-request-review")) {
       return DOMRect.fromRect({ x: 600, y: 300, width: 80, height: 28 });
     }
-    if (this.classList.contains("luke-anchored-popover")) {
+    if (this.classList.contains("ui-anchored-popover")) {
       return DOMRect.fromRect({ x: 0, y: 0, width: 480, height: 600 });
     }
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
@@ -3095,10 +3089,10 @@ test("a press outside the review panel closes it, its words kept, and one on a s
     const tab = await draw(controlAnswering());
     const panel = openReview(tab);
     const layer =
-      tab.querySelector<HTMLElement>(".luke-anchored-popover") ??
+      tab.querySelector<HTMLElement>(".ui-anchored-popover") ??
       assert.fail("the panel hangs from Review");
     assert.equal(layer.dataset.side, "below");
-    assert.equal(layer.style.getPropertyValue("--luke-popover-room"), `${768 - 328 - 4 - 8}px`);
+    assert.equal(layer.style.getPropertyValue("--ui-popover-room"), `${768 - 328 - 4 - 8}px`);
 
     writeReview(panel, "Half a thought");
     act(() => {
@@ -3217,7 +3211,7 @@ test("who opened it reads as one phrase with when: opened a while ago, or, once 
       assert.fail("who opened it stands");
     const times = [...line.querySelectorAll("time")];
     return [
-      line.querySelector("[data-actor-ref] .luke-inline-ref-label")?.textContent,
+      line.querySelector("[data-actor-ref] .ui-inline-ref-label")?.textContent,
       line.querySelector(".pull-request-quiet")?.textContent,
       times.map((time) => time.getAttribute("datetime")),
     ];
@@ -3436,7 +3430,7 @@ function menuItems(): { readonly label: string; readonly checked: string | null 
       ':is([role="menuitem"], [role="menuitemcheckbox"])',
     ),
   ].map((item) => ({
-    label: item.querySelector(".luke-menu-item-label")?.textContent ?? "",
+    label: item.querySelector(".ui-menu-item-label")?.textContent ?? "",
     checked: item.getAttribute("aria-checked"),
   }));
 }
@@ -3448,7 +3442,7 @@ async function pressItem(words: string): Promise<void> {
       ...document.querySelectorAll<HTMLButtonElement>(
         ':is([role="menuitem"], [role="menuitemcheckbox"])',
       ),
-    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent?.startsWith(words)) ??
+    ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent?.startsWith(words)) ??
     assert.fail(`the menu offers ${words}`);
   act(() => item.click());
   await settle();
@@ -3500,7 +3494,7 @@ test("the reviewer picker lists the repository's teams then its people, the auth
   ]);
   const priyan =
     [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((item) =>
-      item.querySelector(".luke-menu-item-label")?.textContent?.includes("priyan"),
+      item.querySelector(".ui-menu-item-label")?.textContent?.includes("priyan"),
     ) ?? assert.fail("priyan is offered");
   assert.equal(
     priyan.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
@@ -3508,7 +3502,7 @@ test("the reviewer picker lists the repository's teams then its people, the auth
     "a reviewer is offered by their GitHub face, not a generic icon",
   );
   restOn(priyan);
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="github"]');
   assert.match(card?.textContent ?? "", /priyan/u);
   await pressItem("priyan");
 
@@ -3559,7 +3553,7 @@ test("a picker's choice shows its button busy once the change has waited the set
   );
   const picker = (name: string) =>
     tab.querySelector<HTMLButtonElement>(`.pull-request-reviewers button[aria-label^="${name}"]`);
-  const ringed = (name: string) => picker(name)?.querySelector(".luke-spinner-ring") != null;
+  const ringed = (name: string) => picker(name)?.querySelector(".ui-spinner-ring") != null;
   const labels = () => picker("Label") ?? picker("Updating labels");
   const reviewers = () => picker("Reviewer") ?? picker("Updating reviewers");
 
@@ -3696,10 +3690,8 @@ test("a label chosen stands under the title before GitHub answers, in the colour
   );
   const labels = () =>
     [
-      ...tab.querySelectorAll<HTMLElement>(
-        ".pull-request-header .pull-request-label > .luke-badge",
-      ),
-    ].map((label) => [label.textContent, label.style.getPropertyValue("--luke-badge-fill-light")]);
+      ...tab.querySelectorAll<HTMLElement>(".pull-request-header .pull-request-label > .ui-badge"),
+    ].map((label) => [label.textContent, label.style.getPropertyValue("--ui-badge-fill-light")]);
 
   act(() =>
     (
@@ -3906,7 +3898,7 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
   assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
 });
 
-test("a tab naming another pull request of the agent's repository by its number reads that one, counts its own lines, and changes it rather than the agent's own", async () => {
+test("a tab naming another pull request of the agent's repository by its number reads that one, counts its own lines and files, and changes it rather than the agent's own", async () => {
   const asked: unknown[] = [];
   const url = "https://github.com/acme/relay/pull/41";
   const earlier = {
@@ -3916,6 +3908,7 @@ test("a tab naming another pull request of the agent's repository by its number 
     url,
     additions: 9,
     deletions: 2,
+    changedFiles: 3,
   };
   const recorded =
     <A>(kind: string, answer: A) =>
@@ -3956,7 +3949,8 @@ test("a tab naming another pull request of the agent's repository by its number 
     ["pull request", AGENT.id, 41],
     ["conversation", AGENT.id, 41],
   ]);
-  assert.equal(tabCount(tab, "Files changed"), "+9 −2");
+  assert.equal(headerLines(tab), "+9 −2");
+  assert.equal(tabCount(tab, "Files changed"), "3");
   await pressAction(tab, "Close pull request");
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
   assert.deepEqual(changeNumbers, [41]);
@@ -4989,7 +4983,7 @@ test("code selected as text on lines GitHub takes a comment on is offered a Comm
 
 /** The rows the `/` menu inside `within` offers now, by their words; none while it stands closed. */
 function slashRows(within: ParentNode): string[] {
-  return [...within.querySelectorAll(".luke-block-menu .luke-combobox-option-label")].map(
+  return [...within.querySelectorAll(".ui-block-menu .ui-combobox-option-label")].map(
     (row) => row.textContent ?? "",
   );
 }
@@ -5130,7 +5124,7 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
     lists
       .at(-1)
       ?.renderHeader(INVITE_FILE.path)
-      .querySelector(".agent-published-lines .luke-count-part")?.textContent;
+      .querySelector(".agent-published-lines .ui-count-part")?.textContent;
   const comment = await pickLines({
     start: 9,
     side: DIFF_SELECTION_SIDE.ADDITIONS,
@@ -5339,7 +5333,7 @@ function headPress(tab: HTMLElement): HTMLButtonElement {
 function ringEnds(card: Element): void {
   for (const name of ["animationend", "webkitAnimationEnd"]) {
     const end = new Event(name, { bubbles: true });
-    Object.defineProperty(end, "animationName", { value: "luke-landed" });
+    Object.defineProperty(end, "animationName", { value: "ui-landed" });
     act(() => card.dispatchEvent(end));
   }
 }
@@ -5467,7 +5461,7 @@ test("a thread on a line no hunk shows, and one a later push outdated, land on t
 
 test("a link to a thread opens a folded Conversation to land on it, centring it in the room under the heading stuck at the top, and a card taller than that room landing with its top just under the heading", async () => {
   window.localStorage.setItem(
-    "luke.conversation-filters",
+    "app.conversation-filters",
     JSON.stringify({ hideBots: false, hideResolved: false, conversationOpen: false }),
   );
   const heard: ReadLink[] = [];
@@ -5589,12 +5583,12 @@ test("every review thread's head leads with its chevron and ends with its ⋯, i
       root.querySelector<HTMLElement>(".annotation-card-fold > summary") ??
       assert.fail(`the thread on ${where} has a head`);
     assert.ok(
-      head.firstElementChild?.querySelector(".luke-disclosure-turn"),
+      head.firstElementChild?.querySelector(".ui-disclosure-turn"),
       `on ${where}, the chevron leads the head`,
     );
     const menu =
       head
-        .closest(".luke-disclosure-frame")
+        .closest(".ui-disclosure-frame")
         ?.lastElementChild?.querySelector(".pull-request-thread-menu") ??
       assert.fail(`on ${where}, the ⋯ ends the head's row`);
     assert.equal(head.contains(menu), false, `on ${where}, the ⋯ stands beside the head`);
@@ -5824,12 +5818,17 @@ const SIZED = [
   ["c.ts", 30, 0],
 ] as const;
 
-/** The plan's agents, the pull request published at the size given (+60 −7 unless told), its changes those three files, read in full unless told, and the member's marks as given. */
+/** The plan's agents, the pull request published at the size given (+60 −7 in 3 files unless told), its changes those three files, read in full unless told, and the member's marks as given. */
 function viewing(
   marked: readonly string[],
-  options: { readonly published?: readonly [number, number]; readonly truncated?: boolean } = {},
+  options: {
+    readonly published?: readonly [number, number];
+    readonly changedFiles?: number;
+    readonly truncated?: boolean;
+  } = {},
 ) {
   const [additions, deletions] = options.published ?? [60, 7];
+  const changedFiles = options.changedFiles ?? SIZED.length;
   const control: AgentsControl = {
     ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
       Promise.resolve({
@@ -5849,7 +5848,7 @@ function viewing(
       }),
     ),
     pullRequests: new Map([
-      [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions, deletions }],
+      [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions, deletions, changedFiles }],
     ]),
     readPullRequestViewed: () =>
       Promise.resolve({
@@ -5874,44 +5873,51 @@ function viewedBoxOf(path: string): HTMLInputElement {
   );
 }
 
-/** What the Files changed tab's hint says, once the pointer rests on it. */
-async function filesHint(tab: HTMLElement): Promise<string | undefined> {
-  const files = option(tab, "Files changed");
-  restOn(files);
+/** What the hint over the header's lines says, once the pointer rests on them. */
+async function linesHint(tab: HTMLElement): Promise<string | undefined> {
+  const lines = tab.querySelector<HTMLElement>(".pull-request-lines");
+  if (lines === null) return assert.fail("the header counts the lines");
+  restOn(lines);
   await settle();
-  const hint = files.getAttribute("aria-describedby");
+  // Note that words taking no focus own their hint, which a reader hears at their end.
+  const hint = lines.getAttribute("aria-owns");
   return hint === null ? undefined : (document.getElementById(hint)?.textContent ?? undefined);
 }
 
-test("Files changed counts what was published until it is first opened; then it counts the lines left to review, the whole in its hint", async () => {
+test("the header counts the lines published until Files changed is first opened; then those left to review, the whole in its hint, as the tab counts the files viewed", async () => {
   const tab = await draw(viewing(["a.ts"]).control);
-  assert.equal(tabCount(tab, "Files changed"), "+60 −7");
+  assert.equal(headerLines(tab), "+60 −7");
+  assert.equal(tabCount(tab, "Files changed"), "3");
 
   await choose(tab, "Files changed");
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
-  assert.equal(await filesHint(tab), "+60 −7 total");
+  assert.equal(headerLines(tab), "+50 −5 left");
+  assert.equal(await linesHint(tab), "+60 −7 total");
+  assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
   await choose(tab, "Conversation");
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left", "the count stands on another tab");
+  assert.equal(headerLines(tab), "+50 −5 left", "the count stands on another tab");
+  assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
 });
 
 test("ticking a file's Viewed box counts it at once, before GitHub answers, and one GitHub refuses counts again as its mark goes back", async () => {
   const { control } = viewing(["a.ts"]);
   const tab = await draw(control, PULL_REQUEST_VIEW.FILES);
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
+  assert.equal(headerLines(tab), "+50 −5 left");
 
   const { promise, resolve } = Promise.withResolvers<void>();
   changeHeld = promise;
   act(() => viewedBoxOf("c.ts").click());
-  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left", "the tick counts at once");
+  assert.equal(headerLines(tab), "+20 −5 left", "the tick counts at once");
+  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
   resolve();
   await settle();
-  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left");
+  assert.equal(headerLines(tab), "+20 −5 left");
 
   changeHeld = undefined;
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Pull request is locked." };
   act(() => viewedBoxOf("b.ts").click());
   await settle();
-  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left", "a refused mark counts again");
+  assert.equal(headerLines(tab), "+20 −5 left", "a refused mark counts again");
+  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
   assert.deepEqual(
     changes.map(([, request]) => request),
     [
@@ -5921,11 +5927,15 @@ test("ticking a file's Viewed box counts it at once, before GitHub answers, and 
   );
 });
 
-test("with every file viewed, or none, Files changed counts the whole and hints nothing more", async () => {
-  for (const marked of [["a.ts", "b.ts", "c.ts"], []]) {
+test("with every file viewed, or none, the header counts the whole and hints nothing more", async () => {
+  for (const [marked, files] of [
+    [["a.ts", "b.ts", "c.ts"], "3/3 viewed"],
+    [[], "3"],
+  ] as const) {
     const tab = await draw(viewing(marked).control, PULL_REQUEST_VIEW.FILES);
-    assert.equal(tabCount(tab, "Files changed"), "+60 −7", `${marked.length} viewed`);
-    assert.equal(option(tab, "Files changed").getAttribute("aria-describedby"), null);
+    assert.equal(headerLines(tab), "+60 −7", `${marked.length} viewed`);
+    assert.equal(tab.querySelector(".pull-request-lines")?.getAttribute("aria-owns"), null);
+    assert.equal(tabCount(tab, "Files changed"), files);
     act(() => root?.unmount());
     root = undefined;
   }
@@ -5933,31 +5943,39 @@ test("with every file viewed, or none, Files changed counts the whole and hints 
 
 test("ticking the last file left counts the whole again, every file viewed", async () => {
   const tab = await draw(viewing(["a.ts", "b.ts"]).control, PULL_REQUEST_VIEW.FILES);
-  assert.equal(tabCount(tab, "Files changed"), "+30 −0 left");
+  assert.equal(headerLines(tab), "+30 −0 left");
   act(() => viewedBoxOf("c.ts").click());
   await settle();
-  assert.equal(tabCount(tab, "Files changed"), "+60 −7");
+  assert.equal(headerLines(tab), "+60 −7");
 });
 
-test("once its files are read, Files changed counts from their own whole, so a pull request pushed to since it was published counts what the read holds", async () => {
-  const tab = await draw(viewing(["a.ts"], { published: [40, 5] }).control);
-  assert.equal(
-    tabCount(tab, "Files changed"),
-    "+40 −5",
-    "until the files land, what was published",
-  );
+test("once its files are read, the header and Files changed count from them, so a pull request pushed to since it was published counts what the read holds", async () => {
+  const tab = await draw(viewing(["a.ts"], { published: [40, 5], changedFiles: 2 }).control);
+  assert.equal(headerLines(tab), "+40 −5", "until the files land, what was published");
+  assert.equal(tabCount(tab, "Files changed"), "2");
   await choose(tab, "Files changed");
-  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
-  assert.equal(await filesHint(tab), "+60 −7 total");
+  assert.equal(headerLines(tab), "+50 −5 left");
+  assert.equal(await linesHint(tab), "+60 −7 total");
+  assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
 });
 
 test("where the read stopped short of every file, the whole is what was published, and every file read being viewed still leaves the rest to review", async () => {
   const tab = await draw(
-    viewing(["a.ts", "b.ts", "c.ts"], { published: [100, 20], truncated: true }).control,
+    viewing(["a.ts", "b.ts", "c.ts"], { published: [100, 20], changedFiles: 5, truncated: true })
+      .control,
     PULL_REQUEST_VIEW.FILES,
   );
-  assert.equal(tabCount(tab, "Files changed"), "+40 −13 left");
-  assert.equal(await filesHint(tab), "+100 −20 total");
+  assert.equal(headerLines(tab), "+40 −13 left");
+  assert.equal(await linesHint(tab), "+100 −20 total");
+  assert.equal(tabCount(tab, "Files changed"), "3/5 viewed");
+});
+
+test("where the read stopped short of more files than were published, Files changed counts at least those read", async () => {
+  const tab = await draw(
+    viewing(["a.ts", "b.ts"], { changedFiles: 1, truncated: true }).control,
+    PULL_REQUEST_VIEW.FILES,
+  );
+  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
 });
 
 /** A comment of the member's own pending review on the invite file, starting a thread of its own on line 12 unless told otherwise. */
@@ -6153,8 +6171,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
-test("on a phone no Preview or Run stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
-  const ran: string[] = [];
+test("on a phone no Preview stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
   const readChanges: AgentsControl["readChanges"] = () =>
     Promise.resolve({
       pullRequest: {
@@ -6183,7 +6200,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
               {
                 environment: "Preview – luke-web",
                 state: DEPLOYMENT_STATE.READY,
-                url: "https://luke-web-git-expiry.vercel.app",
+                url: "https://web-git-expiry.vercel.app",
               },
             ],
           },
@@ -6199,13 +6216,12 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
       createElement(Switching, {
         control,
         first: PULL_REQUEST_VIEW.CONVERSATION,
-        onRun: () => ran.push("run"),
       }),
     ),
   );
 
   assert.deepEqual(
-    words(tab, ".pull-request-title-actions button").filter((each) => /Preview|Run/u.test(each)),
+    words(tab, ".pull-request-title-actions button").filter((each) => /Preview/u.test(each)),
     [],
     "beside the title stands the merge alone",
   );
@@ -6214,12 +6230,9 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
-    "Run on this Mac",
   ]);
   await pressToolbar(tab, "Preview – luke-web");
-  await pressToolbar(tab, "Run on this Mac");
-  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
-  assert.deepEqual(ran, ["run"]);
+  assert.deepEqual(opened, ["https://web-git-expiry.vercel.app"]);
 
   await choose(tab, "Files changed");
   assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");
@@ -6228,7 +6241,6 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
-    "Run on this Mac",
     "Show files",
     "Open files on GitHub",
     "View options",
@@ -6239,7 +6251,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
 
   await choose(tab, "Conversation");
   assert.deepEqual(
-    toolbarItems(tab).slice(5),
+    toolbarItems(tab).slice(4),
     [],
     "Files changed's items go with it once another view is shown",
   );

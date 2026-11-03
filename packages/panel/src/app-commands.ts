@@ -22,7 +22,7 @@
  * swipe hands the window the same way) leaves the page behind it alone.
  */
 
-import type { HostCapability } from "@luke/settings";
+import type { HostCapability } from "@repo/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -33,7 +33,7 @@ import {
   shortcutEditsText,
   shortcutLayered,
   shortcutSwitching,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { capabilityNow } from "./use-app-state.js";

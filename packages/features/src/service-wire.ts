@@ -1,5 +1,5 @@
-import { EXCESS_KEYS } from "@luke/wire";
-import { readEither, verbatimJsonSchema } from "@luke/wire/effect";
+import { EXCESS_KEYS } from "@repo/wire";
+import { readEither, verbatimJsonSchema } from "@repo/wire/effect";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
 
 /**
@@ -11,7 +11,7 @@ import { Schema as EffectSchema, SchemaTransformation } from "effect";
  * Every declaration below is composed directly as an Effect `Schema` and
  * exported under its own name: a caller reads a request through `readEither`,
  * an answer through `readServiceAnswer` below, and shows either through
- * `emitJsonSchema` from `@luke/wire/effect`.
+ * `emitJsonSchema` from `@repo/wire/effect`.
  */
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
@@ -155,6 +155,12 @@ export const HOSTED_API_ERROR = {
   SKILL_FILES_REFUSED: "skill-files-refused",
   /** Another open channel of the workspace goes by that name. Nothing was written. */
   CHANNEL_NAME_TAKEN: "channel-name-taken",
+  /** A slug the owner chose is spelled other than a slug may be (`workspaceSlugProblemOf`). Nothing was written. */
+  WORKSPACE_SLUG_MALFORMED: "workspace-slug-malformed",
+  /** A slug the owner chose is one our own pages stand under, or one an account's first workspace falls back to. Nothing was written. */
+  WORKSPACE_SLUG_RESERVED: "workspace-slug-reserved",
+  /** A slug the owner chose is another workspace's, whatever its case. Nothing was written. */
+  WORKSPACE_SLUG_TAKEN: "workspace-slug-taken",
   /** A Start on This Mac was refused, for the reason it names (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
   /** A host called with a daemon below the service's floor, or with no version at all (`host-wire.ts`); nothing was read or written, and the box's install script upgrades it in place. */

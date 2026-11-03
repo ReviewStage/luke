@@ -1,7 +1,7 @@
-import { HOST_LIVE } from "@luke/features/tasks-view";
-import { ANNOUNCE, Tooltip, useAnnounce } from "@luke/ui";
-import { RefreshCwIcon, WifiOffIcon } from "@luke/ui/icons";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+import { HOST_LIVE } from "@repo/features/tasks-view";
+import { ANNOUNCE, Tooltip, useAnnounce } from "@repo/ui";
+import { RefreshCwIcon, WifiOffIcon } from "@repo/ui/icons";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import * as Atom from "effect/reactivity/Atom";
 import { useRef } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -70,7 +70,7 @@ export function OfflineMark(): React.JSX.Element | null {
         ref={shown.ref}
         data-leaving={shown.leaving ? "true" : undefined}
         inert={shown.leaving}
-        className="offline-mark inline-flex h-offline-mark flex-none animate-offline-arrive data-[leaving=true]:animate-leave items-center gap-tight-gap self-center whitespace-nowrap rounded-luke-full bg-attention-tint px-row-inset text-caption-inline font-luke-semibold text-attention [&_svg]:size-offline-glyph"
+        className="offline-mark inline-flex h-offline-mark flex-none animate-offline-arrive data-[leaving=true]:animate-leave items-center gap-tight-gap self-center whitespace-nowrap rounded-ui-full bg-attention-tint px-row-inset text-caption-inline font-ui-semibold text-attention [&_svg]:size-offline-glyph"
         role="img"
         aria-label={word}
       >

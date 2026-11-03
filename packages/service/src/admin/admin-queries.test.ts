@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { account, user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { account, user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
 import {
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminUsersSource } from "./admin-queries.js";
@@ -32,7 +32,7 @@ const openAccount = (name: string, providers: readonly string[], role: string = 
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${name}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test`, role });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test`, role });
     for (const providerId of providers) {
       yield* db.insert(account).values({
         id: randomUUID(),

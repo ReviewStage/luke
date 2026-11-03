@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@luke/features/agent-wire";
-import type { Channel } from "@luke/features/channel-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { isAgentTab } from "@luke/ui/tab-strip-model";
-import { holdExits } from "@luke/ui/testing/held-exits";
+import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@repo/features/agent-wire";
+import type { Channel } from "@repo/features/channel-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT, HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
+import { isAgentTab } from "@repo/ui/tab-strip-model";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,7 +78,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The cards' dialog, which the switcher draws in `@luke/ui`'s Dialog. */
+/** The cards' dialog, which the switcher draws in `@repo/ui`'s Dialog. */
 const DIALOG = '[role="dialog"]';
 
 /** What the switcher asked the window to show, in order. */
@@ -176,7 +176,7 @@ function press(): void {
 }
 
 function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".luke-tab-card")];
+  return [...document.querySelectorAll<HTMLElement>(".ui-tab-card")];
 }
 
 const inboxOpen = () => ({ ...tasksControl().inboxView, open: true });
@@ -331,8 +331,8 @@ test("a task's card is named as Back's list names the screen: the task, then its
   tab();
   tab();
   const words = cards().map((card) => [
-    card.querySelector(".luke-tab-card-name")?.textContent,
-    card.querySelector(".luke-tab-card-detail")?.textContent,
+    card.querySelector(".ui-tab-card-name")?.textContent,
+    card.querySelector(".ui-tab-card-detail")?.textContent,
   ]);
   assert.deepEqual(words, [
     [DOCUMENT_TASK.name, "Comments"],
@@ -370,8 +370,8 @@ test("a task's card says the task and its agent's tab by the names they go by no
   const left = () => {
     const card = cards()[1];
     return [
-      card?.querySelector(".luke-tab-card-name")?.textContent,
-      card?.querySelector(".luke-tab-card-detail")?.textContent,
+      card?.querySelector(".ui-tab-card-name")?.textContent,
+      card?.querySelector(".ui-tab-card-detail")?.textContent,
     ];
   };
   assert.deepEqual(left(), ["Auth rewrite", "Token renewal · notes.md"]);
@@ -509,7 +509,7 @@ test("the screen left is taken as a still of the work area for its card, drawn a
   });
 
   assert.deepEqual(taken, [{ x: 240, y: 0, width: 1040, height: 800 }]);
-  const preview = cards()[0]?.querySelector(".luke-tab-card-preview");
+  const preview = cards()[0]?.querySelector(".ui-tab-card-preview");
   assert.ok(preview?.classList.contains("ph-no-capture"));
   assert.equal(preview?.querySelector("img")?.getAttribute("src"), STILL);
   assert.equal(cards()[1]?.querySelector("img"), null, "a stop with no still wears its glyph");
@@ -613,8 +613,8 @@ test("a tab closed on its task's page stays let go once the Inbox stands in the 
   tab();
   tab();
   assert.deepEqual(
-    cards().map((card) => card.querySelector(".luke-tab-card-detail")?.textContent),
-    ["", "notes.md"],
+    cards().map((card) => card.querySelector(".ui-tab-card-detail")?.textContent),
+    ["", "notes.md", ""],
   );
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
   letGo();

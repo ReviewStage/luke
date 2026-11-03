@@ -2,7 +2,7 @@ import {
   SETTING_SIDE_EFFECT,
   type SettingSideEffectId,
   type StoredAppSettings,
-} from "@luke/settings";
+} from "@repo/settings";
 import { Effect } from "effect";
 
 /** What one host-side effect is handed: the snapshot the write just stored. */

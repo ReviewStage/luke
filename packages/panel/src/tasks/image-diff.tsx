@@ -1,5 +1,5 @@
-import { type AgentChangedFile, CHANGED_FILE_STATUS } from "@luke/features/agent-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import { type AgentChangedFile, CHANGED_FILE_STATUS } from "@repo/features/agent-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
@@ -7,8 +7,8 @@ import {
   NoteLine,
   PictureStandIn,
   Slider,
-} from "@luke/ui";
-import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
+} from "@repo/ui";
+import { PICTURE_STATE, type PictureState, usePicture } from "@repo/ui/picture-cache";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
@@ -19,17 +19,17 @@ import { pictureUnread } from "../failure-report.js";
  * Each side is the file of the agent's own repository at a commit, read by
  * the service through the repository's contents on the App's token, as the
  * Pull request tab reads any picture its pull request names
- * (`@luke/features/github-image`'s raw-file address, the act
+ * (`@repo/features/github-image`'s raw-file address, the act
  * `AGENTS_GITHUB_IMAGE`): the before at the merge base GitHub counts
  * the changes from, the after at the head. So the window asks GitHub nothing
  * itself, holds no token, and draws each from a `data:` URL of its own
  * making, which the panel's policy admits; a side waits under the window's
  * spinner, and one the service will not answer, an image past its bound or
  * no image at all, says so, as a picture of a transcript does
- * (`@luke/ui`'s `PictureStandIn`), and one whose read did not land this
+ * (`@repo/ui`'s `PictureStandIn`), and one whose read did not land this
  * time says so with Retry, which reads it again. A side is
  * read only once its file is open and Pierre has drawn it near the view,
- * and kept for the window's life (`@luke/ui/picture-cache`), so a list of a
+ * and kept for the window's life (`@repo/ui/picture-cache`), so a list of a
  * hundred images reads only the ones looked at; a side whose read did not
  * land is asked for again when the changes are read again. An image added has no
  * before and one deleted no after; a before whose merge base the service

@@ -1,17 +1,16 @@
 /**
  * inbox-door.ts -- the door every runtime's call of a coding agent's thread and channel tools goes through: the agent the conversation is, then the tool.
  *
- * eve's tool files reach it through the coder host (`host.ts`'s `inbox`),
- * and a native harness's runner through our MCP server
- * (`../luke-mcp/tools.ts`), so both run one implementation. It imports no
+ * A native harness's runner reaches it through our MCP server
+ * (`../workspace-mcp/tools.ts`). It imports no
  * eve runtime, because the web function that serves the MCP server bundles
  * no sandbox.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgentHeaderOfConversation } from "@luke/database/models/agent-store";
-import { CHANNEL_TOOL } from "@luke/features/channel-wire";
-import { INBOX_TOOL } from "@luke/features/inbox-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAgentHeaderOfConversation } from "@repo/database/models/agent-store";
+import { CHANNEL_TOOL } from "@repo/features/channel-wire";
+import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { Effect, Option } from "effect";
 import type { UnparsedWireValue } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";

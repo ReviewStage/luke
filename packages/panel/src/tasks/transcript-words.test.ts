@@ -19,14 +19,14 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * as it was recorded, raw HTML among it: what the parser keeps, what the
  * sanitizer drops, and words that only look like a tag. The drawn markup of
  * every sample is held in `transcript-words.golden.json`, which
- * `LUKE_UPDATE_FIXTURES=1` writes, so a change to how the words are parsed,
+ * `APP_UPDATE_FIXTURES=1` writes, so a change to how the words are parsed,
  * or to when the parser arrives, that moves a byte fails here. A heading keeps
  * its level in the outline and takes its type from the role its level maps to,
  * never from a size of its own. Synthetic words.
  */
 
 /** Records the drawings instead of asserting them. `check.sh` never sets it. */
-const UPDATE_FIXTURES = process.env.LUKE_UPDATE_FIXTURES === "1";
+const UPDATE_FIXTURES = process.env.APP_UPDATE_FIXTURES === "1";
 
 const GOLDEN = path.join(
   path.dirname(fileURLToPath(import.meta.url)),

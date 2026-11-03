@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -150,7 +150,7 @@ test("a version by a member hangs their card beside its row while the pointer re
   const row = view.querySelector<HTMLElement>('[aria-label="Version list"] button');
   assert.ok(row, "a version is listed");
   restOn(row);
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Lee Park");
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Lee Park");
   assert.match(card?.textContent ?? "", /lee@example\.com/u);
 });

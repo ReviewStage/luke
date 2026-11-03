@@ -20,8 +20,8 @@
  * quotes OpenAI's answer, a code, or a claim.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { ChatGptCredentialsSaveRequest } from "@luke/features/provider-key-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { ChatGptCredentialsSaveRequest } from "@repo/features/provider-key-wire";
 import {
   isRecord,
   isWireNumber,
@@ -29,7 +29,7 @@ import {
   type UnparsedWireValue,
   valueFromJsonText,
   type WireRecord,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Clock, Duration, Effect, type Layer, Option, Result, type Scope } from "effect";
 import { Base64Url } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";

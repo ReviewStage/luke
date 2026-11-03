@@ -2,9 +2,9 @@ import {
   type AgentPullRequest,
   type AgentPullRequestAnswer,
   CHECK_SUMMARY,
-} from "@luke/features/agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
+} from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { MENTION_KIND } from "@repo/features/mention-link";
 import {
   BUTTON_SIZE,
   CHIP_LOOK,
@@ -20,9 +20,9 @@ import {
   RowHintOptions,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import { GitBranchIcon, GLYPH } from "@luke/ui/icons";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { GitBranchIcon, GLYPH } from "@repo/ui/icons";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
@@ -188,7 +188,7 @@ export function LinesChanged({
   );
 }
 
-/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click, a long press or the menu key offers the rest, a finger's row drawing no ⋯ so the title keeps its room, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A row as narrow as a phone's gives up its state's word and the checks', then the lines, before the number (tasks.css). */
+/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click, a long press or the menu key offers the rest, a finger's row drawing no ⋯ so the title keeps its room, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A phone's narrow row gives up its state's word, and any narrow row the checks', then the lines, before the number (tasks.css). */
 export function PublishedRow({
   pullRequest,
   branch,

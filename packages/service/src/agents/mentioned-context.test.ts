@@ -3,18 +3,18 @@ import {
   lineParts,
   MENTIONED_HEADING,
   receivedPartsOf,
-} from "@luke/database/models/attached-file-parts";
-import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+} from "@repo/database/models/attached-file-parts";
+import { COALESCED_LINE_SEPARATOR } from "@repo/database/models/message-reads";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
   encodeMention,
   MENTION_KIND,
   type MentionPlace,
   mentionMarkdown,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import type { Task } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+} from "@repo/features/mention-link";
+import type { Task } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage, senderLabel } from "./attached-files.js";
 import {
@@ -120,6 +120,18 @@ test("words that mention only files, folders, another plan, or nothing are hande
   ]) {
     assert.equal(mentionedContext(words, TASK), undefined, words);
   }
+});
+
+test("another task a link names by its number, by itself or by a section, is handed its id once, and one the send did not find nothing", () => {
+  const other = "3a9e1c7b-5d2f-4b8a-9e6c-1f0d2b3c4a5e";
+  const reads = { ...READS, tasks: new Map([["acme", new Map([[7, other]])]]) };
+  const words =
+    "See [@Billing](https://vespin.dev/acme/task/7), its https://vespin.dev/acme/task/7#goal, and [@Gone](https://vespin.dev/acme/task/8).";
+
+  assert.equal(
+    mentionedContext(words, TASK, reads),
+    `${MENTIONED_HEADING}\n\nThe link https://vespin.dev/acme/task/7 names the task whose id is \`${other}\`, which \`read_task\` and the other task tools take.`,
+  );
 });
 
 test("a section mentioned twice is handed once", () => {
@@ -463,6 +475,7 @@ const READS = {
   people: new Map([
     [PERSON_ID, { userId: PERSON_ID, name: "Dana Reyes", role: WORKSPACE_ROLE.ADMIN }],
   ]),
+  tasks: new Map(),
 };
 
 test("a page of the plan the words mention is handed by its title, id, and version, with how to read it and how to revise it, and never its HTML", () => {
@@ -496,6 +509,7 @@ test("an agent of the workspace on another task or on none is handed with its ta
     pages: new Map(),
     agents: new Map([[OTHER_AGENT_ID, standing]]),
     people: new Map(),
+    tasks: new Map(),
   });
 
   const another = mentionedContext(`See ${agent("Store")}.`, TASK, reads(onAnother));
@@ -522,6 +536,7 @@ test("an agent of the plan that published nothing yet is handed its branch to fe
       pages: new Map(),
       agents: new Map([[OTHER_AGENT_ID, standing]]),
       people: new Map(),
+      tasks: new Map(),
     }) ?? "";
 
   assert.match(

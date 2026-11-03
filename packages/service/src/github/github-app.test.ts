@@ -4,16 +4,17 @@ import { it } from "@effect/vitest";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@luke/database/github-installation-vocabulary";
-import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
-import { createTask, readTask } from "@luke/database/models/task-store";
-import { listWorkspaces } from "@luke/database/models/workspace-store";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+} from "@repo/database/github-installation-vocabulary";
+import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
+import { createTask, readTask } from "@repo/database/models/task-store";
+import { listWorkspaces } from "@repo/database/models/workspace-store";
+import { getTestDB, openWorkspace } from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import { generateCodeChallenge } from "better-auth/oauth2";
-import { Clock, Effect, Option, Redacted, Result } from "effect";
+import { Clock, Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth/auth-deployment.js";
@@ -1097,7 +1098,7 @@ const CALLBACK = "https://vespin.dev/api/github/installed/authorized";
 const VERIFIER = "fixture-code-verifier-of-enough-length-for-pkce-0123456789abcdef";
 
 it.effect(
-  "a connect is authorized on GitHub's web flow with the verifier's S256 challenge, and its code is exchanged with that verifier, read once for its installations, and revoked",
+  "a connect is authorized on GitHub's web flow with the verifier's S256 challenge, and its code is exchanged with that verifier, read once for its installations, and revoked where no installer keeps it",
   () =>
     Effect.gen(function* () {
       const relay = relayInstallation(8);
@@ -1112,18 +1113,16 @@ it.effect(
         }),
       );
       const seen = yield* app
-        .authorizedInstallations({
-          code: "one-time",
-          codeVerifier: VERIFIER,
-          redirectUri: CALLBACK,
-        })
+        .authorizedInstallations(
+          { code: "one-time", codeVerifier: VERIFIER, redirectUri: CALLBACK },
+          Option.none(),
+        )
         .pipe(Effect.provide(fake.layer));
       const refused = yield* app
-        .authorizedInstallations({
-          code: GITHUB_FIXTURE_REFUSED_CODE,
-          codeVerifier: VERIFIER,
-          redirectUri: CALLBACK,
-        })
+        .authorizedInstallations(
+          { code: GITHUB_FIXTURE_REFUSED_CODE, codeVerifier: VERIFIER, redirectUri: CALLBACK },
+          Option.none(),
+        )
         .pipe(Effect.provide(fake.layer));
 
       assert.equal(
@@ -1160,5 +1159,5 @@ it.effect(
       assert.deepEqual(JSON.parse(revoked[0]?.body ?? ""), {
         access_token: GITHUB_FIXTURE_AUTHORIZED_TOKEN,
       });
-    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+    }).pipe(Effect.provide(Layer.mergeAll(GitHubApp.layer(GITHUB_APP_SETTINGS), noDatabase))),
 );

@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import {
   PLAN_ACTOR,
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -69,7 +69,7 @@ const SHARED_TASK = { name: "Teammate invitations" };
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -456,6 +456,8 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           parentTaskId: null,
           mode: TASK_MODE.AGENT,
           assigneeId: null,
+          // The workspace's first task.
+          number: 1,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -479,6 +481,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           parentTaskId: null,
           mode: whole.task.mode,
           assigneeId: whole.task.assignee?.userId ?? null,
+          number: whole.task.number,
         });
       }),
   );

@@ -3,12 +3,12 @@ import {
   type AgentAttachment,
   type AgentBrief,
   type AgentSummary,
-} from "@luke/features/agent-wire";
-import { TERMINAL_ASK } from "@luke/features/terminal-entry";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
+} from "@repo/features/agent-wire";
+import { TERMINAL_ASK } from "@repo/features/terminal-entry";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { type InlineRename, useInlineRename } from "@repo/ui/use-inline-rename";
 import { pressAct } from "../act.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
@@ -53,8 +53,6 @@ import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
  * leaves out only what `NOT_ON_A_ROW` names, and nothing of its own is
  * added beside the menu but what the row's kind keeps, a pinned tab's Unpin
  * before it.
- * Run, which runs the agent's pushed branch on this Mac, stands on its
- * Pull request tab instead (`agent-pull-request-tab.tsx`).
  * The doors that open a terminal are the column's, from where it stands
  * (`useAgentTerminalDoors`), and so are those that open a fork of one of its
  * messages or a continue of it as a draft (`useAgentDraftDoors`): the
@@ -212,8 +210,6 @@ export function rowDoors(doors: AgentDoors): RowDoors {
 export interface AgentTerminalDoors {
   /** Shows the agent's own Terminal tab in the side panel, adding no shell; none where the platform runs no terminals. */
   readonly onOpenTerminal: ((agentId: string) => void) | undefined;
-  /** Runs a pushed branch in the agent's terminal of this Mac in the side panel, which every Pull request tab's Run offers (`side-panel.tsx`): the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
-  readonly onOpenOnMac: ((agentId: string, number?: number) => void) | undefined;
   /** Whether the platform runs terminals, which ⌘J and New terminal stand on. */
   readonly terminals: boolean;
 }
@@ -241,32 +237,18 @@ export function agentTranscriptRead(
 
 /**
  * The doors a column opens its agents' terminals through: the agent's
- * Terminal tab shown in the side panel, and its branch run on this Mac
- * there, each handing the panel the keys (`onShown`).
+ * Terminal tab shown in the side panel, handing the panel the keys
+ * (`onShown`).
  */
 export function useAgentTerminalDoors(
   sidePanel: Pick<SidePanelControl, "onChoose">,
-  repository: string | null | undefined,
   onShown: () => void,
 ): AgentTerminalDoors {
   const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
-  const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const openTerminal = useOpenTerminal(sidePanel, onShown);
   return {
     terminals,
     onOpenTerminal: terminals ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW) : undefined,
-    onOpenOnMac:
-      repository == null || !macTerminal
-        ? undefined
-        : (agentId, number) => {
-            sidePanel.onChoose({
-              macTerminal: agentId,
-              repository,
-              asked: Date.now(),
-              ...(number === undefined ? undefined : { number }),
-            });
-            onShown();
-          },
   };
 }
 

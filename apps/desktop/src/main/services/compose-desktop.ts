@@ -1,4 +1,4 @@
-import { AgentNoticeDoors, type AgentNotices } from "@luke/host/agent-notices";
+import { AgentNoticeDoors, type AgentNotices } from "@repo/host/agent-notices";
 import {
   AppStateStore,
   createOperatorClient,
@@ -7,7 +7,7 @@ import {
   linkNetworkWatch,
   type OperatorClient,
   publishAppStateChanges,
-} from "@luke/host/client";
+} from "@repo/host/client";
 import {
   ALL_CLIENT_CAPABILITIES,
   type DuplicateGatewayMethod,
@@ -16,8 +16,7 @@ import {
   hostCapabilities,
   hostStandingLayer,
   layersInOrder,
-} from "@luke/host/effect";
-import { openMacTerminals } from "@luke/host/node";
+} from "@repo/host/effect";
 import {
   confirmingHold,
   type DesktopQuit,
@@ -28,10 +27,10 @@ import {
   reloadGate,
   type UnsavedWorkHolders,
   unsavedWorkHolders,
-} from "@luke/host/quit";
-import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import type { ColourCode } from "@luke/host/task-code-remote";
-import { NO_EXPERIMENTS } from "@luke/settings";
+} from "@repo/host/quit";
+import { effectServiceLayer, serviceLayer } from "@repo/host/service-layer";
+import type { ColourCode } from "@repo/host/task-code-remote";
+import { NO_EXPERIMENTS } from "@repo/settings";
 import { Context, Effect, Layer } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
@@ -105,7 +104,7 @@ export interface DesktopServices {
 
 /** The desktop client as it stands once every step of the launch has run. */
 export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
-  "@luke/desktop/Desktop",
+  "@repo/desktop/Desktop",
 ) {}
 
 /**
@@ -241,14 +240,11 @@ export function composeDesktop(
       });
       const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
       // A quit, a restart to update, and a sign-out asked for while a panel
-      // holds unsaved work or a terminal of this Mac is open ask first, with
-      // Cancel the default, as a Mac app asks before it loses anything; while
-      // nothing would be lost none of them asks at all.
+      // holds unsaved work ask first, with Cancel the default, as a Mac app
+      // asks before it loses anything; while nothing would be lost none of
+      // them asks at all.
       const unsavedWork = unsavedWorkHolders<WebContents>((sender) => sender.isDestroyed());
-      const atStake = () => ({
-        unsavedWork: unsavedWork.holding(),
-        macTerminals: openMacTerminals(),
-      });
+      const atStake = () => ({ unsavedWork: unsavedWork.holding() });
       const askFirst = leaveGate({
         atStake,
         ask: (question) => askBeforeLeaving(windows.panels.primaryPanel(), question),

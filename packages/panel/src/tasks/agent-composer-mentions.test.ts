@@ -2,35 +2,35 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AgentAgentAnswer, AgentWorkspaceListParams } from "@luke/features/agent-view";
+import type { AgentAgentAnswer, AgentWorkspaceListParams } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentPullRequest,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+} from "@repo/features/integration-wire";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import {
   encodeMention,
   MENTION_KIND,
   type Mention,
   type MentionPlace,
   mentionMarkdown,
-} from "@luke/features/mention-link";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+} from "@repo/features/mention-link";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -402,7 +402,7 @@ async function box(page: TaskMentionsValue | undefined, skills: SkillSource = no
 /** The attribute that carries an address, other than those session replay masks (`../session-replay.ts`), if any element drawn holds one. */
 /** The name a chip is drawn by, without the words only a screen reader hears. */
 function chipName(chip: Element): string | null | undefined {
-  return chip.querySelector(".luke-inline-ref-label")?.textContent;
+  return chip.querySelector(".ui-inline-ref-label")?.textContent;
 }
 
 function carryingTarget(container: HTMLElement): string | undefined {
@@ -425,15 +425,13 @@ function carryingTarget(container: HTMLElement): string | undefined {
 function groupsListed(container: HTMLElement): [string | null, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label"),
-    [...group.querySelectorAll(".luke-combobox-option-label")].map(
-      (name) => name.textContent ?? "",
-    ),
+    [...group.querySelectorAll(".ui-combobox-option-label")].map((name) => name.textContent ?? ""),
   ]);
 }
 
 /** The rows the list draws, by name. */
 function listed(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+  return [...container.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (name) => name.textContent ?? "",
   );
 }
@@ -485,7 +483,7 @@ test("the @ list hangs at the caret, by the word's line, and narrows as the word
     typeInComposer(container, "Follow @r");
     await settle();
     const layer =
-      container.querySelector<HTMLElement>(".luke-rect-float") ?? assert.fail("the list hangs");
+      container.querySelector<HTMLElement>(".ui-rect-float") ?? assert.fail("the list hangs");
     const hung = { side: layer.dataset.side, left: layer.style.left, top: layer.style.top };
     const first = listed(container);
     typeInComposer(container, "oll");
@@ -652,7 +650,7 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
   const chip = container.querySelector("[data-mention-ref]");
 
   assert.equal(chip?.tagName, "SPAN");
-  assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, "Linear");
+  assert.equal(chip?.querySelector(".ui-inline-ref-label")?.textContent, "Linear");
   assert.equal(carryingTarget(container), undefined);
 });
 
@@ -767,7 +765,7 @@ test("an @ whose read of the skills came back unread says they could not be read
   const failed = listNote(container);
   assert.match(failed.words, /Skills could not be read\./u);
   assert.doesNotMatch(failed.words, /Reading/u);
-  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+  assert.equal(container.querySelector(".mention-menu .ui-combobox-empty"), null);
 
   reachable = true;
   act(() => (failed.retry ?? assert.fail("no Retry")).click());
@@ -852,7 +850,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
   typeInComposer(container, "See @");
   await settle();
   const agentGlyph = container.querySelector(
-    '.mention-menu [aria-label="Agents"] [role="option"] .luke-combobox-option-glyph',
+    '.mention-menu [aria-label="Agents"] [role="option"] .ui-combobox-option-glyph',
   )?.firstElementChild;
 
   assert.deepEqual(groupsListed(container), [
@@ -879,7 +877,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   const pageMention: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id };
   assert.deepEqual(chips.map(chipName), ["Invites by week"]);
   assert.deepEqual(sent, [`Build ${mentionMarkdown(pageMention, "Invites by week", PLACE)}`]);
-  assert.equal(sent[0], "Build [@Invites by week](https://vespin.dev/acme/plan/pl_1/page/page-1)");
+  assert.equal(sent[0], "Build [@Invites by week](https://vespin.dev/acme/task/pl_1/page/page-1)");
 });
 
 test("on the page of an agent no plan holds an @ offers the pages it showed, a pick sent as the agent's page's link", async () => {
@@ -996,8 +994,8 @@ async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
 function agentsListed(container: HTMLElement): [string, string][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
-      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
+      row.querySelector(".ui-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".ui-combobox-option-detail")?.textContent ?? "",
     ],
   );
 }
@@ -1025,7 +1023,7 @@ test("an @ offers the workspace's agents after the task's own, each labelled by 
 
 /** What the open list says after its rows, and the press that reads again. */
 function listNote(container: HTMLElement): { words: string; retry: HTMLButtonElement | null } {
-  const note = container.querySelector(".mention-menu .luke-combobox-note");
+  const note = container.querySelector(".mention-menu .ui-combobox-note");
   return {
     words: note?.textContent ?? "",
     retry:
@@ -1043,7 +1041,7 @@ test("an @ whose read of the workspace's agents failed says they could not be re
   await settle();
 
   assert.match(listNote(container).words, /Agents could not be read\./u);
-  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+  assert.equal(container.querySelector(".mention-menu .ui-combobox-empty"), null);
   assert.deepEqual(agentsListed(container), [["Wire the desktop", "This task"]]);
 
   refusing.clear();
@@ -1069,7 +1067,7 @@ test("an @ whose read of the repository's files was refused ends its reading, sa
   const failed = listNote(container);
   assert.match(failed.words, /The repository's files could not be read\./u);
   assert.doesNotMatch(failed.words, /Reading/u);
-  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+  assert.equal(container.querySelector(".mention-menu .ui-combobox-empty"), null);
   assert.deepEqual(listed(container), ["Rollout"]);
 
   refusing.clear();
@@ -1234,8 +1232,8 @@ test("an @ row for an agent ends in its starter's face where a teammate started 
   const ends = [
     ...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".luke-combobox-option-label")?.textContent,
-    ...[...(row.querySelector(".luke-combobox-option-hint")?.children ?? [])].map((mark) =>
+    row.querySelector(".ui-combobox-option-label")?.textContent,
+    ...[...(row.querySelector(".ui-combobox-option-hint")?.children ?? [])].map((mark) =>
       mark.matches(".actor-mark")
         ? `face ${mark.getAttribute("data-kind")}`
         : mark.getAttribute("aria-label"),
@@ -1265,8 +1263,8 @@ it.effect(
       restOn(option);
 
       const card =
-        document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
-      assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Bill by seat");
+        document.querySelector(".ui-tooltip-card") ?? assert.fail("the row hangs a card");
+      assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "Bill by seat");
       assert.match(card.textContent ?? "", new RegExp(`On ${BILLING.name}`, "u"));
       assert.equal(told.length, reads, "the card is drawn from the agent the list read");
     }),
@@ -1284,17 +1282,14 @@ async function cardOfRow(page: TaskMentionsValue, typed: string, section: string
   restOn(option);
   return {
     option,
-    card: document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card"),
+    card: document.querySelector(".ui-tooltip-card") ?? assert.fail("the row hangs a card"),
   };
 }
 
 test("an @ row for a file hangs the file's card with its path", async () => {
   const { card } = await cardOfRow(planPage([]), "See @rollout-store", "Files and folders");
 
-  assert.equal(
-    card.querySelector(".luke-hover-card-name")?.textContent,
-    "apps/web/rollout-store.ts",
-  );
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "apps/web/rollout-store.ts");
 });
 
 test("an @ row for a page says its version where it has more than one, else its age, and hangs the page's card", async () => {
@@ -1306,12 +1301,9 @@ test("an @ row for a page says its version where it has more than one, else its 
     "See @invites",
     "Pages",
   );
+  assert.equal(later.option.querySelector(".ui-combobox-option-detail")?.textContent, "Version 3");
   assert.equal(
-    later.option.querySelector(".luke-combobox-option-detail")?.textContent,
-    "Version 3",
-  );
-  assert.equal(
-    later.card.querySelector("[data-page-card] .luke-hover-card-name")?.textContent,
+    later.card.querySelector("[data-page-card] .ui-hover-card-name")?.textContent,
     PAGE.title,
   );
   assert.match(later.card.textContent ?? "", /Version 3/u);
@@ -1327,7 +1319,7 @@ test("an @ row for a page still on its first version says how long ago it was wr
     "Pages",
   );
 
-  assert.equal(option.querySelector(".luke-combobox-option-detail")?.textContent, "3h");
+  assert.equal(option.querySelector(".ui-combobox-option-detail")?.textContent, "3h");
 });
 
 test("a sent mention of an agent of another task or none hangs its card's one reading state while it is read, never the task page's own card for an id it has no tab of", () => {
@@ -1355,7 +1347,7 @@ test("a sent mention of an agent of another task or none hangs its card's one re
 
   const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     restOn(chip);
-    const card = document.querySelector(".luke-tooltip-card > *");
+    const card = document.querySelector(".ui-tooltip-card > *");
     const words = card?.hasAttribute("data-hover-card-skeleton") ? "Reading" : card?.textContent;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -1440,7 +1432,7 @@ function crumb(container: HTMLElement): string | undefined {
 
 /** The keys the list's foot names. */
 function footKeys(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu .luke-menu-keys > *")].map(
+  return [...container.querySelectorAll(".mention-menu .ui-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }
@@ -1450,8 +1442,8 @@ function kindsListed(container: HTMLElement): [string, string][] {
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Mention from"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
-    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
+    row.querySelector(".ui-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".ui-combobox-option-detail")?.textContent ?? "",
   ]);
 }
 
@@ -1461,7 +1453,7 @@ function highlightRow(container: HTMLElement, group: string, name: string): void
     const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
     return (
       row?.closest('[role="group"]')?.getAttribute("aria-label") === group &&
-      row.querySelector(".luke-combobox-option-label")?.textContent === name
+      row.querySelector(".ui-combobox-option-label")?.textContent === name
     );
   };
   for (let press = 0; press < 40 && !held(); press += 1) pressInComposer(container, "ArrowDown");
@@ -1499,7 +1491,7 @@ function highlighted(container: HTMLElement): [string | null, string] | undefine
   if (row === null) return undefined;
   return [
     row.closest('[role="group"]')?.getAttribute("aria-label") ?? null,
-    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".ui-combobox-option-label")?.textContent ?? "",
   ];
 }
 
@@ -1728,8 +1720,8 @@ function pullRequestsListed(container: HTMLElement): [string, string, string | n
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Pull requests"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
-    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
+    row.querySelector(".ui-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".ui-combobox-option-detail")?.textContent ?? "",
     row.querySelector("[data-pull-request-state]")?.getAttribute("data-pull-request-state") ?? null,
   ]);
 }
@@ -1819,8 +1811,8 @@ async function memberBox() {
 function peopleListed(container: HTMLElement): [string, string, string | null][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="People"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
-      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
+      row.querySelector(".ui-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".ui-combobox-option-detail")?.textContent ?? "",
       row.querySelector(".actor-mark")?.getAttribute("data-kind") ?? null,
     ],
   );
@@ -1837,7 +1829,7 @@ test("an @ among the workspace's members offers its people, the reader first as 
   await settle();
   const row = container.querySelector<HTMLElement>('.mention-menu [role="option"]');
   assert.ok(row, "Dana is listed");
-  const marked = [...row.querySelectorAll(".luke-combobox-option-label mark")].map(
+  const marked = [...row.querySelectorAll(".ui-combobox-option-label mark")].map(
     (mark) => mark.textContent,
   );
   restOn(row);
@@ -1849,8 +1841,8 @@ test("an @ among the workspace's members offers its people, the reader first as 
   assert.deepEqual(kind, ["People", "2 members"]);
   assert.deepEqual([crumb(container), listed(container)], ["People", ["Dana Reyes"]]);
   assert.deepEqual(marked, ["Reyes"]);
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Dana Reyes");
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Dana Reyes");
 });
 
 test("a person picked from the @ list is drawn as their chip and sent as their page's link, which names them by their account's id alone", async () => {
@@ -1860,7 +1852,7 @@ test("a person picked from the @ list is drawn as their chip and sent as their p
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
+  const chips = [...composerEditor(container).querySelectorAll(".ui-inline-ref-label")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1890,7 +1882,7 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
   assert.ok(chip);
   act(() => chip.click());
 
-  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Dana Reyes");
+  assert.equal(chip.querySelector(".ui-inline-ref-label")?.textContent, "Dana Reyes");
   assert.equal(chip.dataset.kind, MENTION_KIND.PERSON);
   assert.equal(chip.querySelector(".actor-mark")?.getAttribute("data-kind"), ACTOR_KIND.PERSON);
   assert.deepEqual(opened, [
@@ -1918,7 +1910,7 @@ test("a person's page pasted into the box becomes their chip called by their nam
   typeInComposer(container, "not ");
   pasteInComposer(container, elsewhere);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
+  const chips = [...composerEditor(container).querySelectorAll(".ui-inline-ref-label")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1936,7 +1928,7 @@ test("an old Vespin issue page's link pasted into the box stays the words it is,
   typeInComposer(container, "Fix ");
   pasteInComposer(container, old);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
+  const chips = [...composerEditor(container).querySelectorAll(".ui-inline-ref-label")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1963,7 +1955,7 @@ test("words after an @ that read as a date offer it first, said from today, and 
 
     assert.deepEqual(offered, ["Dates", ["Tomorrow"]]);
     assert.deepEqual(chips.map(chipName), ["Tomorrow"]);
-    assert.deepEqual(sent, ["Ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
+    assert.deepEqual(sent, ["Ship it [@Oct 20, 2026](mention://date/2026-10-20)"]);
   } finally {
     vi.useRealTimers();
   }
@@ -1999,7 +1991,7 @@ test("a date's chip in the box opens its picker, and the day picked there is the
     await settle();
 
     assert.equal(container.querySelector('[role="dialog"]'), null);
-    assert.deepEqual(sent, ["Ship it [@Oct 22, 2026](luke://date/2026-10-22)"]);
+    assert.deepEqual(sent, ["Ship it [@Oct 22, 2026](mention://date/2026-10-22)"]);
   } finally {
     vi.useRealTimers();
   }
@@ -2027,7 +2019,7 @@ test("a sent message's date is drawn as a chip saying it from today that opens n
   try {
     const container = drawn(
       createElement(TranscriptWords, {
-        text: "Ready [@Oct 23, 2026](luke://date/2026-10-23), not [@Feb 30](luke://date/2026-02-30).",
+        text: "Ready [@Oct 23, 2026](mention://date/2026-10-23), not [@Feb 30](mention://date/2026-02-30).",
       }),
       planPage([]),
     );

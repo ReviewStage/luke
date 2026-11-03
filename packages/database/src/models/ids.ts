@@ -1,4 +1,4 @@
-import { hostMintedId } from "@luke/wire/host-ids";
+import { hostMintedId } from "@repo/wire/host-ids";
 
 /**
  * The ids the host mints for what eve's stream names only relatively. A turn
@@ -7,7 +7,7 @@ import { hostMintedId } from "@luke/wire/host-ids";
  * message by a client id unique in its conversation. Each id here is the
  * same function of the same coordinates, so a retried step that re-emits an
  * event under a new event id lands on the row the first attempt opened
- * rather than beside it. The function is `@luke/wire`'s (`host-ids.ts`), so a
+ * rather than beside it. The function is `@repo/wire`'s (`host-ids.ts`), so a
  * window derives the id a line it sent is written under (`sentLineId`).
  */
 

@@ -2,12 +2,12 @@ import {
   PRODUCT_EVENT,
   PRODUCT_UPDATE_ACTION,
   type RecordProductEvent,
-} from "@luke/features/analytics";
-import type { AppStateStore } from "@luke/host/client";
-import { jsonStateFile } from "@luke/host/node";
-import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "@luke/host/update-service";
-import type { UpdateSnapshot } from "@luke/settings/update";
-import { text } from "@luke/wire";
+} from "@repo/features/analytics";
+import type { AppStateStore } from "@repo/host/client";
+import { jsonStateFile } from "@repo/host/node";
+import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "@repo/host/update-service";
+import type { UpdateSnapshot } from "@repo/settings/update";
+import { text } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type UpdateMenuAct, updateMenuAct } from "../app-menu";
 import type { DesktopConfig } from "./desktop-config";
@@ -45,8 +45,8 @@ interface UpdateServiceHostDependencies {
    */
   beforeRestart: () => Promise<void>;
   /**
-   * Asks before Restart to update while a call stands, a panel holds unsaved
-   * work, or a terminal of this Mac is open, answering whether to restart;
+   * Asks before Restart to update while a call stands or a panel holds
+   * unsaved work, answering whether to restart;
    * yes at once while nothing would be lost. It is asked before the install
    * begins, never inside it, because Squirrel's own quit must not be held.
    */

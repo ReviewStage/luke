@@ -33,7 +33,7 @@ import { cn } from "../cn.js";
  *   own, sizes as its caller's `size` says, and leaves the keyboard's ring to
  *   the window (`anti-slop/no-shadcn-focus-ring`).
  *
- * `@luke/ui`'s `ScrollArea` (`components/scroll-area/scroll-area.tsx`) is
+ * `@repo/ui`'s `ScrollArea` (`components/scroll-area/scroll-area.tsx`) is
  * what an app draws, and its sheet keeps the edge fade; this is its inside.
  */
 

@@ -5,7 +5,7 @@
  * sentence, a heading's mono link, and a long link in a narrow column.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   GAP,
   Inline,
@@ -17,7 +17,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextLink,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

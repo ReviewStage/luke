@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, type Mention, type MentionLines } from "@luke/features/mention-link";
-import { CALL_KIND, type CallKind } from "@luke/features/turn-rows";
-import { ACT_KIND } from "@luke/host/acts";
+import { MENTION_KIND, type Mention, type MentionLines } from "@repo/features/mention-link";
+import { CALL_KIND, type CallKind } from "@repo/features/turn-rows";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -106,7 +106,7 @@ function drawnElement(page: TaskMentionsValue | undefined, words: ReactElement):
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
   ]);
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
@@ -11,8 +11,8 @@ import {
   type DeviceAgentAnswer,
   type DeviceLaunchStep,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+} from "@repo/features/device-agent-wire";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -21,6 +21,7 @@ import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { deviceAgentLine, deviceAgentRequest } from "../../schemas/device-agent.js";
 import { conversations, turns } from "../../schemas/storage.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
 import {
@@ -91,6 +92,7 @@ const startAgent = (userId: string, deviceId?: string) =>
       planSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const agentId = Option.getOrThrow(started).agent.id;
     if (deviceId !== undefined) {
@@ -115,7 +117,7 @@ const openAccount = (onMac = true) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const deviceId = yield* registerMac(userId);
     const agentId = yield* startAgent(userId, onMac ? deviceId : undefined);
     return { userId, deviceId, agentId };

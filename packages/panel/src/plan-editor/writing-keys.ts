@@ -23,7 +23,7 @@ import {
   WRITING_SHORTCUTS,
   type WritingAction,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { type AnyExtension, type Editor, Extension, InputRule } from "@tiptap/core";
 import { keydownHandler } from "@tiptap/pm/keymap";
 import type { ResolvedPos } from "@tiptap/pm/model";

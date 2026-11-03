@@ -57,7 +57,7 @@
  * draw the copy of one even though the copy stands outside it.
  */
 
-import { CARD_DROP_TARGET, MOTION_TOKEN, tokenTiming } from "@luke/ui";
+import { CARD_DROP_TARGET, MOTION_TOKEN, tokenTiming } from "@repo/ui";
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";

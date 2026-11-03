@@ -1,8 +1,8 @@
-import type { AgentMachineKind, ContextWindow } from "@luke/features/agent-wire";
-import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
-import type { LinkOpen } from "@luke/features/link-open";
-import type { AgentEnter, ExperimentChoices } from "@luke/settings";
-import { jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import type { AgentMachineKind, ContextWindow } from "@repo/features/agent-wire";
+import type { ChaptersModelId } from "@repo/features/chapters-model-choice";
+import type { LinkOpen } from "@repo/features/link-open";
+import type { AgentEnter, ExperimentChoices } from "@repo/settings";
+import { boolean, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -17,7 +17,7 @@ export const accountPreference = pgTable("account_preference", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   /**
-   * Where the account's app links open (`@luke/features/link-open`); null
+   * Where the account's app links open (`@repo/features/link-open`); null
    * until the account chooses, which reads as the browser. A part of the
    * snapshot of its own rather than the shared preferences, so a build that
    * predates it, writing that part whole, never clears it; written alone, it
@@ -26,7 +26,7 @@ export const accountPreference = pgTable("account_preference", {
   linkOpen: text("link_open").$type<LinkOpen>(),
   /**
    * What Enter does in an agent's message box while it works
-   * (`@luke/settings`'s `AGENT_ENTER`): steer the turn or queue the
+   * (`@repo/settings`'s `AGENT_ENTER`): steer the turn or queue the
    * message; null until the account chooses, which reads as steer. A part of
    * the snapshot of its own, as the link choice is, for the same reason.
    */
@@ -44,14 +44,14 @@ export const accountPreference = pgTable("account_preference", {
   agentContextWindow: text("agent_context_window").$type<ContextWindow>(),
   /**
    * The Claude model a Generate chapters this account presses runs on
-   * (`@luke/features/chapters-model-choice`); null until the account
+   * (`@repo/features/chapters-model-choice`); null until the account
    * chooses, and a value no build lists any more, both read as Haiku.
    * Written alone, it moves no `updated_at`.
    */
   chaptersModel: text("chapters_model").$type<ChaptersModelId>(),
   /**
    * Each experiment the account turned on or back off, by its key
-   * (`@luke/settings`'s `EXPERIMENT`); null on a row that never chose one,
+   * (`@repo/settings`'s `EXPERIMENT`); null on a row that never chose one,
    * which reads as every experiment off. A write merges its keys over what
    * stood, so a Mac that knows fewer experiments never erases another's
    * choice, and a key no build lists any more is left inert.
@@ -66,6 +66,13 @@ export const accountPreference = pgTable("account_preference", {
    * since removed is still told apart from no pick at all. Written alone,
    * it moves no `updated_at`.
    */
+  /**
+   * Whether our Slack bot writes the account the threads that wait on them
+   * (`packages/service/src/slack/thread-dms.ts`), in every workspace whose
+   * bot is connected; null until the account chooses, which reads as on.
+   * Written alone, it moves no `updated_at`.
+   */
+  slackNotifications: boolean("slack_notifications"),
   runsOnMachine: text("runs_on_machine").$type<AgentMachineKind>(),
   runsOnDeviceId: uuid("runs_on_device_id"),
   createdAt: createdAt(),

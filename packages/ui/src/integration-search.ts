@@ -1,10 +1,10 @@
-import type { IntegrationTool } from "@luke/features/integration-health";
-import { byName } from "@luke/features/integration-tool-model";
+import type { IntegrationTool } from "@repo/features/integration-health";
+import { byName } from "@repo/features/integration-tool-model";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**

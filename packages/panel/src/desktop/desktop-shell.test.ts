@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import {
   ACCOUNT_ACT_KIND,
   AGENT_ACT_KIND,
@@ -14,16 +14,16 @@ import {
   TASKS_ACT_KIND,
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
-} from "@luke/host/contract";
-import { EXPERIMENT, type ExperimentChoices, HOST_CAPABILITY } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/host/contract";
+import { EXPERIMENT, type ExperimentChoices, HOST_CAPABILITY } from "@repo/settings";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -212,14 +212,14 @@ test("while Settings is still loading its frame stands, a page of placeholder se
   const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
   const bars = page.querySelectorAll(
-    'section[aria-label="Settings"] :is(.desktop-drag-strip, .luke-toolbar)',
+    'section[aria-label="Settings"] :is(.desktop-drag-strip, .ui-toolbar)',
   );
 
   assert.deepEqual(
     [
       page.querySelector('nav[aria-label="Settings pages"]') !== null,
       placeholder?.textContent,
-      placeholder?.querySelectorAll(".luke-settings-section-card").length,
+      placeholder?.querySelectorAll(".ui-settings-section-card").length,
       bars.length,
     ],
     [true, "Reading Settings", 1, 1],
@@ -398,7 +398,7 @@ test("on a phone, while the account's access is read, Admin stands headed as it 
   assert.ok(page.querySelector('[role="radiogroup"][aria-label="Admin sections"]'));
 });
 
-test("with the sidebar folded, New plan stands beside its toggle over the welcome and the Inbox alike", () => {
+test("with the sidebar folded, New task stands beside its toggle over Home and the Inbox alike", () => {
   assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New task"]);
   act(() => root?.unmount());
   root = undefined;
@@ -460,10 +460,30 @@ function placeRow(page: HTMLElement, name: string): HTMLButtonElement | undefine
   return rowNamed(page.querySelector("aside.desktop-sidebar") ?? page, name);
 }
 
-test("the sidebar offers no Home row, the window resting on the Inbox with no task open", () => {
-  const page = mount(false);
-  assert.equal(placeRow(page, "Home"), undefined);
-  assert.ok(placeRow(page, "Inbox"), "the Inbox's row stands");
+/** The sidebar's Home row. */
+function homeRow(page: HTMLElement): HTMLButtonElement {
+  return placeRow(page, "Home") ?? assert.fail("the Home row stands");
+}
+
+test("the sidebar's Home row is the place shown on Home, and neither over the Inbox nor while a launch reopens a plan", () => {
+  assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
+  act(() => root?.unmount());
+  assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
+  act(() => root?.unmount());
+  assert.equal(homeRow(mount(false, true)).getAttribute("aria-current"), null);
+});
+
+test("Home, pressed or by its chord from Settings, brings the Tasks tab forward on Home", () => {
+  let home = 0;
+  const tabs: PanelTab[] = [];
+  mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  act(() => runAppCommand(APP_COMMAND.HOME));
+  assert.deepEqual([home, tabs], [1, [PANEL_TAB.TASKS]]);
+  act(() => root?.unmount());
+
+  const tasks = mount(false, false, { onGoHome: () => (home += 1) });
+  act(() => homeRow(tasks).click());
+  assert.equal(home, 2);
 });
 
 const ACME: Workspace = {
@@ -514,8 +534,8 @@ test("the window is called by what stands in it: the plan on screen in its own w
 
 test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
   const unreadOnOpen = (inboxOpen: boolean) => {
-    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
-    window.localStorage.setItem("luke.planLooksSeeded", "1");
+    window.localStorage.setItem("app.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
+    window.localStorage.setItem("app.planLooksSeeded", "1");
     const page = mount(
       inboxOpen,
       false,
@@ -566,8 +586,8 @@ function mountListing(
   listed: readonly Task[],
   looks: Readonly<Record<string, number>>,
 ): (open: Task | undefined) => void {
-  window.localStorage.setItem("luke.taskLooks", JSON.stringify(looks));
-  window.localStorage.setItem("luke.taskLooksSeeded", "1");
+  window.localStorage.setItem("app.taskLooks", JSON.stringify(looks));
+  window.localStorage.setItem("app.taskLooksSeeded", "1");
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -591,7 +611,7 @@ function mountListing(
 function sidebarRow(name: string): HTMLButtonElement {
   const row = [
     ...document.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
-  ].find((each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === name);
+  ].find((each) => each.querySelector(".ui-list-row-title")?.firstChild?.textContent === name);
   assert.ok(row, `the sidebar lists ${name}`);
   return row;
 }
@@ -609,7 +629,7 @@ function rowReadMark(name: string, choose = false): string | undefined {
   const menu = document.querySelector('[role="menu"]');
   assert.ok(menu, `${name}'s menu opens`);
   // Note that the item is read by its words, since its U is drawn beside them.
-  const words = (each: Element) => each.querySelector(".luke-menu-item-label")?.textContent ?? "";
+  const words = (each: Element) => each.querySelector(".ui-menu-item-label")?.textContent ?? "";
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
     /^Mark as (un)?read$/u.test(words(each)),
   );
@@ -972,7 +992,7 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.equal(page.querySelector("h1")?.textContent, "Automations");
   const wait = loading.querySelector("[role=status]");
   assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
-  assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);
+  assert.ok((wait?.querySelectorAll(".ui-skeleton").length ?? 0) > 0);
   assert.equal(loading.querySelector("[role=switch]"), null, "their chunk has not loaded yet");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
@@ -1042,7 +1062,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
 
 /** Every place in the window the developer can stand, as the shell is handed it. */
 const PLACE = {
-  HOME: "a new account's welcome",
+  HOME: "Home",
   OTHER_TASK: "another plan",
   INBOX: "the Inbox",
   AGENT_PAGE: "an agent's page",
@@ -1254,8 +1274,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     container.remove();
   }
   assert.deepEqual(found, {
-    // Note that the welcome holds only New task's composer, so it holds no words to find.
-    [PLACE.HOME]: false,
+    [PLACE.HOME]: true,
     [PLACE.OTHER_TASK]: true,
     [PLACE.INBOX]: true,
     // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
@@ -1296,8 +1315,8 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
 
   restOn(chip);
 
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);
+  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, DOCUMENT_NAME);
 });
 
 test("⌘K's Admin opens the Admin place for an admin alone, and is offered nothing for anyone else", async () => {
@@ -1401,7 +1420,7 @@ test("on a phone an open task leads its own row with the way back the window's h
     return container;
   };
   const back = (page: HTMLElement) =>
-    page.querySelector<HTMLButtonElement>(".task-head .luke-toolbar-lead button") ??
+    page.querySelector<HTMLButtonElement>(".task-head .ui-toolbar-lead button") ??
     assert.fail("a way back");
 
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);

@@ -5,8 +5,8 @@ import type {
   AdminUserDetail,
   AdminUserList,
   AdminWorkspaceList,
-} from "@luke/features/admin-answer-wire";
-import type { AdminCost } from "@luke/features/admin-cost-wire";
+} from "@repo/features/admin-answer-wire";
+import type { AdminCost } from "@repo/features/admin-cost-wire";
 import type {
   AdminDayQuery,
   AdminRefused,
@@ -14,7 +14,7 @@ import type {
   AdminUsersQuery,
   AdminWindowedQuery,
   AdminWorkspacesQuery,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import { createContext, useContext } from "react";
 
 /**

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
 import {
   createAutomation,
   listAutomationRuns,
   queuedAutomationRuns,
   updateAutomation,
-} from "@luke/database/models/automation-store";
-import { getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
-import { automationPath, automationWebhookPath, HOSTED_API_ERROR } from "@luke/features";
+} from "@repo/database/models/automation-store";
+import { getTestDB, leaveWorkspace, startTask } from "@repo/database/testing";
+import { automationPath, automationWebhookPath, HOSTED_API_ERROR } from "@repo/features";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -17,9 +17,9 @@ import {
   AUTOMATION_TRIGGER,
   AUTOMATION_WEBHOOK,
   automationAnswerSchema,
-} from "@luke/features/automation-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/automation-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -45,7 +45,7 @@ import { automationsProcedures } from "./automations-procedures.js";
  * Synthetic accounts and words throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 interface Answer {
   readonly status: number;
@@ -76,7 +76,6 @@ const standing = Effect.gen(function* () {
         Effect.succeed(
           Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
         ),
-      eveOrigin: () => undefined,
     }),
   });
   yield* Effect.addFinalizer(() => Effect.promise(() => webhook.dispose()));

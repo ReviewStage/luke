@@ -33,9 +33,9 @@
  * refused as unanswered; a repository nobody reaches as not reachable.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { INSTALLED_SKILL_MAIN_FILE } from "@luke/features/installed-skill-wire";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { INSTALLED_SKILL_MAIN_FILE } from "@repo/features/installed-skill-wire";
+import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

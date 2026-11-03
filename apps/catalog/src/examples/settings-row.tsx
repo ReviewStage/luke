@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -35,8 +35,8 @@ import {
   TEXT_VARIANT,
   Text,
   TextField,
-} from "@luke/ui";
-import { ExternalLinkIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { ExternalLinkIcon } from "@repo/ui/icons";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
@@ -119,7 +119,7 @@ function Mark({ provider }: { provider: (typeof MARK_PROVIDER)[keyof typeof MARK
 function KeyForm(): React.JSX.Element {
   const [key, setKey] = useState("");
   return (
-    <form className="catalog-settings-key" onSubmit={(event) => event.preventDefault()}>
+    <form className="catalog-settings-key" noValidate onSubmit={(event) => event.preventDefault()}>
       <TextField
         type={TEXT_FIELD_TYPE.PASSWORD}
         label="Linear API key"
@@ -209,7 +209,7 @@ function PressRows(): React.JSX.Element {
       </SettingsRow>
       <SettingsRow
         label="Sentry"
-        description="Not installed."
+        description="Not installed. Install to start automations from Sentry alerts."
         leading={<Mark provider={MARK_PROVIDER.SENTRY} />}
       >
         {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Install for workspace</Button>}

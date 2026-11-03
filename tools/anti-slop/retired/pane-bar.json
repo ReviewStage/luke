@@ -1,5 +1,5 @@
 {
-  "instead": "Draw the bar inside a tab or dock with PaneBar from @luke/ui.",
+  "instead": "Draw the bar inside a tab or dock with PaneBar from @repo/ui.",
   "classes": [
     { "class": "file-view-bar", "allow": ["packages/ui/src/components/pane-bar/"] },
     { "class": "pull-request-tab-bar", "allow": ["packages/ui/src/components/pane-bar/"] },

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_COMMENT_SCOPE, type PlanCommentStartRequest } from "@luke/features/plan-comment-wire";
-import type { Task } from "@luke/features/task-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
+import { PLAN_COMMENT_SCOPE, type PlanCommentStartRequest } from "@repo/features/plan-comment-wire";
+import type { Task } from "@repo/features/task-wire";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
@@ -94,7 +94,7 @@ async function opened() {
     onRetry: () => undefined,
     notes: new Map(),
     start: async (start) => {
-      started.push(start);
+      if (!("page" in start)) started.push(start);
       return { note: "not in this test" };
     },
     act: async () => true,
@@ -174,7 +174,7 @@ function turnInto(container: HTMLElement, block: string): void {
     document.querySelector<HTMLElement>('[role="menu"]') ?? assert.fail("the menu opens");
   const row =
     [...menu.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
-      (each) => each.querySelector(".luke-menu-item-label")?.textContent === block,
+      (each) => each.querySelector(".ui-menu-item-label")?.textContent === block,
     ) ?? assert.fail(`the menu offers ${block}`);
   act(() => row.click());
 }

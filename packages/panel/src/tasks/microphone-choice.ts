@@ -1,4 +1,4 @@
-import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "@luke/settings/microphone";
+import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "@repo/settings/microphone";
 
 /**
  * How every capture is processed, wherever it is opened from.

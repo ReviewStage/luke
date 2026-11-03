@@ -12,7 +12,7 @@
  * wrote for the task, each by its newest version, and
  * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
  * answered inside JSON so no page is ever a document of this origin
- * (`@luke/database/models/plan-pages`), and `…/versions/{version}/frame`
+ * (`@repo/database/models/plan-pages`), and `…/versions/{version}/frame`
  * a browser's frame of it, sent on to the sandbox's own site
  * (`../pages/page-frame.ts`). `POST /api/plans/{id}/attachments`
  * keeps one picture on the plan, pasted, dropped, or chosen into its text by
@@ -30,23 +30,25 @@
  * answers as not found.
  */
 
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
-import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
-import { pageVersionNumberSchema, taskPageOwner } from "@luke/features/page-wire";
-import { pictureOfDataUrl } from "@luke/features/picture-wire";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
+import { listPages, readPageVersion } from "@repo/database/models/plan-pages";
+import { readTaskWorkspace } from "@repo/database/models/task-store";
+import { pageVersionNumberSchema, taskPageOwner } from "@repo/features/page-wire";
+import { pictureOfDataUrl } from "@repo/features/picture-wire";
 import {
   PLAN_ATTACHMENT_REFUSAL,
   PLAN_ATTACHMENT_STATUS,
-} from "@luke/features/plan-attachment-wire";
+} from "@repo/features/plan-attachment-wire";
 import {
   type TaskFileRequest,
   type TaskTreeRequest,
   taskFileRequestSchema,
   taskTreeRequestSchema,
-} from "@luke/features/task-wire";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/task-wire";
+import { unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Option, Result } from "effect";
+import { recordServerEventIn, SERVER_AGENT_TOOL, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -152,6 +154,12 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
       );
       switch (kept.status) {
         case PLAN_ATTACHMENT_KEEP.KEPT:
+          yield* recordServerEventIn(
+            SERVER_EVENT.AGENT_TOOL_OPEN,
+            context.userId,
+            readTaskWorkspace(context.userId, taskId),
+            { tool: SERVER_AGENT_TOOL.ADD_TO_PLAN },
+          );
           return { status: PLAN_ATTACHMENT_STATUS.KEPT, body: { id: kept.id } };
         case PLAN_ATTACHMENT_KEEP.TOO_MANY:
           return {

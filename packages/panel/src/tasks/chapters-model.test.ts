@@ -4,7 +4,7 @@ import {
   CHANGED_FILE_STATUS,
   DIFF_SIDE,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -13,16 +13,16 @@ import {
   chapterPatches,
   LINE_REF_SIDE,
   type LineRef,
-} from "@luke/features/pull-request-chapters";
+} from "@repo/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
-} from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters-view";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersState,
-} from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/pull-request-chapters-wire";
 import { test } from "vitest";
 import {
   CHAPTERS_SHOWN,

@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
-import { INBOX_MESSAGE_AUTHOR } from "@luke/features/inbox-wire";
-import { readInboxAttachment, readInboxItem } from "@luke/service/inbox/inbox-store";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@repo/database/testing";
+import { INBOX_MESSAGE_AUTHOR } from "@repo/features/inbox-wire";
+import { readInboxAttachment, readInboxItem } from "@repo/service/inbox/inbox-store";
 import { Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -37,7 +37,7 @@ const foldersUpTo = (through: boolean) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-pre-v5-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-pre-v5-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter((name) =>
       through ? name.localeCompare(MIGRATION) <= 0 : name.localeCompare(MIGRATION) < 0,
     );
@@ -48,7 +48,7 @@ const foldersUpTo = (through: boolean) =>
   });
 
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
+  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
 
 it.effect(
   "an item from before version 5 reads as a thread its agent's message opens, its ask and answer on its messages",

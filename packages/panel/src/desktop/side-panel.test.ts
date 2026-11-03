@@ -7,7 +7,7 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -201,13 +201,13 @@ test("a pull request's card names the coding agent whose it is on a row by its t
       ),
     ),
   );
-  assert.equal(container.querySelector(".luke-hover-card-name")?.textContent, "Expire invitations");
+  assert.equal(container.querySelector(".ui-hover-card-name")?.textContent, "Expire invitations");
   assert.equal(
-    container.querySelector(".luke-hover-card-note")?.textContent,
+    container.querySelector(".ui-hover-card-note")?.textContent,
     "+210 −14 in 6 files · Checks passing",
   );
   const named = container.querySelector<HTMLButtonElement>(
-    '.luke-hover-card-row button[data-actor-ref][data-kind="agent"]',
+    '.ui-hover-card-row button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the agent is named as an actor");
   assert.equal(named.textContent, "Expiry job");
@@ -216,7 +216,7 @@ test("a pull request's card names the coding agent whose it is on a row by its t
   await act(async () => {
     await Promise.resolve();
   });
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card] .luke-hover-card-name");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card] .ui-hover-card-name");
   assert.equal(card?.textContent, "Expiry job", "the agent's own card hangs from its name");
   act(() => named.click());
   assert.deepEqual(opened, [THIRD.id]);
@@ -250,11 +250,11 @@ test("the phone's Activity list hangs each tab's card on its row, as the tab han
     ),
   );
   const row =
-    container.querySelector<HTMLElement>("button.luke-list-row-main") ??
+    container.querySelector<HTMLElement>("button.ui-list-row-main") ??
     assert.fail("the tab's row is drawn");
   restOn(row);
   assert.equal(
-    document.querySelector(".luke-tooltip-card [data-pull-request-card]")?.textContent,
+    document.querySelector(".ui-tooltip-card [data-pull-request-card]")?.textContent,
     "Expire invitations",
   );
   act(() => root.unmount());

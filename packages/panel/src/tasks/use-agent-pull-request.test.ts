@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentPullRequestAnswerView } from "@luke/features/agent-view";
+import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentPullRequestAnswer,
   type AgentTranscriptMessage,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

@@ -55,7 +55,7 @@ import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
  */
 
 /**
- * The card's parts in one type scale, each still named by its `luke-hover-
+ * The card's parts in one type scale, each still named by its `ui-hover-
  * card-*` class for what finds a part in the page. The head's glyph takes a
  * menu glyph's footprint on the name's first line, so the rows listed under
  * the head start their words on the name's column, and sizes whatever it
@@ -66,37 +66,37 @@ import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
  * and corner, its wash off the card's edge by a menu's inset under the
  * pointer, its glyph on the head's glyph column.
  */
-const CARD = "luke-hover-card flex flex-col gap-1";
-const HEAD = "luke-hover-card-head flex items-baseline gap-icon-gap";
-const LEAD = "luke-hover-card-lead flex items-center gap-control-gap";
+const CARD = "ui-hover-card flex flex-col gap-1";
+const HEAD = "ui-hover-card-head flex items-baseline gap-icon-gap";
+const LEAD = "ui-hover-card-lead flex items-center gap-control-gap";
 const LED_HEAD = "min-w-0 flex-1";
 const GLYPH =
-  "luke-hover-card-glyph inline-flex h-lh w-menu-glyph flex-none items-center justify-center self-start [&>:not(.luke-avatar,:has(.luke-avatar))]:size-hover-card-glyph";
-const TITLE = "luke-hover-card-title flex min-w-0 flex-1 flex-col gap-0.5";
+  "ui-hover-card-glyph inline-flex h-lh w-menu-glyph flex-none items-center justify-center self-start [&>:not(.ui-avatar,:has(.ui-avatar))]:size-hover-card-glyph";
+const TITLE = "ui-hover-card-title flex min-w-0 flex-1 flex-col gap-0.5";
 const NAME =
-  "luke-hover-card-name overflow-hidden text-label leading-[inherit] font-label wrap-anywhere";
+  "ui-hover-card-name overflow-hidden text-label leading-[inherit] font-label wrap-anywhere";
 const SUB =
-  "luke-hover-card-sub flex min-w-0 items-center gap-1 text-caption leading-[inherit] text-muted-foreground tabular-nums [&>span]:min-w-0 [&>span]:wrap-anywhere";
+  "ui-hover-card-sub flex min-w-0 items-center gap-1 text-caption leading-[inherit] text-muted-foreground tabular-nums [&>span]:min-w-0 [&>span]:wrap-anywhere";
 const CORNER =
-  "luke-hover-card-corner flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums data-tone:text-tone-ink";
+  "ui-hover-card-corner flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums data-tone:text-tone-ink";
 const NOTE =
-  "luke-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-caption";
-const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border";
+  "ui-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-caption";
+const RULE = "ui-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border";
 const ROW =
-  "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
+  "ui-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--ui-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
 const ROW_PRESS =
   "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong";
 const ROW_FOCUS = "focus-visible:bg-fill-strong focus-visible:outline-none";
 const ROW_GLYPH =
-  "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
-const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
+  "ui-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.ui-avatar,:has(.ui-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
+const ROW_LABEL = "ui-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
 const ROW_END =
-  "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
-const FIGURES = "luke-hover-card-figures m-0 flex flex-col gap-list-gap text-caption";
+  "ui-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
+const FIGURES = "ui-hover-card-figures m-0 flex flex-col gap-list-gap text-caption";
 const FIGURE =
-  "luke-hover-card-figure flex justify-between gap-control-gap [&_dd]:m-0 [&_dd]:tabular-nums [&_dt]:text-muted-foreground";
-const SCROLL = "luke-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
-const SCROLL_BODY = "luke-hover-card-scroll-body px-2";
+  "ui-hover-card-figure flex justify-between gap-control-gap [&_dd]:m-0 [&_dd]:tabular-nums [&_dt]:text-muted-foreground";
+const SCROLL = "ui-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
+const SCROLL_BODY = "ui-hover-card-scroll-body px-2";
 
 /** What a card's skeleton says to a reader while what the card shows is read. */
 const CARD_READING = "Reading…";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
+import { openMigratedPglite, sqlClientOverPglite } from "@repo/database/testing";
 import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Schema } from "effect";
@@ -26,7 +26,7 @@ import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./au
  */
 
 const BASE_URL = "http://127.0.0.1";
-const LUKE_EMAIL = "planner@luke.test";
+const LUKE_EMAIL = "planner@app.test";
 const GITHUB_ACCOUNT_ID = 5151;
 const DONE_URL = "/connect-github.html?done=1";
 const ERROR_URL = "/connect-github.html?error=1";
@@ -172,7 +172,7 @@ test("a signed-in account links a GitHub whose address is not its own, and holds
     assert.equal(linked.github, String(GITHUB_ACCOUNT_ID));
     // Counted under the account that linked, as a link and not as a sign-up.
     assert.deepEqual(linked.counts, [
-      { name: "github:account_link", userId: linked.userId, properties: {} },
+      { name: "github:account_link", actor: { userId: linked.userId }, properties: {} },
     ]);
   });
 });

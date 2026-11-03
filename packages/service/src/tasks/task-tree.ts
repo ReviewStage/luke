@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readTaskHeader, type TaskStoreFailure } from "@repo/database/models/task-store";
 import {
   CODE_PATH_MAX_CHARS,
   isSecretFile,
@@ -8,7 +8,7 @@ import {
   TASK_TREE_ENTRY,
   type TaskTreeAnswer,
   type TaskTreeRequest,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type GitHubApp, markRefusedToken } from "../github/github-app.js";

@@ -4,33 +4,33 @@
    what it does in the muted ink. */
 
 @layer components {
-  .luke-menu-keys {
+  .ui-menu-keys {
     display: flex;
     flex: 0 0 auto;
-    gap: var(--luke-space-12);
-    padding: var(--luke-space-6) calc(var(--luke-menu-inset) + var(--luke-space-8));
-    border-top: 1px solid var(--luke-color-border);
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
+    gap: var(--ui-space-12);
+    padding: var(--ui-space-6) calc(var(--ui-menu-inset) + var(--ui-space-8));
+    border-top: 1px solid var(--ui-color-border);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
     white-space: nowrap;
   }
 
-  .luke-menu-keys-item,
-  .luke-menu-keys-key {
+  .ui-menu-keys-item,
+  .ui-menu-keys-key {
     display: inline-flex;
     align-items: center;
-    gap: var(--luke-space-4);
+    gap: var(--ui-space-4);
   }
 
   /* The keys that do one thing sit closer than the words after them. */
-  .luke-menu-keys-key {
-    gap: var(--luke-space-2);
+  .ui-menu-keys-key {
+    gap: var(--ui-space-2);
   }
 
   /* A finger picks a row by pressing it, so the keys say nothing there. */
   @media (pointer: coarse) {
-    .luke-menu-keys {
+    .ui-menu-keys {
       display: none;
     }
   }

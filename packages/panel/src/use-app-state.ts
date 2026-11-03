@@ -1,18 +1,18 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import { LIVE_READ } from "@luke/features/live-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   type AppStateDelivery,
   type AppStateSnapshot,
   withAppStateDelivery,
-} from "@luke/host/app-state";
+} from "@repo/host/app-state";
 import {
   type Experiment,
   type ExperimentChoices,
   experimentOn,
   type HostCapability,
   NO_EXPERIMENTS,
-} from "@luke/settings";
-import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
+} from "@repo/settings";
+import { type AppSettingsView, appSettingsView } from "@repo/settings/wire";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -339,6 +339,12 @@ const ADMIN_ACCESS: Atom.Atom<boolean> = Atom.map(
   (access) => access?.admin === true,
 );
 
+/** Whether the service runs a Start on a task with no repository, which tells its readers only as it turns. */
+const STARTS_WITHOUT_REPOSITORY: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.ACCESS,
+  (access) => access?.startsWithoutRepository === true,
+);
+
 /** Whether the account's access is not read yet, before the first read of the document among it. */
 const ADMIN_ACCESS_PENDING: Atom.Atom<boolean> = Atom.map(
   APP_SLICE.ACCESS,
@@ -363,6 +369,18 @@ export function useAdminAccess(): boolean {
  */
 export function useAdminAccessPending(): boolean {
   return useAtomValue(ADMIN_ACCESS_PENDING);
+}
+
+/**
+ * Whether the service runs a Start on a task that names no repository where
+ * the task's agents run on a host, redrawn as it moves: what such a task's
+ * Start is pressed by. The service answers it in the local demo alone, so
+ * everywhere else, signed out, before the first read, or where the host's
+ * read of it failed, it is false. It only draws: the Start route decides
+ * every Start.
+ */
+export function useStartsWithoutRepository(): boolean {
+  return useAtomValue(STARTS_WITHOUT_REPOSITORY);
 }
 
 /**

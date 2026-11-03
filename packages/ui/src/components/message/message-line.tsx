@@ -49,12 +49,12 @@ function opensInset(align: MessageLineAlign, inset: MessageLineInset): boolean {
 
 /** The sender's inset: at its end, and at its start too unless the line opens flush with words on no ground. */
 function senderInset(inset: MessageLineInset): string {
-  return inset === MESSAGE_LINE_INSET.BUBBLE ? "px-luke-4" : "pe-luke-4";
+  return inset === MESSAGE_LINE_INSET.BUBBLE ? "px-ui-4" : "pe-ui-4";
 }
 
 /** The time's inset: at its end, and at its start too where it opens a received message's line, so it stands at the bubble's inset as the head over it does (`MessageHead`). */
 function timeInset(named: boolean, align: MessageLineAlign, inset: MessageLineInset): string {
-  return !named && opensInset(align, inset) ? "px-luke-4" : "pe-luke-4";
+  return !named && opensInset(align, inset) ? "px-ui-4" : "pe-ui-4";
 }
 
 /** The line under a message: `sender`, `at`, and `actions`, each left out where the message has none, the actions on the side away from `align`'s edge. */
@@ -83,21 +83,19 @@ export function MessageLine({
   const actionsFirst = align === MESSAGE_LINE_ALIGN.END;
   return (
     <div
-      className={`luke-message-line flex max-w-full items-center gap-luke-2 text-caption-inline text-muted-foreground ${align === MESSAGE_LINE_ALIGN.START ? "justify-start" : "justify-end"}${wrap ? " flex-wrap gap-y-luke-2" : ""}`}
+      className={`ui-message-line flex max-w-full items-center gap-ui-2 text-caption-inline text-muted-foreground ${align === MESSAGE_LINE_ALIGN.START ? "justify-start" : "justify-end"}${wrap ? " flex-wrap gap-y-ui-2" : ""}`}
       data-align={align}
       data-wrap={wrap ? "true" : undefined}
     >
       {actionsFirst ? actions : null}
       {named ? (
-        <span
-          className={`luke-message-line-sender flex min-w-0 items-center ${senderInset(inset)}`}
-        >
+        <span className={`ui-message-line-sender flex min-w-0 items-center ${senderInset(inset)}`}>
           {sender}
         </span>
       ) : null}
       {at === undefined ? null : (
         <span
-          className={`luke-message-line-time flex flex-none items-center gap-luke-6 whitespace-nowrap tabular-nums ${timeInset(named, align, inset)}`}
+          className={`ui-message-line-time flex flex-none items-center gap-ui-6 whitespace-nowrap tabular-nums ${timeInset(named, align, inset)}`}
         >
           {named ? <span aria-hidden="true">·</span> : null}
           <Time at={at} look={TIME_LOOK.DAY} />

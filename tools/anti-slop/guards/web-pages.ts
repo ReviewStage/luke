@@ -13,7 +13,7 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
  * as the landing page's card under Vespin's name, since an unfurler reads it
  * signed out; the page the app frames carries its one style by the digest
  * its policy admits and loads nothing; and every Tailwind entry takes
- * `@luke/ui`'s theme (`packages/ui/AGENTS.md`), without which the buttons'
+ * `@repo/ui`'s theme (`packages/ui/AGENTS.md`), without which the buttons'
  * utilities compile to nothing; and the panel's root stops a phone's text
  * autosizing, without which iOS Safari draws a code block's lines larger
  * than the words around them.
@@ -21,7 +21,7 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
 
 const WEB = "apps/web";
 const PUBLIC = `${WEB}/public`;
-const BRAND_FAVICON = "packages/brand/assets/icon/luke-favicon.svg";
+const BRAND_FAVICON = "packages/brand/assets/icon/favicon.svg";
 const FRAMED_PAGE = "page-in-mac-app.html";
 const PANEL_BASE = "packages/panel/src/styles/base.css";
 
@@ -37,8 +37,8 @@ const THEME_COLOR = /<meta name="theme-color" content="(#[0-9a-f]{6})" \/>/u;
 /** A Tailwind entry: a stylesheet that compiles Tailwind's utilities. */
 const TAILWIND_UTILITIES = /@import\s+"tailwindcss(?:\/utilities\.css)?"/u;
 
-/** What every Tailwind entry takes from `@luke/ui`, so its components' utilities compile. */
-const UI_THEME_IMPORTS = ['"@luke/ui/tailwind/sources.css"', '"@luke/ui/tailwind/theme.css"'];
+/** What every Tailwind entry takes from `@repo/ui`, so its components' utilities compile. */
+const UI_THEME_IMPORTS = ['"@repo/ui/tailwind/sources.css"', '"@repo/ui/tailwind/theme.css"'];
 
 /** What the panel's root declares so a phone draws its sizes as the tokens say: WebKit's spelling and the standard one. */
 const TEXT_SIZE_ADJUST = ["-webkit-text-size-adjust", "text-size-adjust"] as const;
@@ -177,7 +177,7 @@ export function framedPageProblems(html: string, policy: string | undefined): re
   return problems;
 }
 
-/** Where a Tailwind entry leaves out `@luke/ui`'s sources or theme, or takes it before Tailwind's own. */
+/** Where a Tailwind entry leaves out `@repo/ui`'s sources or theme, or takes it before Tailwind's own. */
 export function themeImportProblems(file: string, sheet: string): readonly string[] {
   // Note that an import inside a comment is no import, so comments are taken out before reading.
   const css = sheet.replace(/\/\*[\s\S]*?\*\//gu, "");
@@ -258,6 +258,6 @@ async function webPageProblems(root: string): Promise<readonly string[]> {
 
 export const webPagesGuard: RepositoryGuard = {
   holds:
-    "the site's pages carry their icons, theme colour, card and policy, and every Tailwind entry takes @luke/ui's theme, and the panel's root stops a phone's text autosizing",
+    "the site's pages carry their icons, theme colour, card and policy, and every Tailwind entry takes @repo/ui's theme, and the panel's root stops a phone's text autosizing",
   problems: webPageProblems,
 };

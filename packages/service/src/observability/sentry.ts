@@ -38,7 +38,7 @@ import {
   scrubbedAttributes,
   scrubbedQueryParams,
   scrubbedUrl,
-} from "@luke/features/sentry-addresses";
+} from "@repo/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
 import {
   addBreadcrumb,
@@ -196,10 +196,9 @@ const REFUSAL_CAUSE_DEPTH = 5;
 /**
  * Whether a failure is a refusal: a bare `Error`, carrying nothing but its
  * words and, where it explains another, a cause that is a refusal too. That is
- * how eve's own tools refuse a call (`You must read file … before overwriting
- * it`, a patch that does not apply, a file not found), how this repository's
- * file tools add what to do next to eve's words (`coder-host/files.ts`), and
- * how a connection's tool answers an error.
+ * how eve's own tools refused a call (`You must read file … before overwriting
+ * it`, a patch that does not apply, a file not found), and how a
+ * connection's tool answers an error.
  *
  * Note that a bare `Error` carrying a field of its own beside its cause (a
  * sandbox API error's `response`, undici's `code`) is a failure beneath the
@@ -225,9 +224,7 @@ function isRefusal(failure: Error, depth = 0): boolean {
  * fails beneath a tool arrives as a class of its own (the sandbox client's
  * API error, an MCP client's error, undici's `TypeError`), alone or as a
  * refusal's cause, and still reports as an issue. A defect in this
- * repository's own tools is thrown as a class of its own too, or reported
- * apart from the channel by the eve root's runtime (`runAgent`'s
- * `Effect.withErrorReporting`), under the reporter's own mechanism.
+ * repository's own tools is thrown as a class of its own too.
  */
 function dropAnsweredToolRefusals(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
   const failure = hint.originalException;

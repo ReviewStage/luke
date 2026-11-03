@@ -1,5 +1,5 @@
-import { DIFF_INDICATORS, INLINE_DIFF } from "@luke/settings/diff-view";
-import { cssCustomProperties } from "@luke/ui";
+import { DIFF_INDICATORS, INLINE_DIFF } from "@repo/settings/diff-view";
+import { cssCustomProperties } from "@repo/ui";
 import { useEffect, useState } from "react";
 import { LINE_HEIGHT_RATIO } from "../code-type.js";
 import type { DiffLook } from "../diff-view/contract.js";

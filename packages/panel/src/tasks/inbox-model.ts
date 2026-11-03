@@ -1,12 +1,12 @@
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
-import type { AgentAttachment, AgentSummary } from "@luke/features/agent-wire";
-import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
-import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
+import type { AgentAttachment, AgentSummary } from "@repo/features/agent-wire";
+import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@repo/features/attachment-model";
+import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   inboxAttachmentOf,
   inboxPictureDestination,
-} from "@luke/features/inbox-attachment-link";
+} from "@repo/features/inbox-attachment-link";
 import {
   codeLinesReadable,
   fieldValueWords,
@@ -37,13 +37,13 @@ import {
   inboxWaitsOn,
   openAskOf,
   recommendedLabels,
-} from "@luke/features/inbox-wire";
-import { insideCode } from "@luke/features/mention-link";
-import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
-import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
-import { matchesTokens } from "@luke/ui/search-tokens";
-import { isWireString } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import { insideCode } from "@repo/features/mention-link";
+import type { TaskFileRequest, TaskSummary } from "@repo/features/task-wire";
+import type { TasksFileAnswer } from "@repo/features/tasks-view";
+import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@repo/host/app-state";
+import { matchesTokens } from "@repo/ui/search-tokens";
+import { isWireString } from "@repo/wire";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";

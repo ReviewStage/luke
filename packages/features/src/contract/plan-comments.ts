@@ -10,7 +10,7 @@
  * body of each write is exactly its wire request, read apart from them.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../agent-wire.js";
@@ -57,12 +57,13 @@ const planCommentStartAnswerSchema = EffectSchema.Struct({
 });
 
 export const planCommentsContract = {
-  /** The plan's threads past the cursor `after` names, held while nothing moved; the start where it names none. */
+  /** The plan's threads, or the threads of the task's page `page` names, past the cursor `after` names, held while nothing moved; the start where it names none. */
   read: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: COMMENTS_PATH }))
     .input(
       EffectSchema.Struct({
         ...taskIdField,
+        page: EffectSchema.optionalKey(EffectSchema.String),
         after: EffectSchema.optionalKey(planCommentsCursorSchema),
       }),
     )

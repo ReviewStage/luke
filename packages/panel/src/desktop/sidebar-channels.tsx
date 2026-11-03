@@ -1,6 +1,6 @@
-import type { Channel } from "@luke/features/channel-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readFailedWords, readingWords } from "@luke/features/words";
+import type { Channel } from "@repo/features/channel-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readFailedWords, readingWords } from "@repo/features/words";
 import {
   BUTTON_SIZE,
   ERROR_STATE_PLACEMENT,
@@ -16,8 +16,8 @@ import {
   Tooltip,
   useDisclosureFold,
   useMenu,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { type ReactNode, useId, useRef } from "react";
 import { unreadShown } from "../failure-report.js";
 import { ChannelCard } from "../tasks/channel-card.js";
@@ -32,7 +32,7 @@ import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
 
 /**
- * sidebar-channels.tsx -- the channels under the sidebar's Inbox row while Channels is on, each a filter of the Inbox, and the questions that make, edit, and archive one (STAG-547).
+ * sidebar-channels.tsx -- the channels under the sidebar's Inbox row while Channels is on, each a filter of the Inbox, and the questions that make, edit, and archive one.
  *
  * The rows stand in under the Inbox's name (`SidebarFilters`), the
  * workspace's standing channels first and its project channels after them,

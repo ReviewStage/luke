@@ -4,8 +4,8 @@ import { exit } from "node:process";
 import { webFunctions } from "../server/function-layout.js";
 import {
   API_REWRITES_FILE,
-  apiRewrites,
   apiRewritesSource,
+  generatedRewrites,
   rewritesDrifted,
   VERCEL_CONFIG_FILE,
   vercelConfigSource,
@@ -30,13 +30,13 @@ if (mode !== MODE.WRITE && mode !== MODE.CHECK) {
 if (mode === MODE.WRITE) {
   await writeFile(
     join(WEB, API_REWRITES_FILE),
-    apiRewritesSource(apiRewrites(await webFunctions(WEB))),
+    apiRewritesSource(generatedRewrites(await webFunctions(WEB))),
   );
   await writeFile(join(WEB, VERCEL_CONFIG_FILE), await vercelConfigSource(WEB));
 }
 
 if (await rewritesDrifted(WEB)) {
   console.error(`stale: ${API_REWRITES_FILE} or the /api/ routes of ${VERCEL_CONFIG_FILE}`);
-  console.error("run `pnpm --filter @luke/web functions:rewrites` to regenerate the rewrites");
+  console.error("run `pnpm --filter @repo/web functions:rewrites` to regenerate the rewrites");
   exit(1);
 }

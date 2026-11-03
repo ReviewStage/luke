@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
+import { BRAND_ASSETS_DIRECTORY } from "@repo/brand/assets-directory";
 import { ICONSET_SOURCES, iconutilArguments } from "./package-config.mjs";
 
 /**
@@ -10,7 +10,7 @@ import { ICONSET_SOURCES, iconutilArguments } from "./package-config.mjs";
  * sources are committed files, so mtime is a sound freshness answer.
  */
 export function buildAppIcon(appRoot) {
-  const iconsetPath = path.join(appRoot, ".build", "luke.iconset");
+  const iconsetPath = path.join(appRoot, ".build", "app.iconset");
   const iconPath = path.join(appRoot, ".build", "Vespin.icns");
   const brandIconDirectory = path.join(BRAND_ASSETS_DIRECTORY, "icon");
   const sourcePaths = Object.values(ICONSET_SOURCES).map((sourceName) => {

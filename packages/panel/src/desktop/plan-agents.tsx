@@ -1,5 +1,5 @@
-import type { AgentPullRequest } from "@luke/features/agent-wire";
-import type { TaskRunsOn } from "@luke/features/task-wire";
+import type { AgentPullRequest } from "@repo/features/agent-wire";
+import type { TaskRunsOn } from "@repo/features/task-wire";
 import {
   GROUP_HEADING,
   GroupHeader,
@@ -8,9 +8,9 @@ import {
   ListRow,
   RowHint,
   RowHintOptions,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";

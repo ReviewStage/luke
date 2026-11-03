@@ -3,14 +3,14 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   PULL_REQUEST_GLYPH,
   PULL_REQUEST_MARK_QUEUED,
   pullRequestMarkState,
   STATUS_TONE,
   type StatusTone,
-} from "@luke/ui";
+} from "@repo/ui";
 import { pullRequestNumberLabel, pullRequestPillLabel } from "./agent-model.js";
 
 /**
@@ -26,7 +26,7 @@ import { pullRequestNumberLabel, pullRequestPillLabel } from "./agent-model.js";
  * so its words, not its colour alone, tell it from a merged one.
  * Its checks never change its colour: failed checks are said in its words
  * for a reader who cannot see it, and drawn where the checks themselves
- * are. Its glyph is `@luke/ui`'s (`pull-request-glyph.ts`), which a task's
+ * are. Its glyph is `@repo/ui`'s (`pull-request-glyph.ts`), which a task's
  * status icon draws too. The colour is the stylesheet's, keyed on
  * `data-pull-request-state` (`tasks.css`); a chip naming the pull request
  * says the same in the shared palette's tone for it (`PULL_REQUEST_TONE`).

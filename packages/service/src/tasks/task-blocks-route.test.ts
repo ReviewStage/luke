@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { readTaskBlocks } from "@luke/database/models/task-block-store";
-import { createTask, readTaskHeader } from "@luke/database/models/task-store";
-import { fakeWorkspaceSeams, getTestDB, openWorkspace } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
+import { Database } from "@repo/database/core/query";
+import { readTaskBlocks } from "@repo/database/models/task-block-store";
+import { createTask, readTaskHeader } from "@repo/database/models/task-store";
+import { fakeWorkspaceSeams, getTestDB, openWorkspace } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
 import {
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
@@ -12,7 +12,7 @@ import {
   type TaskBlockRequest,
   type TaskParentRequest,
   type TaskRelationChangeRequest,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { sessionSandboxesLayer } from "../agents/session-sandboxes.js";
@@ -43,7 +43,7 @@ const PLAN_WRITE = {
 
 type PlanWrite = (typeof PLAN_WRITE)[keyof typeof PLAN_WRITE];
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** The plans procedures over the test's store, each bearer answering for the account it maps to; GitHub is never asked. */
 const blocking = (bearers: ReadonlyMap<string, string>) =>
@@ -65,7 +65,6 @@ const blocking = (bearers: ReadonlyMap<string, string>) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
         workspaces: yield* fakeWorkspaceSeams,

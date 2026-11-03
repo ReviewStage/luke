@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
-import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind } from "@luke/host/contract";
-import { MESSAGE_ROLE } from "@luke/wire";
+import type { AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
+import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
+import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind } from "@repo/host/contract";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -231,18 +231,18 @@ test("Add to plan keeps the picture on the plan and writes its line at the plan'
 
   await act(async () => add.click());
   assert.equal(newestToastSays(), "Adding to the plan…");
-  const card = document.querySelector(".luke-toast");
+  const card = document.querySelector(".ui-toast");
   await settled(() => /Added/u.test(newestToastSays() ?? ""));
 
   assert.deepEqual(sent, [ACT_KIND.TASKS_PICTURE_KEEP, ACT_KIND.TASKS_EDIT]);
   assert.equal(held, `${PAGE_TEXT}\n${LINE}\n`);
   assert.equal(newestToastSays(), "Added to the planUndo");
   assert.equal(
-    document.querySelectorAll(".luke-toast").length,
+    document.querySelectorAll(".ui-toast").length,
     1,
     "the working toast turned in place",
   );
-  assert.equal(document.querySelector(".luke-toast"), card);
+  assert.equal(document.querySelector(".ui-toast"), card);
 
   const undo = newestToastAction();
   assert.ok(undo);

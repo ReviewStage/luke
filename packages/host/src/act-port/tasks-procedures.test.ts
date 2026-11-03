@@ -17,19 +17,19 @@ import {
   ADMIN_READ,
   ADMIN_REFUSED,
   type AdminReadAnswer,
-} from "@luke/features/admin-wire";
-import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import { pagePlaceId } from "@luke/features/page-wire";
-import { PICTURE_TYPE } from "@luke/features/picture-wire";
+} from "@repo/features/admin-wire";
+import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import { pagePlaceId } from "@repo/features/page-wire";
+import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
-} from "@luke/features/plan-comment-wire";
-import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
+} from "@repo/features/plan-comment-wire";
+import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
+import { TASK_FILE_REFUSAL } from "@repo/features/task-wire";
 import {
   BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
@@ -40,7 +40,7 @@ import {
   type TasksGitHubPageAnswer,
   type TasksPageSourceAnswer,
   type TasksStartAnswer,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import { vi } from "vitest";
@@ -65,7 +65,7 @@ const PANEL: ActSender = { sender: SENDER, panel: true };
 const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
@@ -412,6 +412,8 @@ function windowPort(
               } as const,
             },
       ),
+    tasksFind: (params) =>
+      ask(`find:${params.workspace}:${params.number}`, () => ({ taskId: TASK_ID })),
     tasksRevisions: (params) =>
       ask(`revisions:${params.taskId}:${params.before}`, () => ({ revisions: [] })),
     tasksRevision: (params) =>
@@ -687,7 +689,7 @@ it("the admin dashboard opens the service's own page in the browser, and an addr
 });
 
 it("the admin dashboard is refused, and nothing opens, where the service's origin is no web address", async () => {
-  for (const serviceBaseUrl of ["file:///srv/luke", "luke-evil://service", "not an address"]) {
+  for (const serviceBaseUrl of ["file:///srv/app", "evil://service", "not an address"]) {
     const { client, browsed } = windowPort(PANEL, { serviceBaseUrl });
 
     assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, undefined), {
@@ -743,7 +745,7 @@ it("a GitHub page the host names off the service's own origin is refused and not
 
   for (const page of [
     "file:///etc/passwd",
-    "luke-evil://connect",
+    "evil://connect",
     "https://evil.test/connect-github.html",
   ]) {
     script.connectPage = page;

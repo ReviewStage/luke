@@ -16,10 +16,10 @@
  * account.
  */
 
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { AUTOMATION_FOLLOW, type AutomationListView } from "@repo/features/automation-view";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -31,19 +31,19 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
   type InboxMessage,
-} from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
-import type { TasksView } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
+import type { TasksView } from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppStateSnapshot,
   RUN_PROFILE,
-} from "@luke/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
+} from "@repo/host/app-state";
+import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 
 /**
  * When the fixture landed, from which every instant here is counted back.
@@ -134,6 +134,8 @@ function item(
 ): InboxItem {
   const first = thread[0]?.createdAt ?? LANDED;
   const last = thread.at(-1)?.createdAt ?? first;
+  // Note that the agent hears the answer to every ask and never a notice's nod, as the service stores its latest post.
+  const latestPost = thread.findLast((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT);
   return {
     id: fixtureId(n),
     agentId,
@@ -141,7 +143,7 @@ function item(
     revision: thread.length,
     version: INBOX_WIRE_VERSION,
     title,
-    needsReply: false,
+    needsReply: latestPost?.ask !== undefined,
     status: INBOX_STATUS.OPEN,
     startedBy: ADA,
     waitsOn: ADA,
@@ -293,29 +295,22 @@ const INVITES_ITEMS: readonly InboxItem[] = [
 
 /** The digest task's items: steps to do, an answer in words, and one answered. */
 const DIGEST_ITEMS: readonly InboxItem[] = [
-  item(
-    11,
-    AGENT.DIGEST,
-    "sender-domain",
-    "Verify the digest's sender domain",
-    [
-      agentSaid(
-        201,
-        25 * MINUTE,
-        "The digest sends from `digest@relay.example.com`, which the mail provider won't send from until the domain is verified.",
-        {
-          type: INBOX_ASK.DO,
-          steps: [
-            "Open the mail provider's **Domains** page and add `relay.example.com`.",
-            "Add the three DNS records it shows at your registrar.",
-            "Press **Verify** once they've spread, which can take an hour.",
-          ],
-          ...OPEN,
-        },
-      ),
-    ],
-    { needsReply: true },
-  ),
+  item(11, AGENT.DIGEST, "sender-domain", "Verify the digest's sender domain", [
+    agentSaid(
+      201,
+      25 * MINUTE,
+      "The digest sends from `digest@relay.example.com`, which the mail provider won't send from until the domain is verified.",
+      {
+        type: INBOX_ASK.DO,
+        steps: [
+          "Open the mail provider's **Domains** page and add `relay.example.com`.",
+          "Add the three DNS records it shows at your registrar.",
+          "Press **Verify** once they've spread, which can take an hour.",
+        ],
+        ...OPEN,
+      },
+    ),
+  ]),
   item(12, AGENT.DIGEST, "digest-subject", "The digest's subject line", [
     agentSaid(
       202,

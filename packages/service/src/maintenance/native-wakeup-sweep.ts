@@ -3,13 +3,13 @@
  *
  * A Claude Code agent that waited on one-shot wakeups alone was released:
  * its runner ended the launch, so its sandbox stopped, and named each wakeup
- * with the instant it comes due (`@luke/agent-runner/protocol`'s
+ * with the instant it comes due (`@repo/agent-runner/protocol`'s
  * `RUNNER_RELEASE`), which the events route kept
- * (`@luke/database/models/agent-wakeups`). Once a wakeup is due, the
- * sweep hands its prompt to the agent as a message from us, the one way a
- * message reaches an agent (`steerAgent`), which relaunches the CLI on
- * the session it resumes, as the wakeup would have started a turn in the
- * CLI that waited. The message goes under a key of the wakeup's own, so a
+ * (`@repo/database/models/agent-wakeups`). Once a wakeup is due, the
+ * sweep hands its prompt to the agent as a message sent by the agent itself,
+ * since the words are its own, the one way a message reaches an agent
+ * (`steerAgent`), which relaunches the CLI on the session it resumes, as the
+ * wakeup would have started a turn in the CLI that waited. The message goes under a key of the wakeup's own, so a
  * delivery repeated after one that landed is told once.
  *
  * A delivery sends only a wakeup that still stands, so one a Stop or a
@@ -19,19 +19,18 @@
  * times, under the same key, so a send that did land is told once. Each call is bounded so the sweep's minute holds.
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { readAgent } from "@repo/database/models/agent-store";
 import {
   agentWakeupStands,
   type ClaimedAgentWakeup,
   claimDueAgentWakeups,
   deleteAgentWakeup,
-} from "@luke/database/models/agent-wakeups";
-import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+} from "@repo/database/models/agent-wakeups";
+import { APP_LINE_METADATA, storeWriter } from "@repo/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { steerAgent } from "../agents/coder-host/steer.js";
+import { agentLineSender, steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -58,7 +57,7 @@ function wakeupKey(wakeup: ClaimedAgentWakeup): string {
 }
 
 /**
- * One wakeup handed to its agent as a message from us; whether it landed.
+ * One wakeup handed to its agent as a message of its own; whether it landed.
  * It is sent only while it still stands, so one a Stop or a launch deleted
  * since the claim is not sent, and deleted once the send landed; one whose
  * send failed stands for its next delivery.
@@ -73,8 +72,8 @@ const deliver = (eveFor: EveForAccount, wakeup: ClaimedAgentWakeup) =>
     yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), wakeup.userId, agent.value, {
       text: wakeup.prompt,
       clientKey: wakeupKey(wakeup),
-      sender: { kind: MESSAGE_SENDER.LUKE },
-      metadata: LUKE_LINE_METADATA,
+      sender: agentLineSender(agent.value),
+      metadata: APP_LINE_METADATA,
     });
     yield* deleteAgentWakeup(wakeup.id);
     return true;

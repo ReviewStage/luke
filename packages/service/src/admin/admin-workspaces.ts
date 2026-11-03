@@ -11,14 +11,14 @@
  * task's title, a plan's text, or anything a member wrote.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AdminWorkspaceInstallation,
   AdminWorkspaceList,
   AdminWorkspaceOwner,
   AdminWorkspaceRow,
   AdminWorkspaceSummary,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
@@ -27,7 +27,7 @@ import {
   adminMetricsScope,
   adminUsersSearch,
   adminWorkspacesKind,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import { Clock, Effect } from "effect";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";

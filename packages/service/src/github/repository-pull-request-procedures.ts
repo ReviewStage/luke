@@ -28,7 +28,7 @@
  * reach is out of reach, as an agent's is.
  */
 
-import type { AgentPullRequest } from "@luke/features/agent-wire";
+import type { AgentPullRequest } from "@repo/features/agent-wire";
 import { Effect, Option, type Redacted } from "effect";
 import {
   actionWrite,

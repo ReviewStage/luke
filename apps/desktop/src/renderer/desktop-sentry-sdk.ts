@@ -5,17 +5,17 @@
  * only that in the chunk, and no window's entry carries any of it.
  */
 
-import { signedInAccountId } from "@luke/credentials/snapshot";
-import { logNamingAccount } from "@luke/features/sentry-account";
+import { signedInAccountId } from "@repo/credentials/snapshot";
+import { logNamingAccount } from "@repo/features/sentry-account";
 import {
   eventWithoutAccessTokens,
   SPANS_NAMING_ACCESS_TOKENS,
   spanWithoutAccessTokens,
   withoutAccessTokens,
-} from "@luke/features/sentry-breadcrumbs";
-import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
-import { sendShownFailure } from "@luke/features/shown-failure";
-import { appStateNow } from "@luke/panel/use-app-state";
+} from "@repo/features/sentry-breadcrumbs";
+import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@repo/features/sentry-tracing";
+import { sendShownFailure } from "@repo/features/shown-failure";
+import { appStateNow } from "@repo/panel/use-app-state";
 import {
   browserTracingIntegration,
   captureException,
@@ -42,19 +42,19 @@ const PANEL_SPAN_OP = "ui.panel";
  * Starts the window's SDK with its default data collection and the
  * renderer's filters: a breadcrumb or an event that names an access token is
  * dropped whole, and so is a span that names one as it starts, while every
- * span sent has its addresses scrubbed (`@luke/features/sentry-breadcrumbs`).
+ * span sent has its addresses scrubbed (`@repo/features/sentry-breadcrumbs`).
  * The DSN, release, and environment are main's, which every renderer event
  * goes through, and its reports reach main as requests of their own, which
  * are never traced (`sentryTracesRequest`).
  *
  * A failure the panel showed is sent as a Sentry log line, and as an issue
- * besides where nothing named it (`@luke/features/shown-failure`); the
+ * besides where nothing named it (`@repo/features/shown-failure`); the
  * window's logs reach Sentry through main, as its events do.
  *
  * Main names the signed-in account as its SDK's user, which every event the
  * window sends through it takes; a log line the window sends leaves with the
  * account read from the window's document as it does, and the window sets no
- * user of its own (`@luke/features/sentry-account`).
+ * user of its own (`@repo/features/sentry-account`).
  *
  * Tracing keeps long animation frames, which name the script that held a
  * slow frame, and Interaction to Next Paint, which the SDK's web vitals

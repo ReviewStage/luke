@@ -8,8 +8,8 @@ import type {
   AgentPullRequestWriteAnswerView,
   RepositoryPullRequestActionParams,
   RepositoryPullRequestParams,
-} from "@luke/features/agent-view";
-import type { PullRequestChaptersAnswerView } from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/agent-view";
+import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import { Effect } from "effect";
 import { PULL_REQUEST_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";

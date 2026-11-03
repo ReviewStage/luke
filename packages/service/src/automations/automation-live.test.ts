@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAutomation, recordAutomationRun } from "@luke/database/models/automation-store";
-import { member, organization, user } from "@luke/database/schemas/auth";
-import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { createAutomation, recordAutomationRun } from "@repo/database/models/automation-store";
+import { member, organization, user } from "@repo/database/schemas/auth";
+import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
 import {
   automationWorkspaceRunsLiveRowsSchema,
   automationWorkspaceRunsOfLiveRows,
-} from "@luke/features/automation-live";
+} from "@repo/features/automation-live";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -16,7 +16,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationScope,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -37,7 +37,7 @@ import {
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

@@ -8,7 +8,7 @@ import {
   type DeviceSetup,
   type DeviceSignedIn,
   type HostUpdate,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
@@ -60,10 +60,22 @@ export const device = pgTable(
     platform: text("platform").$type<DevicePlatform>().notNull(),
     /** The device's CPU architecture, as it last registered. */
     arch: text("arch").$type<DeviceArch>().notNull(),
+    /**
+     * Which machine the device runs on, as its host last reported it at its
+     * enroll or register: a keyed SHA-256 of the OS's own id for the
+     * machine, in hex, never the id (`deviceMachineFields`), so every
+     * install on one machine names the same one. Null for a device whose
+     * host never reported one; a call naming none leaves the last.
+     */
+    machineId: text("machine_id"),
+    /** The machine's model as a person reads it ("MacBook Air (M2, 2022)"), as its host last reported it; null for a Linux box, and for a device whose host never reported one. */
+    model: text("model"),
     /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
     isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
     /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.vespin/agents/<agent>`); null for a host that has not registered yet. */
     home: text("home"),
+    /** The folder the device's own layout puts its local agents under, absolute, as it last registered (`deviceAgentsFolder`); null for a device whose host names none, whose agents are laid out under `home`. */
+    agentsFolder: text("agents_folder"),
     /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
     claudeExecutable: text("claude_executable"),
     /**

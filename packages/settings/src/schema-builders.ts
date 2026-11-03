@@ -1,6 +1,6 @@
-import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@luke/features/analytics";
-import type { UnparsedWireValue } from "@luke/wire";
-import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@luke/wire/app-settings";
+import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@repo/features/analytics";
+import type { UnparsedWireValue } from "@repo/wire";
+import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@repo/wire/app-settings";
 import { Schema } from "effect";
 import {
   type AppSettingReader,

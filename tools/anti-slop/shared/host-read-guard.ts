@@ -49,7 +49,7 @@ const StepsSchema = Schema.Record(Schema.NonEmptyString, Schema.NonEmptyString);
 
 /**
  * The files that still open a follow, each with the migration step that
- * moves it onto `useHostRead` (STAG-715's plan). A file here may open one; a
+ * moves it onto `useHostRead`. A file here may open one; a
  * file that opens none fails, so the list only shrinks, and the step that
  * moves the last of them deletes it.
  */

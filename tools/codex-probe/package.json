@@ -1,17 +1,17 @@
 {
-  "name": "@luke/codex-probe",
+  "name": "@repo/codex-probe",
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "The P16 probe: Codex app-server on a ChatGPT plan inside a Vespin sandbox, signed in through OpenAI's open-source flow",
+  "description": "Proves Codex app-server on a ChatGPT plan runs inside a Vespin sandbox, signed in through OpenAI's open-source flow",
   "scripts": {
     "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@luke/credentials": "workspace:*",
-    "@luke/service": "workspace:*",
-    "@luke/wire": "workspace:*",
+    "@repo/credentials": "workspace:*",
+    "@repo/service": "workspace:*",
+    "@repo/wire": "workspace:*",
     "@vercel/sandbox": "3.8.0"
   },
   "devDependencies": {

@@ -5,14 +5,14 @@
 @layer components {
   /* Only opacity moves, in step across every block. An endless loop with no
      end to wait for, so its duration is a literal; it holds still on
-     --luke-loop-motion with every other, under reduced motion and a capture
+     --ui-loop-motion with every other, under reduced motion and a capture
      run. */
-  .luke-skeleton {
-    animation: luke-skeleton-pulse 1500ms ease-in-out infinite;
-    animation-play-state: var(--luke-loop-motion);
+  .ui-skeleton {
+    animation: ui-skeleton-pulse 1500ms ease-in-out infinite;
+    animation-play-state: var(--ui-loop-motion);
   }
 
-  @keyframes luke-skeleton-pulse {
+  @keyframes ui-skeleton-pulse {
     0%,
     100% {
       opacity: 0.55;

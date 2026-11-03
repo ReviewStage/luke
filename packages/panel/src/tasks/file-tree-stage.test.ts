@@ -15,7 +15,7 @@ import { FileTreePane } from "./file-tree-pane.js";
 
 /**
  * file-tree-stage.test.ts -- where a file tree stands is said by its host,
- * in `@luke/ui`'s lines, beside the tree the bundle draws: its root being
+ * in `@repo/ui`'s lines, beside the tree the bundle draws: its root being
  * read, a root that could not be listed with Retry, which lists it again, a
  * search matching nothing, and a folder listed short of whole. The tree is
  * the bundle's own, Pierre drawing it in jsdom; synthetic paths.
@@ -59,9 +59,9 @@ async function settle(): Promise<void> {
 
 /** The words of every line the host says, alerts, notes and waits alike. */
 function said(): string[] {
-  return [
-    ...document.querySelectorAll(".luke-note-line, .luke-failure-note, .luke-spinner-region"),
-  ].map((line) => line.textContent ?? "");
+  return [...document.querySelectorAll(".ui-note-line, .ui-failure-note, .ui-spinner-region")].map(
+    (line) => line.textContent ?? "",
+  );
 }
 
 /** The host the tree draws in, and whether it is shown. */

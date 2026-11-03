@@ -42,14 +42,14 @@
  * delete as unavailable, and the queue waits for a deployment that has one.
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { type Agent, readAgent } from "@luke/database/models/agent-store";
-import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { type Agent, readAgent } from "@repo/database/models/agent-store";
+import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
 import {
   nextSessionSandboxes,
   sessionSandboxDeferred,
   sessionSandboxDeleted,
-} from "@luke/database/models/session-sandbox-cleanup";
+} from "@repo/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { discardedOrLogged } from "./device-discard.js";
@@ -231,9 +231,10 @@ const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
  * than a log line, and the stops at Vercel are handed to the reach to keep
  * the function awake for, so this returns without waiting on Vercel and the
  * archive never fails on it. A stop that fails or runs past its bound is
- * logged and left: the turn's own end stops a sandbox a turn ran
- * (`agent-runtime/sandbox.ts`), so what is left running here is one a
- * terminal held. A local agent among them is let go of on its device beside
+ * logged and left: the runner's own end stops a sandbox a turn ran
+ * (`coder-host/runner-sessions.ts`'s `runnerEnded`), so what is left
+ * running here is one a terminal held. A local agent among them is let go
+ * of on its device beside
  * the stops, its runner stopped and its folder removed (`device-discard.ts`).
  */
 export const stoppedInBackground = /* @__PURE__ */ Effect.fnUntraced(function* (

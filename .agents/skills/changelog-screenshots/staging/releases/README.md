@@ -50,14 +50,14 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.19.0 | `v0.19.0` (`f9ba4ff5`) | `inbox-asks.png` | `shot-inbox-asks` | 2 | `592,54,750,760` |
 | 0.20.0 | `v0.20.0` (`2cee757c`) | `coding-agents-on-your-plan.png`, `the-tasks-page.png`, `calls-on-agents.png` | `shot-agents-settings`, `shot-tasks-list`, `shot-call` | 1 | whole window |
 | 0.20.0 | `v0.20.0` (`2cee757c`) | `installed-skills.png` | `shot-skills` | 2 | `490,345,820,665` |
-| 0.20.0 | `v0.20.0` (`2cee757c`) | `formatting-in-plans-and-messages.png` | `shot-formatting` (`LUKE_SHOT_SETTLE=15`) | 2 | `520,95,840,730` |
+| 0.20.0 | `v0.20.0` (`2cee757c`) | `formatting-in-plans-and-messages.png` | `shot-formatting` (`APP_SHOT_SETTLE=15`) | 2 | `520,95,840,730` |
 | 0.21.0 | `v0.21.0` (`52edd37e`) | `automation-runs.png`, `tabs-on-the-windows-frame.png` | `shot-automation-runs`, `shot-frame-tabs` | 1 | whole window |
 | 0.21.0 | `v0.21.0` (`52edd37e`) | `select-several-at-once.png` | `shot-select-several` | 2 | `270,250,1100,760` |
-| 0.21.0 | `v0.21.0` (`52edd37e`) | `menus-and-arrow-keys-on-every-row.png` | `shot-row-menu` (`LUKE_SHOT_SETTLE=12`) | 1 | `-70,-70,700,1140` |
+| 0.21.0 | `v0.21.0` (`52edd37e`) | `menus-and-arrow-keys-on-every-row.png` | `shot-row-menu` (`APP_SHOT_SETTLE=12`) | 1 | `-70,-70,700,1140` |
 | 0.22.0 | `v0.22.0` (`bdf4ef72`) | `menus-rise-from-the-bottom-on-a-phone.png` | `shot-row-sheet`, in Safari on the iPhone 17 simulator (`phone.sh`) | — | `frame-phone.py`, cut `0.114` |
-| 0.23.0 | `v0.23.0` (`2defb777`) | `the-browser-tab.png` | `shot-browser-tab` (`LUKE_SHOT_SETTLE=12`) | 1 | whole window |
+| 0.23.0 | `v0.23.0` (`2defb777`) | `the-browser-tab.png` | `shot-browser-tab` (`APP_SHOT_SETTLE=12`) | 1 | whole window |
 | 0.24.0 | `v0.24.0` (`95ebd190`) | `sub-tasks-and-blocked-tasks.png` | `shot-sub-tasks` | 1 | whole window |
-| 0.24.0 | `v0.24.0` (`95ebd190`) | `queue-a-message-behind-a-turn.png` | `shot-queue` (`LUKE_SHOT_SETTLE=9`) | 2 | `380,170,780,860` |
+| 0.24.0 | `v0.24.0` (`95ebd190`) | `queue-a-message-behind-a-turn.png` | `shot-queue` (`APP_SHOT_SETTLE=9`) | 2 | `380,170,780,860` |
 
 0.14.0 was shot from `2ec91a61`, the head of its version pull request (#2871) before its pictures landed; `v0.14.0.patch` carries 0.13.0's module onto it, with 0.14.0's five shots beside the earlier ones.
 
@@ -79,6 +79,6 @@ Every shot can be checked before the Mac: on Linux, Electron runs under `xvfb-ru
 
 The notch-era releases (before 0.7.0) drew no ordinary window, so their
 pictures are taken with the tag's own capture and framed with a layout: build
-with `LUKE_SHOT_PATCH_DIST=0`, then from `apps/desktop` run
+with `APP_SHOT_PATCH_DIST=0`, then from `apps/desktop` run
 `electron . --user-data-dir=<tmp> --fixture smoke [--expanded] --profile <profile> --capture-evidence <out.png> --force-device-scale-factor=4`
 and frame with `--layout top` or `bleed` and `--zoom 2`.

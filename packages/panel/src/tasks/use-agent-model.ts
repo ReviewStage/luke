@@ -1,6 +1,6 @@
-import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
-import type { AgentRuntime, AgentSummary } from "@luke/features/agent-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
+import type { AgentRuntime, AgentSummary } from "@repo/features/agent-wire";
+import type { ModelChoice } from "@repo/features/models-wire";
 import { useRef, useState } from "react";
 import type { AgentActAnswer } from "../act.js";
 import { chooseFailureNote } from "./agent-model.js";
@@ -10,7 +10,7 @@ import { chooseFailureNote } from "./agent-model.js";
  *
  * A choice is sent to the service, which writes it on the agent's row for
  * its next step, and the host draws it on that row the moment it is asked
- * (`@luke/host`'s `task-list-collections.ts`), so the chip reads the
+ * (`@repo/host`'s `task-list-collections.ts`), so the chip reads the
  * choice off the agent, and the runtime it runs on, which narrows what the
  * chip offers (`agent-runtime-models.ts`). A change the service refused is
  * taken back by the host, and why is said under the box until the next

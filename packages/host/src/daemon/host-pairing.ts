@@ -3,25 +3,25 @@ import {
   type HostPairingOutcome,
   pollHostPairing,
   startHostPairing,
-} from "@luke/features";
-import type { DeviceArch, DevicePlatform } from "@luke/features/device-agent-wire";
+} from "@repo/features";
+import type { DeviceArch, DeviceMachine, DevicePlatform } from "@repo/features/device-agent-wire";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   type HostPairingPollAnswer,
   type HostPairingStartAnswer,
-} from "@luke/features/host-wire";
+} from "@repo/features/host-wire";
 import { Duration, Effect, Option, Ref, Schedule } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { readHostDevice, writeHostDevice } from "../host-device-record.js";
 
 /**
- * host-pairing.ts -- a box connected to the service with a code (`luke-host connect`): it starts a pairing, shows the code and the link that opens it, polls until a member approves or denies the code or it lapses, and once approved writes its record of the device (`../host-device-record.ts`) as an enroll does.
+ * host-pairing.ts -- a box connected to the service with a code (`vespin-host connect`): it starts a pairing, shows the code and the link that opens it, polls until a member approves or denies the code or it lapses, and once approved writes its record of the device (`../host-device-record.ts`) as an enroll does.
  *
  * The start carries no credential. The service answers a poll secret, which
  * names the pairing and nothing else, the code and its link, how long the
- * code lasts, and how often to poll (`@luke/features`' `startHostPairing`).
+ * code lasts, and how often to poll (`@repo/features`' `startHostPairing`).
  * The box waits that long before each poll, and five seconds longer from
  * each time the service says to slow down, as RFC 8628's `slow_down` asks.
  * A poll that goes unanswered is tried again at the next, so a network blip
@@ -92,6 +92,8 @@ export interface HostConnectInput {
   readonly name: string;
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
+  /** Which machine the box is, where it read it (`HostOs.machine`). */
+  readonly machine: DeviceMachine;
   /** The daemon's version, which every call carries as every call of a host's does. */
   readonly version: string;
   /** Shows the code and its link, once the service answered them and before the first poll. */
@@ -181,6 +183,7 @@ const connected = Effect.fnUntraced(function* (input: HostConnectInput) {
     name: input.name,
     platform: input.platform,
     arch: input.arch,
+    ...input.machine,
   });
   if (started.outcome !== HOST_PAIRING_OUTCOME.ANSWERED) return endedBy(started);
   const { userCode, url, expiresInMs, intervalMs } = started.answer;

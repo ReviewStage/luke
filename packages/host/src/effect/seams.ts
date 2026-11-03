@@ -5,14 +5,15 @@
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
  */
-import type { OpenConsent } from "@luke/credentials";
-import type { ProductClientPlatform } from "@luke/features/analytics";
+import type { OpenConsent } from "@repo/credentials";
+import type { ProductClientPlatform } from "@repo/features/analytics";
 import type {
   DeviceArch,
   DeviceCapability,
   DeviceIsolation,
+  DeviceMachine,
   DevicePlatform,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import {
   type ConfigProvider,
   Context,
@@ -33,10 +34,10 @@ import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
 /** The app's own application-state root, given explicitly. */
-export class StateRoot extends Context.Service<StateRoot, string>()("@luke/host/StateRoot") {}
+export class StateRoot extends Context.Service<StateRoot, string>()("@repo/host/StateRoot") {}
 
 /** What this launch is allowed to do. */
-export class RunMode extends Context.Service<RunMode, RunModeFacts>()("@luke/host/RunMode") {}
+export class RunMode extends Context.Service<RunMode, RunModeFacts>()("@repo/host/RunMode") {}
 
 /** What this build is, and whose machine it runs on. */
 export interface AppIdentityFacts {
@@ -46,7 +47,7 @@ export interface AppIdentityFacts {
 }
 
 export class AppIdentity extends Context.Service<AppIdentity, AppIdentityFacts>()(
-  "@luke/host/AppIdentity",
+  "@repo/host/AppIdentity",
 ) {}
 
 /**
@@ -56,7 +57,7 @@ export class AppIdentity extends Context.Service<AppIdentity, AppIdentityFacts>(
  * that holds none.
  */
 export class Environment extends Context.Service<Environment, ConfigProvider.ConfigProvider>()(
-  "@luke/host/Environment",
+  "@repo/host/Environment",
 ) {}
 
 /**
@@ -65,7 +66,7 @@ export class Environment extends Context.Service<Environment, ConfigProvider.Con
  * it to the settings store as its `tokenCipher`.
  */
 export class SecretCipher extends Context.Service<SecretCipher, SecretCipherSeam>()(
-  "@luke/host/SecretCipher",
+  "@repo/host/SecretCipher",
 ) {}
 
 /** The ids the host mints for its own records. */
@@ -73,7 +74,7 @@ export interface IdSourceSeam {
   readonly create: () => string;
 }
 
-export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/host/IdSource") {}
+export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@repo/host/IdSource") {}
 
 /**
  * The origin of the service this host talks to, such as
@@ -85,7 +86,7 @@ export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/h
  * its addresses as a desktop build does, so the desktop provides none.
  */
 export class ServiceOrigin extends Context.Service<ServiceOrigin, string>()(
-  "@luke/host/ServiceOrigin",
+  "@repo/host/ServiceOrigin",
 ) {}
 
 /**
@@ -99,17 +100,17 @@ export class ServiceOrigin extends Context.Service<ServiceOrigin, string>()(
 export class SettingsChangedElsewhere extends Context.Service<
   SettingsChangedElsewhere,
   Stream.Stream<void>
->()("@luke/host/SettingsChangedElsewhere") {}
+>()("@repo/host/SettingsChangedElsewhere") {}
 
 /**
  * A terminal's relay WebSocket. It arrives rather than being built here,
- * because the desktop's is opened over `ws` (`@luke/host/node`), and a host
+ * because the desktop's is opened over `ws` (`@repo/host/node`), and a host
  * that imported it could not load where `ws` does not. Only the terminals
  * concern asks for it, so an assembly that leaves terminals out is handed
  * none.
  */
 export class TerminalSocket extends Context.Service<TerminalSocket, OpenTerminalSocket>()(
-  "@luke/host/TerminalSocket",
+  "@repo/host/TerminalSocket",
 ) {}
 
 /**
@@ -117,7 +118,7 @@ export class TerminalSocket extends Context.Service<TerminalSocket, OpenTerminal
  * session manager words — the sign-in and the session hand-off — is stood up
  * by `open`. It arrives rather than being built here, because the only
  * implementation so far is the desktop's loopback over `node:http`
- * (`@luke/credentials/node`), and a host that imported it could not load in a
+ * (`@repo/credentials/node`), and a host that imported it could not load in a
  * browser, which would sign in its own way. Only the desktop's account source
  * asks for it.
  */
@@ -126,7 +127,7 @@ export interface SignInConsentSeam {
 }
 
 export class SignInConsent extends Context.Service<SignInConsent, SignInConsentSeam>()(
-  "@luke/host/SignInConsent",
+  "@repo/host/SignInConsent",
 ) {}
 
 /**
@@ -195,7 +196,7 @@ export class LocalAgentClisUnavailable extends Data.TaggedError("LocalAgentClisU
  * It arrives rather than being built here, because each is the shell's own,
  * a path into its bundle or a script `node:path` builds, and a host that
  * built them could not load in a browser. Only the follower asks for it, as
- * `luke-host` runs it (`@luke/host/daemon`'s `hostPlatform`).
+ * `vespin-host` runs it (`@repo/host/daemon`'s `hostPlatform`).
  */
 export interface LocalAgentPlatformSeam {
   /** The process a runner is started as, given what it runs and the environment made for it: straight on the box in the agent's folder (`local-agent-box.ts`'s `agentOnBox`). */
@@ -205,6 +206,8 @@ export interface LocalAgentPlatformSeam {
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
   readonly deviceName: string;
+  /** Which machine the device runs on, as it registers (`DeviceMachine`), each part absent where it could not be read. */
+  readonly deviceMachine: DeviceMachine;
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
@@ -245,7 +248,7 @@ export interface LocalAgentPlatformSeam {
   /**
    * Whether the agents' folders under the device's home are this install's
    * alone: a Linux host's are, its `luke-host` user's own, and a Mac's
-   * never, since This Mac and a standalone `luke-host` share the member's.
+   * never, since This Mac and a standalone `vespin-host` share the member's.
    * On such a device the follower takes every agent with a folder there as
    * one it made as its gate opens, beside those its own state names.
    */
@@ -255,62 +258,45 @@ export interface LocalAgentPlatformSeam {
 export class LocalAgentPlatform extends Context.Service<
   LocalAgentPlatform,
   LocalAgentPlatformSeam
->()("@luke/host/LocalAgentPlatform") {}
-
-/** What may be asked of This Mac's `luke-host` login item. */
-export const HOST_LOGIN_ITEM_ACT = {
-  REGISTER: "register",
-  UNREGISTER: "unregister",
-  STATUS: "status",
-} as const;
-
-export type HostLoginItemAct = (typeof HOST_LOGIN_ITEM_ACT)[keyof typeof HOST_LOGIN_ITEM_ACT];
-
-/** Where This Mac's `luke-host` login item stands (`SMAppService.Status`). */
-export const HOST_LOGIN_ITEM_STATUS = {
-  ENABLED: "enabled",
-  NOT_REGISTERED: "not-registered",
-  /** Registered, and waiting on the member in System Settings › General › Login Items. */
-  REQUIRES_APPROVAL: "requires-approval",
-  /** The app carries no such item. */
-  NOT_FOUND: "not-found",
-} as const;
-
-export type HostLoginItemStatus =
-  (typeof HOST_LOGIN_ITEM_STATUS)[keyof typeof HOST_LOGIN_ITEM_STATUS];
+>()("@repo/host/LocalAgentPlatform") {}
 
 /**
- * This Mac's `luke-host` as the desktop runs it (`compose-this-mac-host.ts`):
- * its login item asked an act, and the version of the `luke-host` the app
- * carries, which its enroll names. Each answers, never fails: what it
- * answered, or the words it could not with. A development build carries no
- * login item, so its shell answers the same acts by running the same
- * `luke-host` as a child of the app. Only the local agents concern asks for
- * it.
+ * This Mac's host as the desktop keeps it (`compose-this-mac-host.ts`): the
+ * account install the install command puts on a Mac, under the member's own
+ * home, whose LaunchAgent launchd runs at login, which every build of the
+ * app reads and controls alike. Each act answers, never fails: what it
+ * answered, or the words it could not with. Only the local agents concern
+ * asks for it.
  */
 export interface ThisMacHostSeam {
-  readonly loginItem: (
-    act: HostLoginItemAct,
-  ) => Effect.Effect<
-    Result.Result<HostLoginItemStatus, string>,
+  /** The install's state folder, `~/.local/state/luke-host`, holding the record its host runs on. */
+  readonly stateRoot: string;
+  /** Whether this Mac can run the host: Apple silicon, on the oldest macOS the install script takes or later. */
+  readonly runsHost: boolean;
+  /** The Mac as its host registers it, which its enroll names so the service creates the device where it never saw this Mac, and which machine it is where it was read. */
+  readonly machine: Effect.Effect<
+    {
+      readonly name: string;
+      readonly platform: DevicePlatform;
+      readonly arch: DeviceArch;
+    } & DeviceMachine
+  >;
+  /** Whether launchd holds the host's LaunchAgent now. */
+  readonly loaded: Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The install script given run with `/bin/sh`, the LaunchAgent let start first: the release installed or upgraded, and the host started. */
+  readonly install: (
+    script: string,
+  ) => Effect.Effect<Result.Result<void, string>, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The host stopped and kept from starting at the next login, its files kept. */
+  readonly stop: Effect.Effect<
+    Result.Result<void, string>,
     never,
     ChildProcessSpawner.ChildProcessSpawner
   >;
-  readonly version: Effect.Effect<
-    Result.Result<string, string>,
-    never,
-    ChildProcessSpawner.ChildProcessSpawner
-  >;
-  /** The Mac as its `luke-host` registers it, which its enroll names so the service creates the device where it never saw this Mac. */
-  readonly machine: Effect.Effect<{
-    readonly name: string;
-    readonly platform: DevicePlatform;
-    readonly arch: DeviceArch;
-  }>;
 }
 
 export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()(
-  "@luke/host/ThisMacHost",
+  "@repo/host/ThisMacHost",
 ) {}
 
 /**
@@ -320,7 +306,7 @@ export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()
  * session, which needs neither.
  */
 export class AccountSource extends Context.Service<AccountSource, AccountSourceSeam>()(
-  "@luke/host/AccountSource",
+  "@repo/host/AccountSource",
 ) {}
 
 /**
@@ -333,7 +319,7 @@ export interface HostReporter {
   readonly report: (message: string) => void;
 }
 
-export class Reporter extends Context.Service<Reporter, HostReporter>()("@luke/host/Reporter") {}
+export class Reporter extends Context.Service<Reporter, HostReporter>()("@repo/host/Reporter") {}
 
 export const reporterLayer = (report: (message: string) => void): Layer.Layer<Reporter> =>
   Layer.merge(
@@ -364,7 +350,7 @@ export interface ShutdownSignalSeam {
 }
 
 export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSignalSeam>()(
-  "@luke/host/ShutdownSignal",
+  "@repo/host/ShutdownSignal",
 ) {}
 
 /** Every seam tag the host's kernel stands on; the assembly adds `AccountSource`, and each platform concern it was built with adds its own. */

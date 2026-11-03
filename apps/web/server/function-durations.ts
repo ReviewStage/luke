@@ -1,15 +1,15 @@
-import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
-import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
-import { LUKE_MCP_FUNCTION, LUKE_MCP_PATH } from "@luke/service/agents/luke-mcp/app";
+import { BROWSER_LIVE } from "@repo/features/browser-live-wire";
+import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
+import { WORKSPACE_MCP_FUNCTION, WORKSPACE_MCP_PATH } from "@repo/service/agents/workspace-mcp/app";
 import {
   PULL_REQUEST_CHAPTERS_FUNCTION,
   PULL_REQUEST_CHAPTERS_ROUTE_PATHS,
-} from "@luke/service/chapters/chapters-function";
+} from "@repo/service/chapters/chapters-function";
 import {
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
-} from "@luke/service/maintenance/maintenance-bounds";
-import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
+} from "@repo/service/maintenance/maintenance-bounds";
+import { PAGE_LINK_ROUTE } from "@repo/service/pages/page-links";
 import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
@@ -42,7 +42,7 @@ function routeKeyOf(path: string): string {
  */
 const FUNCTION_GROUP = {
   DEFAULT: "default",
-  LUKE_MCP: "luke-mcp",
+  WORKSPACE_MCP: "workspace-mcp",
   MAINTENANCE_SWEEP: "maintenance-sweep",
   PAGE_SANDBOX: "page-sandbox",
   PULL_REQUEST_CHAPTERS: "pull-request-chapters",
@@ -86,9 +86,9 @@ const GROUPS: readonly GroupDefinition[] = [
   },
   // A native agent's `run_on_mac` waits on the developer's Mac for up to eight minutes, past the platform's default duration.
   {
-    file: FUNCTION_GROUP.LUKE_MCP,
-    maxDuration: LUKE_MCP_FUNCTION.MAX_DURATION_SECONDS,
-    routes: [routeKeyOf(LUKE_MCP_PATH)],
+    file: FUNCTION_GROUP.WORKSPACE_MCP,
+    maxDuration: WORKSPACE_MCP_FUNCTION.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(WORKSPACE_MCP_PATH)],
   },
   // A page on the sandbox's host answers within the platform's default, in a function holding no other route.
   { file: FUNCTION_GROUP.PAGE_SANDBOX, routes: [routeKeyOf(PAGE_LINK_ROUTE.PATH)] },

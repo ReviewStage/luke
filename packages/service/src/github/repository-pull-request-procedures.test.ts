@@ -12,15 +12,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, openInstallationWorkspace } from "@luke/database/testing";
-import { GITHUB_REPOSITORIES_QUERY } from "@luke/features";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, openInstallationWorkspace } from "@repo/database/testing";
+import { GITHUB_REPOSITORIES_QUERY } from "@repo/features";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
-} from "@luke/features/pull-request-write-wire";
-import { HTTP_METHOD } from "@luke/wire";
+} from "@repo/features/pull-request-write-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { pullRequestChaptersProcedures } from "../chapters/pull-request-chapters-procedures.js";
@@ -31,7 +31,7 @@ import { githubReaching, openGithubUser, standingGithubRow } from "../testing/gi
 import type { GitHubApp } from "./github-app.js";
 import { repositoryPullRequestProcedures } from "./repository-pull-request-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** A change any pull request takes: a label put on it. */
 const LABEL = JSON.stringify({ action: PULL_REQUEST_ACTION.ADD_LABEL, label: "ready" });
@@ -101,7 +101,7 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
         const outsider = `user-${randomUUID()}`;
         yield* (yield* Database)
           .insert(user)
-          .values({ id: outsider, name: "Test User", email: `${outsider}@luke.test` });
+          .values({ id: outsider, name: "Test User", email: `${outsider}@app.test` });
         const workspace = yield* openInstallationWorkspace(member, {
           installationId: 7802,
           accountId: 9802,

@@ -1,6 +1,6 @@
-import { TASK_STATUS, TASK_STATUS_ORDER, type TaskStatus } from "@luke/features/task-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { type MenuRow, TaskStatusMark } from "@luke/ui";
+import { TASK_STATUS, TASK_STATUS_ORDER, type TaskStatus } from "@repo/features/task-wire";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { type MenuRow, TaskStatusMark } from "@repo/ui";
 import { STATUS_ROWS } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuAction, MenuSubmenu } from "./action-menu.js";

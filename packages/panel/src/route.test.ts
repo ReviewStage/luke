@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import { it } from "vitest";
 import {
   addressOf,

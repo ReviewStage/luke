@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -103,7 +103,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     );
     const unarchive = press(note, "Unarchive");
     const stop = press(note, "Stop");
-    const ring = () => unarchive.querySelector(".luke-spinner-ring") !== null;
+    const ring = () => unarchive.querySelector(".ui-spinner-ring") !== null;
     act(() => unarchive.click());
     assert.equal(unarchive.getAttribute("aria-label"), "Unarchiving");
     assert.equal(stop.disabled, true);

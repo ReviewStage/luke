@@ -1,7 +1,7 @@
-import { queryBuilder } from "@luke/database/core/query";
-import { lastSettledTurnAt, newestAwaitingLineAt } from "@luke/database/models/message-reads";
-import { turns } from "@luke/database/schemas/storage";
-import { AGENT_FAILURE } from "@luke/features/agent-wire";
+import { queryBuilder } from "@repo/database/core/query";
+import { lastSettledTurnAt, newestAwaitingLineAt } from "@repo/database/models/message-reads";
+import { turns } from "@repo/database/schemas/storage";
+import { AGENT_FAILURE } from "@repo/features/agent-wire";
 import { desc, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { FAILURE_WORDS } from "../agents/coder-host/status.js";
 import { TURN_FAILURE, TURN_STATUS } from "../core.js";
@@ -14,7 +14,7 @@ import { TURN_FAILURE, TURN_STATUS } from "../core.js";
  * `coder-host/status.ts`'s `agentFailureOf`), as a fragment a live
  * statement joins or selects beside the agent's own row. Nothing here reads
  * the clock: the status itself, which turns on it, is the reader's to read
- * (`@luke/features/agent-status`). The failure is named here, in
+ * (`@repo/features/agent-status`). The failure is named here, in
  * the wire's own word, so the turn's detail never leaves the database.
  */
 

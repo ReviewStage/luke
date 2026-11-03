@@ -5,7 +5,7 @@ import {
   FileCodeCard,
   TerminalIcon,
   TextButton,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -24,7 +24,7 @@ const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.wri
 const SHORT = ["pnpm install", "pnpm exec vitest run packages/ui"].join("\n");
 
 const COLOURED = [
-  'import { CODE_CARD_TITLE, CODE_ROW, CodeCard, TextButton } from "@luke/ui";',
+  'import { CODE_CARD_TITLE, CODE_ROW, CodeCard, TextButton } from "@repo/ui";',
   "",
   "export const cut = 40;",
 ].join("\n");
@@ -36,7 +36,7 @@ const COLOURED_LINES = [
     { text: " { CodeCard } " },
     { text: "from", color: "#ff7b72", lightColor: "#cf222e" },
     { text: " " },
-    { text: '"@luke/ui"', color: "#a5d6ff", lightColor: "#0a3069" },
+    { text: '"@repo/ui"', color: "#a5d6ff", lightColor: "#0a3069" },
     { text: ";" },
   ],
   [],

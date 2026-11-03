@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -93,7 +93,7 @@ beforeEach(() => {
   window.localStorage.clear();
   // The panel left open on an earlier launch, since a first launch leaves it shut.
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({
       open: true,
       tabs: ["plan", "inbox", "comments"],
@@ -296,7 +296,7 @@ for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
 
 /** The way back that leads the phone's task header. */
 function headBack(page: HTMLElement): HTMLButtonElement {
-  const back = page.querySelector<HTMLButtonElement>(".task-head .luke-toolbar-lead button");
+  const back = page.querySelector<HTMLButtonElement>(".task-head .ui-toolbar-lead button");
   assert.ok(back, "the task's header leads with its way back");
   return back;
 }

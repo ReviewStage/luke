@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { AVATAR_SIZE, Badge, HoverCard, HoverCardHead, type MenuRow, ProviderMark } from "@luke/ui";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { AVATAR_SIZE, Badge, HoverCard, HoverCardHead, type MenuRow, ProviderMark } from "@repo/ui";
 import { RepositoryPicture } from "./repository-picture.js";
 
 /**

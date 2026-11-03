@@ -19,23 +19,24 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
   PATH: {
     WORKSPACE: "/workspace",
     CHECKOUT: "/workspace/repository",
+    // Note that the record keeps its old folder, because a persistent sandbox and a repository snapshot made before still hold it there, and a checkout whose record does not match is cloned again.
     CHECKOUT_RECORD: ".luke/repository",
   },
   VARIABLE: {
     /** The repository the call is about, `owner/name`, read by the probe and the checkout. */
-    REPOSITORY: "LUKE_REPOSITORY",
+    REPOSITORY: "APP_REPOSITORY",
     /** The branch the checkout is of: the default branch, or the one a coding agent was started on. */
-    BRANCH: "LUKE_BRANCH",
+    BRANCH: "APP_BRANCH",
     /** The clone's URL, which carries no credential; its presence is what makes a run the checkout. */
-    URL: "LUKE_CLONE_URL",
+    URL: "APP_CLONE_URL",
     /** How deep the clone is; unset, the whole history, which a coding agent's branch and pull request need. */
-    DEPTH: "LUKE_CLONE_DEPTH",
+    DEPTH: "APP_CLONE_DEPTH",
     /** The model's command, which bash reads from the variable and never from shell text. */
-    COMMAND: "LUKE_COMMAND",
+    COMMAND: "APP_COMMAND",
     /** Which step of deepening a shallow checkout the run is (`DEEPEN_STEP`); its presence is what makes a run one. */
-    DEEPEN: "LUKE_DEEPEN",
+    DEEPEN: "APP_DEEPEN",
     /** Set on the run that brings a checkout a repository snapshot holds up to its branch; its presence is what makes a run the refresh. */
-    REFRESH: "LUKE_REFRESH",
+    REFRESH: "APP_REFRESH",
   },
 } as const;
 

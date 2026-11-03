@@ -36,7 +36,7 @@
  * wait.
  */
 
-import { githubAppAvatarUrl, githubAvatarUrl } from "@luke/features/account-picture";
+import { githubAppAvatarUrl, githubAvatarUrl } from "@repo/features/account-picture";
 import {
   type AgentChangedFile,
   CHANGED_FILE_STATUS,
@@ -61,14 +61,14 @@ import {
   type PullRequestState,
   REVIEW_STATE,
   type ReviewState,
-} from "@luke/features/agent-wire";
-import { githubImageOf, imageTypeOfPath } from "@luke/features/github-image";
-import { REACTION, type Reaction } from "@luke/features/pull-request-write-wire";
+} from "@repo/features/agent-wire";
+import { githubImageOf, imageTypeOfPath } from "@repo/features/github-image";
+import { REACTION, type Reaction } from "@repo/features/pull-request-write-wire";
 import {
   GITHUB_CHECK_CONCLUSION,
   type GitHubCheckConclusion,
   isFailingConclusion,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Duration, Effect, Fiber, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

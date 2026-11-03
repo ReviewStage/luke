@@ -1,5 +1,7 @@
-import { workspaceTokenRepositorySchema } from "@luke/features/github-repositories-wire";
-import { workspaceSentryAnswerSchema } from "@luke/features/sentry-install-wire";
+import { eventIterator, type } from "@orpc/contract";
+import { workspaceTokenRepositorySchema } from "@repo/features/github-repositories-wire";
+import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire";
+import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
@@ -16,18 +18,19 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
+  tasksWorkspaceSlackBotNotificationsParamsSchema,
+  tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
   workspacePeopleFollowSchema,
-} from "@luke/features/tasks-view";
-import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/tasks-view";
+import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
 import {
   formerMemberSchema,
   workspaceMemberSchema,
   workspaceSchema,
-} from "@luke/features/workspace-wire";
-import { eventIterator, type } from "@orpc/contract";
+} from "@repo/features/workspace-wire";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WORKSPACE_ACT_KIND } from "./kinds.js";
@@ -98,6 +101,26 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSentryDisconnectParamsSchema))
     .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ]: actProcedure(
+    "Could not read that workspace's Slack bot on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT]: actProcedure(
+    "Could not connect the Slack bot to that workspace on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT]: actProcedure(
+    "Could not disconnect the Slack bot from that workspace on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: actProcedure(
+    "Could not change your Slack notifications on this system.",
+  )
+    .input(exactInput(tasksWorkspaceSlackBotNotificationsParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actProcedure(
     "Could not read that workspace's members on this system.",
   )
@@ -147,6 +170,11 @@ export const workspaceActsContract = {
     "Could not change that workspace's photo on this system.",
   )
     .input(exactInput(tasksWorkspacePhotoSetParamsSchema))
+    .output(answersWorkspace),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: actProcedure(
+    "Could not change that workspace's link on this system.",
+  )
+    .input(exactInput(tasksWorkspaceSlugSetParamsSchema))
     .output(answersWorkspace),
   [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: actProcedure(
     "Could not read that workspace's repositories on this system.",

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { it } from "@effect/vitest";
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { MemberSeams } from "@luke/database/models/workspace-seams";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { workspaceInvitationsProcedures } from "@luke/service/accounts/workspace-invitations-procedures";
-import { githubProcedures } from "@luke/service/github/github-procedures";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import type { WebServices } from "@luke/service/runtime";
+import type { DatabaseServices } from "@repo/database/core/query";
+import type { MemberSeams } from "@repo/database/models/workspace-seams";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { workspaceInvitationsProcedures } from "@repo/service/accounts/workspace-invitations-procedures";
+import { githubProcedures } from "@repo/service/github/github-procedures";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import type { WebServices } from "@repo/service/runtime";
 import { type Context, Effect, Option } from "effect";
 import { act } from "react";
 import { afterEach, expect, vi } from "vitest";

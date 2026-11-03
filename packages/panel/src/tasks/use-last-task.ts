@@ -1,7 +1,7 @@
-import type { TaskSummary } from "@luke/features/task-wire";
-import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { Schema } from "effect";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { keptKey, useKept } from "../use-kept.js";
 
 /**
@@ -23,7 +23,9 @@ import { keptKey, useKept } from "../use-kept.js";
  * does not flash the home page first; once the task is asked for it stays
  * restoring until the host has it open, or the ask is taken back. A list
  * read that failed leaves the home page standing, and the read its Try
- * again lands still opens the task. A fixture run keeps nothing and opens nothing, as it draws tasks of its
+ * again lands still opens the task. A link to the workspace's Home or its
+ * Board opened before the reopen is decided, as a fresh tab opened at
+ * either's address is, stands over it, so the reopen opens nothing. A fixture run keeps nothing and opens nothing, as it draws tasks of its
  * own.
  */
 
@@ -33,7 +35,7 @@ const storedTasks = Schema.fromJsonString(Schema.Record(Schema.String, Schema.St
 type KeptTasks = typeof storedTasks.Type;
 
 /** Where the tasks are kept in the renderer's storage, and where they were kept before tasks had their name. */
-const KEPT = { TASKS: keptKey("luke.lastTask", storedTasks, "luke.lastPlan") } as const;
+const KEPT = { TASKS: keptKey("app.lastTask", storedTasks, "app.lastPlan") } as const;
 
 const NONE_KEPT: KeptTasks = {};
 
@@ -43,6 +45,13 @@ function withKept(kept: KeptTasks, account: string, taskId: string | undefined):
   if (taskId !== undefined) return { ...kept, [account]: taskId };
   const { [account]: _gone, ...rest } = kept;
   return rest;
+}
+
+/** Whether the window is still restoring the task last open, and the way a link standing over the reopen forgoes it. */
+export interface LastTask {
+  readonly restoring: boolean;
+  /** Forgoes the launch's reopen where it is not yet decided; nothing once it is. */
+  readonly forgo: () => void;
 }
 
 /**
@@ -59,7 +68,7 @@ export function useLastTask(input: {
   openTaskId: string | undefined;
   boundFor: string | undefined;
   select: (taskId: string) => void;
-}): boolean {
+}): LastTask {
   const { staged, account, tasks, listStatus, openTaskId, boundFor, select } = input;
   const [kept, , keep] = useKept(KEPT.TASKS, NONE_KEPT);
   // The account the launch's reopen was decided for, and the task it asked for.
@@ -68,6 +77,13 @@ export function useLastTask(input: {
   );
   // The task last seen open, and the account it was open for.
   const wasOpen = useRef<{ account: string; taskId: string } | undefined>(undefined);
+  // Whether a link forwent the launch's first reopen before it was decided, which that decision takes up.
+  const [forgone, setForgone] = useState(false);
+  const undecided = useRef(true);
+  undecided.current = decided === undefined;
+  const forgo = useCallback(() => {
+    if (undecided.current) setForgone(true);
+  }, []);
 
   // The task the host opens is kept, and let go once it closes. Note that
   // only a close seen in this run, under the same account, lets it go,
@@ -92,7 +108,8 @@ export function useLastTask(input: {
   const keptTask = account === undefined ? undefined : kept[account];
   useEffect(() => {
     if (staged || account === undefined || decided?.account === account) return;
-    if (openTaskId !== undefined) {
+    if (openTaskId !== undefined || forgone) {
+      setForgone(false);
       setDecided({ account });
       return;
     }
@@ -105,13 +122,16 @@ export function useLastTask(input: {
     }
     setDecided({ account, asked: task.id });
     select(task.id);
-  }, [staged, account, decided, openTaskId, listStatus, tasks, keptTask, select, keep]);
+  }, [staged, account, decided, forgone, openTaskId, listStatus, tasks, keptTask, select, keep]);
 
   // Note that a failed read leaves the home page standing, with the
   // sidebar's Try again, rather than the bare ground until the list reads.
-  if (staged || account === undefined || openTaskId !== undefined) return false;
-  if (decided?.account !== account) {
-    return keptTask !== undefined && listStatus !== TASKS_READ.FAILED;
-  }
-  return decided.asked !== undefined && boundFor === decided.asked;
+  const settled = staged || account === undefined || openTaskId !== undefined;
+  const ours = decided !== undefined && decided.account === account ? decided : undefined;
+  const restoring = settled
+    ? false
+    : ours === undefined
+      ? !forgone && keptTask !== undefined && listStatus !== TASKS_READ.FAILED
+      : ours.asked !== undefined && boundFor === ours.asked;
+  return { restoring, forgo };
 }

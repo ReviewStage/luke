@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
-import { AGENT_BOUNDS, AGENT_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { formatCount } from "@luke/features/number-format";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
+import { AGENT_BOUNDS, AGENT_STATUS, type AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { formatCount } from "@repo/features/number-format";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@luke/features/repository-reach-wire";
-import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
-import { pasteCutWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import type { SkillOption } from "@luke/ui/skill-mention";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/repository-reach-wire";
+import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
+import { pasteCutWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import type { SkillOption } from "@repo/ui/skill-mention";
+import { MESSAGE_ROLE } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -173,7 +173,7 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
 test("a paste past the box's cap is cut to the room left and the note says so, until the words change", async () => {
   const box = await mounted();
   const cap = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => box.container.querySelector(".luke-composer-foot-note")?.textContent;
+  const note = () => box.container.querySelector(".ui-composer-foot-note")?.textContent;
   assert.equal(note(), undefined);
 
   pasteInComposer(box.container, "x".repeat(cap + 500));
@@ -192,7 +192,7 @@ test("a paste that fits the cap says nothing of a cut", async () => {
   const box = await mounted();
   pasteInComposer(box.container, "x".repeat(1000));
   assert.equal(box.shown().length, 1000);
-  assert.equal(box.container.querySelector(".luke-composer-foot-note"), null);
+  assert.equal(box.container.querySelector(".ui-composer-foot-note"), null);
 });
 
 test("a paste into a full box whose message did not go leaves the failure and its Retry standing", async () => {
@@ -211,7 +211,7 @@ test("a paste into a full box whose message did not go leaves the failure and it
 test("the length counter stands from four fifths of the cap and not before", async () => {
   const box = await mounted();
   const cap = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
-  const counter = () => box.container.querySelector(".luke-length-counter")?.textContent;
+  const counter = () => box.container.querySelector(".ui-length-counter")?.textContent;
 
   typeInComposer(box.container, "x".repeat(cap * 0.8 - 1));
   assert.equal(counter(), undefined);
@@ -518,7 +518,7 @@ test("a / opens the repository's skills over the caret, the keys move through th
   await settle();
   const rows = () =>
     [...box.container.querySelectorAll('[role="listbox"] [role="option"]')].map((row) => ({
-      name: row.querySelector(".luke-combobox-option-label")?.textContent,
+      name: row.querySelector(".ui-combobox-option-label")?.textContent,
       chosen: row.getAttribute("aria-selected"),
     }));
   assert.deepEqual(rows(), [
@@ -538,7 +538,7 @@ test("a / opens the repository's skills over the caret, the keys move through th
   assert.equal(box.sent.length, 0, "the Enter picked rather than sent");
   assert.equal(box.container.querySelector('[role="listbox"]'), null);
   assert.equal(
-    box.container.querySelector(".agent-composer-input [data-skill-ref] .luke-inline-ref-label")
+    box.container.querySelector(".agent-composer-input [data-skill-ref] .ui-inline-ref-label")
       ?.textContent,
     "/deploy",
   );
@@ -558,16 +558,16 @@ test("a row of the skills' list leads with a book, says what it is for and where
   const [row] = box.container.querySelectorAll('[role="listbox"] [role="option"]');
   assert.ok(row, "the list offers the skills");
   assert.equal(
-    row.querySelector(".luke-combobox-option-detail")?.textContent,
+    row.querySelector(".ui-combobox-option-detail")?.textContent,
     SKILLS[0]?.description,
   );
-  assert.equal(row.querySelector(".luke-combobox-option-hint")?.textContent, "Repository");
+  assert.equal(row.querySelector(".ui-combobox-option-hint")?.textContent, "Repository");
 
   restOn(row);
 
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
-  assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, SKILLS[0]?.description);
+  const card = document.querySelector<HTMLElement>(".ui-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "/release");
+  assert.equal(card?.querySelector(".ui-hover-card-note")?.textContent, SKILLS[0]?.description);
 });
 
 test("Escape closes the skills' list without leaving the box, and the list stays closed while the word is typed on", async () => {

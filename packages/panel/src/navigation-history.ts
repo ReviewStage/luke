@@ -11,7 +11,7 @@
  * stands. It lives as long as the window does, the way a browser tab's does.
  *
  * The history is held by the adapter the window's root installs
- * (`@luke/ui/history-adapter`), each place as the state a step back reopens
+ * (`@repo/ui/history-adapter`), each place as the state a step back reopens
  * it from, the way a browser's `history.state` stands beside its URL, and
  * the path of its app link as its address: the link Copy link names for
  * the step (`links-at-hand.ts`), so the two never disagree, or `/app` for a
@@ -76,23 +76,22 @@
  * as that step is (`WindowHistory`'s `away` and `onLeave`).
  */
 
-import { PRODUCT_SURFACE } from "@luke/features/analytics";
-import { linkOf, type ReadLink } from "@luke/features/link-grammar";
-import type { SettingsView } from "@luke/settings/settings-views";
+import { PRODUCT_SURFACE } from "@repo/features/analytics";
+import { linkOf, type ReadLink } from "@repo/features/link-grammar";
+import type { SettingsView } from "@repo/settings/settings-views";
 import {
   HISTORY_LIMIT,
   type HistoryAdapter,
   type HistoryEntry,
   type HistorySnapshot,
   memoryHistory,
-} from "@luke/ui/history-adapter";
+} from "@repo/ui/history-adapter";
 import {
   isAgentTab,
   isChangesTab,
   isCloudBrowserTab,
   isDraftTab,
   isFileTab,
-  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -100,8 +99,8 @@ import {
   type StripTab,
   sameTab,
   tabKey,
-} from "@luke/ui/tab-strip-model";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/ui/tab-strip-model";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import {
   useCallback,
   useEffect,
@@ -346,7 +345,10 @@ function sameSubStep(one: Place, other: Place): boolean {
 /** Whether two Inbox items are the same item of the same holder. */
 function sameInboxChoice(one: InboxChoice | undefined, other: InboxChoice | undefined): boolean {
   if (one === undefined || other === undefined) return one === other;
-  const holder = (choice: InboxChoice) => ("taskId" in choice ? choice.taskId : choice.agentId);
+  const holder = (choice: InboxChoice) => {
+    if ("taskId" in choice) return choice.taskId;
+    return "agentId" in choice ? choice.agentId : undefined;
+  };
   return one.itemId === other.itemId && holder(one) === holder(other);
 }
 
@@ -455,9 +457,7 @@ function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
   if (isSubagentTab(tab)) return { surface: PRODUCT_SURFACE.SUBAGENT, of, side };
   if (isFileTab(tab)) return { surface: PRODUCT_SURFACE.FILES, of, side };
   if (isChangesTab(tab)) return { surface: PRODUCT_SURFACE.PULL_REQUEST, of, side };
-  if (isTerminalTab(tab) || isMacTerminalTab(tab)) {
-    return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
-  }
+  if (isTerminalTab(tab)) return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
   if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of, side };
   if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of, side };
   // A word of a strip's own: the column's Overview, which shows the task, the task's Inbox, or its comments.
@@ -567,8 +567,9 @@ function samePlace(one: Place, other: Place): boolean {
 }
 
 /**
- * The address of a place with no link: the home page, the Board, a new
- * automation's page.
+ * The address of a place with no link: a new automation's page, and any
+ * place before its workspace is read, the home page a fresh tab rests on
+ * among them, which takes its link's address in place once it is.
  * `app` is a step no workspace's slug may take (`RESERVED_WORKSPACE_SLUGS`),
  * so it names no workspace's place.
  */
@@ -787,7 +788,7 @@ export interface ListBacks {
   readonly inbox: () => void;
   /** Shuts the side panel standing over the plan, the whole pane. */
   readonly panel: () => void;
-  /** Leaves the open task for the step behind it, or, where none stands behind it, for the page the window rests on. */
+  /** Leaves the open task for the step behind it, or, where none stands behind it, for Home. */
   readonly task: () => void;
 }
 
@@ -950,7 +951,7 @@ function standingOf(trail: Trail): HistoryEntry<Place> | undefined {
  * arrival records nothing and the steps ahead are kept. A step it cannot
  * reach is passed over the way the move went, as the window's own step
  * passes over one, and an entry holding no step at all is a page loaded
- * there, which opens where the window rests with no task open. Note that such a move has already happened
+ * there, which opens on Home. Note that such a move has already happened
  * when the window hears it and cannot be refused, so while a page holds
  * unsaved work the adapter is stood back on the window's step first, along
  * the trail or, where the trail no longer holds it, written again after
@@ -1063,7 +1064,7 @@ function useHistory(input: {
   }, [history, place, address, own]);
 
   useEffect(() => {
-    // An entry holding no step is a page loaded there, which opens where the window rests; the window already there writes its step on it.
+    // An entry holding no step is a page loaded there, which opens on Home; the window already there writes its step on it.
     const arriveNowhere = (was: HistoryEntry<Place>) => {
       const home: Place = { kind: PLACE_KIND.HOME };
       if (sameStep(was.state, home)) own(() => history.push(was));
@@ -1232,9 +1233,9 @@ export function useWindowHistory(input: {
     | "workspace"
     | "automationsView"
     | "boardView"
+    | "unknownWorkspace"
     | "adminView"
     | "restoring"
-    | "resting"
     | "leaveGuard"
     | "sidePanel"
     | "mainTabs"
@@ -1294,6 +1295,7 @@ export function useWindowHistory(input: {
     narrow && !automationsTab(automationsPage) ? tasks.automationsView.runs : undefined;
   const experiments = useExperimentChoices();
   const boardOpen = tasks.boardView.open;
+  const unknownWorkspace = tasks.unknownWorkspace.open;
   const adminOpen = tasks.adminView.open;
   const adminView = tasks.adminView.view;
   // A reloaded tab's Admin step is reachable while the account's access is still being read, as the place waits on it.
@@ -1316,7 +1318,8 @@ export function useWindowHistory(input: {
   const titleColumn = input.title?.panes?.column;
   const titleSide = input.title?.panes?.side;
   const untitled = useMemo((): Place | undefined => {
-    if (!known) return undefined;
+    // A workspace's address naming none of the reader's is no place of theirs to come back to, so it is no step, and the tab keeps its address.
+    if (!known || unknownWorkspace) return undefined;
     if (tab === PANEL_TAB.SETTINGS) {
       return {
         kind: PLACE_KIND.SETTINGS,
@@ -1324,8 +1327,6 @@ export function useWindowHistory(input: {
         listed: narrow ? settingsListed : undefined,
       };
     }
-    // The page the window rests on with no task open is where no page stands, so a step to it is a step home.
-    if (tasks.resting) return { kind: PLACE_KIND.HOME };
     if (inboxOpen) {
       const inbox = { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen } as const;
       if (inboxTask !== undefined) return { ...inbox, taskId: inboxTask };
@@ -1362,7 +1363,7 @@ export function useWindowHistory(input: {
         };
   }, [
     known,
-    tasks.resting,
+    unknownWorkspace,
     tab,
     settingsView,
     settingsListed,

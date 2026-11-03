@@ -1,16 +1,16 @@
 /* app.css -- the web app's one stylesheet: the panel's sheets in the order
-   `@luke/panel/styles/index.css` sets them, the one the desktop imports, so
+   `@repo/panel/styles/index.css` sets them, the one the desktop imports, so
    the cascade the panel was written against is the same in a tab. The
    site's own `styles.css` is not imported: it brings Tailwind's preflight, a
    second reset over base.css's that would restyle every element the panel
    draws. The root asks for compact, a mouse's density; on a coarse pointer
-   the site's full roles stand instead (`@luke/ui`'s `profiles.css`). */
-/* The web profile's three faces (`@luke/ui`'s `tokens/profiles.css`), as the
+   the site's full roles stand instead (`@repo/ui`'s `profiles.css`). */
+/* The web profile's three faces (`@repo/ui`'s `tokens/profiles.css`), as the
    site's `styles.css` declares them. */
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/jetbrains-mono/wght.css";
 @import "@fontsource-variable/bricolage-grotesque/wght.css";
-@import "@luke/panel/styles/index.css";
+@import "@repo/panel/styles/index.css";
 /* Tailwind's theme and utilities alone, no preflight, as the desktop's
    `tailwind.css` takes them: the utilities in a cascade layer, so a
    hand-written rule beside them wins, except base.css's element resets in the
@@ -18,31 +18,31 @@
    coming after them changes no winner. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
-@import "@luke/panel/sources.css";
-@import "@luke/ui/tailwind/sources.css";
-@import "@luke/ui/tailwind/theme.css";
+@import "@repo/panel/sources.css";
+@import "@repo/ui/tailwind/sources.css";
+@import "@repo/ui/tailwind/theme.css";
 
 /* Where else the utilities are gathered from: this app's own modules. The
-   panel's and the markdown renderer's are `@luke/panel/sources.css`'s. */
+   panel's and the markdown renderer's are `@repo/panel/sources.css`'s. */
 @source "./";
 
 /* The shell's frame app.html draws before the panel stands, of the shell's
    own classes, so its columns are the shell's; only what makes it a frame is
    here. Its sidebar stands where the shell's would stand pinned: where this
    browser last read someone signed in and drew the sidebar pinned
-   (`data-luke-boot-sidebar`, at the width it kept, all of which
-   `public/app-theme.js` reads), on a stage as wide as `@luke/panel`'s
+   (`data-ui-boot-sidebar`, at the width it kept, all of which
+   `public/app-theme.js` reads), on a stage as wide as `@repo/panel`'s
    `sidebar-collapse.ts` pins one at (`SIDEBAR_COMPACT.ENTER`). The stage is
    the container measured, as the panel measures it (`stage-room.ts`), so a
    screen's side insets, which the stage keeps off, count here as they do
    there. Its places are rows with nothing in them yet. Where no sidebar
    stands, a phone's, a signed-out browser's, or a first visit's, the frame
-   is the work column alone, and the app's
-   face comes up in its middle once the wait has run long enough to notice
-   (`--luke-hint-delay`), so a quick load never flashes it. */
+   is the work column alone, and the product's
+   mark comes up in its middle once the wait has run long enough to notice
+   (`--ui-hint-delay`), so a quick load never flashes it. */
 .boot-frame {
   container-type: inline-size;
-  --sidebar-width: var(--luke-boot-sidebar-width, var(--sidebar-width-default));
+  --sidebar-width: var(--ui-boot-sidebar-width, var(--sidebar-width-default));
 }
 
 .boot-frame .desktop-shell {
@@ -54,31 +54,31 @@
 }
 
 @container (width >= 1120px) {
-  :root[data-luke-boot-sidebar="pinned"] .boot-frame .desktop-shell {
+  :root[data-ui-boot-sidebar="pinned"] .boot-frame .desktop-shell {
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   }
 
-  :root[data-luke-boot-sidebar="pinned"] .boot-frame .desktop-sidebar {
+  :root[data-ui-boot-sidebar="pinned"] .boot-frame .desktop-sidebar {
     display: flex;
   }
 
-  :root[data-luke-boot-sidebar="pinned"] .boot-frame-mark {
+  :root[data-ui-boot-sidebar="pinned"] .boot-frame-mark {
     display: none;
   }
 }
 
 .boot-frame-row::before,
 .boot-frame-row::after {
-  height: var(--luke-space-8);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-fill-strong);
+  height: var(--ui-space-8);
+  border-radius: var(--ui-radius-full);
+  background: var(--ui-color-fill-strong);
   content: "";
 }
 
 .boot-frame-row::before {
-  border-radius: var(--luke-radius-6);
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
+  border-radius: var(--ui-radius-6);
+  width: var(--ui-menu-glyph);
+  height: var(--ui-menu-glyph);
 }
 
 .boot-frame-row::after {
@@ -91,8 +91,8 @@
 
 .boot-frame-mark {
   margin: auto;
-  animation: boot-frame-mark-arrive var(--luke-duration-fast) var(--luke-motion-pane)
-    var(--luke-hint-delay) both;
+  animation: boot-frame-mark-arrive var(--ui-duration-fast) var(--ui-motion-pane)
+    var(--ui-hint-delay) both;
 }
 
 @keyframes boot-frame-mark-arrive {

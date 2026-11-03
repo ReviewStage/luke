@@ -5,19 +5,19 @@ import {
   pullRequestAddressOf,
   type ReadLink,
   readLink,
-} from "@luke/features/link-grammar";
+} from "@repo/features/link-grammar";
 import {
   decodeMention,
   MENTION_KIND,
   type MentionLines,
   pageRepositoryOf,
-} from "@luke/features/mention-link";
+} from "@repo/features/mention-link";
 import {
   listedPullRequestOf,
   type OpenedPullRequest,
   pullRequestAgentOf,
   repositoryPullRequestOf,
-} from "@luke/ui/pull-request-link";
+} from "@repo/ui/pull-request-link";
 
 /**
  * route.ts -- the one table of where an address pressed opens: beside the surface it was pressed on, at a place the window goes to, or in the browser.
@@ -275,7 +275,7 @@ function holdsAgent(
   return at.planId === undefined ? agentIds?.includes(at.agentId) === true : at.planId === taskId;
 }
 
-/** An Inbox item a link names, chosen in the Inbox an item stands in: one under its task, or one under an agent the item's task holds or the agent on no task that holds the item; any other the window finds by its agent. */
+/** An Inbox item a link names, chosen in the Inbox an item stands in: one under its task, or one under an agent the item's task holds or the agent on no task that holds the item; any other the window finds by its agent, or by the item alone. */
 function itemOfInbox(
   at: Extract<LinkPlace, { readonly kind: typeof LINK_PLACE.INBOX_ITEM }>,
   here: InboxItemHere,
@@ -284,6 +284,8 @@ function itemOfInbox(
   if ("planId" in at) {
     return preview({ kind: THING.INBOX_ITEM, itemId, taskId: at.planId, agentId: undefined });
   }
+  // An item named by its id alone is the window's to find, by asking the service whose it is.
+  if (!("agentId" in at)) return NOTHING;
   const { agentId } = at;
   if (here.taskId !== undefined) {
     return (here.heldIds ?? here.agentIds)?.includes(agentId) === true

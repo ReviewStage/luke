@@ -1,7 +1,7 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
-import type { AppInboxTaskHolding } from "@luke/host/app-state";
-import { searchTokens } from "@luke/ui/search-tokens";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import type { AppInboxTaskHolding } from "@repo/host/app-state";
+import { searchTokens } from "@repo/ui/search-tokens";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { afterPaint } from "../after-paint.js";
@@ -304,7 +304,7 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
         : agentsHolding,
     [settles, pageAgent, agentsHolding, agentRepository, agentWorkspace],
   );
-  // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@luke/host`'s `inbox-collections.ts`).
+  // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@repo/host`'s `inbox-collections.ts`).
   const everyTask = tasks.tasks;
   const listedWorkspace = tasks.workspace?.id;
   const everyChannel: readonly InboxGroup[] = useMemo(

@@ -10,10 +10,10 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   REVIEW_STATE,
-} from "@luke/features/agent-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { Tooltip } from "@luke/ui";
+} from "@repo/features/agent-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { Tooltip } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -59,18 +59,18 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-const LUKE_BOT = { login: "luke-agent[bot]", bot: true };
+const APP_BOT = { login: "luke-agent[bot]", bot: true };
 const CHARLES_ON_GITHUB = { login: "charlespan", bot: false, userId: CHARLES.userId };
 const OCTOCAT = { login: "octocat", bot: false };
 const DEVIN = { login: "devin-ai-integration[bot]", bot: true };
 
 const PEOPLE: AgentChangesPeople = {
-  author: LUKE_BOT,
+  author: APP_BOT,
   reviewers: [
     { by: CHARLES_ON_GITHUB, state: REVIEW_STATE.APPROVED },
     { by: OCTOCAT, state: REVIEW_STATE.REQUESTED },
     { by: DEVIN, state: REVIEW_STATE.COMMENTED },
-    { by: LUKE_BOT, state: REVIEW_STATE.COMMENTED },
+    { by: APP_BOT, state: REVIEW_STATE.COMMENTED },
   ],
   comments: [
     { by: DEVIN, state: REVIEW_STATE.COMMENTED, excerpt: "Found 1 potential issue.", at: 1_000 },
@@ -177,10 +177,10 @@ function card(people: AgentChangesPeople | undefined): ReactElement {
 /** Each row of the card's reviewers: the name said, the kind of actor named, whether a bot, and where they stand at the row's end. */
 function reviewerRows(within: ParentNode): (string | null | undefined)[][] {
   return [...within.querySelectorAll('[aria-label="Reviewers"] > li')].map((row) => [
-    row.querySelector(".luke-inline-ref-label")?.textContent,
+    row.querySelector(".ui-inline-ref-label")?.textContent,
     row.querySelector(".actor-mark")?.getAttribute("data-kind"),
     row.querySelector(".actor-mark")?.getAttribute("data-bot") ?? null,
-    row.querySelector(".luke-hover-card-row-end")?.textContent,
+    row.querySelector(".ui-hover-card-row-end")?.textContent,
   ]);
 }
 
@@ -188,15 +188,15 @@ test("a pull request's card says who opened it and lists its reviewers by where 
   const strip = await draw(card(PEOPLE));
 
   const opener =
-    strip.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+    strip.querySelector(".ui-hover-card-row [data-actor-ref]") ??
     assert.fail("who opened it is named");
   assert.deepEqual(
-    [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
+    [opener.querySelector(".ui-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
     "Vespin's own App's bot is an App's bot on GitHub, as any other is",
   );
   hover(opener);
-  const opened = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
+  const opened = document.querySelector('.ui-tooltip-card [data-actor-card="github"]');
   assert.match(opened?.textContent ?? "", /luke-agent.*GitHub App/u);
 
   assert.deepEqual(reviewerRows(strip), [
@@ -207,16 +207,16 @@ test("a pull request's card says who opened it and lists its reviewers by where 
   ]);
   const [, octocat] = strip.querySelectorAll('[aria-label="Reviewers"] [data-actor-ref]');
   hover(octocat ?? assert.fail("octocat's name"));
-  const hung = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
+  const hung = document.querySelector('.ui-tooltip-card [data-actor-card="github"]');
   assert.match(hung?.textContent ?? "", /@octocat.*GitHub user.*Not in this workspace/u);
 });
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
   const opener = async (people: AgentChangesPeople) => {
     const drawn = await draw(card(people));
-    const row = drawn.querySelector(".luke-hover-card-row");
+    const row = drawn.querySelector(".ui-hover-card-row");
     const named = [
-      row?.querySelector(".luke-inline-ref-label")?.textContent,
+      row?.querySelector(".ui-inline-ref-label")?.textContent,
       /as the GitHub App/u.test(row?.textContent ?? ""),
     ];
     act(() => root?.unmount());
@@ -227,8 +227,8 @@ test("who opened the pull request is named alone, whoever the agent wrote as", a
   assert.deepEqual(
     [
       await opener({ author: CHARLES_ON_GITHUB, writtenAs: AGENT_AUTHOR.DEVELOPER }),
-      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.APP_UNLINKED }),
-      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.DEVELOPER }),
+      await opener({ author: APP_BOT, writtenAs: AGENT_AUTHOR.APP_UNLINKED }),
+      await opener({ author: APP_BOT, writtenAs: AGENT_AUTHOR.DEVELOPER }),
     ],
     [
       ["Charles Pan", false],
@@ -300,21 +300,21 @@ test("a pull request's card hung over its tab lists every reviewer, scrolling wi
     }),
   );
   hover(tab.querySelector("button") ?? assert.fail("the tab stands"));
-  const list = document.querySelector('.luke-tooltip-card [aria-label="Reviewers"]');
+  const list = document.querySelector('.ui-tooltip-card [aria-label="Reviewers"]');
   assert.equal(list?.children.length, 50, "every reviewer is listed, none counted");
   // Note that the list scrolls in the area it stands in.
   act(() => {
-    list?.closest(".luke-scroll-area")?.dispatchEvent(new Event("scroll"));
+    list?.closest(".ui-scroll-area")?.dispatchEvent(new Event("scroll"));
   });
   assert.ok(
-    document.querySelector(".luke-tooltip-card:not([data-leaving]) [data-pull-request-card]"),
+    document.querySelector(".ui-tooltip-card:not([data-leaving]) [data-pull-request-card]"),
     "scrolling the card's own list leaves it standing",
   );
   act(() => {
     document.dispatchEvent(new Event("scroll"));
   });
   assert.equal(
-    document.querySelector(".luke-tooltip-card:not([data-leaving]) [data-pull-request-card]"),
+    document.querySelector(".ui-tooltip-card:not([data-leaving]) [data-pull-request-card]"),
     null,
     "the window scrolling takes it down",
   );

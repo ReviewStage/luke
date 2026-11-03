@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   claimMacCommand,
   queueMacCommand,
   settleMacCommand,
   withdrawMacCommand,
-} from "@luke/database/models/mac-command-store";
-import { user } from "@luke/database/schemas/auth";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { expectTopicsFire, getTestDB } from "@luke/database/testing";
-import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
+} from "@repo/database/models/mac-command-store";
+import { user } from "@repo/database/schemas/auth";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { expectTopicsFire, getTestDB } from "@repo/database/testing";
+import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { macCommandsLive } from "./live-queries.js";
 
@@ -28,7 +28,7 @@ import { macCommandsLive } from "./live-queries.js";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

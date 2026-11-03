@@ -1,4 +1,4 @@
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { choiceWords } from "./agent-model.js";
 
 /**

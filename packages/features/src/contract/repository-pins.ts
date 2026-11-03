@@ -2,7 +2,7 @@
  * repository-pins.ts -- the repositories the account pinned in the sidebar (`task-wire.ts`): read them, and pin or unpin one.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";

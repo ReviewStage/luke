@@ -6,7 +6,7 @@ import {
   RowMark,
   Tooltip,
   UnreadMark,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -38,7 +38,7 @@ function RowMarks(): React.JSX.Element {
         </div>
       </CatalogSection>
       <CatalogSection id="row-mark-unread" title="Unread, and read">
-        <div className="catalog-frame flex gap-luke-12">
+        <div className="catalog-frame flex gap-ui-12">
           <UnreadMark unread />
           <UnreadMark unread={false} />
         </div>

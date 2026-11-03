@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { PAGE_SHOWER } from "@repo/features/page-wire";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";

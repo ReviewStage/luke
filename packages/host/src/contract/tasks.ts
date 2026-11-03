@@ -13,8 +13,8 @@ import {
   adminFavoriteParamsSchema,
   adminReadAnswerSchema,
   adminReadParamsSchema,
-} from "@luke/features/admin-wire";
-import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-wire";
+} from "@repo/features/admin-wire";
+import { agentBrowserTabsAnswerSchema } from "@repo/features/agent-browser-tab-wire";
 import {
   codeLinesSchema,
   type TasksBrowserTabsAnswer,
@@ -38,6 +38,8 @@ import {
   tasksEditParamsSchema,
   tasksFileAnswerSchema,
   tasksFileParamsSchema,
+  tasksFindAnswerSchema,
+  tasksFindParamsSchema,
   tasksIssueParamsSchema,
   tasksIssueSchema,
   tasksMoveAnswerSchema,
@@ -73,7 +75,7 @@ import {
   tasksTreeAnswerSchema,
   tasksTreeParamsSchema,
   tasksWriteSectionParamsSchema,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import {
@@ -229,6 +231,9 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actProcedure("Could not colour that code on this system.")
     .input(exactInput(colourCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),
+  [TASKS_ACT_KIND.TASKS_FIND]: actProcedure("Could not find that task on this system.")
+    .input(exactInput(tasksFindParamsSchema))
+    .output(EffectSchema.flip(tasksFindAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_REVISIONS]: actProcedure(
     "Could not read that plan's history on this system.",
   )

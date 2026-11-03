@@ -24,6 +24,7 @@
  * preview pattern matches, which is the security model the docs set out.
  */
 
+import { LINK_HOST_ALIASES } from "@repo/features/link-home";
 import { Redacted } from "effect";
 import { text } from "../core.js";
 
@@ -79,17 +80,24 @@ const WEB_ORIGIN_SCHEMES = ["https://", "http://"] as const;
 
 /**
  * The origins production trusts beyond its own: every Vercel preview of this
- * project, by deployment (`luke-<hash>-stage-review.vercel.app`) or by branch
- * (`luke-web-git-<branch>-stage-review.vercel.app`), and the dev server.
+ * project, by deployment (`vespin-<hash>-stage-review.vercel.app`) or by branch
+ * (`vespin-git-<branch>-stage-review.vercel.app`), and the dev server. Note
+ * that the project's previews from before its rename, under `luke-`, stay
+ * trusted, because their deployments keep the hostnames they were built with.
  */
-const PROXIED_ORIGINS = ["https://luke-*-stage-review.vercel.app", LOCAL_AUTH_URL] as const;
+const PROXIED_ORIGINS = [
+  "https://vespin-*-stage-review.vercel.app",
+  "https://luke-*-stage-review.vercel.app",
+  LOCAL_AUTH_URL,
+] as const;
 
 export interface AuthDeployment {
   /** The address this deployment calls itself, and the origin it trusts by default. */
   baseURL: string;
   /**
    * The origins this deployment's own pages are served from: production's
-   * registered address, a preview's two hostnames, or the dev server's where
+   * registered address and the hosts links were once written on, which it
+   * still serves the app at, a preview's two hostnames, or the dev server's where
    * no Vercel environment is named. Unlike `trustedOrigins`, never another
    * deployment's, so this is what a check that a request came from one of
    * this deployment's own pages reads; a production or a preview that names
@@ -171,7 +179,10 @@ function webOrigin(origin: string | undefined): origin is string {
  * server stands in only where no Vercel environment is named, because a
  * production or a preview that names no address of its own is misconfigured,
  * and it then owns no origin rather than a page on whatever machine answers
- * at `localhost`.
+ * at `localhost`. Production owns the hosts links were once written on
+ * besides its address (`link-home.ts`'s `LINK_HOST_ALIASES`), because it
+ * serves the app at each still, so a link written there opens, and a page it
+ * opened there must be able to act.
  */
 function ownOriginsOf(
   environment: string | undefined,
@@ -179,11 +190,13 @@ function ownOriginsOf(
   productionURL: string | undefined,
 ): string[] {
   if (environment === DEPLOYMENT_ENVIRONMENT.PREVIEW) return previewOrigins.filter(webOrigin);
-  const address =
-    environment === DEPLOYMENT_ENVIRONMENT.PRODUCTION
-      ? productionURL
-      : (productionURL ?? LOCAL_AUTH_URL);
-  return [deploymentOrigin(address)].filter(webOrigin);
+  if (environment !== DEPLOYMENT_ENVIRONMENT.PRODUCTION) {
+    return [deploymentOrigin(productionURL ?? LOCAL_AUTH_URL)].filter(webOrigin);
+  }
+  const own = deploymentOrigin(productionURL);
+  if (!webOrigin(own)) return [];
+  const aliases = LINK_HOST_ALIASES.map((host) => deploymentOrigin(host)).filter(webOrigin);
+  return [...new Set([own, ...aliases])];
 }
 
 /**

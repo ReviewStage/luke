@@ -1,6 +1,6 @@
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { BANNER_LOOK, Banner, Button, ComposerFrame, TEXT_TONE, Text } from "@luke/ui";
-import { CornerLeftUpIcon } from "@luke/ui/icons";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { BANNER_LOOK, Banner, Button, ComposerFrame, TEXT_TONE, Text } from "@repo/ui";
+import { CornerLeftUpIcon } from "@repo/ui/icons";
 import { useState } from "react";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";

@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -17,20 +17,20 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
-import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppHostRead, AppInboxItems } from "@luke/host/app-state";
-import type { PortActResult } from "@luke/host/contract";
-import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
-import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
+import type { TasksTreeAnswer } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
+import type { PortActResult } from "@repo/host/contract";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
+import { experimentsOn, settingsView } from "@repo/settings/testing";
+import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { flushSync } from "react-dom";
@@ -280,8 +280,8 @@ function heard(node: Node): string {
 function rows(): string[] {
   return [...document.querySelectorAll('[role="option"]')].map((row) =>
     [
-      row.querySelector(".luke-combobox-option-label"),
-      row.querySelector(".luke-combobox-option-detail"),
+      row.querySelector(".ui-combobox-option-label"),
+      row.querySelector(".ui-combobox-option-detail"),
       row.querySelector("[data-task-key]"),
     ]
       .filter((part) => part !== null)
@@ -368,11 +368,11 @@ test('"the" finds Theme, marking the words it begins, while "thm" finds no Theme
 
   type("the");
   const theme = [...document.querySelectorAll('[role="option"]')].find(
-    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Theme",
+    (row) => row.querySelector(".ui-combobox-option-label")?.textContent === "Theme",
   );
   assert.ok(theme, '"the" finds Theme');
   assert.deepEqual(
-    [...theme.querySelectorAll(".luke-combobox-option-label mark")].map((mark) => mark.textContent),
+    [...theme.querySelectorAll(".ui-combobox-option-label mark")].map((mark) => mark.textContent),
     ["The"],
   );
   type("thm");
@@ -741,11 +741,11 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   const row = document.querySelectorAll<HTMLElement>('[role="option"]')[1];
   assert.ok(row, "the agent is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
-  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, undefined);
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Invoice export");
+  assert.equal(card?.querySelector(".ui-hover-card-corner")?.textContent, undefined);
   assert.ok(
-    card?.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]'),
+    card?.querySelector('.ui-hover-card-lead .state-glyph[data-state="working"]'),
     "the card's tile wears the working mark in its harness's place",
   );
   press("Invoice export · Billing usage alerts");
@@ -789,8 +789,8 @@ test("an agent with no task hangs its card beside its row and is named as its ta
   );
   assert.ok(row, "the agent is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Cataloged Opus");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Cataloged Opus");
 });
 
 test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
@@ -936,7 +936,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     assert.ok(row, "the agent is listed");
     restOn(row);
     const words = document.querySelector(
-      ".luke-tooltip-card .luke-hover-card-row [data-actor-ref]",
+      ".ui-tooltip-card .ui-hover-card-row [data-actor-ref]",
     )?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";
@@ -1061,7 +1061,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
   const comments = rows().filter((row) => row.startsWith("Show comments"));
   chooseFilter("Files");
   type("index");
-  const notice = document.querySelector(".luke-note-line")?.textContent;
+  const notice = document.querySelector(".ui-note-line")?.textContent;
 
   assert.deepEqual([changes, comments], [[], []]);
   assert.deepEqual(read, [], "the hidden task's files are not read");
@@ -1208,13 +1208,13 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.equal(
-    row?.querySelector(".luke-combobox-option-glyph")?.innerHTML,
+    row?.querySelector(".ui-combobox-option-glyph")?.innerHTML,
     renderToStaticMarkup(fileLook(path).icon),
     "the row wears the file's type icon",
   );
   restOn(row ?? assert.fail("the row is drawn"));
-  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, path);
+  const card = document.querySelector(".ui-tooltip-card [data-file-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, path);
 
   press("accept.ts · src/invites");
   assert.deepEqual(opened, [[{ path }]]);
@@ -1239,9 +1239,9 @@ test("a task's row hangs the task's card beside it while the pointer rests on it
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.ok(row, "the task is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
   assert.ok(card, "the task's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Billing usage alerts");
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "Billing usage alerts");
 });
 
 test("a task's row ends as its sidebar row does, who is on it then an agent at work, and is found by its key", () => {
@@ -1283,7 +1283,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
   chooseFilter("Tasks");
   /** Each row's end, its marks in order: the face's kind, then how its agents stand. */
   const ends = () =>
-    [...document.querySelectorAll('[role="option"] .luke-combobox-option-hint')].map((hint) =>
+    [...document.querySelectorAll('[role="option"] .ui-combobox-option-hint')].map((hint) =>
       [...hint.querySelectorAll(".actor-mark, .task-agents-mark")].map(
         (mark) => mark.getAttribute("data-kind") ?? mark.getAttribute("data-task-agents"),
       ),
@@ -1335,7 +1335,7 @@ test("an agent pressed on a task's card in ⌘K over Settings leaves the palette
   assert.ok(row, "the task is listed");
   restOn(row);
   const agent = document.querySelector<HTMLElement>(
-    ".luke-tooltip-card [data-task-card-agent] button",
+    ".ui-tooltip-card [data-task-card-agent] button",
   );
   assert.ok(agent, "the task's card names its agent");
   act(() => agent.click());
@@ -1383,7 +1383,7 @@ test("Search lists the listed workspace's plans first, then every other workspac
   assert.deepEqual(rows(), ["Checkout retries · Northwind · shop"]);
   assert.equal(
     document.querySelector(
-      ".luke-combobox-option-detail .workspace-ref .luke-avatar[data-shape='tile']",
+      ".ui-combobox-option-detail .workspace-ref .ui-avatar[data-shape='tile']",
     )?.textContent,
     "N",
     "the other workspace is named by its tile and its name",
@@ -1482,7 +1482,7 @@ test("a task's row with a key starts as one without does, its glyph then its nam
   chooseFilter("Tasks");
 
   const starts = [...document.querySelectorAll('[role="option"]')].map((row) =>
-    row.firstElementChild?.classList.contains("luke-combobox-option-glyph"),
+    row.firstElementChild?.classList.contains("ui-combobox-option-glyph"),
   );
   assert.deepEqual(starts, [true, true], "no row is pushed right by a key that leads it");
   assert.equal(document.querySelectorAll("[data-task-key]").length, 1);
@@ -1516,7 +1516,7 @@ test("a task wears who is on it at its row's end, a teammate by face, no one on 
   chooseFilter("Tasks");
   const marks = () =>
     [...document.querySelectorAll('[role="option"]')].map((row) => {
-      const mark = row.querySelector(".luke-combobox-option-hint .actor-mark");
+      const mark = row.querySelector(".ui-combobox-option-hint .actor-mark");
       return mark === null ? null : [mark.getAttribute("data-kind"), mark.textContent];
     });
 
@@ -1524,7 +1524,7 @@ test("a task wears who is on it at its row's end, a teammate by face, no one on 
   // Charles is on Retry budget, Dean, the reader, on Rate limits, though Charles made it, and no one on Cache keys.
   assert.deepEqual(marks(), [["person", "C"], null, ["unassigned", ""]]);
   const hints = [...document.querySelectorAll('[role="option"]')].map(
-    (row) => row.querySelector(".luke-combobox-option-hint")?.textContent ?? "",
+    (row) => row.querySelector(".ui-combobox-option-hint")?.textContent ?? "",
   );
   assert.match(hints[0] ?? "", /\(assigned to Charles Pan\)/u);
   assert.match(hints[2] ?? "", /\(unassigned\)/u);
@@ -1599,7 +1599,7 @@ test("a task Vespin or a coding agent made says who in its detail and is found b
   const marks = () =>
     [...document.querySelectorAll('[role="option"]')].map(
       (row) =>
-        row.querySelector(".luke-combobox-option-hint .actor-mark")?.getAttribute("data-kind") ??
+        row.querySelector(".ui-combobox-option-hint .actor-mark")?.getAttribute("data-kind") ??
         null,
     );
 
@@ -1630,7 +1630,7 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   type("my tasks");
   assert.ok(rows().includes("Show my tasks"), "Show my tasks is listed");
   const row = [...document.querySelectorAll('[role="option"]')][rows().indexOf("Show my tasks")];
-  assert.equal(row?.querySelector(".luke-combobox-option-hint"), null, "no chord is printed");
+  assert.equal(row?.querySelector(".ui-combobox-option-hint"), null, "no chord is printed");
   press("Show my tasks");
   assert.deepEqual(ran, ["show my tasks"]);
 });
@@ -1660,16 +1660,16 @@ test("a command whose only key is Esc is no row in ⌘K, though it is still offe
 function rowChord(listed: string): string | null {
   const row = document.querySelectorAll('[role="option"]')[rows().indexOf(listed)];
   assert.ok(row, `${listed} is listed`);
-  return row.querySelector(".luke-shortcut")?.textContent ?? null;
+  return row.querySelector(".ui-shortcut")?.textContent ?? null;
 }
 
 /** The chord's glyphs at the end of the open menu's item that says exactly these words, or nothing where it prints none. */
 function itemChord(label: string): string | null {
   const item = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+    (each) => each.querySelector(".ui-menu-item-label")?.textContent === label,
   );
   assert.ok(item, `the menu offers ${label}`);
-  return item.querySelector(".luke-shortcut")?.textContent ?? null;
+  return item.querySelector(".ui-shortcut")?.textContent ?? null;
 }
 
 test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", () => {
@@ -1807,7 +1807,7 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⇧�
   openPalette(ON_AGENT_TAB);
   type("copy link");
   const listed = rows().filter((row) => row.startsWith("Copy link to "));
-  const chord = document.querySelector('[role="option"] .luke-combobox-option-hint')?.textContent;
+  const chord = document.querySelector('[role="option"] .ui-combobox-option-hint')?.textContent;
 
   press("Copy link to agent · Expire old invites");
   await act(async () => undefined);
@@ -1858,7 +1858,7 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
 
   assert.deepEqual(copied, [
     `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
-    `https://vespin.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
+    `https://vespin.dev/acme/inbox/${itemId}`,
     `https://vespin.dev/acme/automation/${automationId}`,
   ]);
 });
@@ -1962,7 +1962,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
     }),
   );
   type("copy link");
-  const chord = document.querySelector('[role="option"] .luke-combobox-option-hint')?.textContent;
+  const chord = document.querySelector('[role="option"] .ui-combobox-option-hint')?.textContent;
 
   assert.deepEqual(
     rows().filter((row) => row.startsWith("Copy link to ")),
@@ -2049,8 +2049,8 @@ test("People lists the listed workspace's members as every people menu does, the
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.ok(row, "Charles is listed");
   restOn(row);
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Charles Pan");
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Charles Pan");
   act(() => row.click());
   assert.deepEqual(opened, ["user-charles"]);
   assert.deepEqual(sent.tabs, []);
@@ -2059,7 +2059,7 @@ test("People lists the listed workspace's members as every people menu does, the
 /** What the list says where no row stands: its notice, or "No results match". */
 function emptyLine(): string | undefined {
   return (
-    document.querySelector(".luke-note-line, [cmdk-list] [role=alert]")?.textContent ?? undefined
+    document.querySelector(".ui-note-line, [cmdk-list] [role=alert]")?.textContent ?? undefined
   );
 }
 
@@ -2113,7 +2113,7 @@ test("under All, a query nothing else matches says the repository's files are st
 
   assert.deepEqual(rows(), []);
   assert.equal(emptyLine(), "Reading the repository's files");
-  assert.equal(document.querySelector(".luke-note-line")?.getAttribute("role"), "status");
+  assert.equal(document.querySelector(".ui-note-line")?.getAttribute("role"), "status");
 
   await act(async () =>
     answer({
@@ -2380,7 +2380,7 @@ function PinnableTask(): React.JSX.Element {
 /** The names the sidebar's Pinned section lists, none while it stands nowhere. */
 function pinnedNames(): (string | null)[] {
   const section = document.querySelector('nav[aria-label="Pinned"]');
-  return [...(section?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+  return [...(section?.querySelectorAll(".ui-list-row-title") ?? [])].map(
     (name) => name.firstChild?.textContent ?? null,
   );
 }
@@ -2949,8 +2949,8 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.ok(needs, "the item that needs you is listed");
   assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
-  assert.ok(needs.querySelector(".luke-combobox-option-hint .inbox-row-attention"), "it needs you");
-  assert.ok(needs.querySelector(".luke-combobox-option-hint time"), "its time stands at its end");
+  assert.ok(needs.querySelector(".ui-combobox-option-hint .inbox-row-attention"), "it needs you");
+  assert.ok(needs.querySelector(".ui-combobox-option-hint time"), "its time stands at its end");
   assert.equal(
     answered?.querySelector(".inbox-row-attention"),
     null,
@@ -2958,9 +2958,9 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   );
 
   restOn(needs);
-  const card = document.querySelector(".luke-tooltip-card [data-inbox-item-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-inbox-item-card]");
   assert.equal(
-    card?.querySelector(".luke-hover-card-name")?.textContent,
+    card?.querySelector(".ui-hover-card-name")?.textContent,
     "Which webhook secret should rotate?",
   );
   assert.match(card?.textContent ?? "", /Rotate the Stripe signing secret today\./u);

@@ -7,11 +7,11 @@ import {
   type Task,
   type TaskStanding,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -269,8 +269,8 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
     ],
   );
   restOn(rows[2] ?? assert.fail("no Ada row"));
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Ada Lovelace");
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Ada Lovelace");
   assert.match(card?.textContent ?? "", /user-ada@acme\.test/u);
   act(() => (rows[2] ?? assert.fail("no Ada row")).click());
 
@@ -299,11 +299,8 @@ test("the assignee's menu says it is reading while the members are unread, and n
 
   act(() => chip(host, "Assignee").click());
 
-  assert.match(
-    document.querySelector(".luke-combobox-note")?.textContent ?? "",
-    /Reading members/u,
-  );
-  assert.equal(document.querySelector(".luke-combobox-empty"), null);
+  assert.match(document.querySelector(".ui-combobox-note")?.textContent ?? "", /Reading members/u);
+  assert.equal(document.querySelector(".ui-combobox-empty"), null);
 });
 
 test("the assignee's menu says No members match when a search finds nobody", async () => {
@@ -344,7 +341,7 @@ test("the assignee's menu says No members match when a search finds nobody", asy
     input?.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  assert.equal(document.querySelector(".luke-combobox-empty")?.textContent, "No members match");
+  assert.equal(document.querySelector(".ui-combobox-empty")?.textContent, "No members match");
 });
 
 test("the assignee's menu says the members could not be read, with Retry, never that none match, and Retry reads them again", async () => {
@@ -382,16 +379,16 @@ test("the assignee's menu says the members could not be read, with Retry, never 
 
   act(() => chip(host, "Assignee").click());
 
-  const note = document.querySelector(".luke-combobox-note");
+  const note = document.querySelector(".ui-combobox-note");
   assert.match(note?.textContent ?? "", /Members could not be read\./u);
-  assert.equal(document.querySelector(".luke-combobox-empty"), null);
+  assert.equal(document.querySelector(".ui-combobox-empty"), null);
   const retry =
     [...(note?.querySelectorAll("button") ?? [])].find((button) =>
       (button.textContent ?? "").includes("Retry"),
     ) ?? assert.fail("no Retry");
   await act(async () => retry.click());
 
-  assert.equal(document.querySelector(".luke-combobox-note"), null);
+  assert.equal(document.querySelector(".ui-combobox-note"), null);
   assert.ok(
     [...document.querySelectorAll('[role="option"]')].some((row) =>
       (row.textContent ?? "").includes("Ada Lovelace"),

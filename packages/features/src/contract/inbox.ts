@@ -10,8 +10,8 @@
  * (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS, accountInboxAnswerSchema } from "../account-inbox-wire.js";
 import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../agent-wire.js";
@@ -22,6 +22,7 @@ import {
   inboxAnswerSchema,
   inboxCloseRequestSchema,
   inboxCursorSchema,
+  inboxItemHomeSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
@@ -94,6 +95,10 @@ export const inboxContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: INBOX_PROCEDURE_PATH.AGENT }))
     .input(pastCursorSchema)
     .output(EffectSchema.flip(inboxAnswerSchema)),
+  home: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: INBOX_PROCEDURE_PATH.ITEM }))
+    .input(pathIdSchema)
+    .output(EffectSchema.flip(inboxItemHomeSchema)),
   answer: hostedProcedure
     .meta(bodyCap(CLOSE_BODY_BYTES))
     .meta(

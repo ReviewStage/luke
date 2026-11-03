@@ -6,19 +6,19 @@
  * hold on to.
  */
 
-import { signedInAccountId } from "@luke/credentials/snapshot";
-import { readLink } from "@luke/features/link-grammar";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { eventNamingAccount, logNamingAccount } from "@luke/features/sentry-account";
+import { signedInAccountId } from "@repo/credentials/snapshot";
+import { readLink } from "@repo/features/link-grammar";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { eventNamingAccount, logNamingAccount } from "@repo/features/sentry-account";
 import {
   eventWithoutAccessTokens,
   SPANS_NAMING_ACCESS_TOKENS,
   spanWithoutAccessTokens,
   withoutAccessTokens,
-} from "@luke/features/sentry-breadcrumbs";
-import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
-import { sendShownFailure } from "@luke/features/shown-failure";
-import { appStateNow } from "@luke/panel/use-app-state";
+} from "@repo/features/sentry-breadcrumbs";
+import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import { sendShownFailure } from "@repo/features/shown-failure";
+import { appStateNow } from "@repo/panel/use-app-state";
 import {
   browserTracingIntegration,
   captureException,
@@ -103,12 +103,12 @@ function accountId(): string | undefined {
  * environment, and release, and the desktop renderer's filters: a
  * breadcrumb or an event that names an access token is dropped whole, and
  * so is a span that names one as it starts, while every span sent has its
- * addresses scrubbed (`@luke/features/sentry-breadcrumbs`). Each page load
+ * addresses scrubbed (`@repo/features/sentry-breadcrumbs`). Each page load
  * and navigation is named by the kind of place it opens, never its path. A
  * failure the panel showed is sent as a log line, and as an issue besides
- * where nothing named it (`@luke/features/shown-failure`). Each event and log
+ * where nothing named it (`@repo/features/shown-failure`). Each event and log
  * line names the account signed in as it leaves, by its id alone, as
- * Sentry's user (`@luke/features/sentry-account`).
+ * Sentry's user (`@repo/features/sentry-account`).
  */
 export function initWebSentry(build: WebSentryBuild): WebSentry {
   init({

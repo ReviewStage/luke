@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
-import { accountExperimentOn, readAccountPreferences } from "@luke/database/models/account-store";
-import { agentOwnerFactsOf } from "@luke/database/models/agent-owners";
+import { type DatabaseServices, READ_CONCURRENCY } from "@repo/database/core/query";
+import { accountExperimentOn, readAccountPreferences } from "@repo/database/models/account-store";
+import { agentOwnerFactsOf } from "@repo/database/models/agent-owners";
 import {
   type Agent,
   type AgentPlace,
@@ -13,31 +13,31 @@ import {
   readAgentByKey,
   readAgentContext,
   taskPilotStands,
-} from "@luke/database/models/agent-store";
-import type { HandedFile } from "@luke/database/models/attached-file-parts";
-import { devicesNamed } from "@luke/database/models/device-store";
-import { hostRemoved } from "@luke/database/models/host-store";
-import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
+} from "@repo/database/models/agent-store";
+import type { HandedFile } from "@repo/database/models/attached-file-parts";
+import { devicesNamed } from "@repo/database/models/device-store";
+import { hostRemoved } from "@repo/database/models/host-store";
+import { listAccountProviderKeyRows } from "@repo/database/models/provider-key-store";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
   readTask,
   readTaskWorkspace,
   type StoredTask,
-} from "@luke/database/models/task-store";
-import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/task-store";
+import { isWorkspaceMember, readAccountNames } from "@repo/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
   automationLineMetadata,
   type LineSender,
   storeWriter,
-} from "@luke/database/models/writer";
+} from "@repo/database/models/writer";
 import type {
   StoredArchive,
   StoredAutomationOrigin,
   StoredStartedFrom,
-} from "@luke/database/schemas/agent";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+} from "@repo/database/schemas/agent";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import {
   firstMessageText,
   type NoteFiles,
@@ -46,7 +46,7 @@ import {
   type StartNoteHeading,
   stepsBytes,
   summaryBytes,
-} from "@luke/features/agent-replay";
+} from "@repo/features/agent-replay";
 import {
   AGENT_ARCHIVER,
   AGENT_ATTACHMENT_TYPE,
@@ -61,16 +61,16 @@ import {
   type AgentSummary,
   CONTEXT_WINDOW,
   LOCAL_AGENT_REFUSAL,
-} from "@luke/features/agent-wire";
-import type { GitHubAccess } from "@luke/features/github-repositories-wire";
-import { agentName, automationRun } from "@luke/features/model-label";
-import { agentFallbackChoice, type ModelChoice } from "@luke/features/models-wire";
-import { planMarkdown } from "@luke/features/plan-markdown";
-import { TASK_MODE, type Task } from "@luke/features/task-wire";
-import { bothInOrder, causeKind, failureKind } from "@luke/runtime/effect";
-import { EXPERIMENT } from "@luke/settings";
-import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/agent-wire";
+import type { GitHubAccess } from "@repo/features/github-repositories-wire";
+import { agentName, automationRun } from "@repo/features/model-label";
+import { agentFallbackChoice, type ModelChoice } from "@repo/features/models-wire";
+import { planMarkdown } from "@repo/features/plan-markdown";
+import { TASK_MODE, type Task } from "@repo/features/task-wire";
+import { bothInOrder, causeKind, failureKind } from "@repo/runtime/effect";
+import { EXPERIMENT } from "@repo/settings";
+import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { Cause, Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -94,6 +94,7 @@ import {
   localAgentRefused,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import { LocalDemo } from "../../local/local-demo.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
@@ -238,11 +239,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * before eve took it, each said as an error naming the agent (`agent-log.ts`).
  * A choice an ask names runs that one agent and is never kept as the
  * account's default, which only
- * Settings writes. Who reaches eve is the caller's: the route holds the developer's
+ * Settings writes. Who reaches the agent is the caller's: the route holds the developer's
  * own bearer, and the voice brain's and a coding agent's tool act as the
- * deployment for the account, which the coder channel's table admits for
- * exactly this opening, and its door for the cancel that stops a
- * continue's source (`coder-host/channel.ts`).
+ * deployment for the account; the agent's harness answers the opening, and
+ * the cancel that stops a continue's source, either way
+ * (`runtime-sessions.ts`).
  */
 
 export type { StartWhere };
@@ -516,7 +517,7 @@ const freshKindOn = Effect.fnUntraced(function* (
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** The task read as the account, its repository required unless the Start is blank or the local demo runs, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -566,7 +567,11 @@ const landingOf = Effect.fnUntraced(function* (
       place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
     };
   }
-  if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  // A task with no repository is handed to an agent only in the local demo, which the Start then
+  // holds to an agent on a host once it knows where the agent runs (`repositorylessOnHost`).
+  if (task.repository === null && !(yield* LocalDemo).on) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  }
   const handed = yield* handedOf(brief ?? planMarkdown(task), place, fitter, noteFiles);
   return {
     startedFrom: handed.startedFrom,
@@ -794,11 +799,15 @@ const discardedAt = (
 
 /** A Start that failed to open its agent's session, counted under the member who made it, in the count's words. */
 const startFailed = (userId: string, agent: Agent, { failure, startedBy }: StartFailed) =>
-  recordServerEvent(SERVER_EVENT.AGENT_START_FAIL, userId, {
-    failure,
-    started_by: startedBy,
-    agent_kind: agent.kind,
-  });
+  recordServerEvent(
+    SERVER_EVENT.AGENT_START_FAIL,
+    { userId, workspaceId: agent.organizationId },
+    {
+      failure,
+      started_by: startedBy,
+      agent_kind: agent.kind,
+    },
+  );
 
 /** Why a Start failed, and who started it, as the count words them. */
 interface StartFailed {
@@ -1074,6 +1083,23 @@ const machineOfStart = Effect.fnUntraced(function* (
   return { asked: { machine: AGENT_MACHINE.DEVICE, deviceId: device.id } };
 });
 
+/**
+ * Whether a Start that landed on a task with no repository may go on where
+ * its agent runs: a blank one anywhere, as ever, and one handed the plan or a
+ * prompt, which only the local demo lands (`landingOf`), on a host alone,
+ * where the host starts it in an empty folder of its own; never in the cloud,
+ * whose sandbox is a checkout of a repository. A Start with no task, or on a
+ * task with a repository, goes on as it landed.
+ */
+function repositorylessOnHost(
+  ask: Pick<StartAsk, "blank">,
+  landing: Pick<StartLanding, "task" | "repository">,
+  where: StartMachine,
+): boolean {
+  if (landing.task === undefined || landing.repository !== null || ask.blank === true) return true;
+  return where.asked.machine === AGENT_MACHINE.DEVICE;
+}
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* (
   eve: Effect.Effect<
@@ -1195,6 +1221,9 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       : undefined;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the starter's account, its source or task, and its model, and never change.
   const where = yield* machineOfStart(userId, from?.source, landing.task);
+  if (!repositorylessOnHost(ask, landing, where)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  }
   const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime);
   const started = yield* hostedStoreOrUnavailable(
@@ -1260,8 +1289,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       const mentioned =
         words === undefined ? undefined : mentionedContext(words, landing.task, reads);
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
-      // who sent it: a native harness's runner names the line back as it takes it (`native-events/`), and
-      // eve's receipt takes it by its words (`relay.ts`'s `#received`) rather than writing a typed line.
+      // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).
       // A launch refused discards the agent, line and all. A line that could not be written discards the
       // agent, as a refused launch does, so a retry under the same key starts it afresh rather than
       // finding an agent that was never launched.
@@ -1386,21 +1414,25 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       if (Option.isSome(assigned)) committed = assigned.value.txid;
     }
   }
-  yield* recordServerEvent(SERVER_EVENT.AGENT_START, userId, {
-    model: choice.model,
-    effort: choice.effort,
-    start_kind:
-      from === undefined
-        ? SERVER_AGENT_START_KIND.FRESH
-        : continued
-          ? SERVER_AGENT_START_KIND.CONTINUE
-          : SERVER_AGENT_START_KIND.FORK,
-    is_from_automation: automationRun(ask) !== undefined,
-    // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
-    started_by: starterOf(ask),
-    has_task: ask.taskId !== null,
-    agent_kind: agent.kind,
-  });
+  yield* recordServerEvent(
+    SERVER_EVENT.AGENT_START,
+    { userId, workspaceId: agent.organizationId },
+    {
+      model: choice.model,
+      effort: choice.effort,
+      start_kind:
+        from === undefined
+          ? SERVER_AGENT_START_KIND.FRESH
+          : continued
+            ? SERVER_AGENT_START_KIND.CONTINUE
+            : SERVER_AGENT_START_KIND.FORK,
+      is_from_automation: automationRun(ask) !== undefined,
+      // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
+      started_by: starterOf(ask),
+      has_task: ask.taskId !== null,
+      agent_kind: agent.kind,
+    },
+  );
   return committed === undefined ? { agent, created } : { agent, created, txid: committed };
 });
 

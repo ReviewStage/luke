@@ -9,7 +9,7 @@ import {
   GlyphSlot,
   OneLine,
   useDisclosurePreviewShown,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { ComponentProps, ComponentPropsWithoutRef, ReactNode } from "react";
 
 /** How an opened card sets what it holds: as running words, or as blocks stacked a group's gap apart. */
@@ -24,12 +24,12 @@ type PlanBodyLayout = (typeof PLAN_BODY_LAYOUT)[keyof typeof PLAN_BODY_LAYOUT];
  * plan.tsx -- AI Elements' Plan: a plan as a card across the column, its title on the header and the plan itself under it once opened.
  *
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
- * to our tokens and drawn as `@luke/ui`'s card fold rather than the
+ * to our tokens and drawn as `@repo/ui`'s card fold rather than the
  * registry's card over a collapsible: the header is the one line a closed card shows
  * and is what opens it, so the registry's separate trigger button is not
  * here. Neither is its streaming title, because the plan a coding agent is
  * handed is finished before the agent starts. Closed by default, as
- * docs/TASKS.md's rule for an agent's transcript asks: the plan is
+ * docs/TASKS.md's "Transcript" section has it: the plan is
  * there to be read, never in the way of the agent's own words. Its title's
  * and body's look is tasks.css's `.plan-card-*` rules.
  */
@@ -91,7 +91,7 @@ export function PlanTitle({ label, previews = false, children }: TaskTitleProps)
       words={label === undefined ? children : `${label} · ${children}`}
     >
       {label === undefined ? null : <span className="text-muted-foreground">{label} · </span>}
-      <span className="font-luke-medium">{children}</span>
+      <span className="font-ui-medium">{children}</span>
     </OneLine>
   );
 }

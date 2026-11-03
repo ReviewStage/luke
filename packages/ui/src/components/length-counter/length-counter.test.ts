@@ -63,7 +63,7 @@ function type(page: HTMLElement, value: string): void {
   });
 }
 
-const counter = (page: HTMLElement) => page.querySelector<HTMLElement>(".luke-length-counter");
+const counter = (page: HTMLElement) => page.querySelector<HTMLElement>(".ui-length-counter");
 
 test("the count stands only once the words reach four fifths of the limit", () => {
   const page = render();

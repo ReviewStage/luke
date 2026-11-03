@@ -25,20 +25,20 @@
  * where its `SKILL.md` stands, which the File tab opens, never its body.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type InstalledSkill,
   listInstalledSkills,
-} from "@luke/database/models/installed-skill-store";
-import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
-import { INSTALLED_SKILL_SCOPE } from "@luke/features/installed-skill-wire";
+} from "@repo/database/models/installed-skill-store";
+import { readTaskHeader, type TaskStoreFailure } from "@repo/database/models/task-store";
+import { INSTALLED_SKILL_SCOPE } from "@repo/features/installed-skill-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_SKILL_BOUNDS,
   TASK_SKILL_SOURCE,
   type TaskSkill,
   type TaskSkillsAnswer,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { readRepositorySkills, skillFilePath } from "../agents/repository-skills.js";
@@ -59,7 +59,7 @@ const INSTALLED_ORDER = [TASK_SKILL_SOURCE.WORKSPACE, TASK_SKILL_SOURCE.PERSONAL
  * The installed skills a developer may choose beside the repository's: the
  * enabled ones a member may name, the workspace's and then their own, each
  * by name, any name an earlier one or any repository skill holds left out,
- * a model-only one included, as many as the list carries.
+ * a model-only one left out, as many as the list carries.
  */
 function mergedSkills(
   repository: readonly TaskSkill[],

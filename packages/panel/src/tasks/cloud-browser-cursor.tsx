@@ -2,15 +2,15 @@
  * cloud-browser-cursor.tsx -- the agent's pointer over a cloud Browser tab's live view: an arrow the panel draws over the page, never in it, gliding to each point the agent clicks or types at.
  *
  * The agent's actions report each point a beat before their input lands
- * (`@luke/features/browser-agent-cdp`'s `BROWSER_CURSOR_BEAT`), in the page's
+ * (`@repo/features/browser-agent-cdp`'s `BROWSER_CURSOR_BEAT`), in the page's
  * CSS pixels of its visible area, and the tab's live read carries the last
  * one (`AgentBrowserTab.cursor`). The arrow stands at that point scaled onto
- * the drawn page, and glides there over `--luke-duration-fast` on
- * `--luke-spring-fast`, about the beat, so it arrives as the action lands. It is
+ * the drawn page, and glides there over `--ui-duration-fast` on
+ * `--ui-spring-fast`, about the beat, so it arrives as the action lands. It is
  * drawn as a compact neutral arrowhead on a soft halo, as Codex draws its
  * agent's, in a lighter grey over a dark page (`onDarkPage`). While
  * the agent is active on the tab it rocks gently about its tip, a loop
- * `--luke-loop-motion` holds still; a click presses it, with a soft ripple at
+ * `--ui-loop-motion` holds still; a click presses it, with a soft ripple at
  * the point, and typing bobs it. It fades once the agent has done nothing
  * for `CLOUD_BROWSER_CURSOR_IDLE`, timed on the renderer's runtime, and back
  * in on its next move. Near the page's right or bottom edge it is mirrored
@@ -25,8 +25,8 @@
  */
 
 import { useAtomValue } from "@effect/atom-react";
-import type { AgentBrowserTabCursor } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
+import type { AgentBrowserTabCursor } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { Clock, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type CSSProperties, useMemo } from "react";
@@ -44,7 +44,7 @@ const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
  */
 const ARROW = "M1 1 11.94 6.29Q13.87 7.22 12.56 7.58L8.64 8.64 7.58 12.56Q7.22 13.87 6.29 11.94Z";
 
-/** How far the arrow reaches from its tip, in CSS pixels: `--luke-space-16`, its drawn size. */
+/** How far the arrow reaches from its tip, in CSS pixels: `--ui-space-16`, its drawn size. */
 const ARROW_REACH = 16;
 
 /** The drawn page's size in CSS pixels of the panel. */

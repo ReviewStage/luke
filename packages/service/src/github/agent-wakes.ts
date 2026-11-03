@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -9,14 +9,14 @@ import {
   listAgentsOnPullRequest,
   type OwnedAgent,
   readAgentPublished,
-} from "@luke/database/models/agent-store";
-import { linkedGitHubUserIds } from "@luke/database/models/github-token-store";
-import type { TaskStoreEffect } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { AGENT_BOUNDS, AGENT_STATUS } from "@luke/features/agent-wire";
-import { GITHUB_READER, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { mentionMarkdownLink } from "@luke/features/link-grammar";
+} from "@repo/database/models/agent-store";
+import { linkedGitHubUserIds } from "@repo/database/models/github-token-store";
+import type { TaskStoreEffect } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { AGENT_BOUNDS, AGENT_STATUS } from "@repo/features/agent-wire";
+import { GITHUB_READER, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { mentionMarkdownLink } from "@repo/features/link-grammar";
 import {
   EXCESS_KEYS,
   GITHUB_LINE_BOUNDS,
@@ -24,10 +24,11 @@ import {
   type GitHubLineMetadata,
   MESSAGE_CHANNEL,
   type UnparsedWireValue,
-} from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { isAgentBranch } from "../agents/coder-host/bounds.js";
 import { agentPullRequestReach } from "../agents/coder-host/published.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
@@ -57,7 +58,7 @@ import {
  * in a thread submit too, so a review's inline comments are never told one
  * by one; a comment on the pull request's conversation (`issue_comment` on
  * a pull request); and a check suite that completed without passing on an
- * agent's `luke/` branch, the one failure the automations leave to the agent
+ * agent's branch, the one failure the automations leave to the agent
  * (`automation-github.ts`). `pull_request_review_comment` is answered and
  * ignored, since its review already told it. Only what the message says is
  * read off a delivery: the repository, the pull request's number and branch,
@@ -69,7 +70,7 @@ import {
  * the agent to read them itself with `gh`. What the reviewer wrote is handed
  * fenced as their own words, to weigh as a reviewer's and never as the
  * developer's, and cut with a note where it would not fit a message. A
- * commit status that failed on a `luke/` branch is told as a failed check
+ * commit status that failed on an agent's branch is told as a failed check
  * is, since the pull request's checks count it beside the check runs.
  *
  * On a public repository anyone on GitHub may write a review or a comment,
@@ -106,11 +107,11 @@ import {
  *
  * That wait is the fourth thing told: every check on the pull request's
  * head finished, told only to an agent at work on it, so the message ends
- * the `sleep` it waits in after a push (`coder-host/sleep.ts`) as any
+ * the wakeup it waits on after a push (`coder-host/instructions.ts`) as any
  * message steered into its turn does, rather than the agent holding its
  * sandbox up to watch CI. A check suite completed (all of its check runs
  * completed, with a conclusion), a check run completed, or a commit status
- * set to anything but pending on a `luke/` branch says the head's checks
+ * set to anything but pending on an agent's branch says the head's checks
  * moved (https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_suite,
  * #check_run and #status); no one delivery says they all finished, since a
  * commit has a suite for each App and statuses beside them, so the head's
@@ -204,9 +205,6 @@ const FAILED_CHECKS_GRACE = Duration.seconds(2);
 
 /** The room the message keeps for saying how many failed checks it left unnamed, commit statuses among them. */
 const UNNAMED_CHECKS_ROOM = 120;
-
-/** The branch prefix a coding agent works on (`coder-host/bounds.ts`), the only branches a failed check is told on. */
-const AGENT_BRANCH_PREFIX = "luke/";
 
 /** What GitHub appends to an App's login, which a failed check is told by and an App's words told apart by. */
 const BOT_LOGIN_SUFFIX = "[bot]";
@@ -385,7 +383,7 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
     action !== WAKE_ACTION.COMPLETED ||
     !FAILED_CONCLUSIONS.has(suite.conclusion ?? "") ||
     branch === null ||
-    !branch.startsWith(AGENT_BRANCH_PREFIX)
+    !isAgentBranch(branch)
   ) {
     return undefined;
   }
@@ -402,14 +400,12 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
   };
 }
 
-/** A commit status that failed on agents' branches, every `luke/` branch at the commit, told as a failed check is: by who set it, on the failed commit's checks. */
+/** A commit status that failed on agents' branches, every agent's branch at the commit, told as a failed check is: by who set it, on the failed commit's checks. */
 function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | undefined {
   const read = readDelivery(StatusDeliverySchema, payload);
   if (Result.isFailure(read) || !FAILED_STATES.has(read.success.state)) return undefined;
   const { repository, sender, sha, branches } = read.success;
-  const agentBranches = branches
-    .map((each) => each.name)
-    .filter((name) => name.startsWith(AGENT_BRANCH_PREFIX));
+  const agentBranches = branches.map((each) => each.name).filter(isAgentBranch);
   if (agentBranches.length === 0) return undefined;
   return {
     kind: AGENT_WAKE.CHECK_FAILED,
@@ -426,8 +422,7 @@ function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | 
 /** The agent branches of those named, the null a detached head or a fork's branch leaves dropped. */
 function agentBranchesOf(named: readonly (string | null | undefined)[]): readonly string[] {
   return named.filter(
-    (branch): branch is string =>
-      typeof branch === "string" && branch.startsWith(AGENT_BRANCH_PREFIX),
+    (branch): branch is string => typeof branch === "string" && isAgentBranch(branch),
   );
 }
 
@@ -832,14 +827,14 @@ export function agentIsWoken(
   wake: AgentWake,
   agent: Pick<Agent, "archivedAt" | "createdAt">,
   turn: AgentLatestTurn | undefined,
-  lukeLogin: string | undefined,
+  appLogin: string | undefined,
   now: number,
 ): boolean {
   if (agent.archivedAt !== null) return false;
   const atWork = AT_WORK.has(agentStatusOf(turn, { createdAt: agent.createdAt, now }));
   if (wake.kind === AGENT_WAKE.CHECKS_COMPLETED) return atWork;
-  const byLuke = lukeLogin !== undefined && wake.by.toLowerCase() === lukeLogin.toLowerCase();
-  if (wake.kind !== AGENT_WAKE.CHECK_FAILED && !byLuke) return true;
+  const byApp = appLogin !== undefined && wake.by.toLowerCase() === appLogin.toLowerCase();
+  if (wake.kind !== AGENT_WAKE.CHECK_FAILED && !byApp) return true;
   const settledAt = turn?.settledAt?.getTime();
   return !atWork && (settledAt === undefined || settledAt < wake.at);
 }
@@ -956,7 +951,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
   eveFor: EveForAccount,
   wake: AgentWake,
   deliveryId: string,
-  lukeLogin: string | undefined,
+  appLogin: string | undefined,
   readChecks: HeadChecksRead = headChecksFor,
 ): Effect.fn.Return<number, never, WakeServices> {
   // A delivery with no id has no key to be told once under, so it tells nobody.
@@ -967,7 +962,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
     const agents = yield* agentsOf(wake);
     const turns = yield* latestTurnsOfReached(agents.map(({ agent }) => agent.conversationId));
     const admitted = agents.filter(({ agent }) =>
-      agentIsWoken(wake, agent, turns.get(agent.conversationId), lukeLogin, now),
+      agentIsWoken(wake, agent, turns.get(agent.conversationId), appLogin, now),
     );
     // Checks finished on a commit an agent has pushed past end none of its waits.
     const woken = checksCompleted

@@ -52,6 +52,15 @@ export const INLINE_EXCEPTION = {
 /** Where the expected external set of every bundle is committed, compared as data. */
 export const FUNCTION_EXTERNALS_FILE = join("server", "function-externals.json");
 
+/**
+ * The modules no function may carry, by their path in the web app: the local
+ * server's own routes, which answer what no deployment may. The demo's
+ * sign-in (`local-sign-in.ts`) mints a session with no sign-in at all, so a
+ * route that came to import it, however many modules deep, would carry it
+ * into a deploy.
+ */
+const LOCAL_ONLY_MODULES = [join("server", "local-sign-in.ts")] as const;
+
 /** The metafile the build writes beside its bundles, for reading what actually shipped. */
 export const FUNCTION_METAFILE = join(FUNCTION_BUNDLE_DIRECTORY, "metafile.json");
 
@@ -308,5 +317,19 @@ export function bundlesReaching(
     Object.entries(metafile.outputs)
       .filter(([, output]) => input in output.inputs)
       .map(([path]) => path),
+  );
+}
+
+/**
+ * Where a bundle reaches a module no function may carry, as `<bundle>
+ * reaches <module>`: empty when none does, which is what a deploy is trusted
+ * on. The deploy's bundle step refuses any, and the externals test fails on
+ * one first.
+ */
+export function localOnlyReach(metafile: Metafile, web: string): readonly string[] {
+  return LOCAL_ONLY_MODULES.flatMap((module) =>
+    [...bundlesReaching(metafile, web, join(web, module))].map(
+      (bundle) => `${bundleKey(web, bundle)} reaches ${module}`,
+    ),
   );
 }

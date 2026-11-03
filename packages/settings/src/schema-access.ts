@@ -1,6 +1,6 @@
-import type { ProductSettingValue } from "@luke/features/analytics";
-import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
-import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
+import type { ProductSettingValue } from "@repo/features/analytics";
+import { isRecord, isWireString, type UnparsedWireValue } from "@repo/wire";
+import type { AppSettingId, DescribedSetting } from "@repo/wire/app-settings";
 import { Schema } from "effect";
 import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";

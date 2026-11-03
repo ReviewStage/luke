@@ -1,19 +1,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
+import { listPages, readPageVersion } from "@repo/database/models/plan-pages";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
 import {
   PAGE_OWNER,
   PAGE_SHOWER,
   type PageOwner,
   type PageShower,
   taskPageOwner,
-} from "@luke/features/page-wire";
-import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@luke/wire";
+} from "@repo/features/page-wire";
+import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@repo/wire";
 import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import {
@@ -52,6 +53,7 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
     (started) => Option.getOrThrow(started).agent.id,
   );
@@ -59,7 +61,7 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const agentId = yield* openAgent(userId, { taskId: task.id });
   return {
@@ -145,7 +147,8 @@ it.layer(getTestDB())("show_page", (it) => {
           page: {
             id: page.id,
             version: 1,
-            mention: `[@Invite funnel](https://vespin.dev/workspace-${task.workspaceId}/plan/${task.taskId}/page/${page.id})`,
+            // The task is its workspace's first, which its link names by its number.
+            mention: `[@Invite funnel](https://vespin.dev/workspace-${task.workspaceId}/task/1/page/${page.id})`,
           },
         });
         assert.deepEqual(second, { id: page.id, version: 2 });

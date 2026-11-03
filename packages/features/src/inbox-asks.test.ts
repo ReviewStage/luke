@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { Result, Schema } from "effect";
 import { test } from "vitest";
 import {

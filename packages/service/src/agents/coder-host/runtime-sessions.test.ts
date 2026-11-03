@@ -1,53 +1,57 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   createAgent,
   readAgent,
   readAgentByKey,
   readAgentRouting,
-} from "@luke/database/models/agent-store";
-import { type DeviceRegistration, registerDevice } from "@luke/database/models/device-store";
-import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
-import { sentLineStands } from "@luke/database/models/message-reads";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
+} from "@repo/database/models/agent-store";
+import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
+import { type DeviceRegistration, registerDevice } from "@repo/database/models/device-store";
+import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
+import { sentLineStands } from "@repo/database/models/message-reads";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
   saveProviderKey,
   setProviderKeyForAgents,
   setProviderKeyStatus,
-} from "@luke/database/models/provider-key-store";
+} from "@repo/database/models/provider-key-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
-} from "@luke/database/models/recorded-session";
-import { createTask } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { messages } from "@luke/database/schemas/storage";
-import { task as taskTable } from "@luke/database/schemas/task";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+} from "@repo/database/models/recorded-session";
+import { createTask } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { messages } from "@repo/database/schemas/storage";
+import { task as taskTable } from "@repo/database/schemas/task";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import {
   AGENT_MACHINE,
   AGENT_PAYER,
   type AgentPayer,
   LOCAL_AGENT_REFUSAL,
-} from "@luke/features/agent-wire";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { DEVICE_SETUP } from "@luke/features/device-agent-wire";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+} from "@repo/features/agent-wire";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
+import {
+  DEVICE_AGENT_LINE_KIND,
+  DEVICE_SETUP,
+  deviceAgentLaunchPayloadSchema,
+} from "@repo/features/device-agent-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/provider-key-wire";
+import { MESSAGE_ROLE } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
+import { ConfigProvider, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
@@ -58,6 +62,11 @@ import {
   type HostedRefusal,
   localAgentRefused,
 } from "../../http/http-effect.js";
+import {
+  LOCAL_DEMO_ENVIRONMENT,
+  LOCAL_DEMO_ON,
+  localDemoFromEnvironment,
+} from "../../local/local-demo.js";
 import { type ModelChoiceRefused, modelCatalogOf } from "../../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
@@ -65,9 +74,9 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
+import { localAgentSessions } from "../../testing/local-agent.js";
 import { PLAN_AGENT_WRITERS, writesToAgent } from "../agent-reach.js";
 import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
-import { deploymentEveForAccounts } from "../deployment-eve.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -94,7 +103,7 @@ import {
 } from "./runtime-sessions.js";
 import { accountModelChoices, startAgent } from "./start.js";
 import { STEER_OUTCOME, steerAgent } from "./steer.js";
-import { type EveReach, eveFor, stoppedTurn } from "./stop.js";
+import { stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -232,7 +241,6 @@ function environment(): Layer.Layer<HostedEnvironment> {
     posthogProjectApiKey: undefined,
     posthogIngestHost: undefined,
     cronSecret: undefined,
-    eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: Redacted.make(RING),
   };
@@ -306,9 +314,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const onEve = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
           const { eve, claudeCode, actingFor, native } = runtimes();
-          const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
-            Effect.provide(native),
-          );
+          const sessions = yield* routedSessions(teammate).pipe(Effect.provide(native));
           const nativeOpened = yield* sessions.open(messageTo(onClaudeCode));
           assert.ok(nativeOpened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
           yield* claimRuntimeSession(
@@ -348,12 +354,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const retired = {
             outcome: EVE_SEND_OUTCOME.FAILED,
             status: 409,
-            runtimeRefusal: RUNTIME_REFUSAL.EVE_RETIRED,
+            runtimeRefusal: RUNTIME_REFUSAL.ENDED,
           };
 
-          const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
-            Effect.provide(native),
-          );
+          const sessions = yield* routedSessions(teammate).pipe(Effect.provide(native));
           assert.deepEqual(yield* sessions.open(messageTo(onEve)), retired);
           assert.deepEqual(
             yield* sessions.send("wrun_eve", messageTo(onEve, "And the emails.")),
@@ -383,77 +387,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "every composition the entry points wrap eve in routes alike, refusing an eve agent with eve hearing nothing and reaching a Claude Code agent's harness: a route's caller over a bearer or a cookie, the deployment for a GitHub wake, an automation, or another agent's message, and the agent doors' and the planner's router",
-      () =>
-        Effect.gen(function* () {
-          const { owner, taskId } = yield* openTeam;
-          const onEve = yield* agentOn(owner, taskId, "eve");
-          const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, native } = runtimes();
-          const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
-            eve: () => eve.sessions,
-            eveAs: () => eve.sessions,
-          };
-          const bearer = new Request("https://luke.test/api/agents", {
-            headers: { authorization: "Bearer luke_fixture" },
-          });
-          const cookie = new Request("https://luke.test/api/agents");
-          const route = yield* sessionsRouter.pipe(Effect.provide(native));
-          const composed: readonly (readonly [
-            string,
-            AgentSessions<typeof EVE_HOST_TURN.TYPED>,
-          ])[] = [
-            [
-              "a route's bearer",
-              yield* eveFor<typeof EVE_HOST_TURN.TYPED>(reach, bearer, owner).pipe(
-                Effect.provide(native),
-              ),
-            ],
-            [
-              "a route's cookie",
-              yield* eveFor<typeof EVE_HOST_TURN.TYPED>(reach, cookie, owner).pipe(
-                Effect.provide(native),
-              ),
-            ],
-            ["the agent doors and the planner", route(eve.sessions, owner)],
-          ];
-          for (const [name, sessions] of composed) {
-            const before = claudeCode.calls.length;
-            const refused = yield* sessions.open(messageTo(onEve));
-            assert.equal(refused.outcome, EVE_SEND_OUTCOME.FAILED, name);
-            assert.deepEqual([eve.calls.length, claudeCode.calls.length], [0, before], name);
-            yield* sessions.open(messageTo(onClaudeCode));
-            assert.deepEqual([eve.calls.length, claudeCode.calls.length], [0, before + 1], name);
-          }
-
-          // The deployment's own eve, over HTTP, as a GitHub wake, an automation, and another agent's message reach it.
-          const posted: string[] = [];
-          const deployment = yield* deploymentEveForAccounts<typeof EVE_HOST_TURN.TYPED>(
-            "https://luke.test",
-            "/eve/coder",
-          ).pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                native,
-                environment(),
-                fakeHttpClientLayer(async (url) => {
-                  posted.push(url);
-                  return Response.json({ sessionId: "wrun_1" }, { status: 202 });
-                }),
-              ),
-            ),
-          );
-          const asOwner = yield* deployment(owner);
-          const before = claudeCode.calls.length;
-          assert.equal((yield* asOwner.open(messageTo(onEve))).outcome, EVE_SEND_OUTCOME.FAILED);
-          assert.equal(posted.length, 0);
-          yield* asOwner.open(messageTo(onClaudeCode));
-          assert.deepEqual([posted.length, claudeCode.calls.length], [0, before + 1]);
-        }),
-    );
-
-    it.effect(
       "a message from the composer or an Inbox answer to an eve agent is refused as ended and reaches nothing, and one to a Claude Code agent reaches its runner under its line's own id",
       () =>
         Effect.gen(function* () {
@@ -473,7 +406,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             new Date(0),
           );
           const writer = storeWriter({ tools: CODER_TOOL_SET });
-          const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
+          const sessions = yield* routedSessions(owner).pipe(Effect.provide(native));
           const line = (clientKey: string) => ({
             text: "Expire invitations after a week.",
             clientKey,
@@ -500,7 +433,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message to an agent on eve is refused as ended whoever paid for it and whatever its starter keeps now, Vespin's key, none recorded, or a key since removed, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches eve and no payer moves",
+      "a message to an agent on eve, its session recorded as every one's was, is refused as ended whoever paid for it, Vespin's key, an API key since removed, or none recorded, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches eve and no payer moves",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -529,9 +462,20 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               }),
               (started) => Option.getOrThrow(started).agent,
             );
-          const lukes = yield* onEveAs(owner, taskId, AGENT_PAYER.LUKE);
+          const appText = yield* onEveAs(owner, taskId, AGENT_PAYER.APP);
           const unrecorded = yield* onEveAs(bare, bareTask.id, undefined);
-          const keyRemoved = yield* onEveAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
+          const eveKeyRemoved = yield* onEveAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
+          for (const [starter, agent] of [
+            [owner, appText],
+            [bare, unrecorded],
+            [bare, eveKeyRemoved],
+          ] as const) {
+            yield* claimRuntimeSession(
+              { userId: starter, conversationId: agent.conversationId },
+              `wrun_${agent.id}`,
+              new Date(0),
+            );
+          }
           const nativeKeyRemoved = yield* onEveAs(
             bare,
             bareTask.id,
@@ -541,18 +485,21 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const { eve } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           const send = (starter: string, agent: Agent) =>
-            Effect.result(
-              steerAgent(eve.sessions, writer, starter, agent, {
-                text: "Expire invitations after a week.",
-                clientKey: randomUUID(),
-                sender: { kind: MESSAGE_SENDER.MEMBER, userId: starter },
-              }),
-            );
+            Effect.gen(function* () {
+              const sessions = yield* routedSessions(starter);
+              return yield* Effect.result(
+                steerAgent(sessions, writer, starter, agent, {
+                  text: "Expire invitations after a week.",
+                  clientKey: randomUUID(),
+                  sender: { kind: MESSAGE_SENDER.MEMBER, userId: starter },
+                }),
+              );
+            });
 
           for (const [name, starter, agent] of [
-            ["Vespin's key paid, an API key saved since", owner, lukes],
+            ["Vespin's key paid, an API key saved since", owner, appText],
             ["no payer recorded, no API key", bare, unrecorded],
-            ["its API key removed", bare, keyRemoved],
+            ["its API key removed", bare, eveKeyRemoved],
             ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
           ] as const) {
             const sent = yield* send(starter, agent);
@@ -571,8 +518,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 agent === nativeKeyRemoved ? "claude_code" : "eve",
                 agent === unrecorded
                   ? null
-                  : agent === lukes
-                    ? AGENT_PAYER.LUKE
+                  : agent === appText
+                    ? AGENT_PAYER.APP
                     : AGENT_PAYER.API_KEY,
               ],
               name,
@@ -583,7 +530,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a rewind ends a Claude Code agent's runner before it cuts and cuts nothing where the runner could not be ended, and an eve agent's is refused as ended, its transcript kept whole and its session untouched",
+      "a rewind ends a Claude Code agent's runner before it cuts and cuts nothing where the runner could not be ended, and cuts an eve agent's, whose session ended, with nothing to stop and nothing asked of eve",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -591,7 +538,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
           const unhalted = yield* agentOn(owner, taskId, "claude_code");
           const { eve, claudeCode, native } = runtimes();
-          const writer = storeWriter({ tools: CODER_TOOL_SET });
           const nativeSession = `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`;
           const lines = new Map<string, string>();
           for (const [agent, sessionId] of [
@@ -613,13 +559,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               placedAt: new Date(0),
             });
           }
-          const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
-            eveAs: () => eve.sessions,
-          };
-          const request = new Request("https://luke.test/api/agents/rewind");
           const rewind = (agent: Agent) =>
-            rewoundAgent(reach, writer, request, owner, agent, lines.get(agent.id) ?? "").pipe(
+            rewoundAgent(owner, agent, lines.get(agent.id) ?? "").pipe(
               Effect.provide(native),
               Effect.result,
             );
@@ -634,14 +575,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
 
           // A rewind to a line that is not there is refused before anything is stopped.
-          const missing = yield* rewoundAgent(
-            reach,
-            writer,
-            request,
-            owner,
-            onClaudeCode,
-            randomUUID(),
-          ).pipe(Effect.provide(native), Effect.result);
+          const missing = yield* rewoundAgent(owner, onClaudeCode, randomUUID()).pipe(
+            Effect.provide(native),
+            Effect.result,
+          );
           assert.deepEqual(missing, Result.fail(HOSTED_REFUSAL.NOT_FOUND));
           assert.deepEqual(claudeCode.calls, []);
 
@@ -650,7 +587,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           claudeCode.answers.halts = false;
           const refused = yield* rewind(unhalted);
 
-          assert.deepEqual(eveRewound, Result.fail(HOSTED_REFUSAL.AGENT_RETIRED));
+          assert.ok(Result.isSuccess(eveRewound));
           assert.ok(Result.isSuccess(nativeRewound));
           assert.deepEqual(refused, Result.fail(HOSTED_REFUSAL.UNAVAILABLE));
           // Each is stopped before the cut and again after it, and a runner that could not be ended is not cut.
@@ -662,7 +599,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ]);
           assert.deepEqual(
             [yield* standing(onEve), yield* standing(onClaudeCode), yield* standing(unhalted)],
-            [1, 0, 1],
+            [0, 0, 1],
           );
         }),
     );
@@ -699,16 +636,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               origin: TURN_ORIGIN.TYPED,
             });
           }
-          const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
-            eveAs: () => eve.sessions,
-          };
-          const request = new Request("https://luke.test/api/agents/stop");
-
-          yield* stoppedTurn(reach, writer, request, owner, onEve).pipe(Effect.provide(native));
-          yield* stoppedTurn(reach, writer, request, owner, onClaudeCode).pipe(
-            Effect.provide(native),
-          );
+          yield* stoppedTurn(writer, owner, onEve).pipe(Effect.provide(native));
+          yield* stoppedTurn(writer, owner, onClaudeCode).pipe(Effect.provide(native));
 
           assert.deepEqual(eve.calls, []);
           assert.deepEqual(claudeCode.calls, [`cancel:${nativeSession}:${nativeTurn}`]);
@@ -722,16 +651,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const { owner, teammate, taskId } = yield* openTeam;
           const onEve = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, actingFor, native } = runtimes();
+          const { claudeCode, actingFor, native } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           yield* claimRuntimeSession(
             { userId: owner, conversationId: onClaudeCode.conversationId },
             `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
             new Date(0),
           );
-          const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
-            Effect.provide(native),
-          );
+          const sessions = yield* routedSessions(teammate).pipe(Effect.provide(native));
           const line = {
             text: "Also the emails.",
             clientKey: "key-teammate",
@@ -745,18 +672,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           assert.deepEqual(heard(claudeCode), ["send"]);
           assert.deepEqual(actingFor, [owner]);
-          const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
-            eveAs: () => eve.sessions,
-          };
           // And a teammate's Stop is admitted: the agent runs no turn, so it stops nothing.
-          yield* stoppedTurn(
-            reach,
-            writer,
-            new Request("https://luke.test/"),
-            teammate,
-            onClaudeCode,
-          ).pipe(Effect.provide(native));
+          yield* stoppedTurn(writer, teammate, onClaudeCode).pipe(Effect.provide(native));
 
           assert.equal(
             yield* steerAgent(sessions, writer, owner, onClaudeCode, {
@@ -813,9 +730,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const onCodex = yield* agentOn(owner, taskId, "codex");
           const { eve, claudeCode, codex, actingFor, native } = runtimes();
 
-          const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
-            Effect.provide(native),
-          );
+          const sessions = yield* routedSessions(teammate).pipe(Effect.provide(native));
           const session = yield* everyCall(sessions, onCodex);
           assert.ok(session.startsWith(NATIVE_SESSION_PREFIX.codex));
           assert.deepEqual(heard(codex), ["open", "send", "cancel", "reset"]);
@@ -830,7 +745,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           // The agent doors' and the planner's router.
           const route = yield* sessionsRouter.pipe(Effect.provide(native));
-          yield* route(eve.sessions, owner).open(messageTo(onCodex));
+          yield* route(owner).open(messageTo(onCodex));
           assert.deepEqual(heard(codex), ["open", "send", "cancel", "reset", "open"]);
 
           // A message from the composer, under its line's own id.
@@ -852,13 +767,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             { userId: owner, conversationId: onCodex.conversationId },
             { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
-          const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
-            eveAs: () => eve.sessions,
-          };
-          yield* stoppedTurn(reach, writer, new Request("https://luke.test/"), owner, onCodex).pipe(
-            Effect.provide(native),
-          );
+          yield* stoppedTurn(writer, owner, onCodex).pipe(Effect.provide(native));
           assert.ok(
             codex.calls.at(-1)?.startsWith("cancel:") && codex.calls.at(-1)?.endsWith(turnId),
           );
@@ -879,7 +788,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             `${NATIVE_SESSION_PREFIX.codex}${randomUUID()}`,
             new Date(0),
           );
-          const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
+          const sessions = yield* routedSessions(owner).pipe(Effect.provide(native));
           const send = Effect.result(
             steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onCodex, {
               text: "Also the emails.",
@@ -920,7 +829,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
             new Date(0),
           );
-          const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
+          const sessions = yield* routedSessions(owner).pipe(Effect.provide(native));
           const send = Effect.result(
             steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onClaudeCode, {
               text: "Also the emails.",
@@ -961,7 +870,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
             new Date(0),
           );
-          const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
+          const sessions = yield* routedSessions(owner).pipe(Effect.provide(native));
           const send = Effect.result(
             steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onClaudeCode, {
               text: "Also the emails.",
@@ -997,7 +906,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
             new Date(0),
           );
-          const sessions = yield* routedSessions(eve.sessions, owner);
+          const sessions = yield* routedSessions(owner);
 
           const sent = yield* Effect.result(
             steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onClaudeCode, {
@@ -1245,9 +1154,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             const ask = startIn(workspaceId, each.model);
             const started = yield* Effect.result(
-              startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
-                Effect.provide(layers),
-              ),
+              startAgent(routedSessions(owner), owner, ask).pipe(Effect.provide(layers)),
             );
 
             if (each.on !== "claude_code") {
@@ -1392,10 +1299,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             });
             if ("away" in each)
               yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
-            const { eve, native } = runtimes();
+            const { native } = runtimes();
             const ask = { ...startOn(task.id, each.model) };
             const started = yield* Effect.result(
-              startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+              startAgent(routedSessions(owner), owner, ask).pipe(
                 Effect.provide(
                   Layer.mergeAll(
                     githubReaching(INSTALLATIONS).layer,
@@ -1429,6 +1336,104 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
+      "a Start on a task with no repository runs only in the local demo, on its starter's host, whose launch line names no repository; with no flag, with the flag beside a Vercel variable or a database off this machine, and in the cloud in the demo, it is refused as naming no repository, as ever, and leaves no agent",
+      () =>
+        Effect.gen(function* () {
+          const { owner, workspaceId } = yield* openStarter(false);
+          const deviceId = randomUUID();
+          yield* registerDevice(owner, {
+            id: deviceId,
+            name: "Studio",
+            ...DEVICE_LAYOUT,
+            signedIn: { claudeCode: true },
+          });
+          const onHost = yield* createTask(owner, {
+            organizationId: workspaceId,
+            name: "Invitations",
+            repository: null,
+            runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId },
+          });
+          const inCloud = yield* createTask(owner, {
+            organizationId: workspaceId,
+            name: "Invitations",
+            repository: null,
+          });
+          const ON_LOOPBACK = "postgres://luke:luke@127.0.0.1:54329/luke";
+          const DEMO = { [LOCAL_DEMO_ENVIRONMENT.FLAG]: LOCAL_DEMO_ON, DATABASE_URL: ON_LOOPBACK };
+          const cases = [
+            { name: "no flag", variables: { DATABASE_URL: ON_LOOPBACK }, task: onHost },
+            {
+              name: "beside VERCEL_ENV",
+              variables: { ...DEMO, VERCEL_ENV: "preview" },
+              task: onHost,
+            },
+            {
+              name: "over a database off this machine",
+              variables: { ...DEMO, DATABASE_URL: "postgres://luke:luke@ep-demo.example.com/luke" },
+              task: onHost,
+            },
+            { name: "in the cloud", variables: DEMO, task: inCloud },
+            { name: "on the host", variables: DEMO, task: onHost },
+          ];
+          // The host's own Claude Code sessions, which queue a launch line for its Mac, over the test's store.
+          const store = yield* Effect.context<DatabaseServices>();
+          const native = Layer.succeed(NativeAgentSessions, {
+            sessions: (_runtime, account) =>
+              Option.some(
+                localAgentSessions(account).pipe(
+                  Effect.provide(environment()),
+                  Effect.provideContext(store),
+                ),
+              ),
+          });
+          for (const each of cases) {
+            const { eve } = runtimes();
+            const ask = startOn(each.task.id, "anthropic/claude-opus-5.5");
+            const started = yield* Effect.result(
+              startAgent(routedSessions(owner), owner, ask).pipe(
+                Effect.provide(
+                  Layer.mergeAll(
+                    CATALOG,
+                    native,
+                    localDemoFromEnvironment.pipe(
+                      Layer.provide(
+                        ConfigProvider.layer(ConfigProvider.fromEnvRecord(each.variables)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            const made = yield* readAgentByKey(owner, ask.idempotencyKey);
+            const launches = (yield* deviceAgentLinesWaiting(owner, deviceId)).filter(
+              (line) => line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH,
+            );
+
+            if (each.name !== "on the host") {
+              assert.deepEqual(started, Result.fail(HOSTED_REFUSAL.NO_REPOSITORY), each.name);
+              assert.ok(Option.isNone(made), each.name);
+              assert.deepEqual(launches, [], each.name);
+              continue;
+            }
+            assert.ok(Result.isSuccess(started), each.name);
+            assert.deepEqual(
+              Option.map(made, (agent) => [agent.machine, agent.deviceId, agent.repository]),
+              Option.some([AGENT_MACHINE.DEVICE, deviceId, null]),
+            );
+            assert.deepEqual(heard(eve), [], "nothing reaches eve");
+            // The host makes the launch's folder empty, since the line names no repository to check out.
+            const [launch] = launches;
+            assert.equal(launches.length, 1);
+            assert.ok(launch !== undefined);
+            const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(
+              launch.payload,
+            );
+            assert.deepEqual([payload.repository, payload.identity], [null, undefined]);
+          }
+        }),
+    );
+
+    it.effect(
       "a Start runs where the agent it is started from runs, else where its task runs, else in the cloud; a teammate's Start on a task that runs on another member's device is refused by name with the device and its owner, and a continue from the owner's agent there is refused, never sent to the cloud; a device away is refused likewise",
       () =>
         Effect.gen(function* () {
@@ -1450,7 +1455,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             repository: `${RELAY.owner}/${RELAY.name}`,
             runsOn: onDevice,
           });
-          const { eve, native } = runtimes();
+          const { native } = runtimes();
           const layers = Layer.mergeAll(
             githubReaching(INSTALLATIONS).layer,
             CATALOG,
@@ -1459,9 +1464,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           const start = (userId: string, ask: Parameters<typeof startAgent>[2]) =>
             Effect.result(
-              startAgent(routedSessions(eve.sessions, userId), userId, ask).pipe(
-                Effect.provide(layers),
-              ),
+              startAgent(routedSessions(userId), userId, ask).pipe(Effect.provide(layers)),
             );
           const whereRuns = (
             started: { readonly agent: { readonly id: string } },
@@ -1674,9 +1677,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ] as const;
           for (const each of cases) {
             const { owner, workspaceId } = yield* openStarter(each.token, each.chatGpt);
-            const { eve, claudeCode, codex, native } = runtimes();
+            const { claudeCode, codex, native } = runtimes();
             const started = yield* startAgent(
-              routedSessions(eve.sessions, owner),
+              routedSessions(owner),
               owner,
               startIn(workspaceId, each.model),
             ).pipe(Effect.provide(layers(native)));
@@ -1692,18 +1695,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           // An automation's run says its prompt as the automation, never as its creator.
           const automated = yield* openStarter(true);
           const byAutomation = runtimes();
-          const run = yield* startAgent(
-            routedSessions(byAutomation.eve.sessions, automated.owner),
-            automated.owner,
-            {
-              ...startIn(automated.workspaceId, "anthropic/claude-opus-5.5"),
-              automationOrigin: {
-                name: "Nightly checks",
-                firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
-                prompt: "Fix the flaky test.",
-              },
+          const run = yield* startAgent(routedSessions(automated.owner), automated.owner, {
+            ...startIn(automated.workspaceId, "anthropic/claude-opus-5.5"),
+            automationOrigin: {
+              name: "Nightly checks",
+              firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+              prompt: "Fix the flaky test.",
             },
-          ).pipe(Effect.provide(layers(byAutomation.native)));
+          }).pipe(Effect.provide(layers(byAutomation.native)));
           const lineId = byAutomation.claudeCode.messages[0]?.lineId ?? "";
           const db = yield* Database;
           const [said] = yield* db
@@ -1726,11 +1725,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const byAgent = yield* openStarter(true);
           const agentRuns = runtimes();
           const starting = yield* startAgent(
-            routedSessions(agentRuns.eve.sessions, byAgent.owner),
+            routedSessions(byAgent.owner),
             byAgent.owner,
             startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
           ).pipe(Effect.provide(layers(agentRuns.native)));
-          yield* startAgent(routedSessions(agentRuns.eve.sessions, byAgent.owner), byAgent.owner, {
+          yield* startAgent(routedSessions(byAgent.owner), byAgent.owner, {
             ...startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
             startedBy: starting.agent,
           }).pipe(Effect.provide(layers(agentRuns.native)));
@@ -1756,7 +1755,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
           const onEve = runtimes();
           yield* startAgent(
-            routedSessions(onEve.eve.sessions, keyed.owner),
+            routedSessions(keyed.owner),
             keyed.owner,
             startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"),
           ).pipe(Effect.provide(layers(onEve.native)));
@@ -1778,7 +1777,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const planned = yield* openStarter(true);
           const onPlan = runtimes();
           const started = yield* startAgent(
-            routedSessions(onPlan.eve.sessions, planned.owner),
+            routedSessions(planned.owner),
             planned.owner,
             callIn(planned.workspaceId),
           ).pipe(Effect.provide(layers(onPlan.native)));
@@ -1796,7 +1795,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
           const onKey = runtimes();
           const onEve = yield* startAgent(
-            routedSessions(onKey.eve.sessions, keyed.owner),
+            routedSessions(keyed.owner),
             keyed.owner,
             callIn(keyed.workspaceId),
           ).pipe(Effect.provide(layers(onKey.native)));
@@ -1812,11 +1811,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const none = yield* openStarter(false);
           const refusedOn = runtimes();
           const refused = yield* Effect.result(
-            startAgent(
-              routedSessions(refusedOn.eve.sessions, none.owner),
-              none.owner,
-              callIn(none.workspaceId),
-            ).pipe(Effect.provide(layers(refusedOn.native))),
+            startAgent(routedSessions(none.owner), none.owner, callIn(none.workspaceId)).pipe(
+              Effect.provide(layers(refusedOn.native)),
+            ),
           );
           assertCredentialMissing(refused, MODEL_PROVIDER.ANTHROPIC, "no credential");
         }),
@@ -1847,7 +1844,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             native,
           );
           const started = yield* startAgent(
-            routedSessions(eve.sessions, planned.owner),
+            routedSessions(planned.owner),
             planned.owner,
             yield* blankIn(planned.owner, planned.workspaceId),
           ).pipe(Effect.provide(layers));
@@ -1863,7 +1860,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const none = yield* openStarter(false);
           const refused = yield* Effect.result(
             startAgent(
-              routedSessions(eve.sessions, none.owner),
+              routedSessions(none.owner),
               none.owner,
               yield* blankIn(none.owner, none.workspaceId),
             ).pipe(Effect.provide(layers)),
@@ -1931,9 +1928,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             const ask = startIn(workspaceId, each.model);
             const started = yield* Effect.result(
-              startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
-                Effect.provide(layers),
-              ),
+              startAgent(routedSessions(owner), owner, ask).pipe(Effect.provide(layers)),
             );
 
             if (each.on !== "codex") {
@@ -1976,7 +1971,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const ask = startIn(workspaceId, "openai/gpt-5.5");
 
           const refused = yield* Effect.result(
-            startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+            startAgent(routedSessions(owner), owner, ask).pipe(
               Effect.provide(
                 Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native),
               ),
@@ -2079,11 +2074,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               native,
             );
             const result = yield* Effect.result(
-              startAgent(
-                routedSessions(eve.sessions, owner),
-                owner,
-                startIn(workspaceId, each.model),
-              ).pipe(Effect.provide(layers)),
+              startAgent(routedSessions(owner), owner, startIn(workspaceId, each.model)).pipe(
+                Effect.provide(layers),
+              ),
             );
             if (each.recorded === "refused") {
               assertCredentialMissing(result, providerOfCase(each.model), each.name);
@@ -2156,11 +2149,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               native,
             );
             const result = yield* Effect.result(
-              startAgent(
-                routedSessions(eve.sessions, owner),
-                owner,
-                startIn(workspaceId, each.model),
-              ).pipe(Effect.provide(layers)),
+              startAgent(routedSessions(owner), owner, startIn(workspaceId, each.model)).pipe(
+                Effect.provide(layers),
+              ),
             );
             if (each.recorded === "refused") {
               assertCredentialMissing(result, providerOfCase(each.model), each.name);
@@ -2208,7 +2199,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const gpt = choices.offered.filter((model) => model.provider === MODEL_PROVIDER.OPENAI);
             const started = yield* Effect.result(
               startAgent(
-                routedSessions(eve.sessions, owner),
+                routedSessions(owner),
                 owner,
                 startIn(workspaceId, "openai/gpt-5.5-fast"),
               ).pipe(Effect.provide(layers)),
@@ -2257,9 +2248,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const ask = startIn(workspaceId, "anthropic/claude-opus-5.5");
 
           const preparing = yield* Effect.result(
-            startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
-              Effect.provide(layers),
-            ),
+            startAgent(routedSessions(owner), owner, ask).pipe(Effect.provide(layers)),
           );
           assert.ok(Result.isFailure(preparing) && "error" in preparing.failure);
           assert.equal(preparing.failure.error, HOSTED_REFUSAL.AGENT_IMAGE_PREPARING.error);
@@ -2267,7 +2256,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           yield* TestClock.adjust("1 minute");
           claudeCode.answers.open = EVE_SEND_OUTCOME.ACCEPTED;
-          const started = yield* startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+          const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
             Effect.provide(layers),
           );
           assert.equal(started.created, true);

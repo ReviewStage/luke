@@ -1,6 +1,6 @@
-import { ADMIN_REFUSED, type AdminQuery, type AdminReadProcedure } from "@luke/features/admin-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { STATUS_TONE } from "@luke/ui";
+import { ADMIN_REFUSED, type AdminQuery, type AdminReadProcedure } from "@repo/features/admin-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { STATUS_TONE } from "@repo/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { showToast, TOAST_HOLD } from "../toast.js";
 import { AdminReadRefused, useAdminDoors } from "./admin-doors.js";

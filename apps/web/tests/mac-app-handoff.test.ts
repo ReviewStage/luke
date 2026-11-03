@@ -5,7 +5,7 @@ import {
   LINK_PLATFORM,
   type LinkOpen,
   type LinkPlatform,
-} from "@luke/features/link-open";
+} from "@repo/features/link-open";
 import { Effect } from "effect";
 import { handOffToMacApp } from "../src/app/mac-app-handoff";
 import { type FakeService, fakeService } from "./support/fake-service";
@@ -50,7 +50,7 @@ it.effect("an account that chose the Mac app hands a plan's link to the app, on 
     const opened = yield* loaded(choosing(LINK_OPEN.MAC_APP), TASK_ADDRESS, LINK_PLATFORM.MAC);
     assert.equal(opened.length, 1);
     assert.match(opened[0] ?? "", /^vespin:/u);
-    assert.match(opened[0] ?? "", new RegExp(`/acme/plan/${TASK_ID}$`, "u"));
+    assert.match(opened[0] ?? "", new RegExp(`/acme/task/${TASK_ID}$`, "u"));
   }),
 );
 

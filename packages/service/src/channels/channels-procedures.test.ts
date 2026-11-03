@@ -1,18 +1,26 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
 import {
   archiveChannel,
   createChannel,
   ensureGeneralChannel,
   listChannelLooks,
-} from "@luke/database/models/channel-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/database/models/channel-store";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import type { WireBoundaryInput } from "@repo/wire";
 import { type Context, Effect, Option, Result } from "effect";
+import {
+  recordingProductAnalytics,
+  SERVER_CHANNEL_ACTION,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { postInboxThread } from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { channelsProcedures } from "./channels-procedures.js";
@@ -27,21 +35,26 @@ import { channelsProcedures } from "./channels-procedures.js";
  * Synthetic accounts, bearers, workspaces, and channels throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
+
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
 
 /** An account behind a bearer of its own name. */
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
 /** The resource's answer to one request by the account the bearer names: its status and its JSON. */
 const ask = (userId: string, path: string, body?: WireBoundaryInput) =>
   Effect.gen(function* () {
-    // SAFETY: the procedures yield the database and the clock alone, which the test's own context holds.
-    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>().pipe(
+      Effect.provide(ANALYTICS.layer),
+    )) as Context.Context<WebServices>;
     const handle = hostedFetch({
       channels: channelsProcedures({
         resolveUserId: (incoming) =>
@@ -88,6 +101,74 @@ it.layer(getTestDB())("the channels route", (it) => {
         assert.deepEqual([crossed, foreign, unknown], [NOT_FOUND, NOT_FOUND, NOT_FOUND]);
         assert.deepEqual(yield* listChannelLooks(dean, beta), []);
         assert.deepEqual(own, { status: HOSTED_HTTP_STATUS.OK, body: { threads: [] } });
+      }),
+  );
+
+  it.effect(
+    "a member's make, edit, archive, and move of a channel's thread are counted under them in the workspace, a refused one is not",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const task = yield* startTask(dean, { name: "Teammate invitations" });
+        const acme = task.workspaceId;
+        const started = yield* createAgent(dean, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        assert.ok(Option.isSome(started));
+        const thread = Result.getOrThrow(
+          yield* postInboxThread(
+            { userId: dean, taskId: task.id, agentId: started.value.agent.id },
+            { key: "heads-up", title: "Main is protected now", body: "Pushes need a review." },
+          ),
+        );
+        const infra = Result.getOrThrow(
+          yield* createChannel(
+            dean,
+            acme,
+            { name: "web", purpose: "Web.", project: false },
+            new Date(1),
+          ),
+        );
+        const madeId = randomUUID();
+        const made = yield* ask(dean, "/api/channels", {
+          workspaceId: acme,
+          name: "infra",
+          purpose: "CI and releases.",
+          id: madeId,
+        });
+        assert.equal(made.status, HOSTED_HTTP_STATUS.CREATED);
+
+        yield* ask(dean, "/api/channels/edit", {
+          workspaceId: acme,
+          channelId: madeId,
+          purpose: "CI, releases, and deploys.",
+        });
+        yield* ask(dean, "/api/channels/move", { threadId: thread.id, channelId: infra.id });
+        yield* ask(dean, "/api/channels/archive", { workspaceId: acme, channelId: madeId });
+        const refused = yield* ask(dean, "/api/channels/archive", {
+          workspaceId: acme,
+          channelId: randomUUID(),
+        });
+
+        assert.deepEqual(refused, NOT_FOUND);
+        assert.deepEqual(
+          ANALYTICS.recorded
+            .filter((event) => event.userId === dean && event.name === SERVER_EVENT.CHANNEL_CHANGE)
+            .map((event) => ({ workspaceId: event.workspaceId, ...event.properties })),
+          [
+            { workspaceId: acme, action: SERVER_CHANNEL_ACTION.CREATE },
+            { workspaceId: acme, action: SERVER_CHANNEL_ACTION.EDIT },
+            { workspaceId: acme, action: SERVER_CHANNEL_ACTION.THREAD_MOVE },
+            { workspaceId: acme, action: SERVER_CHANNEL_ACTION.ARCHIVE },
+          ],
+        );
       }),
   );
 

@@ -1,20 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   closeBrowserTab,
   handBackBrowserTab,
   pointBrowserTab,
   takeOverBrowserTab,
   upsertBrowserTab,
-} from "@luke/database/models/agent-browser-tabs";
-import { createAgent, renameAgent } from "@luke/database/models/agent-store";
-import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
-import { readGitHubTokenRow, removeGitHubToken } from "@luke/database/models/github-token-store";
-import { writePage } from "@luke/database/models/plan-pages";
-import { user } from "@luke/database/schemas/auth";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+} from "@repo/database/models/agent-browser-tabs";
+import { createAgent, renameAgent } from "@repo/database/models/agent-store";
+import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
+import { readGitHubTokenRow, removeGitHubToken } from "@repo/database/models/github-token-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   expectTopicsFire,
   getTestDB,
@@ -22,10 +23,10 @@ import {
   leaveWorkspace,
   openTaskAgent,
   startTask,
-} from "@luke/database/testing";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
-import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
+} from "@repo/database/testing";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { saveNotes } from "../tasks/plan-notes.js";
@@ -57,7 +58,7 @@ import {
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -102,7 +103,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
             owner,
             taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
           onTask,
           [taskRecordLive.topics(params), taskPagesLive.topics(params)],
@@ -154,6 +155,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
           planSnapshot: null,
           prompt: "Try the checkout.",
           repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agent = Option.getOrThrow(started).agent;
         const params = { userId: owner, taskId: task.id };

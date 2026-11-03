@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AccountsTableRow } from "@luke/ui/accounts-sort";
+import type { AccountsTableRow } from "@repo/ui/accounts-sort";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

@@ -19,13 +19,13 @@
  * again whenever nobody is using it.
  */
 
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
   type TerminalSummary,
   type TerminalsAnswer,
-} from "@luke/features/terminal-wire";
+} from "@repo/features/terminal-wire";
 import { Context, Effect, Layer, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { GitHubTokenAccess } from "../../github/github-app.js";

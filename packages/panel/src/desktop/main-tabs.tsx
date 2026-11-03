@@ -4,10 +4,10 @@ import {
   type AgentAttachment,
   type AgentStatus,
   type AgentSummary,
-} from "@luke/features/agent-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
-import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/agent-wire";
+import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
+import { TASK_BOUNDS, type TaskSummary } from "@repo/features/task-wire";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   FILL_ELEMENT,
   Fill,
@@ -17,9 +17,9 @@ import {
   STATUS_TONE,
   TABS_GROUND,
   VisuallyHidden,
-} from "@luke/ui";
-import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
-import type { InlineRename } from "@luke/ui/use-inline-rename";
+} from "@repo/ui";
+import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
+import type { InlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useRef } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
-import { Dialog } from "@luke/ui";
+import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
+import { Dialog } from "@repo/ui";
 import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

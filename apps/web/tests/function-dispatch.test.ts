@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import type { Route } from "@luke/service/route";
+import type { Route } from "@repo/service/route";
 import { test } from "vitest";
 import { hostedProcedureRoutes, type ProcedureRoute } from "../server/api-callers";
 import { DISPATCH_QUERY, dispatchRoutes, ORPC_ROUTE_KEY } from "../server/function-dispatch";
@@ -24,7 +24,7 @@ test("the route key picks the member and the request is restored to the route's 
   const dispatcher = dispatchRoutes(new Map([["plans/plan", task.route]]));
   const response = await dispatcher.fetch(
     new Request(
-      `https://luke.test/api/default.js?${DISPATCH_QUERY.ROUTE}=plans/plan&id=t1&wait=1`,
+      `https://app.test/api/default.js?${DISPATCH_QUERY.ROUTE}=plans/plan&id=t1&wait=1`,
       { method: "POST", body: "hello", headers: { "content-type": "text/plain" } },
     ),
   );
@@ -59,16 +59,16 @@ test("a request with no route key, the oRPC key, or a key the function does not 
     `${DISPATCH_QUERY.ROUTE}=plans/revisions&${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
     `${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
   ]) {
-    await dispatcher.fetch(new Request(`https://luke.test/api/default.js?${query}`));
+    await dispatcher.fetch(new Request(`https://app.test/api/default.js?${query}`));
   }
-  await dispatcher.fetch(new Request("https://luke.test/api/default.js?wait=1"));
+  await dispatcher.fetch(new Request("https://app.test/api/default.js?wait=1"));
   assert.deepEqual(
     orpc.requests.map((request) => request.url),
     [
-      "https://luke.test/api/plans/p1/revisions?wait=1",
-      "https://luke.test/api/plans/p1/revisions?wait=1",
-      "https://luke.test/api/plans/p1/revisions?wait=1",
-      "https://luke.test/api/default.js?wait=1",
+      "https://app.test/api/plans/p1/revisions?wait=1",
+      "https://app.test/api/plans/p1/revisions?wait=1",
+      "https://app.test/api/plans/p1/revisions?wait=1",
+      "https://app.test/api/default.js?wait=1",
     ],
   );
   assert.equal(exception.requests.length, 0);
@@ -78,7 +78,7 @@ test("a function that holds no oRPC route answers a key it does not hold 404 wit
   const sweep = recording();
   const dispatcher = dispatchRoutes(new Map([["maintenance/sweep", sweep.route]]));
   const response = await dispatcher.fetch(
-    new Request(`https://luke.test/api/maintenance-sweep.js?${DISPATCH_QUERY.ROUTE}=nope`),
+    new Request(`https://app.test/api/maintenance-sweep.js?${DISPATCH_QUERY.ROUTE}=nope`),
   );
   assert.equal(response.status, 404);
   assert.equal(await response.text(), "");
@@ -106,7 +106,7 @@ async function landingOnDefault() {
   return {
     async land(path: string) {
       reached.length = 0;
-      await dispatched(new Request(`https://luke.test${path}`), routes);
+      await dispatched(new Request(`https://app.test${path}`), routes);
       const [only] = reached;
       assert.ok(only, path);
       return { key: only.key, path: only.url.pathname, query: [...only.url.searchParams] };

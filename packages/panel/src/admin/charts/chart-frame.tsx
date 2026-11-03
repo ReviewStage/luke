@@ -9,8 +9,8 @@
  * set. The plot itself stays the chart's own.
  */
 
-import type { AdminTrend } from "@luke/features/admin-answer-wire";
-import { formatCount } from "@luke/features/number-format";
+import type { AdminTrend } from "@repo/features/admin-answer-wire";
+import { formatCount } from "@repo/features/number-format";
 import {
   ALIGN,
   Card,
@@ -24,8 +24,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { formatTrendMove, TREND_DIRECTION, trendDirection } from "@luke/ui/admin-format";
+} from "@repo/ui";
+import { formatTrendMove, TREND_DIRECTION, trendDirection } from "@repo/ui/admin-format";
 import { CARD_GAP } from "./stat-card.js";
 
 /** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */
@@ -36,13 +36,13 @@ const TREND_TONE = {
 } as const;
 
 /** The room an empty window's line stands in, about a short plot's height. */
-const CHART_EMPTY = "py-(--luke-space-24) text-center";
+const CHART_EMPTY = "py-(--ui-space-24) text-center";
 
 /** A legend's entries, wrapping a field's gap apart, and close under each other where they wrap. */
-export const LEGEND = "flex flex-wrap gap-x-(--luke-field-gap) gap-y-(--luke-space-4)";
+export const LEGEND = "flex flex-wrap gap-x-(--ui-field-gap) gap-y-(--ui-space-4)";
 
 /** A legend entry's swatch a short step from its name, closer than a glyph to its words, since the swatch is smaller. */
-export const LEGEND_ENTRY = "inline-flex items-center gap-(--luke-space-6)";
+export const LEGEND_ENTRY = "inline-flex items-center gap-(--ui-space-6)";
 
 /** A heading bone's width, about the words it stands for. */
 const SKELETON_TITLE_WIDTH = "144px";

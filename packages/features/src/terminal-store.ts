@@ -1,4 +1,4 @@
-import type { TerminalsAnswer } from "@luke/features/terminal-wire";
+import type { TerminalsAnswer } from "@repo/features/terminal-wire";
 import * as Atom from "effect/reactivity/Atom";
 
 /**

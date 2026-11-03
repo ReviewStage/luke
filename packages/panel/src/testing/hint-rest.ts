@@ -1,5 +1,5 @@
 /**
- * hint-rest.ts -- the pointer or the keyboard resting on a control past the window's hint wait (`@luke/ui`'s `useHintRest`), on a faked clock, so a test reads the pill or card it hangs.
+ * hint-rest.ts -- the pointer or the keyboard resting on a control past the window's hint wait (`@repo/ui`'s `useHintRest`), on a faked clock, so a test reads the pill or card it hangs.
  *
  * A hint is mounted only once its control has been rested on, so a test
  * that reads one arrives on the control and lets the wait run out on the
@@ -8,7 +8,7 @@
  * run.
  */
 
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act } from "react";
 import { vi } from "vitest";
 

@@ -66,7 +66,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * or a link drawn as one takes is answered with a pulse of its face, and a
  * submit's arrow lifts as it sends. A busy button refuses its press and is
  * named by `busyLabel` ("Saving") from the press on; once its press has been
- * out `--luke-settle-delay` (180ms) it keeps its width, its words standing
+ * out `--ui-settle-delay` (180ms) it keeps its width, its words standing
  * hidden under the one ring every wait turns (`SpinnerRing`), so an act that
  * lands at once never flashes one. Every kind of button, a split one's, a
  * folding one's, a provider's, takes the same two (`BusyProps`). A labelled
@@ -74,12 +74,12 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * its words stood, it refuses another press, and `onDone` hears once the
  * check has been seen, at once where no motion runs. A busy button told its
  * press `succeeded` as its ring leaves lands the same way for a moment: the
- * check stands in the ring's place for `--luke-confirm-delay`, a hold reduced
+ * check stands in the ring's place for `--ui-confirm-delay`, a hold reduced
  * motion keeps, so the check is still seen there without its spring, and then
  * fades out as its words fade back; one that failed just stops, its words back at once.
  * A button that `turns`, a refresh's or a retry's, turns its glyph once as a
  * press lands, beside the pulse of its face. The ring
- * holds still on `--luke-loop-motion`, as every endless loop does under reduced
+ * holds still on `--ui-loop-motion`, as every endless loop does under reduced
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
  *
@@ -138,10 +138,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * Each is drawn by shadcn/ui's Base UI button (`../../shadcn/button.tsx`),
  * a native button, its box, type, and edge in Tailwind over the theme; a
  * link drawn as one wears the same classes (`buttonVariants`). Its look,
- * the `--luke-button-*` inks each variant and state sets, its motions, and
+ * the `--ui-button-*` inks each variant and state sets, its motions, and
  * what a container restyles it by stay in `button.css`, because a
  * container's sheet sets those inks from the components layer, which a
- * utility would outrank. It keeps the `luke-button` class and its `data-`
+ * utility would outrank. It keeps the `ui-button` class and its `data-`
  * attributes, which those sheets and the apps' own select it by.
  */
 
@@ -334,7 +334,7 @@ function buttonLook({
     size: box,
     shape: shape === BUTTON_SHAPE.ROUND ? "round" : "square",
     className: cn(
-      "luke-button",
+      "ui-button",
       busy ? "cursor-progress" : settled ? "cursor-default" : PRESSABLE_CURSOR,
       fades && "disabled:opacity-disabled",
     ),
@@ -349,7 +349,7 @@ function linkClasses(look: ButtonLook): string {
 /** The classes of a button's face, which hides under a busy ring once it shows and fades under a done check. */
 function faceClasses(size: BoxSize | undefined, ringShown: boolean, done: boolean): string {
   return cn(
-    "luke-button-face inline-flex items-center gap-icon-gap min-w-0",
+    "ui-button-face inline-flex items-center gap-icon-gap min-w-0",
     size === "compact" && "gap-1",
     ringShown && "invisible",
     done && "opacity-0",
@@ -359,14 +359,14 @@ function faceClasses(size: BoxSize | undefined, ringShown: boolean, done: boolea
 /** The ring a busy button turns over its hidden face, the glyph's size, centred in its box. */
 function BusyRing(): React.JSX.Element {
   return (
-    <span className="luke-button-ring absolute inset-0 m-auto size-control-icon" aria-hidden="true">
+    <span className="ui-button-ring absolute inset-0 m-auto size-control-icon" aria-hidden="true">
       <SpinnerRing />
     </span>
   );
 }
 
 /** A button's words, cut with an ellipsis where its box is narrower than they are. */
-const WORDS = "luke-button-words overflow-hidden text-ellipsis";
+const WORDS = "ui-button-words overflow-hidden text-ellipsis";
 
 /** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
@@ -381,7 +381,7 @@ const TURN_ATTRIBUTE = "data-turn";
 
 /** Turns the glyph `button` leads with once, where it has one. */
 function turn(button: HTMLElement): void {
-  const glyph = button.querySelector(":scope > .luke-button-face > svg:first-child");
+  const glyph = button.querySelector(":scope > .ui-button-face > svg:first-child");
   if (glyph !== null) replayMotion(button, TURN_ATTRIBUTE, glyph);
 }
 
@@ -494,7 +494,7 @@ function DoneMark({
         mark.current = element;
         held?.(element);
       }}
-      className="luke-button-done absolute inset-0 grid place-items-center"
+      className="ui-button-done absolute inset-0 grid place-items-center"
       data-hold={hold || undefined}
       data-leaving={leaving || undefined}
       aria-hidden="true"
@@ -625,12 +625,12 @@ export function Button({
         {icon}
         <span className={WORDS}>{children}</span>
         {badge === undefined ? null : (
-          <span className="luke-button-badge inline-flex flex-none">
+          <span className="ui-button-badge inline-flex flex-none">
             <Badge tone={readOnly ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}>{badge}</Badge>
           </span>
         )}
         {trailing === undefined ? null : (
-          <span className="luke-button-trailing inline-flex flex-none items-center text-muted-foreground text-caption tabular-nums">
+          <span className="ui-button-trailing inline-flex flex-none items-center text-muted-foreground text-caption tabular-nums">
             {trailing}
           </span>
         )}
@@ -773,7 +773,7 @@ function submitGlyph(state: SubmitState): React.JSX.Element {
       return <SendGlyph />;
     case SUBMIT_STATE.SUBMITTED:
       return (
-        <span className="luke-button-ring block size-control-icon">
+        <span className="ui-button-ring block size-control-icon">
           <SpinnerRing />
         </span>
       );

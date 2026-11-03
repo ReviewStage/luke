@@ -4,16 +4,16 @@ import {
   connectionHealth,
   type IntegrationTool,
   toolsCount,
-} from "@luke/features/integration-health";
+} from "@repo/features/integration-health";
 import {
   SIGN_IN,
   SIGN_IN_ACTION,
   type SignIn,
   signInLine,
-} from "@luke/features/integration-sign-in";
-import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
-import { byName } from "@luke/features/integration-tool-model";
-import type { IntegrationStatusView } from "@luke/features/integration-view";
+} from "@repo/features/integration-sign-in";
+import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
+import { byName } from "@repo/features/integration-tool-model";
+import type { IntegrationStatusView } from "@repo/features/integration-view";
 import {
   INTEGRATION_ACCOUNTS_MAX,
   INTEGRATION_LABEL_MAX,
@@ -25,12 +25,13 @@ import {
   type IntegrationStatus,
   integrationAccountLabel,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+} from "@repo/features/integration-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
+  AccountWords,
   ANNOUNCE,
   BUTTON_VARIANT,
   Button,
@@ -73,17 +74,17 @@ import {
   Text,
   TextButton,
   useConfirmDialog,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   namedServers,
   type ServerRow,
   serverGroups,
   serverRows,
-} from "@luke/ui/agent-servers-model";
-import { GLYPH, PlusIcon, RefreshCwIcon } from "@luke/ui/icons";
-import { matchIntegration, shownTools } from "@luke/ui/integration-search";
-import { searchTokens } from "@luke/ui/search-tokens";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/agent-servers-model";
+import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
+import { matchIntegration, shownTools } from "@repo/ui/integration-search";
+import { searchTokens } from "@repo/ui/search-tokens";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
@@ -105,9 +106,11 @@ import { MenuRow } from "./menu-row.js";
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so our agents can use them.
  *
  * One row per account at a provider (two Notion workspaces are two rows,
- * "Notion · Acme" and "Notion · Personal", each its own grant), and one for
+ * "Notion · Acme" and "Notion · Personal", each its own grant, and an
+ * account alone is named the same way where it carries a name, such as a
+ * Google account's email: "Gmail · dean@example.com"), and one for
  * a provider where the account holds none, under Connected or Not connected as the MCP popover
- * sections its servers (`@luke/ui/agent-servers-model`), each section
+ * sections its servers (`@repo/ui/agent-servers-model`), each section
  * in the order of the providers' names: its mark and name, and under it where its connection
  * stands once that needs saying — connected with the count of its server's
  * tools, a sign-in under way, or one expired. A sign-in begun waits on the
@@ -162,7 +165,7 @@ import { MenuRow } from "./menu-row.js";
  * own search hands its query down when one of its results opens a row here
  * (`../desktop/desktop-settings.tsx`).
  *
- * The search is `@luke/ui`'s `SearchField`, each section its
+ * The search is `@repo/ui`'s `SearchField`, each section its
  * `SettingsSection`, and each row `MenuRow`'s `SettingsRow`, led by the
  * provider's mark, its line the row's description. A row's Connect,
  * Reconnect, Try again, and Cancel are the outline `Button`, and Reopen the
@@ -243,7 +246,7 @@ const LINE_STATE = {
 
 type LineState = (typeof LINE_STATE)[keyof typeof LINE_STATE];
 
-/** How `@luke/ui`'s state line stands for each line, a wait and a plain line alike unmarked. */
+/** How `@repo/ui`'s state line stands for each line, a wait and a plain line alike unmarked. */
 const ROW_STATE: Record<LineState, SettingsRowState> = {
   [LINE_STATE.CONNECTED]: SETTINGS_ROW_STATE.CONNECTED,
   [LINE_STATE.ATTENTION]: SETTINGS_ROW_STATE.ATTENTION,
@@ -330,15 +333,41 @@ function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | unde
   return status === INTEGRATION_STATUS.EXPIRED ? ROW_ACT.RECONNECT : "Connect";
 }
 
+/** What mends a row's connection, pressed on its line after the words saying what went wrong. */
+interface LineAct {
+  readonly label: string;
+  /** What the press is named, beginning with the words it shows. */
+  readonly name: string;
+  readonly onPress: () => void;
+}
+
 /**
  * A row's line, with the ring before a wait's words, and where the server or
  * the sign-in said words of its own, those quoted on a plain line under ours.
+ * Where the row's mend stands on its line (`act`), it follows our words as a
+ * press of its own words, so the row's end keeps to its ⋯ and a narrow row
+ * never drops a button under its words.
  */
-function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
+function RowLineText({
+  line,
+  act,
+}: {
+  line: RowLine;
+  act?: LineAct | undefined;
+}): React.JSX.Element {
   const state = (
-    <SettingsRowStateLine state={ROW_STATE[line.state]} block={line.said !== undefined}>
+    <SettingsRowStateLine
+      state={ROW_STATE[line.state]}
+      block={line.said !== undefined}
+      wrap={act !== undefined}
+    >
       {line.state === LINE_STATE.WAITING ? <SpinnerRing size={SPINNER_SIZE.SMALL} /> : null}
-      {line.text}
+      {act === undefined ? line.text : `${line.text} · `}
+      {act === undefined ? null : (
+        <TextButton aria-label={act.name} onClick={act.onPress}>
+          {act.label}
+        </TextButton>
+      )}
     </SettingsRowStateLine>
   );
   if (line.said === undefined) return state;
@@ -469,7 +498,7 @@ function RowToolsPanel({
       <div className="integration-tools-split">
         <ScrollArea ref={list}>
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
-          <div className="integration-tools-list p-luke-4" onFocus={onRowFocus}>
+          <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
             <IntegrationToolList
               server={name}
               tools={shown}
@@ -589,7 +618,7 @@ function IntegrationRow({
 }): React.JSX.Element {
   const panelId = useId();
   const { act } = useAct();
-  const { provider, connection, name, account } = row;
+  const { provider, connection, name, account, accountName } = row;
   const { cancelSignIn } = statuses;
   const grant = useIntegrationGrant(statuses);
   const bySignIn = grantedBySignIn(provider);
@@ -600,7 +629,7 @@ function IntegrationRow({
   const [cancelling, setCancelling] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
-  // Several accounts at a provider each name themselves; one alone is the provider, as ever.
+  // Several accounts at a provider are each renamed, and each disconnected leaving the others.
   const several = row.accounts > 1 && account !== undefined;
 
   /** How a grant begun went, said under the row where it could not begin. */
@@ -613,10 +642,12 @@ function IntegrationRow({
   };
 
   const connect = useCallback(() => {
+    // Note that a mend pressed on the row's line shows no wait of its own, so a second press while the first begins is dropped here.
+    if (connecting) return;
     setConnecting(true);
     setRejection(undefined);
     void grant.begin(connection).then(began);
-  }, [grant, connection, name]);
+  }, [connecting, grant, connection, name]);
 
   const addAccount = () => {
     setConnecting(true);
@@ -659,6 +690,14 @@ function IntegrationRow({
   const line = rowLine(provider, status, health, signIn);
   const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect;
   const waiting = !connected && signIn?.kind === SIGN_IN.WAITING;
+  // Whether the row offers its grant (Connect, Reconnect, or Try again), and
+  // whether that stands on its line: a row whose line says what went wrong
+  // mends it there, and only a row with no line, a Connect, keeps a button.
+  const granting =
+    !waiting &&
+    !(connected && health.kind === CONNECTION_HEALTH.FAILED) &&
+    !(status === undefined || status === INTEGRATION_STATUS.UNAVAILABLE || (connected && !broken));
+  const mendOnLine = granting && line !== undefined;
   // A broken connection's Reconnect is the row's button, so its ⋯ keeps it
   // only while the connection stands quiet.
   const reconnect = {
@@ -706,23 +745,39 @@ function IntegrationRow({
               <ProviderMark provider={provider} />
             </SettingsRowMark>
           ),
-          label: (
-            <InlineEdit
-              value={account === undefined ? name : integrationAccountLabel(account)}
-              label={`${name} account name`}
-              editing={editing && account !== undefined}
-              maxLength={INTEGRATION_LABEL_MAX}
-              look={INLINE_EDIT_LOOK.INPUT}
-              onEnd={renamed}
-            >
-              <Highlighted text={name} tokens={tools.tokens} />
-            </InlineEdit>
-          ),
+          label: <Highlighted text={INTEGRATION_NAME[provider]} tokens={tools.tokens} />,
+          // Note that a rename edits the account's words in their place beside the provider's name, since the account is what it names.
+          adornment:
+            accountName === undefined ? undefined : (
+              <InlineEdit
+                value={account === undefined ? accountName : integrationAccountLabel(account)}
+                label={`${name} account name`}
+                editing={editing && account !== undefined}
+                maxLength={INTEGRATION_LABEL_MAX}
+                look={INLINE_EDIT_LOOK.INPUT}
+                onEnd={renamed}
+              >
+                <AccountWords words={accountName}>
+                  <Highlighted text={accountName} tokens={tools.tokens} />
+                </AccountWords>
+              </InlineEdit>
+            ),
           description:
             connected && tools.all.length > 0 ? (
               <ToolsLine name={name} panelId={panelId} tools={tools} />
             ) : line === undefined ? null : (
-              <RowLineText line={line} />
+              <RowLineText
+                line={line}
+                act={
+                  mendOnLine
+                    ? {
+                        label: grantLabel(status, signIn),
+                        name: `${grantLabel(status, signIn)} ${name}`,
+                        onPress: connect,
+                      }
+                    : undefined
+                }
+              />
             ),
           error: refusedShown(rejection, FAILURE_SURFACE.INTEGRATION_RENAME),
           control: waiting ? (
@@ -748,9 +803,7 @@ function IntegrationRow({
             </>
           ) : connected && health.kind === CONNECTION_HEALTH.FAILED ? (
             <RetryButton onRetry={onRetryTools} />
-          ) : status === undefined ||
-            status === INTEGRATION_STATUS.UNAVAILABLE ||
-            (connected && !broken) ? null : (
+          ) : !granting || mendOnLine ? null : (
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
               busy={connecting}
@@ -808,7 +861,7 @@ function foundRow(
   const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
   // An account's label finds its row too, so "personal" finds Notion · Personal.
   const labelled =
-    row.accounts > 1 && tokens.every((token) => row.name.toLowerCase().includes(token));
+    row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token));
   const match =
     matchIntegration(row.provider, all, tokens) ??
     (labelled ? { named: true, tools: [] } : undefined);

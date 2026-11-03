@@ -1,7 +1,7 @@
 /**
  * index.ts -- the hosted service's oRPC contract, one key per resource.
  *
- * A subpath door of its own (`@luke/features/contract`), so a bundle that
+ * A subpath door of its own (`@repo/features/contract`), so a bundle that
  * reads the contract resolves no service code behind it.
  */
 
@@ -36,6 +36,7 @@ import { tasksContract } from "./tasks.js";
 import { workspaceGithubContract } from "./workspace-github.js";
 import { workspaceInvitationsContract } from "./workspace-invitations.js";
 import { workspaceSentryContract } from "./workspace-sentry.js";
+import { workspaceSlackBotContract } from "./workspace-slack-bot.js";
 import { workspacesContract } from "./workspaces.js";
 
 export { AGENT_START_STATUS } from "./agents.js";
@@ -78,5 +79,6 @@ export const hostedContract = {
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,
   workspaceSentry: workspaceSentryContract,
+  workspaceSlackBot: workspaceSlackBotContract,
   workspaces: workspacesContract,
 };

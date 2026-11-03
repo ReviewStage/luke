@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { sweepAbandonedTurns, TURN_ABANDON } from "@luke/database/models/abandoned-turns";
-import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
-import { sandboxTerminalLease } from "@luke/database/schemas/sandbox-terminal-lease";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+import { Database } from "@repo/database/core/query";
+import { sweepAbandonedTurns, TURN_ABANDON } from "@repo/database/models/abandoned-turns";
+import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
+import { storeWriter } from "@repo/database/models/writer";
+import { user } from "@repo/database/schemas/auth";
+import { sandboxTerminalLease } from "@repo/database/schemas/sandbox-terminal-lease";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB } from "@repo/database/testing";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { eq, inArray } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -41,7 +41,7 @@ const openAgent = (turn?: TurnStatus) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const sessionId = `wrun_${randomUUID()}`;
     const [row] = yield* db
       .insert(conversations)

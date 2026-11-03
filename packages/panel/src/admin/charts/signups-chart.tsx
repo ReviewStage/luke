@@ -2,22 +2,22 @@ import type {
   AdminDailySignups,
   AdminSignInMethods,
   AdminTrend,
-} from "@luke/features/admin-answer-wire";
-import { formatCount, formatPercent } from "@luke/features/number-format";
+} from "@repo/features/admin-answer-wire";
+import { formatCount, formatPercent } from "@repo/features/number-format";
 import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-} from "@luke/ui/chart";
-import { DailyBars } from "@luke/ui/daily-bars";
-import { seriesHasNoData } from "@luke/ui/daily-series";
+} from "@repo/ui/chart";
+import { DailyBars } from "@repo/ui/daily-bars";
+import { seriesHasNoData } from "@repo/ui/daily-series";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import { barRadius, barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
 
 const SIGNUPS_CHART = {
-  count: { label: "New accounts", color: "var(--luke-color-chart-1)" },
+  count: { label: "New accounts", color: "var(--ui-color-chart-1)" },
 } satisfies ChartConfig;
 
 const SIGNUPS_TITLE = "New accounts per day";
@@ -83,7 +83,7 @@ const SIGN_IN_METHODS: readonly {
 const SIGN_IN_ROW_HEIGHT = 40;
 
 const SIGN_IN_METHODS_CHART = {
-  accounts: { label: "Accounts", color: "var(--luke-color-chart-1)" },
+  accounts: { label: "Accounts", color: "var(--ui-color-chart-1)" },
 } satisfies ChartConfig;
 
 /**
@@ -137,7 +137,7 @@ export function SignInMethodsChart({
               dataKey="label"
               position="right"
               offset={8}
-              className="fill-(--luke-color-text-muted)"
+              className="fill-(--ui-color-text-muted)"
             />
           </Bar>
         </BarChart>

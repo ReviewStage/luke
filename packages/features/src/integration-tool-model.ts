@@ -8,7 +8,7 @@ import type { IntegrationToolAnnotations, IntegrationToolParameter } from "./int
  * called by the title its server gave it where it gave one, and by its name
  * otherwise, and its row reads the first sentence of what it does. A badge
  * comes from the server's own `ToolAnnotations`
- * (`@luke/features/integration-wire`), the MCP spec's field for them, and
+ * (`@repo/features/integration-wire`), the MCP spec's field for them, and
  * from nothing else: Read-only where it sent `readOnlyHint`, Destructive
  * where it sent `destructiveHint` on a tool it did not mark read-only, which
  * is the only case the spec reads that hint in; a tool it annotated with

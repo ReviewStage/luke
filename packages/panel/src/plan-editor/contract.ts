@@ -17,8 +17,8 @@ import type {
   WritingBlock,
   WritingInsert,
   WritingMark,
-} from "@luke/settings/shortcuts";
-import type { ComboboxFieldProps } from "@luke/ui";
+} from "@repo/settings/shortcuts";
+import type { ComboboxFieldProps } from "@repo/ui";
 
 /** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
 export interface EditorBox {
@@ -479,7 +479,7 @@ export interface ComposerChip {
   readonly name: string;
 }
 
-/** A quote of the agent's words the composer holds as a block of its own (`@luke/ui/reply-quote`): its words, and what takes it out of the box. */
+/** A quote of the agent's words the composer holds as a block of its own (`@repo/ui/reply-quote`): its words, and what takes it out of the box. */
 export interface ComposerQuote {
   readonly words: string;
   readonly remove: () => void;

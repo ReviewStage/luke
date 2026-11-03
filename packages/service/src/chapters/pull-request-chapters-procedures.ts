@@ -49,9 +49,9 @@
  * by its repository, nor its opening, generates chapters.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAccountPreferences } from "@luke/database/models/account-store";
-import { type Agent, hasRepository } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAccountPreferences } from "@repo/database/models/account-store";
+import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
   CHAPTER_GENERATION_STALE_MS,
@@ -62,20 +62,20 @@ import {
   latestPullRequestChapters,
   type PullRequestChapters,
   type PullRequestChaptersEffect,
-} from "@luke/database/models/pull-request-chapters-store";
+} from "@repo/database/models/pull-request-chapters-store";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   PULL_REQUEST_CHAPTERS_STATUS,
   type PullRequestChaptersFailure,
-} from "@luke/database/pull-request-chapters-vocabulary";
-import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@luke/features/chapters-model-choice";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { chapterSchema } from "@luke/features/pull-request-chapters";
+} from "@repo/database/pull-request-chapters-vocabulary";
+import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@repo/features/chapters-model-choice";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { chapterSchema } from "@repo/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersAnswer,
   type PullRequestChaptersState,
-} from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/pull-request-chapters-wire";
 import { Cause, Clock, Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { reachedAgentById } from "../agents/agent-reach.js";
@@ -97,6 +97,7 @@ import {
   recordServerEvent,
   SERVER_CHAPTERS_OUTCOME,
   SERVER_EVENT,
+  type ServerEventActor,
 } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
@@ -318,7 +319,7 @@ function hunksOf(generated: GeneratedChapters): number {
 const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
   claim: ChapterClaim,
   model: ChaptersModel,
-  userId: string,
+  actor: ServerEventActor<typeof SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE>,
   read: {
     readonly title: string;
     readonly body: string | null;
@@ -330,7 +331,7 @@ const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
     Effect.gen(function* () {
       yield* hostedStoreOrUnavailable(outcome);
       const duration = (yield* Clock.currentTimeMillis) - started;
-      yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE, userId, {
+      yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE, actor, {
         ...counted,
         duration_ms: duration,
       });
@@ -442,7 +443,7 @@ const generatedFor = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (claimed.outcome === CHAPTER_CLAIM_OUTCOME.CLAIMED) {
-    yield* generated(claimed.claim, model, userId, read);
+    yield* generated(claimed.claim, model, { userId, workspaceId: organizationId }, read);
   }
   return yield* answerOf(subject, pullRequest.number, true);
 });

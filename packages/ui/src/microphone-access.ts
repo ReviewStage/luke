@@ -2,8 +2,8 @@
  * microphone-access.ts -- what the microphone's row and the controls that need the microphone say, from macOS's answer.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/settings/microphone";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "@repo/settings/microphone";
 
 /** Why a dictated clip cannot run: it runs on the account's own OpenAI key, kept under Codex in settings, and none is saved. */
 export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI key in settings";

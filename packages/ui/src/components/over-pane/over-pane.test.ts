@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { MOTION_DURATION_MS } from "@luke/brand";
+import { MOTION_DURATION_MS } from "@repo/brand";
 import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
@@ -30,7 +30,7 @@ beforeAll(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  document.body.style.removeProperty("--luke-duration-pane");
+  document.body.style.removeProperty("--ui-duration-pane");
   vi.useRealTimers();
 });
 
@@ -125,7 +125,7 @@ test("a pane opened again on its way out stays drawn, open", () => {
 });
 
 test("with motion held still, a closed pane is let go at once", () => {
-  document.body.style.setProperty("--luke-duration-pane", "1ms");
+  document.body.style.setProperty("--ui-duration-pane", "1ms");
   mount();
   openFromToggle();
   press(button("Files"));

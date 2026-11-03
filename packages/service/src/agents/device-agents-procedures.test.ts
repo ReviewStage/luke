@@ -7,30 +7,35 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent, latestTurnsOfReached } from "@luke/database/models/agent-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
-import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { Database } from "@repo/database/core/query";
+import { createAgent, latestTurnsOfReached } from "@repo/database/models/agent-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceSetup,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
-import { HOST_RELEASE } from "@luke/features/host-release";
-import { HOST_WIRE } from "@luke/features/host-wire";
-import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
-import { sessionKey } from "@luke/runtime/vocabulary";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/features/device-agent-wire";
+import { HOST_RELEASE } from "@repo/features/host-release";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
+import { sessionKey } from "@repo/runtime/vocabulary";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { Clock, type Context, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOST_VERSION } from "../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
-import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
+import {
+  recordingProductAnalytics,
+  SERVER_EVENT,
+  SERVER_HOST_PAIRING_ACTION,
+} from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -38,7 +43,7 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { deviceAgentsProcedures } from "./device-agents-procedures.js";
 import { hostsProcedures } from "./hosts-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const PATH = {
   DEVICES: "/api/device-agents/devices",
   PRESENCE: "/api/device-agents/presence",
@@ -66,7 +71,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
 };
@@ -145,7 +149,7 @@ const account = () =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     return userId;
   });
 
@@ -154,11 +158,17 @@ function registered(deviceId: string) {
   return { deviceId, name: "Studio", ...DEVICE_LAYOUT };
 }
 
-/** A Mac's enroll on its desktop's sign-in under the id given, naming the Mac. */
-function enrollOwn(bearer: string, deviceId: string) {
+/** A Mac's enroll on its desktop's sign-in under the id given, naming the Mac, and the machine it runs on where one is given. */
+function enrollOwn(bearer: string, deviceId: string, machineId?: string) {
   return request(bearer, PATH.ENROLL_OWN, {
     version: HOST_VERSION.FLOOR,
-    body: { deviceId, name: "Studio", platform: DEVICE_PLATFORM.DARWIN, arch: DEVICE_ARCH.ARM64 },
+    body: {
+      deviceId,
+      name: "Studio",
+      platform: DEVICE_PLATFORM.DARWIN,
+      arch: DEVICE_ARCH.ARM64,
+      ...(machineId === undefined ? undefined : { machineId }),
+    },
   });
 }
 
@@ -187,6 +197,7 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
       prompt: null,
       repository: null,
       ...(deviceId === null ? {} : { machine: AGENT_MACHINE.DEVICE, deviceId }),
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { conversationId } = Option.getOrThrow(started).agent;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -334,6 +345,7 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         repository: null,
         machine: AGENT_MACHINE.DEVICE,
         deviceId: host.deviceId,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       });
       const live = (secret: string, deviceId: string) =>
         answerOf(request(secret, PATH.LIVE_AGENTS, { deviceId, version: HOST_VERSION.FLOOR }));
@@ -465,6 +477,11 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
       assert.equal(removed, HOSTED_HTTP_STATUS.OK);
       assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
       assert.deepEqual(listed.body.hosts, []);
+      assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
+        { action: SERVER_HOST_PAIRING_ACTION.APPROVE },
+        { action: SERVER_HOST_PAIRING_ACTION.REMOVE },
+      ]);
+      assert.deepEqual(countedProperties(other, SERVER_EVENT.HOST_PAIRING_CHANGE), []);
     }),
   );
 
@@ -492,6 +509,57 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         "an agent on no host runs on",
       );
     }),
+  );
+
+  it.effect(
+    "a paired Mac's first register, and a Mac's own enroll, fold the account's other hosts on its machine into it, ending the turns their agents had running",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account();
+        const machineId = "d".repeat(64);
+        const before = randomUUID();
+        const beforeSecret: string = (yield* answerOf(enrollOwn(owner, before, machineId))).body
+          .deviceSecret;
+        yield* statusOf(macRegister(beforeSecret, before));
+        const onBefore = yield* agentRunningOn(owner, before);
+        // Note that the box was reinstalled, so it pairs as a new host and names its machine only at its first register.
+        const { pollSecret, userCode } = yield* startedPairing;
+        yield* byCode(owner, PATH.PAIRING_APPROVE, userCode);
+        const handed = yield* pollPairing(pollSecret);
+        const paired: string = handed.body.deviceId;
+        const pairedRegister = yield* statusOf(
+          request(handed.body.deviceSecret, PATH.DEVICES, {
+            version: HOST_VERSION.FLOOR,
+            body: { ...registered(paired), machineId },
+          }),
+        );
+        const listedPaired = yield* answerOf(request(owner, PATH.HOSTS));
+        const onPaired = yield* agentRunningOn(owner, paired);
+        const after = randomUUID();
+        const enrolled = yield* statusOf(enrollOwn(owner, after, machineId));
+        const listedAfter = yield* answerOf(request(owner, PATH.HOSTS));
+        const turns = yield* latestTurnsOfReached([onBefore, onPaired]);
+
+        assert.deepEqual(
+          [pairedRegister, enrolled],
+          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
+        );
+        assert.deepEqual(
+          [listedPaired, listedAfter].map((listed) =>
+            listed.body.hosts.map((host: { readonly id: string }) => host.id),
+          ),
+          [[paired], [after]],
+        );
+        assert.deepEqual(
+          [turns.get(onBefore)?.status, turns.get(onPaired)?.status],
+          [TURN_STATUS.FAILED, TURN_STATUS.FAILED],
+          "no runner on a folded host can end its agents' turns",
+        );
+        assert.equal(
+          yield* statusOf(hostBeat(beforeSecret, before)),
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
   );
 
   it.effect(
@@ -651,6 +719,9 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
           { kind: "luke_host" },
         ]);
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
+          { action: SERVER_HOST_PAIRING_ACTION.APPROVE },
+        ]);
       }),
   );
 
@@ -665,6 +736,9 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
       assert.deepEqual(denied, { status: HOSTED_HTTP_STATUS.OK, body: { done: true } });
       assert.deepEqual(polled.body, { status: "denied" });
       assert.deepEqual((yield* answerOf(request(owner, PATH.HOSTS))).body.hosts, []);
+      assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
+        { action: SERVER_HOST_PAIRING_ACTION.DENY },
+      ]);
     }),
   );
 

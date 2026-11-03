@@ -4,12 +4,12 @@ import {
   automationRunLine,
   automationRunStanding,
   automationRunTitle,
-} from "@luke/features/automation-list-model";
-import { AUTOMATION_FIRING, type AutomationRunSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { momentText, sinceText } from "@luke/features/time-format";
-import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
+} from "@repo/features/automation-list-model";
+import { AUTOMATION_FIRING, type AutomationRunSummary } from "@repo/features/automation-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { momentText, sinceText } from "@repo/features/time-format";
+import { TRIGGER_CATALOG } from "@repo/features/trigger-catalog";
 import {
   BackButton,
   EmptyState,
@@ -37,8 +37,8 @@ import {
   Tooltip,
   useMinute,
   useResizeEdge,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";
@@ -278,10 +278,10 @@ function RunsBody({
     <ScrollArea fade={SCROLL_FADE.START}>
       <div
         ref={body}
-        className="automation-runs-body flex min-h-full flex-col gap-control-gap p-luke-16"
+        className="automation-runs-body flex min-h-full flex-col gap-control-gap p-ui-16"
       >
         {headed ? (
-          <div className="automation-runs-head px-luke-2">
+          <div className="automation-runs-head px-ui-2">
             <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
               Runs
             </Text>

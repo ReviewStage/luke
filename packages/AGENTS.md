@@ -23,7 +23,7 @@ and built-in filter.
 
 What a schema emits is pinned as a byte golden under `fixtures/json-schema/`
 only where a model is shown it as a tool's input, re-recorded only with
-`LUKE_UPDATE_FIXTURES=1`. **The bytes are the point** — a model provider keys its
+`APP_UPDATE_FIXTURES=1`. **The bytes are the point** — a model provider keys its
 prompt cache on the text of a request, so a reordered key, a widened bound, or a
 reworded description costs every standing conversation its prefix. If a golden
 fails, that is what it is telling you. Biome is kept off those fixture trees for
@@ -50,7 +50,7 @@ is read by the compiler directly and stays `.ts`.
 After adding or renaming a route under `apps/web/server/routes/`, run:
 
 ```
-pnpm --filter @luke/web functions:rewrites
+pnpm --filter @repo/web functions:rewrites
 ```
 
 That rewrites `apps/web/server/api-rewrites.json` and the root `vercel.json`
@@ -67,7 +67,7 @@ Give a subpath of its own to anything the barrel's other callers must not
 resolve:
 
 - **Node-reaching behavior behind a vocabulary door**
-  (`@luke/runtime/vocabulary`), or the renderer bundle fails to resolve
+  (`@repo/runtime/vocabulary`), or the renderer bundle fails to resolve
   `node:fs` behind a string constant it wanted to draw.
 - **A heavy run-time dependency**, like a reader that calls the AI SDK, where the
   vocabulary beside it reaches the SDK for its types alone.
@@ -79,7 +79,7 @@ every symbol has exactly one way in. `repository-checks.sh` keeps that true and
 walks a door's own relative-import graph, so a later re-export cannot quietly
 carry a Node-reaching layer a few files deep.
 
-A door is not what keeps `effect` out of a bundle generally; `@luke/wire`'s
+A door is not what keeps `effect` out of a bundle generally; `@repo/wire`'s
 barrel resolves `Schema` beneath it. Root AGENTS.md's "Effect idioms" section
 records that cost against the renderer bundle: one copy per bundle,
 paid once. What a door still keeps out is a Node-reaching companion like

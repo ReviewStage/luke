@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND } from "@luke/host/acts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { ACT_KIND } from "@repo/host/acts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -166,7 +166,7 @@ test("Download is a link to the release page whose press opens it through the up
   const download = link(page, "Download");
   assert.equal(
     download?.getAttribute("href"),
-    "https://github.com/ReviewStage/luke/releases/latest",
+    "https://github.com/ReviewStage/vespin/releases/latest",
   );
   assert.equal(button(page, "Download"), undefined, "no button opens the page");
 

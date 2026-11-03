@@ -1,4 +1,4 @@
-import { List, ListRow, ShowMoreRow } from "@luke/ui";
+import { List, ListRow, ShowMoreRow } from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

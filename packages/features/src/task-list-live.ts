@@ -7,13 +7,13 @@ import {
   turnStoppable,
 } from "./agent-status.js";
 import {
-  AGENT_ARCHIVER,
   AGENT_BRIEF,
   AGENT_MACHINE,
   AGENT_STATUS,
   type AgentArchivedBy,
   type AgentStatus,
   type AgentSummary,
+  agentArchiverSchema,
   agentOwnerOf,
   agentPullRequestSchema,
   agentSummarySchema,
@@ -112,7 +112,7 @@ const taskLiveRowSchema = EffectSchema.Struct({
 
 /** Who archived an agent as its row holds it. */
 const archiveLiveSchema = EffectSchema.Struct({
-  by: EffectSchema.Literals(Object.values(AGENT_ARCHIVER)),
+  by: agentArchiverSchema,
   userId: EffectSchema.String,
   agentId: EffectSchema.optionalKey(EffectSchema.String),
   agentName: EffectSchema.optionalKey(EffectSchema.String),

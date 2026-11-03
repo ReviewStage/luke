@@ -4,26 +4,23 @@
  * Every place that reaches a coding agent's session holds one
  * `AgentSessions`: the composer, an Inbox answer, another agent's message, a GitHub
  * wake, an automation's run, the agent tools, Stop, delete, and a Start,
- * Fork, or Continue. Each composes eve's client for its caller as it always
- * has, and wraps it here (`routedSessions`), so each call is answered by the
- * implementation the conversation's `runtime` names. Note that the client
- * is no longer called, since eve runs nothing any more; it is still composed
- * because its composition holds each caller to the deployment's secret and
- * origin, which the harness's own reach is yet to take over:
+ * Fork, or Continue. Each reads it here for the account it acts for
+ * (`routedSessions`), so each call is answered by the implementation the
+ * conversation's `runtime` names:
  *
  * - `open` and `send` carry the conversation, whose agent and runtime are
- *   read as the caller reads them. A coding agent on eve, or from before the
- *   column, is refused as ended (`RUNTIME_REFUSAL.EVE_RETIRED`): a new agent
- *   goes on from its work, as Continue or `start_agent`'s `from` starts one,
- *   on a native harness. So is a conversation that is no coding agent's,
- *   which only eve ever ran. A native one is
+ *   read as the caller reads them. One that runs on no harness
+ *   (`harnessOf`), or is no coding agent's, has ended for good, and is
+ *   refused so (`RUNTIME_REFUSAL.ENDED`, read as `AGENT_RETIRED`): a new
+ *   agent goes on from its work, as Continue or `start_agent`'s `from`
+ *   starts one. A native one is
  *   handed to that harness's sessions acting for the agent's starter, whose
  *   plan pays for it, and a session it opens claims the conversation's
  *   record.
  * - `cancel` and `reset` name a session alone, so they are
- *   answered by the implementation that minted it (`native-runtime.ts`): a
- *   session eve minted runs no turn and holds nothing, so it is answered so
- *   here, and a Stop or a delete of an agent left on eve goes on.
+ *   answered by the harness that minted it (`native-runtime.ts`); a session
+ *   no harness minted runs no turn and holds nothing, so it is answered so
+ *   here, and a Stop or a delete of an agent whose session ended goes on.
  *
  * The native harnesses are a service of the function's own
  * (`NativeAgentSessions`): the harnesses themselves in the web functions
@@ -32,15 +29,14 @@
  * (`RUNTIME_REFUSAL.NOT_HERE`).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgentHeaderOfConversation, readAgentRouting } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAgentHeaderOfConversation, readAgentRouting } from "@repo/database/models/agent-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
-} from "@luke/database/models/recorded-session";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
-import { causeKind, failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/recorded-session";
+import { LOCAL_AGENT_REFUSAL } from "@repo/features/agent-wire";
+import { causeKind, failureKind } from "@repo/runtime/effect";
 import { Clock, Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -65,7 +61,7 @@ import {
   type RuntimeRefusal,
 } from "../eve-host/eve-sessions.js";
 import { agentLogIds } from "./agent-log.js";
-import { isNativeRuntime, type NativeRuntime, nativeRuntimeOfSession } from "./native-runtime.js";
+import { harnessOf, type NativeRuntime, nativeRuntimeOfSession } from "./native-runtime.js";
 
 /** What a change of model or effort came to at a native agent's runner. */
 export const RUNNER_CHOICE = {
@@ -113,11 +109,11 @@ const NOT_HERE = {
   runtimeRefusal: RUNTIME_REFUSAL.NOT_HERE,
 } as const;
 
-/** What an open or a send to a coding agent on eve answers: eve runs no agent any more, so nothing reaches it again. */
-const EVE_RETIRED = {
+/** What an open or a send to an agent whose session ended for good answers: nothing reaches it again. */
+const ENDED = {
   outcome: EVE_SEND_OUTCOME.FAILED,
   status: HOSTED_HTTP_STATUS.CONFLICT,
-  runtimeRefusal: RUNTIME_REFUSAL.EVE_RETIRED,
+  runtimeRefusal: RUNTIME_REFUSAL.ENDED,
 } as const;
 
 /** What a call answers where the conversation's runtime could not be read. */
@@ -135,46 +131,41 @@ function preparingNamed<Outcome extends { readonly outcome: string }>(answered: 
     : answered;
 }
 
-/** What a cancel of a session eve minted answers: eve runs nothing any more, so no turn of the session is under way. */
-const NO_EVE_TURN = { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+/** What a cancel of a session no harness minted answers: it ended for good, so no turn of it is under way. */
+const NO_TURN = { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
 
-/** What a retire of a session eve minted answers: eve runs nothing any more, so the session holds nothing to let go of. */
-const NO_EVE_SESSION = { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+/** What a retire of a session no harness minted answers: it ended for good, so it holds nothing to let go of. */
+const NO_SESSION = { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
 
-/** Where an agent on eve, or a conversation that is no coding agent's, sends its calls: nowhere. */
-const RETIRED = { retired: true } as const;
+/** Where the calls of a conversation on no harness, or of one that is no coding agent's, go: nowhere, since its session ended for good. */
+const ENDED_ROUTE = { ended: true } as const;
 
 /** Where a conversation's calls go: a native harness acting for the agent's starter, or nowhere. */
-type Route = { readonly runtime: NativeRuntime; readonly starter: string } | typeof RETIRED;
+type Route = { readonly runtime: NativeRuntime; readonly starter: string } | typeof ENDED_ROUTE;
 
 /**
- * eve's client for one caller, `account`, with every call answered by the
+ * The sessions of one caller, `account`, with every call answered by the
  * runtime its conversation runs on, as above. The caller reads the
  * conversation's agent as it reads it everywhere, through its workspace.
  */
 export const routedSessions = <Turn extends EveHostTurn>(
-  eve: AgentSessions<Turn>,
   account: string,
 ): Effect.Effect<AgentSessions<Turn>, never, DatabaseServices> =>
-  Effect.map(sessionsRouter, (route) => route(eve, account));
+  Effect.map(sessionsRouter, (route) => route<Turn>(account));
 
-/** Wraps eve's client for one caller as `routedSessions` does, calling none of it. */
-export type SessionsRouter = <Turn extends EveHostTurn>(
-  eve: AgentSessions<Turn>,
-  account: string,
-) => AgentSessions<Turn>;
+/** The sessions of each account a composer acts for, as `routedSessions` reads them. */
+export type SessionsRouter = <Turn extends EveHostTurn>(account: string) => AgentSessions<Turn>;
 
 /**
  * `routedSessions` over the calling fiber's store and native harnesses,
- * read once, for a composer that wraps a client for each account it acts
- * for (`../deployment-eve.ts`, the agent doors).
+ * read once, for a caller that acts for more than one account (a queue's
+ * members, a sweep's agents, the agent doors).
  */
 export const sessionsRouter: Effect.Effect<SessionsRouter, never, DatabaseServices> = Effect.gen(
   function* () {
     const store = yield* Effect.context<DatabaseServices>();
     const native = yield* Effect.serviceOption(NativeAgentSessions);
-    return <Turn extends EveHostTurn>(_eve: AgentSessions<Turn>, account: string) =>
-      routed<Turn>(account, store, native);
+    return <Turn extends EveHostTurn>(account: string) => routed<Turn>(account, store, native);
   },
 );
 
@@ -187,10 +178,10 @@ function routed<Turn extends EveHostTurn>(
   const routeOf = (conversationId: string) =>
     Effect.gen(function* () {
       const agent = yield* readAgentHeaderOfConversation(account, conversationId);
-      if (Option.isNone(agent)) return RETIRED;
+      if (Option.isNone(agent)) return ENDED_ROUTE;
       const routing = yield* readAgentRouting(account, agent.value.id);
-      const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
-      return isNativeRuntime(runtime) ? { runtime, starter: agent.value.userId } : RETIRED;
+      const runtime = harnessOf(Option.getOrUndefined(routing)?.runtime);
+      return runtime === undefined ? ENDED_ROUTE : { runtime, starter: agent.value.userId };
     }).pipe(Effect.provideContext(store));
 
   /** The harness's sessions acting for the account given, where this function has them. */
@@ -233,7 +224,7 @@ function routed<Turn extends EveHostTurn>(
         const read = yield* routeOrUnread(message.conversationId);
         if (Option.isNone(read)) return UNREAD;
         const route = read.value;
-        if ("retired" in route) return EVE_RETIRED;
+        if ("ended" in route) return ENDED;
         const reached = harness(route.runtime, route.starter);
         if (Option.isNone(reached)) return NOT_HERE;
         const opened = yield* (yield* reached.value).open(message);
@@ -248,7 +239,7 @@ function routed<Turn extends EveHostTurn>(
         const read = yield* routeOrUnread(message.conversationId);
         if (Option.isNone(read)) return UNREAD;
         const route = read.value;
-        if ("retired" in route) return EVE_RETIRED;
+        if ("ended" in route) return ENDED;
         const reached = harness(route.runtime, route.starter);
         if (Option.isNone(reached)) return NOT_HERE;
         return preparingNamed(yield* (yield* reached.value).send(sessionId, message));
@@ -256,7 +247,7 @@ function routed<Turn extends EveHostTurn>(
 
     cancel: (sessionId, turnId) => {
       const runtime = nativeRuntimeOfSession(sessionId);
-      if (runtime === undefined) return Effect.succeed(NO_EVE_TURN);
+      if (runtime === undefined) return Effect.succeed(NO_TURN);
       const reached = harness(runtime, account);
       if (Option.isNone(reached)) {
         return Effect.succeed({ ...NOT_HERE, outcome: EVE_CANCEL_OUTCOME.FAILED });
@@ -266,7 +257,7 @@ function routed<Turn extends EveHostTurn>(
 
     reset: (sessionId) => {
       const runtime = nativeRuntimeOfSession(sessionId);
-      if (runtime === undefined) return Effect.succeed(NO_EVE_SESSION);
+      if (runtime === undefined) return Effect.succeed(NO_SESSION);
       const reached = harness(runtime, account);
       if (Option.isNone(reached)) {
         return Effect.succeed({ ...NOT_HERE, outcome: EVE_RESET_OUTCOME.FAILED });
@@ -281,10 +272,10 @@ function routed<Turn extends EveHostTurn>(
  * A change of the agent's model or effort, already written on its row,
  * handed to its runner where it runs one: a `model` line written now, which
  * the runner takes at its next model call, acting for the agent's starter
- * as every native call does. An agent on eve, one whose runner is not up,
- * and a function that cannot reach the harness write nothing, since eve
- * reads the row at its next step and a native agent's next message goes
- * behind the same line (`claude-code-sessions.ts`'s `ahead`). Nothing here
+ * as every native call does. An agent on no harness, whose session ended,
+ * one whose runner is not up, and a function that cannot reach the harness
+ * write nothing, since the agent's next message goes behind the same line
+ * (`claude-code-sessions.ts`'s `ahead`). Nothing here
  * fails its caller: the row already holds the change.
  */
 export const runnerChoiceApplied = (agent: {
@@ -294,8 +285,8 @@ export const runnerChoiceApplied = (agent: {
 }): Effect.Effect<RunnerChoice, never, DatabaseServices> =>
   Effect.gen(function* () {
     const routing = yield* readAgentRouting(agent.userId, agent.id);
-    const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
-    if (!isNativeRuntime(runtime)) return RUNNER_CHOICE.NOT_LIVE;
+    const runtime = harnessOf(Option.getOrUndefined(routing)?.runtime);
+    if (runtime === undefined) return RUNNER_CHOICE.NOT_LIVE;
     const native = yield* Effect.serviceOption(NativeAgentSessions);
     const reached = Option.flatMap(native, (service) => service.sessions(runtime, agent.userId));
     if (Option.isNone(reached)) return RUNNER_CHOICE.NOT_LIVE;
@@ -339,8 +330,8 @@ export const runnerHalted = (
   });
 
 /**
- * What a call that failed answers its caller as: an agent on eve, as ended,
- * which only a new agent goes on from; a native harness whose
+ * What a call that failed answers its caller as: an agent whose session
+ * ended for good, as ended, which only a new agent goes on from; a native harness whose
  * image is still being prepared, which the same request later takes; a
  * native harness this function cannot reach, said by name; the starter's
  * plan refusing the launch, said by name, whose sign-in is signed in again
@@ -367,7 +358,7 @@ export function failedCallRefusal(failed: {
   }
   if (failed.planRefusal === PLAN_REFUSAL.INELIGIBLE) return HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE;
   if (failed.planRefusal !== undefined) return HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT;
-  if (failed.runtimeRefusal === RUNTIME_REFUSAL.EVE_RETIRED) return HOSTED_REFUSAL.AGENT_RETIRED;
+  if (failed.runtimeRefusal === RUNTIME_REFUSAL.ENDED) return HOSTED_REFUSAL.AGENT_RETIRED;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
     return HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.IMAGE_PREPARING) {

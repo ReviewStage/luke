@@ -17,13 +17,13 @@
  * tag, and what is logged of a failure is its status.
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import {
   claimLapsedLease,
   type LapsedSandboxLease,
   lapsedSandboxLeases,
   releaseLapsedLease,
-} from "@luke/database/models/sandbox-terminal-lease";
+} from "@repo/database/models/sandbox-terminal-lease";
 import { Duration, Effect, Result, type Schema } from "effect";
 import { SessionSandboxes } from "../agents/session-sandboxes.js";
 

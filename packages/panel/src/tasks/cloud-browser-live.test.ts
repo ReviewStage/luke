@@ -6,7 +6,7 @@ import {
   BROWSER_LIVE_CLOSE_REASON,
   BROWSER_LIVE_KEY_ACTION,
   BROWSER_LIVE_SERVER,
-} from "@luke/features/browser-live-wire";
+} from "@repo/features/browser-live-wire";
 import { Effect, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {

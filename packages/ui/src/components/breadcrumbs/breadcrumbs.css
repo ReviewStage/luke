@@ -7,24 +7,23 @@
 @layer components {
   /* Note that the path clips past the keyboard's ring on a crumb, which no
      utility spells. */
-  .luke-breadcrumbs {
-    overflow-clip-margin: padding-box
-      calc(var(--luke-focus-ring-width) + var(--luke-focus-ring-offset));
+  .ui-breadcrumbs {
+    overflow-clip-margin: padding-box calc(var(--ui-focus-ring-width) + var(--ui-focus-ring-offset));
   }
 
   /* Note that a crumb's and a chevron's display stay here, because the
      widths below hide them, and a display utility would outrank that. */
-  .luke-breadcrumbs li {
+  .ui-breadcrumbs li {
     display: flex;
   }
 
   /* A crumb that keeps its size, so a narrow bar cuts the crumbs after it
      short first. */
-  .luke-breadcrumbs li[data-fixed="true"] {
+  .ui-breadcrumbs li[data-fixed="true"] {
     flex-shrink: 0;
   }
 
-  .luke-breadcrumb-separator {
+  .ui-breadcrumb-separator {
     display: flex;
   }
 
@@ -32,35 +31,35 @@
      rides in on the pair an arriving element rides, a fade and a short rise
      on the spring, and fades out before it goes. Reduced motion keeps no
      rise, and its tokens hold the fade still. */
-  .luke-breadcrumbs li[data-motion="arriving"] {
+  .ui-breadcrumbs li[data-motion="arriving"] {
     animation:
-      luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-      luke-breadcrumb-rise var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+      ui-breadcrumb-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-breadcrumb-rise var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
-  .luke-breadcrumbs li[data-motion="leaving"] {
-    animation: luke-breadcrumb-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  .ui-breadcrumbs li[data-motion="leaving"] {
+    animation: ui-breadcrumb-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .luke-breadcrumbs li[data-motion="arriving"] {
-      animation: luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
+    .ui-breadcrumbs li[data-motion="arriving"] {
+      animation: ui-breadcrumb-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards;
     }
   }
 
-  @keyframes luke-breadcrumb-fade {
+  @keyframes ui-breadcrumb-fade {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-breadcrumb-rise {
+  @keyframes ui-breadcrumb-rise {
     from {
-      transform: translateY(var(--luke-space-4));
+      transform: translateY(var(--ui-space-4));
     }
   }
 
-  @keyframes luke-breadcrumb-leave {
+  @keyframes ui-breadcrumb-leave {
     to {
       opacity: 0;
     }
@@ -77,10 +76,10 @@
      and stand a gap before the next chevron; this way a crumb's least width
      is the lesser of its floor and its words, and a path with room packs
      each crumb one chevron after the one before. */
-  .luke-breadcrumbs[data-variant="caption"] li {
-    --luke-breadcrumb-floor: 2.5em;
-    --luke-breadcrumb-chevron-room: 0px;
-    flex: 1 0 calc(var(--luke-breadcrumb-floor) + var(--luke-breadcrumb-chevron-room));
+  .ui-breadcrumbs[data-variant="caption"] li {
+    --ui-breadcrumb-floor: 2.5em;
+    --ui-breadcrumb-chevron-room: 0px;
+    flex: 1 0 calc(var(--ui-breadcrumb-floor) + var(--ui-breadcrumb-chevron-room));
     min-width: 0;
     max-width: max-content;
   }
@@ -89,24 +88,23 @@
      at, because a path that squeezes every crumb to two letters says
      nothing. It gives way to that floor only once the path has nothing left
      to fold (`crumb-fold.ts`); until then it keeps its whole width below. */
-  .luke-breadcrumbs[data-variant="caption"] li[data-legible="true"] {
-    --luke-breadcrumb-floor: 11em;
+  .ui-breadcrumbs[data-variant="caption"] li[data-legible="true"] {
+    --ui-breadcrumb-floor: 11em;
   }
 
-  .luke-breadcrumbs[data-variant="caption"] li:has(> .luke-breadcrumb-separator) {
-    --luke-breadcrumb-chevron-room: 12px;
+  .ui-breadcrumbs[data-variant="caption"] li:has(> .ui-breadcrumb-separator) {
+    --ui-breadcrumb-chevron-room: 12px;
   }
 
   /* Note that a crumb whose chevron a width hides takes no chevron's room
      in its floor there, as below for the narrower widths. */
-  .luke-breadcrumbs[data-variant="caption"]
-  li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-    --luke-breadcrumb-chevron-room: 0px;
+  .ui-breadcrumbs[data-variant="caption"] li:has(> .ui-breadcrumb-separator[data-wide="false"]) {
+    --ui-breadcrumb-chevron-room: 0px;
   }
 
   /* The last crumb, the page the reader stands on, takes the larger share of
      the room past the floors, so it gives way last. */
-  .luke-breadcrumbs[data-variant="caption"] li:last-child {
+  .ui-breadcrumbs[data-variant="caption"] li:last-child {
     flex-grow: 9;
   }
 
@@ -114,7 +112,7 @@
      leaves out, and a crumb of words while the path may still fold one
      (`crumb-fold.ts`) keep their width, so a path folds its first crumbs
      before it cuts any. */
-  .luke-breadcrumbs[data-variant="caption"]
+  .ui-breadcrumbs[data-variant="caption"]
   li:is([data-fixed="true"], [data-whole="true"], [data-shown="narrow"], [data-shown="narrowest"]) {
     flex: none;
   }
@@ -122,71 +120,70 @@
   /* The widths a crumb is drawn at (`shownAt`): a wide bar, or none, draws
      what it says it does; a crumb standing for others is drawn only where
      the bar is narrow enough to leave them out. */
-  .luke-breadcrumbs li:is([data-shown="narrow"], [data-shown="narrowest"]) {
+  .ui-breadcrumbs li:is([data-shown="narrow"], [data-shown="narrowest"]) {
     display: none;
   }
 
   /* A chevron is drawn at the widths where a crumb before its own is, so
      the crumb leading the path at a width stands without one there. */
-  .luke-breadcrumb-separator[data-wide="false"] {
+  .ui-breadcrumb-separator[data-wide="false"] {
     display: none;
   }
 
   /* off-scale: 520px, where the narrow crumbs take over from the wide */
-  @container luke-breadcrumb-bar (width < 520px) {
-    .luke-breadcrumbs li[data-shown="wide"] {
+  @container ui-breadcrumb-bar (width < 520px) {
+    .ui-breadcrumbs li[data-shown="wide"] {
       display: none;
     }
 
-    .luke-breadcrumbs li[data-shown="narrow"] {
+    .ui-breadcrumbs li[data-shown="narrow"] {
       display: flex;
     }
 
-    .luke-breadcrumb-separator[data-wide="false"] {
+    .ui-breadcrumb-separator[data-wide="false"] {
       display: flex;
     }
 
-    .luke-breadcrumb-separator[data-narrow="false"] {
+    .ui-breadcrumb-separator[data-narrow="false"] {
       display: none;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
-      li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-      --luke-breadcrumb-chevron-room: 12px;
+    .ui-breadcrumbs[data-variant="caption"] li:has(> .ui-breadcrumb-separator[data-wide="false"]) {
+      --ui-breadcrumb-chevron-room: 12px;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
-      li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      --luke-breadcrumb-chevron-room: 0px;
+    .ui-breadcrumbs[data-variant="caption"]
+      li:has(> .ui-breadcrumb-separator[data-narrow="false"]) {
+      --ui-breadcrumb-chevron-room: 0px;
     }
   }
 
   /* off-scale: 300px, where the narrowest crumbs take over */
-  @container luke-breadcrumb-bar (width < 300px) {
-    .luke-breadcrumbs li:is([data-shown="wide-or-narrow"], [data-shown="narrow"]) {
+  @container ui-breadcrumb-bar (width < 300px) {
+    .ui-breadcrumbs li:is([data-shown="wide-or-narrow"], [data-shown="narrow"]) {
       display: none;
     }
 
-    .luke-breadcrumbs li[data-shown="narrowest"] {
+    .ui-breadcrumbs li[data-shown="narrowest"] {
       display: flex;
     }
 
-    .luke-breadcrumb-separator[data-narrow="false"] {
+    .ui-breadcrumb-separator[data-narrow="false"] {
       display: flex;
     }
 
-    .luke-breadcrumb-separator[data-narrowest="false"] {
+    .ui-breadcrumb-separator[data-narrowest="false"] {
       display: none;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
-      li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      --luke-breadcrumb-chevron-room: 12px;
+    .ui-breadcrumbs[data-variant="caption"]
+      li:has(> .ui-breadcrumb-separator[data-narrow="false"]) {
+      --ui-breadcrumb-chevron-room: 12px;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
-      li:has(> .luke-breadcrumb-separator[data-narrowest="false"]) {
-      --luke-breadcrumb-chevron-room: 0px;
+    .ui-breadcrumbs[data-variant="caption"]
+      li:has(> .ui-breadcrumb-separator[data-narrowest="false"]) {
+      --ui-breadcrumb-chevron-room: 0px;
     }
   }
 }

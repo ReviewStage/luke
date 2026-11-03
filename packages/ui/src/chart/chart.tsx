@@ -3,9 +3,9 @@
  * recharts 3), vendored because no app here is shadcn-scaffolded: there is no
  * components.json for the CLI to install into, and the one shared utility the
  * registry file expects — `cn` from `@/lib/utils` — is this package's own
- * `cn`. Exported at `@luke/ui/chart` alone, so recharts rides into no bundle
+ * `cn`. Exported at `@repo/ui/chart` alone, so recharts rides into no bundle
  * behind the barrel. Its frame and tooltip are drawn by `chart.css` in the
- * shared `--luke-*` tokens, not the stock utilities, so the chart reads
+ * shared `--ui-*` tokens, not the stock utilities, so the chart reads
  * alike whichever app mounts it; a caller's `className` on the container
  * sizes it and nothing more. The tooltip's indicator is the swatch alone,
  * stock's line and dashed variants having no caller. Series colors
@@ -13,7 +13,7 @@
  * time, never from anything observed.
  */
 
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
@@ -22,8 +22,8 @@ import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css.js";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 // A dark series colour applies where the page is drawn in the dark theme
-// (`data-luke-theme`, `@luke/ui`'s `tokens/surface.ts`).
-const THEMES = { light: "", dark: '[data-luke-theme="dark"]' } as const;
+// (`data-ui-theme`, `@repo/ui`'s `tokens/surface.ts`).
+const THEMES = { light: "", dark: '[data-ui-theme="dark"]' } as const;
 
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const;
 type TooltipNameType = number | string;
@@ -83,7 +83,7 @@ function ChartContainer({
       <div
         data-slot="chart"
         data-chart={chartId}
-        className={cn("luke-chart", className)}
+        className={cn("ui-chart", className)}
         style={{ ...singleColorVariables(config), ...style }}
         {...rest}
       >
@@ -164,10 +164,10 @@ function ChartTooltipRow({
   value: React.ReactNode;
 }) {
   return (
-    <div className="luke-chart-tooltip-row">
+    <div className="ui-chart-tooltip-row">
       {indicator}
-      <div className="luke-chart-tooltip-entry">
-        <span className="luke-chart-tooltip-name">{name}</span>
+      <div className="ui-chart-tooltip-entry">
+        <span className="ui-chart-tooltip-name">{name}</span>
         {value}
       </div>
     </div>
@@ -175,7 +175,7 @@ function ChartTooltipRow({
 }
 
 function ChartTooltipSwatch({ color }: { color: string | undefined }) {
-  return <div className="luke-chart-tooltip-swatch" style={{ backgroundColor: color }} />;
+  return <div className="ui-chart-tooltip-swatch" style={{ backgroundColor: color }} />;
 }
 
 /**
@@ -196,14 +196,14 @@ function ChartTooltipFrame({
   }[];
 }) {
   return (
-    <div className="luke-chart-tooltip">
-      <div className="luke-chart-tooltip-label">{label}</div>
+    <div className="ui-chart-tooltip">
+      <div className="ui-chart-tooltip-label">{label}</div>
       {rows.map((row) => (
         <ChartTooltipRow
           key={row.key}
           indicator={<ChartTooltipSwatch color={row.color} />}
           name={row.name}
-          value={<span className="luke-chart-tooltip-value">{row.value}</span>}
+          value={<span className="ui-chart-tooltip-value">{row.value}</span>}
         />
       ))}
     </div>
@@ -250,14 +250,14 @@ function ChartTooltipContent({
       !labelKey && typeof label === "string" ? (config[label]?.label ?? label) : itemConfig?.label;
 
     if (labelFormatter) {
-      return <div className="luke-chart-tooltip-label">{labelFormatter(value, payload)}</div>;
+      return <div className="ui-chart-tooltip-label">{labelFormatter(value, payload)}</div>;
     }
 
     if (!value) {
       return null;
     }
 
-    return <div className="luke-chart-tooltip-label">{value}</div>;
+    return <div className="ui-chart-tooltip-label">{value}</div>;
   }, [label, labelFormatter, payload, hideLabel, config, labelKey]);
 
   if (!active || !payload?.length) {
@@ -265,9 +265,9 @@ function ChartTooltipContent({
   }
 
   return (
-    <div className="luke-chart-tooltip">
+    <div className="ui-chart-tooltip">
       {tooltipLabel}
-      <div className="luke-chart-tooltip-rows">
+      <div className="ui-chart-tooltip-rows">
         {payload
           .filter((item) => item.type !== "none")
           .map((item, index) => {
@@ -277,7 +277,7 @@ function ChartTooltipContent({
 
             if (formatter && item?.value !== undefined && item.name) {
               return (
-                <div key={key} className="luke-chart-tooltip-row">
+                <div key={key} className="ui-chart-tooltip-row">
                   {formatter(item.value, item.name, item, index, item.payload)}
                 </div>
               );
@@ -295,7 +295,7 @@ function ChartTooltipContent({
                 name={itemConfig?.label ?? item.name}
                 value={
                   item.value == null ? null : (
-                    <span className="luke-chart-tooltip-value">
+                    <span className="ui-chart-tooltip-value">
                       {Number.isFinite(item.value)
                         ? (valueFormatter?.(Number(item.value)) ?? formatCount(Number(item.value)))
                         : String(item.value)}

@@ -7,7 +7,7 @@
  * rides beside that answer as these facts: which failure it was, the fault,
  * refusal, HTTP status, code, error name, reason, and trace id it names, and
  * the failure beneath it where there is one. The panel hands the answer on as
- * a shown failure's cause (`@luke/panel/failure-report`), whose reader
+ * a shown failure's cause (`@repo/panel/failure-report`), whose reader
  * (`shown-failure.ts`) reads each field by the name an error carries it
  * under and follows `cause` down the chain. Nothing here decides what a
  * window draws.
@@ -30,9 +30,9 @@ export const FAILURE_FACT = {
   HOSTED_UNANSWERED: "HostedUnanswered",
   /** The host asked nothing, because its gate to the service stood closed: signed out, or a run that sends nothing. */
   GATE_CLOSED: "GateClosed",
-  /** A live read the host followed stopped for good (`@luke/host`'s `live-follow.ts`). */
+  /** A live read the host followed stopped for good (`@repo/host`'s `live-follow.ts`). */
   LIVE_BROKEN: "LiveBroken",
-  /** A live read's first answer never came, asked again and again (`@luke/host`'s `transcript-follow.ts`). */
+  /** A live read's first answer never came, asked again and again (`@repo/host`'s `transcript-follow.ts`). */
   SEAL_UNANSWERED: "SealUnanswered",
 } as const;
 type FailureFact = (typeof FAILURE_FACT)[keyof typeof FAILURE_FACT];

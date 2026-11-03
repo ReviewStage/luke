@@ -1,28 +1,32 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
-import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+} from "@repo/features/integration-wire";
+import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@repo/features/models-wire";
+import {
+  TASK_CREATE_RELATION_KIND,
+  TASK_SKILL_SOURCE,
+  TASK_TREE_ENTRY,
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import {
   agentKeyLink,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
-} from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
+} from "@repo/settings/settings-views";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -265,7 +269,7 @@ async function mount(
     placeholder: () => document.querySelector(".agent-composer-placeholder")?.textContent,
     /** The round Start button, by its place at the foot's end, since an empty box names it for what ⌘Return does there. */
     startButton: () =>
-      document.querySelector<HTMLButtonElement>('.luke-composer-foot button[type="submit"]') ??
+      document.querySelector<HTMLButtonElement>('.ui-composer-foot button[type="submit"]') ??
       assert.fail("the round Start button stands"),
     /** The card's buttons in order, as a reader meets them. */
     controls: () =>
@@ -279,12 +283,12 @@ test("the card, named New task, holds the composer with its words focused, the r
   const card = await mount();
   const controls = card.controls();
   const head = card.dialog()?.querySelector(".new-task-head");
-  const foot = card.dialog()?.querySelector(".luke-composer-foot");
+  const foot = card.dialog()?.querySelector(".ui-composer-foot");
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the task");
   assert.equal(controls.includes("Plan with Vespin first"), false, "no Plan toggle stands");
-  for (const each of ["Attach files", "acme/web", "Start a task with no agent"]) {
+  for (const each of ["Add files and more", "acme/web", "Start a task with no agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
   }
   const name = card.dialog()?.getAttribute("aria-labelledby") ?? assert.fail("the card is named");
@@ -315,6 +319,7 @@ test("Return starts the task without planning, Untitled, on the repository last 
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
     choice: undefined,
+    disabledServers: [],
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
 });
@@ -353,17 +358,72 @@ test("Fast on a model nothing pays for lands on its harness's row in Settings, a
   assert.equal(chip.textContent?.includes("Fast"), false);
 });
 
-test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {
+test("a server switched off from the + menu's Integrations is handed to the agent's start, and a refused card opened again keeps it off", async () => {
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () =>
       Promise.resolve({
-        integrations: { ...UNAVAILABLE, [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED },
+        integrations: {
+          ...UNAVAILABLE,
+          [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.CONNECTED,
+        },
       }),
   });
-  const card = await mount();
+  const card = await mount("The service is down.");
+  const slackSwitch = async () => {
+    act(() => card.button("Add files and more").click());
+    const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    assert.deepEqual(
+      rows.map((row) => row.textContent),
+      ["Attachment", "Integrations", "Task relation"],
+    );
+    act(() => rows[1]?.click());
+    await settle();
+    return (
+      document.querySelector<HTMLButtonElement>(
+        '[role="switch"][aria-label="Slack for this agent"]',
+      ) ?? assert.fail("the servers popover offers Slack's switch")
+    );
+  };
+  const slack = await slackSwitch();
+  assert.equal(
+    slack.getAttribute("aria-checked"),
+    "true",
+    "every server stands on as the card opens",
+  );
+  act(() => slack.click());
+  await card.press("Escape", document.activeElement as HTMLElement);
+  await card.press("Escape", document.activeElement as HTMLElement);
+  card.type("Post the release notes");
+  await card.key("Enter");
   await settle();
 
-  assert.equal(card.dialog()?.textContent?.includes("sign-in expired"), false);
+  assert.deepEqual(card.agents[0]?.disabledServers, [INTEGRATION_PROVIDER.SLACK]);
+  assert.equal(
+    card.note()?.includes("The service is down."),
+    true,
+    "the card opens again on the refusal",
+  );
+  assert.equal((await slackSwitch()).getAttribute("aria-checked"), "false");
+});
+
+test("a refused start related to a task of another workspace opens again there, and its Retry starts there", async () => {
+  const other = {
+    id: "1a2b3c4d-0000-4000-8000-000000000009",
+    workspaceId: "workspace-acme",
+    name: "Ship login",
+    number: 212,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/web",
+  };
+  const card = await mount("The service is down.", {
+    relation: { kind: TASK_CREATE_RELATION_KIND.BLOCKS, task: other },
+  });
+  card.type("Post the release notes");
+  await card.key("Enter");
+  await card.key("Enter");
+
+  assert.deepEqual(card.startedIn, ["workspace-acme", "workspace-acme"]);
 });
 
 test("Command-Return while a file is still being read starts no bare task", async () => {
@@ -451,7 +511,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
 
   typeInComposer(document, "@roll");
   await settle();
-  const offered = [...document.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+  const offered = [...document.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (row) => row.textContent,
   );
   pressInComposer(document, "Enter");
@@ -467,7 +527,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
     [{ workspaceId: "workspace-acme", repository: "acme/web", path: "", recursive: true }],
   );
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["rollout-store.ts"],
   );
   const file = { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" } as const;
@@ -720,7 +780,7 @@ test("the workspace first resolving keeps a repository picked before the workspa
 
 /** The lines the repository menu says in its rows' place. */
 function menuNotes(): (string | null)[] {
-  return [...document.querySelectorAll(".luke-combobox-note")].flatMap((note) => {
+  return [...document.querySelectorAll(".ui-combobox-note")].flatMap((note) => {
     const lines = [...note.querySelectorAll("p")];
     return lines.length === 0 ? [note.textContent] : lines.map((line) => line.textContent);
   });
@@ -729,7 +789,7 @@ function menuNotes(): (string | null)[] {
 /** The chip's menu opened, and the buttons then drawn anywhere in the document. */
 async function openChip(): Promise<HTMLButtonElement[]> {
   const chip =
-    document.querySelector<HTMLButtonElement>(".luke-chip") ??
+    document.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the dialog draws the repository chip");
   act(() => chip.click());
   await settle();
@@ -982,8 +1042,8 @@ test("the repository menu names each repository first and its owner after it, so
   await openChip();
   const rows = () =>
     [...document.querySelectorAll('[role="option"]')].map((row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent,
-      row.querySelector(".luke-combobox-option-detail")?.textContent,
+      row.querySelector(".ui-combobox-option-label")?.textContent,
+      row.querySelector(".ui-combobox-option-detail")?.textContent,
     ]);
 
   assert.deepEqual(rows(), [

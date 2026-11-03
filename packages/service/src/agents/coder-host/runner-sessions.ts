@@ -86,9 +86,9 @@ import {
   RUNNER_ENV,
   type RunnerConfig,
   type RunnerEnd,
-} from "@luke/agent-runner/protocol";
-import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
-import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
+} from "@repo/agent-runner/protocol";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -101,25 +101,25 @@ import {
   readAgentRouting,
   readNativeRunStanding,
   recordAgentRunnerToken,
-} from "@luke/database/models/agent-store";
-import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
+} from "@repo/database/models/agent-store";
+import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
 import {
   clearNativeRewindHanded,
   readNativeRewind,
-} from "@luke/database/models/conversation-rewind";
-import { deviceAgentAwaitsUpdate } from "@luke/database/models/device-agent-store";
+} from "@repo/database/models/conversation-rewind";
+import { deviceAgentAwaitsUpdate } from "@repo/database/models/device-agent-store";
 import {
   ANY_LAUNCH,
   clearRunnerLines,
   queueRunnerLine,
   runnerLinesWaiting,
   withdrawRunnerLine,
-} from "@luke/database/models/runner-line-store";
-import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import type { AgentMachineKind } from "@luke/features/agent-wire";
-import { TURN_FAILURE } from "@luke/features/turn-run";
-import { causeKind, failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/runner-line-store";
+import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import type { AgentMachineKind } from "@repo/features/agent-wire";
+import { TURN_FAILURE } from "@repo/features/turn-run";
+import { causeKind, failureKind } from "@repo/runtime/effect";
 import type { UserContent } from "ai";
 import { Cause, Clock, Context, Data, DateTime, Duration, Effect, Option, Ref } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
@@ -146,7 +146,6 @@ import {
   PLAN_REFUSAL,
   RUNTIME_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   AgentMachine,
   type AgentMachineService,
@@ -173,6 +172,7 @@ import {
   SandboxUnavailable,
   sessionEnding,
 } from "../vercel-sandbox-api.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
@@ -945,8 +945,8 @@ export const runnerSessions = <
 
     /**
      * A new place opened under the session given on the agent's machine, the
-     * agent's repository checked out in it, then at once what eve's first
-     * write does (`deepenAgentCheckout`, the machine's `finishCheckout`): the
+     * agent's repository checked out in it, then at once its deepen
+     * (`deepenCheckoutWith`, the machine's `finishCheckout`): the
      * write token at the firewall and the commit identity, since the
      * harness's own shell has no hook for a first write; and the runner
      * launched on the first line. The member's installed skills are read
@@ -1081,19 +1081,23 @@ export const runnerSessions = <
         const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
         const handedAt = yield* Clock.currentTimeMillis;
         const handed = (path: (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH]) =>
-          recordServerEvent(SERVER_EVENT.AGENT_HANDOFF, userId, {
-            harness: harness.runtime,
-            path,
-            turn_running: turnRunning,
-            ...(turnRunning || turn?.settledAt == null
-              ? {}
-              : {
-                  idle_seconds: Math.max(
-                    0,
-                    Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
-                  ),
-                }),
-          });
+          recordServerEvent(
+            SERVER_EVENT.AGENT_HANDOFF,
+            { userId, workspaceId: agent.organizationId },
+            {
+              harness: harness.runtime,
+              path,
+              turn_running: turnRunning,
+              ...(turnRunning || turn?.settledAt == null
+                ? {}
+                : {
+                    idle_seconds: Math.max(
+                      0,
+                      Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
+                    ),
+                  }),
+            },
+          );
         const running = found.value.runner;
         if (running !== undefined) {
           const runnerPlace = placeOfHandle(running.handle);

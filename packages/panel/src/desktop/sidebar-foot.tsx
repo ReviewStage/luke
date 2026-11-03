@@ -1,12 +1,12 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { VERB } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import type { UpdateControl } from "@luke/settings/settings-controls";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { updateInSidebar } from "@luke/settings/update-row";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { VERB } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
+import type { UpdateControl } from "@repo/settings/settings-controls";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { updateInSidebar } from "@repo/settings/update-row";
 import {
   BUTTON_SHAPE,
   BUTTON_SIZE,
@@ -30,8 +30,8 @@ import {
   Tooltip,
   UpdateIcon,
   useMenu,
-} from "@luke/ui";
-import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import {
   LifeBuoyIcon,
   LightbulbIcon,
@@ -66,7 +66,7 @@ import { OfflineMark } from "./offline-mark.js";
  */
 
 /** Where Contact us > GitHub leads: our own issues, where CONTRIBUTING.md sends bugs and feature requests. */
-const ISSUES_URL = "https://github.com/ReviewStage/luke/issues";
+const ISSUES_URL = "https://github.com/ReviewStage/vespin/issues";
 
 /** The account's place while no one is signed in: someone's outline. */
 const NOBODY_SIGNED_IN: Actor = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
@@ -169,7 +169,7 @@ function AccountHeading({
           as={TEXT_ELEMENT.SPAN}
           variant={TEXT_VARIANT.INHERIT}
           truncate
-          className="account-menu-name font-luke-semibold text-foreground"
+          className="account-menu-name font-ui-semibold text-foreground"
         >
           {account.name}
         </Text>

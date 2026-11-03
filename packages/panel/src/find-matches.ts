@@ -32,7 +32,7 @@
  * root takes none of them, so such a root adopts its own.
  */
 
-import { askScroll } from "@luke/ui/scroll-asked";
+import { askScroll } from "@repo/ui/scroll-asked";
 
 /** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
 const FIND_HIGHLIGHT = {

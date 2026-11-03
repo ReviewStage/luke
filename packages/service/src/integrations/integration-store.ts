@@ -15,18 +15,18 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
 import {
   INTEGRATION_ROW_STATUS,
   type IntegrationRowStatus,
-} from "@luke/database/integration-vocabulary";
-import { InstantColumnSchema } from "@luke/database/models/columns";
-import { integrationConnection } from "@luke/database/schemas/integration";
+} from "@repo/database/integration-vocabulary";
+import { InstantColumnSchema } from "@repo/database/models/columns";
+import { integrationConnection } from "@repo/database/schemas/integration";
 import {
   type IntegrationProvider,
   integrationProviderSchema,
-} from "@luke/features/integration-wire";
-import { and, eq, isNull, sql } from "drizzle-orm";
+} from "@repo/features/integration-wire";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
@@ -348,18 +348,18 @@ const updateUnlabelled = SqlSchema.void({
           and(
             ofAccount(account),
             eq(integrationConnection.connectSubject, connectSubject),
-            isNull(integrationConnection.label),
+            or(isNull(integrationConnection.label), eq(integrationConnection.label, "")),
           ),
         ),
     ),
 });
 
 /**
- * Labels one account that carries no label yet with its name at the
- * provider as Connect's grant read it, or with an empty label where the
- * grant named nothing, which marks it read so its grant is never asked
- * again for a name; a label the account carries, the developer's own among
- * them, stands. Only the account under the subject the name was read for
+ * Labels one account that carries no label yet, or an empty one, with its
+ * name at the provider as Connect's grant or the provider read it, or with
+ * an empty label where neither named anything, which marks it read so its
+ * grant is never asked again for a name; a label the account carries, the
+ * developer's own among them, stands. Only the account under the subject the name was read for
  * takes it, so one disconnected and replaced under the same name meanwhile
  * never wears its predecessor's.
  */

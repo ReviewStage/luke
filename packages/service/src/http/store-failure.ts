@@ -10,8 +10,8 @@
  * refused. A route carries the failure onward as the unavailable refusal.
  */
 
-import type { QueryError } from "@luke/database/core/query";
-import { failureDetail, failureKind } from "@luke/runtime/effect";
+import type { QueryError } from "@repo/database/core/query";
+import { failureDetail, failureKind } from "@repo/runtime/effect";
 import { Effect, Option, type Schema } from "effect";
 
 export type StoreFailure = QueryError | Schema.SchemaError;

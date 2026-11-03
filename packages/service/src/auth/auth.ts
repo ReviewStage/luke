@@ -1,6 +1,6 @@
 import { electron } from "@better-auth/electron";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
@@ -20,6 +20,7 @@ import {
   denyOAuthClientPrivileges,
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
+  LOGIN_PAGE,
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
@@ -96,8 +97,8 @@ export const auth = betterAuth({
     jwt(JWT_KEY_STORAGE),
     lastLoginMethod({ storeInDatabase: true }),
     oauthProvider({
-      loginPage: "/sign-in.html",
-      consentPage: "/consent.html",
+      loginPage: LOGIN_PAGE,
+      consentPage: "/consent",
       allowDynamicClientRegistration: false,
       clientPrivileges: denyOAuthClientPrivileges,
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),

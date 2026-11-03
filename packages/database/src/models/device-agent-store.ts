@@ -31,7 +31,7 @@
  * two lines queued at once outside the lease could commit out of order.
  */
 
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_CAPABILITY,
   DEVICE_AGENT_LINE_KIND,
@@ -46,7 +46,7 @@ import {
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import {
   and,
   arrayContains,
@@ -836,6 +836,33 @@ const writeLapsedSettled = SqlSchema.findAll({
     ),
 });
 
+const writeGoneSettled = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    deviceIds: Schema.Array(Schema.String),
+    now: Schema.Date,
+  }),
+  execute: ({ userId, deviceIds, now }) =>
+    Database.use((db) =>
+      db
+        .update(deviceAgentLine)
+        .set({
+          settledAt: now,
+          exitCode: null,
+          claimedAt: sql`coalesce(${deviceAgentLine.claimedAt}, ${now}::timestamptz)`,
+          sealedSecrets: null,
+        })
+        .where(
+          and(
+            eq(deviceAgentLine.userId, userId),
+            inArray(deviceAgentLine.deviceId, [...deviceIds]),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            isNull(deviceAgentLine.settledAt),
+          ),
+        ),
+    ),
+});
+
 /** A warm launch the sweep may retire: its agent's starter, the agent, and the session its conversation runs in, which its place is found by. */
 const WarmLaunchSchema = Schema.Struct({
   id: Schema.String,
@@ -1172,6 +1199,21 @@ export function settleLapsedDeviceAgentLine(
       Option.fromNullishOr(rows[0]),
     ),
   );
+}
+
+/**
+ * Settles every launch line still open, claimed or not, to the account's
+ * devices given as its runner gone, as `settleLapsedDeviceAgentLine` settles
+ * one, whatever their last beat: what a host folded into another can no
+ * longer run (`./host-store.ts`). Note that this is what lets an agent moved
+ * off such a device launch again on its new one, since its machine reads
+ * the agent's newest launch open as its runner still live.
+ */
+export function settleGoneDeviceAgentLaunches(
+  userId: string,
+  deviceIds: readonly string[],
+): DeviceAgentEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) => writeGoneSettled({ userId, deviceIds, now }));
 }
 
 /**

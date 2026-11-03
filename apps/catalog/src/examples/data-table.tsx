@@ -1,4 +1,4 @@
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import {
   BUTTON_VARIANT,
   Button,
@@ -11,8 +11,8 @@ import {
   Stack,
   TEXT_TONE,
   Text,
-} from "@luke/ui";
-import { SORT_DIRECTION } from "@luke/ui/sort-direction";
+} from "@repo/ui";
+import { SORT_DIRECTION } from "@repo/ui/sort-direction";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

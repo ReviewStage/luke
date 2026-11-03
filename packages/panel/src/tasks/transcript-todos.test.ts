@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TODO_STATUS, type AgentTodos } from "@luke/features/agent-wire";
+import { AGENT_TODO_STATUS, type AgentTodos } from "@repo/features/agent-wire";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -92,7 +92,7 @@ test("a write that failed says why under its list", () => {
 test("only the list the agent is at wears the working mark on its item in progress", () => {
   const working = (surface: HTMLElement): string[] =>
     items(surface)
-      .filter((item) => item.seat.querySelector(".luke-working-mark") !== null)
+      .filter((item) => item.seat.querySelector(".ui-working-mark") !== null)
       .map((item) => item.status);
   assert.deepEqual(working(transcriptList(undefined, true)), [AGENT_TODO_STATUS.IN_PROGRESS]);
   assert.deepEqual(working(transcriptList()), []);

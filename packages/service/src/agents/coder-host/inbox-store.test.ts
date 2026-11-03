@@ -1,30 +1,31 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import { Database } from "@luke/database/core/query";
-import { createAgent, renameAgent } from "@luke/database/models/agent-store";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import { Database } from "@repo/database/core/query";
+import { createAgent, renameAgent } from "@repo/database/models/agent-store";
 import {
   createAutomation,
   ownFailedRunsLiveStatement,
   recordAutomationRun,
   settleAutomationRun,
-} from "@luke/database/models/automation-store";
+} from "@repo/database/models/automation-store";
 import {
   archiveChannel,
   createChannel,
   ensureGeneralChannel,
-} from "@luke/database/models/channel-store";
-import { updateTask } from "@luke/database/models/task-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { organization, user } from "@luke/database/schemas/auth";
-import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
-import { task as taskTable } from "@luke/database/schemas/task";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import type { AccountInboxTask } from "@luke/features/account-inbox-wire";
-import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
+} from "@repo/database/models/channel-store";
+import { updateTask } from "@repo/database/models/task-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { organization, user } from "@repo/database/schemas/auth";
+import { automationRun, automation as automationTable } from "@repo/database/schemas/automation";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { inboxItemRead } from "@repo/database/schemas/inbox-item-read";
+import { task as taskTable } from "@repo/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import type { AccountInboxTask } from "@repo/features/account-inbox-wire";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -33,8 +34,8 @@ import {
   AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/automation-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -48,7 +49,7 @@ import {
   type InboxItem,
   type InboxMessage,
   threadNeedsReader,
-} from "@luke/features/inbox-wire";
+} from "@repo/features/inbox-wire";
 import {
   accountInboxItemsLiveRowsSchema,
   accountInboxLiveRowSchemas,
@@ -56,8 +57,8 @@ import {
   FAILED_RUN_WINDOW_MILLIS,
   inboxOfLiveRows,
   scopeInboxLiveRowsSchema,
-} from "@luke/features/live-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
+} from "@repo/features/live-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -128,7 +129,7 @@ const firstPage = (userId: string, channelId: string) =>
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -144,6 +145,7 @@ const openAgentIn = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   const agent = { userId, taskId: task.id, agentId: started.value.agent.id };
@@ -261,6 +263,7 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
       repository: "acme/relay",
       planSnapshot: null,
       prompt: "Sweep the flaky tests.",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const agent: InboxAgent = { userId, taskId: null, agentId: started.value.agent.id };
@@ -471,6 +474,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Billing export\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(shelvedAgent));
         yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
@@ -1065,6 +1069,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           githubAccess: GITHUB_ACCESS.APP,
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         // The task moves onto its owner's own token, which the teammate keeps none to read through.
         yield* Database.use((db) =>
@@ -1697,6 +1702,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
               repository: "acme/relay",
               planSnapshot: null,
               prompt: null,
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             });
             assert.ok(Option.isSome(started));
             return { userId, taskId: onTask, agentId: started.value.agent.id };

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { openMigratedPglite } from "@luke/database/testing";
+import { openMigratedPglite } from "@repo/database/testing";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
@@ -189,7 +189,11 @@ test("an admin invites by address, and the invitee reads the invitation and acce
     assert.equal(accepted.status, 200);
     // Note that the acceptance is counted under the invitee, and the inviter's own send is the procedure's to count.
     assert.deepEqual(counts, [
-      { name: "workspace:invite_accept", userId: invitee.id, properties: {} },
+      {
+        name: "workspace:invite_accept",
+        actor: { userId: invitee.id, workspaceId },
+        properties: {},
+      },
     ]);
     assert.deepEqual(Schema.decodeUnknownSync(AcceptedSchema)(await accepted.json()).member, {
       organizationId: workspaceId,

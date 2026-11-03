@@ -1,10 +1,10 @@
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
   type TaskStatus,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -34,8 +34,8 @@ import {
   Text,
   TrashIcon,
   UnassignedAvatar,
-} from "@luke/ui";
-import { GLYPH, HandIcon, OctagonMinusIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH, HandIcon, OctagonMinusIcon } from "@repo/ui/icons";
 import { type ReactNode, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

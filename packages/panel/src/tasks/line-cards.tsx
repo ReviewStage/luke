@@ -3,25 +3,27 @@ import {
   type CheckState,
   REVIEW_STATE,
   type ReviewState,
-} from "@luke/features/agent-wire";
-import { THREAD_LINE_LEAD, threadLineTitle } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
+} from "@repo/features/agent-wire";
+import { THREAD_LINE_LEAD, threadLineTitle } from "@repo/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import {
   DISCLOSURE_FILL,
   type EventNote,
   EventNotes,
+  OneLine,
   type SubjectFit,
   SubjectLine,
-} from "@luke/ui";
-import { CircleCheckIcon, CircleSlashIcon, GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { CircleCheckIcon, CircleSlashIcon, GLYPH } from "@repo/ui/icons";
 import {
+  type CommentLineMetadata,
   GITHUB_CHECK_CONCLUSION,
   GITHUB_LINE_EVENT,
   type GitHubCheckConclusion,
   type GitHubLineMetadata,
   isFailingConclusion,
   type ThreadLineMetadata,
-} from "@luke/wire";
+} from "@repo/wire";
 import { createContext, type ReactNode, useContext } from "react";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import {
@@ -99,6 +101,52 @@ export function ThreadLineHead({
   );
 }
 
+/** What a comment line leads with, as a thread's leads with what its member did. */
+export const COMMENT_LINE_LEAD = "Comment on";
+
+/** What a comment line's chip names where no page does: the plan of the task it is on. */
+const PLAN_WORDS = "the plan";
+
+/** The link a comment line's chip is read from: the page it is on, or its task's plan; none where no task or workspace names it. */
+function commentLink(line: CommentLineMetadata, doors: MentionDoors): string | undefined {
+  if (line.task_id === undefined || doors.place.workspace === "") return undefined;
+  return line.page_id === undefined
+    ? linkOf({ kind: LINK_PLACE.TASK, planId: line.task_id }, doors.place.workspace)
+    : linkOf(
+        { kind: LINK_PLACE.PAGE, planId: line.task_id, pageId: line.page_id },
+        doors.place.workspace,
+      );
+}
+
+/** What a comment line's head names: the page by its title, or the plan. */
+export function commentLineSubject(line: CommentLineMetadata): string {
+  return line.page_title ?? PLAN_WORDS;
+}
+
+/**
+ * The head of a comment thread that reached the agent, drawn in place of the
+ * instructions it was handed in, as a thread's line is headed: that it is a
+ * comment, and the chip of the plan or page it is on.
+ */
+export function CommentLineHead({
+  line,
+  fit,
+}: {
+  line: CommentLineMetadata;
+  /** How much of the line the chip takes: the rest of it alone, or its own width beside its sender (`MessageHead`). */
+  fit?: SubjectFit | undefined;
+}): React.JSX.Element {
+  const doors = useMentionDoors();
+  const href = commentLink(line, doors);
+  const chip =
+    href === undefined ? commentLineSubject(line) : linkChip(href, commentLineSubject(line), doors);
+  return (
+    <SubjectLine lead={COMMENT_LINE_LEAD} fit={fit} data-comment-line="">
+      {chip}
+    </SubjectLine>
+  );
+}
+
 /** Where a check a GitHub line names stands in the Pull request tab's own words, which its row is drawn by: one that failed as failed, one that passed as passed, and the rest as skipped, as the tab reads them. */
 function checkStateOf(conclusion: GitHubCheckConclusion): CheckState {
   if (isFailingConclusion(conclusion)) return CHECK_STATE.FAILED;
@@ -123,7 +171,7 @@ type MarkInk = (typeof MARK_INK)[keyof typeof MARK_INK];
 /** A mark in a card's icon's seat, at the size and in the seat the Pull request tab's badge stands in. */
 function CardMark({ ink, children }: { ink: MarkInk; children: ReactNode }): React.JSX.Element {
   return (
-    <span className={`github-line-mark inline-grid place-items-center [&>svg]:size-luke-12 ${ink}`}>
+    <span className={`github-line-mark inline-grid place-items-center [&>svg]:size-ui-12 ${ink}`}>
       {children}
     </span>
   );
@@ -285,16 +333,23 @@ export function GitHubLineCard({
       open={folds ? undefined : false}
       fill={DISCLOSURE_FILL.ACTIONS}
       actions={
-        <>
-          <span className="github-line-head flex min-w-0 flex-1 items-center gap-tight-gap overflow-hidden whitespace-nowrap">
-            {sender == null ? null : <span className="inline-flex min-w-0">{sender}</span>}
-            <span className="flex-none text-muted-foreground">{head.does}</span>
+        // Note that a head too narrow for one line puts what was done on a line of its own under who did it, rather than shrinking a chip under the words beside it; there the count fades first, then the words, and the pull request's chip stays whole.
+        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-tight-gap overflow-clip py-row-inset">
+          {sender == null ? null : (
+            <span className="inline-flex min-w-0 max-w-full overflow-clip">{sender}</span>
+          )}
+          <span className="flex min-w-0 max-w-full flex-1 basis-auto items-center gap-tight-gap whitespace-nowrap">
+            <OneLine className="min-w-0 text-muted-foreground">{head.does}</OneLine>
             <span className="inline-flex flex-none">
               <ChipOrLink href={pullRequestPage(line)} words={head.target} doors={doors} />
             </span>
+            {count === "" ? null : (
+              <OneLine className="ms-auto min-w-0 shrink-[1000] grow-0 basis-auto ps-tight-gap text-muted-foreground">
+                {count}
+              </OneLine>
+            )}
           </span>
-          {count === "" ? null : <span className="flex-none text-muted-foreground">{count}</span>}
-        </>
+        </span>
       }
     >
       <PlanHeader folds={folds} aria-label={count === "" ? named : `${named}, ${count}`}>

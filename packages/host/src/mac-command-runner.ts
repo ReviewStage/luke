@@ -2,7 +2,7 @@ import {
   MAC_COMMAND_BOUNDS,
   type MacShellCommand,
   type MacShellResult,
-} from "@luke/features/mac-command-wire";
+} from "@repo/features/mac-command-wire";
 import { Duration, Effect, Fiber, Option, Ref, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 

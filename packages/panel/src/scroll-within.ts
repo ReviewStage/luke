@@ -1,4 +1,4 @@
-import { askScroll } from "@luke/ui/scroll-asked";
+import { askScroll } from "@repo/ui/scroll-asked";
 
 /**
  * scroll-within.ts -- a reveal that scrolls one box alone, never every box around the element, so a pane still sliding in is not scrolled sideways after it.

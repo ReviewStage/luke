@@ -8,14 +8,14 @@ import {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallFailure,
   type WorkspaceCallResult,
-} from "@luke/features";
+} from "@repo/features";
 import {
   ADMIN_UNANSWERED,
   type AdminReadAnswer,
   adminFavoriteParamsSchema,
   adminReadParamsSchema,
-} from "@luke/features/admin-wire";
-import { type BrowserTabsPlace, browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
+} from "@repo/features/admin-wire";
+import { type BrowserTabsPlace, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import {
   browserTabsOfLiveRows,
   LIVE_SIGNED_OUT,
@@ -25,9 +25,9 @@ import {
   taskBrowserTabsLiveRowsSchema,
   taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
-} from "@luke/features/live-wire";
-import { PAGE_OWNER, type PageOwner, type PagePlace } from "@luke/features/page-wire";
-import { TASK_STATUS, type Task, type TaskSkillsAnswer } from "@luke/features/task-wire";
+} from "@repo/features/live-wire";
+import { PAGE_OWNER, type PageOwner, type PagePlace } from "@repo/features/page-wire";
+import { TASK_STATUS, type Task, type TaskSkillsAnswer } from "@repo/features/task-wire";
 import {
   HOST_LIVE,
   IDLE_TASKS_VIEW,
@@ -43,6 +43,7 @@ import {
   type TasksDocument,
   type TasksEditAnswer,
   type TasksFileAnswer,
+  type TasksFindAnswer,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
@@ -69,6 +70,7 @@ import {
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceSentryAnswer,
+  type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
@@ -82,6 +84,7 @@ import {
   tasksCommentsParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
+  tasksFindParamsSchema,
   tasksIssueParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
@@ -113,21 +116,23 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
+  tasksWorkspaceSlackBotNotificationsParamsSchema,
+  tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
   tasksWriteSectionParamsSchema,
   workspacePeopleFollowSchema,
-} from "@luke/features/tasks-view";
-import type { Workspace } from "@luke/features/workspace-wire";
+} from "@repo/features/tasks-view";
+import type { Workspace } from "@repo/features/workspace-wire";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   readParams,
-} from "@luke/gateway";
-import { keepIdentity } from "@luke/wire";
+} from "@repo/gateway";
+import { keepIdentity } from "@repo/wire";
 import {
   Cache,
   Clock,
@@ -339,6 +344,7 @@ export type TasksClient = Pick<
   | "readRepositoryIssue"
   | "readBrowserTabs"
   | "openBrowserTab"
+  | "find"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -361,12 +367,17 @@ export type TasksClient = Pick<
     | "live"
     | "create"
     | "rename"
+    | "setSlug"
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
     | "sentryInstallations"
     | "sentryInstall"
     | "sentryDisconnect"
+    | "slackBot"
+    | "slackBotConnect"
+    | "slackBotDisconnect"
+    | "slackBotNotifications"
     | "people"
     | "peopleLive"
     | "invitationsLive"
@@ -1897,6 +1908,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksBrowserTabOpenAnswer>(BROWSER_TABS_UNANSWERED);
         return carried<TasksBrowserTabOpenAnswer>(yield* served(client.openBrowserTab(read)));
       }),
+    // The task a link names by its number is found on the service and answered to the window that asked, held nowhere.
+    [GATEWAY_METHOD.TASKS_FIND]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksFindParamsSchema,
+          params,
+          "finding a task by its number names the workspace and the number",
+        );
+        if (!gate()) {
+          return carried<TasksFindAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        const taskId = yield* served(client.find(read.workspace, read.number));
+        return carried<TasksFindAnswer>(
+          taskId === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { taskId },
+        );
+      }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps
     // what it read, and reads again as the task moves on.
@@ -2066,10 +2093,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksCommentsParamsSchema,
           params,
-          "reading a plan's comments names the plan and a cursor",
+          "reading a plan's comments names the plan, the page where it reads one's, and a cursor",
         );
         if (!gate()) return carried<TasksCommentsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.comments(read.planId, read.after));
+        const answer = yield* served(client.comments(read.planId, read.after, read.pageId));
         return carried<TasksCommentsAnswer>(answer);
       }),
     [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>
@@ -2659,6 +2686,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           yield* workspaceWrite(client.workspaces.rename(workspaceId, name)),
         );
       }),
+    // A slug moves no task either: links resolve by id, or by a former
+    // slug the workspace keeps, so the answered workspace lands as a
+    // rename's does.
+    [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceSlugSetParamsSchema,
+          params,
+          "changing a workspace's slug names it and its new slug",
+        );
+        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, slug } = read;
+        return carried<TasksWorkspaceAnswer>(
+          yield* workspaceWrite(client.workspaces.setSlug(workspaceId, slug)),
+        );
+      }),
     // A photo moves no task either, so it is a rename's twin: the answered
     // workspace, its photo's new version or none, lands; the window's tiles
     // read the photo by it.
@@ -2750,6 +2793,63 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksWorkspaceSentryAnswer>(
           sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
+        );
+      }),
+    // A workspace's Slack bot is answered to the window that asked and held
+    // nowhere, as its Sentry is: the row reads it as it opens and as the
+    // window comes forward, and a connect or disconnect answers it anew.
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "reading the Slack bot names a workspace",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBot(read.workspaceId));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "connecting the Slack bot names a workspace",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBotConnect(read.workspaceId));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "disconnecting the Slack bot names a workspace",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBotDisconnect(read.workspaceId));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceSlackBotNotificationsParamsSchema,
+          params,
+          "changing Slack notifications names a workspace and the switch",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(
+          client.workspaces.slackBotNotifications(read.workspaceId, read.notifications),
+        );
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
         );
       }),
     // The members, and who the workspace's work names but left, are answered to the window that asked and held nowhere:

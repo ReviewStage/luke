@@ -5,14 +5,14 @@ import {
   type SidebarRows,
   sidebarLiveRowsSchema,
   sidebarRowsOfLive,
-} from "@luke/features/sidebar-live";
+} from "@repo/features/sidebar-live";
 import {
   TASK_SECTION_GLYPH,
   TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
   type TaskSections,
   type TaskSectionWrite,
-} from "@luke/features/task-section-wire";
+} from "@repo/features/task-section-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -51,7 +51,7 @@ import { createTask, deleteTask, updateTask } from "../task-store.js";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

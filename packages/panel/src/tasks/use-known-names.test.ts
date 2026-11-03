@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LIVE_READ } from "@luke/features/live-wire";
-import type { KnownNames } from "@luke/features/place-chip-model";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
+import { LIVE_READ } from "@repo/features/live-wire";
+import type { KnownNames } from "@repo/features/place-chip-model";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

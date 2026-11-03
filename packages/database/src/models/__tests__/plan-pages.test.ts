@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { PAGE_OWNER, PAGE_SHOWER, type PageOwner, type PageShower } from "@luke/features/page-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { PAGE_OWNER, PAGE_SHOWER, type PageOwner, type PageShower } from "@repo/features/page-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
@@ -33,7 +33,7 @@ import { createTask, deleteTask } from "../task-store.js";
  * Synthetic accounts and pages throughout.
  */
 
-const LUKE: PageShower = { kind: PAGE_SHOWER.LUKE };
+const LUKE: PageShower = { kind: PAGE_SHOWER.APP };
 
 const onTask = (taskId: string): PageOwner => ({ kind: PAGE_OWNER.TASK, taskId });
 
@@ -88,7 +88,7 @@ const ownerColumnsOf = (pageId: string) =>
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

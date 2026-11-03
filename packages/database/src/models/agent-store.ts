@@ -4,7 +4,6 @@ import {
   AGENT_BRIEF,
   AGENT_KIND,
   AGENT_MACHINE,
-  AGENT_PAYER,
   type AgentAuthor,
   type AgentBrief,
   type AgentKind,
@@ -12,20 +11,21 @@ import {
   type AgentPayer,
   type AgentPullRequest,
   type AgentSubagentTitle,
+  agentPayerSchema,
   agentPullRequestSchema,
   CONTEXT_WINDOW,
   type ContextWindow,
   contextWindowSchema,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { automationFiringSchema } from "@luke/features/automation-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+} from "@repo/features/agent-wire";
+import { automationFiringSchema } from "@repo/features/automation-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import {
   integrationConnectionNameSchema,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
-import { TURN_STATUS, type WireValue, WireValueSchema } from "@luke/wire";
+} from "@repo/features/integration-wire";
+import type { ModelChoice } from "@repo/features/models-wire";
+import { TURN_STATUS, type WireValue, WireValueSchema } from "@repo/wire";
 import {
   and,
   asc,
@@ -67,6 +67,7 @@ import {
   CONVERSATION_RUNTIME,
   type ConversationRuntime,
   MESSAGE_SENDER,
+  messageSenderSchema,
 } from "../storage-vocabulary.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
@@ -118,14 +119,13 @@ import type { ConversationTarget } from "./writer.js";
  * rather than finding an agent nothing runs. The model, effort, and context
  * window on the row are read at every step, so a change to them is the next
  * step's. The
- * branch is what stood checked out in the agent's sandbox as its last turn
- * ended, written by the session's turn-end hook (`coder-host/host.ts`) and
- * read where the agent's pull request is looked up (`coder-host/published.ts`). A
- * delegation is a child conversation under the agent's, opened ahead of the
- * worker's session (`coder-host/delegation.ts`) with the model and effort
- * the agent chose for it written beside it here, so the worker's steps read
- * the pair under the child and the tabs read the worker's transcript under
- * the agent's; the worker's title stands on its child conversation
+ * branch is the head of the pull request the agent opened, written as it
+ * opens one (`coder-host/pull-request.ts`) and read where the agent's pull
+ * request is looked up (`coder-host/published.ts`). A delegation is a child
+ * conversation under the agent's, which an eve agent's `delegate` opened
+ * ahead of its worker's session with the model and effort the agent chose
+ * for it written beside it here, so the tabs read the worker's transcript
+ * under the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
  * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
  * because the routes bundle this module and the eve host's modules reach
@@ -323,8 +323,8 @@ export type NewAgent = AgentPlace & {
   readonly mentionedServers?: readonly string[] | undefined;
   /** How the repository was reached for the Start; the App's where none is named. */
   readonly githubAccess?: GitHubAccess | undefined;
-  /** What answers the agent's conversation; eve where none is named. */
-  readonly runtime?: ConversationRuntime | undefined;
+  /** What answers the agent's conversation. */
+  readonly runtime: ConversationRuntime;
   /** Who pays for the agent's model calls; none recorded where none is named. */
   readonly payer?: AgentPayer | undefined;
   /** Where its runner runs; a Vercel Sandbox where none is named. */
@@ -686,7 +686,7 @@ const ownStarterOf = Effect.fnUntraced(function* (userId: string, agentId: strin
 /** A runtime as a conversation's row holds it. */
 const RuntimeColumnSchema = Schema.Literals(Object.values(CONVERSATION_RUNTIME));
 /** A payer as the agent's row holds it. */
-const PayerColumnSchema = Schema.Literals(Object.values(AGENT_PAYER));
+const PayerColumnSchema = agentPayerSchema;
 
 const insertAgentConversation = SqlSchema.findOne({
   Request: Schema.Struct({ userId: Schema.String, runtime: RuntimeColumnSchema, now: Schema.Date }),
@@ -2119,7 +2119,7 @@ export function createAgent(
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({
           userId,
-          runtime: started.runtime ?? CONVERSATION_RUNTIME.EVE,
+          runtime: started.runtime,
           now,
         }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -2727,7 +2727,7 @@ export function takeAgentMentionedServers(
   );
 }
 
-/** The branch checked out in the agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent of a workspace the account is not in. */
+/** The branch the agent opened its pull request from, or null for none; nothing written for an agent of a workspace the account is not in. */
 export function updateAgentBranch(
   userId: string,
   agentId: string,
@@ -3065,13 +3065,18 @@ export function agentConversation(
   return findAgentConversation(agentId);
 }
 
-const findSettledTurnAgentKind = SqlSchema.findOneOption({
+const SettledTurnAgentSchema = Schema.Struct({
+  kind: Schema.Literals(Object.values(AGENT_KIND)),
+  organizationId: Schema.String,
+});
+
+const findSettledTurnAgent = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ kind: Schema.Literals(Object.values(AGENT_KIND)) }),
+  Result: SettledTurnAgentSchema,
   execute: (turnId) =>
     Database.use((db) =>
       db
-        .select({ kind: agentTable.kind })
+        .select({ kind: agentTable.kind, organizationId: agentTable.organizationId })
         .from(turns)
         .innerJoin(agentTable, eq(agentTable.conversationId, turns.conversationId))
         .where(
@@ -3083,17 +3088,19 @@ const findSettledTurnAgentKind = SqlSchema.findOneOption({
     ),
 });
 
+/** What the agent whose turn settled is, and the workspace it belongs to. */
+export type SettledTurnAgent = typeof SettledTurnAgentSchema.Type;
+
 /**
- * What the agent whose turn this is is, where the turn stands ended;
- * nothing where no agent stands on its conversation or the turn's end was
- * rolled back with the transaction that wrote it. Only for a turn the
- * service settled itself, because it reads past any account's gate.
+ * What the agent whose turn this is is, and its workspace, where the turn
+ * stands ended; nothing where no agent stands on its conversation or the
+ * turn's end was rolled back with the transaction that wrote it. Only for a
+ * turn the service settled itself, because it reads past any account's gate.
  */
-export function settledTurnAgentKind(turnId: string): AgentStoreEffect<Option.Option<AgentKind>> {
-  return Effect.map(
-    findSettledTurnAgentKind(turnId),
-    Option.map((row) => row.kind),
-  );
+export function settledTurnAgent(
+  turnId: string,
+): AgentStoreEffect<Option.Option<SettledTurnAgent>> {
+  return findSettledTurnAgent(turnId);
 }
 
 /**
@@ -3378,43 +3385,6 @@ export function readAgentHeaderOfConversation(
   return findAgentHeaderOfConversation({ userId, conversationId });
 }
 
-/**
- * Whether the agent in the row read is under a pilot: started by an agent
- * of kind pilot (`AGENT_KIND.PILOT`), a coding agent and a sub-pilot alike.
- * Such an agent reports to that pilot with `message_agent` and posts no
- * thread the developer reads, which are the top pilot's alone; one started
- * by a coder, by no agent, or by an agent since deleted is under none.
- */
-export function agentUnderPilot(): SQL<boolean> {
-  const starter = alias(agentTable, "pilot_starter");
-  return exists(
-    queryBuilder
-      .select({ id: starter.id })
-      .from(starter)
-      .where(and(eq(starter.id, agentTable.startedByAgentId), eq(starter.kind, AGENT_KIND.PILOT))),
-  ).mapWith(Boolean);
-}
-
-const findAgentUnderPilot = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  Result: Schema.Struct({ underPilot: Schema.Boolean }),
-  execute: ({ userId, agentId }) =>
-    Database.use((db) =>
-      db
-        .select({ underPilot: agentUnderPilot() })
-        .from(agentTable)
-        .where(and(eq(agentTable.id, agentId), agentReachableBy(userId))),
-    ),
-});
-
-/** Whether the agent is under a pilot (`agentUnderPilot`); false for an agent the account does not reach. */
-export function readAgentUnderPilot(userId: string, agentId: string): AgentStoreEffect<boolean> {
-  return Effect.map(
-    findAgentUnderPilot({ userId, agentId }),
-    Option.exists((row) => row.underPilot),
-  );
-}
-
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
 export interface AgentContextRow {
   readonly model: string;
@@ -3454,22 +3424,6 @@ export interface AgentDelegation extends ModelChoice {
   readonly createdAt: Date;
 }
 
-const insertDelegation = SqlSchema.void({
-  Request: Schema.Struct({
-    childConversationId: Schema.String,
-    callId: Schema.String,
-    model: Schema.String,
-    effort: Schema.String,
-  }),
-  execute: ({ childConversationId, callId, model, effort }) =>
-    Database.use((db) =>
-      db
-        .insert(agentDelegationTable)
-        .values({ childConversationId, callId, model, effort })
-        .onConflictDoNothing({ target: agentDelegationTable.childConversationId }),
-    ),
-});
-
 const findDelegation = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -3501,20 +3455,6 @@ const findDelegation = SqlSchema.findOneOption({
         ),
     ),
 });
-
-/** Writes the pair a worker runs on under its child conversation, which must already stand, with the call that delegated it; a pair written twice under one child stands as first written, since the worker may already be reading it. */
-export function writeDelegation(
-  childConversationId: string,
-  callId: string,
-  choice: ModelChoice,
-): AgentStoreEffect<void> {
-  return insertDelegation({
-    childConversationId,
-    callId,
-    model: choice.model,
-    effort: choice.effort,
-  });
-}
 
 /** The delegation recorded under this child of the account's conversation, or nothing where none stands: another account's, another agent's, or no delegation at all. */
 export function readDelegation(
@@ -3588,7 +3528,7 @@ export type LineSent =
       readonly kind: typeof MESSAGE_SENDER.MEMBER;
       readonly member: { readonly userId: string; readonly name: string } | undefined;
     }
-  | { readonly kind: typeof MESSAGE_SENDER.LUKE }
+  | { readonly kind: typeof MESSAGE_SENDER.APP }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
@@ -3606,7 +3546,7 @@ interface SendingAgent {
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
   id: Schema.String,
-  sender: Schema.Literals(Object.values(MESSAGE_SENDER)),
+  sender: messageSenderSchema,
   memberId: Schema.NullOr(Schema.String),
   memberName: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
@@ -3658,8 +3598,8 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
             ? undefined
             : { userId: row.memberId, name: row.memberName },
       };
-    case MESSAGE_SENDER.LUKE:
-      return { kind: MESSAGE_SENDER.LUKE };
+    case MESSAGE_SENDER.APP:
+      return { kind: MESSAGE_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
       return row.senderName === null
         ? undefined

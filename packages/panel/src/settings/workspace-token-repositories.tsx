@@ -1,11 +1,11 @@
 import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepository,
-} from "@luke/features/github-repositories-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { noMatchWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+} from "@repo/features/github-repositories-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ANNOUNCE,
   Badge,
@@ -23,10 +23,10 @@ import {
   SettingsRow,
   SettingsRowMark,
   useConfirmDialog,
-} from "@luke/ui";
-import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";

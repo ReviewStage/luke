@@ -1,4 +1,4 @@
-import { GITHUB_TOKEN_STATUS, type GitHubTokenStatus } from "@luke/features/github-token-wire";
+import { GITHUB_TOKEN_STATUS, type GitHubTokenStatus } from "@repo/features/github-token-wire";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

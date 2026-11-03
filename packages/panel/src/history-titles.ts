@@ -1,18 +1,17 @@
-import type { Channel } from "@luke/features/channel-wire";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import type { Channel } from "@repo/features/channel-wire";
+import type { WorkspaceMember } from "@repo/features/workspace-wire";
 import {
   isAgentTab,
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
-  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
   pullRequestLabelOf,
   TAB_WORDS,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
 import { mainTabLabel } from "./desktop/main-tabs.js";
 import type { StepTitle } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
@@ -94,7 +93,6 @@ function sideTabLabel(tab: SidePanelTab, taskId: string, tasks: StepNameTasks): 
       : undefined;
   }
   if (isTerminalTab(tab)) return TAB_WORDS.TERMINAL;
-  if (isMacTerminalTab(tab)) return TAB_WORDS.MAC_TERMINAL;
   if (isCloudBrowserTab(tab)) return TAB_WORDS.BROWSER;
   if (isSubagentTab(tab)) return "Worker";
   if (isTranscriptTab(tab)) return agentNameNow(tasks, taskId, tab.transcript);
@@ -146,7 +144,7 @@ export function stepTitle(tab: PanelTab, tasks: StepTitleTasks): StepTitle | und
   }
   if (tasks.automationsView.open) return { label: "Automations" };
   if (tasks.boardView.open) return { label: "Tasks" };
-  if (tasks.boundFor === undefined) return { label: "Welcome" };
+  if (tasks.boundFor === undefined) return { label: "Home" };
   const name = taskName(tasks, tasks.boundFor);
   if (name === undefined) return undefined;
   if (tasks.history.open) return { label: name, detail: VERSION_HISTORY_WORDS };

@@ -5,7 +5,7 @@ import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 import { isDoorFile, isLucideModule, LUCIDE_BASELINE } from "../shared/lucide-guard.ts";
 
 /**
- * Every icon is imported through `@luke/ui/icons`, so one glyph stands for
+ * Every icon is imported through `@repo/ui/icons`, so one glyph stands for
  * each meaning and no screen picks a drawing of its own. A direct
  * `lucide-react` import is refused outside the door, from a baseline of the
  * files that still hold one (`lucide-baseline.json`), which only shrinks as
@@ -16,11 +16,11 @@ export const noLucideOutsideDoorRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow importing lucide-react outside @luke/ui's icon door, from a baseline that only shrinks.",
+        "Disallow importing lucide-react outside @repo/ui's icon door, from a baseline that only shrinks.",
     },
     messages: {
       newImport:
-        "Import icons from `@luke/ui/icons`, the one door: a Lucide glyph by its Lucide name, a concept as `GLYPH.X`. This file's `lucide-react` imports are more than the baseline holds.",
+        "Import icons from `@repo/ui/icons`, the one door: a Lucide glyph by its Lucide name, a concept as `GLYPH.X`. This file's `lucide-react` imports are more than the baseline holds.",
       staleBaseline:
         "This file imports `lucide-react` {{found}} time(s), fewer than `tools/anti-slop/lucide-baseline.json` holds ({{expected}}). Lower its count to {{found}}, or delete the row at 0.",
     },

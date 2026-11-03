@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -68,7 +68,7 @@ afterEach(() => {
 
 /** What the panel's root runs on its first commit, over the snapshot given. */
 function Startup(props: { readonly state: AppStateSnapshot }): null {
-  useSessionReplay(props.state.run, props.state.sessionReplay);
+  useSessionReplay(props.state.run, props.state.sessionReplay, undefined);
   usePrefetchBundles();
   return null;
 }

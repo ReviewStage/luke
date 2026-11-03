@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -13,7 +13,7 @@ it.effect(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const stateRoot = yield* temporaryDirectoryScoped("luke-retired-store-");
+      const stateRoot = yield* temporaryDirectoryScoped("retired-store-");
       const agentRoot = path.join(stateRoot, "agents", "main");
       yield* fileSystem.makeDirectory(path.join(agentRoot, "archives"), { recursive: true });
       yield* fileSystem.makeDirectory(path.join(agentRoot, "workspace"), { recursive: true });

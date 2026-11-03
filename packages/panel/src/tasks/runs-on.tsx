@@ -1,11 +1,11 @@
-import { AGENT_MACHINE, DEVICE_STANDING, type DeviceStanding } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, DEVICE_STANDING, type DeviceStanding } from "@repo/features/agent-wire";
 import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DevicePlatform,
-} from "@luke/features/device-agent-wire";
-import type { MacOffer } from "@luke/features/models-wire";
-import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
+} from "@repo/features/device-agent-wire";
+import type { MacOffer } from "@repo/features/models-wire";
+import type { TaskRunsOn, TaskRunsOnRequest } from "@repo/features/task-wire";
 import {
   CHIP_WIDTH,
   GAP,
@@ -19,12 +19,13 @@ import {
   StatusGlyph,
   type StatusTone,
   useSecond,
-} from "@luke/ui";
-import { GLYPH, ICON_SIZE } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH, ICON_SIZE } from "@repo/ui/icons";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
 import { DEVICE_SETUP_WORDS } from "../device-setup.js";
+import { machineName, type ThisMac, useThisMac } from "../machine-name.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
 
@@ -34,8 +35,9 @@ import { keptKey, useKept } from "../use-kept.js";
  * Where agents run is the task's (`task-wire.ts`'s `runsOn`), it decides
  * where every agent started on it runs, and it is set when the task is
  * created and never changed. New task's chip drops a menu: Cloud first, then
- * each device the member registered, as the models answer lists them, by its
- * name under the glyph of its platform, a Mac or a Linux server, each saying
+ * each device the member registered, as the models answer lists them, by what
+ * every list of machines calls it (`machine-name.ts`), This Mac among them,
+ * under the glyph of its platform, a Mac or a Linux server, each saying
  * whether it is online, held against the window's own clock, or, online,
  * that it is still getting ready for local agents or couldn't set them up.
  * Every device's glyph wears one dot at its corner rather than words, whose
@@ -56,7 +58,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * where the member has no device, or while the Bring your own host
  * experiment is off, which lists no device (`new-task-composer.tsx`). On
  * the task, each agent's row in its plan's head says Cloud, or the device
- * it runs on, or that the device was removed (`plan-agents.tsx`).
+ * it runs on, named the same way, or that the device was removed
+ * (`plan-agents.tsx`).
  */
 
 /** What the menu and its chips say. */
@@ -75,7 +78,7 @@ const RUNS_ON_WORDS = {
 const CLOUD_ROW = "cloud";
 
 /** Where New task keeps the member's last pick: Cloud's id, or a device's. */
-const KEPT = { PICK: keptKey("luke.newTaskRunsOn", Schema.String) } as const;
+const KEPT = { PICK: keptKey("app.newTaskRunsOn", Schema.String) } as const;
 
 /** The cloud, as a request names it. */
 const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: AGENT_MACHINE.VERCEL };
@@ -163,14 +166,18 @@ function offerMarks(
     : { icon, disabled: unready.words, why: MENU_ROW_WHY.MARK };
 }
 
-/** Cloud, then each device by name, its platform's glyph wearing its standing's dot, one that takes no agent muted and unpicked. */
-function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly MenuRow[] {
+/** Cloud, then each device by what the list calls it, its platform's glyph wearing its standing's dot, one that takes no agent muted and unpicked. */
+function runsOnRows(
+  devices: readonly MacOffer[],
+  book: PresenceBook,
+  thisMac: ThisMac,
+): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
     ...devices.map(
       (device): MenuRow => ({
         id: device.deviceId,
-        label: device.name,
+        label: machineName(device, devices, thisMac),
         ...offerMarks(device, book),
       }),
     ),
@@ -199,14 +206,12 @@ export function useNewTaskRunsOn(
   ];
 }
 
-/** What New task's chip says of the device picked: its name while it takes an agent, and why it does not, or that its standing cannot be told, otherwise. */
-function offerStateWords(device: MacOffer, book: PresenceBook): string {
+/** What New task's chip says of the device picked, by what the list calls it: that alone while it takes an agent, and why it does not, or that its standing cannot be told, otherwise. */
+function offerStateWords(device: MacOffer, book: PresenceBook, name: string): string {
   const unready = offerUnready(device, book);
-  if (unready !== undefined) return `${device.name} · ${unready.words}`;
+  if (unready !== undefined) return `${name} · ${unready.words}`;
   const standing = offerStanding(device, book);
-  return standing === DEVICE_STANDING.ONLINE
-    ? device.name
-    : `${device.name} · ${STANDING_WORDS[standing]}`;
+  return standing === DEVICE_STANDING.ONLINE ? name : `${name} · ${STANDING_WORDS[standing]}`;
 }
 
 /** What a start sends of New task's pick: the device it names, or the cloud. */
@@ -230,15 +235,20 @@ export function NewTaskRunsOnChip({
 }): React.JSX.Element {
   // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
-  // Note that a chip offering Cloud alone reads no beats, because it draws no device's standing.
+  // Note that a chip offering Cloud alone reads no beats and no This Mac, because it draws no device.
   const book = useDevicePresence(devices.length > 0);
+  const thisMac = useThisMac(devices.length > 0);
   return (
     <Picker
       label={RUNS_ON_WORDS.LABEL}
       value={device?.deviceId ?? CLOUD_ROW}
-      valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, book)}
+      valueLabel={
+        device === undefined
+          ? RUNS_ON_WORDS.CLOUD
+          : offerStateWords(device, book, machineName(device, devices, thisMac))
+      }
       valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={device} />}
-      rows={runsOnRows(devices, book)}
+      rows={runsOnRows(devices, book, thisMac)}
       noMatch={RUNS_ON_WORDS.NO_MATCH}
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
@@ -251,13 +261,21 @@ export function NewTaskRunsOnChip({
 
 /**
  * Where a task's agents run, as each agent's row says it: the cloud's glyph
- * and Cloud, or the device's glyph by its platform and its name, or that
- * the device was removed. Note that it is the task's, shared by every agent
- * on it, and words alone, since it is set when the task is created.
+ * and Cloud, or the device's glyph by its platform and what every list of
+ * machines calls it, or that the device was removed. Note that it is the
+ * task's, shared by every agent on it, and words alone, since it is set
+ * when the task is created.
  */
 export function RunsOnPlace({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
+  const device = runsOn?.device;
+  const thisMac = useThisMac(device !== undefined);
+  // Note that the task names its device alone, so This Mac is told by its device and no name is twinned.
   const words =
-    runsOn === undefined ? RUNS_ON_WORDS.CLOUD : (runsOn.device?.name ?? RUNS_ON_WORDS.REMOVED);
+    runsOn === undefined
+      ? RUNS_ON_WORDS.CLOUD
+      : device === undefined
+        ? RUNS_ON_WORDS.REMOVED
+        : machineName({ deviceId: runsOn.deviceId, name: device.name }, [], thisMac);
   return (
     <Inline gap={GAP.ICON} wrap={false}>
       <GlyphSlot size={ICON_SIZE.SMALL}>

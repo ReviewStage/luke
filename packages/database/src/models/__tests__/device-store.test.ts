@@ -7,7 +7,7 @@ import {
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
+} from "@repo/features/device-agent-wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -38,7 +38,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   return { owner, other };
 });
@@ -121,6 +121,44 @@ it.layer(getTestDB())("the device store", (it) => {
 
         assert.deepEqual(touched, [[HOST_UPDATE.WAITING, null]]);
         assert.deepEqual(cleared, [[null, null]]);
+      }),
+  );
+
+  it.effect(
+    "the machine a Mac's enroll names is listed and offered, a register naming none leaves it, and one naming another replaces it",
+    () =>
+      Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        const id = randomUUID();
+        const [first, moved] = ["a".repeat(64), "b".repeat(64)];
+        const machines = Effect.gen(function* () {
+          const listed = (yield* hostsOf(owner)).map((host) => [host.machineId, host.model]);
+          const offered = (yield* devicesSeenSince(owner, new Date(0))).map((seen) => [
+            seen.machineId,
+            seen.model,
+          ]);
+          return { listed, offered };
+        });
+
+        yield* enrollOwnDevice(owner, {
+          id,
+          version: "0.2.1",
+          secretHash: `secret-${randomUUID()}`,
+          machineId: first,
+          model: "MacBook Air (M2, 2022)",
+          machine: { name: "Studio", platform: DEVICE_PLATFORM.DARWIN, arch: DEVICE_ARCH.ARM64 },
+        });
+        // Note that a register from a host older than the field names no machine.
+        yield* registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT });
+        const kept = yield* machines;
+        yield* registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT, machineId: moved });
+        const replaced = yield* machines;
+
+        assert.deepEqual(kept, {
+          listed: [[first, "MacBook Air (M2, 2022)"]],
+          offered: [[first, "MacBook Air (M2, 2022)"]],
+        });
+        assert.deepEqual(replaced.listed, [[moved, "MacBook Air (M2, 2022)"]]);
       }),
   );
 

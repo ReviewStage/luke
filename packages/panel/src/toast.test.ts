@@ -6,8 +6,8 @@ import {
   FAILURE_SURFACE,
   type ShownFailureSentry,
   sendShownFailure,
-} from "@luke/features/shown-failure";
-import { STATUS_TONE } from "@luke/ui";
+} from "@repo/features/shown-failure";
+import { STATUS_TONE } from "@repo/ui";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -135,7 +135,7 @@ function persisting(words: string): ToastNotice {
 
 /** What each toast standing says, oldest first, leaving out those on their way out. */
 function standing(): string[] {
-  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+  return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
@@ -150,7 +150,7 @@ function pass(ms: number): void {
 /** The button a standing toast labels `label`. */
 function toastButton(label: string): HTMLButtonElement {
   const found = [
-    ...document.querySelectorAll<HTMLButtonElement>(".luke-toast:not([data-leaving]) button"),
+    ...document.querySelectorAll<HTMLButtonElement>(".ui-toast:not([data-leaving]) button"),
   ].find((button) => button.textContent === label);
   return found ?? assert.fail(`a toast button named ${label}`);
 }
@@ -206,7 +206,7 @@ test("a toast with an action carries a Dismiss button the keyboard reaches, and 
   act(() => show?.(persisting("Nightly upgrade couldn't start")));
   const dismissButtons = () =>
     [
-      ...document.querySelectorAll<HTMLButtonElement>(".luke-toast:not([data-leaving]) button"),
+      ...document.querySelectorAll<HTMLButtonElement>(".ui-toast:not([data-leaving]) button"),
     ].filter((button) => button.getAttribute("aria-label") === "Dismiss");
 
   const [first, second] = dismissButtons();
@@ -258,7 +258,7 @@ test("two pieces of work under way stand apart, each settles its own card in pla
     first = work?.("Saving…");
     second = work?.("Saving…");
   });
-  const working = [...document.querySelectorAll(".luke-toast")];
+  const working = [...document.querySelectorAll(".ui-toast")];
 
   act(() =>
     second?.({
@@ -271,7 +271,7 @@ test("two pieces of work under way stand apart, each settles its own card in pla
   act(() => first?.({ words: "Saved", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }));
 
   assert.deepEqual(standing(), ["Saved", "Couldn't save"]);
-  assert.deepEqual([...document.querySelectorAll(".luke-toast")], working, "the same two cards");
+  assert.deepEqual([...document.querySelectorAll(".ui-toast")], working, "the same two cards");
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Couldn't save");
 });
 
@@ -410,7 +410,7 @@ test("a failure toast for a hosted call that never answered reports what the hos
     },
   ]);
   const copy = document.querySelector<HTMLButtonElement>(
-    '.luke-toast:not([data-leaving]) button[aria-label="Copy details"]',
+    '.ui-toast:not([data-leaving]) button[aria-label="Copy details"]',
   );
   await act(async () => copy?.click());
   assert.ok(
@@ -437,7 +437,7 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
 
   const copies = [
     ...document.querySelectorAll<HTMLButtonElement>(
-      '.luke-toast:not([data-leaving]) button[aria-label="Copy details"]',
+      '.ui-toast:not([data-leaving]) button[aria-label="Copy details"]',
     ),
   ];
   for (const copy of copies) await act(async () => copy.click());

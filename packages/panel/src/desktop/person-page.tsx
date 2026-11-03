@@ -1,18 +1,18 @@
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import {
   automationOwner,
   automationRunStanding,
   automationTriggerText,
-} from "@luke/features/automation-list-model";
-import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
-import { inboxWaitsOn } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/automation-list-model";
+import { AUTOMATION_SCOPE, type AutomationSummary } from "@repo/features/automation-wire";
+import { inboxWaitsOn } from "@repo/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
@@ -46,7 +46,7 @@ import {
   useLeaving,
   useMenu,
   useMinute,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   ACTOR_KIND,
   type Actor,
@@ -54,7 +54,7 @@ import {
   personActor,
   ROLE_WORDS,
   SOMEONE_REASON,
-} from "@luke/ui/actor-model";
+} from "@repo/ui/actor-model";
 import {
   agentStarter,
   PERSON_TASKS_SHOWN,
@@ -62,8 +62,8 @@ import {
   personPage,
   personPageEmpty,
   personRef,
-} from "@luke/ui/person-page-model";
-import { ASSIGNED_TO } from "@luke/ui/task-list-model";
+} from "@repo/ui/person-page-model";
+import { ASSIGNED_TO } from "@repo/ui/task-list-model";
 import { ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -128,7 +128,7 @@ import { useAutomations } from "./use-automations.js";
  * items their agents wait on, the tasks assigned to them, the rest of the
  * tasks they created, and their other
  * agents, each from the listed workspace's task list and Inbox
- * (`@luke/ui/person-page-model`), and the workspace's automations they
+ * (`@repo/ui/person-page-model`), and the workspace's automations they
  * made, a section with nothing in it left out.
  * Until the members, the task list, the Inbox, and the automations are read,
  * placeholders stand where what each names will, and a read that failed

@@ -1,18 +1,11 @@
-import type { AgentPullRequest, AgentStatus } from "@luke/features/agent-wire";
-import type { ModelProvider } from "@luke/features/models-wire";
-import type { TaskStatus } from "@luke/features/task-wire";
-import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
-import {
-  AppWindowIcon,
-  BotIcon,
-  GitPullRequestIcon,
-  GlobeIcon,
-  InboxIcon,
-  LaptopIcon,
-} from "lucide-react";
+import type { AgentPullRequest, AgentStatus } from "@repo/features/agent-wire";
+import type { ModelProvider } from "@repo/features/models-wire";
+import type { TaskStatus } from "@repo/features/task-wire";
+import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
+import { AppWindowIcon, BotIcon, GitPullRequestIcon, GlobeIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { agentGlyphState, providerOf } from "./agent-model.js";
@@ -54,8 +47,6 @@ export const TAB_KIND = {
   CHANGES: "changes",
   /** One agent's terminal, which wears the agent's own glyph: a terminal belongs to its agent's sandbox. */
   TERMINAL: "terminal",
-  /** A terminal of this Mac opened on an agent's pushed branch, which wears the laptop: it runs here, not in the agent's sandbox. */
-  MAC_TERMINAL: "mac-terminal",
   FILE: "file",
   PAGE: "page",
   /** A Browser tab, named by its page's title once it has one. */
@@ -111,7 +102,6 @@ export type TabSubject =
       /** Where the agent whose sandbox it is stands, as its own tab's glyph wears it. */
       readonly agent: AgentStanding | undefined;
     }
-  | { readonly kind: typeof TAB_KIND.MAC_TERMINAL }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string }
   | {
@@ -249,8 +239,6 @@ export function tabLook(subject: TabSubject): KindLook {
       // Note that the agent's name is not the label, because the tab says
       // what it is first; each place drawing it names the agent beside it.
       return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
-    case TAB_KIND.MAC_TERMINAL:
-      return { icon: <LaptopIcon />, label: TAB_WORDS.MAC_TERMINAL };
     case TAB_KIND.FILE: {
       // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);

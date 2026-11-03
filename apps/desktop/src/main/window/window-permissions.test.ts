@@ -40,7 +40,7 @@ function grantedSession() {
     let granted: boolean | undefined;
     // SAFETY: the handlers read only the media types of a request's details.
     request?.(webContents, permission, (answer) => (granted = answer), {
-      requestingUrl: "luke://panel",
+      requestingUrl: "app://desktop/panel",
       isMainFrame: true,
       ...details,
     } as Electron.MediaAccessPermissionRequest);
@@ -53,7 +53,7 @@ function grantedSession() {
     permission: Parameters<NonNullable<CheckHandler>>[1],
     mediaType?: "audio" | "video",
   ): boolean =>
-    check?.(webContents, permission, "luke://panel", {
+    check?.(webContents, permission, "app://desktop/panel", {
       isMainFrame: true,
       ...(mediaType === undefined ? undefined : { mediaType }),
     } as Electron.PermissionCheckHandlerHandlerDetails) === true;

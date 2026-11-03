@@ -18,7 +18,7 @@ import { cn } from "../cn.js";
  * the root says only what the component puts in it, without the visually
  * hidden "x" Base UI appends to the root's children, so a bar beside words
  * that say the same adds nothing to them. `ProgressLabel` and
- * `ProgressValue` are dropped, since nothing draws them. `@luke/ui`'s
+ * `ProgressValue` are dropped, since nothing draws them. `@repo/ui`'s
  * `Progress` (`components/progress/progress.tsx`) is what an app draws; this
  * is its inside.
  */

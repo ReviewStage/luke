@@ -1,4 +1,4 @@
-import type { ShortcutChord } from "@luke/settings/shortcuts";
+import type { ShortcutChord } from "@repo/settings/shortcuts";
 import { type ReactNode, useId } from "react";
 import { inputProblem, type ReportedFailure, type Unreported } from "../../reported-failure.js";
 import {
@@ -131,9 +131,9 @@ export interface ComposerNote {
  * with the words over it, since the card around it insets both.
  */
 const FOOT =
-  "luke-composer-foot flex flex-col gap-tight-gap px-luke-12 pt-0 pb-luke-12 " +
-  "group-data-[look=field]/composer:px-luke-6 group-data-[look=field]/composer:pt-luke-2 group-data-[look=field]/composer:pb-luke-6 " +
-  "group-data-[look=input]/composer:px-luke-6 group-data-[look=input]/composer:pt-luke-2 group-data-[look=input]/composer:pb-luke-6 " +
+  "ui-composer-foot flex flex-col gap-tight-gap px-ui-12 pt-0 pb-ui-12 " +
+  "group-data-[look=field]/composer:px-ui-6 group-data-[look=field]/composer:pt-ui-2 group-data-[look=field]/composer:pb-ui-6 " +
+  "group-data-[look=input]/composer:px-ui-6 group-data-[look=input]/composer:pt-ui-2 group-data-[look=input]/composer:pb-ui-6 " +
   "group-data-[look=bare]/composer:px-0";
 
 /** The foot's own box: its bar and its note, stacked. */
@@ -144,7 +144,7 @@ function FootBox({ children }: { children: ReactNode }): React.JSX.Element {
 /** The bar: the tools at its start and the end's presses, or a strip in their place. */
 function FootBar({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-composer-foot-bar flex min-h-control items-center justify-between gap-block-gap">
+    <div className="ui-composer-foot-bar flex min-h-control items-center justify-between gap-block-gap">
       {children}
     </div>
   );
@@ -153,16 +153,14 @@ function FootBar({ children }: { children: ReactNode }): React.JSX.Element {
 /** The bar's start, which gives way first as the bar narrows. */
 function FootTools({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-composer-foot-tools flex min-w-0 items-center gap-tight-gap">
-      {children}
-    </div>
+    <div className="ui-composer-foot-tools flex min-w-0 items-center gap-tight-gap">{children}</div>
   );
 }
 
 /** The bar's end: the counter, the owner's presses, and the send last. */
 function FootEnd({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-composer-foot-end ms-auto flex flex-none items-center gap-tight-gap">
+    <div className="ui-composer-foot-end ms-auto flex flex-none items-center gap-tight-gap">
       {children}
     </div>
   );
@@ -311,7 +309,7 @@ export function ComposerFoot({
             </FootEnd>
           </>
         ) : (
-          <div className="luke-composer-foot-strip flex min-w-0 flex-1 items-center">{strip}</div>
+          <div className="ui-composer-foot-strip flex min-w-0 flex-1 items-center">{strip}</div>
         )}
       </FootBar>
       {/* Note that the line stands, empty, for as long as the send can refuse, so what it says lands as said. */}
@@ -319,7 +317,7 @@ export function ComposerFoot({
         <ErrorLine id={refusalId} error={inputProblem(send.refuses.words)} />
       )}
       {note === undefined ? null : (
-        <div className="luke-composer-foot-note flex flex-col items-start gap-tight-gap">
+        <div className="ui-composer-foot-note flex flex-col items-start gap-tight-gap">
           <ErrorState onRetry={note.onRetry} remedy={note.remedy} failure={note.failure}>
             {note.words}
           </ErrorState>

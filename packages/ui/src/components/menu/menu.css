@@ -25,52 +25,52 @@
 
   /* The row a menu is on is filled, never ringed: focus moves with the
      pointer and the arrows alike, so both light a row. */
-  .luke-menu-item:focus-visible,
-  .luke-menu:focus-visible {
+  .ui-menu-item:focus-visible,
+  .ui-menu:focus-visible {
     outline: none; /* no ring: the row's fill marks it */
   }
 
   /* A detail's words: a caption, muted. They are drawn here rather than in
      utilities, so a row's own words cannot outrank them. */
-  .luke-menu-item-detail {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+  .ui-menu-item-detail {
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
   }
 
   /* A row's shortcut at its end, the way a system menu prints a chord,
      drawn here for the same reason as the detail: a finger hides it below. */
-  .luke-menu-item-hint {
+  .ui-menu-item-hint {
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
     margin-left: auto;
-    padding-left: var(--luke-space-16);
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+    padding-left: var(--ui-space-16);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
     white-space: nowrap;
   }
 
   /* Under a finger a hint that is a chord alone is not drawn, so the
      row's words keep its room; a hint of words still is. */
   @media (hover: none) and (pointer: coarse) {
-    .luke-menu-item-hint:has(> kbd:only-child) {
+    .ui-menu-item-hint:has(> kbd:only-child) {
       display: none;
     }
   }
 
-  @keyframes luke-menu-arrive {
+  @keyframes ui-menu-arrive {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-menu-drop {
+  @keyframes ui-menu-drop {
     from {
-      transform: translateY(calc(-1 * var(--luke-space-4)));
+      transform: translateY(calc(-1 * var(--ui-space-4)));
     }
   }
 
-  @keyframes luke-menu-leave {
+  @keyframes ui-menu-leave {
     to {
       opacity: 0;
     }
@@ -85,81 +85,79 @@
      down (`useSheetSwipe`), settling back on the pane's motion where it is
      let go short, since a spring's overshoot would lift it off the window's
      foot. */
-  .luke-menu-sheet {
-    --luke-menu-row-height: var(--luke-touch-target);
-    --luke-combobox-list-max: none;
+  .ui-menu-sheet {
+    --ui-menu-row-height: var(--ui-touch-target);
+    --ui-combobox-list-max: none;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
-    padding: 0 var(--luke-menu-inset)
-      calc(var(--luke-menu-inset) + env(safe-area-inset-bottom, 0px));
-    border: 1px solid var(--luke-color-border-strong);
+    padding: 0 var(--ui-menu-inset) calc(var(--ui-menu-inset) + env(safe-area-inset-bottom, 0px));
+    border: 1px solid var(--ui-color-border-strong);
     border-bottom: 0;
-    border-radius: var(--luke-dialog-radius) var(--luke-dialog-radius) 0 0;
-    background: var(--luke-color-overlay);
-    box-shadow: var(--luke-menu-shadow);
-    color: var(--luke-color-text);
-    animation: luke-menu-sheet-rise var(--luke-duration-pane) var(--luke-motion-pane);
-    transition: translate var(--luke-duration-pane) var(--luke-motion-pane);
+    border-radius: var(--ui-dialog-radius) var(--ui-dialog-radius) 0 0;
+    background: var(--ui-color-overlay);
+    box-shadow: var(--ui-menu-shadow);
+    color: var(--ui-color-text);
+    animation: ui-menu-sheet-rise var(--ui-duration-pane) var(--ui-motion-pane);
+    transition: translate var(--ui-duration-pane) var(--ui-motion-pane);
   }
 
-  .luke-menu-sheet[data-dragging] {
+  .ui-menu-sheet[data-dragging] {
     transition: none;
   }
 
-  .luke-menu-sheet[data-leaving="true"] {
-    animation: luke-menu-sheet-sink var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+  .ui-menu-sheet[data-leaving="true"] {
+    animation: ui-menu-sheet-sink var(--ui-duration-pane) var(--ui-motion-pane) forwards;
   }
 
   /* The head stays put over the rows that scroll under it, and is what a
      finger drags, so the browser takes no scroll from it. */
-  .luke-menu-sheet-head {
+  .ui-menu-sheet-head {
     display: flex;
     flex: none;
     flex-direction: column;
-    padding: var(--luke-space-6) calc(var(--luke-menu-inset) + var(--luke-row-inset))
-      var(--luke-space-8);
-    border-bottom: 1px solid var(--luke-color-border);
-    margin: 0 calc(-1 * var(--luke-menu-inset)) var(--luke-menu-inset);
+    padding: var(--ui-space-6) calc(var(--ui-menu-inset) + var(--ui-row-inset)) var(--ui-space-8);
+    border-bottom: 1px solid var(--ui-color-border);
+    margin: 0 calc(-1 * var(--ui-menu-inset)) var(--ui-menu-inset);
     touch-action: none;
   }
 
-  .luke-menu-sheet-grip {
-    width: var(--luke-space-32);
-    height: var(--luke-space-4);
-    margin: 0 auto var(--luke-space-8);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-border-strong);
+  .ui-menu-sheet-grip {
+    width: var(--ui-space-32);
+    height: var(--ui-space-4);
+    margin: 0 auto var(--ui-space-8);
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-color-border-strong);
   }
 
-  .luke-menu-sheet-title {
+  .ui-menu-sheet-title {
     display: flex;
     align-items: center;
-    gap: var(--luke-icon-gap);
+    gap: var(--ui-icon-gap);
     min-width: 0;
-    min-height: var(--luke-control-height);
+    min-height: var(--ui-control-height);
   }
 
   /* The way back folds to its glyph, its words a reader's alone. */
-  .luke-menu-sheet-back {
-    --luke-fold: folded;
+  .ui-menu-sheet-back {
+    --ui-fold: folded;
     display: flex;
     flex: none;
   }
 
-  .luke-menu-sheet-mark {
+  .ui-menu-sheet-mark {
     display: inline-flex;
     flex: none;
     align-items: center;
   }
 
   /* A mark that draws nothing now, as a read row's unread gutter, takes no room. */
-  .luke-menu-sheet-mark:not(:has(svg, img, *:not(:empty))) {
+  .ui-menu-sheet-mark:not(:has(svg, img, *:not(:empty))) {
     display: none;
   }
 
-  .luke-menu-sheet-words {
+  .ui-menu-sheet-words {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
@@ -167,37 +165,37 @@
   }
 
   /* A searchable menu's field, under the name and over the hairline. */
-  .luke-menu-sheet-field {
+  .ui-menu-sheet-field {
     display: flex;
     flex-direction: column;
-    margin-top: var(--luke-space-8);
+    margin-top: var(--ui-space-8);
   }
 
-  .luke-menu-sheet-name {
+  .ui-menu-sheet-name {
     display: flex;
     min-width: 0;
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--ui-weight-medium);
   }
 
-  .luke-menu-sheet-detail {
+  .ui-menu-sheet-detail {
     display: flex;
     min-width: 0;
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
   }
 
-  .luke-menu-sheet-rows {
+  .ui-menu-sheet-rows {
     display: flex;
     flex-direction: column;
   }
 
-  @keyframes luke-menu-sheet-rise {
+  @keyframes ui-menu-sheet-rise {
     from {
       transform: translateY(100%);
     }
   }
 
-  @keyframes luke-menu-sheet-sink {
+  @keyframes ui-menu-sheet-sink {
     to {
       transform: translateY(100%);
     }

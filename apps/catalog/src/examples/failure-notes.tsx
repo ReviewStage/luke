@@ -12,8 +12,8 @@ import {
   FailureNote,
   NOTE_LINE_LOOK,
   NoteLine,
-} from "@luke/ui";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

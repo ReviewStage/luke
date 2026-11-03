@@ -20,9 +20,9 @@ import {
   type BrowserLivePortOutbound,
   type BrowserLivePortTicket,
   browserLivePortInboundSchema,
-} from "@luke/features/browser-live-acts";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/browser-live-acts";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Result } from "effect";
 import { BROWSER_LIVE_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";

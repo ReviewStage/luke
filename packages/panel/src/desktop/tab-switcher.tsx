@@ -45,28 +45,28 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import type { TaskSummary } from "@luke/features/task-wire";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
-import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import type { TaskSummary } from "@repo/features/task-wire";
+import type { WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
+import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import {
   isAgentTab,
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
-  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
   sameTab,
   TAB_WORDS,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { type HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
+import { HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -127,6 +127,7 @@ const WORK_AREA = ".desktop-main";
 
 /** What a place's card wears, as the sidebar's row for it does. */
 const PLACE_LOOK = {
+  [SWITCHER_PLACE.HOME]: { icon: HouseIcon, label: "Home" },
   [SWITCHER_PLACE.INBOX]: { icon: InboxIcon, label: TAB_WORDS.INBOX },
   [SWITCHER_PLACE.BOARD]: { icon: ListTodoIcon, label: "Tasks" },
   [SWITCHER_PLACE.AUTOMATIONS]: { icon: ZapIcon, label: "Automations" },
@@ -177,7 +178,6 @@ function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined)
   if (isFileTab(tab)) return tabLook({ kind: TAB_KIND.FILE, path: tab.file });
   if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
   if (isTerminalTab(tab)) return tabLook({ kind: TAB_KIND.TERMINAL, agent: undefined });
-  if (isMacTerminalTab(tab)) return tabLook({ kind: TAB_KIND.MAC_TERMINAL });
   if (isCloudBrowserTab(tab)) {
     return tabLook({ kind: TAB_KIND.BROWSER, title: undefined });
   }
@@ -343,6 +343,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
         : { userId: personView.userId, name: personView.name, workspaceId: personView.workspaceId },
     board: tasks.boardView.open,
     automations: tasks.automationsView.open,
+    home: tasks.page === TASKS_PAGE.HOME && !tasks.adminView.open && !tasks.restoring,
     boundFor: tasks.boundFor,
     openTaskId: tasks.activeTaskId,
     column,
@@ -698,6 +699,9 @@ function showTask(tasks: TasksControl, stop: Extract<Stop, { kind: typeof STOP_K
 /** Opens a place through its own door. */
 function openPlace(tasks: TasksControl, place: SwitcherPlace): void {
   switch (place) {
+    case SWITCHER_PLACE.HOME:
+      tasks.onGoHome();
+      return;
     case SWITCHER_PLACE.INBOX:
       tasks.inboxView.onOpen();
       return;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";
@@ -170,7 +170,7 @@ test("a link GitHub refused says why and offers the same intent again", async ()
     "GitHub did not confirm this account, so it was not connected.",
   );
   const retry = Array.from(page.querySelectorAll("a")).find((a) => a.textContent === "Try again");
-  expect(retry?.getAttribute("href")).toBe("/connect-github.html?intent=intent-1");
+  expect(retry?.getAttribute("href")).toBe("/connect-github?intent=intent-1");
 });
 
 test("a connected account is told the tab can go", async () => {
@@ -220,7 +220,7 @@ test("a same-tab connect GitHub refused says why and offers the way back", async
     "GitHub did not confirm this account, so it was not connected.",
   );
   expect(links(page)).toEqual([
-    ["Try again", "/connect-github.html?intent=intent-1"],
+    ["Try again", "/connect-github?intent=intent-1"],
     ["Open Vespin", "/settings/integrations"],
   ]);
 });

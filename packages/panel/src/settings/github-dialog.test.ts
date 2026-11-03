@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
   type GitHubTokenRejection,
   type GitHubTokenSummary,
-} from "@luke/features/github-token-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind } from "@luke/host/contract";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { holdExits } from "@luke/ui/testing/held-exits";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/features/github-token-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind } from "@repo/host/contract";
+import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { holdExits } from "@repo/ui/testing/held-exits";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -184,7 +184,7 @@ test("a token's expiry is one unbreakable unit and no fact on the row's line car
   stored = KEPT;
   await mountAndOpen(false);
   const facts = [
-    ...(document.querySelector(".luke-settings-row-description .luke-inline")?.children ?? []),
+    ...(document.querySelector(".ui-settings-row-description .ui-inline")?.children ?? []),
   ].map((each) => each.textContent ?? "");
   const expiry = facts.find((each) => each.startsWith("Expires"));
   assert.match(expiry ?? "", /^Expires\u00a0[A-Z][a-z]{2}\u00a0\d{1,2},\u00a0\d{4} $/u);

@@ -6,14 +6,17 @@
     "packages/panel/src/renderer-runtime.ts",
     "apps/desktop/src/renderer/window-root.tsx",
     "apps/host/src/main.ts",
+    "apps/web/scripts/local-server.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
+    "apps/web/server/demo-seed.ts",
     "apps/web/server/orpc-route.ts",
     "apps/web/server/runtime.ts",
     "apps/web/server/seed-clients.ts",
     "apps/web/src/app/web-root.tsx",
     "packages/agent-runner/src/main.ts",
-    "tools/claude-code-probe/src/cli.ts"
+    "tools/claude-code-probe/src/cli.ts",
+    "tools/demo-postgres/demo-postgres.ts"
   ],
   "runShims": [
     "packages/database/src/testing/hosted-store-database.ts",
@@ -33,7 +36,6 @@
     "apps/desktop/src/main/services/window-service.ts",
     "apps/desktop/src/main/window/renderer-revival.ts",
     "packages/panel/src/feedback-images.ts",
-    "packages/panel/src/luke-face-mood.ts",
     "packages/ui/src/components/menu/touch-hold.ts",
     "packages/panel/src/admin/use-admin-read.ts"
   ]

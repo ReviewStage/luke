@@ -22,7 +22,7 @@
  * single hyphens), whose `SKILL.md` names another, or which carries no
  * description is left out, since the convention refuses all three.
  *
- * The frontmatter is read by `@luke/features/skill-file`, which a skill a
+ * The frontmatter is read by `@repo/features/skill-file`, which a skill a
  * member pastes is read by too.
  */
 
@@ -31,8 +31,8 @@ import {
   SKILL_FILE_BOUNDS,
   SKILL_KEY,
   SKILL_NAME_RULE,
-} from "@luke/features/skill-file";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
+} from "@repo/features/skill-file";
+import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
 import { Effect, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubUnavailable } from "../github/github-app.js";

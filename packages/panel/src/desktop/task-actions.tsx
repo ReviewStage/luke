@@ -1,13 +1,13 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   PLAN_ACTOR,
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { IRREVERSIBLE_WORDS } from "@luke/features/words";
-import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { IRREVERSIBLE_WORDS } from "@repo/features/words";
+import { APP_COMMAND, type KeyedCommand } from "@repo/settings/shortcuts";
 import {
   ANNOUNCE,
   BLOCKED_WORDS,
@@ -37,10 +37,10 @@ import {
   useConfirmDialog,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@luke/ui/actor-model";
-import { confirmAsked } from "@luke/ui/confirm-state";
-import { type ChildTaskCount, repositoryLabel } from "@luke/ui/task-list-model";
+} from "@repo/ui";
+import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@repo/ui/actor-model";
+import { confirmAsked } from "@repo/ui/confirm-state";
+import { type ChildTaskCount, repositoryLabel } from "@repo/ui/task-list-model";
 import {
   DOCUMENT_REGION,
   RENAME_FAILED_NOTE,
@@ -48,13 +48,14 @@ import {
   settleOffered,
   TASK_MARK,
   type TaskMark,
-} from "@luke/ui/tasks-model";
-import { useInlineRename } from "@luke/ui/use-inline-rename";
+} from "@repo/ui/tasks-model";
+import { useInlineRename } from "@repo/ui/use-inline-rename";
 import {
   type RefObject,
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -65,11 +66,9 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import {
   COMMAND_PLACE,
   commandAction,
-  commandHead,
   commandWords,
   PANEL_COMMAND,
   type PanelCommand,
-  RELATION_COMMAND,
 } from "../command-items.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -89,7 +88,11 @@ import {
   taskLinkPlace,
   versionHistoryItem,
 } from "../tasks/task-menu-items.js";
-import { TASK_RELATION_ORDER } from "../tasks/task-relation-menu.js";
+import {
+  type TaskRelationDoor,
+  type TaskRelationSubject,
+  taskRelationMenuPanel,
+} from "../tasks/task-relation-menu.js";
 import {
   NO_ASSIGNEE,
   PRIORITY_ROWS,
@@ -152,10 +155,10 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * opens the plan's versions over the whole window, opening the task first
  * where it is not the open one, the one item that moves it. New sub-task
  * opens New task's card for a child of the task, in its workspace and
- * repository (`new-task-composer.tsx`). Add sub-task, Set parent, Mark as
- * blocked by, and Mark as blocking open the add menu on their kind from
- * the task's head (`task-relation-menu.tsx`), opening the task first as
- * Change repository does, and Remove parent takes it out from under its
+ * repository (`new-task-composer.tsx`). Task relation hangs the add menu
+ * beside the menu as its panel (`task-relation-menu.tsx`), as New task's +
+ * does, so a task is related where its menu was opened, never opened
+ * first, and Remove parent takes it out from under its
  * parent at once, with Undo. Pin moves the
  * task in the sidebar at once and is undone from the same menu. A pick in
  * Status sets the task there, said in a toast whose Undo puts back the
@@ -385,6 +388,21 @@ function standingSubmenus(
   ];
 }
 
+/**
+ * What Task relation reads and sends through for `task`, from any row of it:
+ * its own workspace's name and tasks, and the task list's doors, which act
+ * on the task by its id whether or not it is the one open.
+ */
+function relationDoor(tasks: TasksControl, task: TaskSummary): TaskRelationDoor {
+  return {
+    workspaceName: tasks.workspaces.find((each) => each.id === task.workspaceId)?.name ?? "",
+    tasks: tasks.tasks.filter((each) => each.workspaceId === task.workspaceId),
+    onChange: (change) => tasks.onSetTaskBlock(task.id, change),
+    onSetParent: tasks.onSetTaskParent,
+    onNewTask: (kind) => tasks.onNewRelatedTask(task.id, kind),
+  };
+}
+
 /** Which surface offers a task's menu, which decides what the menu holds (`taskActionGroups`). */
 export const TASK_MENU_SURFACE = {
   /** A row of the task, which draws no chips, so its menu keeps Status, Priority, Assignee, and Change repository. */
@@ -399,9 +417,8 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * One task's actions in the groups a rule divides, offering only those that
  * apply to it now, for the surface that offers them. A row's menu holds
  * Copy link; then Rename, Version history, and Mark as unread or read; then
- * Status, Priority, and Assignee; then Relations, a submenu of the four
- * relations (Add sub-task, Set parent, Mark as blocked by, Mark as
- * blocking) and Remove parent where the task has one, New sub-task being the
+ * Status, Priority, and Assignee; then Task relation, the add menu as the
+ * menu's panel, and Remove parent where the task has one, New sub-task being the
  * add menu's and ⌘K's; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
  * any row. The Plan tab's document menu leads with Copy plan, since Copy
@@ -428,6 +445,8 @@ function taskActionGroups(
     section: MenuEntry | undefined;
     /** Status, Priority, and Assignee as a row's submenus, where the task has them; none for a task from a service before statuses. */
     standing: readonly MenuSubmenu[];
+    /** The id Task relation's search stands under while its panel is drawn. */
+    relationId: string;
   },
   surface: TaskMenuSurface,
 ): MenuEntry[][] {
@@ -440,23 +459,21 @@ function taskActionGroups(
   const link: MenuAction[] =
     task === undefined
       ? []
-      : [copyTaskLinkItem(doors.copy, taskId, taskLinkPlace(tasks.workspaces, task), doors.chord)];
+      : [copyTaskLinkItem(doors.copy, task, taskLinkPlace(tasks.workspaces, task), doors.chord)];
   // U and P act on the open task, and on a sidebar row's while it is focused, so both print them.
   const lettered = drawn || doors.rowKeys;
   const read: MenuAction[] = task === undefined ? [] : [markReadItem(doors.read, lettered)];
   const rename = renameTaskItem(doors.rename);
-  // Each relation opens the add menu on its kind in the task's head; Remove parent only where the task has one.
-  const relations: MenuAction[] = TASK_RELATION_ORDER.map((kind) =>
-    commandAction(RELATION_COMMAND[kind], () => tasks.onAddRelation(taskId, kind), drawn),
-  );
+  // Note that the open task relates as the document holds it, whose blocks the list's row does not carry.
+  const subject: TaskRelationSubject | undefined = drawn ? region.task : task;
+  const relate: MenuEntry[] =
+    subject === undefined
+      ? []
+      : [taskRelationMenuPanel(doors.relationId, subject, () => relationDoor(tasks, subject))];
   const unparent: MenuAction[] =
     task?.parentTaskId === undefined
       ? []
       : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
-  const relate: MenuSubmenu = {
-    ...commandHead(PANEL_COMMAND.RELATIONS),
-    items: [...relations, ...unparent],
-  };
   const versions = versionHistoryItem(() => tasks.history.onOpen(taskId), drawn);
   const section: MenuEntry[] = doors.section === undefined ? [] : [doors.section];
   const change = commandAction(
@@ -480,7 +497,7 @@ function taskActionGroups(
       ? [
           [...copy, ...link],
           [rename, versions, ...read],
-          [relate],
+          [...relate, ...unparent],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           [repository],
           [remove],
@@ -489,7 +506,7 @@ function taskActionGroups(
           link,
           [rename, versions, ...read],
           [...doors.standing],
-          [relate],
+          [...relate, ...unparent],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           [change],
           [remove],
@@ -530,7 +547,7 @@ function TaskMenuFooter({
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
     <>
-      <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]">
+      <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)]">
         {"Created by "}
         {origin === undefined ? null : (
           <>
@@ -543,7 +560,7 @@ function TaskMenuFooter({
         <Time at={task.createdAt} now={now} look={TIME_LOOK.AGO} />
       </p>
       {edit === undefined && task.updatedAt <= task.createdAt ? null : (
-        <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]">
+        <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)]">
           {named ? "Last edited by " : "Last edited"}
           {edit === undefined ? null : <EditedBy edit={edit} place={place} sentence />}
           {" · "}
@@ -628,6 +645,7 @@ export function useTaskMenuItems(
       ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections)
       : undefined;
   const setStanding = useStandingDoor(tasks);
+  const relationId = useId();
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
@@ -647,6 +665,7 @@ export function useTaskMenuItems(
           rowKeys: doors.rowKeys === true,
           section,
           standing,
+          relationId,
           read: {
             unread: doors.unread,
             onMark: (unread) => {

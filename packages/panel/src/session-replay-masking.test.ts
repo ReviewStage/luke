@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { afterEach, expect, test, vi } from "vitest";
 import { sessionReplay } from "./session-replay.js";
 
@@ -32,7 +32,8 @@ async function mask(): Promise<Mask> {
   sessionReplay({
     platform: PRODUCT_PLATFORM.DESKTOP,
     projectApiKey: () => "test-project-key",
-    address: "luke://panel",
+    host: { api: "https://us.i.posthog.com", ui: "https://us.posthog.com" },
+    address: "app://desktop/panel",
     namesOwnAddress: () => false,
     importRecorder: () => Promise.resolve(undefined),
   })({ permitted: true, appVersion: "0.0.0", packaged: true, accountId: "user-1" });
@@ -74,11 +75,11 @@ test("a recording asterisks every attribute it does not lay out by, those that c
 test("a recording leaves the attributes it lays out by, a link's address only where it is an icon's or a stylesheet's, and an id only where an icon draws through it", async () => {
   const masked = await mask();
   const svg = (tag: string) => document.createElementNS("http://www.w3.org/2000/svg", tag);
-  assert.equal(masked("class", "luke-one-line"), "luke-one-line");
+  assert.equal(masked("class", "ui-one-line"), "ui-one-line");
   assert.equal(masked("style", "width: 40%;"), "width: 40%;");
   assert.equal(masked("role", "menuitem"), "menuitem");
   assert.equal(masked("aria-expanded", "true"), "true");
-  assert.equal(masked("data-luke-theme", "dark"), "dark");
+  assert.equal(masked("data-ui-theme", "dark"), "dark");
   assert.equal(masked("viewBox", "0 0 16 16", svg("svg")), "0 0 16 16");
   assert.equal(masked("rr_width", "120px"), "120px");
   assert.equal(masked("_cssText", ".row { margin: 0; }"), ".row { margin: 0; }");

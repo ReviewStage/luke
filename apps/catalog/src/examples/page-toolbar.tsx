@@ -5,7 +5,7 @@ import {
   ONE_LINE_ELEMENT,
   OneLine,
   PageToolbar,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

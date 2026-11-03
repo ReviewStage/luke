@@ -1,4 +1,4 @@
-import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@repo/features/task-wire";
 import {
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
@@ -7,7 +7,7 @@ import {
   TEXT_VARIANT,
   Text,
   Toolbar,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   BOARD_PROPERTIES,
   COMPLETED_WINDOW,
@@ -25,7 +25,7 @@ import {
   type TaskProperty,
   type TasksDisplay,
   type TasksFilter,
-} from "@luke/ui/tasks-page-model";
+} from "@repo/ui/tasks-page-model";
 import { Schema, SchemaTransformation } from "effect";
 import { KanbanIcon, ListFilterIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
@@ -146,13 +146,13 @@ function storedDisplayOf(view: TasksView) {
 
 /** Where the view shown last, the filters (each workspace's by its id), each view's display, and where each view stood scrolled when the reader left it, by the view's name, are kept on this Mac. */
 const KEPT = {
-  VIEW: keptKey("luke.tasksPageView", storedView),
-  FILTERS: keptKey("luke.tasksFilter", storedFilters),
+  VIEW: keptKey("app.tasksPageView", storedView),
+  FILTERS: keptKey("app.tasksFilter", storedFilters),
   DISPLAY: {
-    [TASKS_VIEW.LIST]: keptKey("luke.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
-    [TASKS_VIEW.BOARD]: keptKey("luke.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
+    [TASKS_VIEW.LIST]: keptKey("app.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
+    [TASKS_VIEW.BOARD]: keptKey("app.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
   },
-  SCROLLS: keptKey("luke.tasksScroll", storedScrolls),
+  SCROLLS: keptKey("app.tasksScroll", storedScrolls),
 } as const;
 
 /** The List | Columns switch beside the page's title. */
@@ -238,7 +238,7 @@ export function TasksPage({
           <Text
             as={TEXT_ELEMENT.H1}
             variant={TEXT_VARIANT.TOOLBAR_TITLE}
-            className="luke-toolbar-title"
+            className="ui-toolbar-title"
           >
             {TASKS}
           </Text>

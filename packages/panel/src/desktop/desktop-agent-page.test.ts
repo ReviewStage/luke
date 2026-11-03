@@ -7,7 +7,7 @@ import {
   type AgentCallFailure,
   type AgentMessagesAnswerView,
   type AgentPageAnswerView,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AGENT_ARCHIVER,
   AGENT_BRIEF,
@@ -20,33 +20,28 @@ import {
   MERGE_STATE,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import {
-  MAC_TERMINAL_PORT_CHANNEL,
-  MAC_TERMINAL_PORT_MESSAGE,
-  type MacTerminalPortOutbound,
-} from "@luke/features/mac-terminal-wire";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
-import type { Task } from "@luke/features/task-wire";
-import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActResult } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/automation-wire";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import type { Task } from "@repo/features/task-wire";
+import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActResult } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -55,11 +50,8 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { SHELL_ROOM } from "../shell-room.js";
-import { ShellRoomContext } from "../stage-room.js";
-import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -92,7 +84,6 @@ import { holdFrames, settleFrames } from "../testing/frames.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { bundleLanded } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -221,8 +212,6 @@ function listedPublished(): TasksControl["listedPullRequests"] {
 }
 /** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
 let earlier = 0;
-/** The owner of the fork the published pull request's head is pushed to; none for the base repository's own. */
-let forkOwner: string | undefined;
 /** What the window copied, in order. */
 let copied: string[] = [];
 /** What the workspace's list of agents answers, whatever it was asked. */
@@ -233,14 +222,6 @@ let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequest
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
-
-// Note that the terminal bundle is read here first, as the panel reads it once a
-// terminal has opened, so the Mac terminal Run opens mounts within the test's own
-// ticks rather than whenever a busy machine lets the import land.
-beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
-
-/** What `standTerminalDocument` stood in, taken down once the page is gone. */
-let takeDownTerminal: (() => void) | undefined;
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -256,7 +237,6 @@ beforeEach(() => {
   told = [];
   published = undefined;
   earlier = 0;
-  forkOwner = undefined;
   openedOnGitHub = [];
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS, pageFrameUrl });
@@ -352,7 +332,6 @@ beforeEach(() => {
             html: "",
             base: "main",
             head: published.branch ?? "main",
-            ...(forkOwner === undefined ? undefined : { headOwner: forkOwner }),
             createdAt: 1,
             mergedAt: null,
             merge: MERGE_STATE.CLEAN,
@@ -363,13 +342,6 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
-      }
-      // Note that main starts and ends a run of this Mac's without a word back.
-      if (
-        request.kind === ACT_KIND.MAC_TERMINAL_OPEN ||
-        request.kind === ACT_KIND.MAC_TERMINAL_CLOSE
-      ) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);
@@ -418,8 +390,6 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  takeDownTerminal?.();
-  takeDownTerminal = undefined;
   vi.restoreAllMocks();
 });
 
@@ -636,30 +606,6 @@ function PanelPage(): React.JSX.Element {
   });
 }
 
-/** The agent's page in a phone's room, over the window's own side panel, which stands only full screen. */
-function PhonePanelPage(): React.JSX.Element {
-  const agents = [AGENT_ID];
-  const sidePanel = useSidePanel(
-    undefined,
-    { id: AGENT_ID, holds: {} },
-    agents,
-    [],
-    [],
-    agents,
-    SHELL_ROOM.NARROW,
-  );
-  drawnPanel = sidePanel;
-  return createElement(
-    ShellRoomContext.Provider,
-    { value: SHELL_ROOM.NARROW },
-    createElement(DesktopAgentPage, {
-      tasks: { ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() },
-      agentId: AGENT_ID,
-      away: { label: "Inbox", onPress: () => undefined },
-    }),
-  );
-}
-
 test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Plan or Comments", async () => {
   localStorage.clear();
   installScrollIntoView();
@@ -770,13 +716,13 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
 
   assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
   assert.deepEqual(
-    [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map((each) =>
+    [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
       each.getAttribute("aria-label"),
     ),
     ["Pages", "Terminal", "Browser"],
   );
   const row =
-    [...document.querySelectorAll<HTMLElement>(".luke-searchable-menu [role='option']")].find(
+    [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")].find(
       (each) => (each.textContent ?? "").includes(FUNNEL.title),
     ) ?? assert.fail("the + offers the agent's page");
   act(() => row.click());
@@ -791,7 +737,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   );
   assert.equal(
     panel.querySelector<HTMLIFrameElement>(".page-view iframe")?.getAttribute("src"),
-    `luke-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
+    `app-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
   );
 });
 
@@ -827,10 +773,10 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
   focusRestOn(chip);
   await settle();
 
-  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
+  const card = document.querySelector(".ui-tooltip-card [data-page-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, FUNNEL.title);
   assert.equal(
-    card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+    card?.querySelector(".ui-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ taskId: PAGE_TASK, pageId: FUNNEL.id, version: 2 }),
     "the preview is the task's page",
   );
@@ -894,10 +840,10 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
   assert.ok(add, "the panel offers its +");
   act(() => add.click());
   await settle();
-  const offered = [...document.querySelectorAll(".luke-searchable-menu [role='option']")].map(
+  const offered = [...document.querySelectorAll(".ui-searchable-menu [role='option']")].map(
     (each) => each.textContent,
   );
-  const headings = [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map(
+  const headings = [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map(
     (each) => each.getAttribute("aria-label"),
   );
   act(() => add.click());
@@ -911,14 +857,14 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
   act(() => drawnPanel?.onToggle());
   await settle();
   assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
-  const rows = [...document.querySelectorAll<HTMLElement>(".luke-searchable-menu [role='option']")];
+  const rows = [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")];
   assert.deepEqual(
     rows.map((each) => each.textContent),
     offered,
   );
   // Note that an agent's page offers no fixed kind, so the menu heads only its own sections.
   assert.deepEqual(
-    [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map((each) =>
+    [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
       each.getAttribute("aria-label"),
     ),
     headings,
@@ -1030,7 +976,7 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   await settle();
   const chip = (name: string) =>
     [...container.querySelectorAll<HTMLButtonElement>(".agent-page [data-mention-ref]")].find(
-      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
+      (each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#2911");
@@ -1166,10 +1112,10 @@ test("until the agent is read, the page stands in an agent tab's own shape sayin
   assert.equal(wait?.textContent, "Reading the agent");
   assert.ok(wait.closest(".agent-tab"), "the wait stands in the tab's own frame");
   assert.ok(
-    page.querySelector(".agent-page .agent-tab-foot .luke-skeleton"),
+    page.querySelector(".agent-page .agent-tab-foot .ui-skeleton"),
     "the composer's card stands under the log",
   );
-  assert.equal(page.querySelector(".agent-page .luke-spinner-region"), null);
+  assert.equal(page.querySelector(".agent-page .ui-spinner-region"), null);
   assert.equal(page.querySelector("h1"), null);
   answerHeld();
   await settle();
@@ -1338,9 +1284,9 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   await settle();
 
   const sender = page.querySelector(
-    ".is-received:not(.agent-origin) .luke-message-head-sender [data-actor-ref]",
+    ".is-received:not(.agent-origin) .ui-message-head-sender [data-actor-ref]",
   );
-  assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
+  assert.equal(sender?.querySelector(".ui-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
 
@@ -1380,7 +1326,7 @@ function origin(page: HTMLElement): OpenedOrigin {
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
   const head = card.querySelector<HTMLElement>("[data-origin-plan] > summary");
   act(() => head?.click());
-  return { card, sender: card.querySelector<HTMLElement>(".luke-message-line-sender") };
+  return { card, sender: card.querySelector<HTMLElement>(".ui-message-line-sender") };
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
@@ -1471,8 +1417,8 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
   const chip = origin(page).sender?.querySelector<HTMLElement>("[data-mention-ref]");
   assert.deepEqual(
     [
-      chip?.querySelector(".luke-inline-ref-label")?.textContent,
-      chip?.querySelector(".luke-inline-ref-state")?.textContent,
+      chip?.querySelector(".ui-inline-ref-label")?.textContent,
+      chip?.querySelector(".ui-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
     ["#2905", "Open", PULL_REQUEST_STATE.OPEN],
@@ -1532,25 +1478,6 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
-
-/** Opens the side panel's ⋯, over the tab it shows, and answers what it offers. */
-async function sidePanelMenu(): Promise<HTMLButtonElement[]> {
-  const more =
-    document.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button") ??
-    assert.fail("the side panel's bar has a ⋯");
-  act(() => more.click());
-  await settle();
-  return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-}
-
-/** Opens the side panel's ⋯ and answers the item under `label`, or fails saying it is not offered. */
-async function sidePanelMenuItem(label: string): Promise<HTMLButtonElement> {
-  return (
-    (await sidePanelMenu()).find(
-      (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
-    ) ?? assert.fail(`the side panel's ⋯ offers ${label}`)
-  );
-}
 
 /** Opens the page's ⋯ and answers the item under `label`, or fails saying it is not offered. */
 function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
@@ -1676,281 +1603,6 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   assert.ok(!offered.includes("Show terminal⌘J"), `no Show terminal: ${offered.join(", ")}`);
   assert.equal(ran, false, "⌘J is not offered");
   assert.deepEqual(chosen, []);
-});
-
-/**
- * Stands in what a Mac terminal tab's surface reads from the window and jsdom
- * has not, constructed sheets and media queries (as `mac-terminal-tab.test.ts`
- * does), so the terminal Run opens mounts; answers the way to take them down
- * again, which waits for the page to go.
- */
-function standTerminalDocument(): () => void {
-  const sheets = Object.getOwnPropertyDescriptor(document, "adoptedStyleSheets");
-  const media = Object.getOwnPropertyDescriptor(window, "matchMedia");
-  Object.defineProperty(document, "adoptedStyleSheets", {
-    configurable: true,
-    writable: true,
-    value: [],
-  });
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: () => ({
-      matches: false,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-      addListener: () => undefined,
-      removeListener: () => undefined,
-    }),
-  });
-  return () => {
-    if (sheets === undefined) Reflect.deleteProperty(document, "adoptedStyleSheets");
-    else Object.defineProperty(document, "adoptedStyleSheets", sheets);
-    if (media === undefined) Reflect.deleteProperty(window, "matchMedia");
-    else Object.defineProperty(window, "matchMedia", media);
-  };
-}
-
-test("Run on the ⋯ of the agent's Pull request tab runs its branch on this Mac in the side panel, from its own repository", async () => {
-  takeDownTerminal = standTerminalDocument();
-  pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
-  published = {
-    repository: "acme/relay",
-    branch: "luke/flaky-sweep",
-    pullRequest: {
-      number: 2911,
-      title: "Await the payment mock",
-      url: "https://github.com/acme/relay/pull/2911",
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.PASSING,
-      additions: 3,
-      deletions: 1,
-      changedFiles: 1,
-    },
-  };
-  const container = await mountPanelPage();
-  await settle();
-  const row =
-    container.querySelector<HTMLButtonElement>(
-      '.agent-tab-foot [aria-label="Pull request"] li > button',
-    ) ?? assert.fail("the pull request's row stands over the box");
-  act(() => row.click());
-  await settle();
-
-  const run = await sidePanelMenuItem("Run on this Mac");
-  act(() => run.click());
-  await settle();
-
-  const tab = drawnPanel?.tab;
-  assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
-  assert.equal(tab.macTerminal, AGENT_ID);
-  assert.equal(tab.repository, PAGE.repository);
-});
-
-test("Run on the ⋯ of a Pull request tab opened by its number runs that pull request's branch, not the agent's own", async () => {
-  takeDownTerminal = standTerminalDocument();
-  pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
-  published = {
-    repository: "acme/relay",
-    branch: "luke/view-commands",
-    pullRequest: {
-      number: 2905,
-      title: "View commands",
-      url: "https://github.com/acme/relay/pull/2905",
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.PASSING,
-      additions: 5,
-      deletions: 2,
-      changedFiles: 2,
-    },
-  };
-  await mountPanelPage();
-  // Note that a link to another pull request opens its tab by number, as the Inbox's and a mention's do.
-  act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2905 }));
-  await settle();
-
-  const run = await sidePanelMenuItem("Run on this Mac");
-  act(() => run.click());
-  await settle();
-
-  const tab = drawnPanel?.tab;
-  assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
-  assert.equal(tab.macTerminal, AGENT_ID);
-  assert.equal(tab.number, 2905);
-});
-
-/** Runs the agent's pushed branch on this Mac from the Pull request tab's ⋯, which shows the run's Mac terminal tab. */
-/** The agent has pushed a branch, which its pull request tab reads. */
-function pushBranch(): void {
-  published = {
-    repository: "acme/relay",
-    branch: "luke/flaky-sweep",
-    pullRequest: {
-      number: 2911,
-      title: "Await the payment mock",
-      url: "https://github.com/acme/relay/pull/2911",
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.PASSING,
-      additions: 3,
-      deletions: 1,
-      changedFiles: 1,
-    },
-  };
-}
-
-async function runOnThisMac(): Promise<void> {
-  takeDownTerminal = standTerminalDocument();
-  pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
-  pushBranch();
-  const container = await mountPanelPage();
-  await settle();
-  const row =
-    container.querySelector<HTMLButtonElement>(
-      '.agent-tab-foot [aria-label="Pull request"] li > button',
-    ) ?? assert.fail("the pull request's row stands over the box");
-  act(() => row.click());
-  await settle();
-  const run = await sidePanelMenuItem("Run on this Mac");
-  act(() => run.click());
-  await settle();
-}
-
-/** Hands the run's tab a port, as main does after an open, and answers what it can say on it. */
-async function postRunPort(): Promise<(message: MacTerminalPortOutbound) => void> {
-  const { port1: port } = new MessageChannel();
-  act(() => {
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        data: { channel: MAC_TERMINAL_PORT_CHANNEL, ticket: { agentId: AGENT_ID } },
-        source: window,
-        ports: [port],
-      }),
-    );
-  });
-  await settle();
-  return (message) => act(() => port.onmessage?.(new MessageEvent("message", { data: message })));
-}
-
-/** The × on the Mac terminal's tab in the strip. */
-function macTerminalClose(): HTMLButtonElement {
-  return (
-    document.querySelector<HTMLButtonElement>(
-      `aside.side-panel button[aria-label="Close ${TAB_WORDS.MAC_TERMINAL}"]`,
-    ) ?? assert.fail("the Mac terminal's tab has a ×")
-  );
-}
-
-/** The question standing over the window, as its words and its answer buttons. */
-function questionStanding() {
-  const dialog = document.querySelector('[role="alertdialog"]');
-  return {
-    words: dialog?.textContent ?? "",
-    press: async (verb: string) => {
-      const button = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
-        (each) => each.textContent === verb,
-      );
-      assert.ok(button, `the question offers ${verb}`);
-      await act(async () => button.click());
-      await settle();
-    },
-  };
-}
-
-test("closing a Mac terminal's tab while its run is going asks first, and Cancel leaves it open", async () => {
-  await runOnThisMac();
-  await postRunPort();
-  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "Run shows a Mac terminal");
-
-  act(() => macTerminalClose().click());
-  await settle();
-
-  const question = questionStanding();
-  assert.match(question.words, /Close this terminal\?.*What's running in it ends\./u);
-  assert.ok(
-    isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN),
-    "nothing is closed before the answer",
-  );
-  await question.press("Cancel");
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
-  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "Cancel leaves it open");
-
-  act(() => macTerminalClose().click());
-  await settle();
-  await questionStanding().press("Close");
-  assert.ok(!isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the answer closes the tab");
-});
-
-test("on a phone, Close in the panel header asks first while the run is going, as the strip's × does", async () => {
-  takeDownTerminal = standTerminalDocument();
-  pushBranch();
-  localStorage.clear();
-  installScrollIntoView();
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PhonePanelPage))));
-  await settle();
-  act(() => drawnPanel?.onChoose({ macTerminal: AGENT_ID, repository: "acme/relay", asked: 1 }));
-  await settle();
-  await postRunPort();
-  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the Mac terminal is shown");
-
-  const more =
-    container.querySelector<HTMLButtonElement>('[aria-label="Panel actions"]') ??
-    assert.fail("the panel's header has a ⋯");
-  act(() => more.click());
-  const close = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
-    each.textContent?.startsWith("Close"),
-  );
-  assert.ok(close, "the ⋯ offers Close");
-  act(() => close.click());
-  await settle();
-
-  assert.match(questionStanding().words, /Close this terminal\?/u);
-  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "nothing is closed unasked");
-});
-
-test("closing a Mac terminal's tab once its run has ended asks nothing", async () => {
-  await runOnThisMac();
-  const say = await postRunPort();
-  say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 0 });
-
-  act(() => macTerminalClose().click());
-  await settle();
-
-  assert.equal(document.querySelector('[role="alertdialog"]'), null, "no question stands");
-  assert.ok(!isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the tab closed at once");
-});
-
-test("a fork's Pull request tab offers no Run, since its head's branch name would be read from the base repository", async () => {
-  pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
-  published = {
-    repository: "acme/relay",
-    branch: "main",
-    pullRequest: {
-      number: 2907,
-      title: "Contributed fix",
-      url: "https://github.com/acme/relay/pull/2907",
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.PASSING,
-      additions: 1,
-      deletions: 1,
-      changedFiles: 1,
-    },
-  };
-  forkOwner = "contributor";
-  await mountPanelPage();
-  act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2907 }));
-  await settle();
-
-  assert.ok(
-    document.querySelector("aside.side-panel .pull-request-title-actions"),
-    "the fork's Pull request tab draws its header",
-  );
-  const offered = (await sidePanelMenu()).map(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent,
-  );
-  assert.ok(offered.includes("Open on GitHub"), "the fork's Pull request tab's ⋯ opens");
-  assert.ok(!offered.includes("Run on this Mac"), "no Run on a fork's pull request");
 });
 
 test("Archive on the page's ⋯ reads an agent at rest again and archives it unasked", async () => {
@@ -2084,8 +1736,8 @@ it.effect(
       ];
       assert.deepEqual(
         rows.map((row) => [
-          row.querySelector(".luke-combobox-option-label")?.textContent,
-          row.querySelector(".luke-combobox-option-detail")?.textContent,
+          row.querySelector(".ui-combobox-option-label")?.textContent,
+          row.querySelector(".ui-combobox-option-detail")?.textContent,
         ]),
         [["Bill by seat", "Billing · Archived"]],
       );
@@ -2126,7 +1778,7 @@ it.effect(
         ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
       ];
       assert.deepEqual(
-        rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
+        rows.map((row) => row.querySelector(".ui-combobox-option-label")?.textContent),
         ["Bill by seat"],
       );
     }),
@@ -2156,7 +1808,7 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   assert.deepEqual(
     chips.map((chip) => [
       chip.dataset.kind,
-      chip.querySelector(".luke-inline-ref-label")?.textContent,
+      chip.querySelector(".ui-inline-ref-label")?.textContent,
     ]),
     [
       ["file", "store.ts"],
@@ -2166,11 +1818,11 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   const [fileChip, folderChip] = chips;
   assert.ok(fileChip && folderChip);
   restOn(fileChip);
-  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
-      card?.querySelector(".luke-hover-card-name")?.textContent,
-      card?.querySelector(".luke-hover-card-sub")?.textContent,
+      card?.querySelector(".ui-hover-card-name")?.textContent,
+      card?.querySelector(".ui-hover-card-sub")?.textContent,
     ],
     ["src/store.ts", "acme/relay"],
   );
@@ -2218,12 +1870,9 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
 
   for (const chip of chips) {
     restOn(chip);
-    const card = [...document.querySelectorAll(".luke-tooltip-card .luke-hover-card")].at(-1);
+    const card = [...document.querySelectorAll(".ui-tooltip-card .ui-hover-card")].at(-1);
     assert.equal(card?.hasAttribute("data-pull-request-card"), true, "the card is its tab's");
-    assert.equal(
-      card?.querySelector(".luke-hover-card-name")?.textContent,
-      "Await the payment mock",
-    );
+    assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Await the payment mock");
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });

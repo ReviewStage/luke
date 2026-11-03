@@ -35,7 +35,7 @@ function render(element: ReactElement): HTMLElement {
 
 /** What the pager reads as, its place and its arrows' names in order. */
 function reading(container: HTMLElement): string[] {
-  return [...container.querySelectorAll<HTMLElement>(".luke-pager > *")].map(
+  return [...container.querySelectorAll<HTMLElement>(".ui-pager > *")].map(
     (each) => each.getAttribute("aria-label") ?? each.textContent ?? "",
   );
 }

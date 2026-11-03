@@ -4,7 +4,7 @@ import {
   INSTALLED_SKILL_SCOPE,
   type InstalledSkillScope,
   type InstalledSkillSource,
-} from "@luke/features/installed-skill-wire";
+} from "@repo/features/installed-skill-wire";
 import { sql } from "drizzle-orm";
 import { boolean, check, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { bytea, createdAt, updatedAt } from "./_helpers.js";

@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_STATUS,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@repo/settings/shortcuts";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { Duration, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";
@@ -278,6 +278,27 @@ test("a selection outside the agent's words, in its thought or the developer's w
   assert.equal(tab.reply() === undefined, true, "a thought is not the agent's message");
   tab.select(DEVELOPER_WORDS, "Which", "safer?");
   assert.equal(tab.reply() === undefined, true);
+});
+
+test("words selected by a triple-click, which runs on to the start of the next block, are offered Reply over the words alone", async () => {
+  const tab = await mounted();
+  const words = [...tab.container.querySelectorAll("p")].find(
+    (each) => each.textContent === AGENT_WORDS,
+  );
+  const next = [...tab.container.querySelectorAll("p")].find(
+    (each) => each.textContent === DEVELOPER_WORDS,
+  );
+  assert.ok(words && next);
+  const range = document.createRange();
+  range.setStart(words, 0);
+  range.setEnd(next, 0);
+  act(() => {
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    words.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+  await tab.pressReply();
+  assert.deepEqual(tab.blocks(), [`> ${AGENT_WORDS}`, ""]);
 });
 
 test("a message that did not go comes back with its quotes as blocks, a quote's way off takes it out, and a quote alone sends as any words do", async () => {

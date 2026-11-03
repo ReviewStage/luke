@@ -2,7 +2,7 @@
  * web-terminal-socket.ts -- an agent shell's relay socket opened from this page: the seam the host's terminal concern attaches a shell through, on the page's own origin, under the session cookie the browser carries.
  *
  * The relay admits a page of the deployment's own origin by its cookie and
- * the `Origin` the browser names (`@luke/service`'s `http/relay-upgrade.ts`),
+ * the `Origin` the browser names (`@repo/service`'s `http/relay-upgrade.ts`),
  * so the page opens the socket itself, as a plain same-origin `WebSocket`,
  * and sets no header: a page can set none on a socket, and the tab's
  * account is the cookie, which asks for none (`relay-credential.ts`). The
@@ -23,7 +23,7 @@ import type {
   OpenTerminalSocket,
   TerminalSocketArrival,
   TerminalSocketOpening,
-} from "@luke/host/effect";
+} from "@repo/host/effect";
 import { type Cause, Effect, Latch, Queue, Stream } from "effect";
 
 /** How the page ends a socket it no longer wants: normally, the shell going on in tmux. */

@@ -3,13 +3,13 @@ import {
   type DiagramAppearance,
   type DiagramDrawing,
   type DiagramModule,
-} from "@luke/ui/diagram-contract";
-import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
+} from "@repo/ui/diagram-contract";
+import { writeWithheldSheet } from "@repo/ui/session-replay-marks";
 import mermaid, { type MermaidConfig } from "mermaid";
 import { diagramThemeVariables } from "./diagram-theme.js";
 
 /**
- * index.ts -- the diagram bundle: Mermaid drawing a plan's fence as a picture the panel's policy admits, imported by the panel (`@luke/ui/diagram-contract`).
+ * index.ts -- the diagram bundle: Mermaid drawing a plan's fence as a picture the panel's policy admits, imported by the panel (`@repo/ui/diagram-contract`).
  *
  * The panel's policy is `style-src 'self'` (the desktop's
  * `renderer/index.html` and the web's `vercel.json`), and Mermaid's SVG
@@ -36,7 +36,7 @@ import { diagramThemeVariables } from "./diagram-theme.js";
  * its attributes, and its `<style>`, which the recording copies unmasked,
  * names its classes. The measuring sheet names them too, and the recorder
  * copies every sheet the document adopts, so it is written withheld
- * (`@luke/ui/session-replay-marks`), and no recording carries its rules.
+ * (`@repo/ui/session-replay-marks`), and no recording carries its rules.
  */
 
 /** The window's own type, as `styles/base.css` sets it, so a label reads as the words around it. */

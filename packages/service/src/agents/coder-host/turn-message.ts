@@ -1,28 +1,26 @@
 /**
- * turn-message.ts -- a coding agent's turn message composed, on either runtime: the call's words, the time, and the task where it changed.
+ * turn-message.ts -- a coding agent's turn message composed, on either harness: the call's words, the time, and the task where it changed.
  *
- * What a turn opens with after the history is the same whatever answers the
- * agent's conversation, eve or a native harness: the pieces are
+ * What a turn opens with after the history is the same whichever native
+ * harness answers the agent's conversation: the pieces are
  * `turn-context.ts`'s, and this composes them once, so an agent reads the
- * same words on either runtime. eve's host hands it on at each turn's start
- * (`host.ts`'s `turnMessage`, from the eve app's `turn-message.ts`
- * instructions), with what eve's durable session state has handed; a native
- * harness's sessions hand it ahead of the developer's line in the message
+ * same words on either harness. A harness's sessions hand it ahead of the
+ * developer's line in the message
  * written to the runner (`runner-sessions.ts`), with what the conversation's
  * row has handed (`native_handed`, read and written here).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   readNativeHanded,
   recordNativeHanded,
-} from "@luke/database/models/agent-store";
-import { turnsBefore } from "@luke/database/models/message-reads";
-import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
-import { listRevisions } from "@luke/database/models/plan-revisions";
-import { readTask } from "@luke/database/models/task-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
+} from "@repo/database/models/agent-store";
+import { turnsBefore } from "@repo/database/models/message-reads";
+import { readPlanCommentThreads } from "@repo/database/models/plan-comments";
+import { listRevisions } from "@repo/database/models/plan-revisions";
+import { readTask } from "@repo/database/models/task-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";

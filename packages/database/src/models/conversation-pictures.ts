@@ -4,7 +4,7 @@ import {
   type ConversationMediaType,
   conversationMediaTypeSchema,
   type KeptPicture,
-} from "@luke/features/conversation-picture-wire";
+} from "@repo/features/conversation-picture-wire";
 import { and, eq, sum } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -16,12 +16,12 @@ import type { ConversationTarget } from "./writer.js";
 /**
  * conversation-pictures.ts -- the pictures a conversation's tools answered, kept once each beside the transcript that names them.
  *
- * The relay hands each picture in as it settles the call that answered it
- * (`eve-host/relay-pictures.ts`), already sniffed and measured, and
+ * A tool hands each picture in as it settles the call that answered it
+ * (`show-image.ts`, `browser-tool.ts`), already sniffed and measured, and
  * writes the id this answers into the stored output in the bytes' place.
  * A picture is keyed by the hash of its bytes within its conversation, so
- * handing the same one in again answers the row already kept, and an
- * event eve delivers twice keeps nothing twice. A conversation keeps at
+ * handing the same one in again answers the row already kept, and a call
+ * made twice keeps nothing twice. A conversation keeps at
  * most `MAX_BYTES_PER_CONVERSATION` of pictures, read off the rows' byte
  * counts; a picture that would take it past them is not kept, and the
  * caller names it as not kept. A read names the conversation beside the

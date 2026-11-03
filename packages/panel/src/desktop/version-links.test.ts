@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -138,6 +138,6 @@ test("a version's row offers Copy link, which copies its plan's address under th
   assert.ok(item, "the row's menu offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, [`https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}/version/2`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/task/${DOCUMENT_TASK.id}/version/2`]);
   assert.equal(newestToastSays(), "Link copied");
 });

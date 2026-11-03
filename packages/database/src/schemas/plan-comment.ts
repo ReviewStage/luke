@@ -3,9 +3,9 @@ import type {
   PlanCommentEntryKind,
   PlanCommentScope,
   PlanCommentStatus,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import { sql } from "drizzle-orm";
-import { index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
@@ -17,11 +17,18 @@ import { task } from "./task.js";
  * A thread's anchor is kept here as offsets into the plan's Markdown
  * (`task.document`) rather than written into the text, so every reader of the
  * text reads none of it; the plan's one save moves every anchor with its
- * words (`@luke/features/plan-comment-anchor`), and nulls both offsets of an
+ * words (`@repo/features/plan-comment-anchor`), and nulls both offsets of an
  * anchor whose every word it deleted, the thread keeping its quote. The
  * section is the heading the words stood under when the anchor last moved.
  * A thread is the plan's, shared by every member of its workspace, and goes
  * with the plan.
+ *
+ * A thread may stand on one of the task's pages instead (`plan-page.ts`),
+ * which `page_id` names, a page having no row of its own: on the version
+ * `page_version` names, and on the element of it `page_element` names by
+ * its path, or on the whole page where none is named. Such a thread has no
+ * offsets, its quote the element's words or the page's title, and goes with
+ * the task as the page's versions do.
  *
  * An entry is a comment, or a line of what happened to the thread: an ask of
  * the per-task assistant or a coding agent, a resolve, a reopen. Who wrote it
@@ -46,13 +53,26 @@ export const planCommentThread = pgTable(
     anchorTo: integer("anchor_to"),
     /** The heading of the section the words stood in when the anchor last moved; empty before the first heading. */
     section: text("section").notNull(),
+    /** The page of the task the thread is on, the same on each of its versions; null for a thread on the plan. */
+    pageId: uuid("page_id"),
+    /** The version of the page the thread was left on; null for a thread on the plan. */
+    pageVersion: integer("page_version"),
+    /** The path of the element of that version the thread is on; null for the whole page, and on the plan. */
+    pageElement: text("page_element"),
     status: text("status").$type<PlanCommentStatus>().notNull(),
     /** Moved on by every change of the thread, which a reader's cursor digests. */
     revision: integer("revision").notNull(),
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
   },
-  (table) => [index("plan_comment_thread_task_created").on(table.taskId, table.createdAt)],
+  (table) => [
+    index("plan_comment_thread_task_created").on(table.taskId, table.createdAt),
+    // A page and its version stand together or not at all.
+    check(
+      "plan_comment_thread_page",
+      sql`(${table.pageId} is null) = (${table.pageVersion} is null) and (${table.pageElement} is null or ${table.pageId} is not null)`,
+    ),
+  ],
 );
 
 export const planComment = pgTable(

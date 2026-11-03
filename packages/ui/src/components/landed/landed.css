@@ -1,14 +1,14 @@
 /* landed.css -- "you landed here" (landed.ts): a wash over the place the view
-   brought the eye to, standing for --luke-confirm-delay and fading over
-   --luke-duration-shape. Reduced motion zeroes the fade, never the stand, so
+   brought the eye to, standing for --ui-confirm-delay and fading over
+   --ui-duration-shape. Reduced motion zeroes the fade, never the stand, so
    the wash still marks the place, still, for as long. The light is one
-   number, --luke-landed, from 1 to 0, played on the wash, whose end is
+   number, --ui-landed, from 1 to 0, played on the wash, whose end is
    heard as the landed element's own, or on a place that draws it itself
    (`held`), whose children inherit it: a diff's lines, inside a shadow root
    no keyframes of the document's reach. On opacity alone, so no words
    re-shape. */
 
-@property --luke-landed {
+@property --ui-landed {
   syntax: "<number>";
   inherits: true;
   initial-value: 0;
@@ -18,12 +18,12 @@
   /* The light's timing, read where it plays: on the wash, so a motion of the
      place's own never stands in its way, or on a place that draws it itself. */
   [data-landed] {
-    --luke-landed-light: luke-landed var(--luke-duration-shape) var(--luke-motion-exit)
-      var(--luke-confirm-delay) both;
+    --ui-landed-light: ui-landed var(--ui-duration-shape) var(--ui-motion-exit)
+      var(--ui-confirm-delay) both;
   }
 
   [data-landed="held"] {
-    animation: var(--luke-landed-light);
+    animation: var(--ui-landed-light);
   }
 
   [data-landed="around"],
@@ -37,27 +37,27 @@
     content: "";
     position: absolute;
     z-index: -1;
-    inset: calc(-1 * var(--luke-space-2));
-    border-radius: var(--luke-radius-6);
-    background: color-mix(in srgb, var(--luke-color-accent) 18%, transparent);
-    opacity: var(--luke-landed);
+    inset: calc(-1 * var(--ui-space-2));
+    border-radius: var(--ui-radius-6);
+    background: color-mix(in srgb, var(--ui-color-accent) 18%, transparent);
+    opacity: var(--ui-landed);
     pointer-events: none;
-    animation: var(--luke-landed-light);
+    animation: var(--ui-landed-light);
   }
 
   /* Note that a row flush to its card keeps its wash a step inside, clear of the card's corner. */
   [data-landed="within"]::before {
-    inset: var(--luke-space-2);
-    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+    inset: var(--ui-space-2);
+    border-radius: calc(var(--ui-control-radius) - var(--ui-space-2));
   }
 
-  @keyframes luke-landed {
+  @keyframes ui-landed {
     from {
-      --luke-landed: 1;
+      --ui-landed: 1;
     }
 
     to {
-      --luke-landed: 0;
+      --ui-landed: 0;
     }
   }
 }

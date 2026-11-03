@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent, readAgent } from "@luke/database/models/agent-store";
-import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_PAYER } from "@luke/features/agent-wire";
+import { Database } from "@repo/database/core/query";
+import { createAgent, readAgent } from "@repo/database/models/agent-store";
+import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { storeWriter } from "@repo/database/models/writer";
+import { user } from "@repo/database/schemas/auth";
+import { messages } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_PAYER } from "@repo/features/agent-wire";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { cancelledTurn } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -29,7 +31,7 @@ import { NATIVE_WAKEUP_SWEEP, sweepNativeWakeups } from "./native-wakeup-sweep.j
  * The delivery of the wakeups a native agent's released wait left: a
  * wakeup is handed to its agent as a message once due and never again, one
  * not yet due waits, and one whose delivery fails is tried again past the
- * retry, then given up. Over a real dialect, eve a fake at the client's
+ * retry, then given up; the line it writes is the agent's own. Over a real dialect, eve a fake at the client's
  * boundary. The claim is the deployment's, so each test reads back only
  * the messages its own agent was sent. Synthetic accounts and prompts.
  */
@@ -79,7 +81,7 @@ function sentText(message: EveMessage["message"]): string {
 const openAgent = Effect.gen(function* () {
   const db = yield* Database;
   const owner = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
+  yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@app.test` });
   yield* connectAgentApiKeys(owner);
   const task = yield* startTask(owner, { name: "Invitations" });
   const started = yield* createAgent(owner, {
@@ -100,7 +102,7 @@ const openAgent = Effect.gen(function* () {
     sessionId,
     new Date(DUE.getTime() - 3_600_000),
   );
-  return { owner, agentId: agent.id, sessionId };
+  return { owner, agentId: agent.id, conversationId: agent.conversationId, sessionId };
 });
 
 /** One sweep at the instant given, over the eve given. */
@@ -114,18 +116,27 @@ const sentTo = (eve: ReturnType<typeof fakeEve>, sessionId: string) =>
     .map((each) => sentText(each.message.message));
 
 it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
-  it.effect("a wakeup is told to its agent once it is due, and never again", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve();
-      const { agentId, sessionId } = yield* openAgent;
-      yield* replaceAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
+  it.effect(
+    "a wakeup is told to its agent once it is due, and never again, as the agent's own line",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agentId, conversationId, sessionId } = yield* openAgent;
+        yield* replaceAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
 
-      yield* sweepAt(new Date(DUE.getTime() - 1_000), eve);
-      assert.deepEqual(sentTo(eve, sessionId), [], "not yet due");
-      yield* sweepAt(DUE, eve);
-      yield* sweepAt(new Date(DUE.getTime() + RETRY_MS), eve);
-      assert.deepEqual(sentTo(eve, sessionId), ["Check CI on #42."]);
-    }),
+        yield* sweepAt(new Date(DUE.getTime() - 1_000), eve);
+        assert.deepEqual(sentTo(eve, sessionId), [], "not yet due");
+        yield* sweepAt(DUE, eve);
+        yield* sweepAt(new Date(DUE.getTime() + RETRY_MS), eve);
+        assert.deepEqual(sentTo(eve, sessionId), ["Check CI on #42."]);
+        // The words are the agent's own, so its row names the agent as their sender, never the app.
+        const db = yield* Database;
+        const lines = yield* db
+          .select({ sender: messages.sender, senderAgentId: messages.senderAgentId })
+          .from(messages)
+          .where(and(eq(messages.conversationId, conversationId), isNotNull(messages.sender)));
+        assert.deepEqual(lines, [{ sender: MESSAGE_SENDER.AGENT, senderAgentId: agentId }]);
+      }),
   );
 
   it.effect("a wakeup whose delivery fails is tried again past the retry, then given up", () =>

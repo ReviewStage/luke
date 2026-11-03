@@ -7,11 +7,11 @@ import {
   type AdminCost,
   type AdminCostAccount,
   type AdminCostModel,
-} from "@luke/features/admin-cost-wire";
-import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
-import { formatCompact, formatCount, formatUsd } from "@luke/features/number-format";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { readFailedWords } from "@luke/features/words";
+} from "@repo/features/admin-cost-wire";
+import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
+import { formatCompact, formatCount, formatUsd } from "@repo/features/number-format";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { readFailedWords } from "@repo/features/words";
 import {
   Badge,
   DATA_TABLE_COLUMN_KIND,
@@ -22,8 +22,8 @@ import {
   TEXT_ELEMENT,
   TEXT_TONE,
   Text,
-} from "@luke/ui";
-import { formatTrendMove } from "@luke/ui/admin-format";
+} from "@repo/ui";
+import { formatTrendMove } from "@repo/ui/admin-format";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";

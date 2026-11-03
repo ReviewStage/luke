@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   ENTER_KEY_HINT,
   FormField,
@@ -17,8 +17,8 @@ import {
   Text,
   TextArea,
   TextField,
-} from "@luke/ui";
-import { inputProblem } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { inputProblem } from "@repo/ui/reported-failure";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

@@ -8,7 +8,7 @@
  * menu reads it back from the element clicked (`linkAddressOf`). Note that
  * it is kept here rather than on an attribute, because the window's
  * recording masks only the attributes that carry words
- * (`@luke/panel`'s `session-replay.ts`), and an address may carry a token.
+ * (`@repo/panel`'s `session-replay.ts`), and an address may carry a token.
  */
 
 import { useCallback, useRef } from "react";

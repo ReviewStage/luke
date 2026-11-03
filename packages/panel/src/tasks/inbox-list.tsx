@@ -1,9 +1,9 @@
-import { type InboxItem, inboxAddressedTo } from "@luke/features/inbox-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { agoText } from "@luke/features/time-format";
-import { sameShape } from "@luke/features/turn-rows";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { agoText } from "@repo/features/time-format";
+import { sameShape } from "@repo/features/turn-rows";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   ANNOUNCE,
   BUTTON_SIZE,
@@ -59,16 +59,16 @@ import {
   useMinute,
   useResizeEdge,
   useRovingKeys,
-} from "@luke/ui";
-import { actorName, personActor } from "@luke/ui/actor-model";
-import { CheckCheckIcon, GLYPH, InboxIcon, SlidersHorizontalIcon, UsersIcon } from "@luke/ui/icons";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import { actorName, personActor } from "@repo/ui/actor-model";
+import { CheckCheckIcon, GLYPH, InboxIcon, SlidersHorizontalIcon, UsersIcon } from "@repo/ui/icons";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import {
   VIRTUAL_ROWS_ANCHOR,
   type VirtualRowPlace,
   VirtualRows,
   type VirtualRowsHandle,
-} from "@luke/ui/virtual-rows";
+} from "@repo/ui/virtual-rows";
 import {
   Fragment,
   memo,
@@ -759,7 +759,7 @@ function FilterChipLine({
  * The chips over the list: the task the Inbox is narrowed to, by its name,
  * and a × that lists every task's items again; and, while Addressed to
  * names a teammate, their face and name, and a × that lists the reader's
- * own again (`@luke/ui`'s removable filter chip, as the sidebar's Created
+ * own again (`@repo/ui`'s removable filter chip, as the sidebar's Created
  * by stands over its tasks). Each scales in as it is chosen and out as its
  * × lifts it, as the Tasks page's filter chips do.
  */
@@ -940,7 +940,7 @@ function ListHead({
             <Text
               as={TEXT_ELEMENT.H1}
               variant={TEXT_VARIANT.TOOLBAR_TITLE}
-              className="luke-toolbar-title"
+              className="ui-toolbar-title"
             >
               {title}
             </Text>
@@ -1073,8 +1073,7 @@ function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
 const NEW_TASK_LABEL = "New task";
 
 /**
- * The way on from an Inbox with nothing in it, where the window rests with
- * no task open (`resting-page.ts`): New task, opening its dialog, primary
+ * The way on from an Inbox with nothing in it: New task, opening its dialog, primary
  * because starting one is all there is to do from an Inbox with nothing to
  * answer. None where nothing can start.
  */
@@ -1325,7 +1324,7 @@ function useLaidOut(items: readonly InboxListed[]): readonly InboxListed[] {
 const ROW_ESTIMATE_PX = 72;
 
 /**
- * The room between two rows, in pixels: the tight gap (`--luke-tight-gap`),
+ * The room between two rows, in pixels: the tight gap (`--ui-tight-gap`),
  * a step further apart than a list's, because a row of three lines standing
  * clear on its ground is told from the next by the room between them alone.
  */

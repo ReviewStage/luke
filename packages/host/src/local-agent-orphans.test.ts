@@ -22,7 +22,7 @@ import {
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { DeviceAgentClaimedLine } from "@luke/features";
+import type { DeviceAgentClaimedLine } from "@repo/features";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -30,9 +30,9 @@ import {
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
@@ -119,7 +119,7 @@ const following = (input: {
   readonly firstReadDies?: boolean;
 }) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-orphans-");
+    const root = yield* temporaryDirectoryScoped("agent-orphans-");
     const home = `${root}/home`;
     const stateRoot = `${root}/state`;
     for (const agentId of input.held) {
@@ -229,6 +229,7 @@ const following = (input: {
         formerlyDirect: input.mac === true,
         storesOwned: input.storesOwned === true,
         deviceName: "rack-1",
+        deviceMachine: {},
         devicePlatform: input.mac === true ? DEVICE_PLATFORM.DARWIN : DEVICE_PLATFORM.LINUX,
         deviceArch: input.mac === true ? DEVICE_ARCH.ARM64 : DEVICE_ARCH.X64,
         deviceIsolation: DEVICE_ISOLATION.DIRECT,

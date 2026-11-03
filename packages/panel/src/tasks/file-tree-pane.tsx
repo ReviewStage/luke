@@ -1,7 +1,7 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { noMatchWords, readingWords, TERM } from "@luke/features/words";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { TasksTreeAnswer } from "@repo/features/tasks-view";
+import { noMatchWords, readingWords, TERM } from "@repo/features/words";
 import {
   cssCustomProperties,
   FAILURE_NOTE_LOOK,
@@ -16,7 +16,7 @@ import {
   type ResizeEdgeHandle,
   SearchField,
   SpinnerRegion,
-} from "@luke/ui";
+} from "@repo/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";

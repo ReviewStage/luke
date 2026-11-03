@@ -1,5 +1,5 @@
-import { SearchMatch } from "@luke/ui";
-import { type MatchRange, matchRanges } from "@luke/ui/search-tokens";
+import { SearchMatch } from "@repo/ui";
+import { type MatchRange, matchRanges } from "@repo/ui/search-tokens";
 import { focusSeek } from "./focus-seek.js";
 
 /**
@@ -31,7 +31,7 @@ export function focusSearchField(
 /**
  * One drawn line with the query's words marked where they landed, so a
  * result says why it matched: the stretches a search hit gave (`ranges`,
- * `@luke/ui/search-score`), or else wherever the words typed (`tokens`)
+ * `@repo/ui/search-score`), or else wherever the words typed (`tokens`)
  * stand in it. A line the words did not land on is returned as it was.
  */
 export function Highlighted({

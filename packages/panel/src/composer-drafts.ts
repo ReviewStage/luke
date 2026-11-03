@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { type AgentAttachment, DIFF_SIDE } from "@luke/features/agent-wire";
+import { type AgentAttachment, DIFF_SIDE } from "@repo/features/agent-wire";
 import {
   INBOX_REPLY,
   INBOX_STATUS,
@@ -8,8 +8,8 @@ import {
   type InboxItem,
   type InboxReplyKind,
   inboxFormValueSchema,
-} from "@luke/features/inbox-wire";
-import { PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
+} from "@repo/features/inbox-wire";
+import { PLAN_COMMENT_SCOPE } from "@repo/features/plan-comment-wire";
 import { Duration, Effect, Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -64,7 +64,7 @@ import { rendererRuntime } from "./renderer-runtime.js";
  */
 
 /** Where the drafts are kept in the renderer's storage. */
-const STORAGE_KEY = "luke.composerDrafts";
+const STORAGE_KEY = "app.composerDrafts";
 
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;

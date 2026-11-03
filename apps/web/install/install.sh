@@ -19,18 +19,26 @@
 # refused with that install's own uninstall command, since the two would run
 # side by side.
 #
-# The account's files, which `luke-host uninstall` (apps/host/scripts/luke-host.sh)
+# The account's files, which `vespin-host uninstall` (apps/host/scripts/vespin-host.sh)
 # removes by the same names, and which the release's own launcher reads its
 # state root from:
 #
 #   ~/.local/share/luke-host/versions/<version>/   each release, as its tarball's luke-host/ folder
 #   ~/.local/share/luke-host/current                link to versions/<version>, the one that runs
-#   ~/.local/bin/luke-host                          absolute link to …/current/bin/luke-host
+#   ~/.local/bin/vespin-host                        absolute link to …/current/bin/vespin-host
 #   ~/.local/state/luke-host/                       the state root: the box's record and its agents'
-#   ~/.config/systemd/user/luke-host.service        Linux: the service, run through current
+#   ~/.config/systemd/user/vespin-host.service      Linux: the service, run through current
 #   ~/Library/LaunchAgents/dev.vespin.host.standalone.plist
 #                                                   Mac: the LaunchAgent, run through current
-#   ~/Library/Logs/Vespin Host/luke-host.log          Mac: the LaunchAgent's log
+#   ~/Library/Logs/Vespin Host/vespin-host.log      Mac: the LaunchAgent's log
+#
+# An install of a release before 0.7.0 named the program luke-host: it linked
+# ~/.local/bin/luke-host and ran luke-host.service. Run again over one, it
+# moves it over in place to the layout above, as a later release's daemon
+# moves its own service over (packages/host/src/daemon/host-service-move.ts):
+# luke-host.service is stopped and removed before vespin-host.service starts,
+# the plist is rewritten under the same label, and ~/.local/bin/luke-host is
+# left where it is, since an older app's Remove names it.
 #
 # On Linux it turns on lingering first, so the service keeps running after
 # the account logs out: on its own where the account may, and otherwise with
@@ -40,12 +48,12 @@
 # it beside the releases already there, and points current at it. It starts
 # the service before the box is connected, a systemd user service enabled at
 # boot or a LaunchAgent that runs while the user is logged in, which waits
-# until the box's record stands; then it runs `luke-host connect`, which prints
+# until the box's record stands; then it runs `vespin-host connect`, which prints
 # a link and a code and waits for a member to approve it in the app, or answers at
 # once where the box is connected already. Once it is connected it restarts the
 # service on the new release and removes every other release. Where the code
 # is denied or lapses, the service stands waiting, so a later
-# `luke-host connect` by hand is followed within a minute. Run again, it
+# `vespin-host connect` by hand is followed within a minute. Run again, it
 # upgrades in place: the box keeps its pairing, and the service is restarted
 # on the new release.
 set -eu
@@ -59,24 +67,31 @@ SHA256_DARWIN_ARM64="@@SHA256_DARWIN_ARM64@@"
 URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
 
 ORIGIN="@@ORIGIN@@"
-UNIT="luke-host.service"
+UNIT="vespin-host.service"
+# The unit an install of a release before 0.7.0 ran the host as, which a run
+# again moves over from.
+UNIT_BEFORE_RENAME="luke-host.service"
 # A Mac's LaunchAgent, by its label, which an install that came before used too.
 MAC_LABEL="dev.vespin.host.standalone"
 # Where a Mac's install that came before put the host, under its user's home.
 MAC_EARLIER_FOLDER="Library/Application Support/Vespin Host"
 # Where a Linux box's install that came before put the host and its service.
 EARLIER_INSTALL_DIR="/opt/luke-host"
-EARLIER_UNIT_FILE="/etc/systemd/system/$UNIT"
+EARLIER_UNIT_FILE="/etc/systemd/system/luke-host.service"
 # The oldest macOS it installs on: the release's launcher reads its own path
 # with readlink -f, which macOS has had since 12.3.
 MAC_MIN_VERSION="12.3"
 # The folder that stands where systemd runs the box; a test points it elsewhere.
-SYSTEMD_RUN_DIR="${LUKE_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+SYSTEMD_RUN_DIR="${APP_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 # How long a Mac's install waits for its running LaunchAgent to stop before it
 # swaps the release; a test points it at none.
-MAC_STOP_WAIT_SECONDS="${LUKE_HOST_MAC_STOP_WAIT_SECONDS:-30}"
+MAC_STOP_WAIT_SECONDS="${APP_HOST_MAC_STOP_WAIT_SECONDS:-30}"
 # Whether the box is WSL2, which require_supported_os reads from /proc/version.
 ON_WSL=false
+# The command's link as a person types it, which their own shell expands to
+# LINK. Note that it is named by its path whatever this shell's PATH holds,
+# since the shell they type in later may not hold ~/.local/bin.
+TYPED_LINK='~/.local/bin/vespin-host'
 
 if [ -t 1 ]; then
   CHECK="$(printf '\033[32m✓\033[0m')"
@@ -96,10 +111,11 @@ fail() {
 # that they are set once the home is known, as account_paths does.
 account_paths() {
   RELEASES="$HOME/.local/share/luke-host"
-  LINK="$HOME/.local/bin/luke-host"
+  LINK="$HOME/.local/bin/vespin-host"
   UNIT_FILE="$HOME/.config/systemd/user/$UNIT"
+  UNIT_FILE_BEFORE_RENAME="$HOME/.config/systemd/user/$UNIT_BEFORE_RENAME"
   PLIST="$HOME/Library/LaunchAgents/$MAC_LABEL.plist"
-  MAC_LOG="$HOME/Library/Logs/Vespin Host/luke-host.log"
+  MAC_LOG="$HOME/Library/Logs/Vespin Host/vespin-host.log"
 }
 
 # The computer's own architecture. On a Mac it reads the hardware, so Apple
@@ -266,7 +282,7 @@ download() {
 # at boot. Note that it is restarted a minute after any exit, a clean one
 # among them: the daemon exits 0 on a record the service refused, the box removed in
 # the app, and asks the service nothing on it, so a box paired again by hand with
-# luke-host connect is followed within a minute, as the daemon's own rest
+# vespin-host connect is followed within a minute, as the daemon's own rest
 # follows one never connected.
 write_unit() {
   mkdir -p "$(dirname "$UNIT_FILE")"
@@ -277,7 +293,7 @@ Documentation=https://vespin.dev
 
 [Service]
 Type=simple
-ExecStart=$RELEASES/current/bin/luke-host run
+ExecStart=$RELEASES/current/bin/vespin-host run
 Restart=always
 RestartSec=60
 
@@ -302,7 +318,7 @@ write_launch_agent() {
 	<string>$MAC_LABEL</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>$RELEASES/current/bin/luke-host</string>
+		<string>$RELEASES/current/bin/vespin-host</string>
 		<string>run</string>
 	</array>
 	<key>RunAtLoad</key>
@@ -352,6 +368,17 @@ start_launch_agent() {
   return 0
 }
 
+# Stops the systemd user unit $1; refuses, having changed nothing, where it is
+# still running.
+stop_unit() {
+  systemctl --user stop "$1" >/dev/null 2>&1 || true
+  case "$(systemctl --user is-active "$1" 2>/dev/null)" in
+    active | activating | deactivating | reloading | refreshing)
+      fail "Could not stop $1, so nothing was changed. Stop it with systemctl --user stop $1, then run this again."
+      ;;
+  esac
+}
+
 # Stops the service before its release's folder is swapped for the same
 # version's, so no daemon runs from a folder taken away under it; refuses,
 # having changed nothing, where it is still running. Note that a new
@@ -361,12 +388,20 @@ stop_service() {
     stop_launch_agent "$(id -u)"
     return 0
   fi
-  systemctl --user stop "$UNIT" >/dev/null 2>&1 || true
-  case "$(systemctl --user is-active "$UNIT" 2>/dev/null)" in
-    active | activating | deactivating | reloading | refreshing)
-      fail "Could not stop $UNIT, so nothing was changed. Stop it with systemctl --user stop $UNIT, then run this again."
-      ;;
-  esac
+  stop_unit "$UNIT"
+}
+
+# Retires the unit an install of a release before 0.7.0 left, where its file
+# stands, as a later release's daemon retires it once it moved its service
+# over (host-service-move.ts): stopped, disabled, and its file removed, so it
+# never runs beside UNIT; refuses, having changed nothing, where it does not
+# stop. Note that it is retired before any release's folder is swapped, since
+# a daemon updated in place may run the very release swapped.
+retire_unit_before_rename() {
+  [ -e "$UNIT_FILE_BEFORE_RENAME" ] || return 0
+  stop_unit "$UNIT_BEFORE_RENAME"
+  systemctl --user disable "$UNIT_BEFORE_RENAME" >/dev/null 2>&1 || true
+  rm -f "$UNIT_FILE_BEFORE_RENAME"
 }
 
 # Unpacks the checked tarball $1 into the releases, as versions/$VERSION, and
@@ -375,7 +410,8 @@ stop_service() {
 install_release() {
   mkdir -p "$RELEASES/versions" "$work/unpacked"
   tar -xzf "$1" -C "$work/unpacked" || fail "Could not unpack ${1##*/}"
-  [ -x "$work/unpacked/luke-host/bin/luke-host" ] || fail "${1##*/} holds no luke-host."
+  [ -x "$work/unpacked/luke-host/bin/vespin-host" ] || fail "${1##*/} holds no vespin-host."
+  [ "$(uname -s)" = "Darwin" ] || retire_unit_before_rename
   target="$RELEASES/versions/$VERSION"
   if [ -e "$target" ]; then
     stop_service
@@ -384,7 +420,7 @@ install_release() {
   mv "$work/unpacked/luke-host" "$target"
   ln -sfn "versions/$VERSION" "$RELEASES/current"
   mkdir -p "$(dirname "$LINK")"
-  ln -sfn "$RELEASES/current/bin/luke-host" "$LINK"
+  ln -sfn "$RELEASES/current/bin/vespin-host" "$LINK"
   ok "Installed Vespin host $VERSION to $target"
 }
 
@@ -396,15 +432,6 @@ remove_other_releases() {
   done
 }
 
-# The command a person at the box types to run the release, by its name where
-# PATH finds it there and by its link otherwise.
-command_name() {
-  case ":${PATH:-}:" in
-    *":$HOME/.local/bin:"*) printf 'luke-host' ;;
-    *) printf '%s' "$LINK" ;;
-  esac
-}
-
 # Connects the box through the release just installed, which prints the link
 # and the code and waits for them to be approved, or answers at once where the
 # box is connected already; ends the script where it is not connected, by the
@@ -413,7 +440,7 @@ connect_box() {
   code=0
   "$LINK" connect --origin "$ORIGIN" || code=$?
   [ "$code" -eq 0 ] && return 0
-  printf '%s This box is not connected yet. Vespin host is installed and follows it once it is. For a new code, run: %s connect --origin %s\n' "$CROSS" "$(command_name)" "$ORIGIN" >&2
+  printf '%s This box is not connected yet. Vespin host is installed and follows it once it is. For a new code, run: %s connect --origin %s\n' "$CROSS" "$TYPED_LINK" "$ORIGIN" >&2
   exit "$code"
 }
 
@@ -528,7 +555,8 @@ main() {
   mkdir -p "$RELEASES"
   work="$(mktemp -d "$RELEASES/.install.XXXXXX")"
   trap 'rm -rf "$work"' EXIT
-  tarball="luke-host-$VERSION-$target_name.tar.gz"
+  # Note that the release names its tarball luke-host-…, which a host through 0.6.0 updates itself by, and the download is saved by the program's own name.
+  tarball="vespin-host-$VERSION-$target_name.tar.gz"
   download "$target_url" "$work/$tarball"
   check_sha256 "$work/$tarball" "$target_sha256"
   ok "Downloaded and checked $tarball (sha256 matches)"
@@ -549,7 +577,7 @@ main() {
 
   printf '\nConnected. This box gets ready in Vespin, then you can pick it under a task'"'"'s Runs on.\n'
   printf 'To upgrade later, run the same command again.\n'
-  printf 'To remove it: %s uninstall\n' "$(command_name)"
+  printf 'To remove it: %s uninstall\n' "$TYPED_LINK"
   # Note that a systemd service does not keep a WSL distro up: WSL stops it about
   # 15 seconds after its last window closes, unless instanceIdleTimeout is -1.
   if [ "$ON_WSL" = true ]; then
@@ -558,7 +586,7 @@ main() {
 }
 
 # A test sources the script up to here, to call its functions and read what it carries.
-[ -z "${LUKE_HOST_INSTALL_LIBRARY:-}" ] || return 0
+[ -z "${APP_HOST_INSTALL_LIBRARY:-}" ] || return 0
 
 # Note that the whole script is read before any of it runs, since sh reads a piped script as it goes.
 main "$@"

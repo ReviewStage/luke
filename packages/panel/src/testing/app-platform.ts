@@ -2,7 +2,7 @@
  * app-platform.ts -- what a test's window can do that only its shell can: a fake answering only the calls its test gives it.
  */
 
-import { ACT_KIND } from "@luke/host/acts";
+import { ACT_KIND } from "@repo/host/acts";
 import { pressAct } from "../act.js";
 import type { AppPlatform } from "../app-platform.js";
 import { installAppPlatform } from "../app-platform.js";

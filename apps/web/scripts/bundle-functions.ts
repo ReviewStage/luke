@@ -1,6 +1,6 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { RUNNER_BUNDLE_FILE } from "@luke/service/agents/coder-host/runner-bundle";
+import { RUNNER_BUNDLE_FILE } from "@repo/service/agents/coder-host/runner-bundle";
 import { build } from "esbuild";
 import {
   BUILD_OUTPUT_DIRECTORY,
@@ -11,6 +11,7 @@ import {
   bundlesReaching,
   FUNCTION_METAFILE,
   functionBundlePlan,
+  localOnlyReach,
   undeclaredImports,
 } from "../server/function-bundles.js";
 import {
@@ -41,7 +42,7 @@ import {
 const WEB = join(import.meta.dirname, "..");
 
 /**
- * The runner a native harness's sandbox runs, as `@luke/agent-runner`'s own
+ * The runner a native harness's sandbox runs, as `@repo/agent-runner`'s own
  * build leaves it, which the web build runs first; and the module that reads
  * it beside a function's entry. Every function whose bundle reaches that
  * module ships the runner in its `.func`, and a build without the runner
@@ -66,7 +67,7 @@ const SITE_DIRECTORY = "dist";
 
 const runnerBundle = await readFile(AGENT_RUNNER.BUNDLE).catch(() => {
   throw new Error(
-    `${relative(WEB, AGENT_RUNNER.BUNDLE)} is missing: run \`pnpm --filter @luke/agent-runner build\` first`,
+    `${relative(WEB, AGENT_RUNNER.BUNDLE)} is missing: run \`pnpm --filter @repo/agent-runner build\` first`,
   );
 });
 
@@ -79,6 +80,14 @@ const undeclared = undeclaredImports(result.metafile, WEB, task.externalPackages
 if (undeclared.length > 0) {
   throw new Error(
     `bundled routes reach dependencies apps/web does not declare: ${undeclared.join(", ")}`,
+  );
+}
+
+// A route that reaches the local server's own routes would carry a session for anyone into the deploy.
+const localOnly = localOnlyReach(result.metafile, WEB);
+if (localOnly.length > 0) {
+  throw new Error(
+    `bundled routes reach modules only the local server may carry: ${localOnly.join(", ")}`,
   );
 }
 

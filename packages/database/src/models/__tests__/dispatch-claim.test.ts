@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { sentLineId } from "@luke/wire/host-ids";
+import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, Deferred, Duration, Effect, Fiber, Option, Ref, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -31,12 +31,12 @@ import {
  * conversations throughout.
  */
 
-const SENDER = { kind: MESSAGE_SENDER.LUKE } as const;
+const SENDER = { kind: MESSAGE_SENDER.APP } as const;
 
 const openAgentConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)

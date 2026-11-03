@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { listMemories, MEMORY_OUTCOME } from "@luke/database/models/memory-store";
-import { user } from "@luke/database/schemas/auth";
-import { memory } from "@luke/database/schemas/memory";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { MEMORY_BOUNDS } from "@luke/features/memory-wire";
+import { Database } from "@repo/database/core/query";
+import { listMemories, MEMORY_OUTCOME } from "@repo/database/models/memory-store";
+import { user } from "@repo/database/schemas/auth";
+import { memory } from "@repo/database/schemas/memory";
+import { getTestDB, openWorkspace } from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { MEMORY_BOUNDS } from "@repo/features/memory-wire";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "../core.js";
@@ -27,7 +27,7 @@ import { type MemoryCall, runRecall, runRemember } from "./memory-tools.js";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 

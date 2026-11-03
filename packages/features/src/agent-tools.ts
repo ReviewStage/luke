@@ -183,7 +183,7 @@ export const RETIRED_TOOL = {
  * background with `TaskStop`, and sends one of its subagents more with
  * `SendMessage`. Its transcript stores each call under this name; a call to
  * our own MCP server is stored under our tool's name
- * (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
+ * (`claudeCodeWorkspaceTool`).
  */
 export const CLAUDE_CODE_TOOL = {
   BASH: "Bash",
@@ -217,8 +217,27 @@ export const CLAUDE_CODE_UNRECORDED_TOOL = {
   TOOL_SEARCH: "ToolSearch",
 } as const;
 
-/** What Claude Code puts before a tool of our MCP server (`mcpServers.luke`): `mcp__luke__read_threads` is our `read_threads`. */
-export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
+/** The name our MCP server is registered under, in Claude Code (`mcpServers.workspace`) and Codex (`mcp_servers.workspace`) alike. */
+export const WORKSPACE_MCP_SERVER = "workspace";
+
+/**
+ * Every name a stored call may give our MCP server: today's, then `luke`,
+ * which it was registered under before, so a transcript stored then still
+ * draws its calls as our tools.
+ */
+export const WORKSPACE_MCP_SERVER_NAMES: ReadonlySet<string> = new Set([
+  WORKSPACE_MCP_SERVER,
+  "luke",
+]);
+
+/** Our tool's own name from a Claude Code call's, `mcp__workspace__read_threads` being our `read_threads`; none for a tool of any other server. */
+export function claudeCodeWorkspaceTool(name: string): string | undefined {
+  for (const server of WORKSPACE_MCP_SERVER_NAMES) {
+    const prefix = `mcp__${server}__`;
+    if (name.startsWith(prefix)) return name.slice(prefix.length);
+  }
+  return undefined;
+}
 
 /**
  * Codex's own work, by the type of the app-server item that does it (its
@@ -227,7 +246,7 @@ export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
  * place of our shell, file, search, todo, and delegation tools, and a
  * picture it looked at with `view_image`. Its
  * transcript stores each under this name; a call to our own MCP server is
- * stored under our tool's name (`CODEX_LUKE_MCP_SERVER`), and a call to
+ * stored under our tool's name (`WORKSPACE_MCP_SERVER_NAMES`), and a call to
  * any other MCP server as `mcpToolCall`.
  */
 export const CODEX_TOOL = {
@@ -239,6 +258,3 @@ export const CODEX_TOOL = {
   SUBAGENT: "collabAgentToolCall",
   IMAGE_VIEW: "imageView",
 } as const;
-
-/** The name Codex knows our MCP server by (`mcp_servers.luke`): its calls are our tools. */
-export const CODEX_LUKE_MCP_SERVER = "luke";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { unparsedWire } from "@luke/wire";
+import { unparsedWire } from "@repo/wire";
 import { describe, test } from "vitest";
 import { EXPERIMENT, experimentChoicesFrom } from "./experiments.js";
 

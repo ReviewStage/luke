@@ -5,8 +5,8 @@ import {
   type AutomationListView,
   type AutomationRunsView,
   type AutomationWorkspaceRunsView,
-} from "@luke/features/automation-view";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/automation-view";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { askAct } from "../act.js";
 

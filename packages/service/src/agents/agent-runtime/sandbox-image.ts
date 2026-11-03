@@ -1,14 +1,10 @@
 /**
  * sandbox-image.ts -- the coding agent's image: the script that prepares it, the function that runs it, and nothing of eve's runtime.
  *
- * `sandbox.ts` hands this preparation to eve, which prepares its own
- * snapshot from it at build time, and `native-sandbox-template.ts` prepares
- * our own template from it for a native harness's sandbox. It lives
- * apart from `sandbox.ts` because that module reaches eve's sandbox runtime,
- * which a web function cannot bundle, while this one reaches only the code
- * extension's tooling installer, a few self-contained modules.
- *
- * What the image carries, and why, is told in `sandbox.ts`.
+ * `native-sandbox-template.ts` prepares our own template from it for a
+ * native harness's sandbox. It reaches only the code extension's tooling
+ * installer, a few self-contained modules, and none of eve's sandbox
+ * runtime, which a web function cannot bundle.
  */
 
 import {
@@ -19,7 +15,7 @@ import {
   PLAYWRIGHT_PIN,
   RUNNER_DIRECTORY,
   SANDBOX_TOOL_ENV,
-} from "@luke/agent-runner/pins";
+} from "@repo/agent-runner/pins";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
@@ -91,7 +87,7 @@ const INSTALL_BUBBLEWRAP = [
 
 /**
  * The Claude Agent SDK and the `claude` binary it carries, as the runner
- * pins them (`@luke/agent-runner/pins`): the pair the Claude Code probe
+ * pins them (`@repo/agent-runner/pins`): the pair the Claude Code probe
  * proved in a sandbox, installed as root in a directory only root writes, so
  * no shell of the sandbox's user changes the binary Claude Code runs as
  * `agent`.
@@ -130,7 +126,7 @@ const CREATE_AGENT_USER = [
 ];
 
 /**
- * Codex, as the runner pins it (`@luke/agent-runner/pins`): the release the
+ * Codex, as the runner pins it (`@repo/agent-runner/pins`): the release the
  * Codex probe proved in a sandbox, which the runner's Codex mode drives and
  * its protocol types are generated from. Installed as root under a prefix
  * only root writes, beside the Claude Agent SDK. Its `CODEX_HOME` is in
@@ -183,7 +179,7 @@ const KEEP_SUDO_ENVIRONMENT = [
   `$SUDO chmod 0440 ${SUDO_ENV_DROP_IN}`,
   `$SUDO visudo -c -q -f ${SUDO_ENV_DROP_IN}`,
   `$SUDO visudo -c -q`,
-  `if [ "$(id -un)" = ${SANDBOX_USER} ]; then LUKE_SUDO_KEEPS=kept sudo -n bash -c '[ "\${LUKE_SUDO_KEEPS:-}" = kept ]' || { echo 'sudo does not keep the environment' >&2; exit 1; }; fi`,
+  `if [ "$(id -un)" = ${SANDBOX_USER} ]; then APP_SUDO_KEEPS=kept sudo -n bash -c '[ "\${APP_SUDO_KEEPS:-}" = kept ]' || { echo 'sudo does not keep the environment' >&2; exit 1; }; fi`,
 ];
 
 /**

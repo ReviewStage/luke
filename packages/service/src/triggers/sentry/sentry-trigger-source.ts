@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import {
   activeInstallationWorkspace,
   markIntegrationInstallationDeleted,
-} from "@luke/database/models/integration-installation-store";
+} from "@repo/database/models/integration-installation-store";
 import {
   INTEGRATION_TRIGGER_FILTER,
   SENTRY_TRIGGER_EVENT,
   TRIGGER_PROVIDER,
-} from "@luke/features/trigger-catalog";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/trigger-catalog";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import {
   hmacVerifier,

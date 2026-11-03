@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import type { Workspace } from "@luke/features/workspace-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { Workspace } from "@repo/features/workspace-wire";
 import { useEffect } from "react";
 
 /**

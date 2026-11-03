@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -85,6 +85,6 @@ test("in a narrow room the page's bar is led by the way back to the list, which 
   const page = drawn({ kind: HISTORY_READ.READING }, SHELL_ROOM.NARROW).querySelector(
     ".version-page",
   );
-  const banner = page?.querySelector("header.luke-toolbar");
-  assert.ok(banner?.querySelector(".luke-toolbar-lead button"), "the way back leads the bar");
+  const banner = page?.querySelector("header.ui-toolbar");
+  assert.ok(banner?.querySelector(".ui-toolbar-lead button"), "the way back leads the bar");
 });

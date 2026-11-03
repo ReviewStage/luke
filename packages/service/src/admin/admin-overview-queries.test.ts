@@ -1,40 +1,40 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@luke/database/github-installation-vocabulary";
-import { agentTable, type StoredPullRequest } from "@luke/database/schemas/agent";
-import { session, user } from "@luke/database/schemas/auth";
-import { automation, automationRun } from "@luke/database/schemas/automation";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { integrationConnection } from "@luke/database/schemas/integration";
-import { planRevision } from "@luke/database/schemas/plan-revision";
-import { conversations } from "@luke/database/schemas/storage";
-import { task } from "@luke/database/schemas/task";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
+} from "@repo/database/github-installation-vocabulary";
+import { agentTable, type StoredPullRequest } from "@repo/database/schemas/agent";
+import { session, user } from "@repo/database/schemas/auth";
+import { automation, automationRun } from "@repo/database/schemas/automation";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { integrationConnection } from "@repo/database/schemas/integration";
+import { planRevision } from "@repo/database/schemas/plan-revision";
+import { conversations } from "@repo/database/schemas/storage";
+import { task } from "@repo/database/schemas/task";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB, openWorkspace } from "@repo/database/testing";
 import {
   DAILY_COUNT,
   type DailyCount,
   FUNNEL_STEP,
   REACH_FEATURE,
-} from "@luke/features/admin-overview-vocabulary";
-import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+} from "@repo/features/admin-overview-vocabulary";
+import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
-import { PLAN_ACTOR, type PlanActor } from "@luke/features/task-wire";
+} from "@repo/features/automation-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { PLAN_ACTOR, type PlanActor } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminOverviewSource } from "./admin-overview-queries.js";
@@ -62,7 +62,7 @@ const openAccount = (name: string, createdAt: string, role: string = USER_ROLE.U
     const id = `user-${name}-${randomUUID()}`;
     yield* db
       .insert(user)
-      .values({ id, name, email: `${id}@luke.test`, role, createdAt: at(createdAt) });
+      .values({ id, name, email: `${id}@app.test`, role, createdAt: at(createdAt) });
     return id;
   });
 

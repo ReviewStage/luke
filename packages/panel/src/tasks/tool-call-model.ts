@@ -6,12 +6,12 @@ import {
   CONNECTION_TOOL,
   EVE_TOOL,
   RETIRED_TOOL,
-} from "@luke/features/agent-tools";
+} from "@repo/features/agent-tools";
 import {
   AGENT_TODO_STATUS,
   type AgentTodos,
   agentTodosInputSchema,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_BLOCK,
@@ -23,7 +23,7 @@ import {
   inboxPostInputSchema,
   inboxThreadPostInputSchema,
   recommendedLabels,
-} from "@luke/features/inbox-wire";
+} from "@repo/features/inbox-wire";
 import {
   INTEGRATION_NAME,
   type IntegrationProvider,
@@ -31,27 +31,27 @@ import {
   integrationConnectionOf,
   integrationOfRemoteTool,
   integrationRemoteCallSchema,
-} from "@luke/features/integration-wire";
-import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/link-grammar";
-import { linkLabels } from "@luke/features/mention-link";
-import type { ModelChoice } from "@luke/features/models-wire";
-import { planAttachmentOf } from "@luke/features/plan-attachment-link";
-import type { PlanAgentEdit } from "@luke/features/plan-template";
+} from "@repo/features/integration-wire";
+import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
+import { linkLabels } from "@repo/features/mention-link";
+import type { ModelChoice } from "@repo/features/models-wire";
+import { planAttachmentOf } from "@repo/features/plan-attachment-link";
+import type { PlanAgentEdit } from "@repo/features/plan-template";
 import {
   browserCallWords,
   CALL_KIND,
   type CallKind,
   commandDescription,
   pageName,
-} from "@luke/features/turn-rows";
-import { skillWord } from "@luke/ui/skill-mention";
+} from "@repo/features/turn-rows";
+import { skillWord } from "@repo/ui/skill-mention";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
   isWireNumber,
   isWireString,
   type WireValue,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
@@ -1552,7 +1552,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return model === undefined ? { id, title } : { id, title, model };
 }
 
-/** The fields a delegation's part carries, in the wire's words (`agentDelegationInputSchema`, `agentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
+/** The fields a delegation's part carries: an eve agent's `delegate` call's task, model, effort, and result, and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",

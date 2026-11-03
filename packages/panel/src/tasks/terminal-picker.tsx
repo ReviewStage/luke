@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { AgentSummary } from "@luke/features/agent-wire";
-import { sandboxRead } from "@luke/features/terminal-store";
-import { noMatchWords, readingWords, TERM } from "@luke/features/words";
-import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { PlusIcon, Shortcut } from "@luke/ui";
-import { CommandDialog, type CommandGroup, type CommandItem } from "@luke/ui/command";
+import type { AgentSummary } from "@repo/features/agent-wire";
+import { sandboxRead } from "@repo/features/terminal-store";
+import { noMatchWords, readingWords, TERM } from "@repo/features/words";
+import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
+import { PlusIcon, Shortcut } from "@repo/ui";
+import { CommandDialog, type CommandGroup, type CommandItem } from "@repo/ui/command";
 import { useEffect, useState } from "react";
 import { agentName, startsOwnAgents } from "./agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";

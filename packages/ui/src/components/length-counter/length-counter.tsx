@@ -1,4 +1,4 @@
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import { useState } from "react";
 import { useDisclosure } from "../../use-disclosure.js";
 
@@ -14,16 +14,16 @@ import { useDisclosure } from "../../use-disclosure.js";
  * exit (`useDisclosure`). It takes no class or style: where it stands is its
  * caller's, a `FormField`'s label line. It is drawn in Tailwind utilities
  * over the theme's caption and motion roles, and keeps the
- * `luke-length-counter` names a test finds it by.
+ * `ui-length-counter` names a test finds it by.
  */
 
 /** The counter: a caption's tabular figures in the muted ink, the danger ink at the limit, fading in and out. */
 const COUNTER =
-  "luke-length-counter inline-flex flex-none whitespace-nowrap font-body text-caption font-text text-muted-foreground tabular-nums animate-arrive data-[full=true]:text-danger data-[leaving=true]:animate-leave";
+  "ui-length-counter inline-flex flex-none whitespace-nowrap font-body text-caption font-text text-muted-foreground tabular-nums animate-arrive data-[full=true]:text-danger data-[leaving=true]:animate-leave";
 
 /** The count: a figure of its own that ticks in from the way it moved. */
 const COUNT =
-  "luke-length-counter-count inline-block data-[move=up]:animate-tick-up data-[move=down]:animate-tick-down";
+  "ui-length-counter-count inline-block data-[move=up]:animate-tick-up data-[move=down]:animate-tick-down";
 
 /** How far toward its limit a field's words go before the counter shows. */
 export const COUNTER_FROM = 0.8;

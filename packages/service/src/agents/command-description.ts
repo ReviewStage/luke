@@ -1,14 +1,14 @@
-import { describeWire } from "@luke/wire/effect";
+import { describeWire } from "@repo/wire/effect";
 import { Schema } from "effect";
 
 /**
  * command-description.ts -- the few plain words a model gives each command it runs, which the developer's transcript names the call by.
  *
- * A coding agent's shell, `bash` (`coder-host/shell.ts`), takes one beside
- * the command, as Claude Code's shell does, so a row reads
+ * A coding agent's `run_on_mac` (`mac-command.ts`) takes one beside the
+ * command, as Claude Code's shell does, so a row reads
  * "Find where invites are sent" rather than a pipeline of `grep`s. It is
  * optional, so a call without one still runs, and it is never run nor handed
- * to the sandbox: it rides in the call's stored input, where the desktop reads
+ * to the Mac: it rides in the call's stored input, where the desktop reads
  * it for the row's title and draws the command in the row's body.
  */
 

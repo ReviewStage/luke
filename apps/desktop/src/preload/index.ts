@@ -1,9 +1,8 @@
-import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
-import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
-import { eventWithoutAccessTokens, withoutAccessTokens } from "@luke/features/sentry-breadcrumbs";
-import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
-import { ACT_PORT, actPortForwarder, bridgeEntries, type PreloadBridge } from "@luke/host/bridge";
-import type { UnparsedWireValue } from "@luke/wire";
+import { BROWSER_LIVE_PORT_CHANNEL } from "@repo/features/browser-live-acts";
+import { eventWithoutAccessTokens, withoutAccessTokens } from "@repo/features/sentry-breadcrumbs";
+import { TERMINAL_PORT_CHANNEL } from "@repo/features/terminal-acts";
+import { ACT_PORT, actPortForwarder, bridgeEntries, type PreloadBridge } from "@repo/host/bridge";
+import type { UnparsedWireValue } from "@repo/wire";
 import * as Sentry from "@sentry/electron/renderer";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -34,19 +33,14 @@ function exposedBridge(): PreloadBridge {
   return bridge as unknown as PreloadBridge;
 }
 
-contextBridge.exposeInMainWorld("luke", exposedBridge());
+contextBridge.exposeInMainWorld("appBridge", exposedBridge());
 
 // An attached shell's port cannot cross the context bridge, so it is handed
 // into the page as Electron hands a port to an isolated world; the page reads
 // it back by the channel and checks the ticket (`packages/panel/src/terminal/terminal-port.ts`).
-// A terminal of this Mac's port (`packages/panel/src/tasks/mac-terminal-tab.tsx`)
-// and a cloud Browser tab's live view's port (`@luke/panel`'s
-// `tasks/browser-live-port.ts`) are handed in the same way.
-for (const channel of [
-  TERMINAL_PORT_CHANNEL,
-  MAC_TERMINAL_PORT_CHANNEL,
-  BROWSER_LIVE_PORT_CHANNEL,
-]) {
+// A cloud Browser tab's live view's port (`@repo/panel`'s
+// `tasks/browser-live-port.ts`) is handed in the same way.
+for (const channel of [TERMINAL_PORT_CHANNEL, BROWSER_LIVE_PORT_CHANNEL]) {
   ipcRenderer.on(channel, (event, ticket: UnparsedWireValue) => {
     window.postMessage({ channel, ticket }, "*", [...event.ports]);
   });

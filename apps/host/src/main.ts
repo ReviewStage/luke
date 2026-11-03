@@ -1,25 +1,28 @@
 /**
- * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host connect` pairs the machine with a code a member approves in the app, and `luke-host version` prints the daemon's version.
+ * main.ts -- the host daemon's process: `vespin-host run` follows the machine's local agents for as long as its service runs, `vespin-host connect` pairs the machine with a code a member approves in the app, and `vespin-host version` prints the daemon's version.
  *
- * Bundled into one file (`pnpm --filter @luke/host-daemon build`) that the
- * host's release carries at `lib/luke-host.mjs`, beside the runner's bundle
+ * Bundled into one file (`pnpm --filter @repo/host-daemon build`) that the
+ * host's release carries at `lib/vespin-host.mjs`, beside the runner's bundle
  * at `lib/agent-runner.mjs` (`host-platform.ts`), and runs on the release's
  * own Node. The same bundle runs on every OS, as `process.platform` says
  * (`hostRuntime`). The account install (`apps/web/install/install.sh`)
  * runs it as the account it is installed in, on Linux and on a Mac alike:
  * each release unpacked under `~/.local/share/luke-host/versions/<version>`,
  * `current` beside them linking to the one that runs, its state under
- * `~/.local/state/luke-host`, which the release's `luke-host` names
- * (`luke-host.sh`), and a systemd user unit or a LaunchAgent running `run`
- * through `current`, and again a minute after any exit. This Mac's copy is
- * a folder inside the desktop app (`Contents/Resources/luke-host`), run as
- * the member on the app's own state folder by the app's login item
- * (`apps/desktop/native/macos/HostLoginItem.swift`).
+ * `~/.local/state/luke-host`, which the release's `vespin-host` names
+ * (`vespin-host.sh`), and a systemd user unit or a LaunchAgent running `run`
+ * through `current`, and again a minute after any exit. This Mac's host is
+ * that same install, which the desktop app starts and stops through launchd
+ * (`apps/desktop/src/main/native/host-login-item.ts`).
  *
- * `run` is the command the service runs. A box that never connected says
+ * `run` is the command the service runs. A daemon the account install's
+ * service started first moves that service over to `vespin-host` where a
+ * release before the rename wrote it (`hostServiceMoved`), and where it
+ * handed the host over to the new unit, follows nothing while systemd stops
+ * its own. A box that never connected says
  * so and reads its record again every `UNENROLLED_REST`, rather than
  * exiting for its service to start it over; one that did runs the daemon
- * (`@luke/host/daemon`) until the service is stopped, which stops every
+ * (`@repo/host/daemon`) until the service is stopped, which stops every
  * runner it started with it, or until the service refuses the box's secret, the
  * host removed, when it stops them and exits 0, and its service, starting
  * it again a minute later, finds its record refused and rests, until the
@@ -29,7 +32,8 @@
  * (`host-update.ts`): once it switched `current` to it, every runner
  * stopped, it asks a systemd user unit to start it again at once, since
  * the unit's own restart waits a minute, or on a Mac just exits, since
- * launchd's minute counts from the last start. Every agent runs straight
+ * launchd's minute counts from the last start; one run by hand just exits.
+ * Every agent runs straight
  * on the box (`hostPlatform`), as a child of this process, on its Node,
  * and as its user.
  *
@@ -51,32 +55,37 @@ import {
   NodePath,
   NodeRuntime,
 } from "@effect/platform-node";
-import { HOST_WIRE, hostInstallCommand } from "@luke/features/host-wire";
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
+import { HOST_COMMAND, HOST_WIRE, hostInstallCommand } from "@repo/features/host-wire";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   connectHostDevice,
   HOST_CONNECT_OUTCOME,
   HOST_DAEMON_END,
+  HOST_SERVICE,
+  HOST_SERVICE_MOVE,
   type HostPairingCode,
   type HostReleases,
   type HostRuntime,
+  type HostService,
   hostArch,
   hostDaemon,
   hostPlatform,
   hostRuntime,
+  hostServiceMoved,
+  hostServiceOf,
   LINUX_HOST,
   readHostDevice,
-} from "@luke/host/daemon";
-import { Environment, reporterLayer } from "@luke/host/effect";
-import { reportToStderr } from "@luke/host/node";
+} from "@repo/host/daemon";
+import { Environment, reporterLayer } from "@repo/host/effect";
+import { reportToStderr } from "@repo/host/node";
 import { ConfigProvider, Duration, Effect, Exit, Layer, Option } from "effect";
+import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { ChildProcess } from "effect/process";
 
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
-const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
+const VERSION = process.env.APP_HOST_VERSION ?? "0.0.0";
 
 /** The service a box connects to where its install script names none. */
 const DEFAULT_SERVICE_ORIGIN = LINK_ORIGIN;
@@ -89,14 +98,17 @@ const DEFAULT_INSTALL_COMMAND = hostInstallCommand(
 /** How long a box that never connected rests before it reads its record again. */
 const UNENROLLED_REST = Duration.minutes(1);
 
-/** Where the account install keeps its releases, under the home it is installed in, each in a folder of its own under `versions/` (`luke-host.sh`'s `ACCOUNT_RELEASES`). */
+/** Where the account install keeps its releases, under the home it is installed in, each in a folder of its own under `versions/` (`vespin-host.sh`'s `ACCOUNT_RELEASES`). */
 const ACCOUNT_RELEASES = { FOLDER: ".local/share/luke-host", VERSIONS: "versions" } as const;
 
-/** The systemd user unit the account install runs the daemon as on Linux. */
-const ACCOUNT_UNIT = "luke-host.service";
+/** The file the kernel names this process's control groups in, a systemd unit's own among them. */
+const CGROUP_FILE = "/proc/self/cgroup";
 
 /** How long systemd may take to take the ask to start the daemon again. */
 const RESTART_ASK = Duration.seconds(10);
+
+/** How long a daemon that handed the host over to the new unit waits for systemd to stop it before it follows after all, which the follower lease keeps from running beside the new unit's daemon. */
+const HANDED_OVER_WAIT = Duration.minutes(1);
 
 /** The exit codes of `connect`, which the install script reads: a box already connected exits as connected. */
 const CONNECT_EXIT = {
@@ -118,9 +130,9 @@ const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
 
 /**
  * The account install's releases, where this release's own real path
- * stands in a version folder of them, as `luke-host.sh`'s `account_home`
- * reads it; none for This Mac's copy inside the app, a development run, and
- * an install that came before, none of which updates itself.
+ * stands in a version folder of them, as `vespin-host.sh`'s `account_home`
+ * reads it; none for a development run and an install that came before,
+ * neither of which updates itself.
  */
 function accountReleases(): HostReleases | undefined {
   let real: string;
@@ -148,19 +160,18 @@ function accountReleases(): HostReleases | undefined {
 const runtimeOfOs = hostRuntime({
   platform: process.platform,
   home: process.env.HOME ?? os.homedir(),
-  app: { developerIdSigned: buildCarriesDeveloperIdSigning() },
 });
 
 /**
  * The runtime the daemon runs as, its state folder named by
- * `LUKE_HOST_STATE_ROOT` where a development build of the desktop app runs
- * it as a child (`apps/desktop/src/main/native/host-login-item.ts`), since
- * that build's own state folder is not the one a packaged app's is.
+ * `APP_HOST_STATE_ROOT` where the release's `vespin-host` names it
+ * (`vespin-host.sh`, for the account install), so a command run by hand reads
+ * and writes the record its service runs on.
  */
 const runtime: HostRuntime | undefined =
-  runtimeOfOs === undefined || process.env.LUKE_HOST_STATE_ROOT === undefined
+  runtimeOfOs === undefined || process.env.APP_HOST_STATE_ROOT === undefined
     ? runtimeOfOs
-    : { ...runtimeOfOs, stateRoot: process.env.LUKE_HOST_STATE_ROOT };
+    : { ...runtimeOfOs, stateRoot: process.env.APP_HOST_STATE_ROOT };
 
 const nodeServices = Layer.mergeAll(
   NodeChildProcessSpawner.layer.pipe(
@@ -189,7 +200,7 @@ const follow = (runtime: HostRuntime) =>
     const device = yield* readHostDevice(stateRoot);
     if (Option.isNone(device)) {
       reportToStderr(
-        `${PRODUCT_NAME} host: this box is not connected. Run luke-host connect, or the install command from Settings › Hosts › Add hosts (${DEFAULT_INSTALL_COMMAND}), and approve the code it shows in ${PRODUCT_NAME}.`,
+        `${PRODUCT_NAME} host: this box is not connected. Run ${HOST_COMMAND} connect, or the install command from Settings › Hosts › Add hosts (${DEFAULT_INSTALL_COMMAND}), and approve the code it shows in ${PRODUCT_NAME}.`,
       );
       yield* Effect.sleep(UNENROLLED_REST);
       return undefined;
@@ -207,7 +218,6 @@ const follow = (runtime: HostRuntime) =>
       installFolder,
       arch: boxArch,
       stateRoot,
-      runnerFolder: process.env.LUKE_HOST_RUNNER_FOLDER,
       node: process.execPath,
       // Note that every agent runs as the daemon's user, the member's own or root on a dedicated box.
       user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
@@ -231,18 +241,52 @@ const follow = (runtime: HostRuntime) =>
   }).pipe(Effect.repeat({ until: (ended) => ended !== undefined }));
 
 /**
- * The daemon's service asked to start it again at once on the release
- * `current` now names: a systemd user unit restarted without waiting out
- * the minute its own restart waits, while a Mac's LaunchAgent needs no ask,
- * since launchd's minute counts from the daemon's last start. An ask that
- * fails is said, and the exit leaves the start to the unit's own restart.
+ * The service of ours that runs this daemon (`hostServiceOf`), as its
+ * service manager hands it over: the control group a systemd unit runs it
+ * in, or the label launchd names its job by.
  */
-const restartAsked = (runtime: HostRuntime) =>
-  runtime.os.platform !== LINUX_HOST.platform
+const serviceRunning = (runtime: HostRuntime) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const cgroup =
+      runtime.os.platform === LINUX_HOST.platform
+        ? yield* fileSystem.readFileString(CGROUP_FILE).pipe(Effect.orElseSucceed(() => ""))
+        : "";
+    return hostServiceOf({
+      platform: runtime.os.platform,
+      cgroup,
+      launchdLabel: process.env.XPC_SERVICE_NAME,
+    });
+  });
+
+/** The account install's service moved over to `vespin-host`, where this daemon is that install's and its service started it; how the move ended. */
+const serviceMoved = (service: HostService | undefined) =>
+  Effect.suspend(() => {
+    const releases = accountReleases();
+    if (releases === undefined || service === undefined) {
+      return Effect.succeed(HOST_SERVICE_MOVE.STAYS);
+    }
+    return hostServiceMoved({
+      service,
+      home: releases.folder.slice(0, -ACCOUNT_RELEASES.FOLDER.length - 1),
+      releases: releases.folder,
+    });
+  });
+
+/**
+ * The daemon's service asked to start it again at once on the release
+ * `current` now names: the systemd user unit it runs under restarted
+ * without waiting out the minute its own restart waits, while a Mac's
+ * LaunchAgent needs no ask, since launchd's minute counts from the daemon's
+ * last start, and a run by hand has no service to ask. An ask that fails is
+ * said, and the exit leaves the start to the unit's own restart.
+ */
+const restartAsked = (service: HostService | undefined) =>
+  service !== HOST_SERVICE.UNIT && service !== HOST_SERVICE.UNIT_BEFORE_RENAME
     ? Effect.void
     : Effect.scoped(
         Effect.flatMap(
-          ChildProcess.make("systemctl", ["--user", "restart", "--no-block", ACCOUNT_UNIT], {
+          ChildProcess.make("systemctl", ["--user", "restart", "--no-block", service], {
             stdin: "ignore",
             stdout: "ignore",
             stderr: "ignore",
@@ -258,25 +302,29 @@ const restartAsked = (runtime: HostRuntime) =>
             ? Effect.void
             : Effect.sync(() =>
                 reportToStderr(
-                  `${PRODUCT_NAME} host: systemd did not take the ask to restart ${ACCOUNT_UNIT}, so it starts on the new release within a minute.`,
+                  `${PRODUCT_NAME} host: systemd did not take the ask to restart ${service}, so it starts on the new release within a minute.`,
                 ),
               ),
         ),
       );
 
-/** `luke-host run`: the daemon, until the service refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
+/** `vespin-host run`: the service moved over, then the daemon, until the service refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
 const run = (runtime: HostRuntime) =>
   Effect.gen(function* () {
+    const service = yield* serviceRunning(runtime);
+    if ((yield* serviceMoved(service)) === HOST_SERVICE_MOVE.HANDED_OVER) {
+      yield* Effect.sleep(HANDED_OVER_WAIT);
+    }
     const ended = yield* follow(runtime);
-    if (ended === HOST_DAEMON_END.UPDATED) yield* restartAsked(runtime);
+    if (ended === HOST_DAEMON_END.UPDATED) yield* restartAsked(service);
     return 0;
   });
 
 /** The command that connects this box to the service given: its origin named where it is not the one `connect` takes by default. */
 function connectCommand(origin: string): string {
   return origin === DEFAULT_SERVICE_ORIGIN
-    ? "luke-host connect"
-    : `luke-host connect --origin ${origin}`;
+    ? `${HOST_COMMAND} connect`
+    : `${HOST_COMMAND} connect --origin ${origin}`;
 }
 
 /** How the code is shown: its link to open and the code to check against the one the app shows, then that the box waits. */
@@ -296,7 +344,7 @@ const showCode = ({ url, userCode, expiresInMs }: HostPairingCode) =>
     ),
   );
 
-/** `luke-host connect`: the box paired with a code a member approves, and the line that says how it ended. */
+/** `vespin-host connect`: the box paired with a code a member approves, and the line that says how it ended. */
 const connect = (runtime: HostRuntime, name: string, origin: string) =>
   Effect.gen(function* () {
     const outcome = yield* connectHostDevice({
@@ -305,6 +353,7 @@ const connect = (runtime: HostRuntime, name: string, origin: string) =>
       name,
       platform: runtime.os.platform,
       arch: yield* arch(runtime),
+      machine: runtime.os.machine(),
       version: VERSION,
       shown: showCode,
     });
@@ -376,7 +425,7 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
     });
     const name = values.name ?? runtime.os.deviceName();
     if (name.length === 0) {
-      return Effect.sync(() => process.stderr.write("luke-host connect needs a --name\n")).pipe(
+      return Effect.sync(() => process.stderr.write("vespin-host connect needs a --name\n")).pipe(
         Effect.as(CONNECT_EXIT.USAGE),
       );
     }
@@ -384,7 +433,7 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
   }
   return Effect.sync(() =>
     process.stderr.write(
-      "usage: luke-host run | connect [--origin <url>] [--name <name>] | version | uninstall\n",
+      "usage: vespin-host run | connect [--origin <url>] [--name <name>] | version | uninstall\n",
     ),
   ).pipe(Effect.as(CONNECT_EXIT.USAGE));
 }

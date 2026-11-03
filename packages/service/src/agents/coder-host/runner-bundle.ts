@@ -1,8 +1,8 @@
 /**
  * runner-bundle.ts -- the runner a native harness's sandbox runs, as the one bundled file the launch uploads.
  *
- * `@luke/agent-runner` builds to one file with the Agent SDK inside it
- * (`pnpm --filter @luke/agent-runner build`), and the web build ships that
+ * `@repo/agent-runner` builds to one file with the Agent SDK inside it
+ * (`pnpm --filter @repo/agent-runner build`), and the web build ships that
  * file beside each function that launches it (`apps/web/scripts/bundle-functions.ts`),
  * under the name below. The function reads it from the directory its own
  * entry stands in, once per instance.

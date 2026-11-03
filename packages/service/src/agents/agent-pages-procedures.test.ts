@@ -1,19 +1,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { writePage } from "@luke/database/models/plan-pages";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import {
   PAGE_OWNER,
   PAGE_SHOWER,
   planPageVersionAnswerSchema,
   taskPagesAnswerSchema,
-} from "@luke/features/page-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/page-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { type Context, Effect, Option, Result } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -31,7 +32,7 @@ import { agentPagesProcedures } from "./agent-pages-procedures.js";
  * Synthetic accounts, bearers, workspaces, agents, and pages throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 interface Answer {
   readonly status: number;
@@ -41,7 +42,7 @@ interface Answer {
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });
@@ -99,6 +100,7 @@ it.layer(getTestDB())("an agent's own pages over HTTP", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agentId = Option.getOrThrow(started).agent.id;
         const shower = { kind: PAGE_SHOWER.AGENT, agentId } as const;

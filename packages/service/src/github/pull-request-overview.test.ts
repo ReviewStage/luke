@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   createAgent,
   recordAgentPublished,
   updateAgentBranch,
-} from "@luke/database/models/agent-store";
-import { account, user } from "@luke/database/schemas/auth";
-import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
+} from "@repo/database/models/agent-store";
+import { account, user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
 import {
   AGENT_AUTHOR,
   CHECK_STATE,
@@ -20,8 +21,8 @@ import {
   OVERVIEW_BOUNDS,
   PULL_REQUEST_STATE,
   REVIEW_STATE,
-} from "@luke/features/agent-wire";
-import { REACTION } from "@luke/features/pull-request-write-wire";
+} from "@repo/features/agent-wire";
+import { REACTION } from "@repo/features/pull-request-write-wire";
 import { Duration, Effect, Fiber, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -252,6 +253,7 @@ const agentPublishing = (userId: string, branch: string, number: number) =>
       planSnapshot: "# Invites\n",
       prompt: null,
       repository: REPOSITORY,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -274,7 +276,7 @@ const linkedAccount = (githubId: number) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     yield* db.insert(account).values({
       id: `account-${randomUUID()}`,
       accountId: String(githubId),
@@ -523,9 +525,9 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         let asked = 0;
         const script = repository({
           deployments: [
-            deployment("Preview – luke-web", "SUCCESS", "https://luke-web-git-x.vercel.app"),
+            deployment("Preview – luke-web", "SUCCESS", "https://web-git-x.vercel.app"),
             deployment("Preview – docs", "IN_PROGRESS", "https://docs-git-x.vercel.app"),
-            deployment("Preview – luke-web", "FAILURE", "https://luke-web-old.vercel.app"),
+            deployment("Preview – luke-web", "FAILURE", "https://web-old.vercel.app"),
             deployment("staging", "ERROR", "http://staging.example.com"),
             deployment("review-app", "INACTIVE", null),
             deployment("queued", null, null),
@@ -541,7 +543,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           {
             environment: "Preview – luke-web",
             state: DEPLOYMENT_STATE.READY,
-            url: "https://luke-web-git-x.vercel.app",
+            url: "https://web-git-x.vercel.app",
             avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
           },
           {

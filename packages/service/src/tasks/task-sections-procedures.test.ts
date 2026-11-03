@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, openWorkspace } from "@repo/database/testing";
 import {
   TASK_SECTION_WRITE,
   type TaskSections,
   taskSectionsWrittenSchema,
-} from "@luke/features/task-section-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/task-section-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, type Context, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -28,7 +28,7 @@ import { taskSectionsProcedures } from "./task-sections-procedures.js";
  * Synthetic accounts, bearers, workspaces, and sections throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SECTIONS = "/api/task-sections";
 
 interface Answer {
@@ -41,7 +41,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   const bearers = new Map([
     [`Bearer ${owner}`, owner],

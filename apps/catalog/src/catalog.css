@@ -5,14 +5,14 @@
    so a bare glyph's own rule sits under the component that draws it. */
 @layer base, components;
 
-@import "@luke/ui/tokens.css";
-@import "@luke/ui/styles.css";
+@import "@repo/ui/tokens.css";
+@import "@repo/ui/styles.css";
 /* Tailwind's theme and utilities alone, no preflight, as the apps take them,
-   over `@luke/ui`'s own sources and its shadcn/ui vocabulary. */
+   over `@repo/ui`'s own sources and its shadcn/ui vocabulary. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
-@import "@luke/ui/tailwind/sources.css";
-@import "@luke/ui/tailwind/theme.css";
+@import "@repo/ui/tailwind/sources.css";
+@import "@repo/ui/tailwind/theme.css";
 
 *,
 *::before,
@@ -24,15 +24,15 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: var(--luke-color-ground);
-  color: var(--luke-color-text);
-  font-family: var(--luke-font-sans);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
+  background: var(--ui-color-ground);
+  color: var(--ui-color-text);
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-type-body-size);
+  line-height: var(--ui-type-body-leading);
   -webkit-font-smoothing: antialiased;
 }
 
-/* One ring for every control, in the apps' own tokens (`--luke-focus-ring-*`,
+/* One ring for every control, in the apps' own tokens (`--ui-focus-ring-*`,
    `tokens/profiles.css`) and on the same controls as their reset
    (`packages/panel/src/styles/base.css`), so a control rings here as it does
    there. Note that the gate is `:focus-visible` alone, which a browser tab
@@ -53,8 +53,8 @@ body {
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ):focus-visible:not(:has(> [data-focus-ring])) {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--luke-focus-ring-offset);
+    outline: var(--ui-focus-ring-width) solid var(--ui-color-focus-ring);
+    outline-offset: var(--ui-focus-ring-offset);
   }
 
   /* A control whose drawn shape is a part of it, a card's reach or a
@@ -65,8 +65,8 @@ body {
   }
 
   :focus-visible > [data-focus-ring] {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--luke-focus-ring-offset);
+    outline: var(--ui-focus-ring-width) solid var(--ui-color-focus-ring);
+    outline-offset: var(--ui-focus-ring-offset);
   }
 }
 
@@ -81,32 +81,32 @@ body {
 
 /* A brand whose one-colour mark is published in named inks wears them by
    the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
-[data-luke-theme="dark"]
+[data-ui-theme="dark"]
 :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
   color: #fff;
 }
 
-[data-luke-theme="dark"] .integration-mark-mercury {
+[data-ui-theme="dark"] .integration-mark-mercury {
   color: #f4f5f9;
 }
 
-[data-luke-theme="dark"] .integration-mark-neon {
+[data-ui-theme="dark"] .integration-mark-neon {
   color: #34d59a;
 }
 
-[data-luke-theme="light"] :is(.integration-mark-executor, .integration-mark-notion) {
+[data-ui-theme="light"] :is(.integration-mark-executor, .integration-mark-notion) {
   color: #000;
 }
 
-[data-luke-theme="light"] .integration-mark-mercury {
+[data-ui-theme="light"] .integration-mark-mercury {
   color: #272735;
 }
 
-[data-luke-theme="light"] .integration-mark-neon {
+[data-ui-theme="light"] .integration-mark-neon {
   color: #37c38f;
 }
 
-[data-luke-theme="light"] .integration-mark-sentry {
+[data-ui-theme="light"] .integration-mark-sentry {
   color: #181225;
 }
 
@@ -117,15 +117,15 @@ body {
 }
 
 .catalog-index {
-  padding: var(--luke-space-24) var(--luke-space-16);
-  border-right: 1px solid var(--luke-color-border);
+  padding: var(--ui-space-24) var(--ui-space-16);
+  border-right: 1px solid var(--ui-color-border);
 }
 
 .catalog-index-title {
-  margin: 0 0 var(--luke-space-16);
-  font-size: var(--luke-type-section-size);
-  line-height: var(--luke-type-section-leading);
-  font-weight: var(--luke-weight-semibold);
+  margin: 0 0 var(--ui-space-16);
+  font-size: var(--ui-type-section-size);
+  line-height: var(--ui-type-section-leading);
+  font-weight: var(--ui-weight-semibold);
 }
 
 .catalog-index ul,
@@ -134,7 +134,7 @@ body {
   margin: 0;
   padding: 0;
   list-style: none;
-  gap: var(--luke-space-4);
+  gap: var(--ui-space-4);
 }
 
 .catalog-index ul {
@@ -143,19 +143,19 @@ body {
 
 .catalog-link {
   display: block;
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
+  padding: var(--ui-space-4) var(--ui-space-8);
+  border-radius: var(--ui-radius-6);
+  color: var(--ui-color-text-muted);
   text-decoration: none;
 }
 
 .catalog-link:hover {
-  background: var(--luke-color-fill-hover);
+  background: var(--ui-color-fill-hover);
 }
 
 .catalog-link[aria-current="page"] {
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
+  background: var(--ui-color-fill-selected);
+  color: var(--ui-color-text);
 }
 
 .catalog-stage {
@@ -164,37 +164,42 @@ body {
 
 .catalog-toolbar {
   display: flex;
-  gap: var(--luke-space-24);
-  padding: var(--luke-space-12) var(--luke-page-inset);
-  border-bottom: 1px solid var(--luke-color-border);
+  gap: var(--ui-space-24);
+  padding: var(--ui-space-12) var(--ui-page-inset);
+  border-bottom: 1px solid var(--ui-color-border);
   text-transform: capitalize;
 }
 
 .catalog-example {
-  padding: var(--luke-space-24) var(--luke-page-inset) var(--luke-space-64);
+  padding: var(--ui-space-24) var(--ui-page-inset) var(--ui-space-64);
 }
 
 .catalog-example-title {
-  margin: 0 0 var(--luke-space-24);
+  margin: 0 0 var(--ui-space-24);
 }
 
 .catalog-section + .catalog-section {
-  margin-top: var(--luke-space-32);
+  margin-top: var(--ui-space-32);
 }
 
 .catalog-section-title {
-  margin: 0 0 var(--luke-space-12);
+  margin: 0 0 var(--ui-space-12);
 }
 
-.catalog-face {
+.catalog-mark {
   width: 96px;
   height: 96px;
-  color: var(--luke-color-working);
+  color: var(--ui-color-working);
 }
 
-.catalog-face svg {
+.catalog-mark > .ui-product-mark {
   width: 100%;
   height: 100%;
+}
+
+.catalog-mark-small {
+  width: 32px;
+  height: 32px;
 }
 
 .catalog-tiles {
@@ -203,18 +208,18 @@ body {
   margin: 0;
   padding: 0;
   list-style: none;
-  gap: var(--luke-space-8);
+  gap: var(--ui-space-8);
 }
 
 .catalog-tile {
   display: flex;
   align-items: center;
-  gap: var(--luke-icon-gap);
+  gap: var(--ui-icon-gap);
   min-width: 0;
-  padding: var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-surface);
+  padding: var(--ui-space-8);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-8);
+  background: var(--ui-color-surface);
 }
 
 .catalog-glyph :is(svg, img) {
@@ -226,9 +231,9 @@ body {
 
 .catalog-tile-name {
   overflow: hidden;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-caption-size);
+  line-height: var(--ui-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -245,11 +250,11 @@ body {
 }
 
 .catalog-popover {
-  padding: var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-ground);
-  box-shadow: 0 4px 16px var(--luke-color-shadow);
+  padding: var(--ui-space-12);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-8);
+  background: var(--ui-color-ground);
+  box-shadow: 0 4px 16px var(--ui-color-shadow);
 }
 
 /* A short room that scrolls (`ScrollArea`), its button low enough that the
@@ -262,13 +267,13 @@ body {
   height: 200px;
   flex-direction: column;
   overflow: clip;
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 .catalog-popover-scroll {
   height: 480px;
-  padding: 140px var(--luke-space-12) 0;
+  padding: 140px var(--ui-space-12) 0;
 }
 
 /* An example's column of samples, each a row of its own. */
@@ -276,16 +281,16 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--luke-space-12);
+  gap: var(--ui-space-12);
 }
 
 /* A row of attachment chips, with room above for the discs on their corners. */
 .catalog-attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-12);
+  gap: var(--ui-space-12);
   margin: 0;
-  padding: var(--luke-space-12) 0 0;
+  padding: var(--ui-space-12) 0 0;
   list-style: none;
 }
 
@@ -293,12 +298,12 @@ body {
 .catalog-narrow {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--ui-space-8);
   width: 100%;
   max-width: 240px;
-  padding: var(--luke-space-12);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  padding: var(--ui-space-12);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 /* A column wider than a strip's narrow break and short of its whole sentence, so its words are cut short. */
@@ -311,12 +316,12 @@ body {
    gives way rather than overflowing, as a real label does. */
 .catalog-swatch {
   overflow: hidden;
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+  padding: var(--ui-space-4) var(--ui-space-8);
+  border-radius: var(--ui-radius-6);
+  background: var(--ui-color-fill-strong);
+  color: var(--ui-color-text);
+  font-size: var(--ui-type-caption-size);
+  line-height: var(--ui-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -327,9 +332,9 @@ body {
   display: flex;
   width: 600px;
   max-width: 100%;
-  padding: var(--luke-space-4) var(--luke-space-6);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  padding: var(--ui-space-4) var(--ui-space-6);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 .catalog-crumb-bar-narrow {
@@ -368,9 +373,9 @@ body {
 
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
-  padding: var(--luke-space-8);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  padding: var(--ui-space-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 .catalog-frame-wide {
@@ -383,18 +388,18 @@ body {
   width: 160px;
   height: 120px;
   flex-direction: column;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-8);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 /* A transcript's column, as wide as a narrow panel's, which a line spans. */
 .catalog-transcript {
   width: min(360px, 100%);
-  padding: var(--luke-space-8);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  padding: var(--ui-space-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 /* A card in a column narrower than its words. */
@@ -405,11 +410,11 @@ body {
 /* A line a flush card's list draws, inset as a table's cell is, with a
    hairline between it and the line above. */
 .catalog-card-row {
-  padding: var(--luke-space-12) var(--luke-space-20);
+  padding: var(--ui-space-12) var(--ui-space-20);
 }
 
 .catalog-card-row + .catalog-card-row {
-  border-top: 1px solid var(--luke-color-border);
+  border-top: 1px solid var(--ui-color-border);
 }
 
 /* A card's own control, standing over the card's press. */
@@ -425,7 +430,7 @@ body {
 
 /* A sample composer's words and foot, inside its frame. */
 .catalog-composer {
-  padding: var(--luke-space-12);
+  padding: var(--ui-space-12);
 }
 
 /* A palette's short card: its search row over a list engine's box that
@@ -434,7 +439,7 @@ body {
   display: flex;
   height: 200px;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--ui-space-8);
 }
 
 /* A picture's card: its name and Close along the top, the picture under
@@ -443,16 +448,16 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-6) var(--ui-space-6) var(--ui-space-6) var(--ui-space-12);
+  border-bottom: 1px solid var(--ui-color-border);
 }
 
 .catalog-media-picture {
   display: grid;
-  padding: var(--luke-space-48);
+  padding: var(--ui-space-48);
   place-items: center;
-  background: var(--luke-color-surface);
+  background: var(--ui-color-surface);
 }
 
 /* A picture in a bare dialog's own card: the picture centred on its own
@@ -462,21 +467,21 @@ body {
   min-height: 0;
   flex: 1 1 auto;
   place-items: center;
-  background: var(--luke-color-surface);
+  background: var(--ui-color-surface);
 }
 
-/* The face gives way to a narrow or short window, so the card that fits it
+/* The mark gives way to a narrow or short window, so the card that fits it
    never has to clip it: the window less the dimmed margin, the picture's
    inset, the card's edge, and, for its height, the bar above it. */
-.catalog-media-picture > .luke-face,
-.catalog-window-picture > .luke-face {
+.catalog-media-picture > .ui-product-mark,
+.catalog-window-picture > .ui-product-mark {
   width: min(
     480px,
     100vw -
     2 *
-    (var(--luke-space-24) + var(--luke-space-48)) -
+    (var(--ui-space-24) + var(--ui-space-48)) -
     2px,
-    (100vh - 2 * (var(--luke-space-24) + var(--luke-space-48)) - 48px) *
+    (100vh - 2 * (var(--ui-space-24) + var(--ui-space-48)) - 48px) *
     3 / 2
   );
   height: auto;
@@ -504,8 +509,8 @@ body {
   width: 100%;
   max-width: 880px;
   height: 480px;
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 .catalog-settings-frame-narrow {
@@ -518,17 +523,17 @@ body {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: var(--luke-control-gap);
+  gap: var(--ui-control-gap);
 }
 
 .catalog-settings-key > [data-slot="input"] {
-  flex: 1 1 var(--luke-select-field-width);
+  flex: 1 1 var(--ui-select-field-width);
 }
 
 /* The tooltips example's row, whose name's card hangs beside the whole row. */
 .catalog-carded-row {
   display: inline-flex;
-  gap: var(--luke-space-4);
+  gap: var(--ui-space-4);
 }
 
 /* The hover card example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
@@ -538,12 +543,12 @@ body {
 
 /* A toolbar folding its buttons, as an app's container query does. */
 .catalog-folded {
-  --luke-fold: folded;
+  --ui-fold: folded;
 }
 
 /* A toolbar shorter still, leaving a split button its main part's glyph. */
 .catalog-bare {
-  --luke-fold: bare;
+  --ui-fold: bare;
 }
 
 /* A toolbar whose corner resizes it, folding its buttons below 360px. */
@@ -551,15 +556,15 @@ body {
   overflow: hidden;
   width: 480px;
   max-width: 100%;
-  padding: var(--luke-space-8);
-  border: 1px dashed var(--luke-color-border-strong);
+  padding: var(--ui-space-8);
+  border: 1px dashed var(--ui-color-border-strong);
   resize: horizontal;
   container: catalog-folding-toolbar / inline-size;
 }
 
 @container catalog-folding-toolbar (width < 360px) {
   .catalog-folding-toolbar > * {
-    --luke-fold: folded;
+    --ui-fold: folded;
   }
 }
 
@@ -569,22 +574,22 @@ body {
 .catalog-inline-edit {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
-  min-height: var(--luke-control-height);
+  gap: var(--ui-space-8);
+  min-height: var(--ui-control-height);
 }
 
-.catalog-inline-edit > .luke-inline-edit {
+.catalog-inline-edit > .ui-inline-edit {
   flex: 1;
 }
 
 .catalog-inline-edit-well {
   display: inline-flex;
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border-radius: var(--luke-radius-6);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+  padding: var(--ui-space-4) var(--ui-space-8);
+  border-radius: var(--ui-radius-6);
+  box-shadow: inset 0 0 0 1px var(--ui-color-border-selected);
 }
 
-.catalog-inline-edit-well > .luke-inline-edit {
+.catalog-inline-edit-well > .ui-inline-edit {
   width: 24ch;
 }
 
@@ -593,7 +598,7 @@ body {
   display: inline-flex;
   width: 14px;
   height: 14px;
-  color: var(--luke-color-accent-text);
+  color: var(--ui-color-accent-text);
 }
 
 /* A region of a pane, tall enough to centre what it holds. */
@@ -627,7 +632,7 @@ body {
 .catalog-screens {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-24);
+  gap: var(--ui-space-24);
 }
 
 .catalog-screen {
@@ -635,8 +640,8 @@ body {
   width: 768px;
   max-width: 100%;
   overflow: hidden;
-  border: 1px dashed var(--luke-color-border-strong);
-  background: var(--luke-color-ground);
+  border: 1px dashed var(--ui-color-border-strong);
+  background: var(--ui-color-ground);
 }
 
 .catalog-screen-phone {
@@ -668,10 +673,10 @@ body {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-control-gap);
+  gap: var(--ui-control-gap);
   min-height: 46px;
-  padding: var(--luke-space-8) var(--luke-page-inset);
-  border-bottom: 1px solid var(--luke-color-border);
+  padding: var(--ui-space-8) var(--ui-page-inset);
+  border-bottom: 1px solid var(--ui-color-border);
 }
 
 .catalog-window-toolbar-title {
@@ -686,7 +691,7 @@ body {
    the page scrolls them sideways. */
 .catalog-board {
   display: flex;
-  gap: var(--luke-space-12);
+  gap: var(--ui-space-12);
 }
 
 .catalog-board-column {
@@ -707,32 +712,32 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--luke-space-16);
+  gap: var(--ui-space-16);
 }
 
 .catalog-public-wordmark {
-  font-family: var(--luke-font-display);
-  font-weight: var(--luke-weight-bold);
+  font-family: var(--ui-font-display);
+  font-weight: var(--ui-weight-bold);
 }
 
 .catalog-public-links {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-16);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-label-size);
+  gap: var(--ui-space-16);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-label-size);
 }
 
 .catalog-public-footer {
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
+  color: var(--ui-color-text-muted);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-type-caption-size);
 }
 
 /* A recording's stand-in in the landing's example, at the demo's own shape. */
 .catalog-public-media {
   aspect-ratio: 1240 / 864;
-  background: var(--luke-color-fill-hover);
+  background: var(--ui-color-fill-hover);
 }
 
 /* A release in the wide page's example: its version and date on a rail
@@ -740,15 +745,15 @@ body {
 .catalog-public-release {
   display: grid;
   grid-template-columns: 8.5rem minmax(0, 1fr);
-  gap: var(--luke-space-40);
+  gap: var(--ui-space-40);
 }
 
-/* The app's face at the size the OAuth cards open with. */
+/* The product's mark at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;
   width: 52px;
   height: 52px;
-  color: var(--luke-color-working);
+  color: var(--ui-color-working);
 }
 
 .catalog-auth-mark svg {
@@ -764,8 +769,8 @@ body {
   flex-direction: column;
   width: 220px;
   height: 220px;
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 .catalog-scroll-room-wide {
@@ -775,51 +780,51 @@ body {
 
 .catalog-scroll-bar {
   flex: none;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
+  padding: var(--ui-space-8) var(--ui-space-12);
+  border-bottom: 1px solid var(--ui-color-border);
 }
 
 /* The caller's own element inside the area, holding its padding, so the
    scroll bar stands at the area's edge. */
 .catalog-scroll-body {
-  padding: var(--luke-space-8) var(--luke-space-12);
+  padding: var(--ui-space-8) var(--ui-space-12);
 }
 
 /* A log whose groups each open on a band stuck to the area's top, the
    band's height the role the area's fade inset begins beneath. */
 .catalog-scroll-banded {
-  padding: 0 var(--luke-space-12) var(--luke-space-8);
+  padding: 0 var(--ui-space-12) var(--ui-space-8);
 }
 
 .catalog-scroll-band {
   position: sticky;
   top: 0;
   display: flex;
-  height: var(--luke-scroll-band);
+  height: var(--ui-scroll-band);
   align-items: center;
-  background: var(--luke-color-ground);
+  background: var(--ui-color-ground);
 }
 
 .catalog-scroll-board {
   display: flex;
-  gap: var(--luke-space-12);
+  gap: var(--ui-space-12);
   width: max-content;
-  padding: var(--luke-space-12);
+  padding: var(--ui-space-12);
 }
 
 .catalog-scroll-column {
   flex: none;
   width: 200px;
-  padding: var(--luke-space-8);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
+  padding: var(--ui-space-8);
+  border-radius: var(--ui-radius-8);
+  background: var(--ui-color-fill-hover);
 }
 
 /* The width field and its Apply sit with the toolbar's links. */
 .catalog-width {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--ui-space-8);
   text-transform: none;
 }
 
@@ -831,8 +836,8 @@ body {
    gets the whole width, and its edge drawn as an outline just outside, so
    what overflows the width shows past the line rather than being clipped. */
 .catalog-width-frame {
-  outline: 1px dashed var(--luke-color-border);
-  outline-offset: var(--luke-space-4);
+  outline: 1px dashed var(--ui-color-border);
+  outline-offset: var(--ui-space-4);
 }
 
 /* Picture tiles: the frame a place draws a picture in, and a row of tiles
@@ -840,9 +845,9 @@ body {
 .catalog-picture-frame {
   display: block;
   overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-color-surface);
 }
 
 .catalog-picture-frame > img {
@@ -858,7 +863,7 @@ body {
 .catalog-picture-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--luke-space-6);
+  gap: var(--ui-space-6);
   max-width: 480px;
 }
 
@@ -870,7 +875,7 @@ body {
 
 .catalog-picture-caption {
   overflow: hidden;
-  color: var(--luke-color-text-muted);
+  color: var(--ui-color-text-muted);
   font-size: 0.9em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -879,25 +884,25 @@ body {
 /* A picture opened over the window from its tile: its name over it, the
    picture fitted under. */
 .catalog-picture-viewer-title {
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-text-muted);
+  padding: var(--ui-space-8) var(--ui-space-12);
+  color: var(--ui-color-text-muted);
 }
 
 .catalog-picture-viewer-body {
   display: grid;
   overflow: hidden;
   place-items: center;
-  background: var(--luke-color-surface);
+  background: var(--ui-color-surface);
 }
 
 /* A message box's card around a bare text area, at a composer's insets. */
 .catalog-message-box {
-  --luke-text-area-inset-start: var(--luke-space-12);
-  --luke-text-area-inset-inline: var(--luke-space-12);
-  --luke-text-area-inset-end: var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-ground);
+  --ui-text-area-inset-start: var(--ui-space-12);
+  --ui-text-area-inset-inline: var(--ui-space-12);
+  --ui-text-area-inset-end: var(--ui-space-8);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-color-ground);
 }
 
 /* A toolbar's row a tab strip stands in, at a pane's width and a narrow
@@ -907,9 +912,9 @@ body {
   align-items: center;
   width: 640px;
   max-width: 100%;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  padding: var(--ui-space-8) var(--ui-space-12);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 .catalog-tab-row-narrow {
@@ -918,7 +923,7 @@ body {
 
 /* A strip on the window's frame stands on the frame's own colour. */
 .catalog-tab-row[data-frame="true"] {
-  background: var(--luke-color-sidebar);
+  background: var(--ui-color-sidebar);
 }
 
 /* A failure's mark at a tab's end, as an app draws its own: the alert in
@@ -927,7 +932,7 @@ body {
   display: inline-flex;
   width: 14px;
   height: 14px;
-  color: var(--luke-color-danger);
+  color: var(--ui-color-danger);
 }
 
 .catalog-end-mark > svg {
@@ -938,26 +943,26 @@ body {
 /* A list an app hangs on the menu's surface (`MenuSurface`), at an `@`
    list's width, its crumb inset as the rows' words are. */
 .catalog-menu-surface {
-  width: calc(100% - var(--luke-space-48));
+  width: calc(100% - var(--ui-space-48));
 }
 
 .catalog-menu-crumb {
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+  padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-4);
 }
 
 /* A row that has set its own type and ink, for words that inherit them. */
 .catalog-inherited {
   margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-caption-size);
 }
 
 /* The box a hidden rail's strip stands in, as tall as a few rows. */
 .catalog-mark-strip {
   display: flex;
-  width: var(--luke-space-12);
+  width: var(--ui-space-12);
   height: 160px;
-  border-right: 1px solid var(--luke-color-border);
+  border-right: 1px solid var(--ui-color-border);
 }
 
 /* The room a toast stack stands in: its transform makes it the containing
@@ -966,8 +971,8 @@ body {
 .catalog-toast-stage {
   position: relative;
   height: 340px;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-14);
   transform: translateZ(0);
 }
 
@@ -980,12 +985,12 @@ body {
   width: min(360px, 100%);
   height: 480px;
   overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-14);
 }
 
 .catalog-drawer-work {
-  padding: var(--luke-space-48) var(--luke-space-24);
+  padding: var(--ui-space-48) var(--ui-space-24);
 }
 
 .catalog-drawer {
@@ -994,26 +999,26 @@ body {
   top: 0;
   bottom: 0;
   left: 0;
-  width: calc(100% - var(--luke-space-48));
-  padding: var(--luke-space-16);
-  background: var(--luke-color-ground);
-  box-shadow: var(--luke-menu-shadow);
+  width: calc(100% - var(--ui-space-48));
+  padding: var(--ui-space-16);
+  background: var(--ui-color-ground);
+  box-shadow: var(--ui-menu-shadow);
   transform: translateX(-100%);
-  transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
+  transition: transform var(--ui-duration-pane) var(--ui-motion-pane);
 }
 
 .catalog-drawer-stage[data-open="true"] .catalog-drawer {
   transform: none;
 }
 
-.catalog-drawer-stage[data-luke-drawer-drag] .catalog-drawer {
-  transform: translateX(calc((var(--luke-drawer-progress, 0) - 1) * 100%));
+.catalog-drawer-stage[data-ui-drawer-drag] .catalog-drawer {
+  transform: translateX(calc((var(--ui-drawer-progress, 0) - 1) * 100%));
   transition: none;
 }
 
 /* A box the words inside answer the width of (`under`), as a card or a header does. */
 .catalog-room {
-  container: luke-room / inline-size;
+  container: ui-room / inline-size;
 }
 
 /* A card a band stands across the top of, as a review thread's card names
@@ -1024,22 +1029,22 @@ body {
   width: min(360px, 100%);
   max-width: 100%;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  padding-bottom: var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-card-radius);
-  background: var(--luke-color-surface);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+  gap: var(--ui-space-8);
+  padding-bottom: var(--ui-space-8);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-card-radius);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-type-caption-size);
+  line-height: var(--ui-type-caption-leading);
 }
 
 .catalog-band-body {
-  padding-inline: var(--luke-space-12);
+  padding-inline: var(--ui-space-12);
 }
 
 .catalog-band-words {
-  padding: var(--luke-space-4) var(--luke-space-12);
+  padding: var(--ui-space-4) var(--ui-space-12);
 }
 
 /* A glyph's seat before its line's words (`GlyphSlot`), as a call's line
@@ -1047,13 +1052,13 @@ body {
 .catalog-glyph-line {
   display: flex;
   align-items: center;
-  gap: var(--luke-icon-gap);
+  gap: var(--ui-icon-gap);
 }
 
 .catalog-icon-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-  gap: var(--luke-space-12);
+  gap: var(--ui-space-12);
 }
 
 .catalog-glyph-line-top {
@@ -1061,12 +1066,12 @@ body {
 }
 
 .catalog-glyph-line-accent {
-  color: var(--luke-color-accent-text);
+  color: var(--ui-color-accent-text);
 }
 
 /* A container sizing the glyphs it seats, as a review card does its face. */
 .catalog-glyph-large {
-  --luke-glyph-size: var(--luke-space-24);
+  --ui-glyph-size: var(--ui-space-24);
 }
 
 /* A box holding a pane and the work beside it, the pane's edge
@@ -1075,15 +1080,15 @@ body {
   display: flex;
   width: min(360px, 100%);
   height: 96px;
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
 }
 
 .catalog-edged-pane {
   position: relative;
   flex: none;
-  padding: var(--luke-space-8);
-  border-inline: 1px solid var(--luke-color-border);
+  padding: var(--ui-space-8);
+  border-inline: 1px solid var(--ui-color-border);
 }
 
 .catalog-edged-work {
@@ -1098,20 +1103,20 @@ body {
   height: 200px;
   overflow: hidden;
   place-items: center;
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
+  border: 1px dashed var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-8);
   touch-action: none;
 }
 
 /* A transcript's fold skins its summary's line itself, as a pull request's
    section heading does. */
-.catalog-transcript-fold .luke-disclosure-summary {
+.catalog-transcript-fold .ui-disclosure-summary {
   display: flex;
   align-items: center;
-  gap: var(--luke-icon-gap);
-  color: var(--luke-color-text-muted);
+  gap: var(--ui-icon-gap);
+  color: var(--ui-color-text-muted);
 }
 
-.catalog-transcript-fold .luke-disclosure-summary:hover {
-  color: var(--luke-color-text);
+.catalog-transcript-fold .ui-disclosure-summary:hover {
+  color: var(--ui-color-text);
 }

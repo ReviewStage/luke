@@ -1,5 +1,5 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   GLYPH_INK,
   GlyphSlot,
@@ -8,10 +8,10 @@ import {
   ListRow,
   MenuSection,
   PROVIDER_MARK_SIZE,
+  ProductMark,
   ProviderMark,
-  WingFace,
-} from "@luke/ui";
-import { ICON_SIZE } from "@luke/ui/icons";
+} from "@repo/ui";
+import { ICON_SIZE } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -30,7 +30,7 @@ function MenuSections(): React.JSX.Element {
             <ListRow
               leading={
                 <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
-                  <WingFace />
+                  <ProductMark />
                 </GlyphSlot>
               }
               title={PRODUCT_NAME}

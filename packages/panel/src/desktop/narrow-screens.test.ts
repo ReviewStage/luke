@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import { PROFILE } from "@luke/ui";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
+import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { UPDATE_STATUS } from "@repo/settings/update";
+import { PROFILE } from "@repo/ui";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -341,9 +341,9 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
 
 test("a Settings page standing alone on a phone is named by its bar, opens a section's gap under the way back, and keeps the places bar with no place current", async () => {
   // Note that the stage wears the web's profile, whose tokens the gap is read in.
-  document.documentElement.dataset.lukeProfile = PROFILE.WEB;
+  document.documentElement.dataset.uiProfile = PROFILE.WEB;
   onTestFinished(() => {
-    delete document.documentElement.dataset.lukeProfile;
+    delete document.documentElement.dataset.uiProfile;
   });
   const page = await mount(PHONE, createElement(SettingsWindow, { link: undefined }));
   press(the(page, SETTINGS_COLUMNS.list), "Appearance");
@@ -352,10 +352,10 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
   assert.equal(bar.querySelector("h1")?.textContent, "Appearance", "the bar names the page");
   assert.equal(item.querySelectorAll("h1").length, 1, "the page draws no second heading");
 
-  const column = the(item, ".luke-settings-page-column");
+  const column = the(item, ".ui-settings-page-column");
   assert.equal(
     wayBackGap(bar, column),
-    pixelsOf(column, "var(--luke-section-gap)"),
+    pixelsOf(column, "var(--ui-section-gap)"),
     "the page's first line stands a section's gap under the way back",
   );
 
@@ -386,7 +386,7 @@ test("Settings on a stage wide enough for panes, but under the split's line by i
 });
 
 test("Settings' page list kept wider than its share moves from the width it is drawn at, at the first press of its edge", async () => {
-  window.localStorage.setItem("luke.sidebar-width", "400");
+  window.localStorage.setItem("app.sidebar-width", "400");
   const page = await mount(900, createElement(SettingsWindow, { link: undefined }));
   const edge = the(page, '[role="separator"][aria-label="Resize sidebar"]');
   act(() => {

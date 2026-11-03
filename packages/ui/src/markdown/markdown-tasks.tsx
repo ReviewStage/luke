@@ -2,14 +2,14 @@
  * markdown-tasks.tsx -- a note's task items a reader can tick, and any words' a reader cannot: each item's checkbox named by its item's words and placed by its marker's offset, drawn as the shared `Checkbox` in the bullet's gutter.
  */
 
-import { isWireString } from "@luke/wire";
+import { isWireString } from "@repo/wire";
 import type { Element, ElementContent, Root } from "hast";
 import { useState } from "react";
 import type { Components } from "streamdown";
 import { Checkbox } from "../components/checkbox/checkbox.js";
 
 /** The class the box a reader can tick stands in, in the bullet's gutter (`prose.css`). */
-const TASK_BOX_CLASS = "luke-markdown-task";
+const TASK_BOX_CLASS = "ui-markdown-task";
 
 /** A task item's checkbox as drawn: the offset its item starts at in the words, where they say it, and the item's own words, which name it. */
 interface TaskItem {

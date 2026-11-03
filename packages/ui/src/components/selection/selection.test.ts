@@ -660,21 +660,19 @@ test("a chosen row's menu offers the bar's acts under its heading, each act's ch
     });
   };
   const labels = () =>
-    [...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label')].map(
+    [...document.querySelectorAll('[role="menu"]:not([data-leaving]) .ui-menu-item-label')].map(
       (label) => label.textContent,
     );
   const choose = (name: string) => {
     const item = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[role="menu"]:not([data-leaving]) .luke-menu-item',
-      ),
-    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+      ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
+    ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === name);
     if (item === undefined) throw new Error(`no ${name} in the menu`);
     act(() => item.click());
   };
 
   openMenu();
-  expect(document.querySelector(".luke-menu-heading")?.textContent).toBe("2 places");
+  expect(document.querySelector(".ui-menu-heading")?.textContent).toBe("2 places");
   expect(labels()).toEqual(["Mark done", "Move to section"]);
   choose("Mark done");
   expect(page.querySelector("output")?.textContent).toBe("done");

@@ -1,4 +1,4 @@
-import { Badge, CheckIcon, GAP, Inline, STATUS_TONE, Text, VISUALLY_HIDDEN_UNDER } from "@luke/ui";
+import { Badge, CheckIcon, GAP, Inline, STATUS_TONE, Text, VISUALLY_HIDDEN_UNDER } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

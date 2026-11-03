@@ -40,7 +40,7 @@ type Sort = (typeof SORT)[keyof typeof SORT];
 
 const KEPT = {
   SORT: keptKey<Sort>(
-    "luke.testSort",
+    "app.testSort",
     Schema.fromJsonString(Schema.Literals([SORT.LATEST, SORT.OLDEST])),
   ),
 } as const;
@@ -151,7 +151,7 @@ const storedSorts = Schema.fromJsonString(
 
 type Sorts = typeof storedSorts.Type;
 
-const SORTS = keptKey("luke.testSorts", storedSorts);
+const SORTS = keptKey("app.testSorts", storedSorts);
 
 let sortsDoors: { change: (change: (kept: Sorts) => Sorts) => void } | undefined;
 

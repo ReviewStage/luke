@@ -1,7 +1,7 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { AUTOMATION_SCOPE, type AutomationScope } from "@luke/features/automation-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACTOR_KIND, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { AUTOMATION_SCOPE, type AutomationScope } from "@repo/features/automation-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACTOR_KIND, accountActor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";

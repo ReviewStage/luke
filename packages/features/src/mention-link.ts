@@ -1,3 +1,4 @@
+import { LEGACY_APP_WORD } from "@repo/wire";
 import { Schema as EffectSchema, Option } from "effect";
 import { dateLabel, isDateMoment, isDateRange } from "./date-mention.js";
 import {
@@ -16,19 +17,21 @@ import {
   GITHUB_PAGE,
   gitHubFilePageRepositoryOf,
   gitHubPageLink,
-  LEGACY_LINK_HOST,
-  type LegacyLink,
   LINK_PLACE,
   type LinkPlace,
-  legacyLinkOf,
   linkOf,
   linkTarget,
   MENTION_SIGIL,
   mentionMarkdownLink,
   readGitHubPage,
   readLabel,
-  readLegacyLink,
   readLink,
+  readSchemeLink,
+  SCHEME_LINK_HOST,
+  type SchemeLink,
+  schemeLinkOf,
+  taskNumberOf,
+  withTaskId,
 } from "./link-grammar.js";
 import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
@@ -46,7 +49,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * Which target a mention is written with is decided here: every caller
  * holds a `Mention`, which names its subject and nothing of the form, and
  * goes through `encodeMention` and `decodeMention` to write and read one.
- * How each address is spelled, ours, GitHub's, and the `luke:` form, is
+ * How each address is spelled, ours, GitHub's, and the app-only `mention:` form, is
  * `link-grammar.ts`'s, which this reads and writes every target through.
  *
  * Drawn, the `@` is not asked for: wherever the app draws words a person,
@@ -63,7 +66,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * The target is the address the thing has on the web, so a mention copied
  * out of the app, into Slack, a pull request or a mail, still leads somewhere:
  *
- * - A task is `https://vespin.dev/<workspace>/plan/<id>`, and one of its
+ * - A task is `https://vespin.dev/<workspace>/task/<id>`, and one of its
  *   sections that with `#<anchor>` after it. Only the id finds the task: the
  *   workspace's slug reads well and is never trusted, so a slug spelled
  *   another way later breaks no link. The desktop's own scheme is the same
@@ -104,18 +107,20 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * The forms written before the link was settled, `luke://plan/<id>`
  * (`#<heading>` after it, the heading's own words), `luke://file/<path>`,
  * and `luke://folder/<path>/`, stand in plans and messages already, so
- * they are read forever, as the same mention the settled form names. A
- * thing with no page of its own on the web keeps the `luke:` form, which
- * nothing outside the app opens: an MCP server, `luke://mcp/<connection>`,
- * and one of its tools, `luke://mcp/<connection>/<tool>`, where the
+ * they are read forever, as the same mention the settled form names; so
+ * does every `luke://` form below, written before it took the `mention:`
+ * scheme, which reads the same under either. A thing with no page of its
+ * own on the web is written in the `mention:` form, which nothing outside
+ * the app opens: an MCP server, `mention://mcp/<connection>`,
+ * and one of its tools, `mention://mcp/<connection>/<tool>`, where the
  * connection is one account at the provider (`notion`, or `notion-2` for a
  * second account, the first account's name being its provider's, so every
  * address written before a second account was possible keeps its meaning),
  * the tool's own name
  * as the server lists it.
  *
- * A date has no page of its own either, so it keeps the `luke:` form too:
- * `luke://date/<start>`, and `luke://date/<start>/<end>` for a range, each
+ * A date has no page of its own either, so it takes the `mention:` form too:
+ * `mention://date/<start>`, and `mention://date/<start>/<end>` for a range, each
  * end ISO 8601 as Notion holds a date's (`date-mention.ts`): a day,
  * `2026-10-20`, or a time on one with its offset, `2026-10-20T15:00-07:00`.
  * Its label is the date in full, so the words read as it anywhere.
@@ -144,7 +149,7 @@ export const MENTION_KIND = {
   /** A channel of the workspace, `#app`. */
   CHANNEL: "channel",
   /** The app on one task, to which a comment's mention sends its thread. */
-  LUKE: "luke",
+  APP: "app",
   /** A day, a time on one, or a range of either. */
   DATE: "date",
 } as const;
@@ -166,8 +171,11 @@ const MENTION_BOUNDS = {
   MAX_MENTIONS: 20,
 } as const;
 
-/** The step after a task's address that names the app on it: `/luke`, a place of no link's own. */
-const LUKE_STEP = "luke";
+/** The step after a task's address that names the app on it: `/app`, a place of no link's own. */
+const APP_STEP = "app";
+
+/** The steps an address may name the app on a task by: today's, then `luke`, which links written before the app was named `app` carry and which is still read (a legacy read), never written. */
+const APP_STEPS = [APP_STEP, LEGACY_APP_WORD] as const;
 
 /** A tool's name as an MCP server lists it, which is the name the agent's connection runs it by. */
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
@@ -351,7 +359,7 @@ const mentionSchema = EffectSchema.Union([
     channelId: thingIdSchema,
   }),
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(MENTION_KIND.LUKE),
+    kind: EffectSchema.Literal(MENTION_KIND.APP),
     taskId: taskIdSchema,
   }),
   EffectSchema.Struct({
@@ -419,7 +427,7 @@ function decodedSteps(steps: readonly string[]): string | undefined {
   return read.every((step) => step !== undefined) ? read.join("/") : undefined;
 }
 
-/** A legacy target's path read back from its steps, a folder's trailing slash taken off. */
+/** A `mention:` or `luke:` target's path read back from its steps, a folder's trailing slash taken off. */
 function decodedPath(steps: readonly string[]): string | undefined {
   return decodedSteps(steps.at(-1) === "" ? steps.slice(0, -1) : steps);
 }
@@ -430,7 +438,7 @@ function headingAnchor(heading: string): string {
 }
 
 /**
- * The server a `luke://mcp/` address's first segment names: a connection
+ * The server a `mention://mcp/` address's first segment names: a connection
  * name, whose provider is the server's and which is kept where it names an
  * account past the provider's first; any other segment is handed on as the
  * provider for the schema to refuse.
@@ -443,27 +451,27 @@ function serverOfSegment(segment: string) {
     : { provider: account.provider, connection: segment };
 }
 
-/** The fields a legacy `luke:` target spells, for the schema to read; nothing where it is none. */
-function legacyFields({ host, steps, hash, search }: LegacyLink) {
+/** The fields a `mention:` or `luke:` target spells, for the schema to read; nothing where it is none. */
+function schemeFields({ host, steps, hash, search }: SchemeLink) {
   switch (host) {
-    case LEGACY_LINK_HOST.FILE:
+    case SCHEME_LINK_HOST.FILE:
       return { kind: MENTION_KIND.FILE, path: decodedPath(steps) };
-    case LEGACY_LINK_HOST.FOLDER:
+    case SCHEME_LINK_HOST.FOLDER:
       return { kind: MENTION_KIND.FOLDER, path: decodedPath(steps) };
-    case LEGACY_LINK_HOST.MCP: {
+    case SCHEME_LINK_HOST.MCP: {
       const [segment, tool, ...rest] = steps;
       if (rest.length > 0 || hash !== "" || search !== "") return undefined;
       const server = serverOfSegment(segment ?? "");
       if (tool === undefined) return { kind: MENTION_KIND.SERVER, ...server };
       return { kind: MENTION_KIND.TOOL, ...server, tool: decodedStep(tool) };
     }
-    case LEGACY_LINK_HOST.DATE: {
+    case SCHEME_LINK_HOST.DATE: {
       const [start, end, ...rest] = steps;
       if (rest.length > 0 || hash !== "" || search !== "") return undefined;
       const moments = { kind: MENTION_KIND.DATE, start: decodedStep(start ?? "") };
       return end === undefined ? moments : { ...moments, end: decodedStep(end) };
     }
-    case LEGACY_LINK_HOST.PLAN: {
+    case SCHEME_LINK_HOST.PLAN: {
       const taskId = decodedStep(steps.join("/"));
       if (hash === "") return { kind: MENTION_KIND.TASK, taskId };
       // Note that a heading's words name the first section under them, as its anchor without a suffix does.
@@ -478,6 +486,8 @@ function legacyFields({ host, steps, hash, search }: LegacyLink) {
 
 /** The fields a place of our own spells as a mention: a task, a section, a page, an agent, a person, or a channel; nothing for a place no mention names. */
 function placeFields(place: LinkPlace, hash: string) {
+  // A task named by its number is no mention, because a mention names it by its id alone, and the number is the workspace's; its link opens it once found by the slug.
+  if (taskNumberOf(place) !== undefined) return undefined;
   // Note that only a task's address takes a fragment, its section's anchor; a fragment past any other's names nothing.
   if (hash !== "" && place.kind !== LINK_PLACE.TASK && place.kind !== LINK_PLACE.SECTION) {
     return undefined;
@@ -505,16 +515,16 @@ function placeFields(place: LinkPlace, hash: string) {
   }
 }
 
-/** The fields an address on our home spells as a mention: a place of our own, or the app on a task, its address with `/luke` after it. */
-function lukeFields(url: URL) {
-  const luke = `/${LUKE_STEP}`;
-  if (url.pathname.endsWith(luke) && url.hash === "") {
+/** The fields an address on our home spells as a mention: a place of our own, or the app on a task, its address with `/app` after it. */
+function appFields(url: URL) {
+  const step = APP_STEPS.map((each) => `/${each}`).find((each) => url.pathname.endsWith(each));
+  if (step !== undefined && url.hash === "") {
     const task = new URL(url.href);
-    task.pathname = url.pathname.slice(0, -luke.length);
+    task.pathname = url.pathname.slice(0, -step.length);
     task.search = "";
     const place = readLink(task.href)?.place;
-    return place?.kind === LINK_PLACE.TASK
-      ? { kind: MENTION_KIND.LUKE, taskId: place.planId }
+    return place?.kind === LINK_PLACE.TASK && taskNumberOf(place) === undefined
+      ? { kind: MENTION_KIND.APP, taskId: place.planId }
       : undefined;
   }
   const place = readLink(url.href)?.place;
@@ -577,11 +587,11 @@ function linkFields(url: URL) {
  * else a GitHub address names.
  */
 function fieldsOf(target: string, repository: string | null) {
-  const legacy = readLegacyLink(target);
-  if (legacy !== undefined) return legacyFields(legacy);
+  const scheme = readSchemeLink(target);
+  if (scheme !== undefined) return schemeFields(scheme);
   const url = parsedUrl(target);
   if (url === undefined) return undefined;
-  if (isLinkHome(url)) return lukeFields(url);
+  if (isLinkHome(url)) return appFields(url);
   // Note that a page of an integration's is read last, so a GitHub page that is a file of the task stays one.
   return repositoryFields(target, repository) ?? linkFields(url);
 }
@@ -729,7 +739,7 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
   });
 }
 
-/** A file's or a folder's page on GitHub, or the legacy form where the task has no repository to name it under. */
+/** A file's or a folder's page on GitHub, or the app's own form where the task has no repository to name it under. */
 function repositoryTarget(
   kind: typeof MENTION_KIND.FILE | typeof MENTION_KIND.FOLDER,
   path: string,
@@ -737,8 +747,8 @@ function repositoryTarget(
   lines: MentionLines | undefined,
 ): string {
   if (place.repository === null) {
-    const host = kind === MENTION_KIND.FOLDER ? LEGACY_LINK_HOST.FOLDER : LEGACY_LINK_HOST.FILE;
-    return legacyLinkOf(host, `${encodedPath(path)}${kind === MENTION_KIND.FOLDER ? "/" : ""}`);
+    const host = kind === MENTION_KIND.FOLDER ? SCHEME_LINK_HOST.FOLDER : SCHEME_LINK_HOST.FILE;
+    return schemeLinkOf(host, `${encodedPath(path)}${kind === MENTION_KIND.FOLDER ? "/" : ""}`);
   }
   const repository = place.repository;
   if (kind === MENTION_KIND.FOLDER) {
@@ -779,10 +789,10 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       );
     // An MCP server has no page of its own, so it keeps the app's own form, wherever it is written.
     case MENTION_KIND.SERVER:
-      return legacyLinkOf(LEGACY_LINK_HOST.MCP, mention.connection ?? mention.provider);
+      return schemeLinkOf(SCHEME_LINK_HOST.MCP, mention.connection ?? mention.provider);
     case MENTION_KIND.TOOL:
-      return legacyLinkOf(
-        LEGACY_LINK_HOST.MCP,
+      return schemeLinkOf(
+        SCHEME_LINK_HOST.MCP,
         `${mention.connection ?? mention.provider}/${encodedStep(mention.tool)}`,
       );
     case MENTION_KIND.LINK:
@@ -805,12 +815,12 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return linkOf({ kind: LINK_PLACE.PERSON, userId: mention.userId }, workspace);
     case MENTION_KIND.CHANNEL:
       return linkOf({ kind: LINK_PLACE.CHANNEL, channelId: mention.channelId }, workspace);
-    case MENTION_KIND.LUKE:
-      return `${linkOf({ kind: LINK_PLACE.TASK, planId: mention.taskId }, workspace)}/${LUKE_STEP}`;
+    case MENTION_KIND.APP:
+      return `${linkOf({ kind: LINK_PLACE.TASK, planId: mention.taskId }, workspace)}/${APP_STEP}`;
     // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
     case MENTION_KIND.DATE:
-      return legacyLinkOf(
-        LEGACY_LINK_HOST.DATE,
+      return schemeLinkOf(
+        SCHEME_LINK_HOST.DATE,
         mention.end === undefined ? mention.start : `${mention.start}/${mention.end}`,
       );
   }
@@ -880,7 +890,7 @@ export function mentionName(label: string): string {
 }
 
 /** The kinds an address of our own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, a person, and a channel. */
-const LUKE_KINDS: ReadonlySet<Mention["kind"]> = new Set([
+const OWN_KINDS: ReadonlySet<Mention["kind"]> = new Set([
   MENTION_KIND.TASK,
   MENTION_KIND.SECTION,
   MENTION_KIND.PAGE,
@@ -896,7 +906,7 @@ const BARE_NAME = {
   AGENT: "Agent",
   PERSON: "Person",
   CHANNEL: "Channel",
-  LUKE: PRODUCT_NAME,
+  APP: PRODUCT_NAME,
 } as const;
 
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
@@ -937,8 +947,8 @@ function bareName(mention: Mention): string {
       return BARE_NAME.PERSON;
     case MENTION_KIND.CHANNEL:
       return BARE_NAME.CHANNEL;
-    case MENTION_KIND.LUKE:
-      return BARE_NAME.LUKE;
+    case MENTION_KIND.APP:
+      return BARE_NAME.APP;
     case MENTION_KIND.DATE:
       return dateLabel(mention);
   }
@@ -960,7 +970,7 @@ export function pastedLinkMention(
   if (address === "" || /\s/u.test(address)) return undefined;
   const mention = decodeMention(address, repository);
   if (mention === undefined) return undefined;
-  if (mention.kind !== MENTION_KIND.LINK && !LUKE_KINDS.has(mention.kind)) return undefined;
+  if (mention.kind !== MENTION_KIND.LINK && !OWN_KINDS.has(mention.kind)) return undefined;
   return { mention, name: bareName(mention) };
 }
 
@@ -1253,6 +1263,68 @@ function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[]
   return found.filter((link) => !insideCode(text, link.start));
 }
 
+/** A task a link names by its number in a workspace, `/<workspace>/task/42`, by the workspace's step as the link spells it. */
+interface NumberedTask {
+  readonly workspace: string;
+  readonly number: number;
+}
+
+/** The id of the task a link names by its number, as a reader found it; none where it found none. */
+export type NumberedTaskIdOf = (task: NumberedTask) => string | undefined;
+
+/** How `handedMentionsIn` reads the words: how many mentions at most, and how a task a link names by its number is found by its id. */
+interface HandedMentionsOptions {
+  readonly limit?: number | undefined;
+  readonly taskIdOf?: NumberedTaskIdOf | undefined;
+}
+
+/** The task a link names by its number, `/<workspace>/task/42`; none for any other. */
+function numberedTaskOf(target: string): NumberedTask | undefined {
+  const read = readLink(target);
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  return read === undefined || number === undefined
+    ? undefined
+    : { workspace: read.workspace, number };
+}
+
+/**
+ * The mention a link naming its task by its number names, read as the
+ * link naming the task by the id `taskIdOf` found does: the task's, a
+ * section's, or a page's; none where it found no task.
+ */
+function numberedMention(
+  target: string,
+  repository: string | null,
+  taskIdOf: NumberedTaskIdOf,
+): Mention | undefined {
+  const read = readLink(target);
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  if (read === undefined || number === undefined) return undefined;
+  const taskId = taskIdOf({ workspace: read.workspace, number });
+  if (taskId === undefined) return undefined;
+  return decodeMention(linkOf(withTaskId(read.place, taskId), read.workspace), repository);
+}
+
+/**
+ * Every task the words name by its number, by a mention link or an address
+ * written bare, outside code, each once, at most as many as a message's
+ * mentions are handed: what a reader finds by its id before it reads the
+ * words' mentions (`handedMentionsIn`'s `taskIdOf`).
+ */
+export function numberedTasksIn(text: string): readonly NumberedTask[] {
+  const found: NumberedTask[] = [];
+  for (const link of [...mentionLinksIn(text), ...bareLinksIn(text)]) {
+    if (found.length === MENTION_BOUNDS.MAX_MENTIONS) break;
+    const task = numberedTaskOf(link.target);
+    if (task === undefined) continue;
+    const seen = found.some(
+      (each) => each.workspace === task.workspace && each.number === task.number,
+    );
+    if (!seen) found.push(task);
+  }
+  return found;
+}
+
 /**
  * Every mention an agent is handed of the words, in order, standing outside
  * code: each `@` link whose target names a mention (`mentionsIn`), and each
@@ -1260,12 +1332,13 @@ function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[]
  * a page's, an agent's, or a person's, as the window draws either as its chip. A bare
  * address of any other kind, a file's GitHub page or a Linear issue's, is
  * the words' own, and is handed nothing. At most `limit` are read, across
- * both forms; any past them stay words.
+ * both forms; any past them stay words. A link naming its task by its
+ * number is handed as the task's mention where `taskIdOf` finds the task.
  */
 export function handedMentionsIn(
   text: string,
   repository: string | null,
-  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
+  { limit = MENTION_BOUNDS.MAX_MENTIONS, taskIdOf }: HandedMentionsOptions = {},
 ): readonly MentionInWords[] {
   const written = [...mentionLinksIn(text), ...bareLinksIn(text)].sort(
     (first, second) => first.start - second.start,
@@ -1273,10 +1346,11 @@ export function handedMentionsIn(
   const found: MentionInWords[] = [];
   for (const link of written) {
     if (found.length === limit) break;
-    const mention = decodeMention(link.target, repository);
+    const mention =
+      decodeMention(link.target, repository) ??
+      (taskIdOf === undefined ? undefined : numberedMention(link.target, repository, taskIdOf));
     if (mention === undefined) continue;
-    if (isMentionLabel(link.label) || LUKE_KINDS.has(mention.kind))
-      found.push({ ...link, mention });
+    if (isMentionLabel(link.label) || OWN_KINDS.has(mention.kind)) found.push({ ...link, mention });
   }
   return found;
 }
@@ -1314,7 +1388,7 @@ export function withoutMemberLinks(text: string): string {
   let out = "";
   let at = 0;
   // Note that every link is read, past the cap a message's mentions are handed under, so none is left to be handed.
-  for (const found of handedMentionsIn(text, null, text.length)) {
+  for (const found of handedMentionsIn(text, null, { limit: text.length })) {
     if (!namesMember(found.mention)) continue;
     const name = linkMention(found.label, found.target, null)?.name ?? found.label;
     out += `${text.slice(at, found.start)}@${name}`;

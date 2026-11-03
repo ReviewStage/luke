@@ -10,16 +10,16 @@ import {
   type ReplayValueForm,
   START_NOTE_HEADING,
   toolStep,
-} from "@luke/features/agent-replay";
+} from "@repo/features/agent-replay";
 import {
   AGENT_BRIEF,
   AGENT_SENDER,
   AGENT_STATUS,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { CALL_KIND } from "@luke/features/turn-rows";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { CALL_KIND } from "@repo/features/turn-rows";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { messageWords } from "./agent-model.js";

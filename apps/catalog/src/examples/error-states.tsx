@@ -9,7 +9,7 @@
  * beside its words, named for what it reads again.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -20,8 +20,8 @@ import {
   TEXT_BUTTON_LINES,
   Text,
   TextButton,
-} from "@luke/ui";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

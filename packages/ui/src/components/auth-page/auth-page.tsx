@@ -54,7 +54,7 @@ export function AuthPage({
   footnote,
   children,
 }: {
-  /** The artwork the page opens with: an `AuthMark`, or the app's face. */
+  /** The artwork the page opens with: an `AuthMark`, or the product's mark. */
   mark?: ReactNode;
   /** What the page is for, or how it ended, which names it. */
   title: ReactNode;
@@ -70,42 +70,42 @@ export function AuthPage({
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   return (
-    <main className="luke-auth-page @container grid grid-cols-1 place-items-center min-h-dvh p-page-inset box-border">
+    <main className="ui-auth-page @container grid grid-cols-1 place-items-center min-h-dvh p-page-inset box-border">
       <section
-        className="luke-auth-card flex flex-col items-center w-full max-w-auth-card box-border border border-border rounded-dialog bg-surface shadow-auth-card text-foreground font-ui text-body text-center wrap-anywhere"
+        className="ui-auth-card flex flex-col items-center w-full max-w-auth-card box-border border border-border rounded-dialog bg-surface shadow-auth-card text-foreground font-ui text-body text-center wrap-anywhere"
         aria-labelledby={titleId}
       >
         {said(mark) ? (
-          <div className="luke-auth-mark inline-flex max-w-full" aria-hidden="true">
+          <div className="ui-auth-mark inline-flex max-w-full" aria-hidden="true">
             {mark}
           </div>
         ) : null}
         <h1
-          className="luke-auth-title mt-luke-16 first:mt-0 mb-0 mx-0 text-title font-title tracking-title text-balance"
+          className="ui-auth-title mt-ui-16 first:mt-0 mb-0 mx-0 text-title font-title tracking-title text-balance"
           id={titleId}
         >
           {title}
         </h1>
         {said(description) ? (
-          <p className="luke-auth-description m-0 mt-luke-8 text-muted-foreground text-label">
+          <p className="ui-auth-description m-0 mt-ui-8 text-muted-foreground text-label">
             {description}
           </p>
         ) : null}
         {Children.toArray(children).some(said) ? (
-          <div className="luke-auth-body flex flex-col self-stretch gap-luke-12 mt-luke-32 text-start">
+          <div className="ui-auth-body flex flex-col self-stretch gap-ui-12 mt-ui-32 text-start">
             {children}
           </div>
         ) : null}
-        <p className="luke-auth-error m-0 mt-luke-16 empty:mt-0 text-danger" role="alert">
+        <p className="ui-auth-error m-0 mt-ui-16 empty:mt-0 text-danger" role="alert">
           {error !== undefined && said(error.words) ? error.words : null}
         </p>
         {error !== undefined && said(error.words) && isReported(error.failure) ? (
-          <div className="luke-auth-error-copy mt-luke-4 flex justify-center">
+          <div className="ui-auth-error-copy mt-ui-4 flex justify-center">
             <FailureCopy failure={error.failure} size={BUTTON_SIZE.COMPACT} />
           </div>
         ) : null}
         {action === undefined ? null : (
-          <div className="luke-auth-action flex justify-center mt-luke-24">
+          <div className="ui-auth-action flex justify-center mt-ui-24">
             <ButtonLink
               href={action.href}
               variant={BUTTON_VARIANT.OUTLINE}
@@ -116,7 +116,7 @@ export function AuthPage({
           </div>
         )}
         {said(footnote) ? (
-          <p className="luke-auth-footnote m-0 mt-luke-16 text-muted-foreground text-caption">
+          <p className="ui-auth-footnote m-0 mt-ui-16 text-muted-foreground text-caption">
             {footnote}
           </p>
         ) : null}

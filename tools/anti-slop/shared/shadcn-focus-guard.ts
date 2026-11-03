@@ -6,5 +6,5 @@
  */
 export const SHADCN_FOCUS_GUARD_RULE = "anti-slop/no-shadcn-focus-ring";
 
-/** The vendored shadcn/ui components, which `@luke/ui`'s own components wrap, by repository path. */
+/** The vendored shadcn/ui components, which `@repo/ui`'s own components wrap, by repository path. */
 export const SHADCN_SOURCE = /^packages\/ui\/src\/shadcn\/[^/]+\.tsx?$/u;

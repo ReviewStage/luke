@@ -19,21 +19,21 @@
  * pressed anything.
  */
 
-import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@luke/features/agent-view";
-import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@luke/features/shown-failure";
-import { ACT_UNREACHED_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
+import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@repo/features/agent-view";
+import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@repo/features/shown-failure";
+import { ACT_UNREACHED_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   ACT_ERROR,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
   type SettingUpdatePayload,
-} from "@luke/host/contract";
-import type { AppSettingField, AppSettingValue } from "@luke/settings";
-import type { SettingsUpdateResult } from "@luke/settings/wire";
-import { STATUS_TONE } from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/host/contract";
+import type { AppSettingField, AppSettingValue } from "@repo/settings";
+import type { SettingsUpdateResult } from "@repo/settings/wire";
+import { STATUS_TONE } from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
@@ -55,7 +55,7 @@ type ActResults = { readonly [Kind in PortActKind]: PortActResult<Kind> };
 type ActPayload<Kind extends PortActKind> = ActPayloads[Kind];
 
 /** What a kind answers. */
-type ActResult<Kind extends PortActKind> = ActResults[Kind];
+export type ActResult<Kind extends PortActKind> = ActResults[Kind];
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends PortActKind> =
@@ -239,7 +239,7 @@ export function firstRefusal(answers: readonly Kept[]): unknown {
  * its words draw, with the error beneath, which a shown failure reports. It
  * is the window's own and never crosses the act port, so it holds the error
  * itself, where an answer the host sends holds the facts of one
- * (`@luke/features/failure-facts`).
+ * (`@repo/features/failure-facts`).
  */
 export interface Unreached<Failure extends string> {
   readonly failure: Failure;

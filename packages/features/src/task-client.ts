@@ -1,5 +1,5 @@
-import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -41,7 +41,7 @@ import { type PageLine, type PagePlace, type PageVersion, pagePlaceId } from "./
 import { PLAN_ATTACHMENT_REFUSAL, planAttachmentTypeSchema } from "./plan-attachment-wire.js";
 import {
   type PlanCommentActionRequest,
-  type PlanCommentStartRequest,
+  type PlanCommentStart,
   planCommentActionRequestSchema,
   planCommentStartRequestSchema,
 } from "./plan-comment-wire.js";
@@ -332,20 +332,26 @@ export class HostedTaskClient {
     });
   }
 
-  /** The plan's comment threads past the cursor, held by the service while nothing changed; not found where the plan is not the account's. */
+  /** The plan's comment threads, or the named page's, past the cursor, held by the service while nothing changed; not found where the plan is not the account's. */
   comments(
     planId: string,
     after: string,
+    pageId?: string,
   ): Effect.Effect<TasksCommentsAnswer, never, HttpClient.HttpClient> {
+    const page = pageId === undefined ? undefined : { page: pageId };
     return commentAnswer(
-      askHosted(this.#hosted.planComments.read, { id: planId, after }, HOSTED_DEADLINE.HELD),
+      askHosted(
+        this.#hosted.planComments.read,
+        { id: planId, ...page, after },
+        HOSTED_DEADLINE.HELD,
+      ),
     );
   }
 
-  /** A thread started on the plan with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
+  /** A thread started on the plan, or one of its task's pages, with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
   startComment(
     planId: string,
-    request: PlanCommentStartRequest,
+    request: PlanCommentStart,
   ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(planCommentStartRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
@@ -403,6 +409,19 @@ export class HostedTaskClient {
     return hostedResult(
       askLive(this.#hosted.live.tasks, { [LIVE_USER_QUERY]: userId }, poll, after),
       LIVE_REFUSALS,
+    );
+  }
+
+  /** The id of the task a link names by its workspace, by slug or id, and its number there; nothing where none the account reaches is found, or the service did not answer. */
+  find(
+    workspace: string,
+    number: number,
+  ): Effect.Effect<string | undefined, never, HttpClient.HttpClient> {
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.find, { workspace, number: String(number) }),
+        (found) => found.taskId,
+      ),
     );
   }
 

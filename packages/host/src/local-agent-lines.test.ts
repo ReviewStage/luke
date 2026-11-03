@@ -15,7 +15,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@luke/features";
+import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@repo/features";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -25,9 +25,9 @@ import {
   DEVICE_PLATFORM,
   type DeviceAgentLine,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { ConfigProvider, Deferred, Effect, Exit, Layer, Option, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { composeLocalAgents } from "./compose-local-agents.js";
@@ -36,7 +36,7 @@ import { LAUNCH_NOTE } from "./local-agent-first-lines.js";
 import { fakeClis } from "./testing/fake-clis.js";
 import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
 const DEVICE_ID = "2b7e1d4c-8a3f-4e95-b061-5c2d7f8e9a10";
 
@@ -83,13 +83,13 @@ const directMac = (unsavedWork: Script | undefined) => ({
     readonly env: Readonly<Record<string, string>>;
   }) => ({
     command: node,
-    args: [env.LUKE_RUNNER_TOKEN ?? ""],
+    args: [env.APP_RUNNER_TOKEN ?? ""],
     env: {},
   }),
   tools: {
     node: RUNNER,
-    claude: "/opt/luke/agent-tools/claude",
-    codex: "/opt/luke/agent-tools/codex",
+    claude: "/opt/agent/agent-tools/claude",
+    codex: "/opt/agent/agent-tools/codex",
   },
   clis: fakeClis(),
   formerlyDirect: true,
@@ -97,6 +97,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
   runnerBundle: "/opt/luke/agent-runner.mjs",
   runnerEnv: {},
   deviceName: "Studio",
+  deviceMachine: {},
   devicePlatform: DEVICE_PLATFORM.DARWIN,
   deviceArch: DEVICE_ARCH.ARM64,
   deviceIsolation: DEVICE_ISOLATION.DIRECT,
@@ -114,7 +115,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
  */
 const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
+    const root = yield* temporaryDirectoryScoped("agent-lines-");
     const home = path.join(root, "home");
     const fileSystem = yield* FileSystem.FileSystem;
     const folder = deviceAgentLayout(home, AGENT_ID).folder;
@@ -275,7 +276,7 @@ const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
  */
 const launching = (workStands: boolean) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-launch-");
+    const root = yield* temporaryDirectoryScoped("agent-launch-");
     const home = path.join(root, "home");
     const layout = deviceAgentLayout(home, AGENT_ID);
     if (workStands) mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });
@@ -305,7 +306,7 @@ const launching = (workStands: boolean) =>
                 firstSequence: 0,
               },
             },
-            secrets: { env: { LUKE_RUNNER_TOKEN: "runner-secret" }, stdin: RESUMING_LINES },
+            secrets: { env: { APP_RUNNER_TOKEN: "runner-secret" }, stdin: RESUMING_LINES },
           });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES:
           if (init?.method === "POST") {

@@ -1,5 +1,5 @@
-import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
+import { githubAvatarAt, githubAvatarUrl } from "@repo/features/account-picture";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
 import {
   type AgentOverviewChecks,
   type AgentOverviewConversation,
@@ -22,18 +22,18 @@ import {
   REVIEW_STATE,
   type ReactionGroup,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   LINK_PLACE,
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/link-grammar";
-import { formatCount } from "@luke/features/number-format";
-import type { FailureSurface } from "@luke/features/shown-failure";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { workingTime } from "@luke/features/time-format";
-import { INLINE_DIFF } from "@luke/settings/diff-view";
+} from "@repo/features/link-grammar";
+import { formatCount } from "@repo/features/number-format";
+import type { FailureSurface } from "@repo/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { workingTime } from "@repo/features/time-format";
+import { INLINE_DIFF } from "@repo/settings/diff-view";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -54,6 +54,7 @@ import {
   type ChoiceItem,
   Comment,
   type CountPart,
+  CountParts,
   DETAIL_PAGE_INSET,
   DetailPage,
   DISCLOSURE_SUMMARY,
@@ -103,22 +104,21 @@ import {
   useMenu,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { actorName } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { actorName } from "@repo/ui/actor-model";
 import {
   CheckIcon,
   CircleSlashIcon,
   ExternalLinkIcon,
   GLYPH,
   MessagesSquareIcon,
-  PlayIcon,
   RotateCwIcon,
   ScanSearchIcon,
   TriangleAlertIcon,
   XIcon,
-} from "@luke/ui/icons";
-import { landedMark } from "@luke/ui/landed";
-import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+} from "@repo/ui/icons";
+import { landedMark } from "@repo/ui/landed";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
 import {
   type ComponentProps,
   createContext,
@@ -268,7 +268,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * stands; and its checks, whose deployments the header's Preview opens, as
  * stage-cli's header reads them. What the app already holds of
  * the pull request, what the agent published, draws the pill, the title,
- * and the Files changed tab's lines at once; each part stands as a skeleton
+ * and the Files changed tab's count at once; each part stands as a skeleton
  * until its read lands, and says so with its own Retry where its read
  * failed, the other parts and the tabs standing. Refresh reads again all
  * three, each part drawn
@@ -287,12 +287,11 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * first where a deployment of its head serves an address, opening it or, for
  * several, a menu of their environments (`PreviewControl`). Open on GitHub
  * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
- * hands them to while it is drawn (`useHandedTabActions`), and Run after
- * them, which runs the shown pull request's branch in a terminal of this Mac
- * in the side panel, where the panel offers one (`onRun`). Under it one
+ * hands them to while it is drawn (`useHandedTabActions`). Under it one
  * line, wrapping where it must:
  * its branches, with the stack it stands in beside them
- * (`pull-request-stack.tsx`); who opened it and when, as the Changes tab
+ * (`pull-request-stack.tsx`) and the lines it changes, those left to review
+ * while some files are viewed (`linesOf`); who opened it and when, as the Changes tab
  * names them (`pull-request-people.tsx`), with its reviewers' first faces
  * wearing where each stands, the reviewer and label pickers, and its labels
  * in their GitHub colours (`pull-request-labels.tsx`) at the line's end, so
@@ -312,7 +311,9 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * each over its own hunks in Files changed's list, its count saying
  * where they stand: being made, failed, out of date, or how many, and how
  * many viewed once any is; and Files changed (`AgentChangesTab`), its own bar and
- * tree, counted by the lines it adds and removes. A review carries the
+ * tree, counted by its files as Chapters counts its chapters. A phone names
+ * the chosen tab alone and draws the others by their glyphs and counts, and
+ * a folded row leaves "viewed" out of every count. A review carries the
  * threads on lines it started, each on the card every annotation on code
  * stands on (`annotation-card.tsx`): its file and lines in the strip over
  * its head, then the end of the hunk it was made on, drawn as Files changed
@@ -351,7 +352,7 @@ const CHAPTERS_TAB = lazyRoute(() =>
  * (`SCROLL_FADE_INSET.BAND`).
  */
 const VIEW_CLASS =
-  "pull-request-view [--luke-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
+  "pull-request-view [--ui-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
 
 /** The tab's own words. */
 const PULL_REQUEST_WORDS = {
@@ -364,7 +365,6 @@ const PULL_REQUEST_WORDS = {
   CHECKS_FAILED: "The checks could not be read.",
   CONVERSATION_FAILED: "The conversation could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
-  RUN_LABEL: "Run on this Mac",
   PREVIEW: "Preview",
   PREVIEWS: "Preview deployments",
   NO_DESCRIPTION: "No description provided.",
@@ -397,9 +397,9 @@ const PULL_REQUEST_WORDS = {
   /** What a review thread's card is called, and who it is by. */
   THREAD: "Review thread",
   BY: "by",
-  /** What the Files changed tab's count says after the lines left to review. */
+  /** What the header's lines say after those left to review. */
   LEFT: "left",
-  /** What the Files changed tab's hint says of every line the pull request changes. */
+  /** What the hint over the header's lines says of every line the pull request changes. */
   total: (additions: number, deletions: number) =>
     `+${formatCount(additions)} −${formatCount(deletions)} total`,
 } as const;
@@ -658,7 +658,7 @@ export function Section({
       {/* Note that the title is cut in a line of its own, since a flex row's bare words are never cut, and the count after it stays whole. */}
       <OneLine className="flex-initial">{title}</OneLine>
       {count === undefined ? null : (
-        <span className="pull-request-count flex-none font-luke-regular text-muted-foreground tabular-nums">
+        <span className="pull-request-count flex-none font-ui-regular text-muted-foreground tabular-nums">
           {count}
         </span>
       )}
@@ -1421,7 +1421,7 @@ function ThreadComments({
         ))}
       </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
-        <p className="annotation-card-more mr-0 mb-0 mt-luke-8 ml-annotation-more self-start max-w-full text-caption text-muted-foreground">
+        <p className="annotation-card-more mr-0 mb-0 mt-ui-8 ml-annotation-more self-start max-w-full text-caption text-muted-foreground">
           <OnGitHubLink href={last.url}>{PULL_REQUEST_WORDS.moreReplies(thread.more)}</OnGitHubLink>
         </p>
       )}
@@ -1600,8 +1600,11 @@ function PullRequestHead({
   now,
   writes,
   editing,
+  lines,
 }: {
   parts: OverviewParts;
+  /** The lines the pull request changes, after its branches; none until any is held. */
+  lines: LinesShown | undefined;
   now: number;
   writes: PullRequestWrites;
   /** What the reviewer and label pickers read, the reviewers and labels with their choices drawn at once, and whether the pull request is being read again after a change. */
@@ -1643,6 +1646,7 @@ function PullRequestHead({
           headOwner={pullRequest.headOwner}
         />
         <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
+        {lines === undefined ? null : <HeaderLines lines={lines} />}
       </span>
       <OpenedLine
         person={author}
@@ -2083,6 +2087,14 @@ const CHAPTERS_TAB_WORDS = {
   VIEWED: "viewed",
 } as const;
 
+/** How many of how many a tab counts viewed, "1/4 viewed", its word left out where the row folds. */
+function viewedCount(viewed: number, total: number): readonly CountPart[] {
+  return [
+    { text: `${formatCount(viewed)}/${formatCount(total)}` },
+    { text: CHAPTERS_TAB_WORDS.VIEWED, folds: true },
+  ];
+}
+
 /** The glyphs the Chapters tab wears for being made, a failed generation, and new commits since, as the Checks tab's are kept: made once, never in a draw. New commits since wear the merge box's Behind (`merge-box.tsx`), a branch its base moved on from. */
 const CHAPTERS_TAB_GLYPHS = {
   GENERATING: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
@@ -2153,31 +2165,31 @@ function chaptersTabCount(
           chapterViewed(chapterPaths(chapter, files.files), marks.viewed),
         ).length;
   if (viewed === 0) return [{ text: formatCount(total) }];
-  return [{ text: `${formatCount(viewed)}/${formatCount(total)} ${CHAPTERS_TAB_WORDS.VIEWED}` }];
+  return viewedCount(viewed, total);
 }
 
-/** What the Files changed tab counts: the lines left to review and, in its hint, the whole; or the whole alone. */
-interface FilesCount {
+/** The lines the header counts: those left to review and, in its hint, the whole; or the whole alone. */
+interface LinesShown {
   readonly count: readonly CountPart[];
   readonly hint: string | undefined;
 }
 
 /**
- * The lines the Files changed tab counts, as stage-cli counts them: those
- * left to review, the whole less every file the member marked viewed, its
- * whole in the hint, while some files are viewed and some are not; the whole
- * alone where none or all are, or where the changes and the marks, read as
- * Files changed is first opened, have not both landed. The whole is the
+ * The lines the header counts after the branches, as stage-cli counts them:
+ * those left to review, the whole less every file the member marked viewed,
+ * its whole in the hint, while some files are viewed and some are not; the
+ * whole alone where none or all are, or where the changes and the marks, read
+ * as Files changed is first opened, have not both landed. The whole is the
  * changes' own once they are read, so it and the files it is cut by describe
  * the same push; where the read stopped short of every file, it is what the
  * agent published, and files the read left out count as still to review.
  * Note that it reads the marks Files changed draws, so a box ticked there
  * counts at once, and one GitHub refuses counts again as it goes back.
  */
-function filesCountOf(
+function linesOf(
   published: AgentPullRequest | undefined,
   reads: ChangesReads,
-): FilesCount | undefined {
+): LinesShown | undefined {
   const changes = reads.pullRequest;
   const marks = reads.viewedFiles.marks;
   if (changes === null || marks === undefined) {
@@ -2205,6 +2217,45 @@ function filesCountOf(
   };
 }
 
+/**
+ * The files the Files changed tab counts, as the Chapters tab counts its
+ * chapters: how many, then how many of them are viewed once any is, by the
+ * marks Files changed draws, so a box ticked there counts at once. How many
+ * is what the agent published until the changes are read, then theirs, but
+ * where the read stopped short of every file, which leaves the published
+ * count the whole unless the read already holds more.
+ */
+function filesTabCount(
+  published: AgentPullRequest | undefined,
+  reads: ChangesReads,
+): readonly CountPart[] | undefined {
+  const changes = reads.pullRequest;
+  const marks = reads.viewedFiles.marks;
+  // Note that a read cut short counts at least the files it holds, since a push after publishing can outgrow what was published.
+  const total =
+    changes === null
+      ? published?.changedFiles
+      : changes.truncated
+        ? Math.max(published?.changedFiles ?? 0, changes.files.length)
+        : changes.files.length;
+  if (total === undefined) return undefined;
+  const viewed =
+    changes === null || marks === undefined
+      ? 0
+      : changes.files.filter((file) => marks.viewed(file.path)).length;
+  return viewed === 0 ? [{ text: formatCount(total) }] : viewedCount(viewed, total);
+}
+
+/** The lines the pull request changes, at the end of the header's branch row: those left to review, the whole in the hint over them, or the whole alone (`linesOf`). */
+function HeaderLines({ lines }: { lines: LinesShown }): React.JSX.Element {
+  const drawn = (
+    <span className="pull-request-lines flex-none whitespace-nowrap text-muted-foreground">
+      <CountParts parts={lines.count} />
+    </span>
+  );
+  return lines.hint === undefined ? drawn : <Tooltip label={lines.hint}>{drawn}</Tooltip>;
+}
+
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
 function conversationCount(conversation: AgentOverviewConversation): number {
   const threads = conversation.conversation.reduce(
@@ -2219,9 +2270,8 @@ function conversationCount(conversation: AgentOverviewConversation): number {
  * so far: the conversation once read; the checks by how they went from the
  * first frame, as the pill's mark says it, and by how many once read; the
  * chapters by where they stand from their read, as the checks are
- * (`chaptersTabCount`); and
- * the files by the lines left to review once some are marked viewed, else
- * by the lines what was published adds and removes (`filesCountOf`).
+ * (`chaptersTabCount`); and the files by how many, and how many are viewed
+ * once some are (`filesTabCount`).
  */
 function tabsOf(
   parts: OverviewParts,
@@ -2232,7 +2282,6 @@ function tabsOf(
 ): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
-  const files = filesCountOf(published, changes);
   return [
     {
       value: PULL_REQUEST_VIEW.CONVERSATION,
@@ -2262,8 +2311,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.FILES,
       icon: <GLYPH.PULL_REQUEST_CHANGES />,
       label: "Files changed",
-      count: files?.count,
-      hint: files?.hint,
+      count: filesTabCount(published, changes),
     },
   ];
 }
@@ -2454,7 +2502,7 @@ function ConversationView({
     >
       {/* Its words at the measure, as far in from the sides as a `DetailPage` at a column's inset
       stands them, so the Conversation and the Checks read alike. */}
-      <div className="pull-request-page px-pull-request-page pt-section-gap text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--luke-page-measure)]">
+      <div className="pull-request-page px-pull-request-page pt-section-gap text-body text-foreground wrap-anywhere [--pull-request-page-measure:var(--ui-page-measure)]">
         <DescriptionPart
           agentId={agentId}
           part={parts.pullRequest}
@@ -2761,8 +2809,6 @@ interface AgentPullRequestTabProps {
   onView: (view: PullRequestView) => void;
   /** Hears what the side panel's toolbar ⋯ offers while the tab is drawn, Open on GitHub and Refresh (`useHandedTabActions`); none where no toolbar draws them. */
   onActions?: HandTabActions | undefined;
-  /** Runs the shown pull request's branch in a terminal of this Mac in the side panel, which the toolbar's ⋯ offers as Run on this Mac; none where the platform has no Mac terminal or no repository is known. A fork's pull request offers none, whatever this holds. */
-  onRun?: (() => void) | undefined;
 }
 
 /**
@@ -2777,7 +2823,7 @@ const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
  * Checks' page column, the Conversation's scroller, and the diff list's.
  */
 const VIEW_SCROLLER =
-  ".luke-detail-page-main, .pull-request-view > .luke-scroll-area, .diff-list > .luke-scroll-area";
+  ".ui-detail-page-main, .pull-request-view > .ui-scroll-area, .diff-list > .ui-scroll-area";
 
 /**
  * Whether `box` is the shown view's own scroller, drawn in the tab at
@@ -2852,14 +2898,13 @@ function PullRequestTabBody({
   view,
   onView,
   onActions,
-  onRun,
 }: Omit<AgentPullRequestTabProps, "control"> & { source: PullRequestSource }): React.JSX.Element {
   const { ended } = source;
   const id = useId();
-  // A phone names each of the tabs in words, never their glyphs alone, which a finger cannot hover for a name.
+  // A phone names the chosen tab and draws the others by their glyphs and counts, so the four fit its row without scrolling; a tab pressed is named.
   const tabsFold =
     useContext(ShellRoomContext) === SHELL_ROOM.NARROW
-      ? CHOICE_BAR_FOLD.WORDS
+      ? CHOICE_BAR_FOLD.OWN
       : CHOICE_BAR_FOLD.TOGETHER;
   const ids = (each: PullRequestView) => ({
     tab: `${id}-${each}-tab`,
@@ -2933,26 +2978,19 @@ function PullRequestTabBody({
           ],
     [url, reading],
   );
-  // The ⋯ offers Run after the pull request's own. A phone draws no actions beside the title, so
-  // its ⋯ offers Preview beside Run, and whatever the view shown hands up, Files changed's bar among them.
+  // A phone draws no actions beside the title, so its ⋯ offers Preview after the pull request's own,
+  // and whatever the view shown hands up, Files changed's bar among them.
   const phone = usePhoneRoom();
   const openLink = useOpenLink();
   const viewActions = useViewActions();
   const checksLanded = landed(parts.checks);
-  // Note that Run waits for the overview to say the head is the base repository's own, and a fork's pull request offers none, because a run makes its worktree on the head's branch name in the base repository's clone, where a fork's name could be another branch's.
-  const head = landed(parts.pullRequest);
-  const runs =
-    onRun !== undefined && held !== undefined && head !== undefined && head.headOwner === undefined;
-  const run: MenuAction[] = runs
-    ? [{ label: PULL_REQUEST_WORDS.RUN_LABEL, icon: <PlayIcon />, onSelect: onRun }]
-    : [];
   useHandedTabActions(
     onActions,
     handed === undefined
       ? undefined
       : [
           ...handed,
-          phone ? [...previewActions(checksLanded, openLink), ...run] : run,
+          phone ? previewActions(checksLanded, openLink) : [],
           ...(phone && viewActions.held?.view === view ? viewActions.held.actions : []),
         ].filter((group) => group.length > 0),
   );
@@ -3091,6 +3129,7 @@ function PullRequestTabBody({
                     now={now}
                     writes={writes}
                     editing={{ options, picks, refreshing: pullRequestRead.out }}
+                    lines={linesOf(published, changes)}
                   />
                 </header>
                 <PaneBar

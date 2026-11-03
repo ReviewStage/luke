@@ -29,12 +29,12 @@ const ROW = 40;
 
 /** The motion tokens the area reads, as an app's sheets set them. */
 const TOKENS = {
-  "--luke-duration-exit": "90ms",
-  "--luke-motion-exit": "ease",
-  "--luke-duration-quick": "140ms",
-  "--luke-duration-shape": "460ms",
-  "--luke-spring": "ease-out",
-  "--luke-row-stagger": "32ms",
+  "--ui-duration-exit": "90ms",
+  "--ui-motion-exit": "ease",
+  "--ui-duration-quick": "140ms",
+  "--ui-duration-shape": "460ms",
+  "--ui-spring": "ease-out",
+  "--ui-row-stagger": "32ms",
 } as const;
 
 /** The clips a reveal's rows unroll from and to. */
@@ -66,7 +66,7 @@ function heightOf(element: Element): number {
 /** Where the layout given draws an element's top: under what is laid out before it in its parent. */
 function topOf(element: Element): number {
   const parent = element.parentElement;
-  if (parent === null || element.matches(".luke-settings-section-card")) return 0;
+  if (parent === null || element.matches(".ui-settings-section-card")) return 0;
   if (element instanceof HTMLElement && element.style.position === "absolute") {
     return topOf(parent) + Number.parseFloat(element.style.top);
   }
@@ -138,7 +138,7 @@ function rowOf(words: string): Element | undefined {
 
 /** The box a reveal draws its rows in, by the words of its first. */
 function boxOf(words: string): Element | null | undefined {
-  return rowOf(words)?.closest(".luke-reveal");
+  return rowOf(words)?.closest(".ui-reveal");
 }
 
 /** The motions played on `element`, by their keyframes. */

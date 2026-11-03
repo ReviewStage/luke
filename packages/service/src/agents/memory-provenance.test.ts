@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { type Agent, createAgent } from "@luke/database/models/agent-store";
-import { listMemories, MEMORY_OUTCOME } from "@luke/database/models/memory-store";
-import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { messages, turns } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { EXPERIMENT } from "@luke/settings";
+import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { type Agent, createAgent } from "@repo/database/models/agent-store";
+import { listMemories, MEMORY_OUTCOME } from "@repo/database/models/memory-store";
+import type { StoredAutomationOrigin } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { messages, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB, openWorkspace } from "@repo/database/testing";
+import { CLAUDE_CODE_TOOL } from "@repo/features/agent-tools";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option } from "effect";
 import {
   ACTION_RESULT_STATUS,
@@ -22,6 +22,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../core.js";
+import { recordingEve } from "../testing/recording-eve.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { AGENT_CALLER, type AgentCall } from "./agent-tools.js";
 import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
@@ -47,7 +48,7 @@ const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
     const workspaceId = yield* openWorkspace(userId);
     const started = yield* createAgent(userId, {
@@ -60,6 +61,7 @@ const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
       effort: "high",
       repository: null,
       automationOrigin,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     return { agent: started.value.agent, workspaceId };
@@ -127,9 +129,11 @@ const writeTurn = (
 
 /** A `remember` from the agent, as its tool door calls it. */
 const remember = (agent: Agent) => {
+  const { sessions } = recordingEve();
   const call: AgentCall = {
     caller: { kind: AGENT_CALLER.AGENT, agent },
-    eve: undefined,
+    eve: sessions,
+    eveAs: () => sessions,
     writer: Effect.die(new Error("a memory call writes no line")),
     clientKey: randomUUID(),
   };

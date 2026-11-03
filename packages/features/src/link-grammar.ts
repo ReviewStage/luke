@@ -1,11 +1,11 @@
 import { Schema as EffectSchema, Option } from "effect";
 import { isUtcDayKey } from "./admin-wire.js";
 import { HOST_WIRE, hostConnectPath, hostUserCodeOf } from "./host-wire.js";
-import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
+import { inAppScheme, isLinkHome, LINK_ORIGIN, RESERVED_WORKSPACE_SLUGS } from "./link-home.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * link-grammar.ts -- every link the app reads and writes, as the address it is and the Markdown it is written into words as: our own places, GitHub's and Linear's pages, and the older `luke://` forms.
+ * link-grammar.ts -- every link the app reads and writes, as the address it is and the Markdown it is written into words as: our own places, GitHub's and Linear's pages, and the app-only `mention://` forms.
  *
  * This is the one module that knows how an address is spelled. A mention
  * (`mention-link.ts`) names what a link names and reads it through here; a
@@ -20,9 +20,14 @@ import { parsedUrl } from "./parsed-url.js";
  * and a list is plural where a thing is singular, as GitHub's `/pulls` and
  * `/pull/1` are:
  *
- * - a task, `/plan/<id>`, and its section, `#<anchor>`, its version,
- *   `/plan/<id>/version/<seq>`, and a page an agent wrote for it,
- *   `/plan/<id>/page/<pageId>`;
+ * - the workspace's Home, its own address with no step after it, and the
+ *   Board, `/tasks`, each read only under a step a workspace can stand
+ *   under: never a page of ours (`RESERVED_WORKSPACE_SLUGS`) or a file,
+ *   so `/about` and `/robots.txt` are no workspace's Home;
+ * - a task, `/task/<id>`, and its section, `#<anchor>`, its version,
+ *   `/task/<id>/version/<seq>`, and a page an agent wrote for it,
+ *   `/task/<id>/page/<pageId>`, the task named by its id or by its number
+ *   in the workspace (`taskNumberOf`);
  * - an agent, `/agent/<agentId>`, whether or not it works on a task, and
  *   under it what is its own: a worker, `/worker/<callId>`, its Changes,
  *   `/changes`, one review thread of its pull request in one of that tab's
@@ -31,9 +36,11 @@ import { parsedUrl } from "./parsed-url.js";
  *   `/page/<pageId>`; which task's panel it opens in is the reader's to
  *   find, by the agent;
  * - the Inbox, `/inbox`, the Inbox narrowed to one task's items,
- *   `/inbox/plan/<taskId>`, and an item in it under the agent that posted it,
+ *   `/inbox/task/<taskId>`, and an item in it under the agent that posted it,
  *   `/agent/<agentId>/inbox/<itemId>`, whose task, where it has one, is the
  *   reader's to find, by the agent, to open the item in that task's Inbox;
+ *   or by its id alone, `/inbox/<itemId>`, whose agent, task, and workspace
+ *   are the reader's to ask the service for, by the item;
  * - a channel of the workspace, `/channel/<channelId>`, whose threads are
  *   those Inbox items, each still linked under its agent;
  * - the Automations page, `/automations`, an automation,
@@ -58,14 +65,15 @@ import { parsedUrl } from "./parsed-url.js";
  * gone, so an old link to either reads as a link it does not know.
  *
  * An agent's place was once written under its task too,
- * `/plan/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
- * `/plan/<id>/inbox/<itemId>`, each still read, the task kept, and still
+ * `/task/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
+ * `/task/<id>/inbox/<itemId>`, each still read, the task kept, and still
  * written while a writer names the task. A turn of our own work,
  * `/plan/<id>/work/<at>`, and a worker of our own,
  * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
  * its task and written no more.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
+ * still written under `/plan/` for the builds that read a picture there alone,
  * is read as its task, and a picture in an Inbox item's words, the item's
  * link with `/files/<picture>` after it (`inbox-attachment-link.ts`), as
  * the item, since nothing of a picture is opened by its link.
@@ -77,12 +85,19 @@ import { parsedUrl } from "./parsed-url.js";
  * checked against it there, so a link says no more than its address does.
  * A pairing's code is no credential either: the box prints it for anyone at
  * its terminal to read, it approves nothing until a signed-in member presses
- * Connect, and it lapses in minutes. A task is written `/plan/` and read
- * under `/task/` too, the name the unit of work is taking; a reader takes a
+ * Connect, and it lapses in minutes. A task is written `/task/`, the name
+ * the unit of work took, and read under `/plan/` forever, the step every link
+ * written before it holds, whatever follows the task's id; a reader takes a
  * trailing slash, a query, and a fragment a kind has no use for, and refuses
- * anything else. A section's anchor is its heading as GitHub spells a
- * Markdown heading's (`mention-link.ts`'s `sectionAnchors`), read in lower
- * case.
+ * anything else. A task's id is a UUID, never all digits, so a task step
+ * all digits, `/task/42`, names the task by its number in the link's
+ * workspace, which a reader asks the service to find by the slug and the
+ * number before it opens the place, wherever a task's id is read; a key
+ * spelled there, `/task/STAG-42`, is read as its number alone, since its
+ * prefix is the workspace's name and follows a rename. A number that
+ * finds no task opens as an id that names none does. A section's anchor is
+ * its heading as GitHub spells a Markdown heading's (`mention-link.ts`'s
+ * `sectionAnchors`), read in lower case.
  *
  * A page of GitHub's the app reads is a pull request's,
  * `https://github.com/<owner>/<name>/pull/<number>` or any page under it, an
@@ -94,8 +109,9 @@ import { parsedUrl } from "./parsed-url.js";
  * `https://linear.app/<workspace>/issue/<KEY-123>`, its slug after it or not.
  *
  * The forms written before our links were settled, `luke://<host>/<path>`,
- * are read forever, and kept for what has no page of its own on the web, an
- * MCP server and a date; what each host's path means is the mention's.
+ * are read forever. What has no page of its own on the web, an MCP server
+ * and a date, is written in the same form under `mention://`, which reads
+ * as any `luke://` host does; what each host's path means is the mention's.
  *
  * A link is written into words as `[label](target)`: its label's brackets
  * and backslashes escaped and its line breaks made spaces, so a title
@@ -104,6 +120,10 @@ import { parsedUrl } from "./parsed-url.js";
  */
 
 export const LINK_PLACE = {
+  /** The workspace's Home, the page with no task open, at the workspace's own address. */
+  HOME: "home",
+  /** The workspace's Board, its tasks by where each stands. */
+  BOARD: "board",
   TASK: "task",
   SECTION: "section",
   /** One comment thread of a task, written as the task's link with the thread in its `comment` query. */
@@ -155,6 +175,7 @@ const THREAD_VIEWS: ReadonlySet<string> = new Set(Object.values(PULL_REQUEST_THR
 const STEP = {
   PLAN: "plan",
   TASK: "task",
+  TASKS: "tasks",
   VERSION: "version",
   PAGE: "page",
   WORK: "work",
@@ -179,7 +200,7 @@ const STEP = {
 /** The query a task's link names one of its comment threads under. */
 const COMMENT_QUERY = "comment";
 
-/** The steps a task is read under: the one written, and the name the unit of work is taking. */
+/** The steps a task is read under: the one written, and the one every older link holds. */
 const TASK_STEPS: ReadonlySet<string> = new Set([STEP.PLAN, STEP.TASK]);
 
 const LINK_BOUNDS = {
@@ -192,6 +213,9 @@ const LINK_BOUNDS = {
 /** An id as the service mints one, or as a call's id is spelled: letters, digits, `_`, and `-`. */
 const ID = /^[A-Za-z0-9_-]+$/u;
 
+/** The places a link names by its workspace's step alone, or one step after it, which a page of ours or a file could otherwise be read as. */
+const WORKSPACE_PLACES: ReadonlySet<string> = new Set([LINK_PLACE.HOME, LINK_PLACE.BOARD]);
+
 /** A page of Settings as its link spells it: lower case, words joined by hyphens. */
 const SETTINGS_PAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
@@ -203,6 +227,12 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/u;
 
 /** A number spelled whole: a version's, or a moment's in epoch milliseconds. */
 const WHOLE = /^\d{1,15}$/u;
+
+/** A task's number in its workspace as a link spells it in the task's step: whole, from one, within a Postgres integer. */
+const TASK_NUMBER = /^[1-9]\d{0,8}$/u;
+
+/** A task's key as a link may spell it in the task's step, `STAG-42`: a prefix of up to four capitals or digits, held to its case as `workspace-key.ts` holds a key, a hyphen, and its number. */
+const TASK_KEY = /^[\p{Lu}\p{N}]{1,4}-([1-9]\d{0,8})$/u;
 
 /** An anchor as a heading's is spelled: letters, marks, digits, underscores, and hyphens. */
 const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
@@ -270,11 +300,17 @@ const LINEAR_ISSUE_STEP = "issue";
 /** A Linear issue's identifier, its team's key and its number, `ENG-123`, as Linear spells it. */
 export const LINEAR_IDENTIFIER = /^[A-Z][A-Z0-9_]{0,9}-[1-9]\d{0,8}$/u;
 
-/** The scheme of the forms written before our links were settled. */
+/** The scheme the app's own forms are written in, for what has no page of its own on the web. */
+const MENTION_PROTOCOL = "mention:";
+
+/** The scheme of the forms written before our links were settled, read as `MENTION_PROTOCOL` is. */
 const LEGACY_PROTOCOL = "luke:";
 
-/** What a `luke://` address's host says its path names. */
-export const LEGACY_LINK_HOST = {
+/** The schemes an app-only form is read in. */
+const SCHEME_PROTOCOLS: ReadonlySet<string> = new Set([MENTION_PROTOCOL, LEGACY_PROTOCOL]);
+
+/** What a `mention://` or `luke://` address's host says its path names. */
+export const SCHEME_LINK_HOST = {
   PLAN: "plan",
   FILE: "file",
   FOLDER: "folder",
@@ -282,7 +318,7 @@ export const LEGACY_LINK_HOST = {
   DATE: "date",
 } as const;
 
-export type LegacyLinkHost = (typeof LEGACY_LINK_HOST)[keyof typeof LEGACY_LINK_HOST];
+export type SchemeLinkHost = (typeof SCHEME_LINK_HOST)[keyof typeof SCHEME_LINK_HOST];
 
 /** What marks a link's label as a mention's: `[@Rollout](<target>)`. */
 export const MENTION_SIGIL = "@";
@@ -311,6 +347,8 @@ const idSchema = EffectSchema.String.check(
 const wholeSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0));
 
 const linkPlaceSchema = EffectSchema.Union([
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.HOME) }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.BOARD) }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.TASK), planId: idSchema }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SECTION),
@@ -380,6 +418,7 @@ const linkPlaceSchema = EffectSchema.Union([
     agentId: idSchema,
     itemId: idSchema,
   }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.INBOX_ITEM), itemId: idSchema }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.CHANNEL), channelId: idSchema }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.AUTOMATIONS) }),
   EffectSchema.Struct({
@@ -468,6 +507,11 @@ function namesItemPicture(more: readonly string[]): boolean {
   return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
 }
 
+/** A task's step as the place holds it: a key read as its number alone, any other step as written. */
+function taskStepOf(step: string): string {
+  return TASK_KEY.exec(step)?.[1] ?? step;
+}
+
 /** The steps after a task's id: a version, a page, an agent's, or an Inbox item; a turn of ours or a worker of ours read as the task, since each is drawn nowhere now. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
@@ -539,6 +583,10 @@ function placeFields(steps: readonly string[]) {
     return id === undefined ? undefined : taskFields(id, rest);
   }
   switch (step) {
+    case undefined:
+      return { kind: LINK_PLACE.HOME };
+    case STEP.TASKS:
+      return id === undefined ? { kind: LINK_PLACE.BOARD } : undefined;
     case STEP.AGENT:
       return id === undefined ? undefined : agentFields(undefined, id, rest);
     case STEP.INBOX:
@@ -571,12 +619,18 @@ function placeFields(steps: readonly string[]) {
   }
 }
 
-/** The Inbox's fields past its step: the Inbox, or the Inbox narrowed to one task, `plan/<taskId>`. */
+/** The Inbox's fields past its step: the Inbox itself, the Inbox narrowed to one task, `task/<taskId>`, or an item by its id alone, a picture in its words opening the item. */
 function inboxFields(step: string | undefined, rest: readonly string[]) {
   if (step === undefined) return { kind: LINK_PLACE.INBOX };
-  const [taskId, ...more] = rest;
-  if (!TASK_STEPS.has(step) || taskId === undefined || more.length > 0) return undefined;
-  return { kind: LINK_PLACE.INBOX, planId: taskId };
+  if (TASK_STEPS.has(step)) {
+    const [taskId, ...more] = rest;
+    return taskId === undefined || more.length > 0
+      ? undefined
+      : { kind: LINK_PLACE.INBOX, planId: taskStepOf(taskId) };
+  }
+  return rest.length === 0 || namesItemPicture(rest)
+    ? { kind: LINK_PLACE.INBOX_ITEM, itemId: step }
+    : undefined;
 }
 
 /** The Admin place's fields past its step: its Overview, a section, an account's page, or a day's. */
@@ -592,6 +646,11 @@ function adminFields(step: string | undefined, rest: readonly string[]) {
     : undefined;
 }
 
+/** Whether a link's first step is one a workspace can stand under: an id's or a slug's spelling, and no page of ours whatever its case. */
+function workspaceStep(workspace: string): boolean {
+  return ID.test(workspace) && !RESERVED_WORKSPACE_SLUGS.has(workspace.toLowerCase());
+}
+
 /** A task's link, or a section's by its fragment, an empty one the task's own; the anchor read in lower case. */
 function taskLink(taskId: string, hash: string): LinkPlace | undefined {
   if (hash === "" || hash === "#") {
@@ -604,15 +663,19 @@ function taskLink(taskId: string, hash: string): LinkPlace | undefined {
 /** The path a place is written at under its workspace, each id percent-encoded. */
 function placePath(place: LinkPlace): readonly string[] {
   switch (place.kind) {
+    case LINK_PLACE.HOME:
+      return [];
+    case LINK_PLACE.BOARD:
+      return [STEP.TASKS];
     case LINK_PLACE.TASK:
     case LINK_PLACE.SECTION:
     case LINK_PLACE.COMMENT:
-      return [STEP.PLAN, place.planId];
+      return [STEP.TASK, place.planId];
     case LINK_PLACE.VERSION:
-      return [STEP.PLAN, place.planId, STEP.VERSION, String(place.revision)];
+      return [STEP.TASK, place.planId, STEP.VERSION, String(place.revision)];
     case LINK_PLACE.PAGE:
       return "planId" in place
-        ? [STEP.PLAN, place.planId, STEP.PAGE, place.pageId]
+        ? [STEP.TASK, place.planId, STEP.PAGE, place.pageId]
         : [STEP.AGENT, place.agentId, STEP.PAGE, place.pageId];
     case LINK_PLACE.AGENT:
       return agentPath(place.planId, place.agentId);
@@ -631,11 +694,12 @@ function placePath(place: LinkPlace): readonly string[] {
     case LINK_PLACE.MESSAGE:
       return [...agentPath(place.planId, place.agentId), STEP.MESSAGE, place.messageId];
     case LINK_PLACE.INBOX:
-      return place.planId === undefined ? [STEP.INBOX] : [STEP.INBOX, STEP.PLAN, place.planId];
+      return place.planId === undefined ? [STEP.INBOX] : [STEP.INBOX, STEP.TASK, place.planId];
     case LINK_PLACE.INBOX_ITEM:
-      return "planId" in place
-        ? [STEP.PLAN, place.planId, STEP.INBOX, place.itemId]
-        : [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId];
+      if ("planId" in place) return [STEP.TASK, place.planId, STEP.INBOX, place.itemId];
+      return "agentId" in place
+        ? [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId]
+        : [STEP.INBOX, place.itemId];
     case LINK_PLACE.CHANNEL:
       return [STEP.CHANNEL, place.channelId];
     case LINK_PLACE.AUTOMATIONS:
@@ -657,7 +721,7 @@ function placePath(place: LinkPlace): readonly string[] {
 
 /** An agent's path: under the workspace, or under the task a writer still names it under. */
 function agentPath(taskId: string | undefined, agentId: string): readonly string[] {
-  return taskId === undefined ? [STEP.AGENT, agentId] : [STEP.PLAN, taskId, STEP.AGENT, agentId];
+  return taskId === undefined ? [STEP.AGENT, agentId] : [STEP.TASK, taskId, STEP.AGENT, agentId];
 }
 
 /**
@@ -700,9 +764,11 @@ export function readLink(target: string): ReadLink | undefined {
   if (workspace.length > LINK_BOUNDS.MAX_STEP_CHARS) return undefined;
   if (!after.every((step): step is string => step !== undefined && step !== "")) return undefined;
   // A task's own link, or a section's, is read by the codec that writes a mention of either.
-  const [step, taskId, ...rest] = after;
-  const taskOwn =
-    step !== undefined && TASK_STEPS.has(step) && taskId !== undefined && rest.length === 0;
+  const [step, written, ...rest] = after;
+  const taskStep = step !== undefined && TASK_STEPS.has(step);
+  const taskId = taskStep && written !== undefined ? taskStepOf(written) : written;
+  const taskOwn = taskStep && taskId !== undefined && rest.length === 0;
+  const placeSteps = taskStep && taskId !== undefined ? [step, taskId, ...rest] : after;
   // Note that a task's link naming one of its comment threads opens the thread; any other query is the address's own, which the place has no use for.
   const thread = url.searchParams.getAll(COMMENT_QUERY);
   const place =
@@ -712,8 +778,35 @@ export function readLink(target: string): ReadLink | undefined {
         )
       : taskOwn
         ? taskLink(taskId, url.hash)
-        : Option.getOrUndefined(readPlace(placeFields(after)));
-  return place === undefined ? undefined : { workspace, place };
+        : Option.getOrUndefined(readPlace(placeFields(placeSteps)));
+  if (place === undefined) return undefined;
+  // Note that the workspace's own address, and its Board's, are a page of ours or a file's but for the workspace's step.
+  if (WORKSPACE_PLACES.has(place.kind) && !workspaceStep(workspace)) return undefined;
+  return { workspace, place };
+}
+
+/** The number a place names its task by in its link's workspace, `42` from `/task/42`, which the service finds the task by; nothing for a place naming its task by its id, or no task. */
+export function taskNumberOf(place: LinkPlace): number | undefined {
+  return "planId" in place && place.planId !== undefined && TASK_NUMBER.test(place.planId)
+    ? Number(place.planId)
+    : undefined;
+}
+
+/** The place with its task named by the id the service found for its number, everything else as it was. */
+export function withTaskId(place: LinkPlace, taskId: string): LinkPlace {
+  return "planId" in place ? { ...place, planId: taskId } : place;
+}
+
+/**
+ * The step a task's links name it by: its number in its workspace, which
+ * reads well and every reader finds by the slug (`taskNumberOf`), or its id
+ * where no number is known, as from a service before tasks had one.
+ */
+export function taskLinkStep(task: {
+  readonly id: string;
+  readonly number?: number | undefined;
+}): string {
+  return task.number === undefined ? task.id : String(task.number);
 }
 
 /** The places of the account's own, which no workspace holds, so their links name none. */
@@ -967,25 +1060,25 @@ export function readLinearIssue(target: string): string | undefined {
   return LINEAR_IDENTIFIER.test(upper) ? upper : undefined;
 }
 
-/** A `luke://` address read: its host, its path's steps still percent-encoded, and its fragment and query as written. */
-export interface LegacyLink {
+/** A `mention://` or `luke://` address read: its host, its path's steps still percent-encoded, and its fragment and query as written. */
+export interface SchemeLink {
   readonly host: string;
   readonly steps: readonly string[];
   readonly hash: string;
   readonly search: string;
 }
 
-/** The parts of an address in the form written before our links were settled; nothing for any other address. */
-export function readLegacyLink(target: string): LegacyLink | undefined {
+/** The parts of an address in the app's own form, `mention://` or the `luke://` written before it; nothing for any other address. */
+export function readSchemeLink(target: string): SchemeLink | undefined {
   const url = parsedUrl(target);
-  if (url?.protocol !== LEGACY_PROTOCOL) return undefined;
+  if (url === undefined || !SCHEME_PROTOCOLS.has(url.protocol)) return undefined;
   const steps = url.pathname.replace(/^\//u, "").split("/");
   return { host: url.host, steps, hash: url.hash, search: url.search };
 }
 
-/** An address in the app's own form, `luke://<host>/<path>`, its path already spelled as its host reads it. */
-export function legacyLinkOf(host: LegacyLinkHost, path: string): string {
-  return `${LEGACY_PROTOCOL}//${host}/${path}`;
+/** An address in the app's own form, `mention://<host>/<path>`, its path already spelled as its host reads it. */
+export function schemeLinkOf(host: SchemeLinkHost, path: string): string {
+  return `${MENTION_PROTOCOL}//${host}/${path}`;
 }
 
 /** Words as a markdown link's label holds them: each control character, a line break among them, a space, and each bracket and backslash escaped. */

@@ -1,4 +1,4 @@
-import { formatCount } from "@luke/features/number-format";
+import { formatCount } from "@repo/features/number-format";
 import { Fragment, type ReactNode } from "react";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 
@@ -12,7 +12,10 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
  * hears, so a state is never colour and shape alone. A diff's line counts
  * always carry colour, its additions in the complete tone and its deletions
  * in the danger tone, chosen or not and in every look, so they are built
- * one way (`linesCount`) and no caller can draw them grey.
+ * one way (`linesCount`) and no caller can draw them grey. A part that
+ * `folds` is words a bar leaves unseen once it folds its options to their
+ * glyphs, on every option glyphed, the chosen one too, so the counts read
+ * alike: "viewed" after "1/4", still read aloud.
  */
 
 /** A part's glyph and the words that say it, required beside one. */
@@ -24,6 +27,8 @@ type CountGlyph =
 export type CountPart = {
   readonly text: string;
   readonly tone?: StatusTone | undefined;
+  /** Whether a bar folding its options to their glyphs leaves it unseen, still read aloud. */
+  readonly folds?: boolean | undefined;
 } & Readonly<CountGlyph>;
 
 /**
@@ -32,13 +37,17 @@ export type CountPart = {
  * glyph stands at the caption's size.
  */
 const PART =
-  "luke-count-part inline-flex items-center gap-0.5 [&:not([data-tone=neutral])]:text-tone-ink";
-const GLYPH = "luke-count-glyph inline-flex [&>svg]:size-caption-glyph";
+  "ui-count-part inline-flex items-center gap-0.5 [&:not([data-tone=neutral])]:text-tone-ink";
+const GLYPH = "ui-count-glyph inline-flex [&>svg]:size-caption-glyph";
 
 /** One part, its glyph named for a reader who cannot see it. */
 function CountPartView({ part }: { part: CountPart }): React.JSX.Element {
   return (
-    <span className={PART} data-tone={part.tone ?? STATUS_TONE.NEUTRAL}>
+    <span
+      className={PART}
+      data-tone={part.tone ?? STATUS_TONE.NEUTRAL}
+      data-folds={part.folds === true ? "" : undefined}
+    >
       {part.glyph === undefined ? null : (
         <span className={GLYPH} role="img" aria-label={part.glyphLabel}>
           {part.glyph}

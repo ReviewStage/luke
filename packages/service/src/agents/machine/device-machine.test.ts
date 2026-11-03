@@ -1,5 +1,5 @@
 /**
- * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, over the sync hub, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
+ * device-machine.test.ts -- a local agent's machine over a real dialect: its launch laid out under the agents folder its Mac registered, its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, over the sync hub, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
  *
  * Synthetic accounts, agents, Macs, bearers, and keys throughout.
  */
@@ -7,12 +7,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
+import { RUNNER_LOST_DETAIL } from "@repo/database/models/abandoned-turns";
 import {
   hasRepository,
   latestTurnsOfReached,
   recordAgentRunnerToken,
-} from "@luke/database/models/agent-store";
+} from "@repo/database/models/agent-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
@@ -23,14 +24,14 @@ import {
   settleDeviceAgentLine,
   withdrawDeviceAgentRequest,
   withdrawExpiredDeviceAgentRows,
-} from "@luke/database/models/device-agent-store";
-import { beatDevice } from "@luke/database/models/device-store";
-import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { agentTable } from "@luke/database/schemas/agent";
-import { deviceAgentLine } from "@luke/database/schemas/device-agent";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { DEVICE_LAYOUT, expectTopicsFire, getTestDB } from "@luke/database/testing";
+} from "@repo/database/models/device-agent-store";
+import { beatDevice, registerDevice } from "@repo/database/models/device-store";
+import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
+import { deviceAgentLine } from "@repo/database/schemas/device-agent";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { DEVICE_LAYOUT, expectTopicsFire, getTestDB } from "@repo/database/testing";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
@@ -38,9 +39,9 @@ import {
   type DeviceLaunchRefusal,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
-} from "@luke/features/device-agent-wire";
-import { TURN_FAILURE } from "@luke/features/turn-run";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/features/device-agent-wire";
+import { TURN_FAILURE } from "@repo/features/turn-run";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
@@ -55,7 +56,12 @@ import {
 import { openLocalAgent } from "../../testing/local-agent.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { wokenOnHub } from "../../testing/sync-woken.js";
-import { checkOutAgentRepository, deepenAgentCheckout } from "../coder-host/checkout.js";
+import {
+  agentDeepenPlan,
+  agentRepositoryRead,
+  cloneAgentRepository,
+  deepenCheckoutWith,
+} from "../coder-host/checkout.js";
 import { ranDirectlyFolderOf } from "../coder-host/status.js";
 import {
   claimedDeviceAgentLine,
@@ -71,7 +77,7 @@ const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 const BEARER = "fixture-runner-bearer-0123456789";
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
 const FIRST_LINES = '{"harness":"claude_code"}\n{"type":"message"}\n';
-const ENV = { CLAUDE_CODE_OAUTH_TOKEN: PLAN_TOKEN, LUKE_RUNNER_BEARER: BEARER };
+const ENV = { CLAUDE_CODE_OAUTH_TOKEN: PLAN_TOKEN, APP_RUNNER_BEARER: BEARER };
 
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
@@ -80,7 +86,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
 };
@@ -151,6 +156,33 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
 
+    it.effect(
+      "a launch on a Mac that registered its own agents folder is laid out under that folder, whatever this build's root",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgent();
+          // The Mac registers again, as a host whose release moved its agents' root would.
+          yield* registerDevice(opened.userId, {
+            id: opened.deviceId,
+            name: "Studio",
+            ...DEVICE_LAYOUT,
+            agentsFolder: "/Users/fixture/.elsewhere/agents",
+          });
+          const { handle } = yield* launched(opened);
+          const db = yield* Database;
+          const [row] = yield* db
+            .select({ payload: deviceAgentLine.payload })
+            .from(deviceAgentLine)
+            .where(eq(deviceAgentLine.id, handle.command));
+          const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(row?.payload);
+
+          assert.equal(
+            payload.checkoutPath,
+            `/Users/fixture/.elsewhere/agents/${opened.agent.id}/repository`,
+          );
+        }),
+    );
+
     it.effect("a launch's secrets are sealed in its line and handed over open once", () =>
       Effect.gen(function* () {
         const opened = yield* openLocalAgent();
@@ -199,15 +231,15 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             .from(deviceAgentLine)
             .where(eq(deviceAgentLine.id, handle.command));
           const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(row?.payload);
-          // The same agent's checkout in a cloud sandbox, deepened as its first write deepens it.
+          // The same agent's checkout in a cloud sandbox, deepened as its launch deepens it.
           const { agent } = opened;
           assert.ok(hasRepository(agent));
           const target = { userId: opened.userId, conversationId: agent.conversationId };
           const sandbox = sandboxDouble(() => undefined);
-          yield* Effect.andThen(
-            checkOutAgentRepository(target, agent, sandbox),
-            deepenAgentCheckout(target, agent, sandbox),
-          ).pipe(Effect.provide(github.layer));
+          yield* Effect.gen(function* () {
+            yield* cloneAgentRepository(agent, sandbox, yield* agentRepositoryRead(target, agent));
+            yield* deepenCheckoutWith(sandbox, yield* agentDeepenPlan(target, agent));
+          }).pipe(Effect.provide(github.layer));
 
           // A member with no GitHub sign-in writes as the App's bot, at the noreply address GitHub links to it.
           const bot = {
@@ -388,19 +420,19 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
 
-    /** A local agent's launch claimed with a turn queued, then settled unstarted by its device with the refusal given: the agent, and its turn as the store reads it after. */
-    const refusedTurn = (refusal: DeviceLaunchRefusal) =>
+    /**
+     * A local agent's launch claimed, then settled unstarted by its device,
+     * with the refusal given where one is: the agent, and its turn as the
+     * store reads it after. No turn is queued first, because a native turn is
+     * queued by its harness's first event, which a runner that never started
+     * never posts.
+     */
+    const unstartedTurn = (refusal?: DeviceLaunchRefusal) =>
       Effect.gen(function* () {
         const opened = yield* openLocalAgent();
         const { userId, deviceId, agent } = opened;
         const launch = yield* launched(opened);
         yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
-        const writer = yield* storeWriter({ tools: {} });
-        const turnId = randomUUID();
-        yield* writer.enqueueTurn(
-          { userId, conversationId: agent.conversationId },
-          { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
-        );
         yield* settledDeviceAgentLine(userId, deviceId, launch.handle.command, 1, refusal);
         const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
           agent.conversationId,
@@ -409,10 +441,22 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       });
 
     it.effect(
+      "a launch its Mac settled unstarted with no refusal fails the agent's turn as a lost runner's, though its runner never opened one",
+      () =>
+        Effect.gen(function* () {
+          const { turn } = yield* unstartedTurn();
+
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(turn?.failure, TURN_FAILURE.MODEL);
+          assert.equal(turn?.failureDetail, RUNNER_LOST_DETAIL);
+        }),
+    );
+
+    it.effect(
       "a launch its Mac settled unstarted because the agent ran directly on it settles the turn as a session that ended, naming the folder its work is still in",
       () =>
         Effect.gen(function* () {
-          const { agent, turn } = yield* refusedTurn(DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
+          const { agent, turn } = yield* unstartedTurn(DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
 
           assert.equal(turn?.status, TURN_STATUS.FAILED);
           assert.equal(turn?.failure, TURN_FAILURE.SESSION_ENDED);
@@ -538,6 +582,31 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
               (standing) => standing.settled,
             ),
             Option.some(false),
+          );
+        }),
+    );
+
+    it.effect(
+      "a Mac quiet past its lease before its runner opened a turn fails the turn its message waits on, naming the Mac",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgent();
+          const { userId, deviceId, agent } = opened;
+          const launch = yield* launched(opened);
+          // The Mac took the launch and went quiet while preparing it, before its runner posted anything.
+          yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
+          const writer = yield* storeWriter({ tools: {} });
+          yield* TestClock.adjust("6 minutes");
+
+          yield* sweepDeviceLeases(writer, { now: yield* Clock.currentTimeMillis });
+
+          const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
+            agent.conversationId,
+          );
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(
+            turn?.failureDetail,
+            "Studio went away during this turn. Send a message to carry on once it's back.",
           );
         }),
     );

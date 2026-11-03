@@ -2,11 +2,11 @@ import {
   type SidebarRows,
   sidebarLiveRowsSchema,
   sidebarRowsOfLive,
-} from "@luke/features/sidebar-live";
+} from "@repo/features/sidebar-live";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import {
   type WorkspaceInvitationsLiveAnswer,
   type WorkspaceMembersLiveAnswer,
@@ -17,8 +17,8 @@ import {
   workspaceMembersOfLiveRows,
   workspacesLiveRowsSchema,
   workspacesOfLiveRows,
-} from "@luke/features/workspace-live";
-import type { Workspace } from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-live";
+import type { Workspace } from "@repo/features/workspace-wire";
 import { Effect, Option, Schema, Stream } from "effect";
 import {
   decodedLiveRows,

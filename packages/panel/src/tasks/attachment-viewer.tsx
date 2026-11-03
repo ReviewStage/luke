@@ -5,9 +5,9 @@ import {
   chipBase64,
   type FileChip,
   sizeLabel,
-} from "@luke/features/attachment-model";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
+} from "@repo/features/attachment-model";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { SHORTCUT_KEY, type ShortcutChord } from "@repo/settings/shortcuts";
 import {
   Button,
   ButtonLink,
@@ -34,8 +34,8 @@ import {
   VIDEO_PLAYER_PLACE,
   VideoPlayer,
   ZoomImage,
-} from "@luke/ui";
-import { DIAGRAM_DRAWING } from "@luke/ui/diagram-contract";
+} from "@repo/ui";
+import { DIAGRAM_DRAWING } from "@repo/ui/diagram-contract";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -70,12 +70,12 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). Its card
+ * moved by a drag or a two-finger scroll (`@repo/ui`'s ZoomImage). Its card
  * fills the room whatever the picture's shape, as Slack's and Quick Look's
  * frames do, so the header stands still while the picture is zoomed. A video,
  * such as one an agent recorded and opened from its Expand,
  * plays at once as large as the card lets it, with the player's own
- * controls, Full screen among them (`@luke/ui`'s VideoPlayer). A Mermaid
+ * controls, Full screen among them (`@repo/ui`'s VideoPlayer). A Mermaid
  * file (`.mmd`, `.mermaid`) is drawn as its diagram, through the diagram
  * bundle a plan's fences draw through (`../diagram-drawing.ts`), and then
  * shown, zoomed, and copied as a picture is; while it is drawn, or where
@@ -88,7 +88,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * note the place opening it gives the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
- * `@luke/ui`'s dialog drawn bare over the dimmed window, its top clear of the
+ * `@repo/ui`'s dialog drawn bare over the dimmed window, its top clear of the
  * traffic lights, and the viewer's own card (`DialogCard`) filling the room
  * the arrows and the strip leave it, the file fitted inside it edge to edge: a picture or a
  * video up to twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
@@ -105,7 +105,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * end holding every other button of the header, the arrow keys still
  * walking the files. On a touch screen a finger swiping sideways across the
  * viewer walks the files too, the file shown following it until it is let
- * go (`@luke/ui`'s `usePageSwipe`), unless the picture is zoomed, where the
+ * go (`@repo/ui`'s `usePageSwipe`), unless the picture is zoomed, where the
  * finger moves the picture instead.
  *
  * Note that a PDF is shown by its icon rather than drawn, because the
@@ -120,7 +120,7 @@ const SIZE_CLASS = "attachment-viewer-size flex-none text-caption text-muted-for
 
 /** What the place opening the viewer says of the file, a plan's picture saying who last edited it, in the size's quiet ink, cut past the ring a press in it draws. */
 const NOTE_CLASS =
-  "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-caption text-muted-foreground";
+  "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)] text-caption text-muted-foreground";
 
 /** What the strip of the message's files is named. */
 const STRIP_LABEL = "Files";
@@ -141,7 +141,7 @@ const COPY_WHAT = {
   IMAGE: "image",
 } as const;
 
-/** The bare keys a picture's zoom buttons name in their hints, which `@luke/ui`'s `useImageZoom` answers. */
+/** The bare keys a picture's zoom buttons name in their hints, which `@repo/ui`'s `useImageZoom` answers. */
 const ZOOM_CHORD = {
   IN: { key: SHORTCUT_KEY.EQUALS, plain: true },
   OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
@@ -200,7 +200,7 @@ function download(file: FileChip): void {
   link.click();
 }
 
-/** Copy for a text file's words, `@luke/ui`'s one Copy. */
+/** Copy for a text file's words, `@repo/ui`'s one Copy. */
 function CopyTextButton({ text }: { text: string }): React.JSX.Element {
   return <CopyButton text={text} what={COPY_WHAT.TEXT} copy={copyThroughShell} />;
 }
@@ -253,7 +253,7 @@ function WalkButton({
   icon: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="attachment-viewer-walk flex flex-none rounded-control bg-button-ground shadow-floating-edge [--luke-button-ground:var(--luke-color-well)]">
+    <span className="attachment-viewer-walk flex flex-none rounded-control bg-button-ground shadow-floating-edge [--ui-button-ground:var(--ui-color-well)]">
       <Tooltip label={label} chord={chord}>
         <IconButton icon={icon} label={label} onClick={onClick} />
       </Tooltip>
@@ -383,7 +383,7 @@ function AttachmentBody({
   const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
   if (image || diagram.picture !== undefined) {
     return (
-      // Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page.
+      // Two fingers anywhere on the frame pinch the picture (`@repo/ui`'s ZoomImage), never the page.
       <div
         ref={zoom.frameRef}
         className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"
@@ -441,7 +441,7 @@ function AttachmentBody({
       {...DIALOG_VEIL}
     >
       <FileTypeIcon name={file.name} className="size-12" />
-      <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-luke-semibold wrap-anywhere">
+      <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-ui-semibold wrap-anywhere">
         {file.name}
       </p>
       <p className="mx-0 mt-0 mb-block-gap text-caption text-muted-foreground">
@@ -559,7 +559,7 @@ export function AttachmentViewer({
     >
       <div
         ref={viewer}
-        className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-luke-16"
+        className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-ui-16"
         data-view={view}
         data-opening={opening}
         data-hug={hug}
@@ -567,7 +567,7 @@ export function AttachmentViewer({
       >
         {/* The arrows stand on the dimmed window either side of the card, centred down it; a press on the room round them closes the viewer as one on the dimmed window does. */}
         <div
-          className="attachment-viewer-stage flex min-h-0 flex-auto items-center gap-luke-16"
+          className="attachment-viewer-stage flex min-h-0 flex-auto items-center gap-ui-16"
           {...DIALOG_VEIL}
         >
           {walking ? (
@@ -600,14 +600,14 @@ export function AttachmentViewer({
                         as={TEXT_ELEMENT.H2}
                         variant={TEXT_VARIANT.TOOLBAR_TITLE}
                         id={titleId}
-                        className={`luke-toolbar-title max-w-full ${TITLE_CLASS}`}
+                        className={`ui-toolbar-title max-w-full ${TITLE_CLASS}`}
                       >
                         <OneLine>{file.name}</OneLine>
                       </Text>
                       <span className="flex min-w-0 max-w-full">
                         <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
                         {note === undefined || note === null ? null : (
-                          <span className={`my-0 mr-0 ml-luke-8 ${NOTE_CLASS}`}>{note}</span>
+                          <span className={`my-0 mr-0 ml-ui-8 ${NOTE_CLASS}`}>{note}</span>
                         )}
                       </span>
                     </span>
@@ -635,7 +635,7 @@ export function AttachmentViewer({
                   }
                 />
               ) : (
-                <header className="flex flex-none items-center gap-tight-gap border-b border-border py-luke-4 pr-item-gap pl-list-inset">
+                <header className="flex flex-none items-center gap-tight-gap border-b border-border py-ui-4 pr-item-gap pl-list-inset">
                   <FileTypeIcon
                     name={file.name}
                     className="mr-tight-gap size-control-icon flex-none"

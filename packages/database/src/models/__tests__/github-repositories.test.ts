@@ -5,12 +5,13 @@ import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { githubRepositoryRead } from "../../schemas/github-repository-read.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace } from "../../testing/index.js";
 import { createAgent, readAgent } from "../agent-store.js";
 import { createAutomation, readAutomation } from "../automation-store.js";
@@ -38,7 +39,7 @@ import {
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -92,6 +93,7 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: relay,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const automation = Option.getOrThrow(

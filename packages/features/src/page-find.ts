@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { PAGE_LINK_SCRIPT } from "./page-link.js";
+import { PAGE_PICK_SCRIPT } from "./page-pick.js";
 
 /**
  * page-find.ts -- ⌘F in a plan's page as drawn: the find the page's frame runs over its own words, and the messages the side panel and the frame pass to drive it.
@@ -26,7 +27,7 @@ import { PAGE_LINK_SCRIPT } from "./page-link.js";
  */
 
 /** The mark every message of the find wears, setting it apart from whatever else the page posts. */
-export const PAGE_FIND_TYPE = "luke-page-find";
+export const PAGE_FIND_TYPE = "app-page-find";
 
 /** What the panel asks of the frame. */
 export const PAGE_FIND_ACT = {
@@ -99,8 +100,8 @@ const PAGE_FIND_SCRIPT = `(() => {
   "use strict";
   const TYPE = ${JSON.stringify(PAGE_FIND_TYPE)};
   const MAX_SELECTION = ${PAGE_FIND_SELECTION_CHARS};
-  const MATCH = "luke-find-match";
-  const CURRENT = "luke-find-current";
+  const MATCH = "ui-find-match";
+  const CURRENT = "ui-find-current";
   const INLINE = new Set(["A", "ABBR", "B", "BDI", "BDO", "CITE", "CODE", "DEL", "DFN", "EM", "I", "INS", "KBD", "LABEL", "MARK", "Q", "S", "SAMP", "SMALL", "SPAN", "STRONG", "SUB", "SUP", "TIME", "U", "VAR"]);
   const UNREAD = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "TEXTAREA", "SELECT", "OPTION"]);
   const painted = typeof CSS !== "undefined" && CSS.highlights !== undefined && typeof Highlight === "function";
@@ -286,14 +287,15 @@ function doctypeEnd(html: string): number {
 }
 
 /**
- * The page as served: our scripts, the find's and the link's
- * (`@luke/features/page-link`), ahead of the agent's HTML, after its
+ * The page as served: our scripts, the find's, the link's
+ * (`@repo/features/page-link`), and a comment's pick
+ * (`@repo/features/page-pick`), ahead of the agent's HTML, after its
  * doctype, so markup the page leaves open (a `<textarea>` or a comment
  * never closed) cannot swallow them, and a page keeps the standards mode
  * its doctype asks for.
  */
 export function withPageScripts(html: string): string {
   const end = doctypeEnd(html);
-  const scripts = `<script>${PAGE_FIND_SCRIPT}</script><script>${PAGE_LINK_SCRIPT}</script>`;
+  const scripts = `<script>${PAGE_FIND_SCRIPT}</script><script>${PAGE_LINK_SCRIPT}</script><script>${PAGE_PICK_SCRIPT}</script>`;
   return `${html.slice(0, end)}${scripts}${html.slice(end)}`;
 }

@@ -33,7 +33,7 @@ repeated UI shape must live in `packages/ui` whatever app mounts it, even one
 app alone, with no exceptions, and a duplicate is folded into one; an app or
 `packages/panel` must compose those components and never hand-builds a control
 (a raw `<button>`, input, tab, or card with its own press handling) outside
-`@luke/ui`: the design system is one rigid set that every agent must use. A hook or DOM-free view
+`@repo/ui`: the design system is one rigid set that every agent must use. A hook or DOM-free view
 model lives in `packages/ui` when more than one app can mount it, the panel every client mounts, the desktop's panel window and the
 web's tab alike, in `packages/panel`, the hosted service's logic in
 `packages/service`, its contract and clients in `packages/features`, and a
@@ -59,7 +59,7 @@ container that takes no focus, and a spread from a ui helper
 (`menu.contextMenu()`) stay allowed. There is no escape hatch: `pnpm lint` runs
 `tools/anti-slop/press-guard-check.ts`, which fails on a disable comment that
 would silence the rule and on an `.oxlintrc.json` that weakens it. Where it
-fires, use a `@luke/ui` component, or add the component or variant there.
+fires, use a `@repo/ui` component, or add the component or variant there.
 
 A loading skeleton draws through the components its loaded state draws with,
 never a copy of their boxes, and takes its counts, order, and sizes from the
@@ -88,7 +88,10 @@ component, factored out of the surface where it builds the box by hand.
   webhook body an automation's caller sends, or an
   integration trigger's event (a Sentry issue or alert as Vespin's Sentry
   integration delivers it), may reach that run's agent task, transcript and
-  traces. And an automation webhook secret may be shown once, in the window that
+  traces. And a Slack message a member addresses to Vespin's Slack bot (an
+  @Vespin mention or a DM), with the earlier messages of the Slack thread it
+  stands in, may reach the agent it starts or is sent to: that agent's task,
+  transcript and traces. And an automation webhook secret may be shown once, in the window that
   minted it, at creation or rotation; never anywhere else. And an agent's cloud
   browser, a
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
@@ -128,12 +131,12 @@ component, factored out of the surface where it builds the box by hand.
   it (`packages/service/src/tasks/picture-look.ts`), so no model is handed it,
   the plan's player is left out of session replay, and none of it goes into a
   trace, a counted event, or a fixture. And Sentry's SDKs run
-  with their default data collection, but that the service's and the eve roots'
-  leave out model inputs and outputs and request bodies
-  (`packages/service/src/observability/sentry.ts`, the eve roots'
-  `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web app's
+  with their default data collection, but that the service's
+  leaves out model inputs and outputs and request bodies
+  (`packages/service/src/observability/sentry.ts`, the desktop's
+  `Sentry.init`, and the web app's
   browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop renderer's
-  token filters, `@luke/features/sentry-breadcrumbs`), so what a request, a log
+  token filters, `@repo/features/sentry-breadcrumbs`), so what a request, a log
   line, a local variable, or an error's words carries may still reach Sentry
   from the desktop and the browser, and a log line, a local variable, or an
   error's words from any of them; a credential among it is replaced only where
@@ -218,8 +221,8 @@ pnpm check:affected                      # what changed since origin/main, from 
 - `[review]` These are not behavior, so no test asserts them: private state;
   call, render, or redraw counts; that a double was called; constants, token
   tables, getters, types, and re-exports; a Schema round-trip of a valid
-  value; class names, stylesheet declarations, `var(--luke-*)` values,
-  computed styles, and markup shape. Appearance is held by `@luke/ui`, its
+  value; class names, stylesheet declarations, `var(--ui-*)` values,
+  computed styles, and markup shape. Appearance is held by `@repo/ui`, its
   lint rules, and the catalog.
 - `[review]` Nothing is exported only so a test can reach it.
 
@@ -227,8 +230,8 @@ pnpm check:affected                      # what changed since origin/main, from 
 
 - `[check: anti-slop/no-node-test]` Tests run on vitest.
 - `[review]` A test owns its world: one process, a temp directory it created
-  (`temporaryDirectory` from `@luke/runtime/testing`), its own database
-  (`getTestDB()` from `@luke/database/testing`), and `TestClock` for time. It
+  (`temporaryDirectory` from `@repo/runtime/testing`), its own database
+  (`getTestDB()` from `@repo/database/testing`), and `TestClock` for time. It
   never touches the network, a live provider, real time, or personal data,
   and passes alone or in any order.
 - `[review]` A test finishes in about a second, and a file in about ten, on
@@ -256,7 +259,7 @@ pnpm check:affected                      # what changed since origin/main, from 
   `.todo`, or `it.flakyTest`, no looser assertion, and no longer timeout or
   extra retry without evidence of what was slow. A flaky test is fixed or
   deleted.
-- `[review]` A golden is rewritten only by `LUKE_UPDATE_FIXTURES=1` through
+- `[review]` A golden is rewritten only by `APP_UPDATE_FIXTURES=1` through
   the shared helpers, never by hand, and the PR explains its diff. A JSON
   Schema golden exists only for a schema a model sees as a tool's input.
 - `[review]` A test that breaks under a refactor because it pinned wiring is
@@ -347,7 +350,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 
 ### Vocabulary
 
-`SchemaRead` (`@luke/wire`) is the boundary result vocabulary a Schema
+`SchemaRead` (`@repo/wire`) is the boundary result vocabulary a Schema
 decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `packages/host/src/acts.ts`,
@@ -415,14 +418,14 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
 - One-line guide comments inside functions. Why comments talk: "Note that
   we X, because Y." Design comments sit above the function. No trivial
   comments.
-- UI draws with `@luke/ui` (`packages/ui/README.md`): its components, page
-  patterns and `--luke-*` tokens; no raw controls where a component exists,
+- UI draws with `@repo/ui` (`packages/ui/README.md`): its components, page
+  patterns and `--ui-*` tokens; no raw controls where a component exists,
   no literal colours or sizes, no `className` on its controls. A missing
-  variant is added to `@luke/ui` as an `as const` option. Third-party engines
-  are the exception. `@luke/ui` is built on shadcn/ui over Base UI: its
+  variant is added to `@repo/ui` as an `as const` option. Third-party engines
+  are the exception. `@repo/ui` is built on shadcn/ui over Base UI: its
   controls vendor shadcn's source
   (`packages/ui/src/shadcn/`) and are written in Tailwind utilities over the
-  one theme in `@luke/ui/tailwind/theme.css`, which no app restates.
+  one theme in `@repo/ui/tailwind/theme.css`, which no app restates.
 
 ## Commits
 

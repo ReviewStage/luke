@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -32,7 +32,7 @@ afterEach(() => {
 
 /** Whether a turning ring stands in `container`. */
 function ringIn(container: HTMLElement): boolean {
-  return container.querySelector(".luke-spinner-ring") !== null;
+  return container.querySelector(".ui-spinner-ring") !== null;
 }
 
 function render(element: ReactElement): HTMLElement {

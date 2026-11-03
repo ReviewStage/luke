@@ -8,8 +8,8 @@ import {
   agentPullRequestWriteAnswerViewSchema,
   repositoryPullRequestActionParamsSchema,
   repositoryPullRequestParamsSchema,
-} from "@luke/features/agent-view";
-import { pullRequestChaptersAnswerViewSchema } from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/agent-view";
+import { pullRequestChaptersAnswerViewSchema } from "@repo/features/pull-request-chapters-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { PULL_REQUEST_ACT_KIND } from "./kinds.js";

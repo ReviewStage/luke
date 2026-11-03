@@ -1,8 +1,8 @@
-import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { launchFailureReported } from "@luke/features/sentry-reporting";
-import { closeEveryMacTerminal, reportToStderr, tolerateClosedStderr } from "@luke/host/node";
-import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
+import { appLinkInArguments, appLinkInbox } from "@repo/features/app-links";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { launchFailureReported } from "@repo/features/sentry-reporting";
+import { reportToStderr, tolerateClosedStderr } from "@repo/host/node";
+import { desktopQuit, QUIT_STAGE } from "@repo/host/quit";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, protocol, shell } from "electron";
 import { menuBarDrawer } from "./app-menu";
@@ -45,7 +45,7 @@ const RUNTIME_CLOSE_WAIT_MS = 15_000;
 
 // A link of ours macOS hands the app (`tryluke://`) is heard from the first
 // moment, since the one that launched the app arrives before it is ready,
-// and held until a window can open it (`@luke/features/app-links`).
+// and held until a window can open it (`@repo/features/app-links`).
 const appLinks = appLinkInbox();
 app.on("open-url", (event, url) => {
   event.preventDefault();
@@ -94,21 +94,14 @@ const quit = desktopQuit();
  * The whole quit: the one scope every service and the host were built in
  * closes, so each gives back what it began in the reverse of the order it
  * began in and the host's drain is the first of those steps — no runtime work
- * of the app's continues after an intentional quit. Every terminal of this Mac
- * the app opened is hung up beside it, with what it started, since neither
- * waits on the other. The close is forked so the
+ * of the app's continues after an intentional quit. The close is forked so the
  * bound above cannot interrupt it: a close that outran its wait is still
  * closing when this process leaves, which is the same answer an unsettled
  * drain leaves behind.
  */
 const closeRuntime = (runtime: { readonly disposeEffect: Effect.Effect<void> }) =>
   Effect.gen(function* () {
-    const closing = yield* Effect.forkDetach(
-      Effect.all([closeEveryMacTerminal, runtime.disposeEffect], {
-        concurrency: "unbounded",
-        discard: true,
-      }),
-    );
+    const closing = yield* Effect.forkDetach(runtime.disposeEffect);
     const closed = yield* Effect.timeoutOption(
       Fiber.join(closing),
       Duration.millis(RUNTIME_CLOSE_WAIT_MS),

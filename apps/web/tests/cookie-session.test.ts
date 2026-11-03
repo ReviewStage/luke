@@ -2,12 +2,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { auth } from "@luke/service/auth/auth";
-import { requestUserId, resolveHostedUserId } from "@luke/service/auth/bearer";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { auth } from "@repo/service/auth/auth";
+import { requestUserId, resolveHostedUserId } from "@repo/service/auth/bearer";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
@@ -15,10 +15,10 @@ import {
   hostedRefusing,
   resolvedAccount,
   type UserIdResolver,
-} from "@luke/service/http/http-effect";
-import { ANY_METHOD } from "@luke/service/route";
-import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
-import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
+} from "@repo/service/http/http-effect";
+import { ANY_METHOD } from "@repo/service/route";
+import { openWorkspacePlugin } from "@repo/service/testing/workspace-plugin";
+import { HTTP_METHOD, type WireBoundaryInput } from "@repo/wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/http";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -56,7 +56,7 @@ import { dispatched } from "./support/platform-landing.js";
  * loads, and each test names it again below for the routes it builds itself.
  */
 const { OWN_ORIGIN } = vi.hoisted(() => {
-  const own = "https://luke.test";
+  const own = "https://app.test";
   vi.stubEnv("VERCEL_ENV", "production");
   vi.stubEnv("BETTER_AUTH_URL", own);
   return { OWN_ORIGIN: own };
@@ -66,7 +66,7 @@ const { OWN_ORIGIN } = vi.hoisted(() => {
  * The web runtime's layer names a database, so building it needs a
  * connection string; this one is never dialled, as in `route-effect.test.ts`.
  */
-const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/app";
 
 const FOREIGN_ORIGIN = "https://evil.example";
 const ACCOUNT_PATH = "/api/account-under-test";
@@ -99,7 +99,7 @@ const openSignedIn = Effect.gen(function* () {
   const plugin = yield* openWorkspacePlugin;
   const userId = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   ).pipe(Effect.provide(plugin.database));
   const resolveUserId: UserIdResolver = (request) =>
     requestUserId(request, () => Effect.succeed(undefined), plugin.resolveSessionUserId);

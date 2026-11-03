@@ -1,10 +1,10 @@
-import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
-import type { PageLine, PagePlace } from "@luke/features/page-wire";
-import type { TaskStatus } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, STATUS_TONE } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import type { AgentChangesPeople, AgentPullRequest } from "@repo/features/agent-wire";
+import type { CatalogModel } from "@repo/features/models-wire";
+import type { PageLine, PagePlace } from "@repo/features/page-wire";
+import type { TaskStatus } from "@repo/features/task-wire";
+import { HoverCard, HoverCardHead, HoverCardNote, STATUS_TONE } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import { AgentCard, type AgentSubject } from "../tasks/agent-ref.js";
 import { AgentTabCard, type CardReading, taskFoot } from "../tasks/agent-tab-card.js";
@@ -90,7 +90,6 @@ export type CardSubject =
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
     }
-  | { readonly kind: typeof TAB_KIND.MAC_TERMINAL }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | {
       readonly kind: typeof TAB_KIND.PAGE;
@@ -190,7 +189,6 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
     case TAB_KIND.INBOX:
       return subject.inbox === undefined ? null : <InboxCard inbox={subject.inbox} />;
     case TAB_KIND.DRAFT:
-    case TAB_KIND.MAC_TERMINAL:
       return null;
     case TAB_KIND.AGENT:
       return (

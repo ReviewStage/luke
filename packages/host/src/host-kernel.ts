@@ -1,6 +1,6 @@
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@luke/gateway";
-import type { WireValue } from "@luke/wire";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@repo/gateway";
+import type { WireValue } from "@repo/wire";
 import { Effect } from "effect";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
@@ -32,7 +32,7 @@ export interface HostKernel {
    *
    * A promise and not an effect: the composer that hands this on hands it to
    * a seam outside this package — the account session manager's consent, a
-   * promise-shaped callback owned by `@luke/credentials` — and what would
+   * promise-shaped callback owned by `@repo/credentials` — and what would
    * end that is a decision about that seam rather than anything this kernel
    * holds.
    */
@@ -46,7 +46,7 @@ export interface HostKernel {
  * — so it stops at the packaging boundary rather than shipping inside a signed
  * binary.
  */
-export const ACCOUNT_BASE_URL_VARIABLE = "LUKE_ACCOUNT_BASE_URL";
+export const ACCOUNT_BASE_URL_VARIABLE = "APP_ACCOUNT_BASE_URL";
 
 const ACCOUNT_BASE_URL = `${LINK_ORIGIN}/api/auth`;
 

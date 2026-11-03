@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
+import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@repo/features/task-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -142,7 +142,7 @@ function editedLines(view: HTMLElement): (string | undefined)[] {
 function shownWords(line: Element | null): string | undefined {
   const copy = line?.cloneNode(true);
   if (!(copy instanceof Element)) return undefined;
-  for (const hidden of copy.querySelectorAll(".luke-visually-hidden, .luke-visually-hidden"))
+  for (const hidden of copy.querySelectorAll(".ui-visually-hidden, .ui-visually-hidden"))
     hidden.remove();
   return lineWords(copy);
 }
@@ -155,13 +155,13 @@ function cardOf(
 ): HTMLElement {
   const anchor = view.querySelector(`${line} ${selector}`) ?? assert.fail("the ref stands");
   restOn(anchor);
-  return document.querySelector<HTMLElement>(".luke-tooltip-card") ?? assert.fail("the card hangs");
+  return document.querySelector<HTMLElement>(".ui-tooltip-card") ?? assert.fail("the card hangs");
 }
 
 test("the saved body is drawn as Markdown", () => {
   const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK }));
 
-  assert.match(markup, /<p class="luke-markdown-heading" data-level="2">Goal<\/p>/u);
+  assert.match(markup, /<p class="ui-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
@@ -262,9 +262,9 @@ test("the time opens the version history, on the plan as it stands or on the sec
 });
 
 test("a section's byline shows only the writer's face and a few letters of time, so it keeps to its heading's end, and its card says the rest", async () => {
-  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, duringCall: false, by: CHARLES };
+  const byApp = { actor: PLAN_ACTOR.NOTETAKER, duringCall: false, by: CHARLES };
   const lastYear = new Date(new Date().getFullYear() - 1, 9, 1).getTime();
-  const old = await draw(editedAs(byLuke, lastYear));
+  const old = await draw(editedAs(byApp, lastYear));
   assert.equal(
     shownWords(old.querySelector(".plan-unit-byline")),
     " Oct 1",
@@ -272,7 +272,7 @@ test("a section's byline shows only the writer's face and a few letters of time,
   );
   act(() => root?.unmount());
 
-  const view = await draw(editedAs(byLuke), { readerId: DEAN.userId });
+  const view = await draw(editedAs(byApp), { readerId: DEAN.userId });
   const byline = view.querySelector(".plan-unit-byline");
   assert.equal(shownWords(byline), " now");
   assert.equal(byline?.querySelectorAll(".actor-mark").length, 1);
@@ -302,18 +302,18 @@ test("a teammate's card says who they are and what they last changed in the plan
 
 test("Vespin's card says when it wrote, and what it wrote", async () => {
   const at = Date.now();
-  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: false };
+  const byApp = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: false };
   const task: Task = {
     ...TASK,
-    lastEdit: byLuke,
+    lastEdit: byApp,
     sectionEdits: [
-      { section: "Goal", ...byLuke },
-      { section: "Risks", ...byLuke },
+      { section: "Goal", ...byApp },
+      { section: "Risks", ...byApp },
     ],
   };
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
-  assert.ok(card.querySelector('[data-actor-card="luke"]'), "Vespin's card hangs");
+  assert.ok(card.querySelector('[data-actor-card="app"]'), "Vespin's card hangs");
   assert.match(card.textContent ?? "", /^VespinnowEdited Goal and Risks$/u);
 });
 
@@ -335,7 +335,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
   assert.equal(editedLines(view)[1], "Fix auth flow now");
   assert.equal(ref?.tagName, "BUTTON");
   assert.ok(view.querySelector('.plan-unit-byline .actor-mark[data-kind="agent"] .state-glyph'));
-  assert.equal(cardOf(view).querySelector(".luke-hover-card-name")?.textContent, "Fix auth flow");
+  assert.equal(cardOf(view).querySelector(".ui-hover-card-name")?.textContent, "Fix auth flow");
   act(() => ref?.click());
   assert.deepEqual(opened, [AGENT.id]);
 
@@ -369,9 +369,9 @@ test("the sections changed since the last look are counted beside a face for eac
     [...line.querySelectorAll(".actor-stack .actor-mark")].map((mark) =>
       mark.getAttribute("data-kind"),
     ),
-    ["person", "luke"],
+    ["person", "app"],
   );
-  assert.equal(line.querySelector(".luke-visually-hidden")?.textContent, "Charles Pan, Vespin");
+  assert.equal(line.querySelector(".ui-visually-hidden")?.textContent, "Charles Pan, Vespin");
   act(() => line.querySelector("button")?.click());
   assert.equal(dismissed, 1);
 });
@@ -387,12 +387,12 @@ test("a plan read and not edited names itself by one h1, its title, with its Cop
   });
 
   const headings = view.querySelectorAll("h1");
-  const more = view.querySelector('.luke-page-header-actions [aria-label="Copy link"]');
+  const more = view.querySelector('.ui-page-header-actions [aria-label="Copy link"]');
 
   assert.equal(headings.length, 1, "the plan page names itself once");
   assert.equal(headings[0]?.textContent, TASK.name);
   assert.ok(
-    more?.closest(".luke-page-header-actions"),
+    more?.closest(".ui-page-header-actions"),
     "the title carries its Copy link button in the header's acts",
   );
   assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);

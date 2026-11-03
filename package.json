@@ -5,9 +5,9 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ReviewStage/luke"
+    "url": "https://github.com/ReviewStage/vespin"
   },
-  "description": "Vespin is a macOS app for planning a feature by voice before you hand it to a coding agent",
+  "description": "Vespin is an inbox for all your coding agents.",
   "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=24.0.0"
@@ -16,21 +16,21 @@
     "build": "pnpm --recursive --if-present run build",
     "check": "node scripts/check.mjs",
     "check:affected": "./scripts/check.sh --affected",
-    "db:generate": "pnpm --filter @luke/database db:generate",
+    "db:generate": "pnpm --filter @repo/database db:generate",
     "discarded-effect": "node --max-old-space-size=4096 scripts/discarded-effect.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",
     "lint": "biome lint . && pnpm oxlint && node tools/anti-slop/press-guard-check.ts && node tools/anti-slop/style-guard.ts",
     "lint:fix": "biome check --write .",
     "oxlint": "./scripts/oxlint.sh",
-    "package": "pnpm --filter @luke/desktop package",
-    "package:dir": "pnpm --filter @luke/desktop package:dir",
+    "package": "pnpm --filter @repo/desktop package",
+    "package:dir": "pnpm --filter @repo/desktop package:dir",
     "prepare": "husky",
-    "probe:claude-code": "pnpm --filter @luke/claude-code-probe probe",
+    "probe:claude-code": "pnpm --filter @repo/claude-code-probe probe",
     "probe:codex": "tsx tools/codex-probe/src/cli.ts",
     "probe:codex:sign-in": "tsx tools/codex-probe/src/cli.ts sign-in",
     "release:macos": "./scripts/release-macos.sh",
-    "start": "pnpm --filter @luke/desktop start",
+    "start": "pnpm --filter @repo/desktop start",
     "test": "node scripts/turbo.mjs run test:vitest --concurrency=1",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },

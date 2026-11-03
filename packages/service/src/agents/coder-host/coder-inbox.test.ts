@@ -2,16 +2,17 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { archiveChannel, createChannel } from "@luke/database/models/channel-store";
-import { createTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS, AGENT_KIND } from "@luke/features/agent-wire";
-import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
+import { archiveChannel, createChannel } from "@repo/database/models/channel-store";
+import { createTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { GENERAL_CHANNEL } from "@repo/database/schemas/channel";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -23,10 +24,10 @@ import {
   INBOX_REPLY,
   INBOX_STATUS,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { paddedTo, webmBytes } from "@luke/wire/testing";
+} from "@repo/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { paddedTo, webmBytes } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -75,19 +76,14 @@ const firstPage = (userId: string, channelId: string) =>
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
-/** An agent the account starts on the task, in its repository: a coder unless it says otherwise, started by the agent it names or by none. */
-const agentOn = (
-  userId: string,
-  task: { readonly id: string; readonly workspaceId: string },
-  as: { readonly kind?: typeof AGENT_KIND.PILOT; readonly startedByAgentId?: string } = {},
-) =>
+/** An agent the account starts on the task, in its repository. */
+const agentOn = (userId: string, task: { readonly id: string; readonly workspaceId: string }) =>
   Effect.gen(function* () {
     const started = yield* createAgent(userId, {
-      ...as,
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -95,6 +91,7 @@ const agentOn = (
       repository: "acme/relay",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const agent = {
@@ -192,13 +189,9 @@ const onlyItem = (agent: Pick<InboxAgent, "userId"> & { readonly taskId: string 
     return item;
   });
 
-/** The mention an agent writes a thread of its own as, under the agent whichever task it works on, its link spelled out as the window reads one. */
-function mentionOf(
-  agent: { readonly workspaceId: string; readonly agentId: string },
-  title: string,
-  itemId: string,
-): string {
-  return `[@${title}](https://vespin.dev/workspace-${agent.workspaceId}/agent/${agent.agentId}/inbox/${itemId})`;
+/** The mention an agent writes a thread of its own as, by its id alone under its workspace, its link spelled out as the window reads one. */
+function mentionOf(agent: { readonly workspaceId: string }, title: string, itemId: string): string {
+  return `[@${title}](https://vespin.dev/workspace-${agent.workspaceId}/inbox/${itemId})`;
 }
 
 /** The message whose ask the thread holds open. */
@@ -231,7 +224,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
               title: QUEUE.title,
               mention: mentionOf(agent, QUEUE.title, first.id),
               status: INBOX_STATUS.OPEN,
-              waits: true,
               thread: [
                 {
                   from: "you",
@@ -366,26 +358,25 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "a decide and an answer are always heard back, even where the post says not to wait, and a do only where it says so",
+    "every ask is heard back, a do as a decide and an answer, and an older post's waits is taken and changes nothing",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const cases = [
-          ["decide", QUEUE.ask, undefined, true],
-          ["decide-quiet", QUEUE.ask, false, true],
-          ["answer", { type: INBOX_ASK.ANSWER }, undefined, true],
-          ["answer-quiet", { type: INBOX_ASK.ANSWER }, false, true],
-          ["do", SETTINGS.ask, undefined, false],
-          ["do-waits", SETTINGS.ask, true, true],
+          ["decide", QUEUE.ask, undefined],
+          ["answer", { type: INBOX_ASK.ANSWER }, undefined],
+          ["do", SETTINGS.ask, undefined],
+          ["do-quiet", SETTINGS.ask, false],
         ] as const;
         for (const [key, ask, waits] of cases) {
           const value = { key, title: key, body: "Words.", ask };
-          yield* post(agent, waits === undefined ? value : { ...value, waits });
+          const posted = yield* post(agent, waits === undefined ? value : { ...value, waits });
+          assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, key);
         }
         const items = yield* taskInboxItems(agent.userId, agent.taskId);
         assert.deepEqual(
           cases.map(([key]) => [key, items.find((item) => item.key === key)?.needsReply]),
-          cases.map(([key, , , waits]) => [key, waits]),
+          cases.map(([key]) => [key, true]),
         );
       }),
   );
@@ -950,24 +941,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         const refused = yield* post(agent, { key: SETTINGS.key, body: "Still here." });
 
         assert.equal(refusalOf(refused), INBOX_REFUSAL.NO_AGENT);
-      }),
-  );
-
-  it.effect(
-    "an agent a pilot started is refused post_thread and posts nothing, while one a coder started posts",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const pilot = yield* agentOn(userId, task, { kind: AGENT_KIND.PILOT });
-        const underPilot = yield* agentOn(userId, task, { startedByAgentId: pilot.agentId });
-        const underCoder = yield* agentOn(userId, task, { startedByAgentId: underPilot.agentId });
-
-        assert.equal(refusalOf(yield* post(underPilot, QUEUE)), INBOX_REFUSAL.UNDER_PILOT);
-        const posted = yield* post(underCoder, QUEUE);
-
-        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
-        assert.equal((yield* onlyItem(underCoder)).key, QUEUE.key);
       }),
   );
 

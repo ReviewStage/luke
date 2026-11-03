@@ -1,5 +1,5 @@
-import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -33,6 +33,12 @@ import {
   readServiceAnswer,
 } from "./service-wire.js";
 import {
+  WORKSPACE_SLACK_BOT_QUERY,
+  type WorkspaceSlackBot,
+  workspaceSlackBotNotificationsRequestSchema,
+  workspaceSlackBotRequestSchema,
+} from "./slack-bot-wire.js";
+import {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallFailure,
   type WorkspaceCallResult,
@@ -62,12 +68,13 @@ import {
   workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
+  workspaceSlugSetRequestSchema,
   workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
 /**
- * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
+ * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, given a slug or a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. Renaming, setting the photo,
@@ -102,6 +109,9 @@ const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
   [HOSTED_API_ERROR.NOT_PERMITTED, WORKSPACE_CALL_FAILURE.NOT_PERMITTED],
   [HOSTED_API_ERROR.NOT_FOUND, WORKSPACE_CALL_FAILURE.NOT_FOUND],
   [HOSTED_API_ERROR.ALREADY_INVITED, WORKSPACE_CALL_FAILURE.ALREADY_INVITED],
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED, WORKSPACE_CALL_FAILURE.SLUG_MALFORMED],
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED, WORKSPACE_CALL_FAILURE.SLUG_RESERVED],
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN, WORKSPACE_CALL_FAILURE.SLUG_TAKEN],
 ]);
 
 /** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
@@ -279,6 +289,21 @@ export class HostedWorkspaceClient {
     );
   }
 
+  /** The workspace's slug changed by its owner, answering it under its new slug; the service reads the slug's spelling itself, so a refusal names why. */
+  setSlug(
+    workspaceId: string,
+    slug: string,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlugSetRequestSchema)({ workspaceId, slug }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaces.setSlug, admitted),
+      (answer) => answer.workspace,
+    );
+  }
+
   /** The workspace's photo set as a `data:` URL, or removed with null, by an owner or admin, answering the workspace as it then stands; a photo the service would refuse by shape never travels. */
   setPhoto(
     workspaceId: string,
@@ -363,6 +388,64 @@ export class HostedWorkspaceClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
       askHosted(this.#hosted.workspaceSentry.disconnect, admitted),
+      (answer) => answer,
+    );
+  }
+  /** Whether the deployment holds our Slack bot, and the Slack team the workspace's bot is connected to. */
+  slackBot(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.read, {
+        [WORKSPACE_SLACK_BOT_QUERY.WORKSPACE_ID]: admitted.workspaceId,
+      }),
+      (answer) => answer,
+    );
+  }
+
+  /** The workspace's Slack bot connected to the team its token answers for, answering the bot as it then stands. */
+  slackBotConnect(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.connect, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** The workspace's Slack bot disconnected, answering the bot as it then stands. */
+  slackBotDisconnect(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.disconnect, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** The reader's own Slack notifications turned on or off, answering the bot as it then stands. */
+  slackBotNotifications(
+    workspaceId: string,
+    notifications: boolean,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotNotificationsRequestSchema)({ workspaceId, notifications }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.notifications, admitted),
       (answer) => answer,
     );
   }

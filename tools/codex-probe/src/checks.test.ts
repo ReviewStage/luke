@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { isRecord, isWireString, valueFromJsonText, type WireValue } from "@luke/wire";
+import { isRecord, isWireString, valueFromJsonText, type WireValue } from "@repo/wire";
 import { describe, expect, it } from "vitest";
 import {
   CHECK,
@@ -20,7 +20,7 @@ import {
 // (edit, scanner, MCP echo, a CI watch waited out under a steer, an interrupted turn, then a
 // restart and thread/resume), with the model scripted by a local Responses server instead of
 // the ChatGPT plan, and paths moved to where the live probe puts them. See the PR description.
-const FIXTURES = path.join(import.meta.dirname, "..", "fixtures");
+const FIXTURES = path.join(import.meta.dirname, "../../../packages/agent-runner/src/testing");
 const NONCE = "luke-probe-hermetic";
 
 /** A fixture file's lines read back as recorded messages. */
@@ -70,7 +70,7 @@ const CLEAN_SCAN: ScanReport = {
 
 /** Observations as the live run would gather them over the hermetic recording. */
 function observed(overrides: Partial<Observations> = {}): Observations {
-  const messages = recording("hermetic/app-server.jsonl");
+  const messages = recording("app-server.jsonl");
   const steer = resultOf(messages, "turn/steer");
   const resumed = resultOf(messages, "thread/resume");
   const thread = isRecord(resumed) ? resumed.thread : undefined;
@@ -204,7 +204,7 @@ describe("judge over the token's seats", () => {
 
 describe("readScan", () => {
   it("reads the scanner's line out of a command's surrounding output", () => {
-    const line = `LUKE_PROBE_SCAN ${JSON.stringify({ ...CLEAN_SCAN, processesWithAccessToken: [{ pid: 7, comm: "codex" }] })}`;
+    const line = `APP_PROBE_SCAN ${JSON.stringify({ ...CLEAN_SCAN, processesWithAccessToken: [{ pid: 7, comm: "codex" }] })}`;
     expect(readScan(`noise\n${line}\nmore`)).toEqual({
       ...CLEAN_SCAN,
       processesWithAccessToken: ["7:codex"],

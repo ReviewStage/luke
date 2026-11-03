@@ -13,7 +13,7 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/scripts/lib/test-shards.mjs",
         "$TURBO_ROOT$/apps/web/install/install.sh",
-        "$TURBO_ROOT$/apps/host/scripts/luke-host.sh"
+        "$TURBO_ROOT$/apps/host/scripts/vespin-host.sh"
       ]
     }
   }

@@ -6,17 +6,17 @@
  * through the service's frame of its version on the tab's own origin, which
  * sends the frame on to a link on the sandbox's own site, minted for the
  * account as the frame loads, or to the page saying pages open in the Mac app
- * where the deployment has no sandbox (`@luke/features/page-frame`).
+ * where the deployment has no sandbox (`@repo/features/page-frame`).
  */
 
-import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
-import { APP_HOME_LINK } from "@luke/features/link-home";
-import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
-import { openTargetOf } from "@luke/features/open-address";
-import { hostedPageFramePath } from "@luke/features/page-frame";
-import { isGitHubAddress, isMailAddress, isWebAddress } from "@luke/host/acts";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import { COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
+import { ADMIN_PAGE_PATH } from "@repo/features/admin-wire";
+import { APP_HOME_LINK } from "@repo/features/link-home";
+import { LINK_PLATFORM, type LinkPlatform } from "@repo/features/link-open";
+import { openTargetOf } from "@repo/features/open-address";
+import { hostedPageFramePath } from "@repo/features/page-frame";
+import { isGitHubAddress, isMailAddress, isWebAddress } from "@repo/host/acts";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import { COMMAND_KEY, type CommandKey } from "@repo/settings/shortcuts";
 import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
 import { openBrowserLiveOverWebSocket } from "./web-browser-live";

@@ -1,15 +1,15 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { accountExperimentOn } from "@luke/database/models/account-store";
-import type { Agent } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { accountExperimentOn } from "@repo/database/models/account-store";
+import type { Agent } from "@repo/database/models/agent-store";
 import {
   listMemories,
   MEMORY_OUTCOME,
   rememberMemory,
   type StoredMemory,
-} from "@luke/database/models/memory-store";
-import { MEMORY_BOUNDS, memoryIdSchema } from "@luke/features/memory-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { describeWire } from "@luke/wire/effect";
+} from "@repo/database/models/memory-store";
+import { MEMORY_BOUNDS, memoryIdSchema } from "@repo/features/memory-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
@@ -318,7 +318,7 @@ export function runRecall(
  * tool reads them (`callerWorkspace`), then the call itself. An agent whose
  * workspace cannot be read for its starter now keeps and recalls nothing, and
  * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
- * and our MCP server (`luke-mcp/tools.ts`) list neither tool to such an
+ * and our MCP server (`workspace-mcp/tools.ts`) list neither tool to such an
  * agent, but a harness may still call a tool it was not listed, or Memory
  * may go off mid-run, so the refusal stands here as well.
  */

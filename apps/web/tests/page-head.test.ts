@@ -12,7 +12,7 @@ function metaContent(html: string, key: string): string | undefined {
   ).exec(html)?.[1];
 }
 
-test("a route's head replaces the changelog template's title, description, and address", () => {
+test("a route's head replaces the changelog template's title, description, address, and canonical address", () => {
   const html = withPageHead(
     TEMPLATE,
     {
@@ -26,7 +26,8 @@ test("a route's head replaces the changelog template's title, description, and a
   assert.match(html, /<title>Changelog, page 2 — Vespin<\/title>/);
   assert.equal(metaContent(html, "og:title"), "Changelog, page 2 — Vespin");
   assert.equal(metaContent(html, "og:url"), "https://vespin.dev/changelog/page/2");
-  assert.equal(metaContent(html, "og:image"), "https://vespin.dev/luke-og-card.png");
+  assert.match(html, /<link rel="canonical" href="https:\/\/vespin\.dev\/changelog\/page\/2" \/>/);
+  assert.equal(metaContent(html, "og:image"), "https://vespin.dev/og-card.png");
 });
 
 test("a release shares its own screenshot, at its own size, in place of the site's card", () => {

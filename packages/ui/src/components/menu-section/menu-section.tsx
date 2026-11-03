@@ -27,16 +27,16 @@ export function MenuSection({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="luke-menu-section -mx-menu-inset px-menu-inset not-first:mt-menu-inset not-first:border-t not-first:border-border">
+    <section className="ui-menu-section -mx-menu-inset px-menu-inset not-first:mt-menu-inset not-first:border-t not-first:border-border">
       <div
-        className={`luke-menu-section-head flex items-baseline gap-icon-gap ${COMBOBOX_HEADING}`}
+        className={`ui-menu-section-head flex items-baseline gap-icon-gap ${COMBOBOX_HEADING}`}
         aria-hidden="true"
       >
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.GROUP}>
           {heading}
         </Text>
         {count === undefined ? null : (
-          <span className="luke-menu-section-count ml-auto whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums">
+          <span className="ui-menu-section-count ml-auto whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums">
             {count}
           </span>
         )}

@@ -3,9 +3,9 @@ import {
   type AgentSummary,
   DEVICE_STANDING,
   type DeviceStanding,
-} from "@luke/features/agent-wire";
-import { Badge, STATUS_TONE, useSecond, VISUALLY_HIDDEN_UNDER, VisuallyHidden } from "@luke/ui";
-import { GLYPH, LaptopIcon } from "@luke/ui/icons";
+} from "@repo/features/agent-wire";
+import { Badge, STATUS_TONE, useSecond, VISUALLY_HIDDEN_UNDER, VisuallyHidden } from "@repo/ui";
+import { GLYPH, LaptopIcon } from "@repo/ui/icons";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
 
 /**

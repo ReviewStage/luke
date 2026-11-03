@@ -110,7 +110,7 @@ function widthsOf(nav: HTMLElement): readonly number[] {
   if (list === null) return widths;
   widths.push(list.clientWidth, list.scrollWidth);
   for (const crumb of list.children) {
-    widths.push(crumb.clientWidth, crumb.querySelector(".luke-breadcrumb-label")?.scrollWidth ?? 0);
+    widths.push(crumb.clientWidth, crumb.querySelector(".ui-breadcrumb-label")?.scrollWidth ?? 0);
   }
   return widths;
 }

@@ -15,10 +15,10 @@ test("an edit of a document still holding its base takes the developer's text ex
 });
 
 test("an edit of a document Vespin wrote in meanwhile is laid over its words, which stay", () => {
-  const lukes = `${DOCUMENT}- Invites expire after 7 days.\n`;
+  const appText = `${DOCUMENT}- Invites expire after 7 days.\n`;
   const value = DOCUMENT.replace("an admin", "an owner");
 
-  assert.deepEqual(applyDocumentEdit(lukes, { document: { base: DOCUMENT, value } }), {
-    applied: lukes.replace("an admin", "an owner"),
+  assert.deepEqual(applyDocumentEdit(appText, { document: { base: DOCUMENT, value } }), {
+    applied: appText.replace("an admin", "an owner"),
   });
 });

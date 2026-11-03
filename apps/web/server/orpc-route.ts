@@ -1,25 +1,24 @@
 /** orpc-route.ts -- the route every path moved onto the hosted oRPC router answers through. */
 
-import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
-import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
-import { hostedAdminSeams } from "@luke/service/admin/admin-route";
-import { agentBrowserServices } from "@luke/service/agents/browser/agent-browser";
-import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
-import { deploymentEveOrigin } from "@luke/service/agents/eve-host/eve-origin";
+import { memberSeams, workspaceSeams } from "@repo/database/models/workspace-seams";
+import { accountProcedureSeams } from "@repo/service/accounts/account-seams";
+import { hostedAdminSeams } from "@repo/service/admin/admin-route";
+import { agentBrowserServices } from "@repo/service/agents/browser/agent-browser";
+import type { NativeAgentSessions } from "@repo/service/agents/coder-host/runtime-sessions";
 import {
   type SandboxStopReach,
   sessionSandboxesLayer,
-} from "@luke/service/agents/session-sandboxes";
-import { agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
-import { auth } from "@luke/service/auth/auth";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
-import { githubUnlink } from "@luke/service/github/github-unlink";
-import { integrationsAppSeams } from "@luke/service/integrations/integration-seams";
-import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";
-import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router";
-import type { Route } from "@luke/service/route";
-import type { WebServices } from "@luke/service/runtime";
+} from "@repo/service/agents/session-sandboxes";
+import { agentSandboxLayer } from "@repo/service/agents/terminal/agent-sandbox";
+import { auth } from "@repo/service/auth/auth";
+import { resolveHostedUserId } from "@repo/service/auth/bearer";
+import { resolveBrowserSessionUserId } from "@repo/service/auth/browser-session";
+import { githubUnlink } from "@repo/service/github/github-unlink";
+import { integrationsAppSeams } from "@repo/service/integrations/integration-seams";
+import { type HostedFetch, hostedFetch } from "@repo/service/orpc/handler";
+import { type HostedRouterSeams, hostedRouter } from "@repo/service/orpc/router";
+import type { Route } from "@repo/service/route";
+import type { WebServices } from "@repo/service/runtime";
 import { waitUntil } from "@vercel/functions";
 import { Effect, type Layer } from "effect";
 import { nativeAgents } from "./native-agents.js";
@@ -66,7 +65,6 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   resolveSessionUserId: resolveBrowserSessionUserId,
   unlinkGitHub: githubUnlink(auth.api),
   workspaces: workspaceSeams(auth.api),
-  eveOrigin: deploymentEveOrigin,
   sandbox: agentSandboxLayer,
   agentBrowser: agentBrowserServices,
   sessionSandboxes: sessionSandboxesLayer,

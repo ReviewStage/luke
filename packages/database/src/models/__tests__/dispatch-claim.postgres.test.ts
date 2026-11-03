@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
-import { sessionKey } from "@luke/runtime/vocabulary";
-import { TURN_ORIGIN } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
+import { sessionKey } from "@repo/runtime/vocabulary";
+import { TURN_ORIGIN } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -31,10 +31,10 @@ import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../wri
  * second send waits on the claim holding nothing and reaches eve after it,
  * and a task's finish or an agent's delete reads the line as work under way
  * without waiting. This file runs in CI's Postgres job, where
- * `LUKE_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
+ * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
-const SENDER = { kind: MESSAGE_SENDER.LUKE } as const;
+const SENDER = { kind: MESSAGE_SENDER.APP } as const;
 
 /**
  * Answers how to run an effect on a connection of its own to the test's
@@ -55,7 +55,7 @@ const anotherConnection = Effect.gen(function* () {
 const openAgentConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)

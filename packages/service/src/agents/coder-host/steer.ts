@@ -1,5 +1,5 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { settleEndedSessionTurn } from "@luke/database/models/abandoned-turns";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { settleEndedSessionTurn } from "@repo/database/models/abandoned-turns";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -9,14 +9,14 @@ import {
   readAgent,
   readAgentRouting,
   taskNamesOf,
-} from "@luke/database/models/agent-store";
-import { sentLineStands } from "@luke/database/models/message-reads";
+} from "@repo/database/models/agent-store";
+import { sentLineStands } from "@repo/database/models/message-reads";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
-} from "@luke/database/models/recorded-session";
-import { readTaskPlan } from "@luke/database/models/task-store";
-import { readAccountNames } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/recorded-session";
+import { readTaskPlan } from "@repo/database/models/task-store";
+import { readAccountNames } from "@repo/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
   type ConversationTarget,
@@ -24,13 +24,13 @@ import {
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriter,
-} from "@luke/database/models/writer";
-import { type ConversationRuntime, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { AGENT_STATUS, type AgentAttachment } from "@luke/features/agent-wire";
-import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
-import { agentName } from "@luke/features/model-label";
-import { causeKind } from "@luke/runtime/effect";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/database/models/writer";
+import { type ConversationRuntime, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { AGENT_STATUS, type AgentAttachment } from "@repo/features/agent-wire";
+import { MENTION_KIND, withoutMemberLinks } from "@repo/features/mention-link";
+import { agentName } from "@repo/features/model-label";
+import { causeKind } from "@repo/runtime/effect";
+import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { MESSAGE_CHANNEL } from "../../core.js";
@@ -61,7 +61,7 @@ import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../menti
 import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
-import { isNativeRuntime } from "./native-runtime.js";
+import { harnessOf } from "./native-runtime.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
 
@@ -103,12 +103,10 @@ import { agentStatusOf } from "./status.js";
  * behind a label naming them by their mention link (`attached-files.ts`'s
  * `senderLabel`), which the row leaves out, since its sender is its own
  * column, so the model never reads a teammate's words as the developer's.
- * Who reaches eve is the caller's: the route holds the
+ * Who reaches the agent is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
- * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`). An agent on eve takes no
- * message either: eve runs no agent any more, so it is refused as ended,
- * and only a new agent started from it goes on from its work. An archived agent takes
+ * deployment for the account; the agent's harness answers the message
+ * either way (`runtime-sessions.ts`). An archived agent takes
  * no message, and is refused as one that names nothing, since every list
  * leaves it out until it is brought back; it is read again under the
  * conversation's dispatch claim just before the send, which is taken under
@@ -117,15 +115,15 @@ import { agentStatusOf } from "./status.js";
  * session eve answers it no longer runs has ended for good, and nothing
  * will end the turn it was running, so that turn, as read before eve was
  * asked, is settled failed for its session's end
- * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
+ * (`@repo/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
  * rather than running until the sweep's day-long bound. The words are then
  * no refusal: they open a fresh session over the same conversation, and so
  * does a message to an agent whose
  * session never claimed its record, past the grace its Start's session had
  * to come up in or where its Start opened none. The fresh session claims
- * the record forward, so the ended one is refused from then on, and is
- * seeded with what was said (`host.ts`'s `seed`); Continue and fork still
- * start a new agent of their own.
+ * the record forward, so the ended one is refused from then on, and its
+ * harness starts afresh, holding none of what was said; Continue and fork
+ * still start a new agent of their own.
  */
 
 /**
@@ -357,14 +355,13 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { runtime, payer } = routing.value;
   if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  // Note that eve runs no agent any more, so one on it takes no words and is refused as ended, before
-  // GitHub is asked or a line is written: only a new agent, started from it, goes on from its work.
-  if (!isNativeRuntime(runtime)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
   // Note that our key pays for no coding agent, so an agent on its starter's API key whose starter
-  // keeps none for its model now is refused by name and never moved to another payer.
-  const missing = yield* hostedStoreOrUnavailable(
-    messageCredentialMissing(agent, { runtime, payer }),
-  );
+  // keeps none for its model now is refused by name and never moved to another payer; one on no
+  // harness has ended for good whatever paid for it, which the router below refuses it as.
+  const missing =
+    harnessOf(runtime) === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(messageCredentialMissing(agent, { payer }));
   if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
   if (yield* Effect.fromResult(read.repeated)) return { outcome: STEER_OUTCOME.REPEATED };
   const held = yield* Effect.fromResult(read.task);
@@ -446,9 +443,9 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),
   };
-  // Note that a session eve no longer runs, or none at all, is no refusal: the words open a fresh
-  // session over the same conversation, which claims its record forward from the one that ended and
-  // is seeded with what was said in it (`host.ts`'s `seed`), so no developer has to press Continue.
+  // Note that a session that no longer runs, or none at all, is no refusal: the words open a fresh
+  // session over the same conversation, which claims its record forward from the one that ended, so
+  // no developer has to press Continue.
   const send = Effect.gen(function* () {
     if (sessionId !== undefined) {
       const sent = yield* eve

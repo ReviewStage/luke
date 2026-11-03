@@ -1,23 +1,23 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_RUNTIME,
   AGENT_STATUS,
   type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
-import type { Failure } from "@luke/features/failure-remedy";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-chapters-view";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind, PortActPayload } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
-import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import type { Failure } from "@repo/features/failure-remedy";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@repo/features/pull-request-chapters-view";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind, PortActPayload } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
+import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -47,6 +47,7 @@ interface Standing {
   taskId: string | undefined;
   agentId?: string;
   repository: string | null;
+  startsWithoutRepository?: boolean;
   listedAgents?: readonly AgentSummary[];
   listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository">;
 }
@@ -111,6 +112,7 @@ function mount(
       taskId: held.taskId,
       agentId: held.agentId,
       repository: held.repository,
+      startsWithoutRepository: held.startsWithoutRepository,
       listedAgents: held.listedAgents,
       listedPage: held.listedPage,
       onOpenIntegrations: () => undefined,
@@ -1105,10 +1107,35 @@ test("a second continue of an agent once the first landed mints a key of its own
   assert.deepEqual(tab.started, [first.id, second.id, third.id]);
 });
 
-test("no continue is offered while no Start could run: a task naming no repository", async () => {
+test("a task naming no repository offers no Start, which asks nothing when pressed, and no continue, unless the service runs a Start without one there, when its Start asks the service on the task", async () => {
   const bare = mount({ taskId: TASK, repository: null });
   await bare.mount();
+  const { start } = bare.control();
+  assert.deepEqual([start.available, start.reason], [false, "Choose a repository"]);
   assert.equal(bare.control().continueAgent, undefined);
+  await act(async () => {
+    await bare.control().start.onPress();
+  });
+  assert.deepEqual(startPayloads(bare.asked), [], "a press asks nothing");
+
+  const allowed = mount({
+    taskId: TASK,
+    repository: null,
+    startsWithoutRepository: true,
+    listedAgents: [],
+  });
+  allowed.answer(ACT_KIND.AGENTS_START, { agent: STARTED });
+  await allowed.mount();
+  const offered = allowed.control().start;
+  assert.deepEqual([offered.available, offered.reason], [true, undefined]);
+  assert.notEqual(allowed.control().continueAgent, undefined);
+  await act(async () => {
+    await allowed.control().start.onPress();
+  });
+  assert.deepEqual(
+    startPayloads(allowed.asked).map((each) => [each.taskId, each.idempotencyKey]),
+    [[TASK, "key-1"]],
+  );
 });
 
 test("a delete that landed on an agent's page reads it again as gone, and a read already out that still holds it does not bring it back", async () => {

@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { type AgentQueue, QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@luke/features/agent-view";
+import { type AgentQueue, QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
+import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@repo/features/agent-view";
 import {
   AGENT_ATTACHMENT_TYPE,
   type AgentQueueChange,
   QUEUE_CHANGE,
-} from "@luke/features/agent-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { PICTURE_STATE, pictureNow } from "@luke/ui/picture-cache";
+} from "@repo/features/agent-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { PICTURE_STATE, pictureNow } from "@repo/ui/picture-cache";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

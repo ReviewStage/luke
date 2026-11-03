@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TURN_STATUS } from "@luke/wire";
+import { TURN_STATUS } from "@repo/wire";
 import { test } from "vitest";
 import {
   agentStatusAt,

@@ -15,7 +15,7 @@
  * an address does not answer is the handler's 405 before any of them.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import { hosted } from "../orpc/base.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { type AdminCostOptions, handleAdminCost } from "./admin-cost.js";

@@ -1,12 +1,12 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { LANDING_TONE } from "@luke/features/landing-outcome";
-import { AuthMark, AuthPage } from "@luke/ui";
+import { LANDING_TONE } from "@repo/features/landing-outcome";
+import { AuthMark, AuthPage } from "@repo/ui";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
-import { openLukeFromMac } from "./open-luke";
+import { openAppFromMac } from "./open-app";
 import "./styles.css";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { mountPrerenderedPage } from "./mount-page";
 
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
@@ -39,7 +39,7 @@ function Consent(): React.JSX.Element {
       mark={<AuthMark tone={failure ? LANDING_TONE.DANGER : undefined} />}
       title={failure ? `${PRODUCT_NAME} could not continue` : `Continuing to ${PRODUCT_NAME}…`}
       description={failure ? "Start sign-in again." : undefined}
-      action={failure ? openLukeFromMac() : undefined}
+      action={failure ? openAppFromMac() : undefined}
     />
   );
 }

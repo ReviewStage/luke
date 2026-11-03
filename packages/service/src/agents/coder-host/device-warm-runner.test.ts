@@ -1,21 +1,25 @@
 /**
- * device-warm-runner.test.ts -- a local agent's runner kept warm past its turn, over a real store and the Mac's machine: its IDLE leaves it warm and the next message is written to it, but a host waiting to switch release has it retired there; a Stop with no turn under way leaves it warm; and a Stop that lands as its turn ends, which the runner ends on, sends the next message to a new launch rather than to the runner on its way down.
+ * device-warm-runner.test.ts -- a local agent's runner kept warm past its turn, over a real store and the Mac's machine: its IDLE leaves it warm and the next message is written to it, but a host waiting to switch release has it retired there; a Stop with no turn under way leaves it warm; a Stop that lands as its turn ends, which the runner ends on, sends the next message to a new launch rather than to the runner on its way down; and a runner that ends on its own past its turn leaves the agent as that turn ended.
  *
  * Synthetic accounts, agents, Macs, and keys throughout.
  */
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { deviceAgentLinesWaiting } from "@luke/database/models/device-agent-store";
-import { beatDevice } from "@luke/database/models/device-store";
-import { turns } from "@luke/database/schemas/storage";
-import { getTestDB } from "@luke/database/testing";
-import { DEVICE_AGENT_LINE_KIND, HOST_UPDATE } from "@luke/features/device-agent-wire";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
-import { noNetwork } from "@luke/wire/testing";
+import { Database } from "@repo/database/core/query";
+import { latestTurnsOf } from "@repo/database/models/agent-store";
+import {
+  deviceAgentLinesWaiting,
+  latestDeviceAgentLaunch,
+} from "@repo/database/models/device-agent-store";
+import { beatDevice } from "@repo/database/models/device-store";
+import { turns } from "@repo/database/schemas/storage";
+import { getTestDB } from "@repo/database/testing";
+import { DEVICE_AGENT_LINE_KIND, HOST_UPDATE } from "@repo/features/device-agent-wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
+import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Layer } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { driven, forkClockDriven } from "../../testing/clock-driven.js";
 import {
@@ -154,6 +158,26 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
             yield* launchCarries(warm, "And the tests."),
             "the new launch's first lines carry the message",
           );
+        }),
+    );
+
+    it.effect(
+      "a runner that ends on its own past its turn, its launch settled by its Mac, leaves the agent as that turn ended",
+      () =>
+        Effect.gen(function* () {
+          const warm = yield* warmLocalAgent;
+          const { userId, deviceId, agent } = warm;
+          const launch = yield* latestDeviceAgentLaunch(userId, agent.id);
+          assert.ok(Option.isSome(launch));
+          yield* TestClock.adjust("1 minute");
+
+          yield* settledDeviceAgentLine(userId, deviceId, launch.value.id, 0);
+
+          const newest = (yield* latestTurnsOf(userId, [agent.conversationId])).get(
+            agent.conversationId,
+          );
+          assert.equal(newest?.id, warm.turnId);
+          assert.equal(newest?.status, TURN_STATUS.SETTLED);
         }),
     );
   },

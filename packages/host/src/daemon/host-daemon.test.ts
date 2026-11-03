@@ -1,20 +1,20 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
-import { HOST_TARGET } from "@luke/features/host-release";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@repo/features/device-agent-wire";
+import { HOST_TARGET } from "@repo/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   type HostPairingStartAnswer,
-} from "@luke/features/host-wire";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+} from "@repo/features/host-wire";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import {
   jsonResponse,
   type RecordedRequest,
   type RecordingHttpClient,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
@@ -27,7 +27,7 @@ import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js"
 import { connectHostDevice, HOST_CONNECT_OUTCOME, type HostPairingCode } from "./host-pairing.js";
 import { hostPlatform } from "./host-platform.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const VERSION = "0.1.0";
 const DEVICE_ID = "6bbcb1b9-6706-4c97-9197-374756ceee07";
 const AGENT_ID = "0b6f9a4e-1c1d-4d2e-9f3a-5b7c8d9e0f12";
@@ -56,12 +56,8 @@ const NEWER_RELEASE = {
 };
 /** The Node the daemon runs on, which its runners run on too. */
 const NODE = "/opt/luke-host/node/bin/node";
-/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's. */
-const RUNNER_BUNDLE = {
-  LINUX: "/opt/luke-host/lib/agent-runner.mjs",
-  DARWIN: "/opt/agent-runner/agent-runner.mjs",
-} as const;
-const RUNNER_BUNDLES: ReadonlySet<string> = new Set(Object.values(RUNNER_BUNDLE));
+/** The runner's bundle every OS runs: the release's own. */
+const RUNNER_BUNDLE = "/opt/luke-host/lib/agent-runner.mjs";
 const HTTP = {
   OK: 200,
   UNAUTHORIZED: 401,
@@ -69,8 +65,13 @@ const HTTP = {
   SERVER_ERROR: 500,
 } as const;
 
+/** Which machine fra-01 is, as its host reports it: a Linux box names no model. */
+const FRA_01_MACHINE = { machineId: "e".repeat(64) } as const;
+/** Which machine Studio is, as its host reports it. */
+const STUDIO_MACHINE = { machineId: "f".repeat(64), model: "Mac Studio (2023)" } as const;
+
 /** A Linux box named fra-01. */
-const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01" };
+const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", machine: () => FRA_01_MACHINE };
 
 /** A box's platform on the OS given, as its daemon builds it, running as the user given. */
 const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
@@ -97,13 +98,13 @@ const settled = (done: () => boolean) =>
 
 /** A box's state root and its home, under a folder of its own. */
 const box = Effect.gen(function* () {
-  const root = yield* temporaryDirectoryScoped("luke-host-daemon-");
+  const root = yield* temporaryDirectoryScoped("host-daemon-");
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
 /** Whether a spawn is the runner, started straight on the box on the daemon's own Node. */
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
-  each.program === NODE && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
+  each.program === NODE && each.args.includes(RUNNER_BUNDLE);
 
 /** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
@@ -126,26 +127,26 @@ const world = (home: string, reports: string[]) => {
 describe("a host's daemon", () => {
   it.effect.each([
     {
-      os: { ...LINUX_HOST, deviceName: () => "fra-01" },
+      os: FRA_01,
       name: "fra-01",
+      machine: FRA_01_MACHINE,
       platform: "linux",
       uid: 0,
       sandboxed: "1",
-      runnerBundle: RUNNER_BUNDLE.LINUX,
       pnpmConfig: ".config/pnpm",
     },
     {
-      os: { ...DARWIN_HOST, deviceName: () => "Studio" },
+      os: { ...DARWIN_HOST, deviceName: () => "Studio", machine: () => STUDIO_MACHINE },
       name: "Studio",
+      machine: STUDIO_MACHINE,
       platform: "darwin",
       uid: 501,
       sandboxed: undefined,
-      runnerBundle: RUNNER_BUNDLE.DARWIN,
       pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
-    ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
+    "registers as its OS ($platform) and machine on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
+    ({ os, name, machine, platform: devicePlatform, uid, sandboxed, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -213,6 +214,7 @@ describe("a host's daemon", () => {
           name,
           platform: devicePlatform,
           arch: "x64",
+          ...machine,
           home: home,
           isolation: "direct",
           claudeExecutable: fakeClis().paths.claude,
@@ -229,17 +231,17 @@ describe("a host's daemon", () => {
         expect(launched).toHaveLength(1);
         const [runner] = launched;
         const folder = `${home}/.vespin/agents/${AGENT_ID}`;
-        expect(runner?.args).toEqual([runnerBundle]);
+        expect(runner?.args).toEqual([RUNNER_BUNDLE]);
         expect(runner?.cwd).toBe(`${folder}/repository`);
         expect(runner?.extendEnv).toBe(false);
         expect(runner?.env).toMatchObject({
           CLAUDE_CODE_OAUTH_TOKEN: RUNNER_TOKEN,
-          LUKE_RUNNER_PLACE: "host",
+          APP_RUNNER_PLACE: "host",
           HOME: `${folder}/home`,
           XDG_CACHE_HOME: `${folder}/cache`,
           PNPM_HOME: `${folder}/home/.local/share/pnpm`,
           NPM_CONFIG_PREFIX: `${folder}/home/.npm-global`,
-          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
+          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/agent/agent-tools:/usr/bin:/bin`,
         });
         expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
         // Note that every agent's settings name the same folders under the host's state, outside any agent's folder.
@@ -259,7 +261,7 @@ describe("a host's daemon", () => {
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
         yield* Fiber.join(daemon);
-        // Note that a daemon handed no releases, as This Mac's copy inside the app, neither fetches the release named nor says it updates.
+        // Note that a daemon handed no releases, as a development run, neither fetches the release named nor says it updates.
         expect(http.requests.filter((request) => new URL(request.url).origin !== SERVICE)).toEqual(
           [],
         );
@@ -337,6 +339,7 @@ describe("a host's connect with a code", () => {
       name: "fra-01",
       platform: LINUX_HOST.platform,
       arch: DEVICE_ARCH.X64,
+      machine: FRA_01_MACHINE,
       version: VERSION,
       shown: (code) => Effect.sync(() => shown.push(code)),
     }).pipe(Effect.provide(http.layer));
@@ -384,6 +387,7 @@ describe("a host's connect with a code", () => {
           name: "fra-01",
           platform: "linux",
           arch: "x64",
+          ...FRA_01_MACHINE,
         });
         expect(new Set(polls().map((poll) => poll.authorization))).toEqual(
           new Set([`Bearer ${POLL_SECRET}`]),
@@ -435,7 +439,7 @@ describe("hostRuntime", () => {
       platform: "darwin",
       home: "/Users/ada",
       os: DARWIN_HOST,
-      stateRoot: "/Users/ada/Library/Application Support/Vespin",
+      stateRoot: "/Users/ada/.local/state/luke-host",
     },
     {
       platform: "linux",
@@ -444,9 +448,9 @@ describe("hostRuntime", () => {
       stateRoot: "/var/lib/luke-host/state",
     },
   ])(
-    "runs $platform as its own OS, with its state where its app or service keeps it",
+    "runs $platform as its own OS, with its state where its service keeps it",
     ({ platform, home, os, stateRoot }) => {
-      const runtime = hostRuntime({ platform, home, app: { developerIdSigned: true } });
+      const runtime = hostRuntime({ platform, home });
       expect(runtime?.os).toBe(os);
       expect(runtime?.stateRoot).toBe(stateRoot);
     },

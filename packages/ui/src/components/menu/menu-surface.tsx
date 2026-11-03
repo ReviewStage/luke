@@ -76,13 +76,12 @@ export function MenuSurface({
     {
       ...rest,
       className: cn(
-        "luke-menu-surface",
+        "ui-menu-surface",
         DROPDOWN_MENU_SURFACE,
         inset === MENU_SURFACE_INSET.NONE && "p-[0]",
-        flow !== MENU_SURFACE_FLOW.COLUMN && "flex-row items-center gap-luke-2",
+        flow !== MENU_SURFACE_FLOW.COLUMN && "flex-row items-center gap-ui-2",
         // A toolbar's buttons stand a hair from its edge, its corner a row's round that hair out, and it has no entrance of its own, since its owner shows it as the pointer or a selection comes.
-        flow === MENU_SURFACE_FLOW.TOOLBAR &&
-          "w-max rounded-menu-toolbar p-luke-2 whitespace-nowrap",
+        flow === MENU_SURFACE_FLOW.TOOLBAR && "w-max rounded-menu-toolbar p-ui-2 whitespace-nowrap",
         flow === MENU_SURFACE_FLOW.TOOLBAR && !leaving && "animate-none",
         className,
       ),
@@ -99,7 +98,7 @@ export function MenuSurface({
 /** A glyph in a menu row's column, muted beside the words it leads, as a crumb heading a menu's narrowed list leads with its kind's mark. */
 export function MenuGlyph({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <span className="luke-menu-item-glyph inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-data-[variant=destructive]/menu-item:text-inherit [&_svg]:size-menu-glyph [&_svg]:flex-none [&>img]:size-menu-glyph [&>img]:flex-none">
+    <span className="ui-menu-item-glyph inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-data-[variant=destructive]/menu-item:text-inherit [&_svg]:size-menu-glyph [&_svg]:flex-none [&>img]:size-menu-glyph [&>img]:flex-none">
       {children}
     </span>
   );

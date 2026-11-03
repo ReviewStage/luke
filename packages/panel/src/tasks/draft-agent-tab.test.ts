@@ -1,29 +1,29 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import type { Failure } from "@luke/features/failure-remedy";
-import type { IntegrationProviderParams } from "@luke/features/integration-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import type { Failure } from "@repo/features/failure-remedy";
+import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeysAnswer,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@luke/features/repository-reach-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { SettingsLink } from "@luke/settings/settings-views";
+} from "@repo/features/repository-reach-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { SettingsLink } from "@repo/settings/settings-views";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -211,7 +211,7 @@ function mount(
     [...container.querySelectorAll("button")].find(
       (each) =>
         each.getAttribute("aria-label") === words ||
-        each.querySelector(".luke-button-words")?.textContent === words ||
+        each.querySelector(".ui-button-words")?.textContent === words ||
         [...each.childNodes].some(
           (node) => node.nodeType === Node.TEXT_NODE && node.textContent === words,
         ),
@@ -226,8 +226,8 @@ function mount(
       pressInComposer(container, "Enter");
       await settle();
     },
-    note: () => container.querySelector(".luke-composer-foot-note")?.textContent ?? undefined,
-    words: () => sentence(container.querySelector(".luke-composer-foot-note [role='alert']")),
+    note: () => container.querySelector(".ui-composer-foot-note")?.textContent ?? undefined,
+    words: () => sentence(container.querySelector(".ui-composer-foot-note [role='alert']")),
     draft: () => composerEditor(container).textContent,
     button,
     press: async (words: string) => {
@@ -391,12 +391,12 @@ function openServers(): void {
   act(() => plus.click());
   const row =
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (item) => item.textContent === "MCP servers",
-    ) ?? assert.fail("the + menu offers MCP servers");
+      (item) => item.textContent === "Integrations",
+    ) ?? assert.fail("the + menu offers Integrations");
   act(() => row.click());
 }
 
-test("the MCP servers popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
+test("the Integrations popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
   const tab = mount([]);
   await settle();
   openServers();
@@ -444,7 +444,7 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
       words:
         row.querySelector(".agent-servers-problem, .agent-servers-waiting")?.textContent ??
         undefined,
-      buttons: [...row.querySelectorAll(".luke-list-row-actions button")].map(
+      buttons: [...row.querySelectorAll(".ui-list-row-actions button")].map(
         (button) => button.textContent,
       ),
     };

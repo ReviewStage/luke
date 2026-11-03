@@ -1,18 +1,20 @@
-import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import type { MacOffer, ModelChoice } from "@luke/features/models-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import type { MacOffer, ModelChoice } from "@repo/features/models-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   TASK_CREATE_RELATION_KIND,
   TASK_MODE,
   type TaskCreateRelation,
+  type TaskCreateRelationKind,
   type TaskMode,
-} from "@luke/features/task-wire";
-import { TERM } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { TERM } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@repo/settings/shortcuts";
 import {
   CHIP_WIDTH,
   CHOICE_BAR_LOOK,
@@ -25,9 +27,9 @@ import {
   TEXT_VARIANT,
   Text,
   VisuallyHidden,
-} from "@luke/ui";
-import { workspaceReaches } from "@luke/ui/tasks-model";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+} from "@repo/ui";
+import { workspaceReaches } from "@repo/ui/tasks-model";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -38,11 +40,21 @@ import {
   useDraftWriter,
 } from "../composer-drafts.js";
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
+import { useOpenSettings } from "../open-settings.js";
 import { useExperiment } from "../use-app-state.js";
-import { AgentComposer, type ComposerWords } from "./agent-composer.js";
+import { AgentComposer, COMPOSER_DOCK_CLASS, type ComposerWords } from "./agent-composer.js";
+import type { AgentServersControl } from "./agent-servers.js";
 import type { MentionMenuSide } from "./mention-picker.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
-import { type NewTaskRelation, NewTaskRelationPill, treeKind } from "./new-task-relation.js";
+import {
+  type NewTaskRelation,
+  NewTaskRelationRows,
+  type NewTaskRelations,
+  relationMenuPanel,
+  relationsAsked,
+  treeKind,
+  treeRelationOf,
+} from "./new-task-relation.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { NewTaskRunsOnChip, newTaskRunsOn, useNewTaskRunsOn } from "./runs-on.js";
@@ -57,17 +69,19 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, and the chips that say where and how the task starts.
  *
  * The card is the agent box's own (`agent-composer.tsx`): the words field,
- * the "+" that attaches files, with an image pasted or files dropped taken
- * too, dictation, the model chip, and the round Start button, with File for
+ * the "+", which raises a menu of Attachment, which attaches files, with an
+ * image pasted or files dropped taken too, MCP servers, which opens the
+ * servers popover beside the menu (`agent-servers.tsx`), and, on a task's
+ * card, Task relation, which opens the task search beside it
+ * (`new-task-relation.tsx`), dictation, the model chip, and the round Start button, with File for
  * later before it, drawing the backlog's mark alone where the card is too
  * narrow for its words, as on a phone, where the model chip's words are cut
  * short too, so Start stays at the row's end in the card.
  * New task's repository chip stands in a head row over the card, the same in the
- * dialog and on a new account's welcome: the repository the task is about
+ * dialog and on Home: the repository the task is about
  * (`repository-chip.tsx`), its title, "New task", named to a reader alone,
- * since the card says what it is, and an automation's drawn before it. The
- * Relation pill stands after it on a task's card (`new-task-relation.tsx`),
- * and on a phone the row wraps, each chip cut short rather than overflowing.
+ * since the card says what it is, and an automation's drawn before it; on a
+ * phone the row wraps, each chip cut short rather than overflowing.
  * The Runs on chip stands after the box's "+", as an agent's box draws where its
  * agent runs: Cloud, and while Bring your own host is on the member's
  * devices, which the task's agents run on (`runs-on.tsx`); an automation's
@@ -100,9 +114,15 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * holding the words, why under the box, and Retry (`draft-agent-tab.tsx`).
  * The model chip shows the account's default as the card read it, and a
  * pick here runs this one agent alone: only Settings changes the default.
+ * The + menu's MCP servers switch the servers the agent is handed, every
+ * one on as the card opens, as on a draft agent's tab, with no Built in
+ * section, since no agent has started to read its own tools from, and no
+ * chip naming them; the start names those switched off, and only where
+ * there are any, so a card left alone starts the agent as one started
+ * anywhere else with none named.
  * Until the chip is picked the start names no model, so the agent runs on
  * the default Settings holds as Start is pressed, which may be newer than
- * the one the chip read, as on the welcome's card left standing; a draft
+ * the one the chip read, as on Home's card left standing; a draft
  * handed over on a refusal names none either, and its tab reads the
  * default afresh. A call starts only from an agent's own tab, so starting
  * a task never opens one.
@@ -110,8 +130,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * An agent's start carries a key the card mints, and a press asking the
  * same again, as Retry after a start the service never answered does,
  * carries the same key, so a service that made the task and its agent
- * answers them rather than a second pair; a press asking anything else
- * mints another, and so does the card mounted afresh.
+ * answers them rather than a second pair; a press asking anything else,
+ * other servers among it, mints another, and so does the card mounted afresh.
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on a box with
  * neither words nor files starts a bare task: an empty plan, no call, and
@@ -120,8 +140,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * nothing else on screen would. Escape closes a menu or a
  * dictation standing first,
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
- * that was refused keeps the card and its words, with why under it and
- * Retry. Nothing typed here reaches the model as conversation.
+ * that was refused keeps the card, its words, and its servers, with why
+ * under it and Retry; one whose task started but whose agent was refused
+ * hands the servers to the draft agent's tab it opens on. Nothing typed here reaches the model as conversation.
  *
  * An `@` offers what it offers on the page of an agent no task holds
  * (`task-mentions.tsx`'s `tasklessMentions`): the servers and the
@@ -134,7 +155,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * The words and files are New task's draft in the workspace it starts in,
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
- * and opened again, or the welcome's, finds them where they were left, the words
+ * and opened again, or Home's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
  * does, an agent's start as it is pressed, so a New task opened while it is
  * out opens empty, and a refused card opened again brings its own words
@@ -142,16 +163,24 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
  *
- * A task's card may start its task related to another of its workspace, by
- * the Relation pill: the add menu's New task opens the card with it filled
- * from the new task's side, and New sub-task, from a task's menu or ⌘K, as
- * Sub-task of that task; the pill can be changed or removed as any chip.
- * The start names the relation, which the service writes with the task in
- * one transaction. As Sub-task of or Parent of the repository chip is held
- * to the other task's, saying why, because a tree works in one repository,
- * and the start leaves the repository to the service; as Sub-task of the
- * card draws no Runs on either, because a sub-task runs where its parent
- * runs, which the service holds it to.
+ * A task's card may start its task related to others of its workspace,
+ * each picked from the + menu's Task relation and drawn as a row docked over
+ * the card, where an agent's box docks its pull request, reading as a
+ * sentence: its kind, the task's key, its status, its name, and ×
+ * (`new-task-relation.tsx`). The add menu's New task opens the card with one
+ * row from the new task's side, and New sub-task, from a task's menu or ⌘K,
+ * one as Sub-task of that task; each row's kind, task, and × change it as
+ * the card's own. A task takes one relation, a task one parent, and a start
+ * at most `TASK_BOUNDS.MAX_START_RELATIONS`, which the card holds itself,
+ * since the service refuses a task named twice or two parents. The start
+ * names them all (`relations`), which the service writes with the task in
+ * one transaction, and a refused card opened again keeps them. Once a
+ * Sub-task of or Parent of stands the repository chip is held to its task's,
+ * saying why, because a tree works in one repository, so every tree
+ * relation must share it, and the start leaves the repository to the
+ * service; while a Sub-task of stands the card draws no Runs on either,
+ * because a sub-task runs where its parent runs, which the service holds it
+ * to.
  *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (`NEW_TASK_PURPOSE.AUTOMATION`), so making
@@ -220,6 +249,9 @@ const DEVICES_UNREAD: Failure = {
   text: `Couldn't read your devices, so ${PRODUCT_NAME} can't tell where this task should run.`,
 };
 
+/** The servers a card switches off as it opens: none, as an agent started with none named runs with every one on. */
+const NONE_OFF: readonly string[] = [];
+
 /** The devices Runs on offers before a read lists any, or while Bring your own host is off: none, so it offers Cloud alone. */
 const NO_DEVICES: readonly MacOffer[] = [];
 
@@ -231,8 +263,8 @@ interface AgentAsk {
   readonly deviceId?: string | undefined;
   /** How the task is worked, where the card offered the choice; none while the Pilot experiment is off. */
   readonly mode?: TaskMode | undefined;
-  /** The relation the task starts in; none for a task related to none. */
-  readonly relation?: TaskCreateRelation | undefined;
+  /** The relations the task starts in, in the order they were picked. */
+  readonly relations: readonly TaskCreateRelation[];
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
 }
 
@@ -242,27 +274,28 @@ export interface NewTaskPress {
   readonly key: string;
 }
 
-/** Whether two presses ask the same: the same task, device, mode, relation, words, files in the same order, and model. */
+/** Whether two presses ask the same: the same task, device, mode, relations in the same order, words, files in the same order, model, and servers switched off. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
     a.deviceId === b.deviceId &&
     a.mode === b.mode &&
-    a.relation?.kind === b.relation?.kind &&
-    a.relation?.taskId === b.relation?.taskId &&
+    a.relations.length === b.relations.length &&
+    a.relations.every(
+      (relation, index) =>
+        relation.kind === b.relations[index]?.kind &&
+        relation.taskId === b.relations[index]?.taskId,
+    ) &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
     a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
     a.agent.choice?.model === b.agent.choice?.model &&
     a.agent.choice?.effort === b.agent.choice?.effort &&
-    a.agent.choice?.contextWindow === b.agent.choice?.contextWindow
+    a.agent.choice?.contextWindow === b.agent.choice?.contextWindow &&
+    a.agent.disabledServers.length === b.agent.disabledServers.length &&
+    a.agent.disabledServers.every((server) => b.agent.disabledServers.includes(server))
   );
-}
-
-/** What a start names of the card's relation: its kind and the other task's id. */
-function relationAsked(relation: NewTaskRelation): TaskCreateRelation {
-  return { kind: relation.kind, taskId: relation.task.id };
 }
 
 /** A card's draft place: its purpose's, in its workspace, none before the workspaces are read. */
@@ -307,6 +340,7 @@ export function NewTaskComposer({
   onStarting,
   onLeave,
   focusedByOwner = false,
+  takesFocus = true,
   titleId,
   listSide,
   purpose = NEW_TASK_PURPOSE.TASK,
@@ -320,9 +354,11 @@ export function NewTaskComposer({
   onLeave: () => void;
   /** Whether the owner hands the words focus as the card first draws, as the dialog does; the words take it themselves otherwise. */
   focusedByOwner?: boolean;
+  /** Whether the words take the caret as the card shows at all; none on a phone's Home, where the keyboard would cover the places bar. */
+  takesFocus?: boolean;
   /** The id the head row's title stands under, which names the dialog's card. */
   titleId?: string | undefined;
-  /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on the welcome, whose card stands near the page's top, where a list risen over it is cut off under the page's head. */
+  /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on Home, whose card stands near the page's top, where a list risen over it is cut off under the page's head. */
   listSide: MentionMenuSide;
   /** What the card starts; a task's agent where none is named. */
   purpose?: NewTaskPurpose | undefined;
@@ -351,28 +387,46 @@ export function NewTaskComposer({
         : newTask.preset?.repository,
   );
   const [choice, pickedModel, choose] = useDefaultChoice(newTask, refused?.card.choice);
+  // The servers the + menu switched off, a refused card's as it was pressed.
+  const [disabledServers, setDisabledServers] = useState<readonly string[]>(
+    refused?.card.press.ask.agent.disabledServers ?? NONE_OFF,
+  );
+  const openSettings = useOpenSettings();
+  // Note that no agent has started, so the popover offers no Built in section (`luke`).
+  const servers: AgentServersControl = {
+    disabled: disabledServers,
+    onSwitch: setDisabledServers,
+    onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+  };
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
   // Pilot or Agent stands on a task's card while the Pilot experiment is on, set to Pilot.
   const offersPilot = useExperiment(EXPERIMENT.PILOT) && !forAutomation;
   const [mode, setMode] = useState<TaskMode>(refused?.card.press.ask.mode ?? TASK_MODE.PILOT);
   const asked = offersPilot ? mode : undefined;
-  // The relation the press that opened the card chose, or the refused card's, which the pill changes.
-  const [related, setRelated] = useState<NewTaskRelation | undefined>(
-    refused === undefined ? newTask.preset?.relation : refused.card.relation,
+  // The relations the press that opened the card chose, or the refused card's, which the + menu and the rows change.
+  const [related, setRelated] = useState<readonly NewTaskRelation[]>(
+    refused?.card.relations ?? (presetRelation === undefined ? [] : [presetRelation]),
   );
-  // Note that a relation names a task of the card's workspace, so a switch of workspace, as the welcome's, lets it go.
-  const relation =
-    !forAutomation && related !== undefined && related.task.workspaceId === workspaceId
-      ? related
-      : undefined;
-  const tree = relation !== undefined && treeKind(relation.kind);
-  // A tree's relation set takes the other task's repository as the card's own, so the card keeps it once the relation is removed.
-  const relate = (next: NewTaskRelation | undefined) => {
+  // The kind Task relation's search stands on, kept from one opening to the next.
+  const [relationKind, setRelationKind] = useState<TaskCreateRelationKind>(
+    TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
+  );
+  const relationSearchId = useId();
+  // Note that a relation names a task of the card's workspace, so a switch of workspace, as Home's, lets it go.
+  const relations = forAutomation
+    ? []
+    : related.filter((each) => each.task.workspaceId === workspaceId);
+  // Every tree relation's task shares one repository, the first's, which the chip is held to.
+  const treeRelation = treeRelationOf(relations);
+  const tree = treeRelation !== undefined;
+  // A tree's relation set takes the other task's repository as the card's own, so the card keeps it once the relations are removed.
+  const relate = (next: readonly NewTaskRelation[]) => {
     setRelated(next);
-    if (next !== undefined && treeKind(next.kind)) setChosen(next.task.repository);
+    const nextTree = treeRelationOf(next);
+    if (nextTree !== undefined) setChosen(nextTree.task.repository);
   };
-  const asSubTask = relation?.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF;
+  const asSubTask = relations.some((each) => each.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF);
   // A refused card opened again holds the words it was pressed with, where the box holds nothing since.
   useLayoutEffect(() => {
     if (refused === undefined) return;
@@ -387,7 +441,7 @@ export function NewTaskComposer({
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
-  // The Relation pill offers the tasks of the card's workspace.
+  // Task relation offers the tasks of the card's workspace.
   const relatable = useMemo(
     () => newTask.tasks.filter((each) => each.workspaceId === workspaceId),
     [newTask.tasks, workspaceId],
@@ -427,7 +481,7 @@ export function NewTaskComposer({
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   // A repository picked in one workspace is none of another's,
-  // so the owner's switch, as the welcome's, lets it go, in the render that brings it; the scope first
+  // so the owner's switch, as Home's, lets it go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
@@ -452,7 +506,7 @@ export function NewTaskComposer({
       ? null
       : candidate;
   // A tree's two tasks work in one repository, the other task's, which the chip is held to.
-  const repository = relation !== undefined && tree ? relation.task.repository : picked;
+  const repository = treeRelation === undefined ? picked : treeRelation.task.repository;
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
@@ -512,7 +566,7 @@ export function NewTaskComposer({
       .start("", tree ? null : repository, workspaceId, {
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(device === undefined ? undefined : { device }),
-        ...(relation === undefined ? undefined : { relation: relationAsked(relation) }),
+        ...(relations.length === 0 ? undefined : { relations: relationsAsked(relations) }),
         ...handing,
       })
       .then((refused) => {
@@ -540,8 +594,8 @@ export function NewTaskComposer({
       workspaceId,
       deviceId: device?.deviceId,
       mode: asked,
-      relation: relation === undefined ? undefined : relationAsked(relation),
-      agent: { prompt, attachments, choice: pickedModel },
+      relations: relationsAsked(relations),
+      agent: { prompt, attachments, choice: pickedModel, disabledServers },
     };
     const held = pressed.current;
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
@@ -552,7 +606,7 @@ export function NewTaskComposer({
       ...(asked === undefined ? undefined : { mode: asked }),
       card: {
         ...(forAutomation ? { purpose } : undefined),
-        ...(relation === undefined ? undefined : { relation }),
+        relations,
         repository,
         choice: pickedModel,
         press,
@@ -605,6 +659,19 @@ export function NewTaskComposer({
     sent: [],
   };
 
+  // A task's card relates its task to others from the + menu's Task relation, an automation's to none.
+  const relationControl: NewTaskRelations = {
+    relations,
+    tasks: relatable,
+    workspaceName: workspace?.name ?? "",
+    repository,
+    disabled: starting,
+    onChange: relate,
+  };
+  const relationPlus = forAutomation
+    ? undefined
+    : [relationMenuPanel(relationSearchId, relationControl, relationKind, setRelationKind)];
+
   const card = (
     <div className="new-task-composer flex min-w-0 flex-col gap-control-gap">
       <div className="new-task-head flex min-w-0 flex-wrap items-center gap-item-gap">
@@ -623,16 +690,6 @@ export function NewTaskComposer({
           )}
           {repositoryChip}
         </div>
-        {forAutomation ? null : (
-          <NewTaskRelationPill
-            relation={relation}
-            tasks={relatable}
-            workspaceName={workspace?.name ?? ""}
-            repository={repository}
-            disabled={starting}
-            onChange={relate}
-          />
-        )}
         {offersPilot ? (
           <div className="new-task-mode ml-auto shrink-0">
             <ChoiceBar<TaskMode>
@@ -647,6 +704,11 @@ export function NewTaskComposer({
           </div>
         ) : null}
       </div>
+      {relations.length === 0 ? null : (
+        <div className={`new-task-relations-dock ${COMPOSER_DOCK_CLASS}`}>
+          <NewTaskRelationRows control={relationControl} />
+        </div>
+      )}
       <AgentComposer
         status={AGENT_STATUS.STARTING}
         composer={composer}
@@ -658,7 +720,8 @@ export function NewTaskComposer({
         modelsFailed={newTask.modelsFailed}
         readModels={newTask.readModels}
         usage={undefined}
-        servers={undefined}
+        servers={servers}
+        plus={relationPlus}
         skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
@@ -667,6 +730,7 @@ export function NewTaskComposer({
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
+        takesFocus={takesFocus}
         listSide={listSide}
         tools={
           runsOnStands ? (

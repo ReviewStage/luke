@@ -2,7 +2,7 @@
  * admin-client.ts -- the admin dashboard's reads and its one star write, asked of the service by the app's host under the account's session.
  *
  * The admin gate takes a Better Auth session, never the Mac's OAuth token
- * (`@luke/service/admin/admin-access`), so every call here goes under the
+ * (`@repo/service/admin/admin-access`), so every call here goes under the
  * session credential: the Mac's signed session bearer, asked for again once
  * where none is held (`sendInSession`), and a browser tab's own cookie.
  *
@@ -15,7 +15,7 @@
  * screen words as its own failure.
  */
 
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Duration, Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

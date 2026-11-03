@@ -1,6 +1,6 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { Channel } from "@luke/features/channel-wire";
-import { dictationKeywords } from "@luke/features/dictation-keywords";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import type { Channel } from "@repo/features/channel-wire";
+import { dictationKeywords } from "@repo/features/dictation-keywords";
 import {
   fieldValueWords,
   INBOX_ASK,
@@ -16,11 +16,11 @@ import {
   inboxAddressedTo,
   inboxWaitsOn,
   openAskOf,
-} from "@luke/features/inbox-wire";
-import { markdownLink } from "@luke/features/link-grammar";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/inbox-wire";
+import { markdownLink } from "@repo/features/link-grammar";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BackButton,
   Badge,
@@ -53,7 +53,7 @@ import {
   Tooltip,
   useMenu,
   useMinute,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   ACTOR_KIND,
   type Actor,
@@ -61,9 +61,9 @@ import {
   actorName,
   memberActor,
   SOMEONE_REASON,
-} from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
-import { isWireString } from "@luke/wire";
+} from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
+import { isWireString } from "@repo/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -453,7 +453,7 @@ function AnswerValues({
 function EarlierMessages({ by }: { by: ItemAgent }): React.JSX.Element {
   return (
     <li
-      className="inbox-thread-earlier relative pb-luke-20 pl-inbox-earlier text-caption-inline text-muted-foreground before:absolute before:top-0 before:-bottom-inbox-face-half before:left-inbox-line before:w-luke-2 before:bg-border before:content-['']"
+      className="inbox-thread-earlier relative pb-ui-20 pl-inbox-earlier text-caption-inline text-muted-foreground before:absolute before:top-0 before:-bottom-inbox-face-half before:left-inbox-line before:w-ui-2 before:bg-border before:content-['']"
       data-inbox-earlier=""
     >
       <ActorLine>

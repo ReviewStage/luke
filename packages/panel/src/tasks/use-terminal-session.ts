@@ -1,5 +1,5 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
@@ -10,7 +10,7 @@ import {
   type TerminalPortOutbound,
   type TerminalRefusal,
   terminalPortOutboundSchema,
-} from "@luke/features/terminal-acts";
+} from "@repo/features/terminal-acts";
 import {
   TERMINAL_ACTION,
   TERMINAL_STATE,
@@ -18,11 +18,11 @@ import {
   type TerminalAction,
   type TerminalState,
   terminalLook,
-} from "@luke/features/terminal-model";
-import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
-import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { STATUS_TONE } from "@luke/ui";
+} from "@repo/features/terminal-model";
+import { sandboxRead, shellsAsked } from "@repo/features/terminal-store";
+import { SANDBOX_STATE, type TerminalsAnswer } from "@repo/features/terminal-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { STATUS_TONE } from "@repo/ui";
 import {
   type PendingValues,
   pendingSettled,
@@ -30,8 +30,8 @@ import {
   pendingValue,
   pendingWithout,
   type SameValue,
-} from "@luke/ui/pending-values";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/pending-values";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -485,7 +485,7 @@ export function useTerminalSession(
   }, [act, agentId, enter, failedToast, onChoose, reread]);
 
   // A name given here stands over the list until a read carries it, or a third name, or its time
-  // runs out (`@luke/ui/pending-values`), and goes at once where the rename is refused.
+  // runs out (`@repo/ui/pending-values`), and goes at once where the rename is refused.
   const [titles, setTitles] = useState(NO_PENDING_TITLES);
   const titlesNow = usePendingNow(titles.size > 0);
   useEffect(

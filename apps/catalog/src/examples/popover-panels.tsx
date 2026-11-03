@@ -12,7 +12,7 @@ import {
   SearchField,
   TEXT_TONE,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -88,7 +88,7 @@ function PopoverPanelsExample(): React.JSX.Element {
       <div className="catalog-popover-stage">
         <Inline gap={GAP.CONTROL} justify={JUSTIFY.BETWEEN}>
           <Hung look={POPOVER_PANEL_LOOK.CARD} label="Context usage" />
-          <Hung look={POPOVER_PANEL_LOOK.MENU} label="MCP servers" />
+          <Hung look={POPOVER_PANEL_LOOK.MENU} label="Integrations" />
         </Inline>
       </div>
     </CatalogSection>

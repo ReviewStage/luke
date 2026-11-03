@@ -1,4 +1,4 @@
-import { FILE_TEXT_EXTENT, FileText } from "@luke/ui";
+import { FILE_TEXT_EXTENT, FileText } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

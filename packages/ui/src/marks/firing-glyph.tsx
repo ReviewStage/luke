@@ -2,8 +2,8 @@ import {
   AUTOMATION_FIRING,
   type AutomationFiring,
   type AutomationTrigger,
-} from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+} from "@repo/features/automation-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import React from "react";
 import { ClockIcon, PlayIcon, WebhookIcon } from "../icons/icons.js";
 import { ProviderMark } from "./provider-mark.js";

@@ -9,21 +9,21 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationFiring,
-} from "@luke/features/automation-wire";
-import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@luke/features/live-wire";
+} from "@repo/features/automation-wire";
+import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@repo/features/live-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
   type MacCommandKind,
   type MacCommandResult,
-} from "@luke/features/mac-command-wire";
+} from "@repo/features/mac-command-wire";
 import {
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type MessageRole,
-} from "@luke/wire";
+} from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -92,7 +92,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   return { owner, other };
 });
@@ -361,7 +361,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
           kind: MESSAGE_SENDER.AGENT,
           agentId: own.id,
         });
-        yield* sendLine(starter, agent.conversationId, 3, { kind: MESSAGE_SENDER.LUKE });
+        yield* sendLine(starter, agent.conversationId, 3, { kind: MESSAGE_SENDER.APP });
         const target = { userId: starter, conversationId: agent.conversationId };
         assert.equal(yield* heardFromAnotherAccount(target), false);
       }),

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { HIGHLIGHT_WORKER_BUILD } from "@luke/panel/build-table";
+import { HIGHLIGHT_WORKER_BUILD } from "@repo/panel/build-table";
 import { build } from "esbuild";
 import { test } from "vitest";
 

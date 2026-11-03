@@ -1,7 +1,7 @@
 /**
  * inbox-procedures.ts -- what an agent posted for the developer, read, answered, messaged, and marked read, and a thread a member starts.
  *
- * The inbox resource of the hosted oRPC router (`@luke/features/contract`'s
+ * The inbox resource of the hosted oRPC router (`@repo/features/contract`'s
  * `inbox.ts`), each procedure answering the bytes its old `HttpRouter`
  * endpoint answered. The caller is resolved on the resource's implementer,
  * so an unsigned request is refused before its input is read; a procedure
@@ -15,13 +15,18 @@
  * stays on the agents' group (`agents/agents-app.ts`).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { type Agent, readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
-import { readTaskWorkspace } from "@luke/database/models/task-store";
-import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
-import type { AgentAttachment } from "@luke/features/agent-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import {
+  type Agent,
+  readAgent,
+  readVisibleAgent,
+  readVisibleAgentWorkspace,
+} from "@repo/database/models/agent-store";
+import { readTaskWorkspace } from "@repo/database/models/task-store";
+import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
+import type { AgentAttachment } from "@repo/features/agent-wire";
 import {
   INBOX_ASK_STATUS,
   INBOX_CURSOR_START,
@@ -37,10 +42,10 @@ import {
   inboxStartTitle,
   inboxThreadMessage,
   inboxTodoTicks,
-} from "@luke/features/inbox-wire";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
-import { failureKind } from "@luke/runtime/effect";
-import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@luke/wire";
+} from "@repo/features/inbox-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
+import { failureKind } from "@repo/runtime/effect";
+import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@repo/wire";
 import type { LanguageModel } from "ai";
 import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
@@ -51,13 +56,13 @@ import {
   taskInboxPast,
 } from "../agents/coder-host/inbox-page.js";
 import { titleModel } from "../agents/coder-host/model.js";
+import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
-import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { HostedEnvironment } from "../environment.js";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import { recordServerEvent, recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
 import {
   HOSTED_REFUSAL,
@@ -68,6 +73,7 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { providerModelOf } from "../providers/model-catalog.js";
+import { settleThreadDms } from "../slack/thread-dms.js";
 import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
 import {
   acknowledgeInboxItem,
@@ -81,6 +87,7 @@ import {
   markInboxRead,
   postInboxMessage,
   readInboxItem,
+  readInboxItemHome,
   retitleInboxThread,
   type StoredInboxItem,
   startInboxThread,
@@ -97,8 +104,9 @@ export type InboxTitleModelOf = (
 ) => Effect.Effect<LanguageModel | undefined, never, DatabaseServices | HostedEnvironment>;
 
 /** What the inbox asks of the deployment: who the caller is, how eve is reached to hand an answer or a message to an agent, and, for a test, the model an untitled thread's title is generated on. */
-export type InboxProcedureSeams = AccountResolving &
-  EveReach & { readonly titleModel?: InboxTitleModelOf | undefined };
+export type InboxProcedureSeams = AccountResolving & {
+  readonly titleModel?: InboxTitleModelOf | undefined;
+};
 
 /** The agent-title model on the sender's own key (`../agents/coder-host/model.ts`), as an agent's own title is generated, our key never paying for one; none where they saved no key, or it could not be read. */
 const productionTitleModel: InboxTitleModelOf = (userId, preferred) =>
@@ -139,6 +147,12 @@ const retitled = (
     if (Option.isNone(title)) return;
     yield* retitleInboxThread(item.id, item.title, title.value);
   });
+
+/** What a press in a Slack DM says in that DM once its answer is taken: the message whose ask it answered, and the line naming the option chosen. */
+interface SlackChosen {
+  readonly messageId: string;
+  readonly line: string;
+}
 
 /** Whether a hand-off was refused because the agent's session has ended for good, so no message will ever reach it. */
 function retiredRefusal(refusal: HostedRefusal): boolean {
@@ -195,9 +209,7 @@ function threadLine(event: ThreadLineMetadata["event"], itemId: string): ThreadL
  * answer.
  */
 const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: InboxProcedureSeams,
   writer: Effect.Effect<StoreWriter>,
-  request: Request,
   userId: string,
   itemId: string,
   agentId: string,
@@ -206,13 +218,14 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly clientKey: string;
     readonly attachments: readonly AgentAttachment[];
   },
-  counted: Effect.Effect<void>,
+  counted: Effect.Effect<void, never, DatabaseServices>,
+  chosen?: SlackChosen,
 ) {
   const { text, clientKey, attachments } = message;
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+    const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
       text,
       attachments,
@@ -232,6 +245,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted only once the hand-off stands, since a failed one withdraws the answer above.
   yield* counted;
+  yield* afterResponse("an answered thread's Slack DM", settleThreadDms(itemId, chosen));
   // The question settled may have finished the task's work, asked once the agent was told, so one
   // woken by the answer reads as running (`tasks/task-finish.ts`).
   yield* settleAgentTaskIfFinished(userId, agentId);
@@ -253,9 +267,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
  * keeps the nod rather than waiting on the developer for ever.
  */
 const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: InboxProcedureSeams,
   writer: Effect.Effect<StoreWriter>,
-  request: Request,
   userId: string,
   itemId: string,
   asked: { readonly revision: number; readonly clientKey: string },
@@ -267,7 +279,12 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
   const counted =
     stored.value.answerKey === clientKey
       ? Effect.void
-      : recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {});
+      : recordServerEventIn(
+          SERVER_EVENT.INBOX_ANSWER_SEND,
+          userId,
+          readVisibleAgentWorkspace(userId, stored.value.item.agentId),
+          {},
+        );
   const written = yield* takenNod(userId, stored.value, asked);
   if (written === undefined) {
     // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
@@ -283,9 +300,7 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
     return { item: taken, taken: true, ...writtenIn };
   }
   yield* handedAnswer(
-    seams,
     writer,
-    request,
     userId,
     itemId,
     taken.agentId,
@@ -296,27 +311,28 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * A member's reply that answers the thread's open ask, as the window sends
- * one from version 5: the answer taken first, with the reply's words and
- * files, as the member's message that carries it (`answerInboxAsk`), and
- * then, by the rule every answer follows (`inboxAnswerHeard`),
- * handed to the agent under the answer's own lead, its files with it, under
- * the reply's key through the one steer path; otherwise kept for the agent
- * to read in its own time. An item put away with its task is not answered.
- * An answer to an ask the thread no longer holds open, to another message,
- * or one the ask does not take is refused, as a message's request is. A
- * hand-off that fails, is interrupted, or dies takes the answer back, as
- * a nod's does, so the thread never reads answered while the agent
- * was not told; an answer sent again under the key it was taken by is
+ * A member's answer to the thread's open ask, taken first, with its words
+ * and files, as the member's message that carries it (`answerInboxAsk`),
+ * and then, by the rule every answer follows (`inboxAnswerHeard`), handed
+ * to the agent under the answer's own lead, its files with it, under the
+ * answer's key through the one steer path; otherwise kept for the agent to
+ * read in its own time. An item put away with its task is not found. An
+ * answer to an ask the thread no longer holds open, to another message, or
+ * one the ask does not take is answered by what it came to and handed to
+ * nobody. A hand-off that fails, is interrupted, or dies takes the answer
+ * back, as a nod's does, so the thread never reads answered while the
+ * agent was not told; an answer sent again under the key it was taken by is
  * handed off again, which the steer's own key makes reach the agent once.
  * An agent whose session has ended for good can hear nothing again, so its
- * item keeps the answer. It answers as a plain reply does: the item as it
- * then stands.
+ * item keeps the answer.
+ *
+ * Exported for a caller with no request of its own, our Slack route
+ * (`slack/slack-events-app.ts`), which answers a press in a DM as the
+ * member it maps the presser to, and names the line that DM says once the
+ * answer is taken (`chosen`).
  */
-const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: InboxProcedureSeams,
+export const answerAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
-  request: Request,
   userId: string,
   itemId: string,
   sent: {
@@ -325,6 +341,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly attachments: readonly AgentAttachment[];
     readonly answers: InboxAnswers;
   },
+  chosen?: SlackChosen,
 ) {
   const { text, clientKey, attachments, answers } = sent;
   const answered = yield* hostedStoreOrUnavailable(
@@ -334,24 +351,31 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { item, outcome, txid } = answered.value;
   const writtenIn = txid === undefined ? {} : { txid };
   if (outcome === INBOX_ASK_ANSWER.NOT_OPEN || outcome === INBOX_ASK_ANSWER.REFUSED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    return { item, outcome, ...writtenIn };
   }
   // An answer sent again under the key it was taken under is the same answer, counted once.
   const counted =
     outcome === INBOX_ASK_ANSWER.TAKEN
       ? Effect.andThen(
-          recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {}),
-          recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
-            answered_ask: true,
-            has_media: attachments.length > 0,
-          }),
+          recordServerEventIn(
+            SERVER_EVENT.INBOX_ANSWER_SEND,
+            userId,
+            readVisibleAgentWorkspace(userId, item.agentId),
+            {},
+          ),
+          recordServerEventIn(
+            SERVER_EVENT.THREAD_POST,
+            userId,
+            readVisibleAgentWorkspace(userId, item.agentId),
+            { answered_ask: true, has_media: attachments.length > 0 },
+          ),
         )
       : Effect.void;
   const reply = inboxAnswersReply(answers, text);
   if (!inboxAnswerHeard(item, reply, attachments)) {
     yield* counted;
     yield* settleAgentTaskIfFinished(userId, item.agentId);
-    return { item, ...writtenIn };
+    return { item, outcome, ...writtenIn };
   }
   const message = inboxAnswerMessage(
     item,
@@ -359,15 +383,39 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     inboxTodoTicks(item, answers, answered.value.ask),
   );
   yield* handedAnswer(
-    seams,
     writer,
-    request,
     userId,
     itemId,
     item.agentId,
     { text: message, clientKey, attachments },
     counted,
+    chosen,
   );
+  return { item, outcome, ...writtenIn };
+});
+
+/**
+ * A member's reply that answers the thread's open ask, as the window sends
+ * one from version 5, taken and handed to the agent as `answerAsMember`
+ * says. An answer to an ask the thread no longer holds open, to another
+ * message, or one the ask does not take is refused, as a message's request
+ * is. It answers as a plain reply does: the item as it then stands.
+ */
+const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
+  writer: Effect.Effect<StoreWriter>,
+  userId: string,
+  itemId: string,
+  sent: {
+    readonly text: string;
+    readonly clientKey: string;
+    readonly attachments: readonly AgentAttachment[];
+    readonly answers: InboxAnswers;
+  },
+) {
+  const { item, outcome, ...writtenIn } = yield* answerAsMember(writer, userId, itemId, sent);
+  if (outcome === INBOX_ASK_ANSWER.NOT_OPEN || outcome === INBOX_ASK_ANSWER.REFUSED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   return { item, ...writtenIn };
 });
 
@@ -387,9 +435,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
  * so its item stays closed.
  */
 const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: InboxProcedureSeams,
   writer: Effect.Effect<StoreWriter>,
-  request: Request,
   userId: string,
   itemId: string,
   asked: { readonly revision: number; readonly clientKey: string },
@@ -422,14 +468,16 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const { txid, ...taken } = written;
   const writtenIn = txid === undefined ? {} : { txid };
+  const dmSettled = afterResponse("a closed thread's Slack DM", settleThreadDms(itemId));
   if (!taken.needsReply) {
+    yield* dmSettled;
     yield* settleAgentTaskIfFinished(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
   }
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+    const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxClosedMessage(taken),
       attachments: [],
@@ -447,6 +495,7 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     ),
   );
+  yield* dmSettled;
   yield* settleAgentTaskIfFinished(userId, taken.agentId);
   return { item: taken, taken: true, ...writtenIn };
 });
@@ -475,9 +524,7 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
  * answers, even while an ask stands open.
  */
 const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: InboxProcedureSeams,
   writer: Effect.Effect<StoreWriter>,
-  request: Request,
   userId: string,
   itemId: string,
   asked: {
@@ -490,7 +537,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const { text, clientKey, attachments, answers, revision } = asked;
   if (answers !== undefined) {
-    return yield* answeredByReply(seams, writer, request, userId, itemId, {
+    return yield* answeredByReply(writer, userId, itemId, {
       text,
       clientKey,
       attachments,
@@ -513,7 +560,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+    const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
@@ -528,10 +575,12 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted once the hand-off stands, since a failed one takes the message back above.
   if (outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
-    yield* recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
-      answered_ask: false,
-      has_media: attachments.length > 0,
-    });
+    yield* recordServerEventIn(
+      SERVER_EVENT.THREAD_POST,
+      userId,
+      readVisibleAgentWorkspace(userId, item.agentId),
+      { answered_ask: false, has_media: attachments.length > 0 },
+    );
   }
   return { item };
 });
@@ -549,7 +598,6 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
 const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: InboxProcedureSeams,
   writer: Effect.Effect<StoreWriter>,
-  request: Request,
   userId: string,
   asked: {
     readonly agentId: string;
@@ -584,7 +632,7 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? withdrawInboxThread(userId, item.id, clientKey)
       : Effect.void;
   const handedOver = Effect.gen(function* () {
-    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+    const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
@@ -598,10 +646,11 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted once the hand-off stands, since a failed one takes the thread back above.
   if (outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
-    yield* recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
-      answered_ask: false,
-      has_media: attachments.length > 0,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.THREAD_POST,
+      { userId, workspaceId: agent.value.organizationId },
+      { answered_ask: false, has_media: attachments.length > 0 },
+    );
   }
   // Note that only the write that started the thread titles it, so a repeat asks no model again.
   if (!asked.titled && outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
@@ -657,7 +706,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }) {
       const itemId = yield* pathUuid(input.params.id);
       const { revision, clientKey } = input.body;
-      return yield* acknowledged(seams, writer, context.request, context.userId, itemId, {
+      return yield* acknowledged(writer, context.userId, itemId, {
         revision,
         clientKey,
       });
@@ -668,7 +717,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }) {
       const itemId = yield* pathUuid(input.params.id);
       const { text, clientKey, attachments = [], answers, revision } = input.body;
-      return yield* messaged(seams, writer, context.request, context.userId, itemId, {
+      return yield* messaged(writer, context.userId, itemId, {
         text,
         clientKey,
         attachments,
@@ -682,7 +731,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }) {
       const agentId = yield* pathUuid(input.agentId);
       const { text, clientKey, attachments = [] } = input;
-      return yield* started(seams, writer, context.request, context.userId, {
+      return yield* started(seams, writer, context.userId, {
         agentId,
         title: inboxStartTitle(input),
         titled: input.title !== undefined,
@@ -696,7 +745,14 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       context,
     }) {
       const itemId = yield* pathUuid(input.params.id);
-      return yield* closed(seams, writer, context.request, context.userId, itemId, input.body);
+      return yield* closed(writer, context.userId, itemId, input.body);
+    }),
+    // Note that an item the account may not read is answered as one that does not exist, so a link by its id says nothing of it.
+    home: signedIn.home.effect(function* ({ input, context }) {
+      const itemId = yield* pathUuid(input.id);
+      const home = yield* hostedStoreOrUnavailable(readInboxItemHome(context.userId, itemId));
+      if (Option.isNone(home)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return home.value;
     }),
     markItemRead: signedIn.markItemRead.effect(function* ({ input, context }) {
       const itemId = yield* pathUuid(input.id);

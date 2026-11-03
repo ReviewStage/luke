@@ -1,23 +1,20 @@
-# @luke/service
+# @repo/service
 
-The hosted service's logic: what the web deployment's functions and its eve
-service (`apps/dev`) compose and run. The deployment
+The hosted service's logic: what the web deployment's functions compose and
+run. The deployment
 keeps only its shell in `apps/web/server` — the Vercel function entries under
 `routes/`, the runtime edge `runtime.ts`, and the function layout and
 bundling — and reaches everything else here.
 
 The package has no barrel. Each module is its own subpath, as
-`@luke/database`'s are (`@luke/service/http/http-effect`), and test builders
-stand at `@luke/service/testing/<name>`. A module lives in the folder of the
+`@repo/database`'s are (`@repo/service/http/http-effect`), and test builders
+stand at `@repo/service/testing/<name>`. A module lives in the folder of the
 domain it belongs to (`auth/`, `github/`, `tasks/`, `agents/`, …),
 named by the group of this README that describes it.
 
 `src/core.ts` is the package's own door to the workspace packages it builds on,
 and it has no subpath: a consumer outside the package names the defining
 package.
-
-`src/run.ts` names the runners the deployment's edge hands a module
-(`WebStoreRun`, `WebAgentRun`), so a module never imports the edge itself.
 
 ## The auth group
 
@@ -179,8 +176,8 @@ installs the App on an account or organization and chooses its repositories.
 The App's registered Setup URL, with "Redirect on update", is
 `https://vespin.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
-`/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
-(`@luke/features`). Without a `state`, the route confirms the installation
+`/github-installed?status=…` with one word from `GITHUB_INSTALL_STATUS`
+(`@repo/features`). Without a `state`, the route confirms the installation
 through `installation(id)` as the App and links nothing: `installed`,
 `updated`, `requested` (a member asked an organization's owner, so there is
 no installation yet), `not-found`, or `unavailable`.
@@ -245,7 +242,7 @@ task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
 A redelivery reads the same again. Before any of that, the repository a
 delivery names is recorded by GitHub's id under the name it carries
-(`github_repository`, `@luke/database/models/github-repositories`); where
+(`github_repository`, `@repo/database/models/github-repositories`); where
 GitHub gives the id another name than it was last seen under, every stored
 name of it (tasks, agents, automations, pins, token reads, chapters, and
 workspace token repositories) moves to the new one in the same transaction,
@@ -292,7 +289,7 @@ Automations fire on Sentry's events (an issue alert whose action is Vespin, a
 new issue) through Vespin's own Sentry public integration, which a Sentry
 organization's owner installs on one Vespin workspace; a delivery fires only
 the automations of the workspace its installation stands for
-(`integration_installation`, `@luke/database/models/integration-installation-store`).
+(`integration_installation`, `@repo/database/models/integration-installation-store`).
 `src/triggers/sentry/sentry-app-config.ts`'s `SentryApp` is the integration
 as the web runtime builds it from `SENTRY_APP_SLUG` (the integration's slug,
 which its install address names), `SENTRY_APP_CLIENT_ID`, and
@@ -314,13 +311,50 @@ Custom Integrations › Create New Integration, choose a public integration and 
 Then copy the integration's slug, client id, and client secret into the three
 variables above for every environment that receives its deliveries.
 
+## The Vespin Slack bot
+
+Vespin's own Slack bot writes to a workspace's members in Slack. It is one
+Slack app, Vercel Connect's managed `slack/slack` connector, apart from the
+Slack connector each member connects for their agents (`SLACK_CONNECTOR_UID`).
+`src/slack/slack-bot.ts`'s `SlackBot` reads the connector's UID from
+`SLACK_BOT_CONNECTOR_UID` and asks Connect for the bot token under an app
+subject at each call; a deployment without the variable builds the service,
+answers `configured: false`, and writes nothing. Only the deployment's own
+Vercel OIDC token can mint the app token, so the CLI cannot check it: check it
+on a Preview. An owner or admin connects the bot under Settings › Workspace
+(`src/slack/slack-bot-procedures.ts`), which calls `auth.test` and keeps the
+team in `slack_installation`, one per workspace; Disconnect deletes it.
+`SlackBot.dm` finds a member by their email (`users.lookupByEmail`) the first
+time and keeps the answer, a miss included, in `slack_member`
+(`@repo/database/models/slack-installation-store`). `dm` and `update` log and
+swallow every failure; never yield either inside a transaction.
+
+An automation with "Send the result to me on Slack" on (`automation.slack_delivery`)
+has each run's result sent to its owner by the bot as the run's agent's turn
+settles (`src/automations/automation-slack-delivery.ts`, heard through
+`SettledTurnListener`): the agent's final message as mrkdwn, or that the run
+failed or was stopped, with a link to the agent. The run is claimed first
+(`automation_run.slack_delivered_at`), so each run sends once.
+
+A member's @mention of the bot in a channel, or a direct message to it,
+reaches our Slack route (`/api/slack/events`) as an `app_mention` or
+`message.im` event and starts a coding agent as them on no task
+(`src/slack/slack-agent-starts.ts`), once the answer has left; Slack's
+retries (`x-slack-retry-num`) and bots' messages are dropped. The writer is
+found by the Slack id the bot kept, or else by the email Slack holds for them
+(`users.info`). The bot replies in the thread with the agent's link, the
+thread is kept against the agent in `slack_agent_thread`, a later mention in
+that thread is sent to the agent instead, and every settled turn of the agent
+is posted back in the thread once (`SettledTurnListener`). The Slack app must
+subscribe to the `app_mention` and `message.im` bot events.
+
 ## The admin resource
 
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted
 oRPC router (`admin` in `src/orpc/router.ts`): its reads and the Users tab's
 one star write, PUT to set it and DELETE to take it back, each a procedure
-of `@luke/features/contract`'s `admin` contract, whose addresses are
-`ADMIN_ROUTE_PATH` in `@luke/features/admin-wire` — the same constants the
+of `@repo/features/contract`'s `admin` contract, whose addresses are
+`ADMIN_ROUTE_PATH` in `@repo/features/admin-wire` — the same constants the
 page's browser client asks through, so an address cannot drift between the
 two ends. A method an address does not answer is the handler's 405 before
 anything else runs.
@@ -366,8 +400,7 @@ and `userIdForAuthorization(authorization, userInfo)` each answer
 `Effect<OAuthUserInfo | undefined, UnknownException>`: the auth service's own
 `oauth2UserInfo` is a promise of Better Auth's, so it is wrapped with
 `Effect.tryPromise` once where an endpoint is constructed —
-`hostedUserInfo` in `src/auth/bearer.ts` itself, the coder host's seam
-(`src/agents/coder-host/production.ts`),
+`hostedUserInfo` in `src/auth/bearer.ts` itself
 and the events group's inline one — and nowhere else. What that
 call throws is still one indistinguishable nothing: the resolution recovers
 it, so a missing header, an expired token, and a refusing auth service are
@@ -375,13 +408,7 @@ the same 401 they always were, and no route repeats the recovery.
 
 Every caller yields it. `resolveHostedUserId`, which the account and tasks
 groups are handed as their `resolveUserId`, is Effect-shaped, so each reads the bearer on its own fiber instead
-of wrapping a promise in `Effect.promise`. One caller is a
-promise of somebody else's: eve's `AuthFn`, which
-`apps/dev/channels/eve.ts` satisfies by running the resolution once at
-that authored file — eve's own edge — rather than keeping a promise-shaped
-door beside the effect in `src/auth/`. `lukeAccount` takes the
-resolved account as a `BearerAccount` promise and reaches no userinfo
-endpoint of its own.
+of wrapping a promise in `Effect.promise`.
 
 `resolveHostedUserId` reads a request in a fixed order (`requestUserId`):
 where it carries an `Authorization` header at all, the bearer exactly as
@@ -392,37 +419,13 @@ never falls to the cookie beside it, because Better Auth's bearer plugin
 leaves the cookie standing under any header it did not sign. So a page on the
 deployment's own origin reaches the account routes the desktop does, its
 state-changing requests held to that origin by `src/http/origin-guard.ts`
-first. eve's channels take no cookie, so the work that reaches eve picks
-its caller per request in one place (`src/agents/coder-host/stop.ts`'s
-`eveFor`): a request that carries an `Authorization` header reaches eve over
-that bearer as it came, as every desktop request does, and one that carries
-none, whose account the cookie named, reaches eve as the deployment acting
-for that account, under the deployment's own `EVE_DEPLOYMENT_SECRET` with the
-account in `x-luke-account`. The account is always the one the route resolved from
-that request, never one the request or a row names, and a deployment with
-no secret or no eve origin answers such a request unavailable, a delete
-included: a cookie's delete composes eve before it stops or erases anything
-and is refused where it cannot (`src/agents/retire-sessions.ts`'s
-`retiringReach`), while a bearer's goes on with its retires a courtesy, as
-it always has. The channel's
-door holds the deployment to what its actor admits
-(`src/agents/eve-host/auth.ts`, over the coder channel's table,
-`CODER_DEPLOYMENT_TURNS` in `src/agents/coder-host/channel.ts`): a typed
-opening and line, which are an agent's Start, a message, an inbox answer, a
-manual automation run, a comment's hand-over to an agent it mentions
-(`src/tasks/comment-ask.ts`), an agent's own `start_agent`, and
-another agent's `message_agent` (`src/agents/coder-host/agent-message.ts`);
-a cancel, which is an agent's Stop, its Archive, and a task's archive; and a
-reset, which is how the two deletes, a task's and the account's, retire the
-eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
-on a session or a conversation the account reaches, as the door holds every
-caller. A typed message is minted at the door as the account's own
-principal, the very identity its bearer would be admitted as, with the
-deployment named only in its `luke:carrier` attribute, because eve steers a
-running turn, and folds the messages that waited into one turn, only by that
-identity, so a teammate's runs as the teammate, never as the plan's owner. What acts for one device rather than the account
-takes the bearer alone: the Mac's commands (`resolveHostedBearerUserId`), and
-eve's channels, which resolve with `hostedUserId`, as the terminal relay
+first. The work that reaches an agent's session reaches it for the account
+the route resolved from that request, never one the request or a row names,
+whether a bearer or a cookie named it (`src/agents/coder-host/runtime-sessions.ts`'s
+`routedSessions`): a coding agent's session is answered by the harness its
+conversation runs on, and one that ran on eve is refused as ended. What acts for
+one device rather than the account takes the bearer alone: the Mac's
+commands (`resolveHostedBearerUserId`), as the terminal relay
 resolves with `userIdForAuthorization`. Because a tab opened on a byte route now
 carries the cookie, every byte a member, an agent, or GitHub wrote is served
 under `HOSTED_BYTES_HEADERS` (`src/http/http-effect.ts`), whose sandboxed
@@ -433,7 +436,7 @@ policy keeps an SVG's script from running as this origin.
 `src/dictation/dictation-procedures.ts` answers `POST /api/dictation` on the
 hosted oRPC router (`src/orpc/`): one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
-(`@luke/features/dictation-wire`), answered `{ text }`. The clip is WebM
+(`@repo/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
 either as `request_too_large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the task's
@@ -472,8 +475,8 @@ the standard window, which a choice opts into, and the whole window is the
 long one, which every choice runs on unless it names the standard one, as
 every agent did before the choice existed; the factors are what the tier
 past the boundary costs beside the first. No offered model needs a request
-option for either window, so the choice is the window eve compacts against
-and the context ring reads, nothing more. The read is the
+option for either window, and neither harness takes a choice of one, so the
+choice is the window the context ring reads, nothing more. The read is the
 `ModelCatalog` service `src/runtime.ts`'s layer builds once per instance, cached
 for an hour on a success and for no time on a failure, so an outage at the
 gateway is retried on the next request rather than answered for the hour.
@@ -500,7 +503,7 @@ account's own Anthropic and OpenAI API keys, at most one per provider:
 `GET` answers what each is, `PUT` saves one, `DELETE
 ?provider=<provider>` removes one, and `PATCH` turns a connected plan's
 default for the account's agents on or off, each answered with the keys as they then
-stand (`@luke/features/provider-key-wire`). No answer carries a key: what
+stand (`@repo/features/provider-key-wire`). No answer carries a key: what
 the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —
 `verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
@@ -598,8 +601,8 @@ call an app holds for approval, or that needs input, answers the agent with
 the question and a request id, at the plain `/mcp`, its default `model`
 elicitation mode, and the agent asks the developer and calls Executor's
 `resume` with their answer. Its `native` mode would ask over an MCP
-elicitation instead, which eve's client never answers, so Executor's
-connection stays on the plain URL, and the mode is fixed in the grant
+elicitation instead, which eve's client, which every agent ran on when the
+grant was set, never answered, so Executor's connection stays on the plain URL, and the mode is fixed in the grant
 whatever URL a client later opens it at (https://executor.sh/docs/mcp). A connection belongs to the account, so it reaches every task and
 project the account has. `src/integrations/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, the one naming
@@ -613,13 +616,12 @@ server takes a GitHub App user token, and an account that signed in with
 GitHub already holds one: the Vespin GitHub App's, which `GitHubApp.userToken`
 reads off the `account` row and refreshes ("The Vespin GitHub App" above). So
 GitHub has no connector, no `integration_connection` row, and no Connect or
-Disconnect (`INTEGRATION_GRANT_OF` in `@luke/features/integration-wire`): the
+Disconnect (`INTEGRATION_GRANT_OF` in `@repo/features/integration-wire`): the
 statuses route answers it `connected` while that token reads, `disconnected`
 for an account with no usable GitHub sign-in, and `unavailable` on a
 deployment without the App, and a turn is handed GitHub's server wherever the
-App is configured. The token handed to eve is said to expire inside
-`userToken`'s refresh margin, so eve asks again, and the token is refreshed
-if need be, before it lapses. What the agents reach is what the App reaches
+App is configured. The token is read afresh at every call, through
+`userToken`, which refreshes it if need be before it lapses. What the agents reach is what the App reaches
 for the account, under the App's permissions, on the repositories it is
 installed on. Settings › Integrations' GitHub row is where an account links its own GitHub, through the connect
 page, or disconnects it, under the Mac's session; that link reaches no
@@ -646,8 +648,8 @@ was possible, and a minted `luke_acct_…` id for another. Each row also keeps
 the one name the account goes by everywhere (`connection_name`): the
 provider's own for the first (`notion`), the provider and its place for
 another (`notion-2`), minted once (`mintIntegrationConnectionName` in
-`@luke/features/integration-wire`) and read back from the row after. That
-name is the eve connection an agent reaches the account through, an agent's switch and mention, and the routes' `connection` query, so every
+`@repo/features/integration-wire`) and read back from the row after. That
+name is the MCP server an agent reaches the account through, an agent's switch and mention, and the routes' `connection` query, so every
 name stored before a second account was possible keeps naming the first.
 A row also keeps a `label`, the account's name at the provider where
 Connect's grant carries one shaped like no credential, or the developer's
@@ -749,7 +751,7 @@ more than one sees exactly what it saw before:
 - `GET /api/account/integrations/connected` is where Connect returns the
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on
-  `/integration-connected.html` with the provider and one word: `connected`,
+  `/integration-connected` with the provider and one word: `connected`,
   `not-completed` (declined or cancelled), `expired`, or `unavailable`. A
   `not-completed` ends the sign-in, so the desktop's next read finds it no
   longer pending and says it failed, unless Connect's result names it
@@ -763,59 +765,42 @@ more than one sees exactly what it saw before:
 The hosted oRPC router reads the provider from its own path segment, as it
 reads a task's id.
 
-**The agents** (`src/integrations/integration-connection.ts`,
-`src/agents/agent-runtime/connections.ts`). eve hands a declared subagent
-none of its parent's connections, so each of the two agents registers one
-`connections/integrations.ts`: a dynamic connection resolved as each turn
-starts, which hands the turn every server its role's policy has on
-(`src/agents/agent-runtime/servers.ts`), each the one definition over its provider and
-that agent's own ownership check: the root's `admit`, or a worker's
-`admitDelegated`. Each account the caller holds at a provider, standing
-connected or expired, is handed as a connection of its own under its
-connection name and keyed in eve by its own grant's subject, which its
-token read is held to, so a name a later account takes never reaches it from
-a turn handed the old one, and a provider with none is handed bare, so its first call says how to connect it. Where a
-provider hands more than one account, each description gains one sentence
+**The agents** (`src/integrations/connection-door.ts`,
+`src/agents/agent-runtime/servers.ts`). Each connection an agent is handed
+is an MCP server of its own at Vespin
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/workspace-mcp/app.ts`)
+on the runner's bearer, and the launch names them (`nativeAgentConnections`):
+every integration offered to the caller that the developer has not switched
+off for that agent, the switches naming connections, and a server mentioned
+to the agent, which a turn takes as it starts and is handed for that turn
+alone. Each account the caller holds at a provider, standing connected or
+expired, is a server of its own under its connection name, and a call is
+forwarded to the provider on that account's own grant; a provider with none
+is handed bare, so its first call says how to connect it. Where a provider
+hands more than one account, each server's instructions gain one sentence
 naming which account it is and the others, by their labels alone, each
 quoted as a string, asking the agent to ask which account before a write
-the developer has not pointed at one, and to say which it used; a
-developer with one account per provider is told the same bytes as before.
-An agent and its worker
-are handed every integration the developer has not switched off for that
-agent, the switches naming connections. The
-definition's auth is eve's plain `getToken` form, credentialed as the app,
-and the account is the admitted conversation's owner, never the session's
-principal. That matters because a turn the service hands in runs as the
-deployment acting for the account, and eve's user-scoped auth (`connect()`
-from `@vercel/connect/eve`) would refuse it before reading any token. That
-form has no interactive half either, so eve never pauses a run for a
-sign-in. eve opens the client once per model step: the row is read at each
-opening, and again after Connect answers, so a Disconnect takes effect from
-the next step. A connection that cannot be used throws one of
+the developer has not pointed at one, and to say which it used; a developer
+with one account per provider is told the same bytes as before. Every
+request reads the switches again, so a server switched off lists no tools
+and refuses its next call, and a warm runner whose integrations changed is
+launched again. A connection that cannot be used answers one of
 `integrationUnavailable`'s fixed sentences, which fails only the call that
-tried it; every other tool, and the run, carries on. Workers stay read-only
-in the checkout and change an integration only when their subagent task explicitly
-asks them to.
+tried it; every other tool, and the run, carries on.
 
-**Transcripts** (`src/integrations/connection-tools.ts`). eve offers a
-connection through `connection_search` and `connection_execute`, and tells a
-remote call as a call of its own nested under the `connection_execute` that
-ran it, named `<connection>__<tool>` (`linear__list_issues`,
-`notion-2__notion-fetch` for a second Notion account), with id
-`<wrapper>:1`. The relay stores the nested call under the provider's fixed
-name (`linear_remote` for Linear), whose input is `{ remoteTool,
-parentCallId, input }` and, for an account past the provider's first, its
-`connection`, and settles it with what the provider answered, before the
-wrapper's own result. Both the names and that envelope are the wire's
-(`@luke/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
-`integrationRemoteCallSchema`), because the desktop draws the nested call as
-the provider's tool, under the provider's mark, and leaves its wrapper's row
-out. A Claude Code or Codex agent has no wrapper: each connection it is
-handed is an MCP server of its own at Vespin
-(`/api/agents/mcp/integrations/<connection>`, `src/agents/luke-mcp/app.ts`
-over `src/integrations/connection-door.ts`), and its call of one
-(`mcp__linear__list_issues`, or Codex's `mcpToolCall` on server `linear`) is
-stored under the same name and envelope, the call its own parent. Every name
+**Transcripts** (`src/integrations/connection-tools.ts`). A Claude Code or
+Codex agent's call of a connection (`mcp__linear__list_issues`, or Codex's
+`mcpToolCall` on server `linear`) is stored under the provider's fixed name
+(`linear_remote` for Linear), whose input is `{ remoteTool, parentCallId,
+input }` and, for an account past the provider's first, its `connection`, the
+call its own parent, and settled with what the provider answered. Both the
+names and that envelope are the wire's
+(`@repo/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
+`integrationRemoteCallSchema`), because the desktop draws the call as the
+provider's tool, under the provider's mark. An eve agent reached a connection
+through `connection_search` and `connection_execute`, and its transcript
+keeps each remote call nested under the `connection_execute` that ran it, in
+the same envelope, the wrapper's row left out of the tab. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
@@ -1154,48 +1139,30 @@ for it. Disconnect and deleting the account still revoke its grant.
 
 ## The agent service
 
-`apps/dev/` is the standalone eve app built and deployed as the `dev`
-service beside `web` (the root `vercel.json`): its own
-`package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
-eve resolves as an app root, and a build that prewarms its sandbox snapshot
-under the same Vercel Sandbox credentials. It stands at eve's named mount:
-the public route is `/eve/coder/v1/*`, which the deployment's first rewrite
-carries into the service, whose own one `routes` entry turns it back into
-`/eve/v1/*` with a `request.path` transform before eve's router reads it,
-and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
-URLs eve mints resolve to the public path. The web functions reach it through
-`src/agents/eve-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
-The package's name, unscoped, is the agent's name to eve, which names the
-Workflow queue every deployment of the service consumes after it: a session
-stays owned by the deployment it started on until a newer one's message wakes
-it, so a renamed package strands every standing agent, whose next message
-lands on a queue its owner never reads. The name stays `coder` whatever the
-directory or service is called.
-`apps/web/tests/vercel-services.test.ts` holds the two services, that routing,
-and those names.
+Every agent runs on Claude Code or Codex, the harness its model's provider
+names, chosen once at its Start and kept on its row
+(`src/agents/coder-host/agent-runtime-choice.ts`). An agent is one harness
+session over a `coding_agent` conversation
+(`packages/database/src/models/agent-store.ts`), and every call on it, a
+Start, a message, a Stop, a retune, or a delete's retire, is answered by the
+harness the conversation runs on (`sessionsRouter` in
+`src/agents/coder-host/runtime-sessions.ts`, over the `claudeCodeSessions`
+and `codexSessions` that `native-agent-sessions.ts` builds). An agent that ran on eve has
+ended for good: every call on it is refused as `agent-retired`, and only a
+new agent goes on from its work. A route holding the developer's own bearer
+calls as the developer, and one reached on a browser's session cookie alone
+as the deployment acting for the cookie's account ("Reaching eve as the
+deployment").
 
-An agent is one eve session over a `coding_agent` conversation
-(`packages/database/src/models/agent-store.ts`), and the host behind the authored
-files is `src/agents/coder-host/`: the shared door and conversation
-admission (`src/agents/eve-host/door.ts`,
-`src/agents/eve-host/conversation.ts`), with the developer's own bearer the caller
-the channel walks in for the desktop's routes (`src/agents/coder-host/channel.ts`): a
-Start and a Stop come from a route holding it, and a follow-up
-steers; the deployment acting for the account is admitted for what it does
-there on the developer's behalf, a typed opening that starts an agent and a
-typed line that steers one, each minted as the
-developer's own principal with the deployment named as its carrier, and the
-same route reached on a browser's session cookie alone walks in as that
-deployment for the cookie's account, a Stop and a delete's retire with it. The agent (`apps/dev/agent.ts`) runs none of eve's default
-tools and authors its own under `apps/dev/tools/`, which is exactly the set the
-store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
-`write_file`, and `glob`, its own `apply_patch` and `grep`
-(`apps/dev/tools/`), eve's provider-run `web_search` (Anthropic's server
-search on a Claude model, OpenAI's on a GPT one, inside the agent's own model
-call and so on its own key), Vespin's own `read_web_page`
-(`public-research.ts`: refusing any address off the public internet), and two of Vespin's own: `delegate`, the hand-off to a worker (below), and
-`edit_plan` (`src/agents/coder-host/plan-edit.ts`), which takes notes
-(`@luke/features/plan-template`'s `planNotesSchema`)
+The agent is offered Vespin's own tools on Vespin's MCP server
+(`src/agents/workspace-mcp/app.ts`, at `/api/agents/mcp`), which admits the
+runner's bearer, minted at each launch and kept on the agent's row only as
+its hash (`workspace-mcp/bearer.ts`), and runs each call as the agent's starter
+through the shared doors (`src/agents/coder-host/agent-doors.ts`): Claude
+Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its shell,
+files, search, and page reads are the harness's own. Among Vespin's tools,
+`edit_plan` (`src/agents/coder-host/plan-edit.ts`) takes notes
+(`@repo/features/plan-template`'s `planNotesSchema`)
 into the plan of the task the call names, the agent's own or any other of
 its workspace, through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
@@ -1235,14 +1202,14 @@ and `create_task` (`src/agents/task-tools.ts`), which read one task of the
 workspace with its plan and its brief, and
 make one for the starter, on the repository named or the agent's own,
 confirmed through the workspace's installation, with a brief and a plan to
-start from and no agent on it, under an id drawn from eve's key for the
-call (`src/agents/called-id.ts`), so a call run again makes one, which
+start from and no agent on it, under an id drawn from the call's key
+(`src/agents/called-id.ts`), so a call run again makes one, which
 `start_agent` then starts on by its id;
 `create_section` and `delete_section`
 (`src/agents/task-section-tools.ts`), which make and delete the starter's
 own sections of the workspace's sidebar by the sidebar's own write
-(`PUT /api/task-sections`), a section made under an id drawn from eve's key
-for the call, so a call run again makes one; `update_task`, which renames a
+(`PUT /api/task-sections`), a section made under an id drawn from the call's
+key, so a call run again makes one; `update_task`, which renames a
 task of the workspace, sets or clears its repository (confirmed through the
 workspace's installation), pins it for the agent's starter, moves it into
 one of the starter's sections or out of them by that same write, or
@@ -1258,13 +1225,13 @@ the starter may read, or read one whole with its newest runs, and make,
 change, pause, resume, delete, and run one now for the starter through the
 automations routes' own writes (`src/automations/automation-writes.ts`),
 under the same checks and access, an automation made under an id drawn from
-eve's key for the call, so a call run again makes one, and never with a
+the call's key, so a call run again makes one, and never with a
 webhook trigger, whose secret is shown only in the window that minted it;
 a write answers the start of the prompt, as the list does, and a
 switched-off connection named by no connection's name is refused; a run now
 records a manual firing under a key drawn from the call's and acts on it
-through the same guards and start a Run now takes, reaching eve as the
-deployment acting for the starter; and `list_models`, the models and efforts the agent's starter may
+through the same guards and start a Run now takes, reaching the new
+agent's session as the deployment acting for the starter; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1273,150 +1240,99 @@ the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
 instructions show it the mention of every kind it names, under its own
 task's link, so its replies, Inbox items, and plan notes draw them as chips.
 A line from another agent hands the agent it reaches no MCP server it
-mentions, since an agent's servers are its developer's to switch. The
-extension itself is not mounted, since its `worker` subagent runs on an AI
-Gateway model and its `gh` tool on Vercel Connect, and Vespin runs neither.
-`gh` and `git` run through the shell, authenticated at the firewall. The
-session's input tokens are uncapped and compaction is eve's default.
+mentions, since an agent's servers are its developer's to switch.
+`gh` and `git` run through the shell, authenticated at the firewall.
 
-The worker (`apps/dev/subagents/worker/`) is the agent's own declared
-subagent: read-only in the
-agent's own sandbox and checkout, uncommitted edits included
-(`defineParentSandbox`), authored exactly the agent's reads
-(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `web_search`,
-`read_web_page`), told to change nothing, and uncapped in tokens, as the
-agent it runs under is. It is declared
-hidden (`tool: false`), because eve's own subagent tool carries a message
-and nothing else, and the agent chooses each worker's model and effort: the
-model sees `delegate` (`apps/dev/tools/delegate.ts`), a resumable subagent task
-(`serve`, the shape eve gives every agent call) whose input is
-`{ task, model?, effort?, background? }`. The call answers with eve's
-receipt at once and the worker's answer reaches the agent as a subagent task's result,
-so the turn stays open while it works; unless the agent sets `background`,
-the tool's words have it call `task_wait` right after, which is a foreground
-delegation in eve's terms, and a developer's message during the wait reaches
-the agent at once without stopping the worker. Several calls in one step run
-at once, and a call with the subagent task's id sends the worker more, into the same
-session. A worker's row in an agent's tab
-says where the worker's own session stands (the page's `subagents`), since
-the call settles at the receipt.
-Its step fills the pair in from the agent's own row, holds it to the same
-catalog a Start is held to (`src/agents/coder-host/delegation.ts`, refusing with the
-models offered or the named model's efforts, which the body throws so the
-model reads it and tries again), opens the child conversation the call
-names (`childConversationId(agent conversation, callId)`) and writes the
-pair under it
-(`agent_delegation`, migration 0066); then the body opens the worker
-through `ctx.agent("worker")`. eve hands a resolver no lineage, so the
-worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
-in the worker's own state as the session starts, the model resolver reads
-it at every step and is told the recorded pair (`host.delegatedModel`), and
-the hook relays the worker's stream into the child conversation as a child
-turn naming that pair (`host.relayChild`). The subagent task's result names the pair
-and the worker's answer; the starting call's `toolCallId` is what names the
-child. `delegate` is not among `SANDBOX_TOOLS`: a refused or web-only
-delegation opens no sandbox, and counting it would have the turn's end open
-one only to stop it, so a sandbox a worker opened is stopped at the end of
-the first turn in which the agent runs a sandbox tool of its own.
+A Claude Code agent's worker is the runner's one declared subagent
+(`CLAUDE_CODE_WORKER`, in `@repo/agent-runner`): it runs on the agent's own
+model, read-only, denied every edit, the Agent tool, and Vespin's MCP server,
+and the agent hands it work through Claude Code's Agent tool. A Codex agent
+uses Codex's own subagents. Neither opens a conversation of its own in the
+store: the agent's transcript keeps the call and its answer, and the tab draws
+the call as a subagent's row. An eve agent's workers were recorded as child
+conversations under the agent's, which its transcript still reads.
 
-The model is chosen at every step (`src/agents/coder-host/model.ts`): the agent's row
-names the catalog id and effort, `providerModelOf` turns the id into the
-provider's own, and the step is told `@ai-sdk/anthropic` on
-the account's own Anthropic key with `providerOptions.anthropic.effort`, or
-`@ai-sdk/openai`'s Responses model on its own OpenAI key with
-`providerOptions.openai.reasoningEffort`, with the context window the
-catalog lists for the model (`CatalogModel.contextWindow`) or a fallback
-where it lists none. Each step also asks for its reasoning in words, so the
-agent's and each worker's tab show it:
-`reasoningSummary: "auto"` on OpenAI, and
-adaptive thinking with `display: "summarized"` on a Claude 5 model, which
-thinks whether asked or not. An older Claude is not asked, since the ask
-would start it thinking. Nothing goes through AI Gateway.
-
-The key a step runs on is read at every step too
-(`src/agents/coder-host/account-keys.ts`): the account's own key for the provider
-(above, "Accounts' own provider keys"), opened from its row; the deployment
-holds no model key of its own. A provider it saved no
-key for refuses the step with `NO_PROVIDER_KEY`, and a row the deployment's
-ring cannot open, or a deployment holding no ring, with
-`ACCOUNT_KEY_UNREADABLE`, so nothing is quietly billed to Vespin. A step on the account's key goes through a middleware that keeps the
-row's status as the provider answers: a 401 marks it `invalid`, OpenAI's
-429 `insufficient_quota` or Anthropic's "credit balance" refusal marks it
-`quota_exceeded`, and a call that goes through marks it `verified` again,
-each written only where the row still holds the key the step ran on. The
-first two fail the step with `ACCOUNT_KEY_REFUSED` or
-`ACCOUNT_KEY_NO_QUOTA` in place of the provider's own error, and the three
-refusals read as the agent's failure `provider_key`, which the desktop
-words as a key to replace in Settings. The calls beside an account's agents
-run on its own key too, through `ownKeyOf`, the provider they prefer first
-and the other where it saved only that, and never on Vespin's: an agent's or
-a worker's title on the provider's small model (Haiku, or OpenAI's
-`gpt-6-luna`), and a Continue's or Fork's replay summary on the new agent's
-own model, or the other provider's balanced model. An account that saved
-no API key, as one on a subscription alone, has its agents titled from the
+The model and effort are the agent's row's, handed to the harness at each
+launch and again ahead of every message, so a change to them is the next
+model call's. The credential is settled at the Start as its payer
+(`AGENT_PAYER`): the developer's Claude or ChatGPT plan where Settings has
+it on for agents, otherwise the account's own API key for the model's
+provider, and a Start with neither is refused; an agent on the developer's
+Mac runs on the Mac's own sign-in. Each is opened from its sealed row under
+`PROVIDER_KEY_ENCRYPTION_KEYS` into the runner's environment alone, and a
+Codex agent on a ChatGPT plan asks the service for its token as it needs one
+(`src/agents/native-events/runner-token-app.ts`). The deployment holds no
+model key of its own. The calls beside an account's agents run on its own
+key too, through `ownKeyOf` (`src/agents/coder-host/account-keys.ts`), the
+provider they prefer first and the other where it saved only that, and never
+on Vespin's: an agent's title on the provider's small model (Haiku, or
+OpenAI's `gpt-6-luna`), and a Continue's or Fork's replay summary on the new
+agent's own model, or the other provider's balanced model. An account that
+saved no API key, as one on a plan alone, has its agents titled from the
 first words of their opening's first line, with no model call, and its
-replays carried without a summary. Reading the row every
-step means a later change to it is the next step's model.
+replays carried without a summary.
 
-The sandbox (`apps/dev/sandbox.ts`) is one Vercel Sandbox per session at the
-platform's 24-hour maximum timeout, prepared with the code extension's
-tooling (`gh`, signed commits, TypeScript diagnostics), pnpm, and Python
-beside the image's Node and git. As it opens, the agent's repository is
-checked out whole at its default branch through the firewall-scoped
+The sandbox is one Vercel Sandbox per agent
+(`src/agents/machine/vercel-machine.ts`), opened from Vespin's own template
+of the agent's image (`src/agents/native-sandbox-template.ts`, prepared with
+the code tooling, pnpm, and Python beside the image's Node and git), and kept
+alive while the runner reports. As it opens, the agent's repository is
+checked out at its default branch, from the workspace's snapshot of the
+repository where one stands or by a whole clone through the firewall-scoped
 clone of `repository-shell.ts` (`cloneRepository`), on a token
-`repositoryWriteToken` mints for that one
-repository with contents and pull requests write, plus checks, statuses, and
-Actions read where the installation has granted the App those
-(`CI_READ_PERMISSIONS`; a mint naming a permission the installation never
-granted fails whole, so they are asked only where granted), and the token is
-then set at the firewall for the session's own `gh` and `git` through eve's
-`authenticateGitHub`; it never enters the sandbox's filesystem or
-environment. Who the agent writes as is settled once, as its first session
-starts, and kept on its row (`coder-host/checkout.ts`, `AGENT_AUTHOR`):
-an agent a developer started writes as them where their GitHub sign-in may
-push to the repository, its commits authored as their GitHub account and
-ending on a `Co-authored-by` trailer naming the App's bot; an automation's
-agent, and one whose developer has no GitHub sign-in or may not push, writes
-as the App's bot. The agent opens its pull request with `open_pull_request`
-(`coder-host/pull-request.ts`), which the service runs with the developer's
-own GitHub App token where the agent writes as them, in one `POST
-/repos/{owner}/{name}/pulls` on the agent's repository, and with the App's
-token otherwise; where GitHub refuses the developer's token the App opens it
-in their place and the row records why. No developer's token stands at the
-firewall, because the sandbox is the workspace's: any member may steer the
-agent or open a terminal in it. The session's instructions say whether the CI read was granted
-(`host.prompt`, through `repositoryCiReadable`): where it was, the agent
-watches its pull request's checks with `gh pr checks` and fixes what fails
-for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
-not watched. A token lasts an hour, so the store hook renews it at the
-firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
+`repositoryWriteToken` mints for that one repository with contents and pull
+requests write, plus checks, statuses, and Actions read where the
+installation has granted the App those (`CI_READ_PERMISSIONS`; a mint naming
+a permission the installation never granted fails whole, so they are asked
+only where granted). The token is set at the firewall for the session's own
+`gh` and `git`, never in the sandbox's filesystem or environment, and is
+minted again at each launch and each message to a running runner. Who the
+agent writes as is settled once, as its first session starts, and kept on its
+row (`coder-host/checkout.ts`, `AGENT_AUTHOR`): an agent a developer started
+writes as them where their GitHub sign-in may push to the repository, its
+commits authored as their GitHub account and ending on a `Co-authored-by`
+trailer naming the App's bot; an automation's agent, and one whose developer
+has no GitHub sign-in or may not push, writes as the App's bot. The agent
+opens its pull request with `open_pull_request` (`coder-host/pull-request.ts`),
+which the service runs with the developer's own GitHub App token where the
+agent writes as them, in one `POST /repos/{owner}/{name}/pulls` on the
+agent's repository, and with the App's token otherwise; where GitHub refuses
+the developer's token the App opens it in their place and the row records
+why. No developer's token stands at the firewall, because the sandbox is the
+workspace's: any member may steer the agent or open a terminal in it. The
+session's instructions say whether the CI read was granted
+(`repositoryCiReadable`): where it was, the agent watches its pull request's
+checks with `gh pr checks` and fixes what fails for at most
+`CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was not watched.
 
-The store hook (`apps/dev/hooks/store.ts`) relays every event into the store
-through the shared relay (`src/agents/eve-host/relay.ts`), so an
-agent's turns land as `turns` rows naming its
-model and effort and its `messages` rows as `UIMessage`s; it also stops the
-sandbox the moment a turn ends, completed, failed, or cancelled, where a
-sandbox tool ran in the session. The instructions (`src/agents/coder-host/instructions.ts`)
-tell the agent to read `AGENTS.md` and `CLAUDE.md` first, reread the code the
-plan names and say where it no longer fits, run the repository's checks,
-work on a `luke/<slug>` branch and never push the default branch, and decide
-on a pull request and its draft state itself; the plan is the session's
-first message, or for an agent started on a developer's prompt, the prompt is,
-the agent is never handed the plan, and the instructions are worded for a
-prompt in the plan's place. The service needs `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each
-account's own keys are sealed, `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
-credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
-selects the scripted model for `apps/dev/evals/coder.eval.ts`, which
-`pnpm --filter @luke/web test:agent` runs and which
-runs a turn under the scripted model with no tool call, so no sandbox opens,
-and a second turn that delegates to the worker, whose only call is the
-delegation, so no sandbox opens there either.
+The runner (`@repo/agent-runner`) runs in the sandbox as an unprivileged
+user and drives Claude Code through its Agent SDK or Codex through its app
+server. It posts numbered batches of the harness's events to
+`/api/agents/runner-events` (`src/agents/native-events/runner-events-app.ts`),
+which reads them into the store through the store writer under the
+conversation's lock, so an agent's turns land as `turns` rows naming its model
+and effort and its `messages` rows as `UIMessage`s, and a batch posted again
+writes nothing twice; and it takes the developer's lines from
+`/api/agents/runner-lines` (`runner-lines-app.ts`), a held read woken through
+Sync. The runner is retired when its turn goes idle, and its end takes the
+credential off the firewall and stops the sandbox, unless a Terminal holds
+it. The instructions (`src/agents/coder-host/instructions.ts`, worded for the
+harness and handed to it at every launch) tell the agent to read `AGENTS.md`
+and `CLAUDE.md` first, reread the code the plan names and say where it no
+longer fits, run the repository's checks, work on an `agent/<slug>` branch and
+never push the default branch, and decide on a pull request and its draft
+state itself; the plan is the session's first message, or for an agent started
+on a developer's prompt, the prompt is, the agent is never handed the plan,
+and the instructions are worded for a prompt in the plan's place. The service
+needs `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each account's own keys are
+sealed, `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
+credentials.
 
 ## The account group
 
 `src/accounts/account-procedures.ts` is the account resource on the hosted oRPC
 router (`src/orpc/`): the signed-in desktop's own delete, preferences, and plan
-template procedures, on the paths `@luke/features/contract`'s `account.ts`
+template procedures, on the paths `@repo/features/contract`'s `account.ts`
 declares, each answering from this deployment's own database.
 Each procedure resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
@@ -1458,7 +1374,7 @@ must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
 
 `experiments` is the third part: each experiment the account turned on or
-back off in Settings › Experimental, keyed by `@luke/settings`'s
+back off in Settings › Experimental, keyed by `@repo/settings`'s
 `EXPERIMENT`, as `{ "memory": true }`, and `{}` until it chooses one. It is
 the server's to hold rather than the desktop's to sync: a write is a patch
 whose keys are merged over what stood (`jsonb ||` on the `experiments`
@@ -1492,8 +1408,8 @@ words stand once.
 
 The agent keeps and searches it through `save_memory` and `search_memory`
 (`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a
-worker, on both the eve tool files and Vespin's MCP server through the shared
-agent door (`coder-host/agent-doors.ts`). The workspace and the starter are
+worker, on Vespin's MCP server through the shared agent door
+(`coder-host/agent-doors.ts`). The workspace and the starter are
 read from the service's record of the agent (`callerWorkspace`,
 `callerUserId`), never from the model. `packages/database/src/models/memory-store.ts`
 keeps a memory or corrects one in place under a lock on the workspace's row,
@@ -1516,7 +1432,7 @@ the member's whose words the memory holds, or an owner's or admin's
 ## The chapters group
 
 `src/chapters/chapters-generator.ts` tells a pull request's diff as chapters
-(`@luke/features/pull-request-chapters`): `generateChapters(model, input)`
+(`@repo/features/pull-request-chapters`): `generateChapters(model, input)`
 groups, orders, and narrates the hunks in one structured call
 (`Output.object`, its JSON Schema emitted from the Effect Schema that decodes
 the answer), holds the answer to the diff, asks once more for any hunk it left
@@ -1553,15 +1469,16 @@ the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
 task's plan as the Markdown Copy puts on the clipboard
-(`@luke/features/plan-markdown`); then
+(`@repo/features/plan-markdown`); then
 makes the agent and its conversation
-(`createAgent`), and opens the eve session under the developer's own
-bearer with the snapshot as the first message of a typed turn. A Start
+(`createAgent`), and opens the agent's session on its harness under the
+developer's own bearer with the snapshot as the first message of a typed
+turn. A Start
 naming a prompt (`task`), the developer's own words bounded as a message is, opens the
 session with the prompt as that first message instead: the agent is never
 handed the plan, its row keeps the prompt and no snapshot, and it still works
-in the task's repository under the same checks; an eve that
-did not take it discards the agent again (`discardAgent`) and answers
+in the task's repository under the same checks; a session that
+did not open discards the agent again (`discardAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
 model a Start names runs that agent alone: only Settings' write
@@ -1585,8 +1502,8 @@ from, the agent's status as the page was read, and, where that status is
 `failed`, `failureReason` as one of the wire's fixed words (`model`,
 `sandbox`, `github`, `abandoned`, `other`), mapped by
 `src/agents/coder-host/status.ts`'s `agentFailureOf` from the turn row's failure
-word and the host's own refusal sentences in its detail, so nothing eve or
-a provider said reaches the desktop
+word and the host's own refusal sentences in its detail, so nothing a
+harness or a provider said reaches the desktop
 (`src/agents/coder-host/transcript.ts`): a row is new past a cursor when its sequence
 is higher or it was amended in place at a later journal revision, which is
 how a turn's journal is heard again as it grows; a read with nothing new is
@@ -1598,12 +1515,11 @@ answers at once.
 `POST /api/agents/{id}/messages` takes `{ text, clientKey }`, the words
 trimmed and at most `AGENT_BOUNDS.MAX_MESSAGE_CHARS` long
 (`message-too-long`, 400, past that) and the client's own key for the send,
-at most `MAX_KEY_CHARS` long. The message steers the turn under way, which
-is the coder channel's own policy (`src/agents/coder-host/channel.ts`): the model sees
-it at its next step, and a call still generating is cut short and run again
-with it; an idle agent opens a new turn on it. Nothing is handed to eve to
-hold for later, because eve can neither withdraw nor edit a message once it
-queues one. The route first reads whether a line already stands under the
+at most `MAX_KEY_CHARS` long. The message is queued for the agent's runner
+(`src/agents/coder-host/runner-sessions.ts`): a running harness takes it into
+the agent's turn, running it once the model turn under way ends, and an idle
+agent's runner is launched again on the harness's own session and opens a new
+turn on it. The route first reads whether a line already stands under the
 key (`sentLineStands`, by the `messages` row's `client_id`, which is
 `sentLineId(clientKey)`), and answers the agent as it stands with nothing
 sent again where one does, which is what makes a send repeated after a lost
@@ -1613,30 +1529,29 @@ writes the words as a user row with no turn yet together with the
 conversation's dispatch claim, in one short transaction under its row lock
 (`writeAwaitingLine`, which reads the key again under that lock so two sends
 racing under one key send once; `dispatch-claim.ts`), hands them to the
-agent's eve session under the developer's own bearer with no transaction
+agent's session under the developer's own bearer with no transaction
 open, and in a second short transaction releases the claim and withdraws the
-row where eve did not take them, so no write of the conversation waits on
-eve. The transcript shows the line at once, and the turn eve opens on it
-finds the row standing, since it was written before eve heard it; the relay's receipt
-of the line (`message.received`) takes the oldest turnless row with those
-words into the turn in place, bumping its revision (`takeAwaitingLine`),
+row where the session did not take them, so no write of the conversation
+waits on the hand-over. The transcript shows the line at once, and the turn
+that takes it finds the row standing, since it was written before the runner
+heard it; the runner's receipt of the line takes the oldest turnless row with
+those words into the turn in place, bumping its revision (`takeAwaitingLine`),
 rather than writing it again. An agent whose session has not claimed the
-conversation, or whose session eve answers is still coming up past the
-client's twenty-second loop, is `agent-not-ready` (409, tried again); a
-session eve no longer runs is `agent-retired` (409), since the agent's
-sandbox lives with its session; any other answer is `unavailable`, and none
-of them leaves a row behind. A send meeting another hand-over's claim asks
+conversation, or whose session is still coming up past the client's
+twenty-second loop, is `agent-not-ready` (409, tried again); a session that
+has ended for good, as every agent that ran on eve has, is `agent-retired`
+(409); any other answer is `unavailable`, and none of them leaves a row
+behind. A send meeting another hand-over's claim asks
 for it again a moment apart for five seconds at most, holding nothing
 meanwhile: a hand-over another send holds longer is `unavailable` too, with
-eve told nothing, and a wait of a second or more is logged by the
+the session told nothing, and a wait of a second or more is logged by the
 conversation's id. A claim whose holder died expires a minute on, and the
-next send takes it over without handing eve what the dead one handed. The client asks under a
-deadline (`HOSTED_DEADLINE.STEER`, 45 seconds) that outlasts that wait and
-eve's thirty-second hand-over, so a send that lands slowly is not shown as
-unanswered.
-`GET /api/agents/{id}/subagents/{callId}/messages?after=` reads a worker's
-transcript the same way, under the agent and eve's id for the `delegate`
-call that started it, which the call's tool part carries as `toolCallId`:
+next send takes it over without handing on what the dead one handed. The
+client asks under a deadline (`HOSTED_DEADLINE.STEER`, 45 seconds) that
+outlasts that wait, so a send that lands slowly is not shown as unanswered.
+`GET /api/agents/{id}/subagents/{callId}/messages?after=` reads the
+transcript of a worker an eve agent delegated to the same way, under the
+agent and the id of the `delegate` call that started it, which the call's tool part carries as `toolCallId`:
 the child conversation is `childConversationId` of the two, and only a
 delegation recorded under an agent the account reaches answers, so an agent
 of a workspace the account is not in, or a call that made no delegation, is
@@ -1644,9 +1559,9 @@ of a workspace the account is not in, or a call that made no delegation, is
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
 agent's row (`updateAgentChoice`), answering the agent's summary with
-it; the coder agent reads the row at every step (`apps/dev/agent.ts`'s
-`defineDynamic`, through `src/agents/coder-host/host.ts`'s `model`), so a change
-mid-turn is the next step's and an idle agent's next turn takes it. It
+it; the runner is handed the choice at once where it runs, and ahead of the
+agent's next message otherwise (`retune`), so a change mid-turn is the next
+model call's and an idle agent's next turn takes it. It
 refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
 default as it was. The same PATCH taking `{ pinned }` pins the agent, on a
@@ -1658,25 +1573,21 @@ a pin is the account's own row of `agent_pin`, as a task's is of
 account; the plan list's `planlessAgents` answer it as `pinnedAt` only where
 the reader holds one, and its live follow carries the reader's pins of
 agents on a task as `taskAgentPins`.
-`POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
-eve's own id on the row, then the row's stamp; the service's hook stops the
-sandbox as the cancelled turn ends, and anything the agent pushed stays.
+`POST /api/agents/{id}/stop` is the harness's cancel of the turn under way, a
+stop line the runner hands on as an interrupt, then the row's stamp; a turn
+still running `CODER.STOP_CONFIRM` later has its runner ended and is settled
+cancelled, the runner's end stops the sandbox, and anything the agent pushed
+stays.
 `GET /api/agents/{id}/pull-request` answers what the agent published
 (`src/agents/coder-host/published.ts`): the repository, the branch it pushed, and the
 pull request from it with its state (`open`, `draft`, `merged`, `closed`),
 its checks as one word (`pending`, `passing`, `failing`, `none`), and its
 additions, deletions, and changed files; null for a branch or a pull
-request it has not. The agent reaches GitHub through `git` and `gh` in its
-shell alone, and the branch its sandbox stands on as a turn ends is the one
-its pull request is on, whatever it cut, switched, or deleted on the way:
-the service's hook (`apps/dev/hooks/store.ts`) runs `git branch
---show-current` in the checkout as each turn ends and writes the answer on
-the agent's row (`agent.branch`, through `src/agents/coder-host/host.ts`'s
-`recordBranch`), null for a detached HEAD, ahead of relaying the end (a
-tab reads the pull request the moment it hears the agent ended, and the
-answer is then kept a while) and before it stops the sandbox; a read that
-fails is logged and the sandbox stops regardless, and a turn that opened
-no sandbox writes nothing. A row with no branch published nothing, and
+request it has not. The agent pushes through `git` and `gh` in its shell
+and opens its pull request with `open_pull_request`, which writes the branch
+it was opened from on the agent's row (`agent.branch`,
+`src/agents/coder-host/pull-request.ts`'s `recordOpened`) and reads the pull
+request back onto the row at once. A row with no branch published nothing, and
 GitHub is not asked; a row still on the repository's default branch, as
 an agent that only read leaves it, published nothing either. GitHub then says what stands, once the
 installation of the task's workspace is confirmed to reach the repository as
@@ -1706,10 +1617,8 @@ reading as unchanged, a file only moved carries an empty patch, and a
 list cut at the bound says so. An agent with no pull request yet answers
 a null one. The agent's sandbox is no source: nothing outside its session
 reaches it and its diff is not kept in the store.
-`src/agents/agents-app*.test.ts` (with `src/testing/agents-app-support.ts`) answer the routes over a fake eve, a
-scripted GitHub, a fixed catalog, and PGlite; `src/agents/coder-host/coder-host.test.ts`
-drives the host, the shared relay, the branch recorded at a turn's end
-over the sandbox double, and the held read on the test clock;
+`src/agents/agents-app*.test.ts` (with `src/testing/agents-app-support.ts`) answer the routes over a fake of the
+agents' sessions, a scripted GitHub, a fixed catalog, and PGlite;
 `src/agents/coder-host/checkout.test.ts` holds the checkout over the sandbox
 double, reading every run for the token and never finding it.
 
@@ -1719,7 +1628,7 @@ An automation is an account's saved agent Start on one of its tasks,
 fired by a trigger. The account, the task, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
-and the guards as `@luke/features/automation-wire`'s own JSON; every
+and the guards as `@repo/features/automation-wire`'s own JSON; every
 firing is an `automation_run` row, kept whatever came of it, under a
 dedupe key unique per automation, so the same firing claimed twice is one
 run. The store is `packages/database/src/models/automation-store.ts`: an
@@ -1727,7 +1636,7 @@ automation is made only on a task the account reaches, and every other
 statement an account makes names it.
 
 A schedule is five-field cron read in an IANA zone
-(`@luke/features/automation-schedule`), so nine o'clock stays nine o'clock
+(`@repo/features/automation-schedule`), so nine o'clock stays nine o'clock
 in that zone across a daylight-saving change; one that would fire more
 often than every fifteen minutes is refused. Its next due instant is the
 row's `next_run_at`, which the minute sweep claims by
@@ -1752,10 +1661,10 @@ starting or running, read as each agent's tab reads it) is skipped, never
 queued. Then it is a Start with a prompt, on the one path a Start takes
 (`src/agents/coder-host/start.ts`): the task, its repository, the owner's reach of it
 through the App, and the model are checked as for the developer's own
-Start, the agent runs as the owner on the owner's keys, and eve is reached
-as the deployment acting for the owner under `EVE_DEPLOYMENT_SECRET`, never
-the bearer the cron called with, the opening the coder channel admits for a
-agent's own `start_agent`. The prompt is the
+Start, the agent runs as the owner on the owner's keys, and its session is
+reached as the deployment acting for the owner ("Reaching eve as the
+deployment"), never on the bearer the cron called with, as an agent's own
+`start_agent` reaches one. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
@@ -1812,8 +1721,8 @@ workspace the account left, is `not-found`:
   trigger.
 - `POST /api/automations/{id}/run` takes `{ idempotencyKey }`, records a
   manual firing under it, and acts on it at once through the same guards
-  and start a scheduled run takes, reaching eve as the developer under the
-  request's own bearer; `201` with the run, or `200` with the run the same
+  and start a scheduled run takes, reaching the agent's session as the
+  developer under the request's own bearer; `201` with the run, or `200` with the run the same
   key made before, starting nothing again.
 - `GET /api/automations/{id}/runs` answers its runs newest first, fifty at
   most, each with its agent's title and status as the agent's tab reads
@@ -1837,10 +1746,10 @@ brackets spelled as entities, cut with a note where it would push the prompt
 past its bound. The body reaches the run's agent task, transcript, and traces
 by the carve-out in root `AGENTS.md`; nothing of it or the secret is logged.
 
-`@luke/features/automation-wire` declares every body and `service-paths.ts`
-the addresses, `@luke/features/contract`'s `automations.ts` the procedures;
+`@repo/features/automation-wire` declares every body and `service-paths.ts`
+the addresses, `@repo/features/contract`'s `automations.ts` the procedures;
 `src/automations/automations-procedures.test.ts` holds the routes over a fake
-eve, a scripted GitHub, a fixed catalog, and PGlite.
+of the agents' sessions, a scripted GitHub, a fixed catalog, and PGlite.
 
 A GitHub trigger fires on the Vespin App's own webhook
 (`src/github/github-webhook-app.ts`, through `src/automations/automation-github.ts`): a
@@ -1867,10 +1776,10 @@ or a person; and, for a pull request, its moment (opened or reopened, marked
 ready, pushed to), whether it is a draft, and whether it comes from a fork
 (its head in another repository, or in none). The trigger's settings choose
 among them (`senders`, `moments`, `drafts`, `forks` in
-`@luke/features/automation-wire`): people's events alone, every moment, and
+`@repo/features/automation-wire`): people's events alone, every moment, and
 no draft or fork where it names none. An automation cannot fire itself
 whatever its settings say: a push by Vespin's agents, to a branch or to a pull
-request, fires nothing, and neither does a failed check on a `luke/` branch,
+request, fires nothing, and neither does a failed check on an agent's branch (`agent/`, or `luke/` before it),
 where an agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
 fenced as the event's own text to read as data, its angle brackets spelled
@@ -1891,6 +1800,11 @@ chosen, in the workspace its `workspaceId` names, which the account must be
 a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
 in the account's first workspace, ensured first, where it names none,
 `GET /api/plans/{id}` opens one with its saved document,
+`GET /api/workspaces/{workspace}/tasks/{number}` answers the id of the one a
+link names by its number in its workspace, by slug or id, the number it
+held before a move still finding it (`task_number_forward`), and
+`not-found` for a workspace the account is no member of, a number naming no
+task, or a task it does not reach,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, the workspace it belongs to, or several at
 once, an archive a stamp on the row (`archived_at`) and a pin the
@@ -1900,7 +1814,8 @@ a move
 (`workspaceId`) is the task's owner's alone (`not-permitted` for a
 teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
-change would be otherwise, and its agents go with it, and
+change would be otherwise, and its agents go with it, its number in the
+workspace it left kept for the links written with it, and
 `DELETE /api/plans/{id}` deletes it, its agents' rows going with it
 and their conversations stamped deleted, with the one the task's own Vespin
 kept where the row still names it (`deleteTask`),
@@ -2034,7 +1949,7 @@ App or store the service could not read `unavailable`, the task standing as
 it was. A change naming null clears it.
 
 A `repository-not-reachable` refusal says why in `unreached`
-(`@luke/features/repository-reach-wire`, read by `repositoryReach` on the
+(`@repo/features/repository-reach-wire`, read by `repositoryReach` on the
 `GitHubApp`), naming the repository: the workspace has nothing connected
 (`not-connected`); the installation GitHub no longer knows or its account
 suspended (`connection-lapsed`); the installation is on another account
@@ -2071,32 +1986,22 @@ against a real dialect.
 **One tool registry** (`src/agents/agent-runtime/tools.ts`). Every tool
 Vespin offers either of its two agents is named once there, with the roles it
 serves: the agent and its worker.
-What each is offered is derived from it: the agent's files under
-`apps/dev/tools/` name its set; each role's
-stored set names every tool the role is offered. A tool's
+What each is offered is derived from it: each role's stored set names
+every tool the role is offered, the ones only eve's agents were offered
+among them, so a transcript an eve agent wrote reads back. A tool's
 module takes its name from the registry, so the registry imports none and
-every module may import it. eve's own injected tools (`task_wait`,
-`task_cancel`, `connection_search`, `connection_execute`) are eve's, not
-listed.
+every module may import it. The tools eve injected of its own (`task_wait`,
+`task_cancel`, `connection_search`, `connection_execute`) were eve's, and
+are not listed.
 
-An agent's session is offered the skills its repository keeps
-(`apps/dev/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`),
-read from GitHub on a read token for that repository as the session starts,
-and loaded with `load_skill`; each body says where the skill stands in the
-agent's checkout. A task with no repository, one the App does not reach, or
-a read that fails offers none.
+An agent's harness finds the skills its repository keeps in its own
+checkout, as Claude Code and Codex look for them, and the skills its member
+installed into the app in a folder of its sandbox written as it opens
+(`src/agents/coder-host/native-skills.ts`, `src/agents/coder-host/skills.ts`).
 
-The page read (`src/agents/public-research.ts`) is `read_web_page`, one
-public HTTPS page fetched and reduced to its text, with no credential of the
-account's, the result going back only to the call that asked. A search is no
-tool of Vespin's: it is eve's provider-run `web_search`, paid for by the agent's
-own model call. A page read refuses any host whose address, resolved before
-each request and again on every redirect hop it follows by hand, is private,
-loopback, link-local, CGNAT, unique-local, or reserved; the check is a lookup
-ahead of the request, so a DNS answer that changes between the two is the case
-it does not cover. A turn gets at most 6 page reads, and 20,000 characters of
-a page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`).
-`src/agents/public-research.test.ts` holds it against scripted HTTP and DNS.
+A search and a page read are the harness's own tools (Claude Code's
+WebSearch and WebFetch, or Codex's own web search), run on the agent's own
+model account; Vespin offers neither.
 ## Hosted conversation store
 
 The `conversations`, `messages`, and `turns` tables hold the agents'
@@ -2123,10 +2028,9 @@ the conversation row's observed-session, event-sequence, completion-sweep,
 and memory-flush columns. A child's `parent_conversation_id`, `label`,
 `title`, and `expects_completion` are live: a subagent's and an agent's worker's child conversation writes them.
 
-The conversation tables are the shape the LUKE-95 storage plan settled on,
-less the `prompts` table it drew and less the `tool_sets` table
-`0039_dead_tool_sets` dropped: a turn keeps the composed prompt's hash and the
-tool set's and nothing else of either, because nothing replays them, and the
+The conversation tables have no `prompts` table and no `tool_sets` table
+(`20260921141320_dead_tool_sets` dropped the second): a turn keeps the
+composed prompt's hash and the tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
 conversation row names its kind (`coding_agent`, which
 `packages/database/src/models/agent-store.ts` opens, is the one any
@@ -2136,11 +2040,13 @@ numbers its messages. A message is one AI SDK `UIMessage`, its parts and
 metadata as plain `jsonb`, unique on `(conversation_id, client_id)` as its
 idempotency key; a turn is one run's origin, status, model, prompt and
 tool-set hashes, response ids, usage, timings, and failure, with why the
-runtime failed one in `failure_detail`: eve's failure code, the key names of
+runtime failed one in `failure_detail`: for a Claude Code or Codex turn, the
+runner's words for how its launch ended, the harness's failure, and any rate
+limit it met; for an eve agent's turn, eve's failure code, the key names of
 its details, the error's class name, eve's catalog id, and status codes where
-eve's details carry them, and eve's message cut to 200 characters with every
+eve's details carried them, and eve's message cut to 200 characters with every
 credential-shaped run replaced by `[redacted]`, no other value of the
-details, cut to 500 characters by the writer and read by nothing but a
+details; either cut to 500 characters by the writer and read by nothing but a
 query. A prompt and a tool set are content-addressed, the hash of the text or
 the schemas as the key, and the turn row carries that hash and nothing else
 of either, naming no row and holding no foreign key. Nothing in these tables
@@ -2155,9 +2061,9 @@ consumes the turn run event stream (`RunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
 turn's start where nothing queued it) through running to settled, cancelled,
-or failed, carrying the origin it was queued under, eve's own id for the turn
-where the relay queued it (the store's id is a digest of it that nothing
-reverses, and a Stop on the row is scoped to eve's turn by reading it back),
+or failed, carrying the origin it was queued under, the runtime's own id for
+the turn where one queued it (the store's id is a digest of it that nothing
+reverses, and a Stop on the row is scoped to that turn by reading it back),
 its usage split four ways, its response ids where the runtime has them, and
 its failure word. Each user
 message the turn opened with lands as its own row by the message's id. The
@@ -2208,9 +2114,9 @@ major production runs: Neon serves 18.x, PGlite 0.5.8 embeds PostgreSQL
 18.3, and the CI image is `postgres:18`, so a local `check.sh` is a
 reproduction on 18 already. On either dialect an opening of the test
 database is a database of that opening's own: a fresh PGlite, or a clone of
-the database `LUKE_STORE_TEST_DATABASE_URL` names, made with
+the database `APP_STORE_TEST_DATABASE_URL` names, made with
 `create database ... template ...` on the cluster's `postgres` maintenance
-database and dropped when the file closes it (`@luke/database/testing`, the
+database and dropped when the file closes it (`@repo/database/testing`, the
 one door that reads the variable). Nothing writes to the named database
 itself after `db:migrate`, so a statement a test forgets to scope by account
 or conversation reaches its own file's rows and no other file's. To run a
@@ -2219,54 +2125,15 @@ may `create database`, migrated by `db:migrate` alone, because that is the
 runner which records what it applied and the tests copy what it recorded:
 
 ```sh
-DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
-LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
+DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @repo/web db:migrate
+APP_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
-
-## Reaching eve as the deployment
-
-A hosted route that holds no bearer of the account's reaches the agent
-service's eve as the deployment acting for one account: it calls eve's session
-routes under the deployment's `EVE_DEPLOYMENT_SECRET` as its bearer with the
-account in `x-luke-account`. The eve door's first authenticator admits that
-pair for a typed message, which its table, `CODER_DEPLOYMENT_TURNS` in
-`src/agents/coder-host/channel.ts`, admits, minted as the account's own
-principal with the deployment named only as its carrier
-(`CODER_DEPLOYMENT_PRESENCE`), so the message joins the agent's turn under
-way; and for a cancel or a reset of a session; and nothing else: any other
-route or kind of turn carrying the secret is refused outright rather than
-passed to the account authenticator behind it. An agent's own
-`start_agent` and `message_agent` send such a typed message, and so does a
-hosted route a browser reached on its session cookie alone, a comment's
-hand-over to an agent it mentions among them (`src/tasks/comment-ask.ts`).
-The door admits that typed message from anything that holds the secret,
-since one secret proves no more than that something holding it acted, so
-what keeps the deployment's typed messages to those is the code. The hook's
-carried Stop and a delete's retire are typed to cancel and to reset alone.
-Which account a request acts for is one accessor over both principal types,
-and the door's ownership checks and the host's admission read that answer,
-so the deployment can open a turn only on a conversation the named account
-reaches, and cancel one only in a session a conversation that account
-reaches recorded. Where eve answers is an origin of this deployment's own,
-whose rewrites carry `/eve/coder/v1/*` into the eve service
-(`deploymentEveOrigin` in `src/agents/eve-host/eve-origin.ts`):
-`LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
-in production and the deployment's own host on any other deployment.
-Production names the custom domain rather than the generated `*.vercel.app`
-host because that host carries the project's Vercel Authentication, which
-answers a server-to-server POST at the edge and never reaches eve (LUKE-250).
-Since a Preview's functions dial the Preview's own eve, both ends read one
-environment's `EVE_DEPLOYMENT_SECRET`, so Production and Preview each hold a
-value of their own, and neither is `CRON_SECRET`'s. One set to the cron's
-value is read as unset (`environment.ts`), as a blank one is: the build logs
-that once, by the two names, and the admin dashboard's Reliability screen
-shows it as not configured.
 
 ## Vespin Sync
 
 `src/sync/` is what a wait on the database waits through. A reader opens a
 watch on the topics its rows notify (`src/sync/watch.ts`; the topics and the
-triggers that send them are `@luke/database/sync`), reads, and waits on the
+triggers that send them are `@repo/database/sync`), reads, and waits on the
 watch's `next` before each read after; `heldUntil` (`src/http/held-read.ts`)
 holds every held read this way. The watch is opened before the first read, so
 a write that commits while that read runs still wakes the next look.
@@ -2309,8 +2176,8 @@ sweep over turns still running past their kind's bound, an hour for a turn
 of any other conversation and a day and an hour for an agent's
 (`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
 `TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end
-the relay never heard and which are settled as failed for `abandoned`
-through the same write the relay's own end takes, at most fifty a sweep and
+the service never heard and which are settled as failed for `abandoned`
+through the same write a turn's own end takes, at most fifty a sweep and
 counted as `abandoned`.
 
 It then fires the automations whose schedule is due ("Automations" below),
@@ -2320,11 +2187,8 @@ at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance
-routes alone, this one and the provider-key rewrap asked by hand: every
-other web function and the eve service act for an account at eve's door
-under `EVE_DEPLOYMENT_SECRET` instead ("Reaching eve as the deployment"),
-and neither door admits the cron's bearer, so the
-scheduler's secret opens no session. Without it the route answers 503 and the schedule is
+routes alone, this one and the provider-key rewrap asked by hand, so the
+scheduler's secret opens nothing else. Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
 

@@ -1,5 +1,5 @@
 import { useAtomMount } from "@effect/atom-react";
-import { textChange } from "@luke/features/plan-comment-anchor";
+import { textChange } from "@repo/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
@@ -7,9 +7,10 @@ import {
   PLAN_COMMENTS_CURSOR_START,
   type PlanCommentActionRequest,
   type PlanCommentRefusal,
+  type PlanCommentStart,
   type PlanCommentStartRequest,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import {
   PLAN_COMMENT_CALL_FAILURE,
   type TasksCommentActParams,
@@ -17,7 +18,7 @@ import {
   type TasksCommentStartParams,
   type TasksCommentsAnswer,
   type TasksCommentsParams,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import { Data, Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
@@ -38,7 +39,12 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState } fro
  * answer is taken once; the service
  * answers with the thread as it then stands, which replaces the one held, or
  * that it was deleted. A write that did not land is said on its thread, its
- * draft kept by the caller. Posting a comment asks no agent anything.
+ * draft kept by the caller. Posting a comment reaches the agents in its
+ * thread, the page's writer among them on a page, and one it mentions, and
+ * is said on its thread where one in it could not take it.
+ *
+ * The same control holds one of the task's pages' threads in the plan's
+ * place where it is handed the page, read on the same held read naming it.
  */
 
 /** What a write to a thread did not do, said on the thread. */
@@ -75,8 +81,8 @@ export interface PlanCommentsControl {
   readonly onRetry: () => void;
   /** Why the last write to a thread did not land, by thread, said on it until the next write. */
   readonly notes: ReadonlyMap<string, string>;
-  /** Starts a thread with its first comment, anchored to words of the text it names, under the caller's key, which stays the same while a send is tried again. */
-  readonly start: (start: PlanCommentStartRequest) => Promise<CommentStarted>;
+  /** Starts a thread with its first comment, anchored to words of the text it names or on a page of the task, under the caller's key, which stays the same while a send is tried again. */
+  readonly start: (start: PlanCommentStart) => Promise<CommentStarted>;
   /** Does one thing to one thread; answers whether it landed. */
   readonly act: (threadId: string, action: PlanCommentActionRequest) => Promise<boolean>;
 }
@@ -166,15 +172,18 @@ const RESTING = Atom.make(Effect.void);
  */
 export function commentsPoll(input: {
   readonly planId: string;
+  /** The page of the plan's task whose comments to read in the plan's place; none for the plan's own. */
+  readonly pageId?: string | undefined;
   readonly read: CommentsReader;
   readonly took: (threads: readonly PlanCommentThread[]) => void;
   readonly missed: () => void;
 }): Effect.Effect<void> {
   const { planId, read, took, missed } = input;
+  const page = input.pageId === undefined ? undefined : { pageId: input.pageId };
   return Effect.suspend(() => {
     let after = PLAN_COMMENTS_CURSOR_START;
     const once = Effect.tryPromise({
-      try: () => read({ planId, after }),
+      try: () => read({ planId, ...page, after }),
       catch: () => new CommentsUnread(),
     }).pipe(
       Effect.flatMap((answer) => {
@@ -196,15 +205,25 @@ export function commentsPoll(input: {
   }).pipe(Effect.ignore);
 }
 
-interface Held {
+/** Whose comments are held: a plan's, or one of its task's pages'. */
+interface Subject {
   readonly planId: string | undefined;
+  readonly pageId: string | undefined;
+}
+
+interface Held extends Subject {
   readonly threads: readonly PlanCommentThread[];
   readonly read: boolean;
   readonly failed: boolean;
 }
 
-function fresh(planId: string | undefined): Held {
-  return { planId, threads: [], read: false, failed: false };
+function fresh(subject: Subject): Held {
+  return { ...subject, threads: [], read: false, failed: false };
+}
+
+/** Whether what is held is the subject's, which a window moved to another plan or page no longer reads. */
+function heldOn(held: Subject, subject: Subject): boolean {
+  return held.planId === subject.planId && held.pageId === subject.pageId;
 }
 
 /**
@@ -221,19 +240,22 @@ function heldAfterRead(was: Held, threads: readonly PlanCommentThread[]): Held {
 }
 
 /**
- * The plan's comments, read while `shown`: the threads, and the doors that
- * write them, each answered as the service holds the thread after it.
+ * The plan's comments, or one of its task's pages' where `pageId` names one,
+ * read while `shown`: the threads, and the doors that write them, each
+ * answered as the service holds the thread after it.
  */
 export function usePlanComments(input: {
   readonly planId: string | undefined;
+  readonly pageId?: string | undefined;
   readonly shown: boolean;
   readonly readComments: CommentsReader;
   readonly startComment: CommentStarter;
   readonly actOnComment: CommentActor;
 }): PlanCommentsControl | undefined {
-  const { planId, shown } = input;
-  const [held, setHeld] = useState<Held>(() => fresh(planId));
-  if (held.planId !== planId) setHeld(fresh(planId));
+  const { planId, pageId, shown } = input;
+  const subject = useMemo(() => ({ planId, pageId }), [planId, pageId]);
+  const [held, setHeld] = useState<Held>(() => fresh(subject));
+  if (!heldOn(held, subject)) setHeld(fresh(subject));
   const [attempt, setAttempt] = useState(0);
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
   const latest = useRef(input);
@@ -246,18 +268,19 @@ export function usePlanComments(input: {
         ? Atom.make(
             commentsPoll({
               planId,
+              pageId: subject.pageId,
               read: (params) => latest.current.readComments(params),
               took: (threads) =>
-                setHeld((was) => (was.planId === planId ? heldAfterRead(was, threads) : was)),
+                setHeld((was) => (heldOn(was, subject) ? heldAfterRead(was, threads) : was)),
               missed: () =>
                 setHeld((was) =>
-                  was.planId === planId && !was.failed ? { ...was, failed: true } : was,
+                  heldOn(was, subject) && !was.failed ? { ...was, failed: true } : was,
                 ),
             }),
           )
         : RESTING,
     // Note that `attempt` is read so Retry polls again at once, past the wait standing.
-    [shown, planId, attempt],
+    [shown, planId, subject, attempt],
   );
   useAtomMount(poll);
 
@@ -272,20 +295,20 @@ export function usePlanComments(input: {
     });
   }, []);
 
-  /** An answer taken in, on the plan it was asked on only, since the window may have moved to another. */
+  /** An answer taken in, on the plan or page it was asked on only, since the window may have moved to another. */
   const took = useCallback(
-    (askedOn: string, answer: TasksCommentAnswer): PlanCommentThread | undefined => {
+    (askedOn: Subject, answer: TasksCommentAnswer): PlanCommentThread | undefined => {
       if ("thread" in answer) {
         const { thread } = answer;
         setHeld((was) =>
-          was.planId === askedOn ? { ...was, threads: withThread(was.threads, thread) } : was,
+          heldOn(was, askedOn) ? { ...was, threads: withThread(was.threads, thread) } : was,
         );
         return thread;
       }
       if ("deleted" in answer) {
         const { deleted } = answer;
         setHeld((was) =>
-          was.planId === askedOn
+          heldOn(was, askedOn)
             ? { ...was, threads: was.threads.filter((each) => each.id !== deleted) }
             : was,
         );
@@ -296,18 +319,18 @@ export function usePlanComments(input: {
   );
 
   const start = useCallback(
-    async (begun: PlanCommentStartRequest): Promise<CommentStarted> => {
+    async (begun: PlanCommentStart): Promise<CommentStarted> => {
       if (planId === undefined) return { note: COMMENT_NOTE.NOT_POSTED };
       const answer = await latest.current
         .startComment({ planId, start: begun })
         .catch((): TasksCommentAnswer => UNANSWERED);
       if ("refused" in answer) return { note: refusalWords(answer.refused) };
-      const thread = took(planId, answer);
+      const thread = took(subject, answer);
       if (thread === undefined) return { note: COMMENT_NOTE.NOT_POSTED };
       note(thread.id, unsentWords(answer));
       return { thread };
     },
-    [planId, took, note],
+    [planId, subject, took, note],
   );
 
   const act = useCallback(
@@ -325,11 +348,11 @@ export function usePlanComments(input: {
         note(threadId, "words" in action ? COMMENT_NOTE.NOT_POSTED : COMMENT_NOTE.NOT_CHANGED);
         return false;
       }
-      took(planId, answer);
+      took(subject, answer);
       note(threadId, unsentWords(answer));
       return true;
     },
-    [planId, note, took],
+    [planId, subject, note, took],
   );
 
   return useMemo(
@@ -374,7 +397,7 @@ export interface CommentSpan {
 export interface PendingThread {
   readonly from: number;
   readonly to: number;
-  readonly scope: PlanCommentThread["scope"];
+  readonly scope: PlanCommentStartRequest["scope"];
   readonly quote: string;
   /** The text `from` and `to` are offsets in, where it is not the plan's as saved: the open editor's, for words started on there. */
   readonly text?: string;

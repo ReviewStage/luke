@@ -26,86 +26,82 @@
    end opens the task. */
 
 @layer components {
-  .luke-task-row:has(:focus-visible),
-  .luke-task-row[data-menu-open="true"],
-  .luke-task-row:has([aria-expanded="true"]) {
+  .ui-task-row:has(:focus-visible),
+  .ui-task-row[data-menu-open="true"],
+  .ui-task-row:has([aria-expanded="true"]) {
     z-index: 2;
   }
 
-  .luke-task-row {
-    --luke-task-row-more-room: calc(var(--luke-space-24) + var(--luke-icon-gap));
-    --luke-task-row-aside: calc(-1 * var(--luke-task-row-more-room));
+  .ui-task-row {
+    --ui-task-row-more-room: calc(var(--ui-space-24) + var(--ui-icon-gap));
+    --ui-task-row-aside: calc(-1 * var(--ui-task-row-more-room));
   }
 
-  .luke-task-row:dir(rtl) {
-    --luke-task-row-aside: var(--luke-task-row-more-room);
+  .ui-task-row:dir(rtl) {
+    --ui-task-row-aside: var(--ui-task-row-more-room);
   }
 
-  .luke-task-row-more {
+  .ui-task-row-more {
     position: absolute;
     inset-block: 0;
-    inset-inline-end: var(--luke-row-inset);
+    inset-inline-end: var(--ui-row-inset);
     pointer-events: none;
   }
 
-  .luke-task-row-cell[data-under-more="true"] {
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  .ui-task-row-cell[data-under-more="true"] {
+    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  .luke-task-row:is(:has(:focus-visible), [data-menu-open="true"]) .luke-task-row-more {
+  .ui-task-row:is(:has(:focus-visible), [data-menu-open="true"]) .ui-task-row-more {
     pointer-events: auto;
   }
 
   @media (hover: hover) {
-    .luke-task-row:hover .luke-task-row-more {
+    .ui-task-row:hover .ui-task-row-more {
       pointer-events: auto;
     }
 
-    .luke-task-row:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(
-        .luke-task-row-more:not(:empty)
+    .ui-task-row:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(
+        .ui-task-row-more:not(:empty)
       )
-      > .luke-task-row-cell[data-under-more="true"] {
+      > .ui-task-row-cell[data-under-more="true"] {
       opacity: 0;
       pointer-events: none;
     }
   }
 
   @media (hover: none) {
-    .luke-task-row-after {
-      transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+    .ui-task-row-after {
+      transition: transform var(--ui-duration-fast) var(--ui-spring-fast);
     }
 
-    .luke-task-row-more {
+    .ui-task-row-more {
       pointer-events: auto;
     }
 
-    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
-        > .luke-task-row-cell[data-under-more="true"]
-      )
-      .luke-task-row-after {
-      transform: translateX(var(--luke-task-row-aside));
+    .ui-task-row:has(.ui-task-row-more:not(:empty)):has(> .ui-task-row-cell[data-under-more="true"])
+      .ui-task-row-after {
+      transform: translateX(var(--ui-task-row-aside));
     }
 
-    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
-        > .luke-task-row-cell[data-under-more="true"]
-      )
+    .ui-task-row:has(.ui-task-row-more:not(:empty)):has(> .ui-task-row-cell[data-under-more="true"])
       > [data-cell="name"] {
-      padding-inline-end: var(--luke-task-row-more-room);
+      padding-inline-end: var(--ui-task-row-more-room);
     }
   }
 
-  .luke-task-row-draft .luke-task-row-press {
+  .ui-task-row-draft .ui-task-row-press {
     display: flex;
     overflow: visible;
-    gap: var(--luke-item-gap);
+    gap: var(--ui-item-gap);
   }
 
-  .luke-task-row-draft .luke-task-row-press > [data-slot="input"] {
+  .ui-task-row-draft .ui-task-row-press > [data-slot="input"] {
     min-inline-size: 0;
     flex: 1 1 auto;
   }
 
-  .luke-task-row-draft[data-pending="true"] .luke-task-row-press {
-    color: var(--luke-color-text-muted);
+  .ui-task-row-draft[data-pending="true"] .ui-task-row-press {
+    color: var(--ui-color-text-muted);
   }
 }

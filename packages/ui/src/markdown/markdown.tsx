@@ -7,7 +7,7 @@
  * part of it that keeps what that look has always drawn:
  *
  * - A note (`MARKDOWN_LOOK.NOTE`) is parsed whole through Streamdown's
- *   `Block`, inside this component's own `.luke-markdown` root, with nothing
+ *   `Block`, inside this component's own `.ui-markdown` root, with nothing
  *   of Streamdown's own dress: its headings are paragraphs a step above the
  *   words (styled, never announced), a picture is its alternative words, raw
  *   HTML is text, and only the elements a place hands in are drawn its way.
@@ -26,7 +26,7 @@
  *   it is drawn inside a label or any other element that holds words alone,
  *   as a to-do's step is.
  *
- * Exported at `@luke/ui/markdown` alone, so the parser rides into no bundle
+ * Exported at `@repo/ui/markdown` alone, so the parser rides into no bundle
  * behind the barrel. Whatever a place knows better than this package, a
  * mention's chip, a coloured code block, a diagram, arrives as a component
  * or a step, so nothing here reaches an app.

@@ -1,4 +1,4 @@
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useEffect, useRef, useState } from "react";
 
 /** What a write says when it failed with no sentence of its own: the call itself rejected rather than answered. */

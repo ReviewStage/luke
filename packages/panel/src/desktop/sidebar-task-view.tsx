@@ -1,5 +1,5 @@
-import type { TaskSummary } from "@luke/features/task-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BUTTON_SIZE,
   GROUP_ACTION_STATE,
@@ -8,14 +8,14 @@ import {
   TextButton,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import { ACTOR_KIND, type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND, type Actor, actorName, creatorActor, memberActor } from "@repo/ui/actor-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
   type HiddenStatus,
   TASK_GROUPING,
-} from "@luke/ui/task-list-model";
+} from "@repo/ui/task-list-model";
 import { FolderGitIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useAppCommand } from "../app-commands.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";

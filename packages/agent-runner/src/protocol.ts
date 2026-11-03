@@ -13,7 +13,7 @@
  * stdin: the runner's bearer and the harness's credential are in its
  * environment, and Codex asks the service for each ChatGPT access token over HTTPS
  * through the runner's token command (`codex-token.ts`), so no line carries
- * one, on a Mac's queue (`@luke/features/device-agent-wire`) or anywhere else.
+ * one, on a Mac's queue (`@repo/features/device-agent-wire`) or anywhere else.
  */
 
 import type {
@@ -33,7 +33,7 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * in it: app-server asks the service for it through the runner's token command.
  */
 export const RUNNER_ENV = {
-  BEARER: "LUKE_RUNNER_TOKEN",
+  BEARER: "APP_RUNNER_TOKEN",
   CLAUDE_TOKEN: "CLAUDE_CODE_OAUTH_TOKEN",
   /**
    * The account's Anthropic API key, in the plan token's place for an agent
@@ -53,7 +53,7 @@ export const RUNNER_ENV = {
    * host's daemon alone, on a Linux box and a Mac alike, This Mac's among
    * them, and unset in the cloud's sandbox.
    */
-  PLACE: "LUKE_RUNNER_PLACE",
+  PLACE: "APP_RUNNER_PLACE",
 } as const;
 
 /** The places a runner's starter names in `RUNNER_ENV.PLACE`. */
@@ -83,7 +83,7 @@ export const INSTALLED_SKILLS = {
   /** The plugin's manifest, under the installed folder. */
   MANIFEST: ".claude-plugin/plugin.json",
   /** The plugin's name, which leads each of its skills' names in Claude Code. */
-  PLUGIN: "luke",
+  PLUGIN: "workspace",
 } as const;
 
 /**
@@ -508,9 +508,7 @@ export const RUNNER_RELEASE = {
    * How long a wait lasts before it is released, and how far off its
    * earliest wakeup must still be then. Vercel bills a sandbox's memory by
    * the minute it runs, and a released wait costs a stop, a resume, and a
-   * relaunch of the CLI, so a wait shorter than two billed minutes is held;
-   * the same bound eve's agent stops its sandbox for a pause at
-   * (`CODER.SLEEP_STOPS_AT`).
+   * relaunch of the CLI, so a wait shorter than two billed minutes is held.
    */
   SETTLE_MS: 2 * 60 * 1_000,
   /** How often a wait not yet released is looked at again, for a process of the agent's that has since ended. */

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageVersion } from "@luke/features/page-wire";
-import { TASK_CALL_FAILURE, type TasksPageParams } from "@luke/features/tasks-view";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { PageVersion } from "@repo/features/page-wire";
+import { TASK_CALL_FAILURE, type TasksPageParams } from "@repo/features/tasks-view";
 import { Effect } from "effect";
 import { pageResponse } from "./page-protocol";
 
 /**
- * The `luke-page:` scheme as a frame meets it: the version its address names,
+ * The `app-page:` scheme as a frame meets it: the version its address names,
  * served under a policy that leaves the page no network and no reach outside
  * its sandbox, and not found for anything else. A page a coding agent on no
  * task showed is read by the agent's address on the same terms. The service
@@ -86,12 +86,12 @@ it.effect(
       const served = (url: string) => Effect.map(pageResponse(url, readPage), (r) => r.status);
       const agentUrl = pageFrameUrl({ agentId: AGENT_ID, pageId: CHART.id, version: 2 });
 
-      assert.equal(agentUrl, `luke-page://page/agent/${AGENT_ID}/${CHART.id}/2`);
+      assert.equal(agentUrl, `app-page://page/agent/${AGENT_ID}/${CHART.id}/2`);
       assert.equal(yield* served(agentUrl), 200);
       // The agent's id read as a task's, or an agent's address missing its version or bearing an extra step, names nothing.
-      assert.equal(yield* served(`luke-page://page/${AGENT_ID}/${CHART.id}/2`), 404);
-      assert.equal(yield* served(`luke-page://page/agent/${AGENT_ID}/${CHART.id}`), 404);
-      assert.equal(yield* served(`luke-page://page/agent/${AGENT_ID}/${CHART.id}/2/x`), 404);
-      assert.equal(yield* served(`luke-page://page/agent//${CHART.id}/2`), 404);
+      assert.equal(yield* served(`app-page://page/${AGENT_ID}/${CHART.id}/2`), 404);
+      assert.equal(yield* served(`app-page://page/agent/${AGENT_ID}/${CHART.id}`), 404);
+      assert.equal(yield* served(`app-page://page/agent/${AGENT_ID}/${CHART.id}/2/x`), 404);
+      assert.equal(yield* served(`app-page://page/agent//${CHART.id}/2`), 404);
     }),
 );

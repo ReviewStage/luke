@@ -1,4 +1,4 @@
-import { BarItem, EllipsisIcon, FolderIcon, GearIcon } from "@luke/ui";
+import { BarItem, EllipsisIcon, FolderIcon, GearIcon } from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

@@ -1,4 +1,4 @@
-import { WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
+import { WRITING_BLOCK, WRITING_INSERT } from "@repo/settings/shortcuts";
 import {
   BLOCK_MENU_GROUP,
   BlockMenu,
@@ -11,7 +11,7 @@ import {
   TableIcon,
   UserIcon,
   writingRow,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useId, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

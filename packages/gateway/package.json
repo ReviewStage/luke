@@ -1,5 +1,5 @@
 {
-  "name": "@luke/gateway",
+  "name": "@repo/gateway",
   "version": "0.24.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@luke/wire": "workspace:*",
+    "@repo/wire": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

@@ -7,7 +7,7 @@
  * answers a method and the client that calls it read the same words from one
  * contract. Nothing in this file performs anything.
  */
-import type { WireValue } from "@luke/wire";
+import type { WireValue } from "@repo/wire";
 import { Effect, Schema } from "effect";
 
 /** Every method the host answers, by the name a client calls it. */
@@ -62,6 +62,8 @@ export const GATEWAY_METHOD = {
   TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
+  /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
+  TASKS_FIND: "tasks.find",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -114,6 +116,8 @@ export const GATEWAY_METHOD = {
   WORKSPACES_CREATE: "workspaces.create",
   /** A workspace renamed on the service by an owner or admin; the view's workspaces are read again. */
   WORKSPACES_RENAME: "workspaces.rename",
+  /** A workspace's slug changed on the service by its owner; the view's workspaces are read again. */
+  WORKSPACES_SLUG_SET: "workspaces.slugSet",
   /** A workspace's photo set or removed on the service by an owner or admin; the view's workspaces are read again. */
   WORKSPACES_PHOTO_SET: "workspaces.photoSet",
   /** A GitHub organization's connection to a workspace begun on the service: our GitHub App's install address, for the caller to open. */
@@ -126,6 +130,14 @@ export const GATEWAY_METHOD = {
   WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
   /** One of a workspace's Sentry installations disconnected on the service, answered with the workspace's Sentry as it then stands. */
   WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
+  /** Whether the deployment holds our Slack bot, and the Slack team a workspace's bot is connected to, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_SLACK_BOT: "workspaces.slackBot",
+  /** A workspace's Slack bot connected on the service by an owner or admin, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_CONNECT: "workspaces.slackBotConnect",
+  /** A workspace's Slack bot disconnected on the service by an owner or admin, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_DISCONNECT: "workspaces.slackBotDisconnect",
+  /** The reader's own Slack notifications turned on or off on the service, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_NOTIFICATIONS: "workspaces.slackBotNotifications",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /**
@@ -308,6 +320,8 @@ export const GATEWAY_METHOD = {
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
+  AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
+  /** `AGENTS_WORKSPACE_TOOLS` under the name an operator built before the rename still calls; goes once the releases after it are out. */
   AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, as its overview draws them. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
@@ -382,6 +396,8 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
+  /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
+  AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
   AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /** Where every one of the account's integrations stands, read from the service now. */
@@ -414,7 +430,7 @@ export const GATEWAY_METHOD = {
   /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
   AGENTS_PART: "agents.part",
   /**
-   * A coding agent's terminals (`@luke/features/terminal-view`): its shells
+   * A coding agent's terminals (`@repo/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
    * developer's click; and a shell attached for one panel under a
    * connection id the desktop minted, typed into, resized, acked, woken
@@ -433,7 +449,7 @@ export const GATEWAY_METHOD = {
   TERMINALS_DISCONNECT: "terminals.disconnect",
   TERMINALS_WAKE: "terminals.wake",
   /**
-   * A cloud Browser tab's live view (`@luke/features/browser-live-wire`),
+   * A cloud Browser tab's live view (`@repo/features/browser-live-wire`),
    * opened for one panel under a connection id the desktop minted, sent on,
    * and closed. The host only carries the socket's text frames each way;
    * what the service sends is heard as `BROWSER_LIVE_MESSAGE` events, and
@@ -447,15 +463,10 @@ export const GATEWAY_METHOD = {
   SETTINGS_SNAPSHOT: "settings.snapshot",
   SETTINGS_UPDATE: "settings.update",
   SETTINGS_RESET: "settings.reset",
-  /** Each repository's run command on this Mac (`@luke/features/mac-terminal-wire`): read, and one repository's set. */
-  MAC_REPOSITORIES_READ: "macRepositories.read",
-  MAC_REPOSITORY_SET: "macRepositories.set",
-  /** The developer's answer to one command an agent asked to run on this Mac (`@luke/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
+  /** The developer's answer to one command an agent asked to run on this Mac (`@repo/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
-  /** Where This Mac's `luke-host` stands (`@luke/host/contract`'s `THIS_MAC_HOST_STANDING`), as the host last found it. */
+  /** The device This Mac's host's record names (`@repo/host/contract`'s `ThisMacHostRead`), so Hosts draws This Mac on its row. */
   THIS_MAC_HOST_READ: "thisMacHost.read",
-  /** This Mac's `luke-host` turned on by the member's own act, enrolling the Mac again where the service removed it or the last turn-on failed; where it then stands. */
-  THIS_MAC_HOST_TURN_ON: "thisMacHost.turnOn",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",

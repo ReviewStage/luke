@@ -7,15 +7,15 @@ set -euo pipefail
 #
 # The worktree is $SHOTS_WORKTREE (default ~/Developer/luke-changelog-shots),
 # checked out at the release with its staging applied and installed (build.sh,
-# LUKE_SHOT_PATCH_DIST=0); the web app's fixture switch exists from 0.21.0 on.
-# The simulator is $LUKE_SHOT_PHONE (default "iPhone 17"), dark, at 9:41. Its
+# APP_SHOT_PATCH_DIST=0); the web app's fixture switch exists from 0.21.0 on.
+# The simulator is $APP_SHOT_PHONE (default "iPhone 17"), dark, at 9:41. Its
 # first load transforms every module of the panel, so the page is opened twice
 # and given over a minute; frame the screen with frame-phone.py.
 
 out=${1:?usage: phone.sh <out.png> <profile>}
 profile=${2:?usage: phone.sh <out.png> <profile>}
 worktree=${SHOTS_WORKTREE:-$HOME/Developer/luke-changelog-shots}
-name=${LUKE_SHOT_PHONE:-iPhone 17}
+name=${APP_SHOT_PHONE:-iPhone 17}
 url="http://127.0.0.1:5199/app.html?fixture=$profile"
 device=$(xcrun simctl list devices available | awk -F'[()]' -v name="$name" 'index($0, "    " name " (") == 1 {print $2; exit}')
 [[ -n $device ]] || { printf 'error: no simulator named %s\n' "$name" >&2; exit 1; }

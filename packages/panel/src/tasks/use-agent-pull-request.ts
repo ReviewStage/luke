@@ -1,11 +1,11 @@
-import type { AgentPullRequestAnswerView } from "@luke/features/agent-view";
+import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
 import type {
   AgentPullRequest,
   AgentPullRequestAnswer,
   AgentStatus,
   AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import type { ListedPullRequest, TaskPullRequestLine } from "@luke/features/task-wire";
+} from "@repo/features/agent-wire";
+import type { ListedPullRequest, TaskPullRequestLine } from "@repo/features/task-wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";

@@ -25,20 +25,20 @@ afterEach(() => {
 test("a task's address, or a section's, opens that task in the app, whichever host served the page", () => {
   assert.equal(
     appLinkFromAddress(`/acme/plan/${TASK_ID}`, ""),
-    `vespin://vespin.dev/acme/plan/${TASK_ID}`,
+    `vespin://vespin.dev/acme/task/${TASK_ID}`,
   );
   assert.equal(
     appLinkFromAddress(`/acme/plan/${TASK_ID}/`, "#rollout"),
-    `vespin://vespin.dev/acme/plan/${TASK_ID}#rollout`,
+    `vespin://vespin.dev/acme/task/${TASK_ID}#rollout`,
   );
   assert.equal(
     appLinkFromAddress(`/acme/plan/${TASK_ID}`, "#rollout"),
-    `vespin://vespin.dev/acme/plan/${TASK_ID}#rollout`,
+    `vespin://vespin.dev/acme/task/${TASK_ID}#rollout`,
   );
   // A task's link a later build writes under task hands the app the link it reads now.
   assert.equal(
     appLinkFromAddress(`/acme/task/${TASK_ID}`, "#rollout"),
-    `vespin://vespin.dev/acme/plan/${TASK_ID}#rollout`,
+    `vespin://vespin.dev/acme/task/${TASK_ID}#rollout`,
   );
 });
 
@@ -48,7 +48,7 @@ test("a comment's address opens its thread, the query it names it by carried to 
   const target = openTargetOf(`/acme/plan/${TASK_ID}`, "", `?comment=${thread}`);
 
   assert.equal(target?.kind, LINK_PLACE.COMMENT);
-  assert.equal(target?.appLink, `vespin://vespin.dev/acme/plan/${TASK_ID}?comment=${thread}`);
+  assert.equal(target?.appLink, `vespin://vespin.dev/acme/task/${TASK_ID}?comment=${thread}`);
 });
 
 test("a picture's address opens the plan it is of, and nothing else of it", () => {
@@ -56,18 +56,18 @@ test("a picture's address opens the plan it is of, and nothing else of it", () =
 
   assert.equal(
     appLinkFromAddress(`/acme/plan/${TASK_ID}/files/${picture}`, ""),
-    `vespin://vespin.dev/acme/plan/${TASK_ID}`,
+    `vespin://vespin.dev/acme/task/${TASK_ID}`,
   );
   assert.equal(appLinkFromAddress(`/acme/plan/${TASK_ID}/files/not-an-id`, ""), undefined);
 });
 
 test("an agent's, an Inbox item's, or an automation's address opens it in the app, the page told its kind", () => {
   assert.deepEqual(openTargetOf(`/acme/plan/${TASK_ID}/agent/${AGENT_ID}/`, ""), {
-    appLink: `vespin://vespin.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}`,
+    appLink: `vespin://vespin.dev/acme/task/${TASK_ID}/agent/${AGENT_ID}`,
     kind: LINK_PLACE.AGENT,
   });
   assert.deepEqual(openTargetOf(`/acme/plan/${TASK_ID}/inbox/${AGENT_ID}`, ""), {
-    appLink: `vespin://vespin.dev/acme/plan/${TASK_ID}/inbox/${AGENT_ID}`,
+    appLink: `vespin://vespin.dev/acme/task/${TASK_ID}/inbox/${AGENT_ID}`,
     kind: LINK_PLACE.INBOX_ITEM,
   });
   assert.deepEqual(openTargetOf(`/acme/automation/${AGENT_ID}`, "#runs"), {
@@ -81,7 +81,7 @@ test("an address that names no place opens nothing", () => {
     ["/acme/plans/x", ""],
     ["/acme/agent/Fix%20billing", ""],
     [`/acme/plan/${TASK_ID}/files`, ""],
-    ["/acme", ""],
+    ["/about", ""],
     [`/acme/plan/${TASK_ID}/more`, ""],
     [`/acme/plan/${TASK_ID}`, "#a%20b"],
   ] as const) {
@@ -94,7 +94,7 @@ test("a browser without URL.parse, as Safari before 18 is, still opens the place
 
   assert.equal(
     appLinkFromAddress(`/acme/plan/${TASK_ID}`, "#rollout"),
-    `vespin://vespin.dev/acme/plan/${TASK_ID}#rollout`,
+    `vespin://vespin.dev/acme/task/${TASK_ID}#rollout`,
   );
   assert.equal(
     appLinkFromAddress(`/acme/agent/${AGENT_ID}`, ""),

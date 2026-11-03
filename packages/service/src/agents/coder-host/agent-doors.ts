@@ -3,7 +3,7 @@
  *
  * eve's tool files reach them through the coder host (`host.ts`), and a
  * native harness's runner through our MCP server
- * (`../luke-mcp/tools.ts`), so both run one implementation, as the inbox's
+ * (`../workspace-mcp/tools.ts`), so both run one implementation, as the inbox's
  * own door does (`inbox-door.ts`). Nothing here imports eve's runtime,
  * because the web function that serves the MCP server bundles no sandbox:
  * a door that reads a file the agent names is handed the door to its
@@ -11,16 +11,17 @@
  * seams it reads (`AgentDoorSeams`).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   hasRepository,
   readAgentHeaderOfConversation,
   readAgentOfConversation,
-} from "@luke/database/models/agent-store";
-import { readTaskHeader } from "@luke/database/models/task-store";
-import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
-import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
+} from "@repo/database/models/agent-store";
+import { readTaskHeader } from "@repo/database/models/task-store";
+import type { StoreWriter } from "@repo/database/models/writer";
+import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
+import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
@@ -65,7 +66,6 @@ import {
   runUpdateAutomation,
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
@@ -79,22 +79,24 @@ import {
   planEditRejected,
   recordPlanEdit,
 } from "./plan-edit.js";
-import type { CoderHostSeams } from "./production.js";
 import {
   openPullRequest,
   PULL_REQUEST_UNAVAILABLE,
   type PullRequestToolResult,
   pullRequestRejected,
 } from "./pull-request.js";
+import type { SummaryModelOf } from "./replay-summary.js";
 import { sessionsRouter } from "./runtime-sessions.js";
 import { runShowImage } from "./show-image.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-/** What the doors that reach eve or the store's writer read of the deployment: a part of the coder host's own seams, which a web function builds without eve (`../luke-mcp/door-seams.ts`). */
-export type AgentDoorSeams = Pick<
-  CoderHostSeams,
-  "writer" | "deploymentSecret" | "eveOrigin" | "summaryModel"
->;
+/** What the doors that reach an agent's session or the store's writer read of the deployment, as the web function serving the MCP server builds them (`../workspace-mcp/door-seams.ts`). */
+export interface AgentDoorSeams {
+  /** The writer over the coding agent's tool set, composed once per instance. */
+  readonly writer: () => Effect.Effect<StoreWriter>;
+  /** How an agent this one starts from another summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out. */
+  readonly summaryModel?: SummaryModelOf;
+}
 
 /** One call of the agent's tools about the workspace's coding agents, by the tool's name, the input its runtime held to its schema, and the call's own id. */
 export interface AgentToolCall {
@@ -345,22 +347,11 @@ export function runAgentTools(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return agentToolRejected(found.failure);
-    // The agent asking is the one the conversation is, and eve is reached as its starter.
+    // The agent asking is the one the conversation is, and the sessions it reaches are its starter's.
     const sender = found.success;
-    const secret = seams.deploymentSecret();
-    const origin = seams.eveOrigin();
-    const compose = yield* eveSessionsComposer;
     // Each agent the tools reach is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
-    const route = yield* sessionsRouter;
-    const eveAs =
-      secret === undefined || origin === undefined
-        ? undefined
-        : (account: string) =>
-            route(
-              compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER }),
-              account,
-            );
-    const eve = eveAs?.(sender.userId);
+    const eveAs = yield* sessionsRouter;
+    const eve = eveAs(sender.userId);
     const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
     const toolCall = {
       caller,

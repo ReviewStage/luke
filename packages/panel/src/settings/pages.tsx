@@ -1,13 +1,13 @@
-import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_PAGE_GROUPS,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
-} from "@luke/settings/settings-views";
-import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon } from "@luke/ui";
-import { FlaskConicalIcon, GLYPH, InfoIcon } from "@luke/ui/icons";
+} from "@repo/settings/settings-views";
+import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon } from "@repo/ui";
+import { FlaskConicalIcon, GLYPH, InfoIcon } from "@repo/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
 /** A page's name and glyph. */
@@ -47,9 +47,6 @@ const SETTINGS_PAGE = {
  * themself, and the two once shared one name.
  */
 export const WORKSPACE_CONNECTIONS = "Workspace connections";
-
-/** The Workspace page's group of where each repository is cloned on this Mac, its heading and its search result alike. */
-export const MAC_REPOSITORIES = "Repositories on this Mac";
 
 /** What each of the Settings sidebar's groups is headed by where no workspace is listed to name the first. */
 const SETTINGS_GROUP_HEADING = {

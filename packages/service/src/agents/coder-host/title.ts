@@ -1,20 +1,19 @@
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { type Agent, fillAgentTitle } from "@luke/database/models/agent-store";
-import { childTitlesOf, fillChildTitle } from "@luke/database/models/child-titles";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { type Agent, fillAgentTitle } from "@repo/database/models/agent-store";
 import {
   listMessagesPast,
   listRecentMessages,
   listTurnOpeners,
   turnsBefore,
-} from "@luke/database/models/message-reads";
-import { nameUntitledTask } from "@luke/database/models/task-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
-import { firstMessageParts } from "@luke/features/agent-replay";
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { titlesNothing } from "@luke/features/task-wire";
-import { failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/message-reads";
+import { nameUntitledTask } from "@repo/database/models/task-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import type { StoredAutomationOrigin } from "@repo/database/schemas/agent";
+import { firstMessageParts } from "@repo/features/agent-replay";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
+import { titlesNothing } from "@repo/features/task-wire";
+import { failureKind } from "@repo/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel, type ToolSet } from "ai";
 import { Effect, Option, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -40,7 +39,7 @@ import { CURSOR_START } from "./transcript.js";
  * names it, and one started on a prompt of its own is named for that prompt.
  * An agent started from another is named from the brief and the note it
  * was handed, never from the other agent's transcript replayed between
- * them (`@luke/features/agent-replay`), whose words are that agent's.
+ * them (`@repo/features/agent-replay`), whose words are that agent's.
  * An automation's run is named from the automation's prompt alone in its
  * opening's place, without the lines we add of the firing, which would
  * name every run of it alike, and the GitHub event's subject where one
@@ -389,29 +388,6 @@ function titledWithTask(
     yield* nameUntitledTask(userId, agent.taskId, title);
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written));
-}
-
-/**
- * A subagent's title generated from the task it was handed and filled on
- * its child conversation, for a child that has none yet: a title already
- * standing is never asked for again, and a call that fails leaves the child
- * untitled. With no model the title is cut from the task's first words.
- * A child not yet opened is filled nowhere.
- */
-export function titleSubagent(
-  model: LanguageModel | undefined,
-  parent: ConversationTarget,
-  childConversationId: string,
-  task: string,
-): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
-  return Effect.gen(function* () {
-    const standing = yield* childTitlesOf(parent, [childConversationId]);
-    if (standing.has(childConversationId)) return;
-    const title =
-      model === undefined ? firstWordsTitle(task) : yield* generateAgentTitle(model, task);
-    if (Option.isNone(title)) return;
-    yield* fillChildTitle(parent, childConversationId, title.value);
-  });
 }
 
 /**

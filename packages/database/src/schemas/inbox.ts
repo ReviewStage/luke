@@ -1,4 +1,4 @@
-import { INBOX_STATUS, type InboxStatus } from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxStatus } from "@repo/features/inbox-wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,

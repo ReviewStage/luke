@@ -1,4 +1,4 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import { Effect, Option } from "effect";
 import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";

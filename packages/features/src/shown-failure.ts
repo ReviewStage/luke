@@ -1,7 +1,7 @@
 /**
  * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
  *
- * The panel hands every failure it shows here (`@luke/panel/failure-report`),
+ * The panel hands every failure it shows here (`@repo/panel/failure-report`),
  * an error toast and a failure drawn in place of what could not be read
  * alike. Each becomes one Sentry log line, searchable by every attribute
  * below: at `warn` for a refusal something named, such as a limit or a
@@ -110,6 +110,8 @@ export const FAILURE_SURFACE = {
   GITHUB_ACCOUNT: "github.account",
   GITHUB_TOKEN_REMOVE: "github_token.remove",
   GITHUB_TOKEN_SAVE: "github_token.save",
+  HOME_INBOX_READ: "home_inbox.read",
+  HOME_TASKS_READ: "home_tasks.read",
   HOSTS_READ: "hosts.read",
   HOST_PAIRING_ANSWER: "host_pairing.answer",
   HOST_PAIRING_READ: "host_pairing.read",
@@ -124,8 +126,6 @@ export const FAILURE_SURFACE = {
   INTEGRATIONS_READ: "integrations.read",
   INTEGRATION_DISCONNECT: "integration.disconnect",
   INTEGRATION_RENAME: "integration.rename",
-  MAC_REPOSITORIES_READ: "mac_repositories.read",
-  MAC_REPOSITORY_WRITE: "mac_repository.write",
   MEMBERS_READ: "members.read",
   MEMORIES_READ: "memories.read",
   MEMORY_FORGET: "memory.forget",
@@ -187,7 +187,6 @@ export const FAILURE_SURFACE = {
   TASK_RENAME: "task.rename",
   TASK_SETTLE: "task.settle",
   TASK_STANDING: "task.standing",
-  TERMINAL_CLOSE: "terminal.close",
   TERMINAL_CREATE: "terminal.create",
   TERMINAL_SHELLS_READ: "terminal_shells.read",
   TERMINAL_STOP: "terminal.stop",
@@ -210,6 +209,9 @@ export const FAILURE_SURFACE = {
   WORKSPACE_SENTRY: "workspace.sentry",
   WORKSPACE_SENTRY_DISCONNECT: "workspace_sentry.disconnect",
   WORKSPACE_SENTRY_READ: "workspace_sentry.read",
+  WORKSPACE_SLACK_BOT: "workspace.slack_bot",
+  WORKSPACE_SLACK_BOT_DISCONNECT: "workspace_slack_bot.disconnect",
+  WORKSPACE_SLACK_BOT_READ: "workspace_slack_bot.read",
   WORKSPACE_TRANSFER: "workspace.transfer",
   WORKSPACE_WRITE: "workspace.write",
 } as const;

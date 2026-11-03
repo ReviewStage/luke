@@ -1,6 +1,6 @@
-import type { AgentStatus, AgentSummary } from "@luke/features/agent-wire";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
+import type { AgentStatus, AgentSummary } from "@repo/features/agent-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { APP_COMMAND, type KeyedCommand } from "@repo/settings/shortcuts";
 import {
   IconButton,
   type MenuRow,
@@ -16,8 +16,8 @@ import {
   type StatusTone,
   Tooltip,
   useMenu,
-} from "@luke/ui";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import {
   createContext,
   useCallback,
@@ -277,9 +277,10 @@ export function tabContentGroups(doors: TabDoors): TabActionGroups {
   );
 }
 
-/** Whether two items draw alike: named, said, and standing the same, a submenu by its items. */
+/** Whether two items draw alike: named, said, and standing the same, a submenu by its items, and a panel by its name alone, since it draws its own. */
 function sameAction(one: TabAction, other: TabAction | undefined): boolean {
   if (other === undefined || one.label !== other.label) return false;
+  if ("panel" in one || "panel" in other) return "panel" in one && "panel" in other;
   if ("items" in one || "items" in other) {
     return (
       "items" in one &&
@@ -323,7 +324,7 @@ function throughLatest(
   return actions.map((group, at) =>
     group.map((action, place) => {
       const now = () => latest.current?.[at]?.[place];
-      if ("items" in action) return action;
+      if ("items" in action || "panel" in action) return action;
       if ("onAsk" in action) {
         return {
           ...action,
@@ -337,7 +338,7 @@ function throughLatest(
         ...action,
         onSelect: () => {
           const held = now();
-          if (held !== undefined && !("onAsk" in held) && !("items" in held)) held.onSelect();
+          if (held !== undefined && "onSelect" in held) held.onSelect();
         },
       };
     }),
@@ -534,13 +535,13 @@ export function TabSkeleton(): React.JSX.Element {
 
 /** The block standing in the "+" while its strip is read: an icon press's square, as tall as it is wide. */
 export function AddTabSkeleton(): React.JSX.Element {
-  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />;
+  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--ui-control-height)" />;
 }
 
 /**
  * The "+" after a strip's last tab, and the menu it drops: the shared
  * searchable one, as the repository and model pickers drop, over the rows
- * its column lists. It hangs under the "+" in `@luke/ui`'s anchored
+ * its column lists. It hangs under the "+" in `@repo/ui`'s anchored
  * popover, from the "+"'s left edge, or from its right where what is seen
  * of the window ends before the menu would, or pushed back inside where
  * neither edge keeps it there, as a phone's row leaves a "+" mid-way along

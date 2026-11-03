@@ -8,20 +8,20 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
-import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
-import { installAppPlatform } from "@luke/panel/app-platform";
-import { installShownFailureReporter } from "@luke/panel/failure-report";
+import { ACT_PORT, type PreloadBridge } from "@repo/host/bridge";
+import { actPort, installActPort, installAppBridge, openPushStream } from "@repo/panel/app-bridge";
+import { installAppPlatform } from "@repo/panel/app-platform";
+import { installShownFailureReporter } from "@repo/panel/failure-report";
 import {
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
   leaveWindowSpan,
   markWindowStart,
   PANEL_SPAN,
-} from "@luke/panel/panel-spans";
-import { rendererRegistry } from "@luke/panel/renderer-runtime";
-import { appStateFirstRead } from "@luke/panel/use-app-state";
-import { ReloadState } from "@luke/ui/error-boundary";
+} from "@repo/panel/panel-spans";
+import { rendererRegistry } from "@repo/panel/renderer-runtime";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
+import { ReloadState } from "@repo/ui/error-boundary";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
@@ -51,13 +51,13 @@ export function mountWindow(
 ): void {
   // The window's start, which its first paint and first usable screen are timed from.
   if (timing.timesStart) markWindowStart();
-  // The desktop's bridge is the one the preload exposed as `window.luke`, and
+  // The desktop's bridge is the one the preload exposed as `window.appBridge`, and
   // this is the one place that global is read: everything else reaches main
   // through `appBridge()`, which reads what is installed here before anything
   // below subscribes or draws. What only the shell can do is answered beside
   // it, through `appPlatform()`, by the desktop's own acts and events.
-  const preloadWindow: Window & { readonly luke?: PreloadBridge } = window;
-  if (preloadWindow.luke === undefined) throw new Error("The preload's bridge is missing");
+  const preloadWindow: Window & { readonly appBridge?: PreloadBridge } = window;
+  if (preloadWindow.appBridge === undefined) throw new Error("The preload's bridge is missing");
   // The window's act port, as oRPC's Electron adapter opens one: this page
   // keeps one end and posts the other to itself, where the preload takes it
   // to main (`apps/desktop/src/main/bridge-host.ts`).
@@ -67,7 +67,7 @@ export function mountWindow(
   // What main pushes this window arrives on one stream of that port, opened
   // now and heard through the bridge's own listeners beside the preload's calls.
   const pushes = openPushStream(actPort());
-  installAppBridge({ ...preloadWindow.luke, ...pushes.listeners });
+  installAppBridge({ ...preloadWindow.appBridge, ...pushes.listeners });
   installAppPlatform(DESKTOP_PLATFORM);
 
   // Every window's tracing and error reports, from Sentry's SDK loaded once

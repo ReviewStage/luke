@@ -1,5 +1,5 @@
-import { githubAutomationsOn, recordAutomationRun } from "@luke/database/models/automation-store";
-import type { TaskStoreEffect } from "@luke/database/models/task-store";
+import { githubAutomationsOn, recordAutomationRun } from "@repo/database/models/automation-store";
+import type { TaskStoreEffect } from "@repo/database/models/task-store";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
@@ -13,10 +13,11 @@ import {
   PULL_REQUEST_DEFAULT_MOMENTS,
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
-} from "@luke/features/automation-wire";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/automation-wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { isAgentBranch } from "../agents/coder-host/bounds.js";
 
 /**
  * automation-github.ts -- a GitHub delivery read as an automation's trigger: which events it is, the issue, pull request, or branch it names, and the runs it queues.
@@ -38,7 +39,7 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
  *
  * Each event is read with who sent it, people, our agents (the App's
  * own bot, or a person opening, reopening, or marking ready a pull request
- * from a `luke/` branch, which is a coding agent writing as its developer),
+ * from an agent's branch, which is a coding agent writing as its developer),
  * or another bot, and, for a pull request, the moment it is
  * (opened, marked ready, or pushed to), whether it is a draft, and whether
  * it comes from a fork; an issue an agent opened as its developer has no
@@ -47,7 +48,7 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
  * it names none. Two things fire nothing whatever a trigger says, so an
  * automation cannot fire itself in a loop: a push by our agents, to a
  * branch or to a pull request, since an agent answering its run with a
- * push would start that run again, and a failed check on a `luke/` branch,
+ * push would start that run again, and a failed check on an agent's branch,
  * which is where a coding agent works and where it already watches its own
  * checks.
  */
@@ -82,9 +83,6 @@ const UPDATE_MOMENT: ReadonlyMap<string, PullRequestMoment> = new Map([
 
 /** The ref prefix a branch's push names. */
 const BRANCH_REF = "refs/heads/";
-
-/** The branch prefix a coding agent works on, whose own checks it already watches. */
-const AGENT_BRANCH_PREFIX = "luke/";
 
 /**
  * The pull request actions a coding agent takes on its own pull request, as
@@ -186,14 +184,14 @@ function senderOf(
   agentLogin: string | undefined,
 ): GitHubSender {
   if (agentLogin !== undefined && sender.login.toLowerCase() === agentLogin.toLowerCase()) {
-    return GITHUB_SENDER.LUKE_AGENTS;
+    return GITHUB_SENDER.APP_AGENTS;
   }
   return sender.type === BOT_SENDER ? GITHUB_SENDER.OTHER_BOTS : GITHUB_SENDER.PEOPLE;
 }
 
 /**
  * Who sent a pull request's delivery. A person who opened, reopened, or
- * marked ready a pull request from a `luke/` branch of the repository's own
+ * marked ready a pull request from an agent's branch of the repository's own
  * counts as our agents, because a coding agent that writes as its developer
  * opens its pull request on their token, so GitHub names the developer;
  * the branch is where every coding agent works. Note that a person doing
@@ -207,9 +205,10 @@ function pullRequestSender(
   fork: boolean,
 ): GitHubSender {
   const sender = senderOf(read.sender, agentLogin);
-  const agentBranch = read.pull_request.head?.ref?.startsWith(AGENT_BRANCH_PREFIX) === true;
+  const head = read.pull_request.head?.ref;
+  const agentBranch = head !== undefined && isAgentBranch(head);
   const agentOpened = !fork && agentBranch && AGENT_OPENING_ACTIONS.has(read.action);
-  return sender === GITHUB_SENDER.PEOPLE && agentOpened ? GITHUB_SENDER.LUKE_AGENTS : sender;
+  return sender === GITHUB_SENDER.PEOPLE && agentOpened ? GITHUB_SENDER.APP_AGENTS : sender;
 }
 
 /** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
@@ -344,7 +343,8 @@ function githubEventOf(
         action !== GITHUB_ACTION.COMPLETED ||
         !FAILED_CONCLUSIONS.has(suite.conclusion ?? "") ||
         branch === null ||
-        branch.startsWith(AGENT_BRANCH_PREFIX)
+        // An agent already watches its own branch's checks.
+        isAgentBranch(branch)
       ) {
         return undefined;
       }
@@ -410,7 +410,7 @@ function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): bool
   ) {
     return false;
   }
-  if (read.sender === GITHUB_SENDER.LUKE_AGENTS && read.pushed) return false;
+  if (read.sender === GITHUB_SENDER.APP_AGENTS && read.pushed) return false;
   const moments = trigger.moments ?? PULL_REQUEST_DEFAULT_MOMENTS;
   if (read.moment !== undefined && !moments.includes(read.moment)) return false;
   if ((read.draft && trigger.drafts !== true) || (read.fork && trigger.forks !== true)) {

@@ -1,5 +1,5 @@
-import { TASK_SKILL_SOURCE, type TaskSkillSource } from "@luke/features/task-wire";
-import { Badge, STATUS_TONE } from "@luke/ui";
+import { TASK_SKILL_SOURCE, type TaskSkillSource } from "@repo/features/task-wire";
+import { Badge, STATUS_TONE } from "@repo/ui";
 
 /**
  * skill-source-badge.tsx -- the short word saying where a skill the `/` list offers comes from: Repository, Workspace, or Only you.

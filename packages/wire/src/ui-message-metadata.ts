@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { wireRefusal } from "./effect/json-schema.js";
+import { LEGACY_APP_WORD, literalsReadingLegacy } from "./legacy-app-word.js";
 import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
 
 /**
@@ -17,7 +18,7 @@ import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
  *
  * Every shape below is an Effect `Schema.Struct`, declared and exported
  * directly: a caller reads one with `readEither` and shows it with
- * `emitJsonSchema`, both from `@luke/wire/effect`.
+ * `emitJsonSchema`, both from `@repo/wire/effect`.
  */
 
 /** The roles a stored message may carry, as the SDK names them. */
@@ -59,7 +60,7 @@ export const MESSAGE_CHANNEL = {
   COMMENT: "comment",
   START: "start",
   GITHUB: "github",
-  LUKE: "luke",
+  APP: "app",
   AUTOMATION: "automation",
 } as const;
 
@@ -136,6 +137,18 @@ export const GITHUB_LINE_BOUNDS = {
   PATH_CHARS: 4_096,
   URL_CHARS: 8_192,
   NAME_CHARS: 256,
+} as const;
+
+/**
+ * The most a comment line's metadata holds: a comment's words and the quote
+ * of what its thread is on within the bounds a comment keeps them to
+ * (`@repo/features/plan-comment-wire`'s `PLAN_COMMENT_BOUNDS`), which wire,
+ * beneath features, cannot read, and a page's title within a page's.
+ */
+export const COMMENT_LINE_BOUNDS = {
+  WORDS_CHARS: 8_000,
+  QUOTE_CHARS: 2_000,
+  TITLE_CHARS: 80,
 } as const;
 
 /**
@@ -253,10 +266,29 @@ const THREAD_LINE_METADATA = EffectSchema.Struct({
 
 export type ThreadLineMetadata = EffectSchema.Schema.Type<typeof THREAD_LINE_METADATA>;
 
-/** A comment line is a plan's comment thread a member sent the agent to answer: the thread it hands over. */
+/**
+ * A comment line is a comment thread on a plan, or on one of its task's
+ * pages, that reached the agent: the thread it hands over, and, so a window
+ * draws the line from these rather than from the text the model reads, the
+ * task it is on, what it is on (the plan's words, a page's element, or a
+ * page as a whole), the page by its id and title where it is on one, and
+ * the member's own words. Each of these is absent from a line kept before
+ * it was said.
+ */
 const COMMENT_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.COMMENT),
   thread_id: identifier,
+  task_id: EffectSchema.optional(identifier),
+  quote: EffectSchema.optional(
+    EffectSchema.String.check(EffectSchema.isMaxLength(COMMENT_LINE_BOUNDS.QUOTE_CHARS)),
+  ),
+  page_id: EffectSchema.optional(identifier),
+  page_title: EffectSchema.optional(
+    EffectSchema.String.check(EffectSchema.isMaxLength(COMMENT_LINE_BOUNDS.TITLE_CHARS)),
+  ),
+  words: EffectSchema.optional(
+    EffectSchema.String.check(EffectSchema.isMaxLength(COMMENT_LINE_BOUNDS.WORDS_CHARS)),
+  ),
 });
 
 export type CommentLineMetadata = EffectSchema.Schema.Type<typeof COMMENT_LINE_METADATA>;
@@ -341,12 +373,16 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
 
-/** A service line is one the service sent the agent on its own, such as a wakeup it set. */
-const LUKE_LINE_METADATA = EffectSchema.Struct({
-  channel: EffectSchema.Literal(MESSAGE_CHANNEL.LUKE),
+/**
+ * A service line is one the service sent the agent on its own, such as a
+ * wakeup it set. Note that a line kept before the app was named `app` names
+ * its channel `luke`, which still reads as the app's (a legacy read).
+ */
+const APP_LINE_METADATA = EffectSchema.Struct({
+  channel: literalsReadingLegacy([MESSAGE_CHANNEL.APP], LEGACY_APP_WORD, MESSAGE_CHANNEL.APP),
 });
 
-export type LukeLineMetadata = EffectSchema.Schema.Type<typeof LUKE_LINE_METADATA>;
+export type AppLineMetadata = EffectSchema.Schema.Type<typeof APP_LINE_METADATA>;
 
 /**
  * An automation line is an automation's run's prompt, the agent's first line
@@ -376,7 +412,7 @@ export type UserMessageMetadata =
   | CommentLineMetadata
   | StartLineMetadata
   | GitHubLineMetadata
-  | LukeLineMetadata
+  | AppLineMetadata
   | AutomationLineMetadata
   | ObservationMetadata;
 
@@ -389,7 +425,7 @@ export const USER_MESSAGE_METADATA = EffectSchema.Union([
   COMMENT_LINE_METADATA,
   START_LINE_METADATA,
   GITHUB_LINE_METADATA,
-  LUKE_LINE_METADATA,
+  APP_LINE_METADATA,
   AUTOMATION_LINE_METADATA,
   OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));

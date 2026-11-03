@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { SignInMethodsChart, SignupsChart } from "@luke/panel/admin/charts/signups-chart";
+import { SignInMethodsChart, SignupsChart } from "@repo/panel/admin/charts/signups-chart";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

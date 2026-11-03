@@ -5,12 +5,12 @@ import {
   type GitHubTokenRejection,
   type GitHubTokenStatus,
   type GitHubTokenSummary,
-} from "@luke/features/github-token-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { dayText } from "@luke/features/time-format";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+} from "@repo/features/github-token-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { dayText } from "@repo/features/time-format";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ANNOUNCE,
   BUTTON_TYPE,
@@ -36,8 +36,8 @@ import {
   Text,
   TextLink,
   useConfirmDialog,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";

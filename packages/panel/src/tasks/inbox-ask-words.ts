@@ -1,4 +1,4 @@
-import { INBOX_ASK, type InboxAsk, type InboxAskInput } from "@luke/features/inbox-wire";
+import { INBOX_ASK, type InboxAsk, type InboxAskInput } from "@repo/features/inbox-wire";
 
 /**
  * inbox-ask-words.ts -- what an Inbox ask asks, in the words its box leads with: the one name the box, the list's row, and the agent's transcript say it by; and what an unfinished answer lacks, in the words its refused send says it by.

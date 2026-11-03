@@ -25,7 +25,7 @@ function isWindowOpen(callee: Node): boolean {
 }
 
 /**
- * The rule: outside `@luke/ui`, a button's press never opens a page. A page
+ * The rule: outside `@repo/ui`, a button's press never opens a page. A page
  * to open is a link, `ButtonLink`, `TextLink` or `Chip`'s `href`, so a
  * right-click, ⌘-click and a reader's link list find it. A handler is read
  * where it is written, or by the name it is held under in the same file, and
@@ -36,7 +36,7 @@ export const noOpenPageFromButtonRule = defineRule({
   meta: {
     type: "problem",
     docs: {
-      description: "Disallow opening a page from a @luke/ui button's press outside @luke/ui.",
+      description: "Disallow opening a page from a @repo/ui button's press outside @repo/ui.",
     },
     messages: {
       opensPage:

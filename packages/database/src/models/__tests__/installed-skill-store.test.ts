@@ -7,7 +7,7 @@ import {
   INSTALLED_SKILL_SCOPE,
   INSTALLED_SKILL_SOURCE,
   type InstalledSkillRefusal,
-} from "@luke/features/installed-skill-wire";
+} from "@repo/features/installed-skill-wire";
 import { and, eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
@@ -74,7 +74,7 @@ const skill = (
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

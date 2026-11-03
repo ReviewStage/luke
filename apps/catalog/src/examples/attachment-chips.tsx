@@ -8,15 +8,16 @@ import {
   ListMotion,
   motionRows,
   useLeaving,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type RefObject, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * attachment-chips.tsx -- a row of files coming along with a message: a
- * picture's thumbnail, files drawn by name and size, one with nothing to
- * open, a long name cut short, and the way off each, unavailable while busy,
+ * attachment-chips.tsx -- a row of files coming along with a message:
+ * pictures at their own shapes, a tall phone capture narrow and a panorama
+ * cropped at the wide bound, files drawn by name and size, one with nothing
+ * to open, a long name cut short, and the way off each, unavailable while busy,
  * each file taken off scaling out under the row's `ListMotion`;
  * then the same chips in a narrow column, a call's pictures still read,
  * gone, and not kept, and files going up, at a share and with none, which
@@ -28,6 +29,16 @@ const PICTURE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#7aa7f4"/><stop offset="1" stop-color="#3d5ac8"/></linearGradient></defs><rect width="64" height="48" fill="url(#g)"/><path d="M0 40l18-14 12 10 14-12 20 16v8H0z" fill="#fff8"/></svg>',
 )}`;
 
+/** A tall phone capture, drawn in place: it stands narrow, cropped at the chip's narrow bound. */
+const PHONE_PICTURE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 96"><rect width="45" height="96" fill="#f4efe6"/><rect x="4" y="10" width="26" height="4" rx="1" fill="#2b2b2b"/><rect x="4" y="22" width="37" height="18" rx="2" fill="#d9d2c5"/><rect x="4" y="46" width="37" height="22" rx="3" fill="#fff" stroke="#d9d2c5"/></svg>',
+)}`;
+
+/** A panorama, drawn in place: it stands wide, cropped at the chip's wide bound. */
+const WIDE_PICTURE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48"><defs><linearGradient id="w" x2="1"><stop offset="0" stop-color="#f4b26a"/><stop offset="1" stop-color="#c8513d"/></linearGradient></defs><rect width="160" height="48" fill="url(#w)"/><path d="M0 38l30-16 26 12 34-20 40 18 30-8v24H0z" fill="#0004"/></svg>',
+)}`;
+
 interface SampleFile {
   readonly name: string;
   readonly image?: string;
@@ -37,6 +48,8 @@ interface SampleFile {
 
 const FILES: readonly SampleFile[] = [
   { name: "screenshot.png", image: PICTURE, openable: true },
+  { name: "phone.png", image: PHONE_PICTURE, openable: true },
+  { name: "panorama.png", image: WIDE_PICTURE, openable: true },
   { name: "spec.pdf", detail: "48 kB", openable: true },
   {
     name: "quarterly-revenue-forecast-with-every-region-broken-out.csv",

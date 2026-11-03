@@ -4,13 +4,15 @@ import {
   type LinkPlace,
   linkOf,
   type ReadLink,
-} from "@luke/features/link-grammar";
-import type { PagePlace } from "@luke/features/page-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
-import type { SettingsView } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
+  taskLinkStep,
+  withTaskId,
+} from "@repo/features/link-grammar";
+import type { PagePlace } from "@repo/features/page-wire";
+import type { Workspace } from "@repo/features/workspace-wire";
+import type { SettingsView } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
 import { adminLinkFields } from "./admin/routing.js";
 import { useAppCommand } from "./app-commands.js";
@@ -35,7 +37,8 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  * file's, the board, the code, the Inbox, or a terminal, is passed over for
  * the task, and so is the plan's, whose link is the task's.
  * Each link is written under its workspace's slug, or its id until the
- * workspaces are read, as a task's own is; an agent's page under the
+ * workspaces are read, as a task's own is, and names a task by its number
+ * where it has one (`taskLinkStep`); an Inbox item by its id alone; an agent's page under the
  * workspace the page read its agent into, which only the page knows, so the
  * page tells the window (`usePageWorkspace`). A place whose workspace is
  * known by neither, as with no workspace listed, has no link, since a link
@@ -43,10 +46,12 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  *
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
- * version history stands, the Inbox, an agent's or a person's page, an
- * automation or the list, the Admin place's view, or a page of Settings. The history
- * writes that link as the step's address, so the address and Copy link
- * never disagree. The Board, a new automation's page, and the home page have none. A narrow
+ * version history stands, the home page, the Board, the Inbox, an agent's or
+ * a person's page, an automation or the list, the Admin place's view, or a
+ * page of Settings. The history writes that link as the step's address, so
+ * the address and Copy link never disagree. A new automation's page has
+ * none, nor has the home page while a launch is still reopening the task
+ * last open, which stands nowhere until it opens. A narrow
  * room, which shows one pane at a time, names the pane it shows as the
  * step: the side panel's tab over the plan, where the tab has a link, the
  * Inbox's item standing alone (as it is in an Inbox showing one column by
@@ -58,7 +63,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  * in the Inbox's, and its chosen thread's link is at hand before it as an
  * item's is, naming the step in its place where it stands alone. An Inbox
  * narrowed to a task, Channels on or off, has the task's Inbox link,
- * `/inbox/plan/<taskId>`, in the Inbox's.
+ * `/inbox/task/<taskId>`, in the Inbox's.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -66,6 +71,8 @@ const SIDE_PANEL_SELECTOR = ".side-panel";
 
 /** What a link at hand is called where it is offered: "Copy link to <thing>". */
 const LINK_THING = {
+  HOME: "Home",
+  BOARD: "Tasks",
   TASK: "task",
   VERSION: "version",
   PAGE: "page",
@@ -181,15 +188,9 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
   }
 }
 
-/** An Inbox item's place, under its agent; under its task only while an older link opened it naming no agent. */
+/** An Inbox item's place, by its id alone, whose agent, task, and workspace its reader asks the service for, as every Copy link of an item writes it. */
 function inboxItemPlace(chosen: InboxChoice): LinkPlace {
-  if (!("taskId" in chosen)) {
-    return { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
-  }
-  const { taskId, itemAgentId, itemId } = chosen;
-  return itemAgentId === undefined
-    ? { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId }
-    : { kind: LINK_PLACE.INBOX_ITEM, agentId: itemAgentId, itemId };
+  return { kind: LINK_PLACE.INBOX_ITEM, itemId: chosen.itemId };
 }
 
 /** The links of an Inbox narrowed to a channel: its chosen thread's, a step of its own where it stands alone, and the channel's. */
@@ -215,8 +216,10 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   if (region.kind !== DOCUMENT_REGION.READY) return [];
   const { task: drawn } = region;
   const workspace = slugOf(tasks.workspaces, drawn.workspaceId);
+  // Note that the task's links name it by its number, where it has one, as every link to it is written.
+  const planId = taskLinkStep(drawn);
   const task: LinkAtHand = {
-    link: { workspace, place: { kind: LINK_PLACE.TASK, planId: drawn.id } },
+    link: { workspace, place: { kind: LINK_PLACE.TASK, planId } },
     thing: LINK_THING.TASK,
     name: drawn.name,
   };
@@ -228,7 +231,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       ? [{ ...task, step: true }]
       : [
           {
-            link: { workspace, place: { kind: LINK_PLACE.VERSION, planId: drawn.id, revision } },
+            link: { workspace, place: { kind: LINK_PLACE.VERSION, planId, revision } },
             thing: LINK_THING.VERSION,
             step: true,
           },
@@ -246,9 +249,10 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
           thing: LINK_THING.AGENT,
           name: tasks.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };
-  const held = tasks.sidePanel.open
+  const tabPlace = tasks.sidePanel.open
     ? panelTabPlace({ taskId: drawn.id }, tasks.sidePanel.tab)
     : undefined;
+  const held = tabPlace === undefined ? undefined : withTaskId(tabPlace, planId);
   const thing = held === undefined ? undefined : panelThing(held);
   const panel: LinkAtHand | undefined =
     held === undefined || thing === undefined
@@ -267,7 +271,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   return order.filter((each): each is LinkAtHand => each !== undefined);
 }
 
-/** Every link the window can copy now, the most specific first; none on the home page, nor for a place whose workspace is unknown. */
+/** Every link the window can copy now, the most specific first; none for a place whose workspace is unknown. */
 function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   return placesAtHand(tasks, at).filter((each) => each.link.workspace !== "");
 }
@@ -359,8 +363,13 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
     return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
   }
-  // The Board has no link of its own either, on the same terms.
-  if (tasks.boardView.open) return [];
+  // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
+  if (tasks.unknownWorkspace.open) return [];
+  // The Board stands over the plan, on the same terms; and with no task bound for, the window stands on the home page.
+  if (tasks.boardView.open) return [at_({ kind: LINK_PLACE.BOARD }, LINK_THING.BOARD)];
+  if (tasks.boundFor === undefined && !tasks.restoring) {
+    return [at_({ kind: LINK_PLACE.HOME }, LINK_THING.HOME)];
+  }
   return taskLinks(tasks, at);
 }
 

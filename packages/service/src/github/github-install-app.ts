@@ -16,9 +16,9 @@
  * guidance for the Setup URL is to generate a user access token for the user
  * who installed the App and check the installation is associated with them
  * (https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url).
- * We keep no user's token for that, so the Setup URL sends the browser on
- * through GitHub's web application flow, with PKCE and the App's
- * registered callback URL `GITHUB_INSTALLED_AUTHORIZED` named as its
+ * The Setup URL holds no token of the installer's for that, so it sends
+ * the browser on through GitHub's web application flow, with PKCE and the
+ * App's registered callback URL `GITHUB_INSTALLED_AUTHORIZED` named as its
  * `redirect_uri`
  * (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app),
  * under the intent's own state, once the installation's id and a random
@@ -28,12 +28,23 @@
  * refuses a state unknown, used, or expired; the account must still be an
  * owner or admin of the workspace; and the
  * installation must be among those the code's user access token reaches
- * (`GET /user/installations`), read once before the token is revoked
- * (`GitHubApp.authorizedInstallations`). Only then is it linked, beside any
- * other installation the workspace holds, with the account's role read
- * again in the write's own transaction; one whose GitHub account already
- * stands for another workspace is refused. A callback replayed after its
- * intent was spent lands as expired and writes nothing.
+ * (`GET /user/installations`, `GitHubApp.authorizedInstallations`). Only
+ * then is it linked, beside any other installation the workspace holds,
+ * with the account's role read again in the write's own transaction; one
+ * whose GitHub account already stands for another workspace is refused. A
+ * callback replayed after its intent was spent lands as expired and writes
+ * nothing.
+ *
+ * The same token links the installer's own GitHub, so onboarding takes one
+ * trip to GitHub rather than an install and a separate link: it is kept as
+ * the account's GitHub row, as a GitHub sign-in or Settings' link leaves
+ * one, where the browser GitHub returned to the callback is signed in to the
+ * account the intent names, and revoked otherwise. Note that we ask the
+ * browser's own session, because the state travels in an address anyone can
+ * hand another person, and a token kept on the state alone would link the
+ * GitHub of whoever followed it to the account that minted it; GitHub's own
+ * link holds its intent to the same browser session
+ * (`github-procedures.ts`'s claim). The installation is linked either way.
  *
  * GitHub's "Request user authorization (OAuth) during installation" is left
  * off: it disables the Setup URL and returns the code to the App's first
@@ -41,19 +52,20 @@
  * whole web flow with `redirect_uri` to choose the callback instead.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { workspaceOf } from "@luke/database/models/workspace-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { workspaceOf } from "@repo/database/models/workspace-store";
 import {
   GITHUB_INSTALL_STATUS,
   type GitHubInstallStatus,
   githubInstallLandingPath,
   HOSTED_SERVICE_PATH,
-} from "@luke/features";
+} from "@repo/features";
 import { generateRandomString } from "better-auth/crypto";
 import { Effect, Layer, Option } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { sessionCredential } from "../auth/session-credential.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
-import { hostedNotFoundRoute } from "../http/http-effect.js";
+import { hostedNotFoundRoute, type SessionUserIdResolver } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import {
   GitHubApp,
@@ -101,6 +113,11 @@ const LANDED_ON_LINK = {
   [LINK_OUTCOME.ALREADY_CONNECTED]: GITHUB_INSTALL_STATUS.ALREADY_CONNECTED,
   [LINK_OUTCOME.NOT_PERMITTED]: GITHUB_INSTALL_STATUS.EXPIRED,
 } as const satisfies Readonly<Record<LinkOutcome, GitHubInstallStatus>>;
+
+/** The session read the callback asks whose browser GitHub returned. */
+export interface GitHubInstallSeams {
+  readonly resolveSessionUserId: SessionUserIdResolver;
+}
 
 /** A browser is sent on with 303, so a POST GitHub might one day send becomes the GET the page is. */
 const HTTP_STATUS = { SEE_OTHER: 303 } as const;
@@ -172,17 +189,18 @@ const authorizeConnect = /* @__PURE__ */ Effect.fn("web/authorizeConnect")(funct
   return HttpServerResponse.redirect(url, { status: HTTP_STATUS.SEE_OTHER });
 });
 
-/** The installation named, as the user who authorized reaches it; nothing where they do not, where GitHub refused the code, or where its account is none a workspace is linked to. */
+/** The installation named, as the user who authorized reaches it, their token kept for the installer given; nothing where they do not, where GitHub refused the code, or where its account is none a workspace is linked to. */
 const authorizedInstallation = /* @__PURE__ */ Effect.fn("web/authorizedInstallation")(function* (
   installationId: number,
   returned: GitHubAuthorizeReturn,
+  installer: Option.Option<string>,
 ): Effect.fn.Return<
   Option.Option<ConnectedInstallation>,
-  GitHubReadFailure,
-  GitHubApp | HttpClient.HttpClient
+  GitHubWorkspaceReadFailure,
+  GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
   const app = yield* GitHubApp;
-  const installations = yield* app.authorizedInstallations(returned);
+  const installations = yield* app.authorizedInstallations(returned, installer);
   const reached = Option.getOrElse(installations, () => []).find(
     (installation) => installation.id === installationId,
   );
@@ -194,8 +212,30 @@ const authorizedInstallation = /* @__PURE__ */ Effect.fn("web/authorizedInstalla
   return Option.some({ installationId, accountId, accountLogin, accountType, suspended });
 });
 
+/**
+ * The account the browser's own session names, where it is the account
+ * given; none for a browser signed in to another or to none. An auth service
+ * that cannot answer keeps no token rather than failing the connect.
+ */
+function signedInAs(
+  seams: GitHubInstallSeams,
+  request: Request,
+  userId: string,
+): Effect.Effect<Option.Option<string>> {
+  const credential = sessionCredential(request.headers);
+  if (credential === undefined) return Effect.succeedNone;
+  return seams.resolveSessionUserId(new Request(request.url, { headers: credential })).pipe(
+    Effect.map(Option.filter((signedIn) => signedIn === userId)),
+    Effect.catch((failure) =>
+      Effect.as(Effect.logWarning("the auth service read no session", failure), Option.none()),
+    ),
+  );
+}
+
 /** The status a workspace's connect settles on at the callback, once its intent is spent and the installation confirmed with the user who authorized. */
 const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")(function* (
+  seams: GitHubInstallSeams,
+  request: Request,
   code: string | null,
   state: string | null,
   callback: string,
@@ -215,11 +255,12 @@ const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")
   if (Option.isNone(workspace) || !GITHUB_CONNECT_ROLES.has(workspace.value.role)) {
     return GITHUB_INSTALL_STATUS.EXPIRED;
   }
-  const installation = yield* authorizedInstallation(installationId, {
-    code,
-    codeVerifier,
-    redirectUri: callback,
-  });
+  const installer = yield* signedInAs(seams, request, userId);
+  const installation = yield* authorizedInstallation(
+    installationId,
+    { code, codeVerifier, redirectUri: callback },
+    installer,
+  );
   if (Option.isNone(installation)) return GITHUB_INSTALL_STATUS.NOT_FOUND;
   // Note that a connect repeated for an installation the workspace holds links it as before, which is no new connection, so what it holds is read first.
   const held = yield* installationsOfWorkspace(organizationId);
@@ -228,7 +269,11 @@ const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")
     linked === LINK_OUTCOME.LINKED &&
     !held.some((each) => each.installationId === installationId)
   ) {
-    yield* recordServerEvent(SERVER_EVENT.GITHUB_APP_INSTALL, userId, {});
+    yield* recordServerEvent(
+      SERVER_EVENT.GITHUB_APP_INSTALL,
+      { userId, workspaceId: organizationId },
+      {},
+    );
   }
   return LANDED_ON_LINK[linked];
 });
@@ -248,6 +293,7 @@ const requestQuery = Effect.gen(function* () {
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const url = new URL(request.url);
   return {
+    request,
     callback: new URL(HOSTED_SERVICE_PATH.GITHUB_INSTALLED_AUTHORIZED, url.origin).toString(),
     query: url.searchParams,
   };
@@ -270,24 +316,31 @@ const installedEndpoint = Effect.gen(function* () {
 });
 
 /** GET: the callback a connect's one-time authorization returns through. Whatever GitHub sent, the browser lands on the page with a status. */
-const authorizedEndpoint = Effect.gen(function* () {
-  const { callback, query } = yield* requestQuery;
-  const settled = connectInstallation(
-    query.get(AUTHORIZED_QUERY.CODE),
-    query.get(AUTHORIZED_QUERY.STATE),
-    callback,
-  );
-  return landing(yield* Effect.catch(settled, landedOnFailure));
-});
+const authorizedEndpoint = (seams: GitHubInstallSeams) =>
+  Effect.gen(function* () {
+    const { request, callback, query } = yield* requestQuery;
+    const settled = connectInstallation(
+      seams,
+      request,
+      query.get(AUTHORIZED_QUERY.CODE),
+      query.get(AUTHORIZED_QUERY.STATE),
+      callback,
+    );
+    return landing(yield* Effect.catch(settled, landedOnFailure));
+  });
 
 /** The group: the three navigations, and the hosted vocabulary's own refusal for any other path. */
-export function githubInstallApp(): WebRoutes<
-  GitHubApp | HttpClient.HttpClient | DatabaseServices
-> {
+export function githubInstallApp(
+  seams: GitHubInstallSeams,
+): WebRoutes<GitHubApp | HttpClient.HttpClient | DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, HOSTED_SERVICE_PATH.GITHUB_INSTALL, installEndpoint),
     HttpRouter.add(ANY_METHOD, HOSTED_SERVICE_PATH.GITHUB_INSTALLED, installedEndpoint),
-    HttpRouter.add(ANY_METHOD, HOSTED_SERVICE_PATH.GITHUB_INSTALLED_AUTHORIZED, authorizedEndpoint),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.GITHUB_INSTALLED_AUTHORIZED,
+      authorizedEndpoint(seams),
+    ),
     hostedNotFoundRoute,
   );
 }

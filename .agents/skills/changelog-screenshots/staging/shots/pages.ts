@@ -8,12 +8,12 @@
  *
  * The plan lists two pages (`page-html.ts`), so the panel's + offers both.
  * The Page tab draws the page line from the planning view; its frame reads
- * the HTML over `luke-page:`, which main answers from `page-html.ts` in a
+ * the HTML over `app-page:`, which main answers from `page-html.ts` in a
  * fixture run under this profile (`main/services/window-service.ts`, marked
  * `Throwaway:`).
  */
 
-import type { PageLine } from "@luke/features/page-wire";
+import type { PageLine } from "@repo/features/page-wire";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";

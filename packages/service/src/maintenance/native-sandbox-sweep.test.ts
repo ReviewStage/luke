@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { INPUT_LINE } from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
-import { claimAgentRunnerLease } from "@luke/database/models/agent-runner-lease";
-import { createAgent } from "@luke/database/models/agent-store";
-import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { user } from "@luke/database/schemas/auth";
-import { runnerLine } from "@luke/database/schemas/runner-line";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { INPUT_LINE } from "@repo/agent-runner/protocol";
+import { Database } from "@repo/database/core/query";
+import { claimAgentRunnerLease } from "@repo/database/models/agent-runner-lease";
+import { createAgent } from "@repo/database/models/agent-store";
+import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
+import { user } from "@repo/database/schemas/auth";
+import { runnerLine } from "@repo/database/schemas/runner-line";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, ErrorReporter, Layer, Option } from "effect";
 import { afterEach, vi } from "vitest";
@@ -149,7 +149,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
     const started = yield* createAgent(userId, {
       taskId: task.id,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TASK_SECTION_GLYPH } from "@luke/features/task-section-wire";
+import { TASK_SECTION_GLYPH } from "@repo/features/task-section-wire";
 import { describe, it } from "vitest";
 import {
   emojiGroups,

@@ -30,8 +30,8 @@ import { workspaceActsContract } from "./workspaces.js";
 /**
  * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
  *
- * A subpath door of its own (`@luke/host/contract`), read by the panel's act
- * door and implemented by `@luke/host/act-port`, so it and everything it
+ * A subpath door of its own (`@repo/host/contract`), read by the panel's act
+ * door and implemented by `@repo/host/act-port`, so it and everything it
  * imports stay free of Node. The router is flat and keyed by the kind
  * itself, so a window calls a kind by the name it already spells, and a kind
  * with no procedure here cannot be called on the port at all.
@@ -68,7 +68,6 @@ export {
   WINDOW_SURFACE_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
-export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
 export {
   type EventPushName,
   PUSH,
@@ -80,11 +79,7 @@ export {
   type PushPayload,
 } from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
-export {
-  THIS_MAC_HOST_STANDING,
-  type ThisMacHostStanding,
-  thisMacHostStandingSchema,
-} from "./this-mac-host.js";
+export type { ThisMacHostRead } from "./this-mac-host.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */

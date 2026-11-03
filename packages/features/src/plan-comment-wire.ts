@@ -1,5 +1,7 @@
+import { LEGACY_APP_WORD, literalsReadingLegacy } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { agentMessageRequestSchema } from "./agent-wire.js";
+import { pageVersionNumberSchema } from "./page-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { TASK_BOUNDS } from "./task-wire.js";
 import { filledText } from "./text-schema.js";
@@ -24,6 +26,15 @@ import { filledText } from "./text-schema.js";
  * its id, its name, and its type; their bytes are read apart, as a plan's
  * picture's are, at `planAttachmentPath`.
  *
+ * A thread may instead be on one of the task's pages (`page-wire.ts`): on
+ * an element of the version a member was reading, which they picked in the
+ * page's frame, or on the page as a whole. It names the page and that
+ * version, and the element by its path in it, its quote the element's words
+ * as the frame read them, or the version's title for the whole page. A page
+ * thread is the task's like any other and is answered, resolved, and
+ * reopened the same way, but is read apart from the plan's: the plan's read
+ * holds no page thread, and a page's read holds that page's alone.
+ *
  * Every member of the plan's workspace reads and writes every thread, and
  * every agent on the task does through its tools; resolving and reopening
  * need nothing more. A comment is edited or deleted only by its writer, and
@@ -43,12 +54,18 @@ export const PLAN_COMMENT_BOUNDS = {
   MAX_CLIENT_KEY_CHARS: 200,
   /** The longest cursor the service hands back. */
   MAX_CURSOR_CHARS: 200,
+  /** The longest path a page thread keeps of the element it is on. */
+  MAX_ELEMENT_PATH_CHARS: 1_000,
+  /** The longest heading a page thread keeps of the section its element stands in. */
+  MAX_SECTION_CHARS: 200,
 } as const;
 
-/** What a thread is anchored to: words a member selected, or a whole block they commented beside. */
+/** What a thread is anchored to: words a member selected or a whole block they commented beside, on the plan; an element they picked or the whole of a page, on a page. */
 export const PLAN_COMMENT_SCOPE = {
   WORDS: "words",
   BLOCK: "block",
+  ELEMENT: "element",
+  PAGE: "page",
 } as const;
 
 export type PlanCommentScope = (typeof PLAN_COMMENT_SCOPE)[keyof typeof PLAN_COMMENT_SCOPE];
@@ -64,11 +81,18 @@ export type PlanCommentStatus = (typeof PLAN_COMMENT_STATUS)[keyof typeof PLAN_C
 /** Who wrote an entry: a member of the workspace, the app, or one of the task's coding agents. */
 export const PLAN_COMMENT_ACTOR = {
   MEMBER: "member",
-  LUKE: "luke",
+  APP: "app",
   AGENT: "agent",
 } as const;
 
 export type PlanCommentActor = (typeof PLAN_COMMENT_ACTOR)[keyof typeof PLAN_COMMENT_ACTOR];
+
+/** Who wrote an entry or was asked in it, as its row stores it. Note that it reads `luke`, which rows from before the app was named `app` hold, as the app (a legacy read). */
+export const planCommentActorSchema = literalsReadingLegacy(
+  Object.values(PLAN_COMMENT_ACTOR),
+  LEGACY_APP_WORD,
+  PLAN_COMMENT_ACTOR.APP,
+);
 
 /** What one entry of a thread is: a comment, or a line of what happened to the thread. */
 export const PLAN_COMMENT_ENTRY = {
@@ -102,7 +126,7 @@ const planCommentSpanSchema = EffectSchema.Struct({
  * An entry whose member's account is gone names no member.
  */
 const planCommentWriterSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals(Object.values(PLAN_COMMENT_ACTOR)),
+  actor: planCommentActorSchema,
   by: EffectSchema.optionalKey(memberRefSchema),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
@@ -111,7 +135,11 @@ export type PlanCommentWriter = typeof planCommentWriterSchema.Type;
 
 /** Who a thread was sent to: the app, or a coding agent by its id. */
 const planCommentAskedSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals([PLAN_COMMENT_ACTOR.LUKE, PLAN_COMMENT_ACTOR.AGENT]),
+  actor: literalsReadingLegacy(
+    [PLAN_COMMENT_ACTOR.APP, PLAN_COMMENT_ACTOR.AGENT],
+    LEGACY_APP_WORD,
+    PLAN_COMMENT_ACTOR.APP,
+  ),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
@@ -153,14 +181,26 @@ const planCommentEntrySchema = EffectSchema.Struct({
 
 export type PlanCommentEntry = typeof planCommentEntrySchema.Type;
 
+/** The path of an element of a page, as the frame wrote it: a CSS selector from the document's root. */
+const planCommentElementPathSchema = filledText(PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS);
+
+/** The page a thread is on, the version it was left on, and the element it is on there, by its path; no element for the whole page. */
+const planCommentPageSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  version: pageVersionNumberSchema,
+  element: EffectSchema.optionalKey(EffectSchema.String),
+});
+
 /** One thread, as the window and the agents read it. */
 const planCommentThreadSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   scope: EffectSchema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
-  /** The words the thread was anchored to, as they stood when it was started or last moved. */
+  /** The words the thread was anchored to, as they stood when it was started or last moved; on a page, its element's words, or the version's title for the whole page. */
   quote: EffectSchema.String,
-  /** Where the words stand in the plan's text now; absent once every one of them was deleted. */
+  /** Where the words stand in the plan's text now; absent once every one of them was deleted, and on a page. */
   anchor: EffectSchema.optionalKey(planCommentSpanSchema),
+  /** The page the thread is on; absent for a thread on the plan. */
+  page: EffectSchema.optionalKey(planCommentPageSchema),
   /** The heading of the section the words stand, or last stood, in; empty before the first heading. */
   section: EffectSchema.String,
   status: EffectSchema.Literals(Object.values(PLAN_COMMENT_STATUS)),
@@ -198,9 +238,9 @@ const ANCHOR_TEXT = EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUN
  * started in an editor with words not yet saved lands on the same words. The
  * comment may carry files under its words.
  */
-export const planCommentStartRequestSchema = EffectSchema.Struct({
+const planCommentPlanStartSchema = EffectSchema.Struct({
   clientKey: planCommentClientKeySchema,
-  scope: EffectSchema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
+  scope: EffectSchema.Literals([PLAN_COMMENT_SCOPE.WORDS, PLAN_COMMENT_SCOPE.BLOCK]),
   quote: filledText(PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
   anchor: planCommentSpanSchema,
   text: ANCHOR_TEXT,
@@ -208,7 +248,45 @@ export const planCommentStartRequestSchema = EffectSchema.Struct({
   attachments: planCommentFilesSchema,
 });
 
-export type PlanCommentStartRequest = typeof planCommentStartRequestSchema.Type;
+/**
+ * A thread started on one of the task's pages (the same POST): its first
+ * comment, the page and the version the member was reading, and the element
+ * they picked in its frame, or that holds the words they selected there,
+ * where they did, by its path, its words or those selected, and the heading
+ * of the section it stands in. The service takes the page's
+ * title as the quote of a thread on the whole page.
+ */
+const planCommentPageStartSchema = EffectSchema.Struct({
+  clientKey: planCommentClientKeySchema,
+  page: EffectSchema.Struct({ id: wireUuidSchema, version: pageVersionNumberSchema }),
+  element: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      path: planCommentElementPathSchema,
+      quote: filledText(PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
+      section: EffectSchema.String.check(
+        EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS),
+      ),
+      /** Whether the quote is words selected in the element, which the page tints, rather than the element as a whole. */
+      words: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+    }),
+  ),
+  words: planCommentWordsSchema,
+  attachments: planCommentFilesSchema,
+});
+
+/** A thread started on the plan's words. */
+export type PlanCommentStartRequest = typeof planCommentPlanStartSchema.Type;
+
+/** A thread started on a page of the plan's task. */
+export type PlanCommentPageStart = typeof planCommentPageStartSchema.Type;
+
+/** A thread started (POST `/api/plans/{id}/comments`): on the plan's words, or on one of its task's pages. */
+export const planCommentStartRequestSchema = EffectSchema.Union([
+  planCommentPlanStartSchema,
+  planCommentPageStartSchema,
+]);
+
+export type PlanCommentStart = typeof planCommentStartRequestSchema.Type;
 
 /** What a member does to one thread (POST `/api/plans/{id}/comments/{thread}`). */
 export const PLAN_COMMENT_ACTION = {

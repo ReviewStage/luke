@@ -3,10 +3,11 @@
  *
  * This is not the counted-event stream and does not share its guarantee. A
  * counted event can only say what `packages/features/src/analytics/product-events.ts`
- * declared; this client is the analytics library posting straight to the
- * processor, and a recording is the rendered panel. What keeps a session
- * title, a branch, an error line, a caption, or the account's own name out of
- * it is `SESSION_REPLAY_MASKING` below, not a declared list of events: every
+ * declared; this client is the analytics library posting to the processor,
+ * directly or through the web's own origin, which passes on what it is sent,
+ * and a recording is the rendered panel. What keeps a session title, a
+ * branch, an error line, a caption, or the account's own name out of it is
+ * `SESSION_REPLAY_MASKING` below, not a declared list of events: every
  * text node and every input is masked, every attribute but the few the replay
  * lays out by is asterisked, and autocapture is off; and the stylesheets the
  * panel builds from a person's words are emptied before a recording leaves
@@ -34,31 +35,32 @@
  * record under any other.
  *
  * What a shell decides is only what is its own: the platform it is, the
- * project key its build carries (none, and nothing records), the address its
- * window says it has in place of the one it has, and where its recorder's
- * bundle is. Whether a run may record at all is the host's word
- * (`SessionReplayBootstrap`): there is no switch. Where it may, recording
+ * project key its build carries (none, and nothing records), where its
+ * recording posts, the address its window says it has in place of the one it
+ * has, and where its recorder's bundle is. Whether a run may record at all is
+ * the host's word (`SessionReplayBootstrap`): there is no switch. Where it may, recording
  * waits for an account: nothing loads and nothing records while signed out,
  * so a visit that never signs in sends nothing, and every recording is filed
  * under a person, named by the account's name and email, from its first
- * frame, and can be erased with the account. `PRIVACY.md` says so.
+ * frame, and can be erased with the account. `PRIVACY.md` says so. A
+ * recording is also filed under the workspace the window lists, by its id
+ * alone, as the service's counts are (`WORKSPACE_GROUP_TYPE`).
  */
 
-import type { ProductPlatform } from "@luke/features/analytics";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
-import { opensWithheldSheet } from "@luke/ui/session-replay-marks";
-import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
+import type { ProductPlatform } from "@repo/features/analytics";
+import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
+import { opensWithheldSheet } from "@repo/ui/session-replay-marks";
+import { isRecord, text, type UnparsedWireValue, type WireValue } from "@repo/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
 import type { BundleImporter } from "./bundle-loader.js";
 import { sessionRecorderLoaded } from "./session-recorder/contract.js";
 
 /**
- * Where everything here posts. The processor's own address rather than our
- * origin: nothing forwards on the user's behalf, so the processor sees the
- * address a request arrives from. Each shell's connect policy names it, and
- * the assets host beside it.
+ * The group type a recording is filed under its workspace by, the one the
+ * service files its counts under (`packages/service/src/events/events.ts`), so a workspace's
+ * recordings and counts are one group in PostHog.
  */
-const POSTHOG_HOST = "https://us.i.posthog.com";
+const WORKSPACE_GROUP_TYPE = "workspace";
 
 /**
  * The panel's own `data-*` attributes its styles select on by their value,
@@ -78,8 +80,7 @@ const LAYOUT_DATA = `
   inbox-comment inbox-shown indent indeterminate indicators inherit ink
   inset issue-state item-section item-selected keyboard kind labels-control
   landed late layer layout lead leaving legible level lifted lights line
-  lines lit loaded look luke-boot-sidebar luke-density luke-profile
-  luke-room luke-theme marked measure menu-open meta min-width mobile-bar
+  lines lit loaded look marked measure menu-open meta min-width mobile-bar
   mode motion move moves muted name narrow narrowest nudge numbered open
   opened orientation overflow page pane-beside pane-over panel-open
   panel-toggle pending picked place placed placement playing pointer-opens
@@ -88,7 +89,8 @@ const LAYOUT_DATA = `
   sections selected separator shown side sidebar-collapsed sidebar-overlay
   single size slot stand start state status style submit surface swiped
   thumb tone truncate-container truncate-group-container turn turned type
-  under under-more unread variant whole wide width worded wrap-heading
+  ui-boot-sidebar ui-density ui-profile ui-room ui-theme under under-more
+  unread variant whole wide width worded wrap-heading
   wrapped zoom
 `
   .trim()
@@ -108,7 +110,7 @@ const LAYOUT_DATA = `
  * where a box left out of the recording stands. Each is a keyword, a number,
  * a colour, or a path, and never a person's words. Note that an element's own
  * style leaves whole, so nothing may write a person's words into one: the one
- * style built from a config, a chart's series colours (`@luke/ui/chart`), is
+ * style built from a config, a chart's series colours (`@repo/ui/chart`), is
  * drawn from a module's constants, and only on the admin page, which the
  * recording leaves out. Names are lowercase, since the recorder hands an SVG
  * attribute over in the case it was written.
@@ -247,9 +249,11 @@ function laysOut(name: string, value: string, element: Element | undefined): boo
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
  * bundle), every input masked, every attribute but those the replay lays out
- * by (`LAYOUT`) asterisked, autocapture off, since a click event carries the
- * text of what was clicked, and canvas recording off, since a canvas carries
- * its words as pixels.
+ * by (`LAYOUT`) asterisked, every comment in the markup left out, since the
+ * recorder copies a comment's words as they stand and no masking reaches
+ * one, autocapture off, since a click event carries the text of what was
+ * clicked, and canvas recording off, since a canvas carries its words as
+ * pixels.
  *
  * An allowlist rather than a list of the attributes that carry words,
  * because that list kept missing one: an element's `id` and the ids that
@@ -267,7 +271,7 @@ function laysOut(name: string, value: string, element: Element | undefined): boo
  * because the project's setting would otherwise decide; and that the
  * recorder masks no radio's, checkbox's, or file input's value at all,
  * whatever this says, so those are kept out where they are drawn
- * (`@luke/ui/session-replay-marks`, and the file picker's `ph-no-capture`).
+ * (`@repo/ui/session-replay-marks`, and the file picker's `ph-no-capture`).
  * The canvas option is set here rather than left to the library's default
  * on the same terms, because the library reads it before the remote
  * configuration and a project that switched canvas recording on would
@@ -289,6 +293,7 @@ const SESSION_REPLAY_MASKING = {
     maskTextSelector: "*",
     maskAttributeFn: (name: string, value: string, element?: Element): string =>
       laysOut(name.toLowerCase(), value, element) ? value : "*".repeat(value.length),
+    slimDOMOptions: { comment: true },
     recordHeaders: false,
     recordBody: false,
   },
@@ -327,6 +332,14 @@ export interface SessionReplayShell {
    * empty for a build that records nothing, such as a development one.
    */
   readonly projectApiKey: () => string;
+  /**
+   * Where the recording posts, the client's `api_host`, which the shell's
+   * connect policy must allow, and the processor's own app, its `ui_host`:
+   * the processor's address on the desktop, whose `file://` page no blocker
+   * sees, and a path of the tab's own origin on the web, which the web
+   * service passes on (`@repo/features/posthog-proxy`).
+   */
+  readonly host: { readonly api: string; readonly ui: string };
   /** The address the window says it has, in place of the one it has, which may name a person or carry their words. */
   readonly address: string;
   /**
@@ -348,17 +361,24 @@ export interface SessionReplayShell {
 }
 
 /** The run's word on recording where it names a signed-in account, the only word that records. */
-type SignedInBootstrap = SessionReplayBootstrap & { accountId: string };
+type SignedInBootstrap = SessionReplayWord & { accountId: string };
 
 /** The word as one that names a signed-in account, or none while signed out. */
-function signedIn(bootstrap: SessionReplayBootstrap): SignedInBootstrap | undefined {
+function signedIn(bootstrap: SessionReplayWord): SignedInBootstrap | undefined {
   const accountId = bootstrap.accountId;
   return accountId ? { ...bootstrap, accountId } : undefined;
 }
 
+/**
+ * The run's word on recording as the panel hands it to its shell: the host's
+ * word, and the workspace the window lists, which only the window knows
+ * (`chosen-workspace.ts`), absent while it lists none.
+ */
+export type SessionReplayWord = SessionReplayBootstrap & { workspaceId?: string | undefined };
+
 /** Brings recording into line with the run's word on it; a test may stand its own recorder bundle in. */
 export type ApplySessionReplay = (
-  bootstrap: SessionReplayBootstrap,
+  bootstrap: SessionReplayWord,
   importRecorder?: BundleImporter<unknown>,
 ) => void;
 
@@ -399,7 +419,7 @@ function addressless(
 }
 
 /**
- * Empties every withheld sheet (`@luke/ui/session-replay-marks`) in what a
+ * Empties every withheld sheet (`@repo/ui/session-replay-marks`) in what a
  * recording sends: the panel built it from a person's words, which its
  * selectors name in clear, since no masking reaches CSS.
  *
@@ -541,6 +561,20 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   let latest: SignedInBootstrap | undefined;
   /** The account the running recording is filed under, as last identified, cleared with the person on a stop. */
   let identified: SignedInBootstrap | undefined;
+  /** The workspace the running recording is filed under, as last grouped, cleared with the person by every `reset`. */
+  let grouped: string | undefined;
+
+  /**
+   * Files what is recorded from here on under the workspace the window lists,
+   * by its id and nothing else, or under none once it lists none. A workspace
+   * already grouped is not grouped again, since most words move nothing.
+   */
+  const followWorkspace = (posthog: PostHog, workspaceId: string | undefined): void => {
+    if (grouped === workspaceId) return;
+    grouped = workspaceId;
+    if (workspaceId === undefined) posthog.resetGroups();
+    else posthog.group(WORKSPACE_GROUP_TYPE, workspaceId);
+  };
 
   /**
    * Files what is being recorded under the signed-in account, and sets the
@@ -573,10 +607,18 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       return;
     }
     if (before !== undefined) {
+      // The reset takes the workspace's group with the person, so the next account's is set afresh.
       posthog.reset();
+      grouped = undefined;
       registerBuild(posthog, bootstrap, shell.platform);
     }
     posthog.identify(bootstrap.accountId, personProperties(bootstrap, shell.platform));
+  };
+
+  /** Files the recording under the word's account, and then under its workspace. */
+  const follow = (posthog: PostHog, bootstrap: SignedInBootstrap): void => {
+    followAccount(posthog, bootstrap);
+    followWorkspace(posthog, bootstrap.workspaceId);
   };
 
   /** Starts the client over a recorder already loaded: built once per window, resumed after that. */
@@ -588,14 +630,15 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       // because the person may have changed since the last one.
       optIn(posthog);
       registerBuild(posthog, bootstrap, shell.platform);
-      followAccount(posthog, bootstrap);
+      follow(posthog, bootstrap);
       posthog.startSessionRecording();
       return;
     }
     initialized = true;
     preloadRemoteConfig(key);
     posthog.init(key, {
-      api_host: POSTHOG_HOST,
+      api_host: shell.host.api,
+      ui_host: shell.host.ui,
       defaults: "2025-11-30",
       // Both of these carry the window's own address, which is the shell's to
       // replace. Switching them off is only half of it — see `before_send`,
@@ -638,7 +681,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
     // been stopped would come up recording nothing for the rest of the install.
     optIn(posthog);
     registerBuild(posthog, bootstrap, shell.platform);
-    followAccount(posthog, bootstrap);
+    follow(posthog, bootstrap);
   };
 
   /**
@@ -688,13 +731,15 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   const stop = (): void => {
     started = false;
     identified = undefined;
+    grouped = undefined;
     const posthog = initialized ? client : undefined;
     if (posthog === undefined) return;
     posthog.stopSessionRecording();
     // The person goes with the recording. Without this the client keeps the
     // previous account's id and its anonymous session, so signing in as someone
     // else would file their recordings under the person who signed out — which
-    // is the one thing filing under an account is supposed to prevent.
+    // is the one thing filing under an account is supposed to prevent. The
+    // workspace's group goes with it.
     posthog.reset();
     posthog.opt_out_capturing();
   };
@@ -712,6 +757,6 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       return;
     }
     // A client still loading starts under `latest`, which already names the account.
-    if (initialized && client !== undefined) followAccount(client, wanted);
+    if (initialized && client !== undefined) follow(client, wanted);
   };
 }

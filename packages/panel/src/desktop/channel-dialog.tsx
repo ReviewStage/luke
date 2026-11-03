@@ -1,5 +1,5 @@
-import { CHANNEL_BOUNDS, type Channel } from "@luke/features/channel-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { CHANNEL_BOUNDS, type Channel } from "@repo/features/channel-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   DIALOG_TONE,
   Dialog,
@@ -11,8 +11,8 @@ import {
   Text,
   TextField,
   useConfirmDialog,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useId, useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
 import { channelEditable, channelSlug } from "../tasks/channels-model.js";
@@ -20,7 +20,7 @@ import type { ChannelsControl } from "../tasks/use-channels.js";
 import { useFormDialog } from "./use-form-dialog.js";
 
 /**
- * channel-dialog.tsx -- the question that makes a channel or edits one, asked from the sidebar's "+" and a row's menu, and from a phone's list of channels (STAG-547).
+ * channel-dialog.tsx -- the question that makes a channel or edits one, asked from the sidebar's "+" and a row's menu, and from a phone's list of channels.
  *
  * Making one asks for a name, written as a channel's is (`channelSlug`),
  * and a purpose, the line an agent reads to choose it. Editing one asks for

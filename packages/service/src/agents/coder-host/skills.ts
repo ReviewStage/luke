@@ -17,8 +17,8 @@
  * its task.
  */
 
-import { type Agent, hasRepository } from "@luke/database/models/agent-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
+import { type Agent, hasRepository } from "@repo/database/models/agent-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
 import { Effect } from "effect";
 import { agentMember, ownAgentWorkspace } from "../../github/workspace-repository.js";
 import {

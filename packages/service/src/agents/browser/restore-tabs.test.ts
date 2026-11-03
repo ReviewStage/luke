@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
 import {
   listAgentBrowserTabs,
   retargetBrowserTab,
   upsertBrowserTab,
-} from "@luke/database/models/agent-browser-tabs";
-import { user } from "@luke/database/schemas/auth";
-import { conversations } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import type { CdpSession } from "@luke/features/browser-cdp";
+} from "@repo/database/models/agent-browser-tabs";
+import { user } from "@repo/database/schemas/auth";
+import { conversations } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { getTestDB } from "@repo/database/testing";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import type { CdpSession } from "@repo/features/browser-cdp";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { agentBrowserTestLayer, fakeCdpPeer } from "../../testing/agent-browser-fake.js";
@@ -35,7 +35,7 @@ const SESSION = "wrun_restore_tabs_fixture";
 const openConversation = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   const [row] = yield* Database.use((db) =>
     db

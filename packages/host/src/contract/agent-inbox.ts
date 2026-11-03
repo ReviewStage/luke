@@ -17,12 +17,15 @@
  * does not name.
  */
 
+import { eventIterator, type } from "@orpc/contract";
 import {
   agentInboxAnsweredViewSchema,
   agentInboxAnswerParamsSchema,
   agentInboxAttachmentParamsSchema,
   agentInboxAttachmentViewSchema,
   agentInboxCloseParamsSchema,
+  agentInboxItemHomeParamsSchema,
+  agentInboxItemHomeViewSchema,
   agentInboxMessagedViewSchema,
   agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
@@ -32,8 +35,7 @@ import {
   agentInboxScopeSchema,
   agentInboxStartParamsSchema,
   agentPictureParamsSchema,
-} from "@luke/features/agent-view";
-import { eventIterator, type } from "@orpc/contract";
+} from "@repo/features/agent-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
@@ -80,6 +82,11 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(agentInboxReadStateParamsSchema))
     .output(EffectSchema.toType(agentInboxReadStateViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME]: actProcedure(
+    "Could not find the inbox item on this system.",
+  )
+    .input(exactInput(agentInboxItemHomeParamsSchema))
+    .output(EffectSchema.toType(agentInboxItemHomeViewSchema)),
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: actProcedure(
     "Could not mark the inbox read on this system.",
   )

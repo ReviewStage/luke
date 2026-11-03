@@ -1,40 +1,40 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { PLAN_COMMENT_OUTCOME, startPlanCommentThread } from "@luke/database/models/plan-comments";
-import { createTask, savePlanText } from "@luke/database/models/task-store";
-import { attachment } from "@luke/database/schemas/attachment";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
-import { PICTURE_BOUNDS, PICTURE_MEDIA_TYPE, PICTURE_TYPE } from "@luke/features/picture-wire";
+import { Database } from "@repo/database/core/query";
+import { PLAN_COMMENT_OUTCOME, startPlanCommentThread } from "@repo/database/models/plan-comments";
+import { createTask, savePlanText } from "@repo/database/models/task-store";
+import { attachment } from "@repo/database/schemas/attachment";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { PICTURE_BOUNDS, PICTURE_MEDIA_TYPE, PICTURE_TYPE } from "@repo/features/picture-wire";
 import {
   PLAN_ATTACHMENT_BOUNDS,
   PLAN_ATTACHMENT_REFUSAL,
   planAttachmentAnswerSchema,
-} from "@luke/features/plan-attachment-wire";
-import { PLAN_COMMENT_ACTOR, PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import type { UserIdResolver } from "@luke/service/http/http-effect";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import type { WebServices } from "@luke/service/runtime";
-import { taskFilesProcedures } from "@luke/service/tasks/task-files-procedures";
-import { tasksApp } from "@luke/service/tasks/tasks-app";
+} from "@repo/features/plan-attachment-wire";
+import { PLAN_COMMENT_ACTOR, PLAN_COMMENT_SCOPE } from "@repo/features/plan-comment-wire";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
+import type { UserIdResolver } from "@repo/service/http/http-effect";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import { modelCatalogOf } from "@repo/service/providers/model-catalog";
+import type { WebServices } from "@repo/service/runtime";
+import { taskFilesProcedures } from "@repo/service/tasks/task-files-procedures";
+import { tasksApp } from "@repo/service/tasks/tasks-app";
 import {
   type OpenedPagePolicy,
   openedPagePolicy,
   SANDBOXED_PAGE,
-} from "@luke/service/testing/content-policy";
-import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
+} from "@repo/service/testing/content-policy";
+import { NO_GITHUB } from "@repo/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
-} from "@luke/service/testing/integration-connect";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { paddedTo, webmBytes } from "@luke/wire/testing";
+} from "@repo/service/testing/integration-connect";
+import { unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
+import { paddedTo, webmBytes } from "@repo/wire/testing";
 import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -55,7 +55,7 @@ import { SqlClient } from "effect/sql";
  * Synthetic accounts, bearers, and pictures throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const ATTACHMENT = "/api/plans/attachment";
 
 /** A PNG's signature and a few bytes more: all the service reads of a picture. */
@@ -74,7 +74,7 @@ interface Answered {
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

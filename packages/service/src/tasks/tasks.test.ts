@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   createTask,
   deleteTask,
@@ -9,19 +9,19 @@ import {
   readTask,
   savePlanText,
   updateTask,
-} from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
+} from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
 import {
   getTestDB,
   joinWorkspace,
   openWorkspace,
   startTask,
   type TestTask,
-} from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { planSections } from "@luke/features/plan-document";
-import type { PlanNote } from "@luke/features/plan-template";
-import { type PlanDocument, TASK_STATUS } from "@luke/features/task-wire";
+} from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { planSections } from "@repo/features/plan-document";
+import type { PlanNote } from "@repo/features/plan-template";
+import { type PlanDocument, TASK_STATUS } from "@repo/features/task-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { INVITATIONS_TEXT, makeDocumentTask } from "../testing/plan-documents.js";
@@ -80,7 +80,7 @@ const EMPTY_STATE_NOTES: readonly PlanNote[] = [
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 

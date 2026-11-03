@@ -6,12 +6,12 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageLine } from "@luke/features/page-wire";
-import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/agent-wire";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import type { PageLine } from "@repo/features/page-wire";
+import { TASK_STATUS, type Task, type TaskSummary } from "@repo/features/task-wire";
+import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -213,8 +213,8 @@ interface Look {
 function tabLooks(column: Element): Map<string, Look> {
   return new Map(
     [...column.querySelectorAll('[role="tab"]')].map((tab) => {
-      const label = tab.querySelector(".luke-tab-label")?.textContent ?? "";
-      return [label, { glyph: tab.querySelector(".luke-tab-icon")?.innerHTML, label }];
+      const label = tab.querySelector(".ui-tab-label")?.textContent ?? "";
+      return [label, { glyph: tab.querySelector(".ui-tab-icon")?.innerHTML, label }];
     }),
   );
 }
@@ -224,11 +224,11 @@ function rowLooks(column: Element): Map<string, Look> {
   const add = column.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
-  const rows = [...column.querySelectorAll('.luke-searchable-menu [role="option"]')].map((row) => {
-    const label = row.querySelector(".luke-combobox-option-label")?.textContent ?? "";
+  const rows = [...column.querySelectorAll('.ui-searchable-menu [role="option"]')].map((row) => {
+    const label = row.querySelector(".ui-combobox-option-label")?.textContent ?? "";
     return [
       label,
-      { glyph: row.querySelector(".luke-combobox-option-glyph")?.innerHTML, label },
+      { glyph: row.querySelector(".ui-combobox-option-glyph")?.innerHTML, label },
     ] as const;
   });
   act(() => add.click());
@@ -279,7 +279,7 @@ test("the column's strip leads with the task itself, named as the list names it 
   const container = await mount({ listed: { ...SUMMARY, name: "Expire invites after a week" } });
   const column = container.querySelector(".main-tabs");
   assert.ok(column, "the task's column's strip");
-  const first = column.querySelector<HTMLElement>('[role="tab"] .luke-tab-label');
+  const first = column.querySelector<HTMLElement>('[role="tab"] .ui-tab-label');
   assert.equal(first?.textContent, "Expire invites after a week", "the task leads the strip");
   const panel = container.querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
@@ -292,9 +292,9 @@ test("the column's first tab hangs the task's card, as its sidebar row does", as
   const tab = column?.querySelector<HTMLElement>('[role="tab"]');
   assert.ok(tab, "the strip leads with the task's tab");
   restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
   assert.ok(card, "the task's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
 });
 
@@ -304,7 +304,7 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
     body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
   });
   const tab = [...container.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === "#42 Expire invitations",
+    (each) => each.querySelector(".ui-tab-label")?.textContent === "#42 Expire invitations",
   );
   const [chip, files] = container.querySelectorAll<HTMLElement>(
     'a[data-mention-ref][data-kind="link"]',
@@ -312,11 +312,11 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
   const cardOf = (control: HTMLElement | undefined) => {
     assert.ok(control, "the pull request is named");
     restOn(control);
-    const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+    const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
     const look = {
       card: card?.hasAttribute("data-pull-request-card"),
-      name: card?.querySelector(".luke-hover-card-name")?.textContent,
-      agent: card?.querySelector('.luke-hover-card-row [data-actor-ref][data-kind="agent"]')
+      name: card?.querySelector(".ui-hover-card-name")?.textContent,
+      agent: card?.querySelector('.ui-hover-card-row [data-actor-ref][data-kind="agent"]')
         ?.textContent,
     };
     act(() => {
@@ -334,17 +334,17 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === "Terminal",
+    (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Terminal",
   );
   assert.ok(tab, "the strip has a Terminal tab");
-  assert.equal(tab.querySelector(".luke-tab-detail")?.textContent, WORKING.title);
-  assert.match(tab.querySelector(".luke-tab-icon")?.innerHTML ?? "", /data-state="working"/u);
+  assert.equal(tab.querySelector(".ui-tab-detail")?.textContent, WORKING.title);
+  assert.match(tab.querySelector(".ui-tab-icon")?.innerHTML ?? "", /data-state="working"/u);
   restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, WORKING.title);
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, WORKING.title);
   assert.equal(
-    card.querySelector(".luke-hover-card-row:last-child .luke-hover-card-row-label")?.textContent,
+    card.querySelector(".ui-hover-card-row:last-child .ui-hover-card-row-label")?.textContent,
     "Terminal in this agent’s sandbox",
   );
 });
@@ -353,14 +353,14 @@ test("a page's tab hangs the page's card: its title and version over its newest 
   fakeAppPlatform({ pageFrameUrl });
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === FUNNEL.title,
+    (each) => each.querySelector(".ui-tab-label")?.textContent === FUNNEL.title,
   );
   assert.ok(tab, "the strip has the page's tab");
   restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
-  assert.equal(card.querySelector(".luke-hover-card-sub")?.textContent, "Version 3");
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, FUNNEL.title);
+  assert.equal(card.querySelector(".ui-hover-card-sub")?.textContent, "Version 3");
   const frame = card.querySelector("iframe");
   assert.ok(frame, "the card previews the page");
   assert.equal(

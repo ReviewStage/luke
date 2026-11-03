@@ -76,7 +76,6 @@ export const DRAFT_FIELD = {
   SCHEDULE: "schedule",
   PROMPT: "prompt",
   REPOSITORY: "repository",
-  AGENT: "agent",
   /** An integration trigger's filters. */
   FILTERS: "filters",
   /** An integration trigger's subject cooldown. */
@@ -120,12 +119,14 @@ export interface AutomationDraft {
   readonly owner: AutomationScope;
   /** Where a run lands: a new agent each time, or the one agent each run goes to. */
   readonly target: AutomationTargetKind;
-  /** The agent each run goes to where runs land in the same agent, or none chosen yet. */
+  /** The agent each run goes to where runs land in the same agent, or none chosen, so its first run starts one. */
   readonly agentId: string | null;
   /** The model and effort a new agent runs on, or none for the account's default as it stands when a run starts. */
   readonly choice: ModelChoice | null;
   /** Whether a run's agent is archived once it finishes without failing. */
   readonly archiveSuccessful: boolean;
+  /** Whether each run's result is sent to the automation's owner on Slack. */
+  readonly slackDelivery: boolean;
   /** The owner's MCP servers a run's new agent is not handed, by connection name (`notion`, `notion-2`), as the agent box's servers button switches them. */
   readonly disabledServers: readonly string[];
   /** The guards it runs under: a saved one's, the service's defaults otherwise. */
@@ -228,9 +229,9 @@ function actionOf(draft: AutomationDraft): AutomationAction {
   };
 }
 
-/** Where a draft's runs land, as the service takes it: a new agent, or the one chosen; a same agent with none chosen lands nowhere and is a problem before it is a write. */
+/** Where a draft's runs land, as the service takes it: a new agent, or the same one, chosen or, with none chosen, the one its first run starts. */
 function targetOf(draft: AutomationDraft): AutomationTarget {
-  return draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId !== null
+  return draft.target === AUTOMATION_TARGET.SAME_AGENT
     ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: draft.agentId }
     : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
@@ -421,6 +422,7 @@ export function automationDraft(
       agentId: null,
       choice: null,
       archiveSuccessful: false,
+      slackDelivery: false,
       disabledServers: [],
       guards: null,
       subjectCooldownHours: AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
@@ -453,6 +455,7 @@ export function automationDraft(
       automation.target?.kind === AUTOMATION_TARGET.SAME_AGENT ? automation.target.agentId : null,
     choice: automation.action.choice ?? null,
     archiveSuccessful: automation.archiveSuccessful ?? false,
+    slackDelivery: automation.slackDelivery ?? false,
     disabledServers: automation.action.disabledServers ?? [],
     guards: automation.guards,
     subjectCooldownHours: cooldownOf(automation.guards),
@@ -504,16 +507,11 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
     !held && draft.repository === null && draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
       ? "Choose the repository whose events start it."
       : undefined;
-  const agent =
-    draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId === null
-      ? "Choose the agent its runs go to."
-      : undefined;
   const problems: { [Field in DraftField]?: string } = {};
   if (name !== undefined) problems[DRAFT_FIELD.NAME] = name;
   if (schedule !== undefined) problems[DRAFT_FIELD.SCHEDULE] = schedule;
   if (prompt !== undefined) problems[DRAFT_FIELD.PROMPT] = prompt;
   if (repository !== undefined) problems[DRAFT_FIELD.REPOSITORY] = repository;
-  if (agent !== undefined) problems[DRAFT_FIELD.AGENT] = agent;
   if (filters !== undefined) problems[DRAFT_FIELD.FILTERS] = filters;
   if (cooldown !== undefined) problems[DRAFT_FIELD.COOLDOWN] = cooldown;
   return problems;
@@ -560,6 +558,7 @@ export function createRequestOf(
     scope: draft.owner,
     target: targetOf(draft),
     archiveSuccessful: draft.archiveSuccessful,
+    slackDelivery: draft.slackDelivery,
     ...(guards === null ? undefined : { guards }),
   } as const;
   return { ...made, repositories: draftRepositories(draft) };
@@ -593,7 +592,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     landingAgent(one) === landingAgent(other) &&
     sameChoice(one.choice, other.choice) &&
     sameSet(one.disabledServers, other.disabledServers) &&
-    one.archiveSuccessful === other.archiveSuccessful
+    one.archiveSuccessful === other.archiveSuccessful &&
+    one.slackDelivery === other.slackDelivery
   );
 }
 
@@ -642,12 +642,11 @@ export function changeOf(
   }
   // Note that a change names its servers even where none are off, because a change that names none keeps the saved ones.
   if (actionMoved) change.action = { ...actionOf(draft), disabledServers: draft.disabledServers };
-  if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
-    change.target = targetOf(draft);
-  }
+  if (targetMoved) change.target = targetOf(draft);
   if (draft.archiveSuccessful !== was.archiveSuccessful) {
     change.archiveSuccessful = draft.archiveSuccessful;
   }
+  if (draft.slackDelivery !== was.slackDelivery) change.slackDelivery = draft.slackDelivery;
   if (repositoryMoved) change.repositories = draftRepositories(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;

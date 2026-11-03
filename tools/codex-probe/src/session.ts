@@ -10,7 +10,7 @@
  * own logs are not part of the protocol P20 and P22 read.
  */
 
-import { valueFromJsonText, type WireValue } from "@luke/wire";
+import { valueFromJsonText, type WireValue } from "@repo/wire";
 import type { Command } from "@vercel/sandbox";
 import {
   type ClientMessage,

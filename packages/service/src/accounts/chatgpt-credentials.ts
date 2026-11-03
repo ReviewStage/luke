@@ -50,7 +50,7 @@ import {
   type KeyRing,
   openProviderKey,
   sealProviderKey,
-} from "@luke/database/models/provider-key-seal";
+} from "@repo/database/models/provider-key-seal";
 import {
   ensureChatGptHostId,
   type ProviderKeyRow,
@@ -58,14 +58,14 @@ import {
   resealProviderKey,
   setProviderKeyStatus,
   withProviderKeyLocked,
-} from "@luke/database/models/provider-key-store";
+} from "@repo/database/models/provider-key-store";
 import {
   type ChatGptCredentialsSaveRequest,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   planLimitResetsAt,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { DateTime, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

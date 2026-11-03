@@ -5,7 +5,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { rendererRuntime } from "./renderer-runtime.js";
 
 /**
- * pending-clock.ts -- the renderer clock a value given here reads while it waits on a view to carry it (`@luke/ui/pending-values`).
+ * pending-clock.ts -- the renderer clock a value given here reads while it waits on a view to carry it (`@repo/ui/pending-values`).
  *
  * A pending value counts its time from the clock's first reading after it
  * was asked, so one past `PENDING_LIMIT` lets go. The clock is read only

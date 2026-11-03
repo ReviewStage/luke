@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { GITHUB_INSTALL_LANDING, GITHUB_INSTALL_STATUS } from "@luke/features";
+import { GITHUB_INSTALL_LANDING, GITHUB_INSTALL_STATUS } from "@repo/features";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";

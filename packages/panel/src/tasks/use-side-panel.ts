@@ -1,6 +1,5 @@
-import type { CodeRef } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { CommentsIcon, DocumentIcon } from "@luke/ui";
+import type { CodeRef } from "@repo/features/task-wire";
+import { CommentsIcon, DocumentIcon } from "@repo/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
@@ -11,12 +10,10 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
-  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
-  type MacTerminalStripTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
@@ -31,11 +28,10 @@ import {
   type ViewedAt,
   viewedLast,
   withoutViewedAt,
-} from "@luke/ui/tab-strip-model";
+} from "@repo/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fileName } from "./file-ref-model.js";
 import {
@@ -226,7 +222,6 @@ export type SidePanelTab =
   | ChangesStripTab
   | TerminalStripTab
   | PageStripTab
-  | MacTerminalStripTab
   | CloudBrowserStripTab;
 
 /**
@@ -313,7 +308,7 @@ export const SIDE_PANEL_WIDTH = {
 } as const;
 
 /** Where the preference is kept in the renderer's storage. */
-const STORAGE_KEY = "luke.sidePanel";
+const STORAGE_KEY = "app.sidePanel";
 
 /**
  * How many tabs a task keeps as viewed, the latest viewed. Note that a tab
@@ -382,7 +377,7 @@ const keptTaskPinTabSchema = Schema.Union([
 /**
  * A tab pinned to the sidebar on a task: the task, the tab, the name the
  * sidebar draws for it, when it was pinned, where it stands among the pins
- * once it was dragged (`@luke/features/pin-order`), kept on this Mac alone,
+ * once it was dragged (`@repo/features/pin-order`), kept on this Mac alone,
  * and, an agent's an earlier version pinned, the model it ran on then.
  */
 const taskPinSchema = Schema.Struct({
@@ -582,8 +577,6 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly lastTerminals: Readonly<Record<string, string>>;
   /** What each Pull request tab shows, by agent and then by the number it names (`pull-request-number.ts`), of those whose view was chosen; the overview otherwise. */
   readonly pullRequestViews: ByPullRequestTab<PullRequestView>;
-  /** The open tabs of this Mac's terminals, by agent, in the order opened. */
-  readonly macTerminals: readonly MacTerminalStripTab[];
   /** Each task's preview tab, by task: the one tab a link opened that the next link opened replaces, until it is kept (`withPreview`). */
   readonly previews: Readonly<Record<string, SidePanelTab>>;
   readonly tasks: Readonly<Record<string, TaskTabs>>;
@@ -1072,16 +1065,12 @@ function withTab(
     isTerminalTab(tab) && taskId !== undefined && held.lastTerminals[taskId] !== tab.terminal
       ? { ...held.lastTerminals, [taskId]: tab.terminal }
       : held.lastTerminals;
-  const macTerminals = isMacTerminalTab(tab)
-    ? [...held.macTerminals.filter((each) => !sameTab(each, tab)), tab]
-    : held.macTerminals;
   const openedCloudBrowsers =
     isCloudBrowserTab(tab) && !held.openedCloudBrowsers.includes(tab.cloudBrowser)
       ? [...held.openedCloudBrowsers, tab.cloudBrowser]
       : held.openedCloudBrowsers;
-  const chosen = isMacTerminalTab(tab) ? tab : (open ?? tab);
+  const chosen = open ?? tab;
   return opened === held &&
-    macTerminals === held.macTerminals &&
     openedCloudBrowsers === held.openedCloudBrowsers &&
     subagents === held.subagents &&
     files === held.files &&
@@ -1099,7 +1088,6 @@ function withTab(
         pages,
         terminals,
         lastTerminals,
-        macTerminals,
         openedCloudBrowsers,
         tab: chosen,
       };
@@ -1294,14 +1282,6 @@ export function drawsTerminal(
   return drawn.taskAgents?.includes(tab.terminal) === true;
 }
 
-/** Whether the plan draws the agent's tab of a terminal of this Mac: once its agents are read and the agent is among them, as a Terminal tab (`drawsTerminal`). */
-export function drawsMacTerminal(
-  tab: MacTerminalStripTab,
-  drawn: Pick<DrawnTabs, "taskAgents">,
-): boolean {
-  return drawn.taskAgents?.includes(tab.macTerminal) === true;
-}
-
 /** The open file tabs of files opened on the task, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -1356,7 +1336,6 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
-    ...held.macTerminals.filter((each) => drawsMacTerminal(each, drawn)),
     ...drawnCloudBrowsers(held, drawn),
   ];
   return inTaskOrder(kinds, orderOn(held, drawn.task.id), (tab) => tab);
@@ -1424,16 +1403,14 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
             ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
             : isTerminalTab(tab)
               ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-              : isMacTerminalTab(tab)
-                ? { ...held, macTerminals: held.macTerminals.filter((each) => !sameTab(each, tab)) }
-                : isCloudBrowserTab(tab)
-                  ? {
-                      ...held,
-                      openedCloudBrowsers: held.openedCloudBrowsers.filter(
-                        (each) => each !== tab.cloudBrowser,
-                      ),
-                    }
-                  : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+              : isCloudBrowserTab(tab)
+                ? {
+                    ...held,
+                    openedCloudBrowsers: held.openedCloudBrowsers.filter(
+                      (each) => each !== tab.cloudBrowser,
+                    ),
+                  }
+                : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
@@ -1713,7 +1690,6 @@ function settled(state: SidePanelState): HeldState {
     openedCloudBrowsers: [],
     lastTerminals: {},
     pullRequestViews: new Map(),
-    macTerminals: [],
     previews: {},
     tasks: currentTasks(state.tasks),
     pins: pins.flatMap(heldPin).toSorted((a, b) => b.at - a.at),
@@ -1836,7 +1812,6 @@ function shownTab(
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
-  if (isMacTerminalTab(kept)) return drawsMacTerminal(kept, drawn) ? kept : tabs[0];
   // Note that a cloud Browser tab chosen stands while the list is on its way, so it is not swapped for another and back.
   if (isCloudBrowserTab(kept)) {
     return drawn.cloudBrowsers === undefined || drawn.cloudBrowsers.includes(kept.cloudBrowser)
@@ -1909,17 +1884,6 @@ export function useSidePanel(
   const stage = useMemo(() => (staged === undefined ? undefined : stagedHeld(staged)), [staged]);
   const taskId = task.id;
   const state = stage === undefined ? kept : (moved ?? stage);
-  // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).
-  const { press } = useAct();
-  const heldMacTerminals = useRef(kept.macTerminals);
-  useEffect(() => {
-    for (const tab of heldMacTerminals.current) {
-      if (!kept.macTerminals.some((each) => sameTab(each, tab))) {
-        press(ACT_KIND.MAC_TERMINAL_CLOSE, { agentId: tab.macTerminal });
-      }
-    }
-    heldMacTerminals.current = kept.macTerminals;
-  }, [kept.macTerminals, press]);
   // The files the task draws tabs of: those opened on it.
   const taskFiles = useMemo(
     () => state.files.flatMap((each) => (each.browsedOn === taskId ? [each.path] : [])),

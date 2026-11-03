@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -11,13 +11,13 @@ import {
   type ProviderKeySummary,
   type ProviderKeysAnswer,
   type SubscriptionKeySummary,
-} from "@luke/features/provider-key-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { BUTTON_VARIANT, SETTINGS_ROW_STATE } from "@luke/ui";
+} from "@repo/features/provider-key-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
+import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@repo/settings/settings-views";
+import { BUTTON_VARIANT, SETTINGS_ROW_STATE } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -179,15 +179,15 @@ async function mount(
 
 /** A harness's row button's words, the check it may end in having none. */
 const rowButton = (page: HTMLElement, harness: string) =>
-  [...page.querySelectorAll<HTMLElement>(".luke-settings-row")]
+  [...page.querySelectorAll<HTMLElement>(".ui-settings-row")]
     .find((row) => row.textContent?.startsWith(harness))
     ?.querySelector<HTMLButtonElement>("button") ?? assert.fail(`no ${harness} row`);
 
 /** What a harness's row says under its name, and in which tint, or nothing where it says nothing. */
 const rowState = (page: HTMLElement, harness: string) => {
   const line = rowButton(page, harness)
-    .closest(".luke-settings-row")
-    ?.querySelector<HTMLElement>(".luke-settings-row-state");
+    .closest(".ui-settings-row")
+    ?.querySelector<HTMLElement>(".ui-settings-row-state");
   return line === null || line === undefined
     ? undefined
     : { words: line.textContent, state: line.dataset.state };
@@ -226,7 +226,7 @@ const radio = (dialog: Element, label: string) =>
 
 /** The card a radio heads. */
 const card = (dialog: Element, label: string) =>
-  radio(dialog, label).closest<HTMLElement>(".luke-choice-card") ?? assert.fail(`no ${label} card`);
+  radio(dialog, label).closest<HTMLElement>(".ui-choice-card") ?? assert.fail(`no ${label} card`);
 
 /** The field a visible label names, as a reader finds it. */
 function labelled(within: Element, words: string): HTMLInputElement {
@@ -395,7 +395,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     ) ?? assert.fail("no hint");
   assert.equal(saved.value, "sk-ant-…wxyz");
   assert.equal(saved.readOnly, true);
-  assert.ok(radio(dialog, "API key").querySelector(".luke-settings-saved-mark"));
+  assert.ok(radio(dialog, "API key").querySelector(".ui-settings-saved-mark"));
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Connected with an API key"));
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
@@ -482,7 +482,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     "an unchecked plan reads as a connected one",
   );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
-  assert.ok(radio(dialog, "Subscription").querySelector(".luke-settings-saved-mark"));
+  assert.ok(radio(dialog, "Subscription").querySelector(".ui-settings-saved-mark"));
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Connected with a subscription"));
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 

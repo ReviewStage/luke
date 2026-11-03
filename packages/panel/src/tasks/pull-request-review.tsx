@@ -2,9 +2,9 @@ import {
   PULL_REQUEST_ACTION,
   REVIEW_EVENT,
   type ReviewEvent,
-} from "@luke/features/pull-request-write-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { IRREVERSIBLE_WORDS } from "@luke/features/words";
+} from "@repo/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
   AnchoredPopover,
   BUTTON_VARIANT,
@@ -19,10 +19,10 @@ import {
   POPOVER_ALIGN,
   PopoverPanel,
   useConfirmDialog,
-} from "@luke/ui";
-import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
-import { GLYPH, MessageSquarePlusIcon } from "@luke/ui/icons";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { CONFIRM_STAGE } from "@repo/ui/confirm-state";
+import { GLYPH, MessageSquarePlusIcon } from "@repo/ui/icons";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
@@ -156,7 +156,7 @@ function ReviewPanel({
       onDismiss={onClose}
       onLeave={onLeave}
     >
-      <p className="m-0 -mt-luke-8 text-muted-foreground">
+      <p className="m-0 -mt-ui-8 text-muted-foreground">
         {REVIEW_WORDS.LEAD}
         {pending == null || pending.comments === 0
           ? null

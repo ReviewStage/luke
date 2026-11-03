@@ -1,6 +1,6 @@
 import { posix } from "node:path";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { writePage } from "@luke/database/models/plan-pages";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { writePage } from "@repo/database/models/plan-pages";
 import {
   PAGE_BOUNDS,
   PAGE_OWNER,
@@ -8,13 +8,13 @@ import {
   type PageShower,
   type PageWrite,
   pageTitleSchema,
-} from "@luke/features/page-wire";
-import { isSecretFile } from "@luke/features/task-wire";
-import { describeWire, readEither } from "@luke/wire/effect";
+} from "@repo/features/page-wire";
+import { isSecretFile } from "@repo/features/task-wire";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
-import { pageMention, pageStepOf, writtenMention } from "../agents/written-mentions.js";
+import { writtenPageMention } from "../agents/written-mentions.js";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
@@ -189,16 +189,10 @@ function htmlRefusal(html: string): string | undefined {
  * shown all the same.
  */
 const pageMentionOf = (binding: PageToolBinding, pageId: string, title: string) =>
-  pageStepOf(binding.userId, binding.owner).pipe(
+  writtenPageMention(binding.userId, binding.owner, pageId, title).pipe(
     Effect.tapError(logStoreFailure),
     Effect.option,
-    Effect.map((step) =>
-      Option.getOrUndefined(
-        Option.map(Option.flatten(step), (workspace) =>
-          writtenMention(pageMention(binding.owner, pageId), title, workspace),
-        ),
-      ),
-    ),
+    Effect.map((mention) => Option.getOrUndefined(Option.flatten(mention))),
   );
 
 /** Why a write found nothing to write on: no such page of the owner where one was named, else no owner. */

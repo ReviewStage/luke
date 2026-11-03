@@ -12,18 +12,18 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { saveProviderKey } from "@repo/database/models/provider-key-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   FAST_ACCESS,
   type FastAccess,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
-} from "@luke/features/provider-key-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+} from "@repo/features/provider-key-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -32,7 +32,7 @@ import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js
 import type { WebServices } from "../runtime.js";
 import { modelsProcedures } from "./models-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const MODELS = "/api/models";
 const USER_ID = "user-1";
 
@@ -61,7 +61,7 @@ const FAST_CATALOG: readonly CatalogModel[] = [OPUS, OPUS_FAST, SOL];
 const accountWithAnthropicKey = (userId: string, fastAccess: FastAccess | null) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const sealed = {
       keyVersion: 1,
       sealedDataKey: "sealed-data-key",

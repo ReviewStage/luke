@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { it } from "@effect/vitest";
-import { TERMINAL_RELAY, TERMINAL_RELAY_CLOSE } from "@luke/features/terminal-wire";
+import { TERMINAL_RELAY, TERMINAL_RELAY_CLOSE } from "@repo/features/terminal-wire";
 import { Effect, Option } from "effect";
 import { WebSocket } from "ws";
 import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
@@ -23,7 +23,7 @@ import { standTerminalRelay, terminalRelayServer } from "./service.js";
  * past the reach stands. Synthetic ids, cookies, and bearers throughout.
  */
 
-const OWN_ORIGIN = "https://luke.example.test";
+const OWN_ORIGIN = "https://app.example.test";
 const ADA = "user-ada";
 const GRACE = "user-grace";
 const ADA_AGENT = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";

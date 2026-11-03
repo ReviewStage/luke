@@ -1,5 +1,5 @@
 import { generateKeyPairSync, sign } from "node:crypto";
-import type { WireRecord } from "@luke/wire";
+import type { WireRecord } from "@repo/wire";
 import { describe, expect, it } from "vitest";
 import {
   authorizeUrl,

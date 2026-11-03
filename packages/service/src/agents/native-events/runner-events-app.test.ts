@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
-import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
+import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@repo/agent-runner/protocol";
+import { Database } from "@repo/database/core/query";
 import {
   createAgent,
   readAgent,
@@ -11,19 +11,19 @@ import {
   readAgentRouting,
   recordAgentPublished,
   recordAgentRunnerToken,
-} from "@luke/database/models/agent-store";
-import { claimDueAgentWakeups } from "@luke/database/models/agent-wakeups";
+} from "@repo/database/models/agent-store";
+import { claimDueAgentWakeups } from "@repo/database/models/agent-wakeups";
 import {
   listProviderKeyRows,
   type ProviderKeyRow,
   saveProviderKey,
-} from "@luke/database/models/provider-key-store";
-import { readTask, updateTask } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
+} from "@repo/database/models/provider-key-store";
+import { readTask, updateTask } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { user } from "@repo/database/schemas/auth";
+import { conversations, messages, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
 import {
   AGENT_FAILURE,
   AGENT_KIND,
@@ -31,16 +31,16 @@ import {
   type AgentPayer,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
-import { TASK_STATUS, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
-import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
-import type { StoredUIMessage } from "@luke/wire/ui-messages";
+} from "@repo/features/provider-key-wire";
+import { TASK_STATUS, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
+import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
+import type { StoredUIMessage } from "@repo/wire/ui-messages";
 import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, ErrorReporter, Layer, Option } from "effect";
@@ -62,7 +62,7 @@ import { titleAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { readNativeTurnHanded, recordNativeTurnHanded } from "../coder-host/turn-message.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
   type RunnerAlive,
@@ -82,7 +82,7 @@ import {
  * runner posts it. Synthetic accounts, words, and ids throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
@@ -152,7 +152,7 @@ const agentOn = (
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
     const started = yield* createAgent(userId, {
       taskId: task.id,
@@ -240,7 +240,7 @@ function workflowTurn(lineId: string): readonly RunnerEvent[] {
     { type: "system", subtype: "init", ...envelope },
     toolUse("toolu_Write", "Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }),
     toolResult("toolu_Write", "File created"),
-    toolUse("toolu_inbox", "mcp__luke__read_inbox", {}),
+    toolUse("toolu_inbox", "mcp__workspace__read_inbox", {}),
     toolResult("toolu_inbox", '{"status":"accepted","inbox":[]}'),
     toolUse("toolu_Bash", "Bash", {
       command: `sleep 45 && echo ${NONCE}`,
@@ -933,6 +933,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
                 {
                   type: "tool_use",
                   id: "toolu_look",
+                  // The server's name before its rename, which a stored transcript still holds, read as ours.
                   name: "mcp__luke__look_at_picture",
                   input: {},
                 },
@@ -1053,9 +1054,9 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 });
 
-/** P16's hermetic recording of app-server's stdio, as the runner's own tests play it (`tools/codex-probe/fixtures/hermetic/`). */
+/** P16's hermetic recording of app-server's stdio, as the runner's own tests play it. */
 const CODEX_RECORDING = new URL(
-  "../../../../../tools/codex-probe/fixtures/hermetic/app-server.jsonl",
+  "../../../../../packages/agent-runner/src/testing/app-server.jsonl",
   import.meta.url,
 );
 const THREAD = "00000000-0000-4000-8000-000000000002";
@@ -1169,7 +1170,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             "output-available",
             {
               output:
-                'LUKE_PROBE_SCAN {"uid":1001,"user":"vercel-sandbox","capEff":"0000000000000000","ownEnvHasAccessToken":false,"environsReadable":2,"environsDenied":14,"processesWithAccessToken":[],"filesScanned":0,"filesDenied":0,"jwtSha256":[]}\n',
+                'APP_PROBE_SCAN {"uid":1001,"user":"vercel-sandbox","capEff":"0000000000000000","ownEnvHasAccessToken":false,"environsReadable":2,"environsDenied":14,"processesWithAccessToken":[],"filesScanned":0,"filesDenied":0,"jwtSha256":[]}\n',
               exitCode: 0,
             },
           ],
@@ -1312,7 +1313,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         const inbox = {
           type: "mcpToolCall",
           id: "mcp_inbox",
-          server: "luke",
+          server: "workspace",
           tool: "read_inbox",
           status: "inProgress",
           arguments: {},
@@ -1861,10 +1862,10 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         yield* post(onKey.bearer, refusedLaunch(onKey.lineId, 0, expired));
 
-        const onLuke = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.LUKE }, [
+        const onApp = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.APP }, [
           "Fix the test.",
         ]);
-        yield* post(onLuke.bearer, refusedLaunch(onLuke.lineId, 0, expired));
+        yield* post(onApp.bearer, refusedLaunch(onApp.lineId, 0, expired));
 
         const keyRows = yield* listProviderKeyRows(onKey.userId, PROVIDER_KEY_KIND.API_KEY);
         assert.deepEqual(
@@ -1873,7 +1874,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         assert.deepEqual(
           reported.map((attributes) => attributes.agentId),
-          [onLuke.agentId],
+          [onApp.agentId],
         );
         // The starter's own key reads as a key to replace; Fullspin's own key refused is no key of theirs.
         const db = yield* Database;
@@ -1892,7 +1893,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         assert.deepEqual(yield* failureOf(onKey.target.conversationId), [
           AGENT_FAILURE.PROVIDER_KEY,
         ]);
-        assert.deepEqual(yield* failureOf(onLuke.target.conversationId), [AGENT_FAILURE.MODEL]);
+        assert.deepEqual(yield* failureOf(onApp.target.conversationId), [AGENT_FAILURE.MODEL]);
       }),
   );
 

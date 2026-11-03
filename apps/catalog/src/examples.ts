@@ -1,3 +1,4 @@
+import { ACCOUNT_WORDS_EXAMPLE } from "./examples/account-words";
 import { ADDRESS_FIELDS_EXAMPLE } from "./examples/address-fields";
 import { ANCHORED_POPOVER_EXAMPLE } from "./examples/anchored-popover";
 import { ANNOUNCER_EXAMPLE } from "./examples/announcer";
@@ -59,6 +60,7 @@ import { ICONS_EXAMPLE } from "./examples/icons";
 import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
 import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { KEEP_FOCUS_EXAMPLE } from "./examples/keep-focus";
+import { LANDING_EXAMPLE } from "./examples/landing";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LENGTH_COUNTERS_EXAMPLE } from "./examples/length-counters";
 import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
@@ -264,6 +266,7 @@ export const EXAMPLES: readonly Example[] = [
   PROVIDER_BUTTONS_EXAMPLE,
   ROLLING_NUMBER_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
+  LANDING_EXAMPLE,
   SCROLL_AREA_EXAMPLE,
   SAVED_TICKS_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
@@ -279,6 +282,7 @@ export const EXAMPLES: readonly Example[] = [
   SLIDER_EXAMPLE,
   VIDEO_PLAYER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
+  ACCOUNT_WORDS_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
   GLYPH_SLOTS_EXAMPLE,
   ICONS_EXAMPLE,

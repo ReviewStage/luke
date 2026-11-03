@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { RUNNER_LINES } from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
-import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
-import { queueRunnerLine } from "@luke/database/models/runner-line-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { RUNNER_LINES } from "@repo/agent-runner/protocol";
+import { Database } from "@repo/database/core/query";
+import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
+import { queueRunnerLine } from "@repo/database/models/runner-line-store";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { RUNNER_LINES_PATH, runnerLinesApp } from "./runner-lines-app.js";
 
 /**
@@ -21,7 +22,7 @@ import { RUNNER_LINES_PATH, runnerLinesApp } from "./runner-lines-app.js";
  * agent's lines read by nothing. Synthetic accounts and bearers throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const LAUNCH = 3;
 
 /** The route's group over the test's store, as a fetch. */
@@ -51,7 +52,7 @@ const standing = Effect.gen(function* () {
 const agentWithLines = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Invitations" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -61,6 +62,7 @@ const agentWithLines = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agentId = Option.getOrThrow(started).agent.id;
   const bearer = randomBytes(32).toString("base64url");

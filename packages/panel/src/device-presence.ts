@@ -4,9 +4,9 @@ import {
   type DeviceStanding,
   deviceStanding,
   MAC_PRESENCE,
-} from "@luke/features/agent-wire";
-import type { DevicePresenceAnswer } from "@luke/features/host-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-wire";
+import type { DevicePresenceAnswer } from "@repo/features/host-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { Duration, Effect, Option, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -76,12 +76,6 @@ export function presenceStanding(
   const beat = book.beats.get(deviceId);
   if (beat === undefined) return book.failed ? DEVICE_STANDING.UNKNOWN : undefined;
   return deviceStanding(beat.ageMs + (monotonicNow() - beat.landedAt), book.failed);
-}
-
-/** How long ago `deviceId` last beat as the book now knows it, none where no beat is held. */
-export function presenceAgeMs(book: PresenceBook, deviceId: string): number | undefined {
-  const beat = book.beats.get(deviceId);
-  return beat === undefined ? undefined : beat.ageMs + (monotonicNow() - beat.landedAt);
 }
 
 /** The book after a read that landed at `landedAt`: its ages where it answered, the held ones where it did not. */

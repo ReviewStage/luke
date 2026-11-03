@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { test } from "vitest";
 import { liveStepTitle, NAMED_STEP, stepTitle } from "./history-titles.js";
 import { PANEL_TAB } from "./panel-tabs.js";
@@ -73,7 +73,7 @@ test("a task's step listed later on its Overview is named by the task and its pa
   });
 });
 
-test("the Inbox's step names the task its item is of, and Settings and a new account's welcome are named alone", () => {
+test("the Inbox's step names the task its item is of, and Settings and Home are named alone", () => {
   const chosen: InboxChoice = { itemId: "item-1", taskId: TASK.id };
   const base = tasksControl({ tasks: [TASK] });
   const inbox = tasksControl({
@@ -82,7 +82,7 @@ test("the Inbox's step names the task its item is of, and Settings and a new acc
   });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, inbox), { label: "Inbox", detail: "Auth refactor" });
   assert.deepEqual(stepTitle(PANEL_TAB.SETTINGS, base), { label: "Settings" });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Welcome" });
+  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Home" });
 });
 
 test("with Channels on, a step on a channel listed later is named by the channel's name now, with the task of the thread open in it", () => {

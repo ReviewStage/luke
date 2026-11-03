@@ -1,8 +1,8 @@
 import { useAtomSet } from "@effect/atom-react";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, Button, IconButton, MENU_SURFACE_FLOW, MenuSurface, Tooltip } from "@luke/ui";
-import { replyOf } from "@luke/ui/reply-quote";
-import { visibleViewport } from "@luke/ui/visible-viewport";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { BUTTON_SIZE, Button, IconButton, MENU_SURFACE_FLOW, MenuSurface, Tooltip } from "@repo/ui";
+import { replyOf } from "@repo/ui/reply-quote";
+import { visibleViewport } from "@repo/ui/visible-viewport";
 import { Duration, Effect } from "effect";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
@@ -29,7 +29,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * does not (`coarse-pointer.ts`). A press hands the words to the box
  * (`AgentComposer`'s `replyDoor`), whose editor lays them in (`insertQuote`), drawn here
  * (`ComposerQuoteView`), and sends them as a Markdown blockquote set apart
- * by a blank line (`@luke/ui/reply-quote`). The press is drawn over the window, not inside
+ * by a blank line (`@repo/ui/reply-quote`). The press is drawn over the window, not inside
  * the transcript, so the log's own clipping never cuts it, follows the
  * selection as the log scrolls, and goes as the selection does. Note that
  * the press takes no focus and leaves the selection as it was until it is
@@ -88,12 +88,9 @@ const selectionSettleAtom = () =>
   );
 
 /** A selection Reply answers: its words as the reply, the words it lies in, and where the press stands. */
-interface Picked {
+interface Picked extends PressPlace {
   readonly reply: string;
   readonly words: Element;
-  readonly left: number;
-  readonly top: number;
-  readonly below: boolean;
 }
 
 /**
@@ -109,31 +106,62 @@ function reachesField(words: Element, range: Range): boolean {
   );
 }
 
+/** The run of words a reply may quote that `node` lies in, if any. */
+function scopeOf(node: Node): Element | null {
+  return (node instanceof Element ? node : node.parentElement)?.closest(SCOPE_SELECTOR) ?? null;
+}
+
+/**
+ * `range` cut to what it holds of `words`, or nothing where what it holds
+ * past them is more than blank: as a triple-click's selection of a run's
+ * last paragraph holds, which runs on to the start of the next block.
+ */
+function cutTo(words: Element, range: Range): Range | undefined {
+  const cut = range.cloneRange();
+  if (!words.contains(range.startContainer)) cut.setStart(words, 0);
+  if (!words.contains(range.endContainer)) cut.setEnd(words, words.childNodes.length);
+  return cut.toString().trim() === range.toString().trim() ? cut : undefined;
+}
+
 /** The selection inside one run of words a reply may quote under `scope`, as Reply answers it; nothing for any other. */
 function pickedIn(scope: HTMLElement): Picked | undefined {
   const selection = window.getSelection();
   if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return undefined;
-  const range = selection.getRangeAt(0);
-  const common = range.commonAncestorContainer;
-  const words = (common instanceof Element ? common : common.parentElement)?.closest(
-    SCOPE_SELECTOR,
-  );
-  if (words === null || words === undefined || !scope.contains(words)) return undefined;
+  const whole = selection.getRangeAt(0);
+  const words = scopeOf(whole.commonAncestorContainer) ?? scopeOf(whole.startContainer);
+  if (words === null || !scope.contains(words)) return undefined;
+  const range = cutTo(words, whole);
+  if (range === undefined) return undefined;
   // Note that words a hidden pane holds keep their selection, as the narrow Inbox's item does behind its list, but are no longer on screen to reply to.
   if (words.closest("[hidden]") !== null) return undefined;
   if (reachesField(words, range)) return undefined;
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
-  const box = range.getBoundingClientRect();
+  return { reply, words, ...pressPlace(range.getBoundingClientRect()) };
+}
+
+/** Where Reply stands by words drawn in a box of the window, the middle of its edge, kept in from the window's sides. */
+export interface PressPlace {
+  readonly left: number;
+  readonly top: number;
+  /** Whether it stands under the words rather than over them. */
+  readonly below: boolean;
+}
+
+/** Where Reply stands by words drawn in `box`, in window coordinates: over them, or under where the room above runs short or a finger made the selection. */
+export function pressPlace(box: {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}): PressPlace {
   const seen = visibleViewport();
   // Note that a finger's press stands under the words, clear of the system's menu over them, unless the window ends first.
   const finger =
     coarsePointerNow() && box.bottom + FINGER_SELECTION_GAP + PRESS_ROOM <= seen.bottom;
   const below = finger || box.top - seen.top < PRESS_ROOM;
-  const centre = box.left + box.width / 2;
+  const centre = (box.left + box.right) / 2;
   return {
-    reply,
-    words,
     left: Math.min(Math.max(centre, seen.left + PRESS_MARGIN), seen.right - PRESS_MARGIN),
     top: below ? box.bottom + (finger ? FINGER_SELECTION_GAP : PRESS_GAP) : box.top - PRESS_GAP,
     below,
@@ -207,12 +235,23 @@ export function ReplyToSelection({
   useAppCommand(APP_COMMAND.REPLY_TO_SELECTION, reply);
 
   if (picked === undefined || reply === undefined) return null;
+  return <ReplyPress place={picked} onReply={reply} />;
+}
+
+/** Reply standing by words selected, where `pressPlace` put it, over everything in the window; a press hands the reply on. */
+export function ReplyPress({
+  place,
+  onReply,
+}: {
+  place: PressPlace;
+  onReply: () => void;
+}): React.JSX.Element {
   return createPortal(
     <MenuSurface
       flow={MENU_SURFACE_FLOW.TOOLBAR}
       className="reply-to-selection fixed z-menu -translate-x-1/2 -translate-y-full data-below:translate-y-0"
-      data-below={picked.below ? "" : undefined}
-      style={{ left: picked.left, top: picked.top }}
+      data-below={place.below ? "" : undefined}
+      style={{ left: place.left, top: place.top }}
     >
       <Tooltip label={REPLY_WORDS.REPLY} command={APP_COMMAND.REPLY_TO_SELECTION}>
         <Button
@@ -220,7 +259,7 @@ export function ReplyToSelection({
           // Note that the press keeps the selection and the focus where they stand until it lands.
           keepFocus
           onPointerDown={(event) => event.preventDefault()}
-          onClick={reply}
+          onClick={onReply}
         >
           {REPLY_WORDS.REPLY}
         </Button>

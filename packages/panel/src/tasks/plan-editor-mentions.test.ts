@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
+import { TASK_TREE_ENTRY, type Task } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
@@ -14,6 +16,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -166,9 +169,7 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
 function listed(container: HTMLElement): [string, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label") ?? "",
-    [...group.querySelectorAll(".luke-combobox-option-label")].map(
-      (name) => name.textContent ?? "",
-    ),
+    [...group.querySelectorAll(".ui-combobox-option-label")].map((name) => name.textContent ?? ""),
   ]);
 }
 
@@ -198,7 +199,7 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
 
   const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Rollout"],
   );
   assert.equal(task.container.querySelector(".mention-menu"), null);
@@ -217,7 +218,7 @@ test("words after an @ that read as a time on a day, up to six of them, offer it
     const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
     assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
     assert.deepEqual(
-      chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+      chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
       ["Oct 30 3:00 PM → 5:00 PM"],
     );
   } finally {
@@ -256,8 +257,8 @@ test("the list says it is reading, never that nothing matches, while the reposit
   await task.typeAtEnd(" See @zzq");
   const reading = task.container.querySelector(".mention-menu");
 
-  assert.match(reading?.querySelector(".luke-combobox-note")?.textContent ?? "", /Reading/u);
-  assert.equal(reading?.querySelector(".luke-combobox-empty"), null);
+  assert.match(reading?.querySelector(".ui-combobox-note")?.textContent ?? "", /Reading/u);
+  assert.equal(reading?.querySelector(".ui-combobox-empty"), null);
 });
 
 test("a heading just renamed is offered by its new words, before the editor hands its draft over", async () => {
@@ -358,8 +359,44 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
 
   const chips = [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Goal"],
+  );
+});
+
+test("a section's address naming its task by its number, pasted whole into the plan, is laid in as the chip its id lays in, found among the window's tasks", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [
+          {
+            id: "workspace-acme",
+            name: "Acme",
+            slug: "acme",
+            role: WORKSPACE_ROLE.MEMBER,
+            github: null,
+          },
+        ],
+        tasks: [{ ...TASK, workspaceId: "workspace-acme", number: 42 }],
+      },
+    },
+  );
+  const plan = await opened();
+
+  await plan.typeAtEnd(" See ");
+  await plan.pasteAtEnd("https://vespin.dev/acme/task/42#goal");
+
+  const chips = [
+    ...plan.container.querySelectorAll<HTMLElement>(".plan-document-text [data-mention-ref]"),
+  ];
+  assert.deepEqual(
+    chips.map((chip) => [
+      chip.dataset.kind,
+      chip.querySelector(".ui-inline-ref-label")?.textContent,
+    ]),
+    [[MENTION_KIND.SECTION, "Goal"]],
   );
 });
 
@@ -405,7 +442,7 @@ test("a bare @ in the plan narrows by its kind's row to the repository's paths, 
   assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
   assert.deepEqual(
     [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
-      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
+      (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent,
     ),
     ["web/"],
   );
@@ -458,7 +495,7 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
   assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
   assert.deepEqual(
     [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
-      (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
+      (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent,
     ),
     ["#3059"],
   );

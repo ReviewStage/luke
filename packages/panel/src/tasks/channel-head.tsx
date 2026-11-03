@@ -1,6 +1,6 @@
-import type { Channel } from "@luke/features/channel-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readFailedWords } from "@luke/features/words";
+import type { Channel } from "@repo/features/channel-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readFailedWords } from "@repo/features/words";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -8,13 +8,13 @@ import {
   NotFoundIcon,
   TOOLBAR_INSET,
   Toolbar,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import { unreadShown } from "../failure-report.js";
 import type { InboxChannelHead } from "./inbox-list.js";
 
 /**
- * channel-head.tsx -- what a channel adds to the Inbox narrowed to it: its head's name, its purpose or when it was archived, and an archived channel's Unarchive; and the Inbox's place where the channel chosen stands no more (STAG-547).
+ * channel-head.tsx -- what a channel adds to the Inbox narrowed to it: its head's name, its purpose or when it was archived, and an archived channel's Unarchive; and the Inbox's place where the channel chosen stands no more.
  *
  * A channel is the Inbox narrowed to one topic (`use-inbox-listing.ts`), so
  * its list, its reading pane, and its keys are the Inbox's own; only its

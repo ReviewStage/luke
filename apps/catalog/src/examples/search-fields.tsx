@@ -5,7 +5,7 @@ import {
   type SearchFieldLook,
   type SearchTally,
   Stack,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type ReactNode, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

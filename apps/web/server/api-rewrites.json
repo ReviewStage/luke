@@ -1,5 +1,44 @@
 [
   {
+    "src": "/k7x2/static/(.*)",
+    "dest": "https://us-assets.i.posthog.com/static/$1",
+    "transforms": [
+      {
+        "type": "request.headers",
+        "op": "delete",
+        "target": {
+          "key": "cookie"
+        }
+      }
+    ]
+  },
+  {
+    "src": "/k7x2/array/(.*)",
+    "dest": "https://us-assets.i.posthog.com/array/$1",
+    "transforms": [
+      {
+        "type": "request.headers",
+        "op": "delete",
+        "target": {
+          "key": "cookie"
+        }
+      }
+    ]
+  },
+  {
+    "src": "/k7x2/(.*)",
+    "dest": "https://us.i.posthog.com/$1",
+    "transforms": [
+      {
+        "type": "request.headers",
+        "op": "delete",
+        "target": {
+          "key": "cookie"
+        }
+      }
+    ]
+  },
+  {
     "src": "/install\\.sh",
     "dest": "/api/default.js?route=hosts/install-script"
   },
@@ -45,11 +84,11 @@
   },
   {
     "src": "/api/agents/mcp",
-    "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp"
+    "dest": "/api/workspace-mcp.js?route=agents/mcp&route-path=agents/mcp"
   },
   {
     "src": "/api/agents/mcp/integrations/([^/]+)",
-    "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp/integrations/$1"
+    "dest": "/api/workspace-mcp.js?route=agents/mcp&route-path=agents/mcp/integrations/$1"
   },
   {
     "src": "/api/account/integrations/connected",
@@ -90,6 +129,10 @@
   {
     "src": "/api/maintenance/provider-keys-rewrap",
     "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
+  },
+  {
+    "src": "/api/slack/events",
+    "dest": "/api/default.js?route=slack/events"
   },
   {
     "src": "/api/triggers/sentry",

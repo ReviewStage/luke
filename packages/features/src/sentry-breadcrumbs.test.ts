@@ -29,7 +29,7 @@ test("a failed join's validate fetch, its token in the query, is dropped", () =>
     level: "error" as const,
     data: {
       method: "GET",
-      url: `https://luke-avatar.livekit.cloud/rtc/v1/validate?access_token=${TOKEN}&auto_subscribe=1`,
+      url: `https://ui-avatar.livekit.cloud/rtc/v1/validate?access_token=${TOKEN}&auto_subscribe=1`,
     },
   };
   assert.equal(withoutAccessTokens(breadcrumb), null);
@@ -48,7 +48,7 @@ test("a breadcrumb carrying no token is kept as it was", () => {
   const breadcrumb = {
     category: "fetch",
     type: "http",
-    data: { method: "GET", url: "https://luke.example.test/status", status_code: 200 },
+    data: { method: "GET", url: "https://app.example.test/status", status_code: 200 },
   };
   assert.equal(withoutAccessTokens(breadcrumb), breadcrumb);
 });
@@ -200,7 +200,7 @@ test("a token in a span's fragment, path, or query is scrubbed from what is sent
   const spans = await sentSpans(() => {
     Sentry.startSpan({ name: "/app", op: "pageload" }, (page) => {
       // Note that the page's own address is set once the span stands, as the SDK's HTTP context does.
-      page.setAttribute("url.full", `https://luke.example.test/app#access_token=${TOKEN}`);
+      page.setAttribute("url.full", `https://app.example.test/app#access_token=${TOKEN}`);
       page.setAttribute("url.fragment", `access_token=${TOKEN}`);
       Sentry.startSpan(
         {
@@ -222,7 +222,7 @@ test("a token in a span's fragment, path, or query is scrubbed from what is sent
   const attributes = Object.fromEntries(spans.map((span) => [span.name, span.attributes]));
   assert.deepEqual(
     [attributes["/app"]?.["url.full"], attributes["/app"]?.["url.fragment"]],
-    ["https://luke.example.test/app#[redacted]", "[redacted]"],
+    ["https://app.example.test/app#[redacted]", "[redacted]"],
   );
   assert.deepEqual(
     [
@@ -239,30 +239,30 @@ test("a token in a span's fragment, path, or query is scrubbed from what is sent
 test("an address in a span's name is scrubbed, and other words of the name are kept", async () => {
   const spans = await sentSpans(() => {
     Sentry.startSpan(
-      { name: "GET https://luke.example.test/oauth/callback?code=fixture-code&sig=fixture-sig" },
+      { name: "GET https://app.example.test/oauth/callback?code=fixture-code&sig=fixture-sig" },
       () => {},
     );
     Sentry.startSpan(
-      { name: "proxy url=https://fixture-user:fixture-pass@luke.example.test/x" },
+      { name: "proxy url=https://fixture-user:fixture-pass@app.example.test/x" },
       () => {},
     );
     Sentry.startSpan(
-      { name: "relay =://x&next=https://fixture-user:fixture-pass@luke.example.test/y" },
+      { name: "relay =://x&next=https://fixture-user:fixture-pass@app.example.test/y" },
       () => {},
     );
     Sentry.startSpan(
       {
-        name: "relay a=https://x.example.test&b=https://fixture-user:fixture-pass@luke.example.test/z",
+        name: "relay a=https://x.example.test&b=https://fixture-user:fixture-pass@app.example.test/z",
       },
       () => {},
     );
     Sentry.startSpan({ name: "ui.click button#send" }, () => {});
   });
   assert.deepEqual(spans.map((span) => span.name).sort(), [
-    "GET https://luke.example.test/oauth/callback?code=[redacted]&sig=[redacted]",
-    "proxy url=https://[redacted]@luke.example.test/x",
-    "relay =://x&next=https://[redacted]@luke.example.test/y",
-    "relay a=https://x.example.test&b=https://[redacted]@luke.example.test/z",
+    "GET https://app.example.test/oauth/callback?code=[redacted]&sig=[redacted]",
+    "proxy url=https://[redacted]@app.example.test/x",
+    "relay =://x&next=https://[redacted]@app.example.test/y",
+    "relay a=https://x.example.test&b=https://[redacted]@app.example.test/z",
     "ui.click button#send",
   ]);
 });
@@ -272,7 +272,7 @@ test("the page's referrer, an array, is scrubbed, and so is a token in any array
     Sentry.startSpan({ name: "/app", op: "pageload" }, (page) => {
       // Note that the browser's HTTP context sets the referrer on the segment as a one-string array.
       page.setAttribute("http.request.header.referer", [
-        `https://luke.example.test/cb?access_token=${TOKEN}&code=fixture-code&state=fixture-state`,
+        `https://app.example.test/cb?access_token=${TOKEN}&code=fixture-code&state=fixture-state`,
       ]);
       page.setAttribute("avatar.attempts", [
         "first",
@@ -287,7 +287,7 @@ test("the page's referrer, an array, is scrubbed, and so is a token in any array
   assert.deepEqual(
     [spans[0]?.attributes["http.request.header.referer"], spans[0]?.attributes["avatar.attempts"]],
     [
-      ["https://luke.example.test/cb?access_token=[redacted]&code=[redacted]&state=[redacted]"],
+      ["https://app.example.test/cb?access_token=[redacted]&code=[redacted]&state=[redacted]"],
       ["first", "[redacted]"],
     ],
   );

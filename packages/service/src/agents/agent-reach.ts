@@ -7,7 +7,7 @@
  * workspace's agent reads as none at all.
  *
  * An agent that runs on its starter's own GitHub token is reached by the
- * members who see it (`@luke/database/models/workspace-store`), but steered,
+ * members who see it (`@repo/database/models/workspace-store`), but steered,
  * given a shell, or started from by its starter alone (`controlsAgent`),
  * since all of that acts on GitHub as them.
  *
@@ -17,12 +17,12 @@
  * `PLAN_AGENT_WRITER_POLICY` admits (`admitsPlanWriter`).
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { type Agent, readAgentRouting, readVisibleAgent } from "@luke/database/models/agent-store";
-import { readAccountNames } from "@luke/database/models/workspace-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { type Agent, readAgentRouting, readVisibleAgent } from "@repo/database/models/agent-store";
+import { readAccountNames } from "@repo/database/models/workspace-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Option, type Scope } from "effect";
 import {
   HOSTED_REFUSAL,

@@ -15,21 +15,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { HOSTED_API_ERROR } from "@luke/features";
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import { Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { messagesProcedures } from "./messages-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const USER_ID = "user-1";
 const AGENT_ID = randomUUID();
 
 const handle = hostedFetch({
   messages: messagesProcedures({
-    eveOrigin: () => undefined,
     resolveUserId: (incoming) =>
       Effect.succeed(
         Option.fromNullishOr(

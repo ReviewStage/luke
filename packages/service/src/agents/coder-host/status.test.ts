@@ -1,5 +1,5 @@
-import { NO_AGENT_OWNER_FACTS } from "@luke/database/models/agent-owners";
-import type { AgentLatestTurn, AgentLine } from "@luke/database/models/agent-store";
+import { NO_AGENT_OWNER_FACTS } from "@repo/database/models/agent-owners";
+import type { AgentLatestTurn, AgentLine } from "@repo/database/models/agent-store";
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
@@ -7,9 +7,9 @@ import {
   AGENT_MACHINE,
   AGENT_STATUS,
   CONTEXT_WINDOW,
-} from "@luke/features/agent-wire";
-import { DEVICE_KIND, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/agent-wire";
+import { DEVICE_KIND, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Duration } from "effect";
 import { expect, test } from "vitest";
 import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
@@ -171,6 +171,8 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
             name: "Charles's MacBook Pro",
             kind: DEVICE_KIND.DESKTOP,
             platform: DEVICE_PLATFORM.DARWIN,
+            machineId: null,
+            model: null,
             lastSeenAt: new Date(lastSeenAt),
             signedIn: {},
             codexExecutable: null,

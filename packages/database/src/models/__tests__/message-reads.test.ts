@@ -8,7 +8,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnStatus,
-} from "@luke/wire";
+} from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option } from "effect";
@@ -44,7 +44,7 @@ import { storeWriter } from "../writer.js";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

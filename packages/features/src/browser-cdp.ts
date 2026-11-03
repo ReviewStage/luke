@@ -7,7 +7,7 @@
  * Nothing a page holds is kept here; it reaches only the caller.
  */
 
-import type { UnparsedWireValue, WireBoundaryInput } from "@luke/wire";
+import type { UnparsedWireValue, WireBoundaryInput } from "@repo/wire";
 import { Data, type Effect, type Stream } from "effect";
 
 /**

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Layer, Redacted } from "effect";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@repo/features";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
+import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { test } from "vitest";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -20,9 +20,9 @@ import { githubInstallApp } from "./github-install-app.js";
  * Synthetic key and secrets throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const INSTALLATION_ID = 777;
-const LANDING = "/github-installed.html?status=";
+const LANDING = "/github-installed?status=";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 
@@ -64,7 +64,7 @@ function answer(
   configured = true,
 ): Promise<Response> {
   const { handler } = HttpRouter.toWebHandler(
-    githubInstallApp().pipe(
+    githubInstallApp({ resolveSessionUserId: () => Effect.succeedNone }).pipe(
       HttpRouter.provideRequest(
         Layer.mergeAll(
           github.layer,

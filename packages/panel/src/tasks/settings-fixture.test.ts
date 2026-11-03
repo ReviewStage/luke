@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
-import type { AdminMetrics } from "@luke/features/admin-answer-wire";
+import type { AdminMetrics } from "@repo/features/admin-answer-wire";
 import {
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
   ADMIN_METRICS_WINDOW,
   ADMIN_METRICS_WINDOW_PARAM,
   ADMIN_READ,
-} from "@luke/features/admin-wire";
-import { AUTOMATION_FOLLOW } from "@luke/features/automation-view";
-import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
+} from "@repo/features/admin-wire";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
+import { AUTOMATION_RUN_STATUS } from "@repo/features/automation-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
 import {
   actContract,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
-} from "@luke/host/contract";
+} from "@repo/host/contract";
 import { Result, Schema } from "effect";
 import { test } from "vitest";
 import { stateWith } from "../testing/app-state.js";
@@ -63,6 +63,7 @@ const READS: readonly Read[] = [
   read(ACT_KIND.WORKSPACE_INVITATIONS_READ, ACME),
   read(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACME),
   read(ACT_KIND.WORKSPACE_SENTRY_READ, ACME),
+  read(ACT_KIND.WORKSPACE_SLACK_BOT_READ, ACME),
   read(ACT_KIND.INSTALLED_SKILLS_LIST, ACME),
   read(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE, {
     ...ACME,

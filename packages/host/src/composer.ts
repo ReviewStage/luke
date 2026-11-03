@@ -1,4 +1,4 @@
-import type { GatewayMethod, GatewayMethodTable } from "@luke/gateway";
+import type { GatewayMethod, GatewayMethodTable } from "@repo/gateway";
 import { Data, type Effect, Result, type Scope } from "effect";
 
 /** One concern of the host: the Gateway methods it answers, and its own lifecycle. */

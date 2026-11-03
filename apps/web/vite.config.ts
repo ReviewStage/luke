@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url";
+import { PAGE_IN_MAC_APP_PATH } from "@repo/features/page-frame";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { panelBuild } from "./scripts/panel-build";
 import { siteMarkdown } from "./scripts/site-markdown";
 
@@ -19,9 +20,29 @@ const WEB_DEPLOYMENT_DEFINES = {
   WEB_SENTRY_RELEASE: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? ""),
 };
 
+/**
+ * The page a frame shows where the deployment has no sandbox, served in
+ * development at its clean path as the root `vercel.json` serves it. Note
+ * that Vite already serves every entry page at its clean path, but not a page
+ * `public/` carries, which this one is.
+ */
+function pageInMacAppAtCleanPath(): Plugin {
+  return {
+    name: "page-in-mac-app-at-clean-path",
+    configureServer(server) {
+      server.middlewares.use((request, _response, next) => {
+        const url = new URL(request.url ?? "/", "http://localhost");
+        if (url.pathname === PAGE_IN_MAC_APP_PATH)
+          request.url = `${url.pathname}.html${url.search}`;
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   define: WEB_DEPLOYMENT_DEFINES,
-  plugins: [react(), tailwindcss(), ...panelBuild(), siteMarkdown()],
+  plugins: [react(), tailwindcss(), ...panelBuild(), siteMarkdown(), pageInMacAppAtCleanPath()],
   build: {
     // Vite's own gzip report is only a cost to every build.
     reportCompressedSize: false,
@@ -40,6 +61,7 @@ export default defineConfig({
         "accept-invitation": resolveEntry("./accept-invitation.html"),
         "desktop-session": resolveEntry("./desktop-session.html"),
         app: resolveEntry("./app.html"),
+        "404": resolveEntry("./404.html"),
       },
     },
   },

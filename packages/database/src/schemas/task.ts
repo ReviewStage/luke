@@ -1,6 +1,6 @@
-import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import type { PlanAgentEdit } from "@luke/features/plan-template";
+import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import type { PlanAgentEdit } from "@repo/features/plan-template";
 import {
   PLAN_ACTOR,
   TASK_MODE,
@@ -10,7 +10,7 @@ import {
   type TaskMode,
   type TaskPriority,
   type TaskStatus,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -19,6 +19,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   uniqueIndex,
   uuid,
@@ -59,7 +60,7 @@ export const task = pgTable(
     /**
      * The task's number in its workspace, counted from one in the order its
      * tasks were made and never reused (`task_number_counter`), which its key (`ACME-42`,
-     * `@luke/features/workspace-key`) is drawn from. A task moved to another
+     * `@repo/features/workspace-key`) is drawn from. A task moved to another
      * workspace takes the next number there.
      */
     number: integer("number").notNull(),
@@ -106,7 +107,7 @@ export const task = pgTable(
       .$type<readonly PlanAgentEdit[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@luke/features/plan-document`). */
+    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@repo/features/plan-document`). */
     document: text("document").notNull(),
     /**
      * The GitHub repository the task is about, `owner/name` as GitHub spells
@@ -195,3 +196,29 @@ export const taskNumberCounter = pgTable("task_number_counter", {
     .references(() => organization.id, { onDelete: "cascade" }),
   lastNumber: integer("last_number").notNull(),
 });
+
+/**
+ * A number a task held in a workspace it moved out of, so a link written
+ * with that number (`/<slug>/task/<number>`) still opens the task: a row per
+ * move, written as the task leaves (`task-store.ts`), and read only where
+ * the number names no task of the workspace now. A number is never handed
+ * out again, so the pair names one task for good. The row goes with the
+ * workspace, or with the task.
+ */
+export const taskNumberForward = pgTable(
+  "task_number_forward",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => task.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.number] }),
+    // The task's delete taking each of its rows.
+    index("task_number_forward_task").on(table.taskId),
+  ],
+);

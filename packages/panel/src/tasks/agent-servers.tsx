@@ -1,29 +1,31 @@
-import { AGENT_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   connectionHealth,
   type IntegrationTool,
   toolsCount,
-} from "@luke/features/integration-health";
-import { SIGN_IN_ACTION } from "@luke/features/integration-sign-in";
-import { byName, toolTitle } from "@luke/features/integration-tool-model";
+} from "@repo/features/integration-health";
+import { SIGN_IN_ACTION } from "@repo/features/integration-sign-in";
+import { byName, toolTitle } from "@repo/features/integration-tool-model";
 import {
+  INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
-  type LukeToolRow,
-  lukeToolSections,
-  lukeToolSummary,
   RUN_ON_MAC_DESCRIPTION,
   RUN_ON_MAC_REASON,
   RUN_ON_MAC_REASON_WORDS,
   type RunOnMacReason,
   runOnMacDetail,
-} from "@luke/features/luke-tools-model";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+  type WorkspaceToolRow,
+  workspaceToolSections,
+  workspaceToolSummary,
+} from "@repo/features/workspace-tools-model";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
+  AccountWords,
   AnchoredPopover,
   BANNER_LOOK,
   BackButton,
@@ -38,6 +40,7 @@ import {
   GLYPH_INK,
   GlyphSlot,
   LIST_DENSITY,
+  LIST_ROW_CHEVRON,
   LIST_ROW_CURRENT,
   List,
   ListMotion,
@@ -53,6 +56,7 @@ import {
   POPOVER_PANEL_LOOK,
   PopoverPanel,
   PROVIDER_MARK_SIZE,
+  ProductMark,
   ProviderMark,
   RowHint,
   RowHintOptions,
@@ -69,9 +73,8 @@ import {
   Text,
   Tooltip,
   VisuallyHidden,
-  WingFace,
   wholeWordsHint,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   namedServers,
   opensTools,
@@ -86,10 +89,10 @@ import {
   serversOnWords,
   switchedServers,
   type ToolHit,
-} from "@luke/ui/agent-servers-model";
-import { CircleAlertIcon, ICON_SIZE } from "@luke/ui/icons";
-import { matchIntegration, shownTools } from "@luke/ui/integration-search";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+} from "@repo/ui/agent-servers-model";
+import { CircleAlertIcon, ICON_SIZE } from "@repo/ui/icons";
+import { matchIntegration, shownTools } from "@repo/ui/integration-search";
+import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import {
   cloneElement,
   createContext,
@@ -110,23 +113,27 @@ import {
 import { useIntegrationTools } from "../integration-tools.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { Highlighted } from "../search-field.js";
-import { type LukeToolsDoor, type LukeToolsRead, useLukeTools } from "./agent-luke-tools.js";
+import {
+  useWorkspaceTools,
+  type WorkspaceToolsDoor,
+  type WorkspaceToolsRead,
+} from "./agent-workspace-tools.js";
 import { ServerCard } from "./server-card.js";
 
 /**
- * agent-servers.tsx -- the MCP servers row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
+ * agent-servers.tsx -- the Integrations row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
  *
- * The agent box's + opens a menu whose MCP servers row opens the popover
- * beside the menu as its submenu (`serversMenuPanel`, `@luke/ui`'s
+ * The agent box's + opens a menu whose Integrations row opens the popover
+ * beside the menu as its submenu (`serversMenuPanel`, `@repo/ui`'s
  * `MenuPanel`), the menu standing behind it; an automation's form opens the
  * same popover from its field's chip, hung from the chip's trailing edge
- * (`AgentServersButton`, `@luke/ui`'s `AnchoredPopover`). Either way it is
+ * (`AgentServersButton`, `@repo/ui`'s `AnchoredPopover`). Either way it is
  * a `PopoverPanel`, a menu's, drawn as the searchable menu is: a search field first, then, for a
  * started agent, our own tools under Built in, then the servers under
  * Connected, which counts how many this agent has on, and Not connected
- * (`agent-servers-model.ts`), each section under `@luke/ui`'s `MenuSection`,
- * and Manage in Settings pinned at the foot. The app's row is its face, its
- * name, how many of its tools the agent is offered (`agent-luke-tools.ts`),
+ * (`agent-servers-model.ts`), each section under `@repo/ui`'s `MenuSection`,
+ * and Manage in Settings pinned at the foot. The app's row is its mark, its
+ * name, how many of its tools the agent is offered (`agent-workspace-tools.ts`),
  * `run_on_mac off` in the attention tone where it is, and Always on in a
  * switch's place, since his tools cannot be turned off; pressing it turns
  * the popover into his page, his tools under their groups, each its name and
@@ -168,7 +175,7 @@ import { ServerCard } from "./server-card.js";
  * open; Manage in Settings closes the + menu with it. A second press of the
  * chip, and focus leaving it for another part of the window, close it too.
  * The chip, the back, a row's switch and its Connect, Reopen, Cancel or
- * Retry are `@luke/ui`'s, each pressed without taking the focus from the field.
+ * Retry are `@repo/ui`'s, each pressed without taking the focus from the field.
  */
 
 /** The servers an agent is handed, as the button changes them. */
@@ -180,7 +187,7 @@ export interface AgentServersControl {
   /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
   /** The started agent whose own tools, the app's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
-  readonly luke?: LukeToolsDoor | undefined;
+  readonly workspace?: WorkspaceToolsDoor | undefined;
 }
 
 /** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
@@ -207,10 +214,7 @@ const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
  * search field's height; a narrowed mention list's crumb stands as one.
  */
 export const SERVER_PAGE_HEAD_CLASS =
-  "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--luke-fold:folded]";
-
-/** What the + menu's row that opens the popover is named. */
-const SERVERS_ROW = "MCP servers";
+  "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--ui-fold:folded]";
 
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
@@ -220,8 +224,8 @@ const SERVERS_NONE = "No integrations available";
 
 /** What the home's field asks for, and says where nothing matches. */
 const SEARCH = {
-  PLACEHOLDER: "Search servers and tools",
-  NONE: "No servers or tools match",
+  PLACEHOLDER: "Search integrations and tools",
+  NONE: "No integrations or tools match",
   TOOLS: "Tools",
 } as const;
 
@@ -231,7 +235,7 @@ const PAGE = {
 } as const;
 
 /** What the app's own row and pages say. */
-const LUKE_WORDS = {
+const WORKSPACE_WORDS = {
   SECTION: "Built in",
   ALWAYS_ON: "Always on",
   ON: "On",
@@ -243,7 +247,7 @@ const LUKE_WORDS = {
 } as const;
 
 /** Where the home's highlight stands while the app's row heads it: before every server's row. */
-const LUKE_PICK = 0;
+const WORKSPACE_PICK = 0;
 
 /** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
 const WORKING_ACT = {
@@ -294,7 +298,7 @@ function ServerName({ name }: { name: string }): React.JSX.Element {
 /** A server's name heading its own page, faded where the head cuts it short. */
 function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
   return (
-    <OneLine className="agent-servers-page-title text-section-inline font-luke-semibold text-foreground">
+    <OneLine className="agent-servers-page-title text-section-inline font-ui-semibold text-foreground">
       {name}
     </OneLine>
   );
@@ -312,19 +316,19 @@ function problemHint(problem: string, said: string | undefined): OneLineHint {
 }
 
 /**
- * What a server's row says between its mark and its end: its name, how
- * many tools it offers, and where its sign-in or its server stands, as the
- * card a mention of the server hangs says them too (`server-card.tsx`).
+ * What a server's row says between its mark and its end: its provider's
+ * name, the account's beside it in the muted ink where the row names one,
+ * and where its sign-in or its server stands, as the card a mention of the
+ * server hangs says them too (`server-card.tsx`). How many tools it offers
+ * is the row's metadata, at its end beside its switch.
  */
 function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
     // Note that the words stand in a line of their own, because a list row's
     // title would otherwise clip the reason behind a long name.
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
-      <ServerName name={row.name} />
-      {row.tools !== undefined ? (
-        <span className={SERVER_COUNT_CLASS}>{toolsCount(row.tools.length)}</span>
-      ) : null}
+      <ServerName name={INTEGRATION_NAME[row.provider]} />
+      {row.accountName !== undefined ? <AccountWords>{row.accountName}</AccountWords> : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
         <Tooltip label={row.note}>
           <span className="agent-servers-waiting flex">
@@ -469,11 +473,11 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
   );
 }
 
-/** The app's face, at a provider mark's seat. */
-function LukeMark(): React.JSX.Element {
+/** The product's mark, at a provider mark's seat. */
+function AppMark(): React.JSX.Element {
   return (
     <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
-      <WingFace />
+      <ProductMark small />
     </GlyphSlot>
   );
 }
@@ -482,33 +486,33 @@ function LukeMark(): React.JSX.Element {
 function AlwaysOn(): React.JSX.Element {
   return (
     <span className={SERVER_END_CLASS}>
-      <span className={SERVER_COUNT_CLASS}>{LUKE_WORDS.ALWAYS_ON}</span>
+      <span className={SERVER_COUNT_CLASS}>{WORKSPACE_WORDS.ALWAYS_ON}</span>
     </span>
   );
 }
 
-/** What the app's row says between its face and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
-function LukeRowWords({ luke }: { luke: LukeToolsRead }): React.JSX.Element {
+/** What the app's row says between its mark and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
+function WorkspaceRowWords({ workspace }: { workspace: WorkspaceToolsRead }): React.JSX.Element {
   return (
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
       <ServerName name={PRODUCT_NAME} />
-      {luke.answer !== undefined ? (
-        <span className={SERVER_COUNT_CLASS}>{toolsCount(luke.answer.tools.length)}</span>
+      {workspace.answer !== undefined ? (
+        <span className={SERVER_COUNT_CLASS}>{toolsCount(workspace.answer.tools.length)}</span>
       ) : null}
-      {luke.reason !== undefined ? (
+      {workspace.reason !== undefined ? (
         <OneLine
-          hint={wholeWordsHint(RUN_ON_MAC_REASON_WORDS[luke.reason].short)}
+          hint={wholeWordsHint(RUN_ON_MAC_REASON_WORDS[workspace.reason].short)}
           className="agent-servers-problem flex-auto text-caption-inline text-attention"
         >
-          {LUKE_WORDS.RUN_ON_MAC_OFF}
+          {WORKSPACE_WORDS.RUN_ON_MAC_OFF}
         </OneLine>
       ) : null}
-      {luke.failed ? (
+      {workspace.failed ? (
         <OneLine
-          hint={wholeWordsHint(LUKE_WORDS.READ_FAILED)}
+          hint={wholeWordsHint(WORKSPACE_WORDS.READ_FAILED)}
           className="agent-servers-problem flex-auto text-caption-inline text-muted-foreground"
         >
-          {LUKE_WORDS.READ_FAILED}
+          {WORKSPACE_WORDS.READ_FAILED}
         </OneLine>
       ) : null}
     </span>
@@ -516,23 +520,23 @@ function LukeRowWords({ luke }: { luke: LukeToolsRead }): React.JSX.Element {
 }
 
 /** Whether `run_on_mac` is on for the agent, once that is known: On in the complete tone, Off in the attention tone. */
-function RunOnMacBadge({ luke }: { luke: LukeToolsRead }): React.JSX.Element | null {
-  if (luke.reason !== undefined)
-    return <Badge tone={STATUS_TONE.ATTENTION}>{LUKE_WORDS.OFF}</Badge>;
-  if (luke.answer === undefined) return null;
-  return <Badge tone={STATUS_TONE.COMPLETE}>{LUKE_WORDS.ON}</Badge>;
+function RunOnMacBadge({ workspace }: { workspace: WorkspaceToolsRead }): React.JSX.Element | null {
+  if (workspace.reason !== undefined)
+    return <Badge tone={STATUS_TONE.ATTENTION}>{WORKSPACE_WORDS.OFF}</Badge>;
+  if (workspace.answer === undefined) return null;
+  return <Badge tone={STATUS_TONE.COMPLETE}>{WORKSPACE_WORDS.ON}</Badge>;
 }
 
 /** Whether a row of the app's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
-function opensLukeTool(tool: LukeToolRow): boolean {
+function opensWorkspaceTool(tool: WorkspaceToolRow): boolean {
   return tool.name === AGENT_TOOL.RUN_ON_MAC;
 }
 
 /** Whether a search finds the app's row: by its name, or by a tool's name or what it does. */
-function lukeFound(names: readonly string[], tokens: readonly string[]): boolean {
+function workspaceFound(names: readonly string[], tokens: readonly string[]): boolean {
   return (
     matchesTokens([PRODUCT_NAME], tokens) ||
-    names.some((name) => matchesTokens([name, lukeToolSummary(name) ?? ""], tokens))
+    names.some((name) => matchesTokens([name, workspaceToolSummary(name) ?? ""], tokens))
   );
 }
 
@@ -601,23 +605,25 @@ function ServersPopover({
   const [openedTool, setOpenedTool] = useState<string | undefined>(undefined);
   const toolBody = useRef<HTMLDivElement>(null);
   const grant = useIntegrationGrant(statuses);
-  const luke = useLukeTools(servers.luke);
+  const workspace = useWorkspaceTools(servers.workspace);
   const openSettings = useOpenSettings();
-  const [lukeOpen, setLukeOpen] = useState(false);
-  const [lukeTool, setLukeTool] = useState<string | undefined>(undefined);
-  const [lukeFilter, setLukeFilter] = useState("");
-  const [lukeHighlight, setLukeHighlight] = useState(0);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [workspaceTool, setWorkspaceTool] = useState<string | undefined>(undefined);
+  const [workspaceFilter, setWorkspaceFilter] = useState("");
+  const [workspaceHighlight, setWorkspaceHighlight] = useState(0);
 
   // The app's page stands only while the popover draws an agent's; its tool's page only over its.
-  const lukeNames = luke.answer?.tools ?? [];
-  const onLuke = servers.luke !== undefined && lukeOpen;
-  const onRunOnMac = onLuke && lukeTool === AGENT_TOOL.RUN_ON_MAC;
-  const lukeTokens = searchTokens(lukeFilter);
-  const lukeSections = lukeToolSections(
-    lukeNames.filter((name) => matchesTokens([name, lukeToolSummary(name) ?? ""], lukeTokens)),
+  const workspaceNames = workspace.answer?.tools ?? [];
+  const onWorkspace = servers.workspace !== undefined && workspaceOpen;
+  const onRunOnMac = onWorkspace && workspaceTool === AGENT_TOOL.RUN_ON_MAC;
+  const workspaceTokens = searchTokens(workspaceFilter);
+  const workspaceSections = workspaceToolSections(
+    workspaceNames.filter((name) =>
+      matchesTokens([name, workspaceToolSummary(name) ?? ""], workspaceTokens),
+    ),
   );
-  const lukeRows = lukeSections.flatMap((section) => section.tools);
-  const lukeAt = Math.min(lukeHighlight, Math.max(lukeRows.length - 1, 0));
+  const workspaceRows = workspaceSections.flatMap((section) => section.tools);
+  const workspaceAt = Math.min(workspaceHighlight, Math.max(workspaceRows.length - 1, 0));
 
   // A server's page stands only while its server still answers with tools; otherwise the home is drawn.
   const page = rows.find((row) => row.connection === opened && opensTools(row));
@@ -645,13 +651,14 @@ function ServersPopover({
   ].map((each) => ("tool" in each ? each : { row: each }));
   // The app's row heads the home's picks while it stands: for an agent, and found by the search.
   const homeTokens = searchTokens(query);
-  const lukeShown = servers.luke !== undefined && lukeFound(lukeNames, homeTokens);
-  const lukeOffset = lukeShown ? 1 : 0;
-  const at = Math.min(highlight, Math.max(picks.length + lukeOffset - 1, 0));
-  const onLukeRow = lukeShown && at === LUKE_PICK;
+  const workspaceShown =
+    servers.workspace !== undefined && workspaceFound(workspaceNames, homeTokens);
+  const workspaceOffset = workspaceShown ? 1 : 0;
+  const at = Math.min(highlight, Math.max(picks.length + workspaceOffset - 1, 0));
+  const onWorkspaceRow = workspaceShown && at === WORKSPACE_PICK;
   // A search that found one of his tools opens his page filtered to it, as a server's does.
-  const lukeSearch = lukeNames.some((name) =>
-    matchesTokens([name, lukeToolSummary(name) ?? ""], homeTokens),
+  const workspaceSearch = workspaceNames.some((name) =>
+    matchesTokens([name, workspaceToolSummary(name) ?? ""], homeTokens),
   )
     ? query
     : "";
@@ -666,17 +673,17 @@ function ServersPopover({
     if (first && !takesFocus) return;
     if (tool !== undefined || onRunOnMac) toolBody.current?.focus({ preventScroll: true });
     else field.current?.focus();
-  }, [page?.connection, tool, onLuke, onRunOnMac, takesFocus]);
+  }, [page?.connection, tool, onWorkspace, onRunOnMac, takesFocus]);
 
   useLayoutEffect(() => {
     if (tool !== undefined || onRunOnMac) return;
-    const highlighted = onLuke
-      ? `${rowsId}-luke-${lukeAt}`
+    const highlighted = onWorkspace
+      ? `${rowsId}-workspace-${workspaceAt}`
       : page === undefined
         ? `${rowsId}-${at}`
         : `${rowsId}-tool-${pageAt}`;
     keepInView(list.current, document.getElementById(highlighted));
-  }, [at, page, pageAt, tool, rowsId, onLuke, onRunOnMac, lukeAt]);
+  }, [at, page, pageAt, tool, rowsId, onWorkspace, onRunOnMac, workspaceAt]);
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (server: string) => {
@@ -715,30 +722,30 @@ function ServersPopover({
   /** Back from a tool's page to its server's, the filter and the highlight as they were. */
   const closeTool = () => setOpenedTool(undefined);
 
-  const openLuke = (search: string) => {
-    setLukeOpen(true);
-    setLukeFilter(search);
-    setLukeHighlight(0);
-    setLukeTool(undefined);
+  const openWorkspace = (search: string) => {
+    setWorkspaceOpen(true);
+    setWorkspaceFilter(search);
+    setWorkspaceHighlight(0);
+    setWorkspaceTool(undefined);
   };
 
-  const backFromLuke = () => {
-    setLukeOpen(false);
-    setLukeFilter("");
+  const backFromWorkspace = () => {
+    setWorkspaceOpen(false);
+    setWorkspaceFilter("");
   };
 
-  const openLukeTool = (name: string) => {
-    setLukeHighlight(
+  const openWorkspaceTool = (name: string) => {
+    setWorkspaceHighlight(
       Math.max(
-        lukeRows.findIndex((each) => each.name === name),
+        workspaceRows.findIndex((each) => each.name === name),
         0,
       ),
     );
-    setLukeTool(name);
+    setWorkspaceTool(name);
   };
 
   /** Back from a tool's page to the app's, the filter and the highlight as they were. */
-  const closeLukeTool = () => setLukeTool(undefined);
+  const closeWorkspaceTool = () => setWorkspaceTool(undefined);
 
   /**
    * What a pick does when chosen: a server opens or connects, and a tool
@@ -765,20 +772,22 @@ function ServersPopover({
 
   const onHomeKey = (event: React.KeyboardEvent<HTMLElement>) => {
     const caretAtEnd = caretOf(event) === query.length;
-    const pick = onLukeRow ? undefined : picks[at - lukeOffset];
+    const pick = onWorkspaceRow ? undefined : picks[at - workspaceOffset];
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const step = event.key === "ArrowDown" ? 1 : -1;
-      setHighlight(Math.min(Math.max(at + step, 0), Math.max(picks.length + lukeOffset - 1, 0)));
+      setHighlight(
+        Math.min(Math.max(at + step, 0), Math.max(picks.length + workspaceOffset - 1, 0)),
+      );
     } else if (event.key === "Enter" || (event.key === "ArrowRight" && caretAtEnd)) {
       if (
-        !onLukeRow &&
+        !onWorkspaceRow &&
         event.key === "ArrowRight" &&
         !(pick !== undefined && (pick.tool !== undefined || opensTools(pick.row)))
       )
         return;
       event.preventDefault();
-      if (onLukeRow) openLuke(lukeSearch);
+      if (onWorkspaceRow) openWorkspace(workspaceSearch);
       else choose(pick);
     } else if (event.key === " " && query.trim() === "" && pick?.row.kind === SERVER_ROW.SWITCH) {
       // Note that we flip the switch only on an empty search, because a space typed after a word is part of the search.
@@ -805,31 +814,31 @@ function ServersPopover({
     closeTool();
   };
 
-  const onLukeKey = (event: React.KeyboardEvent<HTMLElement>) => {
-    const highlighted = lukeRows[lukeAt];
+  const onWorkspaceKey = (event: React.KeyboardEvent<HTMLElement>) => {
+    const highlighted = workspaceRows[workspaceAt];
     pageFieldKey(event, {
-      filter: lukeFilter,
-      at: lukeAt,
-      count: lukeRows.length,
-      back: backFromLuke,
-      step: setLukeHighlight,
+      filter: workspaceFilter,
+      at: workspaceAt,
+      count: workspaceRows.length,
+      back: backFromWorkspace,
+      step: setWorkspaceHighlight,
       open:
-        highlighted === undefined || !opensLukeTool(highlighted)
+        highlighted === undefined || !opensWorkspaceTool(highlighted)
           ? undefined
-          : () => openLukeTool(highlighted.name),
+          : () => openWorkspaceTool(highlighted.name),
     });
   };
 
-  const onLukeToolKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const onWorkspaceToolKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!goesBack(event)) return;
     event.preventDefault();
-    closeLukeTool();
+    closeWorkspaceTool();
   };
 
   // Escape goes back one level, and closes the popover only from its home.
   const dismiss = () => {
-    if (onRunOnMac) closeLukeTool();
-    else if (onLuke) backFromLuke();
+    if (onRunOnMac) closeWorkspaceTool();
+    else if (onWorkspace) backFromWorkspace();
     else if (tool !== undefined) closeTool();
     else if (page !== undefined) back();
     else onBack();
@@ -922,7 +931,7 @@ function ServersPopover({
   /** A row's place among the home's picks, after the app's where it stands, which names its id and its highlight; a quiet row is none. */
   const pickIndex = (row: ServerRow, tool?: IntegrationTool) => {
     const index = picks.findIndex((pick) => pick.row === row && pick.tool === tool);
-    return index < 0 ? index : index + lukeOffset;
+    return index < 0 ? index : index + workspaceOffset;
   };
 
   /** A row of the home: its place among the picks names its id and its highlight, and the pointer coming onto its press moves the highlight there. */
@@ -956,6 +965,8 @@ function ServersPopover({
             actions={input.actions}
             current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
             chevron={input.opens}
+            // Note that the chevron takes the metadata's place while the row is in hand, as a sidebar row's ⋯ takes its count's, so a server's account fades to its count rather than short of room kept for the chevron.
+            chevronAt={LIST_ROW_CHEVRON.META}
             keepFocus
             tabbable={false}
             onPress={input.onPress}
@@ -982,6 +993,8 @@ function ServersPopover({
       index: pickIndex(row),
       row,
       title: <ServerRowWords row={row} />,
+      // Note that the count is the row's metadata, beside its switch, so every row's counts form one column, and the chevron takes its place while the row is in hand.
+      meta: row.tools !== undefined ? toolsCount(row.tools.length) : undefined,
       card: <ServerCard provider={row.provider} connection={row.connection} />,
       actions: end(row),
       opens: opensTools(row),
@@ -1007,19 +1020,21 @@ function ServersPopover({
       onPress: () => open(row, query),
     });
 
-  /** The app's own row, heading the home: its face, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
-  const lukeRow = (
-    <RowHighlight.Provider value={at === LUKE_PICK ? undefined : () => setHighlight(LUKE_PICK)}>
+  /** The app's own row, heading the home: its mark, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
+  const workspaceRow = (
+    <RowHighlight.Provider
+      value={at === WORKSPACE_PICK ? undefined : () => setHighlight(WORKSPACE_PICK)}
+    >
       <ListRow
-        id={`${rowsId}-${LUKE_PICK}`}
-        leading={<LukeMark />}
-        title={<LukeRowWords luke={luke} />}
+        id={`${rowsId}-${WORKSPACE_PICK}`}
+        leading={<AppMark />}
+        title={<WorkspaceRowWords workspace={workspace} />}
         actions={<AlwaysOn />}
-        current={onLukeRow ? LIST_ROW_CURRENT.ITEM : undefined}
+        current={onWorkspaceRow ? LIST_ROW_CURRENT.ITEM : undefined}
         chevron
         keepFocus
         tabbable={false}
-        onPress={() => openLuke(lukeSearch)}
+        onPress={() => openWorkspace(workspaceSearch)}
         hint={{ Hint: PointerHighlight, label: PRODUCT_NAME }}
       />
     </RowHighlight.Provider>
@@ -1041,15 +1056,15 @@ function ServersPopover({
         <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
           <div ref={moving} className="agent-servers-list p-menu-inset">
             <ListMotion root={moving}>
-              {lukeShown ? (
-                <MenuSection heading={LUKE_WORDS.SECTION}>
-                  <List label={LUKE_WORDS.SECTION} density={LIST_DENSITY.COMPACT}>
-                    {lukeRow}
+              {workspaceShown ? (
+                <MenuSection heading={WORKSPACE_WORDS.SECTION}>
+                  <List label={WORKSPACE_WORDS.SECTION} density={LIST_DENSITY.COMPACT}>
+                    {workspaceRow}
                   </List>
                 </MenuSection>
               ) : null}
               {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
-              {rows.length > 0 && picks.length === 0 && groups.length === 0 && !lukeShown ? (
+              {rows.length > 0 && picks.length === 0 && groups.length === 0 && !workspaceShown ? (
                 <ServersNote words={SEARCH.NONE} />
               ) : null}
               {groups.map((group) =>
@@ -1136,88 +1151,90 @@ function ServersPopover({
   };
 
   /** One of the app's tools on its page: its name in mono and what it does, `run_on_mac` with whether it is on and, where it is off, why. */
-  const lukeToolRow = (shown: LukeToolRow) => {
-    const index = lukeRows.indexOf(shown);
+  const workspaceToolRow = (shown: WorkspaceToolRow) => {
+    const index = workspaceRows.indexOf(shown);
     const runOnMac = shown.name === AGENT_TOOL.RUN_ON_MAC;
     const description =
-      runOnMac && luke.reason !== undefined
-        ? RUN_ON_MAC_REASON_WORDS[luke.reason].short
+      runOnMac && workspace.reason !== undefined
+        ? RUN_ON_MAC_REASON_WORDS[workspace.reason].short
         : shown.summary;
     return (
       <RowHighlight.Provider
         key={shown.name}
-        value={index === lukeAt ? undefined : () => setLukeHighlight(index)}
+        value={index === workspaceAt ? undefined : () => setWorkspaceHighlight(index)}
       >
         <ListRow
-          id={`${rowsId}-luke-${index}`}
+          id={`${rowsId}-workspace-${index}`}
           title={
             <OneLine
               className="integration-tool-title integration-tool-code flex-initial font-mono text-caption-inline"
               words={shown.name}
             >
-              <Highlighted text={shown.name} tokens={lukeTokens} />
+              <Highlighted text={shown.name} tokens={workspaceTokens} />
             </OneLine>
           }
           description={
             description === undefined ? undefined : (
-              <Highlighted text={description} tokens={lukeTokens} />
+              <Highlighted text={description} tokens={workspaceTokens} />
             )
           }
-          actions={runOnMac ? <RunOnMacBadge luke={luke} /> : undefined}
-          current={index === lukeAt ? LIST_ROW_CURRENT.ITEM : undefined}
-          chevron={opensLukeTool(shown)}
+          actions={runOnMac ? <RunOnMacBadge workspace={workspace} /> : undefined}
+          current={index === workspaceAt ? LIST_ROW_CURRENT.ITEM : undefined}
+          chevron={opensWorkspaceTool(shown)}
           keepFocus
           tabbable={false}
-          onPress={opensLukeTool(shown) ? () => openLukeTool(shown.name) : undefined}
+          onPress={opensWorkspaceTool(shown) ? () => openWorkspaceTool(shown.name) : undefined}
           hint={{ Hint: PointerHighlight, label: shown.name }}
         />
       </RowHighlight.Provider>
     );
   };
 
-  /** The app's page in the popover's place: back, its face and name, its count, Always on, a filter, and its tools under their groups. */
-  const lukePage = (
+  /** The app's page in the popover's place: back, its mark and name, its count, Always on, a filter, and its tools under their groups. */
+  const workspacePage = (
     <>
       <div className={SERVER_PAGE_HEAD_CLASS}>
         <BackButton
           label={SERVERS_LABEL}
           place={SERVERS_LABEL}
           command={NO_BACK_KEY}
-          onBack={backFromLuke}
+          onBack={backFromWorkspace}
         />
-        <LukeMark />
+        <AppMark />
         <ServerPageTitle name={PRODUCT_NAME} />
-        {luke.answer !== undefined ? (
-          <span className={SERVER_COUNT_CLASS}>{toolsCount(lukeNames.length)}</span>
+        {workspace.answer !== undefined ? (
+          <span className={SERVER_COUNT_CLASS}>{toolsCount(workspaceNames.length)}</span>
         ) : null}
         <AlwaysOn />
       </div>
       <SearchRow
         field={field}
-        value={lukeFilter}
-        placeholder={`Filter ${toolsCount(lukeNames.length)}`}
+        value={workspaceFilter}
+        placeholder={`Filter ${toolsCount(workspaceNames.length)}`}
         onChange={(value) => {
-          setLukeFilter(value);
-          setLukeHighlight(0);
+          setWorkspaceFilter(value);
+          setWorkspaceHighlight(0);
         }}
-        onKeyDown={onLukeKey}
+        onKeyDown={onWorkspaceKey}
       />
       <div className={SERVERS_SCROLL_CLASS}>
         <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
           <div className="agent-servers-list p-menu-inset">
-            {luke.answer === undefined ? (
-              <ServersNote words={luke.failed ? LUKE_WORDS.READ_FAILED : LUKE_WORDS.READING} />
-            ) : lukeRows.length === 0 ? (
+            {workspace.answer === undefined ? (
+              <ServersNote
+                words={workspace.failed ? WORKSPACE_WORDS.READ_FAILED : WORKSPACE_WORDS.READING}
+              />
+            ) : workspaceRows.length === 0 ? (
               <ServersNote words={PAGE.NONE} />
             ) : null}
-            {lukeSections.map((section) => (
+            {workspaceSections.map((section) => (
               <MenuSection
                 key={section.heading}
                 heading={section.heading}
                 count={toolsCount(section.tools.length)}
               >
                 <List label={section.heading} density={LIST_DENSITY.COMPACT}>
-                  {section.tools.map(lukeToolRow)}
+                  {section.tools.map(workspaceToolRow)}
                 </List>
               </MenuSection>
             ))}
@@ -1229,16 +1246,17 @@ function ServersPopover({
 
   /** `run_on_mac`'s page over the app's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
   const runOnMacPage = (reason: RunOnMacReason | undefined) => {
-    const detail = reason === undefined ? undefined : runOnMacDetail(reason, luke.answer?.runOnMac);
+    const detail =
+      reason === undefined ? undefined : runOnMacDetail(reason, workspace.answer?.runOnMac);
     return (
       <div className="agent-servers-tool-page flex min-h-0 flex-col">
         <div className={SERVER_PAGE_HEAD_CLASS}>
           <BackButton
-            label={LUKE_WORDS.TOOLS}
-            place={LUKE_WORDS.TOOLS}
+            label={WORKSPACE_WORDS.TOOLS}
+            place={WORKSPACE_WORDS.TOOLS}
             command={NO_BACK_KEY}
             keepFocus
-            onBack={closeLukeTool}
+            onBack={closeWorkspaceTool}
           />
           <OneLine
             className="agent-servers-page-title font-mono text-caption-inline text-foreground"
@@ -1247,11 +1265,11 @@ function ServersPopover({
             {AGENT_TOOL.RUN_ON_MAC}
           </OneLine>
           <span className={SERVER_END_CLASS}>
-            <RunOnMacBadge luke={luke} />
+            <RunOnMacBadge workspace={workspace} />
           </span>
         </div>
         {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
-        <ScrollArea ref={toolBody} tabIndex={-1} onKeyDown={onLukeToolKey}>
+        <ScrollArea ref={toolBody} tabIndex={-1} onKeyDown={onWorkspaceToolKey}>
           <div className="flex flex-col gap-block-gap px-list-inset pt-row-inset pb-list-inset">
             <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {RUN_ON_MAC_DESCRIPTION}
@@ -1315,8 +1333,8 @@ function ServersPopover({
       title={
         onRunOnMac
           ? AGENT_TOOL.RUN_ON_MAC
-          : onLuke
-            ? LUKE_WORDS.TOOLS
+          : onWorkspace
+            ? WORKSPACE_WORDS.TOOLS
             : tool !== undefined
               ? toolTitle(tool)
               : page !== undefined
@@ -1332,9 +1350,9 @@ function ServersPopover({
           contents, because its rows' highlight is that menu's. */}
       <div className="agent-servers-menu contents">
         {onRunOnMac
-          ? runOnMacPage(luke.reason)
-          : onLuke
-            ? lukePage
+          ? runOnMacPage(workspace.reason)
+          : onWorkspace
+            ? workspacePage
             : page !== undefined && tool !== undefined
               ? toolPage(page, tool)
               : page !== undefined
@@ -1391,7 +1409,7 @@ function ServersMenuPanel({
 }
 
 /**
- * The + menu's MCP servers row, which opens the popover beside the menu as
+ * The + menu's Integrations row, which opens the popover beside the menu as
  * its submenu: the same popover the chip hangs, Escape on its home going
  * back to the row.
  */
@@ -1400,7 +1418,7 @@ export function serversMenuPanel(
   statuses: IntegrationStatuses,
 ): MenuPanel {
   return {
-    label: SERVERS_ROW,
+    label: SERVERS_LABEL,
     icon: <McpIcon />,
     panel: ({ back, close, entered }) => (
       <ServersMenuPanel

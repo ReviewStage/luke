@@ -16,7 +16,7 @@
  * agents' default model, effort, and context window, which Settings alone
  * writes and which reads, until it does, as the fallback a Start naming no
  * model runs on (`accountModelChoices`), the Claude model the account's Generate chapters
- * runs on, one of a fixed set (`@luke/features/chapters-model-choice`), and the experiments the account turned on in
+ * runs on, one of a fixed set (`@repo/features/chapters-model-choice`), and the experiments the account turned on in
  * Settings › Experimental. A write carries any of them, a coding-agent
  * choice is accepted only as the catalog accepts it
  * (`packages/service/src/providers/model-catalog.ts`), and moved only to a
@@ -36,34 +36,33 @@
  * The provider keys are `provider-keys-procedures.ts`'s.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AccountPreferencesRow,
   AccountPreferencesWrite,
   AccountSeamEffect,
-} from "@luke/database/models/account-store";
-import type { StandingSession } from "@luke/database/models/recorded-session";
-import type { TaskStoreFailure } from "@luke/database/models/task-store";
-import { contextWindowSchema } from "@luke/features/agent-wire";
-import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@luke/features/chapters-model-choice";
-import type { ModelChoice } from "@luke/features/models-wire";
-import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
-import { failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/account-store";
+import type { StandingSession } from "@repo/database/models/recorded-session";
+import type { TaskStoreFailure } from "@repo/database/models/task-store";
+import { contextWindowSchema } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@repo/features/chapters-model-choice";
+import type { ModelChoice } from "@repo/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
+import { failureKind } from "@repo/runtime/effect";
 import {
   accountPreferencesFromWire,
   accountPreferencesParts,
   experimentChoicesFrom,
   NO_EXPERIMENTS,
   ownPreferenceFromWire,
-} from "@luke/settings";
-import type { UnparsedWireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/settings";
+import type { UnparsedWireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { isAdminRole } from "../admin/admin-access.js";
 import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.js";
 import { accountModelChoices } from "../agents/coder-host/start.js";
-import type { EveReach } from "../agents/coder-host/stop.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { HostedEnvironment } from "../environment.js";
 import {
@@ -74,6 +73,7 @@ import {
 } from "../http/http-effect.js";
 import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
+import { LocalDemo } from "../local/local-demo.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   type AccountFastOffer,
@@ -85,7 +85,7 @@ import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { memoriesProcedures } from "./memories-procedures.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
-export interface AccountProcedureSeams extends EveReach {
+export interface AccountProcedureSeams {
   resolveUserId: UserIdResolver;
   /** The eve sessions the account's standing conversations run in, which the delete retires first. */
   standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
@@ -225,15 +225,11 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * to erase. Where the deployment can, the analytics person is asked to
      * be erased first, because nothing after the delete would still name
      * it; a refusal or an outage there must not hold up the delete, so it
-     * is logged as a status and the delete proceeds. Every eve session the
+     * is logged as a status and the delete proceeds. Every session the
      * account's standing conversations run in is retired before anything is
-     * deleted, as the request's own caller (`coder-host/stop.ts`'s
-     * `eveFor`: over the bearer, or as the deployment acting for the
-     * account the cookie named), while eve's door still admits them to it
-     * (`retire-sessions.ts`); a session eve did not retire is logged and the
-     * delete proceeds, though a cookie's deletion on a deployment that
-     * cannot reach eve as itself is refused as unavailable before anything
-     * is erased (`retiringReach`); the delete itself queues the sandbox of
+     * deleted, for the account the request resolved to, while those
+     * conversations still stand (`retire-sessions.ts`); a session not
+     * retired is logged and the delete proceeds. The delete itself queues the sandbox of
      * every session the account ran for the sweep. Every grant the
      * account's integration rows name is revoked at Vercel Connect once the
      * rows are gone, as a Disconnect revokes one, so no grant outlives the
@@ -242,9 +238,9 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      */
     delete: signedIn.delete.effect(function* ({ context }) {
       const { userId } = context;
-      const eveAt = yield* retiringReach(seams, context.request, userId);
+      const retiring = yield* retiringReach(userId);
       const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
-      yield* retireSessions(eveAt, sessions);
+      yield* retireSessions(retiring, sessions);
       yield* forgetAnalytics(userId);
       // Note that the grants are read before the delete, because an added account's subject is no id the account still names after it.
       const grants = yield* hostedStoreOrUnavailable(readIntegrationConnections(userId));
@@ -259,10 +255,18 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
     }),
 
-    /** Whether the caller's own account is an admin, any role but the admin role not. */
+    /**
+     * Whether the caller's own account is an admin, any role but the admin
+     * role not, and, in the local demo alone, that a Start on a task with no
+     * repository runs where its agents run on a host (`local/local-demo.ts`).
+     */
     access: signedIn.access.effect(function* ({ context }) {
       const role = yield* hostedStoreOrUnavailable(seams.readRole(context.userId));
-      return { admin: isAdminRole(role) };
+      const demo = yield* LocalDemo;
+      return {
+        admin: isAdminRole(role),
+        ...(demo.on ? { startsWithoutRepository: true as const } : undefined),
+      };
     }),
 
     /**

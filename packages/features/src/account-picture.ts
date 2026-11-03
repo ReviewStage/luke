@@ -15,7 +15,9 @@
  * for that login (`githubUserAvatarUrl`), each asked for at the
  * size it is drawn (`githubAvatarAt`). A GitHub App, which runs a pull
  * request's checks, is drawn by the logo GitHub serves at its App's address
- * (`githubAppAvatarUrl`).
+ * (`githubAppAvatarUrl`). A workspace's connected GitHub account is drawn
+ * in its invitation email by the avatar GitHub serves for its id
+ * (`githubAccountAvatarUrl`).
  */
 
 const GOOGLE_PICTURE_HOST = "googleusercontent.com";
@@ -60,6 +62,19 @@ export function githubAvatarUrl(value: string | null | undefined): string | unde
 export function githubUserAvatarUrl(person: { readonly login: string }): string {
   const url = new URL(`https://${GITHUB_PICTURE_HOST}/`);
   url.pathname = `/${encodeURIComponent(person.login)}`;
+  url.searchParams.set("v", GITHUB_AVATAR_REVISION);
+  return url.toString();
+}
+
+/**
+ * The avatar GitHub serves for an account by its numeric id, a user's or an
+ * organization's alike. Note that the id is asked for rather than the login,
+ * because GitHub serves an organization's avatar at its id's address alone and
+ * a placeholder at its login's, and the id outlives a rename.
+ */
+export function githubAccountAvatarUrl(accountId: number): string {
+  const url = new URL(`https://${GITHUB_PICTURE_HOST}/`);
+  url.pathname = `/u/${encodeURIComponent(String(accountId))}`;
   url.searchParams.set("v", GITHUB_AVATAR_REVISION);
   return url.toString();
 }

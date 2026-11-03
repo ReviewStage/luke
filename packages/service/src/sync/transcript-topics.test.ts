@@ -1,33 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   queueAgentMessage,
   readAgentQueue,
   takeQueuedMessage,
-} from "@luke/database/models/agent-queue-store";
-import { writeDelegation } from "@luke/database/models/agent-store";
-import { fillChildTitle } from "@luke/database/models/child-titles";
-import { childConversationId } from "@luke/database/models/ids";
-import { createTask } from "@luke/database/models/task-store";
-import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@luke/database/testing";
+} from "@repo/database/models/agent-queue-store";
+import { createTask } from "@repo/database/models/task-store";
+import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@repo/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
-import { recordDelegation } from "../agents/coder-host/delegation.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import {
-  CURSOR_START,
-  delegationPast,
-  transcriptNow,
-  transcriptPast,
-} from "../agents/coder-host/transcript.js";
-import { openChildConversation } from "../agents/eve-host/conversation.js";
+import { CURSOR_START, transcriptNow, transcriptPast } from "../agents/coder-host/transcript.js";
 import {
   AssistantMessageBuilder,
   MESSAGE_ROLE,
@@ -52,11 +42,8 @@ import type { LiveParams } from "./live-query.js";
  * holds for a developer's line, a turn queued, started, and settled, and the
  * journal it writes, which notify the conversation, a turn the agent's, its
  * task's, and its workspace's too, so every view of the agent's status
- * hears it; and for a worker opened, its delegation recorded, and its title
- * filled, which notify the agent's own conversation, whose transcript lists
- * its workers. A transcript read held on Sync answers the agent's
- * message, and a wait for a worker's delegation its record, within a
- * coalesce window of the write.
+ * hears it. A transcript read held on Sync answers the agent's message
+ * within a coalesce window of the write.
  *
  * Synthetic accounts, workspaces, tasks, agents, and turns throughout.
  */
@@ -67,7 +54,7 @@ const NOW = 1_800_000_000_000;
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -115,7 +102,7 @@ const wakesTheTranscript = <A, E, R>(
     return fired;
   });
 
-/** One run event of the turn, as eve's relay hands the writer one. */
+/** One run event of the turn, as a native harness's runner hands the writer one. */
 const runEvent = (target: ConversationTarget, turnId: string) => ({
   conversationId: sessionKey(target.conversationId),
   turnId,
@@ -216,38 +203,7 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
   );
 
   it.effect(
-    "a worker opened, its delegation recorded, and its title filled each notify the agent's own conversation, which the transcript of the agent and of the worker wake on",
-    () =>
-      Effect.gen(function* () {
-        const { target, params } = yield* openAgent;
-        const callId = `call_${randomUUID()}`;
-        const workerId = childConversationId(target.conversationId, callId);
-        const worker: readonly SyncTopic[] = [
-          [TOPIC.CONVERSATION, workerId],
-          [TOPIC.CONVERSATION, target.conversationId],
-        ];
-        const workersRead = { ...params, conversationId: workerId };
-
-        yield* wakesTheTranscript(
-          openChildConversation(target, workerId, "researcher"),
-          worker,
-          params,
-        );
-        yield* wakesTheTranscript(
-          writeDelegation(workerId, callId, { model: "anthropic/claude-opus-5.5", effort: "high" }),
-          [[TOPIC.CONVERSATION, target.conversationId]],
-          workersRead,
-        );
-        yield* wakesTheTranscript(
-          fillChildTitle(target, workerId, "Invite research"),
-          worker,
-          params,
-        );
-      }),
-  );
-
-  it.effect(
-    "on Vespin Sync, a held read of the agent's transcript answers its message, and a wait for a worker's delegation the record, each within a coalesce window of the write",
+    "on Vespin Sync, a held read of the agent's transcript answers its message within a coalesce window of the write",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -285,8 +241,6 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
           const answer = new AssistantMessageBuilder();
           answer.stepStart();
           answer.text("The invites are sent.");
-          const callId = `call_${randomUUID()}`;
-
           const message = yield* wokenOnHub(
             transcriptPast(target, CODER_TOOL_SET, page.cursor, agent, own).pipe(
               Effect.provide(catalog),
@@ -298,21 +252,11 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
               message: answer.finish(randomUUID()),
             }),
           );
-          const delegation = yield* wokenOnHub(
-            delegationPast(target, childConversationId(target.conversationId, callId), agent),
-            recordDelegation(
-              target,
-              callId,
-              { model: "anthropic/claude-opus-5.5", effort: "high" },
-              "researcher",
-            ),
-          );
 
           assert.deepEqual(
             message.answered.messages.map((each) => each.role),
             [MESSAGE_ROLE.ASSISTANT],
           );
-          assert.equal(delegation.answered.delegation?.model, "anthropic/claude-opus-5.5");
         }),
       ),
   );

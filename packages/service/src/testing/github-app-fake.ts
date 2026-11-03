@@ -16,11 +16,11 @@
  */
 
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { Database } from "@luke/database/core/query";
-import { saveGitHubToken } from "@luke/database/models/github-token-store";
-import { parseKeyRing, sealGitHubToken } from "@luke/database/models/provider-key-seal";
-import { account, user } from "@luke/database/schemas/auth";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Database } from "@repo/database/core/query";
+import { saveGitHubToken } from "@repo/database/models/github-token-store";
+import { parseKeyRing, sealGitHubToken } from "@repo/database/models/provider-key-seal";
+import { account, user } from "@repo/database/schemas/auth";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { Clock, Effect, Layer, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -101,7 +101,7 @@ export function listingTokenOf(installationId: number): string {
   return `ghs_fixture_listing_${installationId}`;
 }
 
-/** The user access token GitHub's web flow hands the fake for any code but the refused one. */
+/** The user access token GitHub's web flow hands the fake for any code but the refused one, on the fixture member's GitHub account. */
 export const GITHUB_FIXTURE_AUTHORIZED_TOKEN = "ghu_fixture_authorized";
 
 /** A code the fake's token endpoint refuses, as GitHub refuses one spent or expired. */
@@ -274,8 +274,9 @@ function installationJson(installation: InstallationFixture) {
  * repositories listed on a token minted for the listing and paged the way
  * GitHub pages them; the App mints a token for any of those installations
  * but a suspended one, which GitHub refuses as forbidden;
- * GitHub's web flow exchanges any code but the refused one for a user
- * access token that sees every installation given, and revokes it; the App's
+ * GitHub's web flow exchanges any code but the refused one for an expiring
+ * user access token, the fixture member's, that sees every installation
+ * given, and revokes it, and refreshes no token; the App's
  * bot is the one given, the fixture's own when unsaid; and a repository
  * answers from the script given where a test hands one. Nothing else: any
  * other request fails.
@@ -290,9 +291,19 @@ export function githubReaching(
   const notFound = () => Response.json({ message: "Not Found" }, { status: 404 });
   return fakeGitHub(async (sent) => {
     if (sent.url === TOKEN_ENDPOINT) {
-      return new URLSearchParams(sent.body).get("code") === GITHUB_FIXTURE_REFUSED_CODE
+      const asked = new URLSearchParams(sent.body);
+      // Note that only the web flow's exchange is answered: a refresh finds GitHub unavailable.
+      if (!asked.has("code")) return new Response(null, { status: 503 });
+      return asked.get("code") === GITHUB_FIXTURE_REFUSED_CODE
         ? Response.json({ error: "bad_verification_code" })
-        : Response.json({ access_token: GITHUB_FIXTURE_AUTHORIZED_TOKEN, token_type: "bearer" });
+        : Response.json({
+            access_token: GITHUB_FIXTURE_AUTHORIZED_TOKEN,
+            expires_in: 8 * 60 * 60,
+            refresh_token: "ghr_fixture_authorized",
+            refresh_token_expires_in: 184 * 24 * 60 * 60,
+            token_type: "bearer",
+            scope: "",
+          });
     }
     const { pathname } = new URL(sent.url);
     const scripted = await repository(sent);
@@ -341,6 +352,14 @@ export function githubReaching(
           repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
         },
         { status: 201 },
+      );
+    }
+    if (
+      pathname === "/user" &&
+      sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_AUTHORIZED_TOKEN}`
+    ) {
+      return Response.json(
+        userJson({ id: Number(GITHUB_FIXTURE_MEMBER.ID), login: GITHUB_FIXTURE_MEMBER.LOGIN }),
       );
     }
     if (pathname === "/user/installations") {
@@ -408,7 +427,7 @@ export const openGithubUser = (standing?: GitHubAccountRow) =>
     const now = yield* Clock.currentTimeMillis;
     const row = standing ?? standingGithubRow(now);
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     yield* db.insert(account).values({
       id: `account-${randomUUID()}`,
       accountId: GITHUB_FIXTURE_MEMBER.ID,

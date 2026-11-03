@@ -1,5 +1,5 @@
-import { MessageRoleSchema } from "@luke/wire";
-import type { StoredUIMessage } from "@luke/wire/ui-messages";
+import { MessageRoleSchema } from "@repo/wire";
+import type { StoredUIMessage } from "@repo/wire/ui-messages";
 import { count, eq, getColumnTable } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";

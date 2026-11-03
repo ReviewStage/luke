@@ -21,7 +21,7 @@ import { pulseOnPress } from "../../press-pulse.js";
 
 /** The press: a share of the bar, its glyph over its name in the caption's type, muted until it is the place shown. */
 const BAR_ITEM =
-  "luke-bar-item flex min-h-luke-48 flex-1 basis-0 flex-col items-center justify-center gap-luke-2 border-0 bg-transparent [font-family:inherit] [font-style:inherit] [font-weight:inherit] text-caption text-muted-foreground [-webkit-tap-highlight-color:transparent] aria-[current=page]:text-accent-ink";
+  "ui-bar-item flex min-h-ui-48 flex-1 basis-0 flex-col items-center justify-center gap-ui-2 border-0 bg-transparent [font-family:inherit] [font-style:inherit] [font-weight:inherit] text-caption text-muted-foreground [-webkit-tap-highlight-color:transparent] aria-[current=page]:text-accent-ink";
 
 /**
  * What waits on the reader, as a badge on the glyph's top corner: a
@@ -31,7 +31,7 @@ const BAR_ITEM =
  * from the glyph's strokes.
  */
 const BAR_ITEM_COUNT =
-  "absolute -top-luke-4 left-bar-count-reach h-caption-leading min-w-caption-leading rounded-luke-full bg-attention-fill px-luke-4 text-center text-caption font-emphasis text-on-attention tabular-nums shadow-bar-count-ring";
+  "absolute -top-ui-4 left-bar-count-reach h-caption-leading min-w-caption-leading rounded-ui-full bg-attention-fill px-ui-4 text-center text-caption font-emphasis text-on-attention tabular-nums shadow-bar-count-ring";
 
 /** What waits on the reader in a place: its figure and what it counts, as a reader hears it after the figure. */
 export interface BarCount {
@@ -79,14 +79,14 @@ export function BarItem({
       onPointerDown={onPointerDown}
       onClick={pulseOnPress(onPress)}
     >
-      <span className="relative flex [&_svg]:size-luke-20" aria-hidden="true">
+      <span className="relative flex [&_svg]:size-ui-20" aria-hidden="true">
         {icon}
         {counted ? <span className={BAR_ITEM_COUNT}>{count.value}</span> : null}
       </span>
       <span>
         {children}
         {counted ? (
-          <span className="luke-visually-hidden">
+          <span className="ui-visually-hidden">
             {count.noun === undefined ? `, ${count.value}` : `, ${count.value} ${count.noun}`}
           </span>
         ) : null}

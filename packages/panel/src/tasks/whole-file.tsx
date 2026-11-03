@@ -1,7 +1,7 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readingWords } from "@luke/features/words";
-import { ERROR_STATE_PLACEMENT, ErrorState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readingWords } from "@repo/features/words";
+import { ERROR_STATE_PLACEMENT, ErrorState, Fill, ScrollArea, SpinnerRegion } from "@repo/ui";
 import { Cause } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";

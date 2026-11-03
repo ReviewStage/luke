@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT_ID } from "@luke/runtime/vocabulary";
+import { DEFAULT_AGENT_ID } from "@repo/runtime/vocabulary";
 import { Cause, Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 

@@ -9,7 +9,7 @@
 
 @layer components {
   [data-motion-root] {
-    min-height: var(--luke-list-held-height, auto);
+    min-height: var(--ui-list-held-height, auto);
   }
 
   [data-motion-rows] {

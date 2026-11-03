@@ -28,17 +28,17 @@ import { STATUS_TONE, type StatusTone } from "../status-tone.js";
  *   `md:` breakpoint, because a banner measures its own width.
  * - `AlertTitle` is dropped, because a banner's words are one slot whose
  *   heading, where it has one, is the caller's own `Text`.
- * - Each part keeps the `luke-banner-*` class it wore before the move, which
+ * - Each part keeps the `ui-banner-*` class it wore before the move, which
  *   the sheet's narrow rules select. The words and the glyph do not go
  *   through `cn`, because
  *   tailwind-merge reads `text-body` (a size) and `text-body-foreground` (a
  *   colour) as one group and would keep only the last.
  *
- * `@luke/ui`'s `Banner` (`components/banner/banner.tsx`) is what an app
+ * `@repo/ui`'s `Banner` (`components/banner/banner.tsx`) is what an app
  * draws; this is its inside.
  */
 
-const alertVariants = cva("luke-banner flex-none @container/luke-banner", {
+const alertVariants = cva("ui-banner flex-none @container/ui-banner", {
   variants: {
     look: {
       strip:
@@ -53,7 +53,7 @@ const alertVariants = cva("luke-banner flex-none @container/luke-banner", {
 type AlertLook = NonNullable<VariantProps<typeof alertVariants>["look"]>;
 type AlertTone = StatusTone;
 
-const alertRowVariants = cva("luke-banner-row flex", {
+const alertRowVariants = cva("ui-banner-row flex", {
   variants: {
     look: {
       strip: "min-h-control items-center gap-icon-gap",
@@ -65,7 +65,7 @@ const alertRowVariants = cva("luke-banner-row flex", {
 });
 
 const alertGlyphVariants = cva(
-  "luke-banner-glyph inline-flex flex-none items-center justify-center [&>svg]:size-control-icon",
+  "ui-banner-glyph inline-flex flex-none items-center justify-center [&>svg]:size-control-icon",
   {
     variants: {
       look: {
@@ -90,7 +90,7 @@ const alertGlyphVariants = cva(
   },
 );
 
-const alertDescriptionVariants = cva("luke-banner-words min-w-0 flex-1", {
+const alertDescriptionVariants = cva("ui-banner-words min-w-0 flex-1", {
   variants: {
     look: {
       strip: "block overflow-hidden text-body text-body-foreground",
@@ -163,7 +163,7 @@ function AlertAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="alert-action"
-      className={cn("luke-banner-actions flex min-w-0 items-center gap-control-gap", className)}
+      className={cn("ui-banner-actions flex min-w-0 items-center gap-control-gap", className)}
       {...props}
     />
   );

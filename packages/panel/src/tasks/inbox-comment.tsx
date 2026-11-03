@@ -1,4 +1,4 @@
-import { Comment, type CommentAuthor, cn } from "@luke/ui";
+import { Comment, type CommentAuthor, cn } from "@repo/ui";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 
 /**
@@ -38,7 +38,7 @@ export const INBOX_THREAD = "inbox-thread mb-0";
  * the ground that cuts the line short of the face.
  */
 const INBOX_COMMENT =
-  "inbox-comment relative isolate flex min-w-0 flex-col gap-tight-gap pb-luke-20 last:pb-0 not-last:before:absolute not-last:before:top-inbox-face-half not-last:before:-bottom-inbox-face-half not-last:before:left-inbox-line not-last:before:-z-1 not-last:before:w-luke-2 not-last:before:bg-border not-last:before:content-['']";
+  "inbox-comment relative isolate flex min-w-0 flex-col gap-tight-gap pb-ui-20 last:pb-0 not-last:before:absolute not-last:before:top-inbox-face-half not-last:before:-bottom-inbox-face-half not-last:before:left-inbox-line not-last:before:-z-1 not-last:before:w-ui-2 not-last:before:bg-border not-last:before:content-['']";
 
 /**
  * One message of the thread as a comment (`Comment`): its writer's face on
@@ -84,7 +84,7 @@ export function InboxComment({
               "inbox-comment-body flex min-w-0 flex-col gap-control-gap text-body-size leading-reading text-foreground",
               kind === COMMENT.DRAFT
                 ? "overflow-visible"
-                : "overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]",
+                : "overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)]",
             )}
             {...(kind === COMMENT.DRAFT ? {} : { [REPLY_SCOPE]: "" })}
           >

@@ -1,4 +1,4 @@
-import type { DeviceArch, DevicePlatform } from "@luke/features/device-agent-wire";
+import type { DeviceArch, DevicePlatform } from "@repo/features/device-agent-wire";
 import { index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

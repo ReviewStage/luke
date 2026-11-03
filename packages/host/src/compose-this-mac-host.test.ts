@@ -1,48 +1,61 @@
 /**
- * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the member turns it on: a Mac holding no record never enrolled but by the member's own Turn on, which enrolls it under the device id the app already had before the login item is registered, and a Mac the service removed never enrolled again but by the member's own act.
+ * compose-this-mac-host.test.ts -- This Mac's host kept as the account's experiments say: a Mac with no record enrolled under a new id, its record written and the install script run; a record of the account's kept under its id, never enrolled again while it stands; the host stopped with its files kept where Bring your own host is off; and a record that is not the account's left alone.
  *
- * The composer runs over a real state folder of its own, holding the device
- * id the account already had, and a fake service and login item that each
- * say what they were asked, on the test's clock. Synthetic ids and secrets
- * throughout.
+ * The composer runs over a real state folder of its own, a fake service
+ * that enrolls the Mac, lists the account's hosts, and serves the install
+ * script, and a fake launchd and installer that each say what they were
+ * asked, on the test's clock. Synthetic ids and secrets throughout.
  */
 
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@luke/features";
-import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
-import { HOST_WIRE } from "@luke/features/host-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Duration, Effect, Layer, Option, Result, Schema } from "effect";
+import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@repo/features";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { HOST_RELEASE } from "@repo/features/host-release";
+import { HOST_WIRE } from "@repo/features/host-wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@repo/gateway";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { EXPERIMENT, type Experiment } from "@repo/settings";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
+import { Duration, Effect, Layer, Option, Result } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
-import { composeThisMacHost, type ThisMacSetup } from "./compose-this-mac-host.js";
-import {
-  THIS_MAC_HOST_STANDING,
-  type ThisMacHostStanding,
-  thisMacHostStandingSchema,
-} from "./contract/this-mac-host.js";
-import {
-  HOST_LOGIN_ITEM_ACT,
-  HOST_LOGIN_ITEM_STATUS,
-  type HostLoginItemAct,
-  reporterLayer,
-  ThisMacHost,
-} from "./effect/seams.js";
-import { readHostDevice, writeHostDevice } from "./host-device-record.js";
-import { writeLocalAgentState } from "./local-agent-state.js";
+import { composeThisMacHost } from "./compose-this-mac-host.js";
+import { reporterLayer, ThisMacHost } from "./effect/seams.js";
+import { type HostDevice, readHostDevice, writeHostDevice } from "./host-device-record.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const USER_ID = "user-fixture";
-const DEVICE_ID = "5f0c7a1e-2b3d-4e5f-8a9b-0c1d2e3f4a5b";
-const SERVICE = "https://luke.test";
+const MINTED_ID = "5f0c7a1e-2b3d-4e5f-8a9b-0c1d2e3f4a5b";
+const KEPT_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const MACHINE_ID = "e".repeat(64);
+const SERVICE = "https://app.test";
 const SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"c".repeat(43)}`;
+const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
+const SCRIPT = "#!/bin/sh\necho install\n";
+/** Where the fake service takes an enroll, so its responder reads the version the enroll carried. */
+const ENROLL_URL = `${SERVICE}/enroll`;
 /** The panel's own operator, which asks the host's methods. */
 const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
-const decodeStanding = Schema.decodeUnknownSync(thisMacHostStandingSchema);
-const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
+const FILES = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+
+const BRING_YOUR_OWN_HOST_ON = {
+  [EXPERIMENT.BRING_YOUR_OWN_HOST]: true,
+};
+
+interface MacOptions {
+  /** The experiments the account has on; Bring your own host by default. */
+  readonly experiments?: Partial<Record<Experiment, boolean>>;
+  /** The devices the service lists among the account's hosts, beside each it enrolls. */
+  readonly listed?: readonly string[];
+  /** Whether launchd holds the host's LaunchAgent. */
+  readonly loaded?: boolean;
+  /** How many runs of the install script fail before one lands. */
+  readonly failedInstalls?: number;
+}
 
 /** The clock nudged, and the state folder's reads and writes, which wait on no clock, let land, until the condition holds. */
 const until = (holds: () => boolean) =>
@@ -54,48 +67,53 @@ const until = (holds: () => boolean) =>
     assert.ok(holds(), "the composer never got there");
   });
 
-/**
- * This Mac's `luke-host` composed over a state folder of its own, the
- * account's device id already kept there, a service that enrolls the Mac
- * and lists the setup `setup` says until the test lists another (none where
- * it cannot answer), and a login item that takes every act; what each fake
- * was asked, in the order it was asked.
- */
-const thisMac = (stateRoot: string, options: { setup?: Option.Option<ThisMacSetup> } = {}) =>
+/** The clock nudged, and the state folder's reads and writes let land, for the time given. */
+const nudged = (time: Duration.Input) =>
   Effect.gen(function* () {
-    let setup = options.setup ?? Option.none<ThisMacSetup>();
+    const rounds = Duration.toMillis(time) / 100;
+    for (let round = 0; round < rounds; round += 1) {
+      yield* TestClock.adjust(Duration.millis(100));
+      yield* Effect.yieldNow;
+    }
+  });
+
+/**
+ * This Mac's host composed over a state folder of its own, with what each
+ * fake was asked, in the order it was asked: the service's enrolls, by the
+ * device id and the version they carried, and the installer's and launchd's
+ * acts.
+ */
+const thisMac = (stateRoot: string, options: MacOptions = {}) =>
+  Effect.gen(function* () {
     const asked: string[] = [];
-    const enrolled: string[] = [];
+    const enrolled: { deviceId: string; version: string | null }[] = [];
+    let failedInstalls = options.failedInstalls ?? 0;
+    const experiments: Partial<Record<Experiment, boolean>> =
+      options.experiments ?? BRING_YOUR_OWN_HOST_ON;
+    const listed = new Set(options.listed ?? []);
+    let version: string | null = null;
     const client = {
       enrollOwn: (deviceId: string) =>
-        Effect.sync((): OwnEnrollOutcome => {
-          enrolled.push(deviceId);
-          asked.push("enroll");
-          return { outcome: OWN_ENROLL_OUTCOME.ENROLLED, deviceSecret: SECRET };
-        }),
+        HttpClient.get(ENROLL_URL).pipe(
+          Effect.orDie,
+          Effect.map((): OwnEnrollOutcome => {
+            enrolled.push({ deviceId, version });
+            asked.push("enroll");
+            listed.add(deviceId);
+            return { outcome: OWN_ENROLL_OUTCOME.ENROLLED, deviceSecret: SECRET };
+          }),
+        ),
     };
-    yield* Effect.orDie(
-      writeLocalAgentState(stateRoot, { devices: { [USER_ID]: DEVICE_ID }, launches: [] }),
-    );
-    const loginItem = (act: HostLoginItemAct) =>
-      Effect.sync(() => {
-        asked.push(`login item ${act}`);
-        return Result.succeed(
-          act === HOST_LOGIN_ITEM_ACT.UNREGISTER
-            ? HOST_LOGIN_ITEM_STATUS.NOT_REGISTERED
-            : HOST_LOGIN_ITEM_STATUS.ENABLED,
-        );
-      });
     const composer = yield* composeThisMacHost({
       kernel: {
-        stateRoot,
         hostedServiceBaseUrl: SERVICE,
-        createId: () => "never-minted",
+        createId: () => MINTED_ID,
         runMode: { sendsNetwork: true },
       },
       account: { capabilitiesActive: () => true },
       accountId: () => USER_ID,
-      deviceSetup: () => Effect.sync(() => setup),
+      experimentOn: (experiment) => Effect.succeed(experiments[experiment] === true),
+      hostListed: (deviceId) => Effect.succeed(Option.some(listed.has(deviceId))),
       client,
     }).pipe(
       Effect.provide(
@@ -103,192 +121,198 @@ const thisMac = (stateRoot: string, options: { setup?: Option.Option<ThisMacSetu
           NodeFileSystem.layer,
           NodePath.layer,
           scriptedSpawner(() => undefined).layer,
-          fakeHttpClientLayer(() => Promise.reject(new Error("this test reaches no service"))),
+          fakeHttpClientLayer((url, init) => {
+            if (url === ENROLL_URL) {
+              version = new Headers(init.headers).get(HOST_WIRE.VERSION_HEADER);
+              return new Response("{}");
+            }
+            assert.equal(url, `${SERVICE}${HOST_WIRE.INSTALL_SCRIPT_PATH}`);
+            return new Response(SCRIPT);
+          }),
           reporterLayer(() => undefined),
           Layer.succeed(ThisMacHost, {
-            loginItem,
-            version: Effect.succeed(Result.succeed("0.1.0")),
+            stateRoot,
+            runsHost: true,
             machine: Effect.succeed({
               name: "Studio",
               platform: DEVICE_PLATFORM.DARWIN,
               arch: DEVICE_ARCH.ARM64,
+              machineId: MACHINE_ID,
+            }),
+            loaded: Effect.succeed(options.loaded ?? false),
+            install: (script) =>
+              Effect.sync(() => {
+                asked.push(script === SCRIPT ? "install" : "install another script");
+                if (failedInstalls === 0) return Result.succeed(undefined);
+                failedInstalls -= 1;
+                return Result.fail("could not download the release");
+              }),
+            stop: Effect.sync(() => {
+              asked.push("stop");
+              return Result.succeed(undefined);
             }),
           }),
         ),
       ),
     );
     yield* composer.lifetime;
-    const call = (
-      method:
-        | typeof GATEWAY_METHOD.THIS_MAC_HOST_READ
-        | typeof GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON,
-    ) => {
-      const handler = composer.methods[method];
+    const read = Effect.gen(function* () {
+      const handler = composer.methods[GATEWAY_METHOD.THIS_MAC_HOST_READ];
       assert.ok(handler !== undefined);
-      return Effect.map(Effect.orDie(handler({}, CONTEXT)), decodeStanding);
-    };
-    const listSetup = (next: Option.Option<ThisMacSetup>) => {
-      setup = next;
-    };
-    return { asked, enrolled, call, listSetup };
+      return yield* Effect.orDie(handler({}, CONTEXT));
+    });
+    return { asked, enrolled, read };
   });
 
-/** The first standing `read` answers past off, read again as the clock moves. */
-const firstStanding = (read: Effect.Effect<ThisMacHostStanding>) =>
+/** The state folder with the record given written, as the install's host would have left it. */
+const recorded = (record: HostDevice) =>
   Effect.gen(function* () {
-    let standing = yield* read;
-    for (
-      let round = 0;
-      round < 20_000 && standing.standing === THIS_MAC_HOST_STANDING.OFF;
-      round += 1
-    ) {
-      yield* TestClock.adjust(Duration.millis(100));
-      yield* Effect.yieldNow;
-      standing = yield* read;
-    }
-    return standing;
+    const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
+    yield* writeHostDevice(stateRoot, record);
+    return stateRoot;
   });
-
-/** A minute of the clock nudged, in which the composer, reading again every five seconds, reads a dozen times. */
-const aDozenReads = Effect.gen(function* () {
-  for (let round = 0; round < 600; round += 1) {
-    yield* TestClock.adjust(Duration.millis(100));
-    yield* Effect.yieldNow;
-  }
-});
 
 it.effect(
-  "a Mac holding no record stands not turned on and enrolls nothing on its own, and Turn on enrolls it before it registers luke-host, under the device id the app already had",
+  "a Mac with no record is enrolled under a new id on the release's version, its record written, and then the install script run",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
-        const { asked, enrolled, call } = yield* thisMac(stateRoot);
-        const standing = yield* firstStanding(call(GATEWAY_METHOD.THIS_MAC_HOST_READ));
-        yield* aDozenReads;
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
+        const mac = yield* thisMac(stateRoot);
+        yield* until(() => mac.asked.length >= 2);
 
-        assert.deepEqual(standing, { standing: THIS_MAC_HOST_STANDING.NOT_TURNED_ON });
-        // Note that the length is asserted rather than the list, which an assertion would narrow to an empty one.
-        assert.equal(asked.length, 0, "nothing was enrolled and no login item asked");
-        assert.equal(Option.isNone(yield* readHostDevice(stateRoot)), true);
-
-        yield* Effect.forkScoped(call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON));
-        yield* until(() => asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`));
-        assert.deepEqual(asked.slice(0, 2), [
-          "enroll",
-          `login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`,
-        ]);
-        assert.deepEqual(enrolled, [DEVICE_ID]);
-        const record = yield* readHostDevice(stateRoot);
-        assert.deepEqual(Option.getOrUndefined(record), {
-          deviceId: DEVICE_ID,
+        assert.deepEqual(mac.asked, ["enroll", "install"]);
+        assert.deepEqual(mac.enrolled, [{ deviceId: MINTED_ID, version: HOST_RELEASE?.VERSION }]);
+        assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), {
+          deviceId: MINTED_ID,
           deviceSecret: SECRET,
           serviceOrigin: SERVICE,
         });
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+        const fileSystem = yield* FileSystem.FileSystem;
+        const mode = (yield* fileSystem.stat(join(stateRoot, "device.json"))).mode & 0o777;
+        assert.equal(mode, 0o600, "the record is readable by its owner alone");
+        assert.deepEqual(yield* mac.read, { deviceId: MINTED_ID, machineId: MACHINE_ID });
+      }).pipe(Effect.provide(FILES)),
     ),
 );
 
+it.effect("a record the service refused is enrolled again under its own id, not a new one", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const stateRoot = yield* recorded({
+        deviceId: KEPT_ID,
+        deviceSecret: OLD_SECRET,
+        serviceOrigin: SERVICE,
+        refused: true,
+      });
+      const mac = yield* thisMac(stateRoot);
+      yield* until(() => mac.asked.includes("install"));
+
+      assert.deepEqual(
+        mac.enrolled.map((each) => each.deviceId),
+        [KEPT_ID],
+      );
+      assert.equal(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.deviceSecret, SECRET);
+    }).pipe(Effect.provide(FILES)),
+  ),
+);
+
 it.effect(
-  "a Mac whose secret Vespin refused is shown removed and never enrolled again on its own, only by Turn on again",
+  "the account's standing record is never enrolled again, so its secret holds, and the script runs only where launchd holds no host",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
-        yield* writeHostDevice(stateRoot, {
-          deviceId: DEVICE_ID,
-          deviceSecret: OLD_SECRET,
-          serviceOrigin: SERVICE,
-          refused: true,
+        const record = { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE };
+        const stopped = yield* thisMac(yield* recorded(record), { listed: [KEPT_ID] });
+        const running = yield* thisMac(yield* recorded(record), {
+          listed: [KEPT_ID],
+          loaded: true,
         });
-        const { asked, enrolled, call } = yield* thisMac(stateRoot);
-        const standing = yield* firstStanding(call(GATEWAY_METHOD.THIS_MAC_HOST_READ));
-        yield* aDozenReads;
+        yield* until(() => stopped.asked.length > 0);
+        yield* nudged(Duration.minutes(1));
 
-        assert.deepEqual(standing, { standing: THIS_MAC_HOST_STANDING.REMOVED });
-        assert.deepEqual(yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ), standing);
-        assert.deepEqual(enrolled, []);
-        assert.deepEqual(asked, []);
-
-        yield* Effect.forkScoped(call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON));
-        yield* until(() => enrolled.length > 0);
-        assert.deepEqual(enrolled, [DEVICE_ID]);
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+        assert.deepEqual(stopped.asked, ["install"]);
+        assert.equal(running.asked.length, 0, "a running host is left as it is");
+      }).pipe(Effect.provide(FILES)),
     ),
 );
 
-/** This Mac enrolled before the app starts, its record kept unrefused, and where it first reads as more than off. */
-const enrolledMac = (setup: Option.Option<ThisMacSetup>) =>
-  Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
-    yield* writeHostDevice(stateRoot, {
-      deviceId: DEVICE_ID,
-      deviceSecret: OLD_SECRET,
-      serviceOrigin: SERVICE,
-    });
-    const mac = yield* thisMac(stateRoot, { setup });
-    const first = yield* firstStanding(mac.call(GATEWAY_METHOD.THIS_MAC_HOST_READ));
-    return { ...mac, first };
-  });
-
 it.effect(
-  "a setup the service lists as failed reads with why, and Retry starts luke-host again",
+  "an install that failed after the enroll is tried again after a backoff by the script alone, never by enrolling again",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const why = "the sandbox image could not be pulled";
-        const { asked, call, first } = yield* enrolledMac(
-          Option.some({ setup: DEVICE_SETUP.FAILED, setupFailure: why }),
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
+        const mac = yield* thisMac(stateRoot, { failedInstalls: 1 });
+        yield* until(() => mac.asked.length >= 2);
+        yield* nudged(Duration.seconds(5));
+        assert.deepEqual(
+          mac.asked,
+          ["enroll", "install"],
+          "nothing is tried again before the backoff",
         );
-        const before = asked.length;
-        yield* call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON);
 
-        assert.deepEqual(first, {
-          standing: THIS_MAC_HOST_STANDING.SETUP_FAILED,
-          reason: why,
-          deviceId: DEVICE_ID,
+        yield* until(() => mac.asked.length >= 3);
+        assert.deepEqual(mac.asked, ["enroll", "install", "install"]);
+        assert.equal(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.deviceId, MINTED_ID);
+      }).pipe(Effect.provide(FILES)),
+    ),
+);
+
+it.effect(
+  "with Bring your own host off, the account's host is stopped and its record and files kept",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const record = { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE };
+        const stateRoot = yield* recorded(record);
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.makeDirectory(join(stateRoot, "owned-agents"), { recursive: true });
+        yield* fileSystem.writeFileString(join(stateRoot, "owned-agents", "agent-1"), "");
+        const mac = yield* thisMac(stateRoot, {
+          experiments: {},
+          listed: [KEPT_ID],
+          loaded: true,
         });
-        assert.deepEqual(asked.slice(before), [
-          `login item ${HOST_LOGIN_ITEM_ACT.UNREGISTER}`,
-          `login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`,
-        ]);
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+        yield* until(() => mac.asked.length > 0);
+        yield* nudged(Duration.minutes(1));
+
+        assert.deepEqual(mac.asked, ["stop"]);
+        assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
+        assert.equal(yield* fileSystem.exists(join(stateRoot, "owned-agents", "agent-1")), true);
+      }).pipe(Effect.provide(FILES)),
     ),
 );
 
 it.effect.each([
-  { case: "ready", setup: Option.some<ThisMacSetup>({}) },
-  { case: "unreadable", setup: Option.none<ThisMacSetup>() },
-])(
-  "Retry on a Mac whose setup is $case never stops luke-host, which may be mid-turn",
-  ({ setup }) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { asked, call } = yield* enrolledMac(setup);
-        yield* call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON);
+  {
+    case: "the record was enrolled with another service",
+    record: {
+      deviceId: KEPT_ID,
+      deviceSecret: OLD_SECRET,
+      serviceOrigin: "https://preview.app.test",
+    },
+    experiments: BRING_YOUR_OWN_HOST_ON,
+  },
+  {
+    case: "the record is another account's",
+    record: { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE },
+    experiments: BRING_YOUR_OWN_HOST_ON,
+  },
+] as const)("nothing is enrolled, installed, or stopped where $case", ({ record, experiments }) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const stateRoot = yield* recorded(record);
+      const on = yield* thisMac(stateRoot, { experiments });
+      const off = yield* thisMac(stateRoot, {
+        experiments: { ...experiments, [EXPERIMENT.BRING_YOUR_OWN_HOST]: false },
+        loaded: true,
+      });
+      yield* nudged(Duration.minutes(1));
 
-        assert.equal(asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.UNREGISTER}`), false);
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
-    ),
-);
-
-it.effect(
-  "a setup failure the service listed stays with its Retry while the service cannot answer",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const why = "the sandbox image could not be pulled";
-        const { call, listSetup } = yield* enrolledMac(
-          Option.some({ setup: DEVICE_SETUP.FAILED, setupFailure: why }),
-        );
-        listSetup(Option.none());
-        yield* TestClock.adjust(Duration.minutes(1));
-
-        assert.deepEqual(yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ), {
-          standing: THIS_MAC_HOST_STANDING.SETUP_FAILED,
-          reason: why,
-          deviceId: DEVICE_ID,
-        });
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
-    ),
+      // Note that the length is asserted rather than the list, which an assertion would narrow to an empty one.
+      assert.equal(on.asked.length + off.asked.length, 0);
+      assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
+    }).pipe(Effect.provide(FILES)),
+  ),
 );

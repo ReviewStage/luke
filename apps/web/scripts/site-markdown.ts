@@ -1,9 +1,9 @@
 /**
  * site-markdown.ts -- the site's Markdown documents answered as modules of finished HTML: CHANGELOG.md's releases and PRIVACY.md's policy, drawn by `src/site-markdown.tsx` when the site is built or served.
  *
- * A page imports `virtual:luke/changelog-releases` or
- * `virtual:luke/privacy-policy` and is handed values, every release's and
- * section's HTML among them, so the renderer (`@luke/ui/markdown`) runs in
+ * A page imports `virtual:site/changelog-releases` or
+ * `virtual:site/privacy-policy` and is handed values, every release's and
+ * section's HTML among them, so the renderer (`@repo/ui/markdown`) runs in
  * the build and never in a visitor's tab. The drawing module is TypeScript
  * that reaches the shared packages' sources, so it is loaded through a Vite
  * server of its own, which runs it as the SSR build runs the pages, and
@@ -33,14 +33,14 @@ interface SiteDocument {
 /** Each module this answers, and its document. */
 const SITE_DOCUMENTS = new Map<string, SiteDocument>([
   [
-    "virtual:luke/changelog-releases",
+    "virtual:site/changelog-releases",
     {
       file: resolveFile("../../../CHANGELOG.md"),
       draw: (site, words) => site.parseReleases(words),
     },
   ],
   [
-    "virtual:luke/privacy-policy",
+    "virtual:site/privacy-policy",
     { file: resolveFile("../../../PRIVACY.md"), draw: (site, words) => site.policyOf(words) },
   ],
 ]);
@@ -108,7 +108,7 @@ export function siteMarkdown(): Plugin {
   let building = false;
   let drawings: Map<string, unknown> | undefined;
   return {
-    name: "luke-site-markdown",
+    name: "site-markdown",
     configResolved(config) {
       building = config.command === "build";
     },

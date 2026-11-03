@@ -18,8 +18,8 @@
  * wire schemas flipped (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@luke/wire";
-import { wireKeys } from "@luke/wire/effect";
+import { HTTP_METHOD } from "@repo/wire";
+import { wireKeys } from "@repo/wire/effect";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
@@ -42,7 +42,6 @@ import {
   startBrief,
 } from "../agent-wire.js";
 import { githubRepositoryFullNameSchema } from "../github-repositories-wire.js";
-import { lukeToolsAnswerSchema } from "../luke-tools-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
@@ -52,6 +51,7 @@ import {
   terminalRenameRequestSchema,
   terminalsAnswerSchema,
 } from "../terminal-wire.js";
+import { workspaceToolsAnswerSchema } from "../workspace-tools-wire.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
@@ -225,10 +225,15 @@ export const agentsContract = {
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
   /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
+  workspaceTools: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/workspace-tools` }))
+    .input(idParams)
+    .output(EffectSchema.flip(workspaceToolsAnswerSchema)),
+  /** `workspaceTools` under the path a desktop or host built before the rename still calls; goes once the releases after it are out. */
   lukeTools: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/luke-tools` }))
     .input(idParams)
-    .output(EffectSchema.flip(lukeToolsAnswerSchema)),
+    .output(EffectSchema.flip(workspaceToolsAnswerSchema)),
   /** One agent's stopped sandbox resumed, on the developer's click. */
   sandboxResume: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/sandbox/resume` }))

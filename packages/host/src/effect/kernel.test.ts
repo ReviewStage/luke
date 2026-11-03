@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";

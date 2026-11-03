@@ -19,9 +19,11 @@ import { githubAppFromEnvironment } from "./github/github-app.js";
 import { githubRateGate } from "./github/github-rate-gate.js";
 import { pullRequestLinksLayer } from "./github/pull-request-links.js";
 import { integrationConnectFromEnvironment } from "./integrations/integration-connect.js";
+import { localDemoFromEnvironment } from "./local/local-demo.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { pageLinksFromEnvironment } from "./pages/page-links.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
+import { slackBotFromEnvironment } from "./slack/slack-bot.js";
 import { syncFromEnvironment } from "./sync/hub.js";
 import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
 
@@ -58,6 +60,11 @@ const gatedGitHubClient = githubRateGate.pipe(
 /** Our GitHub App as the environment names it, named once so every layer that reaches it shares one. */
 const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment));
 
+/** Our Slack bot as the environment names it, named once so every layer that reaches it shares one. */
+const slackBot = slackBotFromEnvironment.pipe(
+  Layer.provide(Layer.merge(FetchHttpClient.layer, integrationConnectFromEnvironment)),
+);
+
 /**
  * The services every web function's and every agent's effects run against. A
  * function reaches this layer only through its edge's runtime, so a service
@@ -72,12 +79,14 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  *
  * `IntegrationConnect` is the one place each integration's connector UID and
  * allowlist are read, for the account routes that connect and disconnect an account and
- * the agents that read its tokens alike.
+ * the agents that read its tokens alike. `SlackBot` is the one place the
+ * bot's own connector is read (`slack/slack-bot.ts`).
  *
  * `SettledTurnListener` is here because the store writer tells it of every
  * coding agent turn it settles, on whichever function the settle ran: it
- * counts the turn and hands the agent's final message to the agent that
- * started it (`agents/coder-host/settled-turns.ts`).
+ * counts the turn, hands the agent's final message to the agent that
+ * started it, and sends an automation run's result on Slack
+ * (`agents/coder-host/settled-turns.ts`).
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
@@ -111,6 +120,10 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  * (`pages/page-links.ts`), for the frame that mints a link and the page
  * route that reads it back alike.
  *
+ * `LocalDemo` is the one place the local demo's flag is read, behind the
+ * local server's own guard (`local/local-demo.ts`), so a deployment's
+ * environment holds it off whatever the flag says.
+ *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
  * behind this door would have to be traced into every bundle. `@effect/sql-pg`
@@ -124,10 +137,11 @@ export const webServices = Layer.mergeAll(
   hostedEnvironment,
   githubApp,
   settledTurnListener.pipe(
-    Layer.provide(Layer.mergeAll(gatedGitHubClient, githubApp, hostedEnvironment)),
+    Layer.provide(Layer.mergeAll(gatedGitHubClient, githubApp, hostedEnvironment, slackBot)),
   ),
   sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
+  slackBot,
   webLogger,
   syncFromEnvironment,
   bearerCallersLayer,
@@ -135,9 +149,10 @@ export const webServices = Layer.mergeAll(
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   pullRequestLinksLayer,
   productAnalyticsFromEnvironment.pipe(
-    Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
+    Layer.provide(Layer.mergeAll(FetchHttpClient.layer, hostedEnvironment, webSqlClient)),
   ),
   invitationMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
+  localDemoFromEnvironment,
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run on a runtime over these services may require. */

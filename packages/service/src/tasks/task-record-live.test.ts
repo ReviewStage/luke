@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { listPages, writePage } from "@luke/database/models/plan-pages";
-import { readTaskPlan, savePlanText, updateTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
-import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@luke/features/live-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { listPages, writePage } from "@repo/database/models/plan-pages";
+import { readTaskPlan, savePlanText, updateTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
+import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@repo/features/live-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -35,7 +35,7 @@ const HELD_PARTS = ["plan", "pages"] as const;
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -118,7 +118,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             owner,
             taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         live = yield* liveRecordOf(owner, task.id);
@@ -130,7 +130,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             owner,
             taskPageOwner(task.id),
             { pageId: shown.id, title: "Invite funnel", html: "<p>Two</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
 
@@ -141,7 +141,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             owner,
             taskPageOwner(other.id),
             { title: "Billing funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {

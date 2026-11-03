@@ -15,10 +15,10 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { PRODUCT_EVENT } from "@luke/features/analytics";
-import { EVENTS_MAXIMUM_BODY_BYTES } from "@luke/features/contract";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { PRODUCT_EVENT } from "@repo/features/analytics";
+import { EVENTS_MAXIMUM_BODY_BYTES } from "@repo/features/contract";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { type Context, Effect, Layer, Option, Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
@@ -27,7 +27,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { eventsProcedures } from "./events-procedures.js";
 
-const EVENTS = "https://luke.test/api/events";
+const EVENTS = "https://app.test/api/events";
 const JSON_TYPE = "application/json";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
@@ -37,7 +37,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };

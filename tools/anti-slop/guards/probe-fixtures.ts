@@ -14,11 +14,8 @@ import { loadModule, type RepositoryGuard, readText } from "./guard.ts";
 
 const CLAUDE_PROBE = "tools/claude-code-probe";
 const CODEX_PROBE = "tools/codex-probe";
-const CLAUDE_FIXTURES = [
-  "fixtures/claude-code-stream.jsonl",
-  "fixtures/claude-code-probe-report.json",
-];
-const CODEX_FIXTURES = ["fixtures/hermetic/app-server.jsonl", "fixtures/live/report.json"];
+const CLAUDE_FIXTURES = [`${CLAUDE_PROBE}/fixtures/claude-code-stream.jsonl`];
+const CODEX_FIXTURES = ["packages/agent-runner/src/testing/app-server.jsonl"];
 
 type FindLeaks = (text: string, secrets: readonly never[]) => readonly string[];
 type Scrub = (value: unknown) => unknown;
@@ -52,11 +49,8 @@ export function fixtureProblems(
   return problems;
 }
 
-function fixturesOf(root: string, probe: string, files: readonly string[]) {
-  return files.map((file) => ({
-    file: `${probe}/${file}`,
-    text: readText(root, `${probe}/${file}`),
-  }));
+function fixturesOf(root: string, files: readonly string[]) {
+  return files.map((file) => ({ file, text: readText(root, file) }));
 }
 
 async function probeProblems(root: string): Promise<readonly string[]> {
@@ -68,16 +62,8 @@ async function probeProblems(root: string): Promise<readonly string[]> {
     throw new Error(`${CODEX_PROBE}'s sanitize.ts no longer exports findLeaks`);
   const scrub = (claude.sanitizer as (options: object) => Scrub)({ secrets: [], replacements: [] });
   return [
-    ...fixtureProblems(
-      fixturesOf(root, CLAUDE_PROBE, CLAUDE_FIXTURES),
-      claude.fixtureLeaks as FindLeaks,
-      scrub,
-    ),
-    ...fixtureProblems(
-      fixturesOf(root, CODEX_PROBE, CODEX_FIXTURES),
-      codex.findLeaks as FindLeaks,
-      undefined,
-    ),
+    ...fixtureProblems(fixturesOf(root, CLAUDE_FIXTURES), claude.fixtureLeaks as FindLeaks, scrub),
+    ...fixtureProblems(fixturesOf(root, CODEX_FIXTURES), codex.findLeaks as FindLeaks, undefined),
   ];
 }
 

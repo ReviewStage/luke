@@ -1,5 +1,5 @@
-import { WireValueSchema } from "@luke/wire";
-import { verbatimJsonSchema } from "@luke/wire/effect";
+import { WireValueSchema } from "@repo/wire";
+import { verbatimJsonSchema } from "@repo/wire/effect";
 import { Schema as EffectSchema } from "effect";
 
 /**
@@ -494,7 +494,7 @@ export type IntegrationConnectAnswer = typeof integrationConnectAnswerSchema.Typ
 
 /** The page the browser lands on once a sign-in settled, and what its address carries. */
 export const INTEGRATION_LANDING = {
-  PATH: "/integration-connected.html",
+  PATH: "/integration-connected",
   PROVIDER_PARAM: "provider",
   STATUS_PARAM: "status",
 } as const;

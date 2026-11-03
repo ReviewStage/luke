@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readVisibleAgent } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readVisibleAgent } from "@repo/database/models/agent-store";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -13,10 +13,10 @@ import {
   readAutomation,
   recordAutomationRun,
   updateAutomationCommitted,
-} from "@luke/database/models/automation-store";
-import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
-import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
+} from "@repo/database/models/automation-store";
+import { isWorkspaceMember, personalWorkspaceOf } from "@repo/database/models/workspace-store";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { nextScheduledRun, readSchedule } from "@repo/features/automation-schedule";
 import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
@@ -31,7 +31,7 @@ import {
   type AutomationTrigger,
   type automationChangeRequestSchema,
   type automationCreateRequestSchema,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
@@ -43,6 +43,7 @@ import {
 import { standingsOf } from "../agents/coder-host/stop.js";
 import {
   recordServerEvent,
+  SERVER_AUTOMATION_CHANGE_ACTION,
   type SERVER_AUTOMATION_SOURCE,
   SERVER_EVENT,
 } from "../events/server-events.js";
@@ -207,6 +208,7 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: automation.targetAgentId }
         : { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: automation.archiveSuccessful,
+    slackDelivery: automation.slackDelivery,
     mine: automation.userId === userId,
     creatorId: automation.userId,
   };
@@ -219,10 +221,11 @@ interface TargetColumns {
 }
 
 /**
- * A target the account may aim runs at: a new agent each run, or an agent
- * the account may read (`readVisibleAgent`), its task included; an
- * agent it cannot read is refused as no request at all, the same as a
- * malformed one.
+ * A target the account may aim runs at: a new agent each run, the same
+ * agent with none named yet, which the first run starts and the automation
+ * keeps, or an agent the account may read (`readVisibleAgent`), its task
+ * included; an agent it cannot read is refused as no request at all, the
+ * same as a malformed one.
  */
 const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -231,6 +234,8 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (target.kind === AUTOMATION_TARGET.NEW_AGENT) {
     return { targetKind: AUTOMATION_TARGET.NEW_AGENT, targetAgentId: null };
   }
+  if (target.agentId === null)
+    return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: null };
   const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, target.agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
@@ -385,6 +390,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...(asked.archiveSuccessful === undefined
       ? undefined
       : { archiveSuccessful: asked.archiveSuccessful }),
+    ...(asked.slackDelivery === undefined ? undefined : { slackDelivery: asked.slackDelivery }),
   };
   return { changes, webhookSecret: webhook?.secret };
 });
@@ -439,6 +445,7 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
       scope,
       ...target,
       archiveSuccessful: made.archiveSuccessful ?? false,
+      slackDelivery: made.slackDelivery ?? false,
     }),
   );
   if (Option.isNone(created)) {
@@ -454,10 +461,14 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
       txid: undefined,
     };
   }
-  yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
-    trigger_kind: made.trigger.kind,
-    source,
-  });
+  yield* recordServerEvent(
+    SERVER_EVENT.AUTOMATION_CREATE,
+    { userId, workspaceId: standing.organizationId },
+    {
+      trigger_kind: made.trigger.kind,
+      source,
+    },
+  );
   return {
     automation: yield* summaryOf(userId, created.value.automation),
     webhookSecret: webhook?.secret,
@@ -474,6 +485,7 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   standing: Automation,
   asked: typeof automationChangeRequestSchema.Type,
+  source: (typeof SERVER_AUTOMATION_SOURCE)[keyof typeof SERVER_AUTOMATION_SOURCE],
 ): Effect.fn.Return<
   AutomationWritten,
   HostedRefusal,
@@ -488,6 +500,11 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
     updateAutomationCommitted(userId, standing.id, changes, access),
   );
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  yield* recordServerEvent(
+    SERVER_EVENT.AUTOMATION_CHANGE,
+    { userId, workspaceId: standing.organizationId },
+    { action: SERVER_AUTOMATION_CHANGE_ACTION.EDIT, source },
+  );
   return {
     automation: yield* summaryOf(userId, written.value.automation),
     webhookSecret,
@@ -495,13 +512,19 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** One automation the account reads deleted with its history, answering the transaction it went in; one it may not delete is refused as not permitted. */
+/** One automation the account reads deleted with its history, counted as its member's or its agent's, answering the transaction it went in; one it may not delete is refused as not permitted. */
 export const removeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  id: string,
+  standing: Automation,
+  source: (typeof SERVER_AUTOMATION_SOURCE)[keyof typeof SERVER_AUTOMATION_SOURCE],
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
-  const deleted = yield* hostedStoreOrUnavailable(deleteAutomationCommitted(userId, id));
+  const deleted = yield* hostedStoreOrUnavailable(deleteAutomationCommitted(userId, standing.id));
   if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  yield* recordServerEvent(
+    SERVER_EVENT.AUTOMATION_CHANGE,
+    { userId, workspaceId: standing.organizationId },
+    { action: SERVER_AUTOMATION_CHANGE_ACTION.DELETE, source },
+  );
   return deleted.value.txid;
 });
 
@@ -516,7 +539,7 @@ export interface AutomationRanNow {
  * The automation run now, as the account asks, under the caller's key: a
  * manual firing recorded once per key and acted on at once, through the
  * same guards and the same start a scheduled run takes
- * (`automation-runs.ts`), reaching eve as `eveFor` reaches it; the same key
+ * (`automation-runs.ts`), reaching the agent's sessions as `eveFor` reaches them; the same key
  * again answers the run it made. The caller has read the automation as one
  * the account may run.
  */

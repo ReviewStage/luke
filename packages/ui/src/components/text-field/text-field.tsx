@@ -30,6 +30,12 @@ import type { FieldControl } from "../form-field/form-field.js";
  * start a line itself, as on a phone's keyboard, ⌘Return (Ctrl+Enter off
  * the Mac).
  *
+ * Neither ever asks the browser to check it: a field to be filled says so
+ * through its `FormField` (`aria-required`), never the native `required`,
+ * and the form it stands in is never checked by the browser, so its owner
+ * checks what it holds and says what is wrong in the field's error, never
+ * the browser's own bubble.
+ *
  * A number field holds a number, or nothing while it is empty or holds what
  * is not yet one (a lone minus sign), as the browser reads it; a busy text
  * area, its words on their way somewhere, takes no typing and answers
@@ -99,7 +105,7 @@ export const TEXT_AREA_SUBMIT = {
 
 export type TextAreaSubmit = (typeof TEXT_AREA_SUBMIT)[keyof typeof TEXT_AREA_SUBMIT];
 
-/** How a text area stands: in a field's well, or bare in a card that is its well, at the insets the card sets (`--luke-text-area-inset-*`). */
+/** How a text area stands: in a field's well, or bare in a card that is its well, at the insets the card sets (`--ui-text-area-inset-*`). */
 export const TEXT_AREA_LOOK = {
   WELL: "well",
   BARE: "bare",
@@ -135,7 +141,7 @@ const TEXT_FIELD_SIZE_CLASS = {
     "h-auto p-0 border-0 bg-transparent focus:bg-transparent text-title font-title tracking-title outline-none",
   /** A step under a control, on the well's ground, its edge lighting while it holds the caret; 16px words under a finger. */
   [TEXT_FIELD_SIZE.COMPACT]:
-    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
+    "h-control-compact rounded-control-compact border-border bg-well px-ui-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
 } as const satisfies Record<TextFieldSize, string | undefined>;
 
 /**
@@ -198,8 +204,6 @@ type TextEntryProps = Named & {
   placeholder?: string | undefined;
   disabled?: boolean | undefined;
   readOnly?: boolean | undefined;
-  /** Whether the form it stands in refuses to submit while it is empty, or, for an address, malformed. */
-  required?: boolean | undefined;
   autoFocus?: boolean | undefined;
   name?: string | undefined;
   maxLength?: number | undefined;
@@ -247,7 +251,6 @@ function entryAttributes(props: TextEntryProps) {
     placeholder: props.placeholder,
     disabled: props.disabled,
     readOnly: props.readOnly,
-    required: props.required,
     autoFocus: props.autoFocus,
     name: props.name,
     maxLength: props.maxLength,
@@ -396,7 +399,7 @@ export function TextArea({
       enterKeyHint={enterKeyHint}
       // Note that a growing note sizes to its words, which the browser does
       // without reading `rows`, so its rows reach its stylesheet as its least height.
-      style={grow ? cssCustomProperties({ "--luke-text-area-rows": rows }) : undefined}
+      style={grow ? cssCustomProperties({ "--ui-text-area-rows": rows }) : undefined}
       {...entryAttributes(props)}
       value={props.value}
       readOnly={busy || props.readOnly}

@@ -3,7 +3,7 @@ import { Schema as EffectSchema } from "effect";
 /**
  * account-wire.ts -- the account's preferences snapshot, its access, and its deletion, as `/api/account/*` carries them.
  *
- * The snapshot is the settings vocabulary's (`@luke/settings`), which sits
+ * The snapshot is the settings vocabulary's (`@repo/settings`), which sits
  * above this boundary, so each part is declared here only as far as the wire
  * knows it: the shared `preferences` a record, the link choice, the coding
  * agents' default, the chapters model, and the experiments as whatever they carry, and the
@@ -49,8 +49,15 @@ export const accountDeleteAnswerSchema = EffectSchema.Struct({
 /**
  * What the signed-in account may open in the app's clients (GET): whether it
  * is an admin, and nothing of any other account. A client draws by it and
- * authorizes nothing: the admin dashboard's own gate decides every read.
+ * authorizes nothing: the admin dashboard's own gate decides every read, and
+ * the Start route every Start.
  */
 export const accountAccessAnswerSchema = EffectSchema.Struct({
   admin: EffectSchema.Boolean,
+  /**
+   * True where a Start on a task that names no repository runs, as it does
+   * in the local demo alone, where the task's agents run on a host; absent
+   * everywhere else, and from a service older than it.
+   */
+  startsWithoutRepository: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });

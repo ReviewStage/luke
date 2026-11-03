@@ -12,7 +12,7 @@
  * task's id.
  */
 
-import { listRepositoryPins, setRepositoryPin } from "@luke/database/models/repository-pin-store";
+import { listRepositoryPins, setRepositoryPin } from "@repo/database/models/repository-pin-store";
 import { Effect, Option } from "effect";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
@@ -41,9 +41,13 @@ export function repositoryPinsProcedures(seams: RepositoryPinsProcedureSeams) {
       if (Option.isNone(set)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       // Counted only where the write changed a row, which is the one that answers a transaction.
       if (set.value.txid !== undefined) {
-        yield* recordServerEvent(SERVER_EVENT.REPOSITORY_PIN, context.userId, {
-          pinned: input.pinned,
-        });
+        yield* recordServerEvent(
+          SERVER_EVENT.REPOSITORY_PIN,
+          { userId: context.userId },
+          {
+            pinned: input.pinned,
+          },
+        );
       }
       return set.value;
     }),

@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
@@ -9,11 +9,11 @@ import {
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
-import { taskKey } from "@luke/features/workspace-key";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { noMatchWords, readFailedWords, TERM } from "@repo/features/words";
+import { taskKey } from "@repo/features/workspace-key";
+import type { WorkspaceMember } from "@repo/features/workspace-wire";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   Breadcrumbs,
   CHIP_LOOK,
@@ -33,7 +33,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -352,7 +352,7 @@ function PathLine({
   // Note that the menu hangs from the line rather than from its crumb, because the path clips what stands inside it,
   // and that the line is pulled back by a crumb's inset, so its first mark stands on the title's edge.
   return (
-    <div className="plan-task-path mb-luke-4">
+    <div className="plan-task-path mb-ui-4">
       <div className="relative -ms-breadcrumb-pill-inline flex min-w-0" ref={room}>
         <Breadcrumbs label={PATH_LABEL} crumbs={drawn} />
         {menu}

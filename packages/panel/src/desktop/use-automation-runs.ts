@@ -1,6 +1,6 @@
-import { AUTOMATION_CALL_FAILURE, type AutomationRunView } from "@luke/features/automation-view";
-import type { AutomationRunSummary, AutomationWorkspaceRun } from "@luke/features/automation-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import { AUTOMATION_CALL_FAILURE, type AutomationRunView } from "@repo/features/automation-view";
+import type { AutomationRunSummary, AutomationWorkspaceRun } from "@repo/features/automation-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useState } from "react";
 import { useAct } from "../act.js";
 import { useFollowedRuns, useFollowedWorkspaceRuns } from "./use-followed-automations.js";

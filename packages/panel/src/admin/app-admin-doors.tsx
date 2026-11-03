@@ -3,7 +3,7 @@
  *
  * The window acts through its act port alone, so each read is `admin.read`
  * on it, which the host asks of the service under the account's session
- * (`@luke/features/admin-client`), and the star is `admin.favorite`. The
+ * (`@repo/features/admin-client`), and the star is `admin.favorite`. The
  * port carries no signal, so a read the screen stopped waiting on runs to
  * its end, and the read hook drops its answer (`use-admin-read.ts`), as it
  * drops any read it aborted. The app is signed in before it
@@ -14,11 +14,11 @@
  * to itself and an account opens on a press, as a step of that history.
  */
 
-import type { AdminReadParams, AdminRefused } from "@luke/features/admin-wire";
-import { ADMIN_UNANSWERED } from "@luke/features/admin-wire";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { ACT_KIND } from "@luke/host/acts";
-import { COLLECTION_STATE, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import type { AdminReadParams, AdminRefused } from "@repo/features/admin-wire";
+import { ADMIN_UNANSWERED } from "@repo/features/admin-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ACT_KIND } from "@repo/host/acts";
+import { COLLECTION_STATE, ERROR_STATE_PLACEMENT, ErrorState } from "@repo/ui";
 import { askAct } from "../act.js";
 import { failureShown } from "../failure-report.js";
 import {

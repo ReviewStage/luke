@@ -8,7 +8,7 @@ import type { Baseline } from "./baseline.ts";
 
 /**
  * busy-guard.ts -- what the `async-press-needs-busy` rule reads: which
- * `@luke/ui` components are buttons that take `busy`, the props that carry
+ * `@repo/ui` components are buttons that take `busy`, the props that carry
  * their press, the calls that start an act, and the baseline of files that
  * still hold a press without it. Every kind of button is busy one way
  * (`BusyProps`), and a press that waits on the server shows it.
@@ -17,7 +17,7 @@ export const BUSY_GUARD_RULE = "anti-slop/async-press-needs-busy";
 
 const PLUGIN_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** The `@luke/ui` buttons that take `busy` and `busyLabel`, by the name they are exported under. */
+/** The `@repo/ui` buttons that take `busy` and `busyLabel`, by the name they are exported under. */
 export const BUSY_BUTTONS: ReadonlySet<string> = new Set([
   "Button",
   "IconButton",
@@ -53,10 +53,10 @@ export const PROMISE_CHAIN: ReadonlySet<string> = new Set(["then", "catch", "fin
 export const HANDLER_HOOKS: ReadonlySet<string> = new Set(["useCallback", "useEffectEvent"]);
 
 /** The package a button is imported from, and what a relative import means inside it. */
-const UI_MODULE = /^@luke\/ui(?:\/|$)/u;
+const UI_MODULE = /^@repo\/ui(?:\/|$)/u;
 const UI_PACKAGE = "packages/ui/";
 
-/** Whether `specifier`, imported by the file at `file`, reaches `@luke/ui`. */
+/** Whether `specifier`, imported by the file at `file`, reaches `@repo/ui`. */
 export function isUiModule(specifier: string, file: string): boolean {
   return UI_MODULE.test(specifier) || (file.startsWith(UI_PACKAGE) && specifier.startsWith("."));
 }

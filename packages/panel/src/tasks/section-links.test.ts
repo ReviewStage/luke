@@ -6,8 +6,8 @@ import {
   type Mention,
   type MentionLines,
   mentionMarkdown,
-} from "@luke/features/mention-link";
-import type { Task } from "@luke/features/task-wire";
+} from "@repo/features/mention-link";
+import type { Task } from "@repo/features/task-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -58,12 +58,12 @@ const UNIT_LINK = '.plan-unit-more button[aria-label="Copy link"]';
 /** The sections' Copy link buttons, the title's left out. */
 function sectionLinks(container: HTMLElement): HTMLButtonElement[] {
   return [...container.querySelectorAll<HTMLButtonElement>(UNIT_LINK)].filter(
-    (button) => button.closest(".luke-page-header-actions") === null,
+    (button) => button.closest(".ui-page-header-actions") === null,
   );
 }
 
 /** The title's Copy link button, which ends its line in the header's acts. */
-const TITLE_LINK = '.luke-page-header-actions button[aria-label="Copy link"]';
+const TITLE_LINK = '.ui-page-header-actions button[aria-label="Copy link"]';
 
 const roots: Root[] = [];
 const copied: string[] = [];
@@ -99,7 +99,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
 
 function chipNamed(container: HTMLElement, name: string): HTMLButtonElement {
   const chip = [...container.querySelectorAll<HTMLButtonElement>("[data-mention-ref]")].find(
-    (each) => each.querySelector(".luke-inline-ref-label")?.textContent === name,
+    (each) => each.querySelector(".ui-inline-ref-label")?.textContent === name,
   );
   assert.ok(chip, `a chip named ${name}`);
   return chip;
@@ -135,7 +135,7 @@ test("a section's Copy link button copies the section's link, its bare address, 
   assert.ok(more, "the Rollout section has a Copy link button");
   await act(async () => more.click());
 
-  assert.deepEqual(copied, [`https://vespin.dev/acme/plan/${TASK_ID}#rollout`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/task/${TASK_ID}#rollout`]);
 });
 
 test("an ask to show a section scrolls the document to it, and an ask for one it no longer holds to its top", () => {
@@ -262,7 +262,7 @@ test("copying a section's link from its button opens no editor, as a click into 
   const afterCopy = container.querySelector(".plan-document-editor");
   act(() =>
     rollout
-      ?.querySelector("p:not(.luke-markdown-heading)")
+      ?.querySelector("p:not(.ui-markdown-heading)")
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
   );
 
@@ -366,7 +366,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
   const task: Task = {
     ...TASK,
     document: {
-      body: `## Notes\nfirst\n\n## Notes\nsecond, see [@Notes](https://vespin.dev/acme/plan/${TASK_ID}#notes-1)`,
+      body: `## Notes\nfirst\n\n## Notes\nsecond, see [@Notes](https://vespin.dev/acme/task/${TASK_ID}#notes-1)`,
       assumptions: [],
     },
   };
@@ -395,8 +395,8 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
 
   assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "notes-1" }]);
   assert.deepEqual(copied, [
-    `https://vespin.dev/acme/plan/${TASK_ID}#notes`,
-    `https://vespin.dev/acme/plan/${TASK_ID}#notes-1`,
+    `https://vespin.dev/acme/task/${TASK_ID}#notes`,
+    `https://vespin.dev/acme/task/${TASK_ID}#notes-1`,
   ]);
 });
 
@@ -406,7 +406,7 @@ test("a folder's chip, and a file's where no file opens from here, hang their ca
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
 
   assert.deepEqual(
-    chips.map((chip) => [chip.querySelector(".luke-inline-ref-label")?.textContent, chip.tagName]),
+    chips.map((chip) => [chip.querySelector(".ui-inline-ref-label")?.textContent, chip.tagName]),
     [
       ["session-store.ts", "SPAN"],
       ["auth/", "SPAN"],
@@ -434,7 +434,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
     ),
   );
   const folder = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].find(
-    (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent === "auth/",
+    (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent === "auth/",
   );
   assert.ok(folder);
 
@@ -489,7 +489,7 @@ test("the title's Copy link button ends the title's line, shown while the keyboa
 
   await act(async () => more.click());
 
-  assert.deepEqual(copied, [`https://vespin.dev/acme/plan/${TASK_ID}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/task/${TASK_ID}`]);
 });
 
 test("on a plan that cannot be edited, the title's Copy link button is a Tab stop", () => {

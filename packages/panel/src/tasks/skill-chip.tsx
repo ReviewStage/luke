@@ -1,11 +1,11 @@
-import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
+import type { MarkdownComponents, MarkdownNodeProps } from "@repo/ui/markdown";
 import {
   holdsSlashWord,
   type SkillOption,
   skillTokens,
   skillWord,
   type TextRange,
-} from "@luke/ui/skill-mention";
+} from "@repo/ui/skill-mention";
 import {
   createContext,
   type ReactNode,
@@ -55,7 +55,7 @@ interface SkillFileDoors {
 
 /** The element a chip is written into the words as, and the one attribute it carries. */
 const SKILL_ELEMENT = {
-  TAG: "luke-skill",
+  TAG: "app-skill",
   NAME: "name",
 } as const;
 

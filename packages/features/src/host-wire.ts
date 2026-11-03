@@ -3,10 +3,12 @@ import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   DEVICE_SETUP_FAILURE_MAX_CHARS,
+  deviceMachineFields,
   deviceSetupSchema,
   HOST_UPDATE_FAILURE_MAX_CHARS,
   hostUpdateSchema,
 } from "./device-agent-wire.js";
+import { HOST_RELEASE } from "./host-release.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -39,7 +41,7 @@ export const HOST_WIRE = {
   VERSION_HEADER: "luke-host-version",
   /** The install script's path on the service's own origin, which the web service rewrites onto `INSTALL_SCRIPT_ROUTE`. */
   INSTALL_SCRIPT_PATH: "/install.sh",
-  /** The route that answers the install script, with the release and the origin it was asked on written in (`@luke/service/agents/host-install-script-app`). */
+  /** The route that answers the install script, with the release and the origin it was asked on written in (`@repo/service/agents/host-install-script-app`). */
   INSTALL_SCRIPT_ROUTE: "/api/hosts/install-script",
   /** What every poll secret begins with: the bearer a pairing box polls on, which names its pairing and nothing else. */
   POLL_SECRET_PREFIX: "lkp_",
@@ -164,7 +166,8 @@ export type HostEnrollAnswer = typeof hostEnrollAnswerSchema.Type;
  * An own device's enroll: the id of the member's machine, a Mac its desktop
  * signed in on, and its name, platform and architecture, which create the
  * device under the account where the account never registered the id; all
- * three or none, since a device the account already has needs none. The
+ * three or none, since a device the account already has needs none; and
+ * the machine it runs on where it read it (`deviceMachineFields`). The
  * desktop's own sign-in is its credential, as its bearer and never a
  * browser's session, and the version of the host program it enrolls for
  * rides in `HOST_WIRE.VERSION_HEADER`. It answers the device's id and its
@@ -177,17 +180,25 @@ export const ownDeviceEnrollRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(enrollingMachineFields.name),
   platform: EffectSchema.optionalKey(enrollingMachineFields.platform),
   arch: EffectSchema.optionalKey(enrollingMachineFields.arch),
+  ...deviceMachineFields,
 });
 
 export type OwnDeviceEnrollRequest = typeof ownDeviceEnrollRequestSchema.Type;
 
 /**
  * A pairing started (POST), with no credential: the box's name (its
- * hostname), platform, and architecture, its daemon's version riding in
+ * hostname), platform, and architecture, and the machine it runs on where
+ * it read it (`deviceMachineFields`), its daemon's version riding in
  * `HOST_WIRE.VERSION_HEADER` as on every call of a host's. The service
  * mints the device's id once a member approves; the box never names one.
+ * Note that the service keeps no machine of the start's yet, since the
+ * box's first register follows its approve at once and names it again; it
+ * rides here so a service that does keep it needs no newer host.
  */
-export const hostPairingStartRequestSchema = EffectSchema.Struct(enrollingMachineFields);
+export const hostPairingStartRequestSchema = EffectSchema.Struct({
+  ...enrollingMachineFields,
+  ...deviceMachineFields,
+});
 
 export type HostPairingStartRequest = typeof hostPairingStartRequestSchema.Type;
 
@@ -310,7 +321,9 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
  * machine updating itself to a newer release says where that stands
  * (`HOST_UPDATE`), and why for one that failed, as its last beat said; both
  * are absent while no update is under way, and from a service older than
- * them.
+ * them. A machine says which machine it runs on, and its model, as its host
+ * last reported them (`deviceMachineFields`); each is absent where it never
+ * did, and from a service older than them.
  */
 const hostSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -328,6 +341,8 @@ const hostSchema = EffectSchema.Struct({
   updateFailure: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(HOST_UPDATE_FAILURE_MAX_CHARS)),
   ),
+  machineId: EffectSchema.optionalKey(EffectSchema.String),
+  model: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type Host = typeof hostSchema.Type;
@@ -372,5 +387,25 @@ export function hostUpgradeCommand(installScriptUrl: string): string {
   return `curl -fsSL ${installScriptUrl} | sh`;
 }
 
-/** The command that takes our host out of the account the install command set it up in, with no sudo: its service, its agents' folders, its state and its releases (`apps/host/scripts/luke-host.sh`). Note that it names the install's own link, since the account's PATH may not hold `~/.local/bin`. */
-export const HOST_UNINSTALL_COMMAND = "~/.local/bin/luke-host uninstall";
+/** The host's command as the install command set it up in an account, by its link (`apps/web/install/install.sh`), which a person's shell expands. Note that it is named by its path, since the account's PATH may not hold `~/.local/bin`. */
+export const HOST_COMMAND = "~/.local/bin/vespin-host";
+
+/** The first release whose program and command are named `vespin-host` rather than `luke-host`. Note that its tarballs, their one top folder, and a `bin/luke-host` link keep the old name, which a host through 0.6.0 updates itself by (`apps/host/scripts/release-layout.ts`). */
+const HOST_RENAMED_IN = "0.7.0";
+
+/** The command's link as an install of a release before `HOST_RENAMED_IN` made it, which stays where it was made, since an older app's Remove names it. */
+const HOST_COMMAND_BEFORE_RENAME = "~/.local/bin/luke-host";
+
+/**
+ * The command that takes our host out of the account the install command set
+ * it up in, with no sudo: its service, its agents' folders, its state and its
+ * releases (`apps/host/scripts/vespin-host.sh`), named by the link the host's
+ * reported version stands behind. A host that has reported none yet is most
+ * likely one the install script just set up, so it is named by the release
+ * that script installs now (`HOST_RELEASE`).
+ */
+export function hostUninstallCommand(version: string | null): string {
+  const running = version ?? HOST_RELEASE?.VERSION ?? HOST_RENAMED_IN;
+  const renamed = hostVersionMeets(running, HOST_RENAMED_IN);
+  return `${renamed ? HOST_COMMAND : HOST_COMMAND_BEFORE_RENAME} uninstall`;
+}

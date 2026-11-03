@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
+import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -67,13 +67,13 @@ async function mounted(source: SkillSource = SOURCE) {
 test("the skill list's foot names Move, Insert by ⏎ and ⇥, and Close by Esc", async () => {
   const { page, type } = await mounted();
   await type("dep");
-  const foot = page.querySelector(".luke-menu-keys");
+  const foot = page.querySelector(".ui-menu-keys");
   assert.ok(foot, "the list has a foot");
   assert.deepEqual(
     [...foot.children].map((item) => item.textContent),
     ["↑↓Move", "⏎⇥Insert", "EscClose"],
   );
-  assert.equal(foot.querySelectorAll("kbd.luke-shortcut").length, 5);
+  assert.equal(foot.querySelectorAll("kbd.ui-shortcut").length, 5);
 });
 
 test("a search no skill matches reads the one no-match line", async () => {

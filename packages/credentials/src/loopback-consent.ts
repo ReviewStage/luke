@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { SIGN_IN_FAILURE } from "@luke/features/words";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { SIGN_IN_FAILURE } from "@repo/features/words";
 import { Deferred, Duration, Effect, Exit, Option, Result, type Scope, Semaphore } from "effect";
 import * as HttpServer from "effect/http/HttpServer";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";

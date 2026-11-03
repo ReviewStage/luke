@@ -1,8 +1,8 @@
-import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
-import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { noMatchWords, TERM } from "@luke/features/words";
-import { managesWorkspace } from "@luke/features/workspace-role";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
+import { noMatchWords, TERM } from "@repo/features/words";
+import { managesWorkspace } from "@repo/features/workspace-role";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import {
   APP_SETTING_SCHEMA,
   describedSettings,
@@ -11,18 +11,18 @@ import {
   type SettingsRowsInput,
   settingFieldForId,
   settingIdVisible,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   EXPERIMENT_ANCHOR,
   SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
   SETTINGS_SEARCH_ROW,
-} from "@luke/settings/settings-anchors";
+} from "@repo/settings/settings-anchors";
 import {
   SETTINGS_PAGE_LIST,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsView,
-} from "@luke/settings/settings-views";
+} from "@repo/settings/settings-views";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -43,7 +43,7 @@ import {
   WRITING_KEYS_IN_CONTEXT,
   WRITING_SHORTCUTS,
   type WritingShortcut,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   commandKeyshortcuts,
   GAP,
@@ -56,18 +56,18 @@ import {
   SearchField,
   Shortcut,
   Stack,
-} from "@luke/ui";
-import { integrationLines } from "@luke/ui/integration-search";
-import { land } from "@luke/ui/landed";
-import { searchHit } from "@luke/ui/search-score";
-import { type MatchRange, searchTokens } from "@luke/ui/search-tokens";
-import { useStateWithRef } from "@luke/ui/use-state-with-ref";
+} from "@repo/ui";
+import { integrationLines } from "@repo/ui/integration-search";
+import { land } from "@repo/ui/landed";
+import { searchHit } from "@repo/ui/search-score";
+import { type MatchRange, searchTokens } from "@repo/ui/search-tokens";
+import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { MAC_REPOSITORIES, settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
+import { settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
 import { experimentPages, settingsPageShown } from "./settings/settings-rows.js";
 
 /**
@@ -330,7 +330,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.ADD_HOSTS,
           label: "Add hosts",
           page: SETTINGS_VIEW.HOSTS,
-          haystack: ["Add hosts", "machine host server linux mac install luke-host"],
+          haystack: ["Add hosts", "machine host server linux mac install vespin-host"],
         }
       : undefined,
     // The Workspace page's groups, as it draws them for the workspace it
@@ -371,18 +371,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // Where each repository is cloned on this Mac, drawn on the Workspace page only where the app can run a terminal there.
-    input.workspace && input.capabilities.includes(HOST_CAPABILITY.MAC_TERMINAL)
-      ? {
-          id: SETTINGS_SECTION.MAC_REPOSITORIES,
-          label: MAC_REPOSITORIES,
-          page: SETTINGS_VIEW.WORKSPACE,
-          haystack: [
-            MAC_REPOSITORIES,
-            "repository repositories clone folder checkout git command run checks terminal path",
-          ],
-        }
-      : undefined,
     // The workspace's name, which an owner or an admin changes on the identity row, but not the account's first workspace, which its owner's account name names.
     input.workspace !== undefined &&
     managesWorkspace(input.workspace) &&
@@ -392,6 +380,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           label: "Rename workspace",
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: ["Rename workspace", "rename name change workspace photo"],
+        }
+      : undefined,
+    // The workspace's link, which its owner alone changes on the row under its identity.
+    input.workspace?.role === WORKSPACE_ROLE.OWNER
+      ? {
+          id: SETTINGS_SEARCH_ROW.WORKSPACE_SLUG,
+          label: "Workspace link",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["Workspace link", "link slug address url change workspace"],
         }
       : undefined,
     // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.

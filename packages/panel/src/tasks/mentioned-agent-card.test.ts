@@ -1,26 +1,26 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentPullRequest,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   encodeMention,
   MENTION_KIND,
   type MentionPlace,
   mentionMarkdown,
-} from "@luke/features/mention-link";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { ACTOR_KIND, ACTOR_STATE, LUKE_ACTOR } from "@luke/ui/actor-model";
+} from "@repo/features/mention-link";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { ACTOR_KIND, ACTOR_STATE, APP_ACTOR } from "@repo/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -307,21 +307,19 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the agent is drawn as its chip");
   restOn(chip);
   await settle();
-  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     agent: card.matches("[data-agent-card]"),
     pullRequest: card.matches("[data-pull-request-card]"),
     reading: card.matches("[data-hover-card-skeleton]"),
-    led: card.querySelector(".luke-hover-card-lead") !== null,
+    led: card.querySelector(".ui-hover-card-lead") !== null,
     actor: card.getAttribute("data-actor-card") ?? undefined,
-    name: card.querySelector(".luke-hover-card-name")?.textContent,
+    name: card.querySelector(".ui-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
-    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
-    working:
-      card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
-    foot: card.querySelector(".luke-hover-card-row:last-child .luke-hover-card-row-label")
-      ?.textContent,
+    corner: card.querySelector(".ui-hover-card-corner")?.textContent,
+    working: card.querySelector('.ui-hover-card-lead .state-glyph[data-state="working"]') !== null,
+    foot: card.querySelector(".ui-hover-card-row:last-child .ui-hover-card-row-label")?.textContent,
     words: card.textContent,
   };
   act(() => {
@@ -344,7 +342,7 @@ test("a chip of an agent the window lists not reads the workspace's agents its n
   const chip = container.querySelector("[data-mention-ref]") ?? undefined;
 
   assert.ok(
-    chip?.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
+    chip?.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
     "the chip wears its harness",
   );
   const card = await cardOf(chip);
@@ -385,7 +383,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
   );
 
   assert.ok(
-    container.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
+    container.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
     "the box's chip wears its harness",
   );
 });
@@ -418,7 +416,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
   );
 
   assert.ok(
-    container.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
+    container.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
     "the box's chip wears its harness",
   );
 });
@@ -587,11 +585,11 @@ test("an agent named as an actor leads its card with its tile while its read is 
 
 test("a chip of Vespin hangs Vespin's own card", async () => {
   const container = await drawn(
-    `Ask ${mentionMarkdown({ kind: MENTION_KIND.LUKE, taskId: BILLING.id }, "Vespin", PLACE)}.`,
+    `Ask ${mentionMarkdown({ kind: MENTION_KIND.APP, taskId: BILLING.id }, "Vespin", PLACE)}.`,
   );
 
   const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
-  assert.deepEqual([card.actor, card.name], [ACTOR_KIND.LUKE, "Vespin"]);
+  assert.deepEqual([card.actor, card.name], [ACTOR_KIND.APP, "Vespin"]);
 });
 
 test("Vespin and an agent named as actors hang Vespin's card and the agent's tab's card, the agent's read as it is hung", async () => {
@@ -599,7 +597,7 @@ test("Vespin and an agent named as actors hang Vespin's card and the agent's tab
     createElement(
       "p",
       null,
-      createElement(ActorRef, { actor: LUKE_ACTOR }),
+      createElement(ActorRef, { actor: APP_ACTOR }),
       createElement(ActorRef, {
         actor: {
           kind: ACTOR_KIND.AGENT,
@@ -616,7 +614,7 @@ test("Vespin and an agent named as actors hang Vespin's card and the agent's tab
 
   const lukeCard = await cardOf(luke);
   const agentCard = await cardOf(agent);
-  assert.equal(lukeCard.actor, ACTOR_KIND.LUKE);
+  assert.equal(lukeCard.actor, ACTOR_KIND.APP);
   assert.deepEqual(
     [agentCard.agent, agentCard.led, agentCard.name, agentCard.foot],
     [true, true, "Prorate seat changes", "On Billing by seat"],

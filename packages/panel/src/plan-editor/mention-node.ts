@@ -1,5 +1,5 @@
-import { MENTION_SIGIL, mentionMarkdownLink } from "@luke/features/link-grammar";
-import { mentionLinksIn, mentionName } from "@luke/features/mention-link";
+import { MENTION_SIGIL, mentionMarkdownLink } from "@repo/features/link-grammar";
+import { mentionLinksIn, mentionName } from "@repo/features/mention-link";
 import { type Editor, type JSONContent, Node } from "@tiptap/core";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
@@ -9,7 +9,7 @@ import type { MentionDrawer, MentionNode, MentionNodeDoors } from "./contract.js
  * mention-node.ts -- a mention in the editors' words: an atom holding the name it was written with and its link's target, drawn by the panel, written back as the link it was read from.
  *
  * A mention is written into markdown as a link whose label starts with `@`
- * (`@luke/features/mention-link`, which only the panel reads). The editor
+ * (`@repo/features/mention-link`, which only the panel reads). The editor
  * holds it as one node, an atom one Backspace takes out whole, its name and
  * target in the node and never in the DOM's attributes, since the recording
  * masks words and not every attribute: the chip inside the node's element
@@ -17,7 +17,7 @@ import type { MentionDrawer, MentionNode, MentionNodeDoors } from "./contract.js
  * or take it out (a date's picker). Read from markdown, a link whose words
  * start with `@` becomes the node, its formatting, if its label had any,
  * left behind; written back, it is the link again, `[@name](target)`,
- * written and read as every link is (`@luke/features/link-grammar`).
+ * written and read as every link is (`@repo/features/link-grammar`).
  * Nothing here knows what a target names.
  */
 

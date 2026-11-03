@@ -1,9 +1,9 @@
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
-} from "@luke/features/integration-view";
-import { integrationConnectionOf } from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/integration-view";
+import { integrationConnectionOf } from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 

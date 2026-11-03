@@ -1,16 +1,16 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
   GAP,
   Inline,
+  ProductMark,
   Stack,
   TerminalIcon,
   Text,
   UnassignedAvatar,
-  WingFace,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -69,7 +69,7 @@ function Avatars(): React.JSX.Element {
               />
               <Avatar
                 name={PRODUCT_NAME}
-                glyph={<WingFace />}
+                glyph={<ProductMark />}
                 shape={AVATAR_SHAPE.SQUARE}
                 size={size}
                 tiled

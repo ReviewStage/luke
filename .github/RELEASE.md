@@ -3,15 +3,16 @@
 Releases are cut by pushing a `vX.Y.Z` tag. GitHub Actions does the rest: the **Release**
 workflow builds, signs, notarizes, staples, and validates an arm64 macOS app with
 electron-builder on a `macos-15` runner, then publishes the GitHub Release and uploads
-every asset. The Apple, Google, PostHog, and Sentry secrets the workflow needs are configured on
-this repository, so the tag push is the whole release.
+every asset. The Apple, PostHog, and Sentry secrets the workflow needs are configured on
+this repository, so here the tag push is the whole release.
 
 The workflow's first job asks whether the signing certificate secret exists, because a
-job-level `if` cannot read the `secrets` context. It is a guard against a tag pushed
-where the credentials are absent — a fork, or a repository whose secrets were cleared —
-and it never prints a secret. A manual dispatch bypasses the guard on purpose, so a
-rehearsal run without credentials fails loudly at the secret check instead of silently
-doing nothing.
+job-level `if` cannot read the `secrets` context. Where it does not exist, a fork or a
+repository whose secrets were cleared, a tag push skips the release job without failing
+it, and the release is cut by hand from a Mac (see "Emergency fallback" below). The job
+never prints a secret. A manual dispatch bypasses the guard on purpose, so a rehearsal
+run without credentials fails loudly at the secret check instead of silently doing
+nothing.
 
 ## What a release publishes
 
@@ -104,9 +105,9 @@ Confirm the three consumers see the build:
 
 ```sh
 curl -sI -o /dev/null -w '%{http_code}\n' \
-  https://github.com/ReviewStage/luke/releases/latest/download/Vespin.dmg
-curl -s https://api.github.com/repos/ReviewStage/luke/releases/latest | grep tag_name
-curl -sL https://github.com/ReviewStage/luke/releases/latest/download/latest-mac.yml
+  https://github.com/ReviewStage/vespin/releases/latest/download/Vespin.dmg
+curl -s https://api.github.com/repos/ReviewStage/vespin/releases/latest | grep tag_name
+curl -sL https://github.com/ReviewStage/vespin/releases/latest/download/latest-mac.yml
 ```
 
 To check a downloaded build by hand, keep the zip and its checksum file in the same
@@ -124,9 +125,29 @@ spctl -a -t exec -vv Vespin.app
 
 A successful assessment identifies the source as `Notarized Developer ID`.
 
+## Host releases
+
+The host daemon (`apps/host`, `@repo/host-daemon`) is released apart from the desktop app by
+the **Release host** workflow (`.github/workflows/release-host.yml`). It runs when a
+`host-vX.Y.Z` tag is pushed, and the version must match `apps/host/package.json`; the
+workflow refuses a tag that does not.
+
+The workflow builds a tarball for linux-x64, linux-arm64, and darwin-arm64, each with a
+`.sha256` file, and checks that the packaged daemon reports the tag's version. It creates the
+GitHub release as a draft, uploads all six files, and only then publishes it. It never marks
+the release as latest, because the desktop's download link and its updater read
+`releases/latest`. A manual dispatch is a rehearsal: it builds the tarballs and keeps them as
+workflow artifacts, and publishes nothing.
+
+The served install script installs only the release that `HOST_RELEASE` names, in
+`packages/features/src/host-release.ts`. After the workflow publishes a release, open a pull
+request that moves `HOST_RELEASE` to the new version and its digests, which the workflow
+prints and the `.sha256` files carry. Until it merges, the install script keeps installing the
+previous release.
+
 ## GitHub Actions secrets
 
-All nine are configured. This section is for rotating them or standing the workflow up
+All eight are configured. This section is for rotating them or standing the workflow up
 somewhere else; the workflow fails its secret check if any one is missing.
 
 | Secret | Purpose | Source |
@@ -136,7 +157,7 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_KEY_P8_BASE64` | Base64-encoded App Store Connect API private key | The downloaded `.p8` file from App Store Connect |
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
-| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `LUKE_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
+| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `APP_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
 | `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
 | `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Vespin@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 
@@ -178,7 +199,7 @@ stored `luke-notary` notarytool profile
 (`xcrun notarytool store-credentials luke-notary`), plus a `gh` login with write access.
 
 ```sh
-export LUKE_CODESIGN_IDENTITY='Your Name (TEAMID)'
+export APP_CODESIGN_IDENTITY='Your Name (TEAMID)'
 export POSTHOG_PROJECT_API_KEY='phc_…'                  # from PostHog project settings
 export SENTRY_DSN='https://…'                            # from the luke-desktop project
 export SENTRY_AUTH_TOKEN='sntrys_…'                     # source-map upload token
@@ -187,7 +208,7 @@ git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
 ```
 
-`LUKE_CODESIGN_IDENTITY` goes to electron-builder's `mac.identity` unchanged, which
+`APP_CODESIGN_IDENTITY` goes to electron-builder's `mac.identity` unchanged, which
 expects the identity's name **without** the `Developer ID Application:` prefix — the
 common name and team identifier alone, as in `Your Name (TEAMID)`. Run
 `security find-identity -v -p codesigning` to read the exact name off the certificate.

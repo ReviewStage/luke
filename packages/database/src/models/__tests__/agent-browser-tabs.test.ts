@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
-import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_SHOWN_MAX_CHARS } from "@repo/features/browser-acts";
+import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -13,7 +13,7 @@ import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
+import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import {
   type BrowserTabAction,
@@ -52,7 +52,7 @@ const MINUTE_MS = 60_000;
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });
@@ -68,6 +68,7 @@ const startAgent = (starter: string, taskId: string) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/shop",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
     (started) => Option.getOrThrow(started).agent,
   );
@@ -374,6 +375,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: "acme/shop",
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const tab = yield* upsertBrowserTab(

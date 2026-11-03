@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   type ActSender,
   actPortHandlerOf,
   pushProcedures,
   WindowPushes,
-} from "@luke/host/act-port";
-import { PUSH } from "@luke/host/contract";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/host/act-port";
+import { PUSH } from "@repo/host/contract";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import { Context } from "effect";

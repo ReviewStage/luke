@@ -22,7 +22,7 @@ import { cn } from "../cn.js";
  * the profile's dialog card, its inset, corners, edge, and lift, at a
  * question's measure; it fades and rises in on the motion
  * tokens, and as it closes it and its dimmed window fade out over
- * `--luke-duration-exit`, taking no press while they do, Base UI holding
+ * `--ui-duration-exit`, taking no press while they do, Base UI holding
  * them drawn (`data-ending-style`) until the card's fade has run. A card
  * may also stay drawn, hidden, while its dialog is shut (`keepMounted`, Base
  * UI's portal's own), so opening it again only shows it. shadcn's close
@@ -30,7 +30,7 @@ import { cn } from "../cn.js";
  * out, because a dialog of ours draws its own head and foot
  * (`components/dialog/dialog.tsx`), as is its ring utility,
  * because the card holds focus for its controls and draws no ring. What an
- * app draws is `@luke/ui`'s `Dialog`; this is its inside.
+ * app draws is `@repo/ui`'s `Dialog`; this is its inside.
  */
 
 /**
@@ -43,7 +43,7 @@ const DIALOG_ROOM =
 
 /** The card: a column at a question's measure, never taller than the window less its margins, on the motion tokens, fading out as it closes. */
 const DIALOG_CARD =
-  "box-border flex w-dialog-confirm max-h-dialog-room flex-col gap-2 rounded-dialog border border-border-strong bg-popover p-dialog-inset text-body leading-[inherit] text-popover-foreground shadow-dialog animate-dialog-in transition-shadow duration-(--luke-duration-hover) ease-motion-exit data-ending-style:pointer-events-none data-ending-style:animate-leave";
+  "box-border flex w-dialog-confirm max-h-dialog-room flex-col gap-2 rounded-dialog border border-border-strong bg-popover p-dialog-inset text-body leading-[inherit] text-popover-foreground shadow-dialog animate-dialog-in transition-shadow duration-(--ui-duration-hover) ease-motion-exit data-ending-style:pointer-events-none data-ending-style:animate-leave";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -83,7 +83,7 @@ function DialogContent({
         data-slot="dialog-viewport"
         className={cn(
           DIALOG_ROOM,
-          "@container/luke-dialog-room box-border grid grid-cols-1 place-items-center bg-scrim p-6 animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
+          "@container/ui-dialog-room box-border grid grid-cols-1 place-items-center bg-scrim p-6 animate-dialog-scrim data-ending-style:pointer-events-none data-ending-style:animate-leave",
           viewportClassName,
         )}
         {...room}

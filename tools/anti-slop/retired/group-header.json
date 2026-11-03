@@ -1,5 +1,5 @@
 {
-  "instead": "Draw a group's head, and the fold under it, with GroupHeader from @luke/ui: it folds with the Disclosure's one animation and turns one chevron.",
+  "instead": "Draw a group's head, and the fold under it, with GroupHeader from @repo/ui: it folds with the Disclosure's one animation and turns one chevron.",
   "classes": [
     { "class": "sidebar-repository-header", "allow": ["packages/ui/src/components/group-header/"] },
     {
@@ -13,7 +13,7 @@
     { "class": "tasks-list-head", "allow": ["packages/ui/src/components/group-header/"] },
     { "class": "tasks-list-chevron", "allow": ["packages/ui/src/components/group-header/"] },
     { "class": "tasks-list-glyph", "allow": ["packages/ui/src/components/group-header/"] },
-    { "class": "luke-nav-item-chevron", "allow": ["packages/ui/src/components/group-header/"] }
+    { "class": "ui-nav-item-chevron", "allow": ["packages/ui/src/components/group-header/"] }
   ],
   "patterns": [
     {

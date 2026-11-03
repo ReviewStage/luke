@@ -1,4 +1,4 @@
-import { readEither } from "@luke/wire/effect";
+import { readEither } from "@repo/wire/effect";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";

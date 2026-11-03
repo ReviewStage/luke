@@ -2,8 +2,12 @@
 
 ## Scope
 
-This policy covers the Vespin desktop app in this repository and the hosted
-service at vespin.dev, which the app signs in to.
+This policy covers the code in this repository and the hosted service at
+vespin.dev:
+
+- the Vespin desktop app for macOS
+- the web app at vespin.dev
+- the host daemon (`vespin-host`), which runs on users' own machines
 
 ## Supported versions
 
@@ -13,11 +17,11 @@ as patches to an older one.
 ## Reporting a vulnerability
 
 Email **founders@stagereview.app**, or use GitHub's
-[private vulnerability reporting](https://github.com/ReviewStage/luke/security/advisories/new)
+[private vulnerability reporting](https://github.com/ReviewStage/vespin/security/advisories/new)
 on this repository. Please do not open a public issue for a security report.
 
-Include the Vespin version, your macOS version, steps to reproduce, and what an
-attacker gains.
+Include which client is affected (desktop, web, or host), its version, the
+operating system it runs on, steps to reproduce, and what an attacker gains.
 
 ## What to expect
 

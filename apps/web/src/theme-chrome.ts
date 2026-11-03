@@ -6,10 +6,10 @@
  */
 
 /** Where the last theme chosen is kept for the next load's first frame, as `public/app-theme.js` reads it. */
-export const THEME_KEY = "luke.theme";
+export const THEME_KEY = "app.theme";
 
 /** The palette's own ground, which the browser's chrome is drawn in to blend into the page. */
-const GROUND_TOKEN = "--luke-color-ground";
+const GROUND_TOKEN = "--ui-color-ground";
 
 /** Says the ground of the theme just worn to the browser, for the chrome around the page. */
 export function tintChrome(root: HTMLElement): void {

@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   dataUrl,
   fileMark,
@@ -10,24 +10,24 @@ import {
   keptImageMetadata,
   keptImageOfLine,
   textOf,
-} from "@luke/database/models/attached-file-parts";
-import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
-import type { TaskStoreFailure } from "@luke/database/models/task-store";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
+} from "@repo/database/models/attached-file-parts";
+import { keepConversationPicture } from "@repo/database/models/conversation-pictures";
+import { COALESCED_LINE_SEPARATOR } from "@repo/database/models/message-reads";
+import type { TaskStoreFailure } from "@repo/database/models/task-store";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@repo/features/agent-wire";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   PICTURE_OMISSION,
-} from "@luke/features/conversation-picture-wire";
-import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
-import { MENTION_KIND, memberMentionOf } from "@luke/features/mention-link";
+} from "@repo/features/conversation-picture-wire";
+import { imageDimensions, sniffImageType } from "@repo/features/image-signature";
+import { MENTION_KIND, memberMentionOf } from "@repo/features/mention-link";
 import type { FileUIPart, UserContent } from "ai";
 import { Effect, Option } from "effect";
 import type { MessageReceivedPart } from "eve/client";
 
 /**
- * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, and as eve's receipt of them reads back. How the journal keeps them is `@luke/database/models/attached-file-parts`.
+ * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, and as eve's receipt of them reads back. How the journal keeps them is `@repo/database/models/attached-file-parts`.
  *
  * A message is words, files, or both. eve is handed the words first where
  * there are any, then each text file inlined as its own text part, headed

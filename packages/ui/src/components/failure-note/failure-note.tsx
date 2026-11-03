@@ -75,7 +75,7 @@ export type FailureNoteTime = (typeof FAILURE_NOTE_TIME)[keyof typeof FAILURE_NO
 
 /** The line: the mark, the words, and the presses on one row, in the danger tone's ink at a caption's size, inset as a list's note where it stands in a list's place. */
 const LINE =
-  "luke-failure-note m-0 flex min-w-0 flex-wrap items-start gap-icon-gap font-ui text-caption text-tone-ink data-[look=list]:px-list-inset data-[look=list]:py-row-inset";
+  "ui-failure-note m-0 flex min-w-0 flex-wrap items-start gap-icon-gap font-ui text-caption text-tone-ink data-[look=list]:px-list-inset data-[look=list]:py-row-inset";
 
 /**
  * Each part, by whether a press stands in the first row, which is then a
@@ -84,14 +84,14 @@ const LINE =
  */
 const PART = {
   ROW: {
-    mark: "luke-failure-note-mark flex h-control flex-none items-center [&_svg]:size-control-icon",
+    mark: "ui-failure-note-mark flex h-control flex-none items-center [&_svg]:size-control-icon",
     words:
-      "luke-failure-note-words min-w-1/2 flex-[1_1_0] py-state-row-inset wrap-anywhere whitespace-pre-wrap select-text",
+      "ui-failure-note-words min-w-1/2 flex-[1_1_0] py-state-row-inset wrap-anywhere whitespace-pre-wrap select-text",
   },
   LINE: {
-    mark: "luke-failure-note-mark flex h-failure-note-row flex-none items-center [&_svg]:size-control-icon",
+    mark: "ui-failure-note-mark flex h-failure-note-row flex-none items-center [&_svg]:size-control-icon",
     words:
-      "luke-failure-note-words min-w-0 flex-[1_1_0] py-0 wrap-anywhere whitespace-pre-wrap select-text",
+      "ui-failure-note-words min-w-0 flex-[1_1_0] py-0 wrap-anywhere whitespace-pre-wrap select-text",
   },
 } as const;
 
@@ -101,7 +101,7 @@ const PART = {
  * more go, whole, onto the line under them, at its end, as a failure line's
  * do (`ErrorState`).
  */
-const ACTS = "luke-failure-note-retry ms-auto flex max-w-full flex-none items-center gap-icon-gap";
+const ACTS = "ui-failure-note-retry ms-auto flex max-w-full flex-none items-center gap-icon-gap";
 
 /** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`, then Copy details where it is the app's, standing as `look` asks, an alert unless `time` says it is past. */
 export function FailureNote({
@@ -117,7 +117,7 @@ export function FailureNote({
   time?: FailureNoteTime;
   /** Retry's press; with none, the line says its words alone, and any `also`. */
   onRetry?: (() => void) | undefined;
-  /** A second act after Retry, drawn by the caller as a `@luke/ui` control; with neither, the line says its words alone. */
+  /** A second act after Retry, drawn by the caller as a `@repo/ui` control; with neither, the line says its words alone. */
   also?: ReactNode;
   /** The failure beneath the words, as the app reports it, or what names them as no failure of the app's. */
   failure: ReportedFailure | Unreported;

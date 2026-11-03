@@ -1,6 +1,6 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
-import { FolderTreeIcon, GLYPH } from "@luke/ui/icons";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@repo/ui";
+import { FolderTreeIcon, GLYPH } from "@repo/ui/icons";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import type { MenuAction } from "../desktop/action-menu.js";

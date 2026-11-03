@@ -10,6 +10,7 @@ import {
   IconButton,
   ImageIcon,
   Inline,
+  ProductMark,
   SCROLL_SIZE,
   ScrollArea,
   TEXT_ELEMENT,
@@ -18,8 +19,7 @@ import {
   Text,
   TextArea,
   TextField,
-  WingFace,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -200,12 +200,12 @@ function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
     <Dialog open={open} size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose}>
       <div className="catalog-media-bar">
         <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H2} id={titleId}>
-          luke-face.svg
+          product-mark.svg
         </Text>
         <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
       </div>
       <div className="catalog-media-picture">
-        <WingFace />
+        <ProductMark />
       </div>
     </Dialog>
   );
@@ -219,12 +219,12 @@ function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
       <DialogCard>
         <div className="catalog-media-bar">
           <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H2} id={titleId}>
-            luke-face.svg
+            product-mark.svg
           </Text>
           <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
         </div>
         <div className="catalog-window-picture">
-          <WingFace />
+          <ProductMark />
         </div>
       </DialogCard>
     </Dialog>

@@ -17,7 +17,7 @@ export const COARSE_POINTER = "(pointer: coarse)";
 
 /**
  * How far what is offered on a finger's selection stands under the words,
- * past the knob of the handle that ends them: `--luke-space-16`, the gap
+ * past the knob of the handle that ends them: `--ui-space-16`, the gap
  * `.comment-bubble[data-below]` stands at (tasks.css).
  */
 export const FINGER_SELECTION_GAP = 16;

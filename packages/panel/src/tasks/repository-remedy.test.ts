@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

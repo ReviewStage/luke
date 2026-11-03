@@ -14,9 +14,9 @@
 import assert from "node:assert/strict";
 import "@orpc/experimental-effect/extensions/effect";
 import { it } from "@effect/vitest";
-import { bodyCap, HOSTED_ERRORS } from "@luke/features/contract";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { HTTP_METHOD } from "@luke/wire";
+import { bodyCap, HOSTED_ERRORS } from "@repo/features/contract";
+import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { oc } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
@@ -34,7 +34,7 @@ import type { WebServices } from "../runtime.js";
 import type { HostedContext } from "./base.js";
 import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "./handler.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const WHEN_PATH = "/api/test/{id}/when";
 const REACH_PATH = "/api/test/reach";
 const ITEMS_PATH = "/api/test/items";

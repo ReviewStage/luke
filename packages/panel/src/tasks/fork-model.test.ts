@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { test } from "vitest";
 import { forkStart, forksOf, messageOpening, startingWords } from "./fork-model.js";
 

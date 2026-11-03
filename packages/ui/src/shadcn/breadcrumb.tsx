@@ -41,7 +41,7 @@ import { cn } from "../cn.js";
  * - `BreadcrumbEllipsis` is left out: a path's "…" is a crumb of its own,
  *   a press naming the folders it stands for.
  *
- * `@luke/ui`'s `Breadcrumbs` (`components/breadcrumbs/breadcrumbs.tsx`) is
+ * `@repo/ui`'s `Breadcrumbs` (`components/breadcrumbs/breadcrumbs.tsx`) is
  * what an app draws; this is its inside.
  */
 
@@ -69,7 +69,7 @@ function BreadcrumbLink({ className, render, ...props }: useRender.ComponentProp
     props: mergeProps<"a">(
       {
         className: cn(
-          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [&:hover]:bg-fill-selected [&:hover]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]",
+          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-fill-selected [&:hover]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag]",
           className,
         ),
       },

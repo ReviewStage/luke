@@ -4,14 +4,15 @@ import {
   BUTTON_SIZE,
   COMMENT_ELEMENT,
   Comment,
+  CommentPin,
   CommentSkeleton,
   GAP,
   LAYOUT_ELEMENT,
   MoreButton,
   STATUS_TONE,
   Stack,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -20,7 +21,8 @@ import { CatalogSection } from "../section";
  * by their letter where no picture is given, an agent on its square, a
  * status and an action at a head's end, a line of what happened to the
  * thread, said after its writer's name, a draft not yet sent, which says
- * no time, and a comment while it is read.
+ * no time, a comment while it is read, and the pins of comments on what
+ * they are on: one thread, a person's, and three, an agent's first.
  */
 
 /** A synthetic picture drawn in place, so the catalog renders offline. */
@@ -91,6 +93,35 @@ function Comments(): React.JSX.Element {
                 { key: "line", width: "95%" },
                 { key: "end", width: "45%" },
               ]}
+            />
+          </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="comment-pin" title="Pinned to what they are on">
+        <div className="catalog-frame">
+          <Stack gap={GAP.BLOCK}>
+            <CommentPin
+              author={{ name: "Ada Lovelace", id: "user-ada", picture: PICTURE }}
+              count={1}
+              label="1 comment"
+              preview="Can the retry wait for the queue to drain first?"
+              open={false}
+              onPress={() => undefined}
+              onHover={() => undefined}
+            />
+            <CommentPin
+              author={{
+                name: "Fix the flaky spec",
+                id: "agent-flaky",
+                shape: AVATAR_SHAPE.SQUARE,
+                glyph: <GLYPH.AGENT />,
+              }}
+              count={3}
+              label="3 comments"
+              preview="Rerunning the spec on WebKit."
+              open
+              onPress={() => undefined}
+              onHover={() => undefined}
             />
           </Stack>
         </div>

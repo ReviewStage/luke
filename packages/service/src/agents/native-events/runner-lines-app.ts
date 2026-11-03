@@ -1,13 +1,13 @@
 /**
  * runner-lines-app.ts -- where a cloud runner reads our lines past its cursor, held open until one is queued.
  *
- * A runner whose config names this read (`@luke/agent-runner`'s
+ * A runner whose config names this read (`@repo/agent-runner`'s
  * `RUNNER_LINES`) takes our lines from here rather than from its stdin,
  * so a line stands until the runner says it took it, rather than counting as
  * delivered the moment a write to a pipe succeeded. The read names the
  * launch by its first event number and the place of the last line the
  * runner read, and is answered the agent's lines past that place
- * (`@luke/database`'s `runner-line-store.ts`): those written for the launch,
+ * (`@repo/database`'s `runner-line-store.ts`): those written for the launch,
  * and the message lines an earlier launch never took, queued no longer ago
  * than a line still reads as awaiting its turn (`CODER.LINE_GRACE`), so a
  * line the developer was already told went unanswered is never run behind
@@ -17,19 +17,19 @@
  * is held; the runner asks again.
  *
  * The bearer is admitted as the events route admits it
- * (`../luke-mcp/bearer.ts`): one no standing agent holds, a retired one's
+ * (`../workspace-mcp/bearer.ts`): one no standing agent holds, a retired one's
  * among them, is refused, and a launch's bearer is its own, so a launch a
  * newer one replaced reads nothing more. An answer carries the lines whole,
  * at least one, up to `RUNNER_LINES_ANSWER.MAX_BYTES`, so a run of large
  * messages is read over several answers.
  */
 
-import { RUNNER_LINES, type RunnerLinesAnswer } from "@luke/agent-runner/protocol";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgentOfConversation } from "@luke/database/models/agent-store";
-import { type RunnerLine, runnerLinesPast } from "@luke/database/models/runner-line-store";
-import { TOPIC } from "@luke/database/sync/notification";
-import { HTTP_METHOD } from "@luke/wire";
+import { RUNNER_LINES, type RunnerLinesAnswer } from "@repo/agent-runner/protocol";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAgentOfConversation } from "@repo/database/models/agent-store";
+import { type RunnerLine, runnerLinesPast } from "@repo/database/models/runner-line-store";
+import { TOPIC } from "@repo/database/sync/notification";
+import { HTTP_METHOD } from "@repo/wire";
 import { DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { heldUntil } from "../../http/held-read.js";
@@ -44,7 +44,7 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { CODER } from "../coder-host/bounds.js";
-import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
+import { admitRunnerBearer, presentedBearer } from "../workspace-mcp/bearer.js";
 
 /** The path a runner reads its lines from. */
 export const RUNNER_LINES_PATH = "/api/agents/runner-lines";

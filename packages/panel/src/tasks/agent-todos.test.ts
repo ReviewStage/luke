@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { AGENT_TODO_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { AGENT_TODO_STATUS, type AgentTranscriptMessage } from "@repo/features/agent-wire";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { test } from "vitest";
 import { dockedTodos, newestTodos, taskTodos } from "./agent-todos.js";
 

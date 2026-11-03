@@ -1,4 +1,4 @@
-import type { InboxAnswers, InboxMessageAuthor, InboxReadAsk } from "@luke/features/inbox-wire";
+import type { InboxAnswers, InboxMessageAuthor, InboxReadAsk } from "@repo/features/inbox-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
@@ -59,6 +59,14 @@ export const inboxMessage = pgTable(
     addresseeId: text("addressee_id").references(() => user.id, { onDelete: "set null" }),
     /** The key a member's client wrote it under; null for the agent's. */
     clientKey: text("client_key"),
+    /**
+     * The direct message our Slack bot wrote the member the agent's message
+     * waited on (`packages/service/src/slack/thread-dms.ts`), by the
+     * conversation it is in and its timestamp, which is what Slack rewrites
+     * it by once the message's ask is answered, withdrawn, or replaced;
+     * null where none was written, and once it was rewritten so.
+     */
+    slackDm: jsonb("slack_dm").$type<{ readonly channel: string; readonly ts: string }>(),
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [

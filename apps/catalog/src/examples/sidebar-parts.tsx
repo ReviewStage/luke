@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   AVATAR_SIZE,
   Avatar,
@@ -11,6 +11,7 @@ import {
   MoreButton,
   NAV_CURRENT,
   NavItem,
+  ProductMark,
   SearchIcon,
   Shortcut,
   SidebarAccountRow,
@@ -21,9 +22,8 @@ import {
   SidebarRule,
   STATUS_TONE,
   useDisclosureFold,
-  WingFace,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -77,12 +77,16 @@ function SidebarParts(): React.JSX.Element {
     <>
       <CatalogSection id="sidebar-identity" title="Head">
         <div className="catalog-narrow">
-          <SidebarIdentity name={PRODUCT_NAME} face={<WingFace fill />} />
+          <SidebarIdentity name={PRODUCT_NAME} mark={<ProductMark fill small />} />
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-identity-qualified" title="Head on a surface of its own">
         <div className="catalog-narrow">
-          <SidebarIdentity name={PRODUCT_NAME} qualifier="Admin" face={<WingFace fill />} />
+          <SidebarIdentity
+            name={PRODUCT_NAME}
+            qualifier="Admin"
+            mark={<ProductMark fill small />}
+          />
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-places" title="Places over their rule">

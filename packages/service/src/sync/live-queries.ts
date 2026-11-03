@@ -6,17 +6,17 @@
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.
  */
-import { browserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
-import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
-import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
-import { messageStandingNow } from "@luke/database/models/message-reads";
-import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
-import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
+import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
+import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
+import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
+import { messageStandingNow } from "@repo/database/models/message-reads";
+import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
+import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
 import {
   memberWorkspaceIds,
   workspacesLiveStatements,
-} from "@luke/database/models/workspace-store";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+} from "@repo/database/models/workspace-store";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   agentBrowserTabSync,
   agentDelegationSync,
@@ -44,6 +44,7 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
+  workspaceFormerSlugSync,
   planPageVersionSync,
   planRevisionSync,
   repositoryPinSync,
@@ -54,10 +55,10 @@ import {
   taskSync,
   turnsSync,
   userSync,
-} from "@luke/database/sync/tables";
-import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { macCommandKindsRead } from "@luke/features/mac-command-wire";
+} from "@repo/database/sync/tables";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { macCommandKindsRead } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
@@ -177,14 +178,21 @@ export const tasksLive = defineLiveQuery({
 /**
  * The account's workspaces and the GitHub installations connected to them,
  * woken on the account's topic and on each of its workspaces'. A
- * workspace's name and photo, its members, its installations, and the name
+ * workspace's name and photo, the slugs it stood under before, its members, its installations, and the name
  * of the account it was made for name the workspace; the account's
  * memberships, its first workspace, and its own picture name the account.
  */
 export const workspacesLive = defineLiveQuery({
   name: "workspaces",
   params: ["userId"],
-  reads: [memberSync, organizationSync, personalWorkspaceSync, userSync, githubInstallationSync],
+  reads: [
+    memberSync,
+    organizationSync,
+    personalWorkspaceSync,
+    userSync,
+    githubInstallationSync,
+    workspaceFormerSlugSync,
+  ],
   topics: ({ userId }) => readerAndWorkspaceTopics(userId),
   statements: ({ userId }) => workspacesLiveStatements(userId),
   mode: LIVE_MODE.SNAPSHOT,

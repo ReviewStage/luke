@@ -1,19 +1,22 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { LINK_HOME } from "@repo/features/link-home";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
-} from "@luke/features/sentry-install-wire";
-import type { FailureSurface } from "@luke/features/shown-failure";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { dayAndTimeText } from "@luke/features/time-format";
-import { readingWords } from "@luke/features/words";
+} from "@repo/features/sentry-install-wire";
+import type { FailureSurface } from "@repo/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
+import { dayAndTimeText } from "@repo/features/time-format";
+import { readingWords } from "@repo/features/words";
 import {
   INVITATION_ROLE,
+  isInvitableEmail,
   type WorkspaceInvitation,
-} from "@luke/features/workspace-invitation-wire";
-import { managesWorkspace } from "@luke/features/workspace-role";
+} from "@repo/features/workspace-invitation-wire";
+import { managesWorkspace } from "@repo/features/workspace-role";
 import {
   WORKSPACE_BOUNDS,
   WORKSPACE_PHOTO_BOUNDS,
@@ -23,13 +26,12 @@ import {
   type WorkspaceGithubInstallation,
   type WorkspaceMember,
   workspacePhotoOfDataUrl,
-} from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION } from "@luke/settings/settings-views";
+  workspaceSlugProblemOf,
+} from "@repo/features/workspace-wire";
+import { ACT_KIND, WORKSPACE_SLUG_REFUSAL } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@repo/settings/settings-views";
 import {
-  ALIGN,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -75,8 +77,8 @@ import {
   useFilePicker,
   useMenu,
   wholeWordsHint,
-} from "@luke/ui";
-import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
+} from "@repo/ui";
+import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@repo/ui/actor-model";
 import {
   CrownIcon,
   ExternalLinkIcon,
@@ -87,9 +89,10 @@ import {
   UserMinusIcon,
   UserRoundIcon,
   XIcon,
-} from "@luke/ui/icons";
-import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/icons";
+import { inputProblem } from "@repo/ui/reported-failure";
+import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
@@ -105,13 +108,12 @@ import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
-import { useSentryRead } from "./use-sentry-read.js";
+import { SwitchRow } from "./switch-row.js";
+import { useWorkspaceRead } from "./use-workspace-read.js";
 import {
   AddTokenRepository,
   TokenRepositoryRows,
@@ -206,6 +208,12 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 /** What the toast says once an invitation's accept link is on the clipboard. */
 const INVITE_LINK_COPIED = "Invite link copied";
 
+/** What the address field says of a refused invite: nothing typed, or no address the service invites. */
+const INVITE_EMAIL_PROBLEM = {
+  EMPTY: "Enter an email address.",
+  MALFORMED: "Enter an address like name@example.com.",
+} as const;
+
 /** What the invitations say where none is pending, with the one fact a reader cannot guess: the invitee is emailed their link. */
 const INVITATIONS_EMPTY = `No invitations. ${PRODUCT_NAME} emails each invitee their link, which you can also copy and send yourself.`;
 
@@ -214,6 +222,7 @@ const READ_FAILED = {
   MEMBERS: "The members could not be read.",
   INVITATIONS: "The invitations could not be read.",
   SENTRY: "The workspace's Sentry could not be read.",
+  SLACK_BOT: "The workspace's Slack bot could not be read.",
 } as const;
 
 /**
@@ -292,11 +301,38 @@ const SENTRY_MARK = (
   </SettingsRowMark>
 );
 
-/** What the Sentry row's line says, by whether an installation stands and who is reading it. */
+/** Slack's own mark, which leads the Slack bot's row as Sentry's leads Sentry's. */
+const SLACK_MARK = (
+  <SettingsRowMark>
+    <ProviderMark provider={INTEGRATION_PROVIDER.SLACK} />
+  </SettingsRowMark>
+);
+
+/**
+ * What the Slack bot row's line says, by whether it is connected and who is
+ * reading it. Note that every line names messages to members, because this
+ * row is easily read as the Slack an agent reads through, which is each
+ * member's own in Settings › Integrations; this one is the bot that writes
+ * to the workspace's members.
+ */
+const SLACK_BOT_LINE = {
+  CONNECTED: (team: string) => `Connected to ${team} · Messages members whose email matches`,
+  MANAGES: `Not connected. Connect ${PRODUCT_NAME}'s bot to message members in Slack.`,
+  MEMBER: `Not connected. Ask an owner or admin to connect ${PRODUCT_NAME}'s bot.`,
+} as const;
+
+/**
+ * What the Sentry row's line says, by whether an installation stands and who
+ * is reading it. Note that every line names automations, because this row is
+ * easily read as the Sentry an agent reads through, which is each member's
+ * own in Settings › Integrations; this one only carries Sentry's alerts and
+ * new issues to the workspace's automations.
+ */
 const SENTRY_LINE = {
-  INSTALLED: (accounts: string) => (accounts === "" ? "Installed" : `Installed · ${accounts}`),
-  MANAGES: "Not installed.",
-  MEMBER: "Not installed. Ask an owner or admin.",
+  INSTALLED: (accounts: string) =>
+    accounts === "" ? "Installed for automations" : `Installed for automations · ${accounts}`,
+  MANAGES: "Not installed. Install to start automations from Sentry alerts.",
+  MEMBER: "Not installed. Ask an owner or admin to install it for automations.",
 } as const;
 
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
@@ -333,6 +369,7 @@ const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
 const WORKSPACE_INTEGRATIONS = [
   { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
   { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
+  { service: INTEGRATION_PROVIDER.SLACK, Row: WorkspaceSlackBotRow },
 ] as const;
 
 /**
@@ -448,7 +485,7 @@ function useMembersRead(workspace: Workspace) {
  * the other; Make owner and Remove from workspace ask first. A role change
  * refused is said under the row. A row with no ⋯ in a list where others
  * have one keeps the ⋯'s room, so every role ends in the same place. The
- * row is `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
+ * row is `@repo/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -686,7 +723,7 @@ function MemberLeave({
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
-        <ul className="leave-consequences m-0 pl-luke-16 text-body text-muted-foreground [&>li+li]:mt-luke-4">
+        <ul className="leave-consequences m-0 pl-ui-16 text-body text-muted-foreground [&>li+li]:mt-ui-4">
           <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}
@@ -934,7 +971,7 @@ function TeamMembers({
  * The role an invitation is sent as: the field chip a Settings picker wears,
  * "Member ⌄", whose menu checks the role chosen and says under each what it
  * may do, as the composer's model chip stands beside its field and its send.
- * It is `@luke/ui`'s field `Chip`, its one width its container's.
+ * It is `@repo/ui`'s field `Chip`, its one width its container's.
  */
 function RoleChip({
   value,
@@ -994,7 +1031,7 @@ function RoleChip({
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * first in the accent rather than red: inviting the address again undoes it,
  * but the link already sent to the invitee stops working. A refusal is
- * said under the form. The form is `@luke/ui`'s `TextField`, the role's
+ * said under the form. The form is `@repo/ui`'s `TextField`, the role's
  * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
  * led by the face, through `MenuRow`, Copy link its outline `Button`.
  */
@@ -1019,6 +1056,7 @@ function Invitations({
     setPendingState(next);
   };
   const [email, setEmail] = useState("");
+  const [emailProblem, setEmailProblem] = useState<string>();
   const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
@@ -1104,6 +1142,18 @@ function Invitations({
   // followed list then carries it as the service holds it.
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
+    // Note that the address is checked here, as the service reads it, because the browser never checks a form.
+    const problem =
+      email.trim() === ""
+        ? INVITE_EMAIL_PROBLEM.EMPTY
+        : isInvitableEmail(email)
+          ? undefined
+          : INVITE_EMAIL_PROBLEM.MALFORMED;
+    setEmailProblem(problem);
+    if (problem !== undefined) {
+      emailField.current?.focus();
+      return;
+    }
     write(
       INVITATION_WRITE.INVITE,
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
@@ -1146,42 +1196,40 @@ function Invitations({
     <>
       <Stack gap={GAP.NONE}>
         <div className="workspace-invite flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block">
-          <Inline
-            as={LAYOUT_ELEMENT.FORM}
-            align={ALIGN.END}
-            justify={JUSTIFY.END}
-            grow
-            growFirst
-            onSubmit={invite}
-          >
-            <FormField label="Email address">
+          {/* Note that the field's label stands over the whole row and its error under it, so Member and Invite keep the address's line. */}
+          <Inline as={LAYOUT_ELEMENT.FORM} grow growFirst onSubmit={invite}>
+            <FormField label="Email address" error={inputProblem(emailProblem)}>
               {(field) => (
-                <TextField
-                  ref={emailField}
-                  field={field}
-                  type={TEXT_FIELD_TYPE.EMAIL}
-                  required
-                  placeholder="name@example.com"
-                  autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-                  spellCheck={false}
-                  value={email}
-                  disabled={busy}
-                  // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
-                  onEscape={() => emailField.current?.blur()}
-                  onChange={setEmail}
-                />
+                <Inline justify={JUSTIFY.END} growFirst>
+                  <TextField
+                    ref={emailField}
+                    field={field}
+                    type={TEXT_FIELD_TYPE.EMAIL}
+                    placeholder="name@example.com"
+                    autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                    spellCheck={false}
+                    value={email}
+                    disabled={busy}
+                    // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+                    onEscape={() => emailField.current?.blur()}
+                    onChange={(typed) => {
+                      setEmail(typed);
+                      setEmailProblem(undefined);
+                    }}
+                  />
+                  <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
+                  <Button
+                    type={BUTTON_TYPE.SUBMIT}
+                    variant={BUTTON_VARIANT.PRIMARY}
+                    busy={writing === INVITATION_WRITE.INVITE}
+                    busyLabel="Inviting"
+                    disabled={writing === INVITATION_WRITE.CANCEL}
+                  >
+                    Invite
+                  </Button>
+                </Inline>
               )}
             </FormField>
-            <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-            <Button
-              type={BUTTON_TYPE.SUBMIT}
-              variant={BUTTON_VARIANT.PRIMARY}
-              busy={writing === INVITATION_WRITE.INVITE}
-              busyLabel="Inviting"
-              disabled={writing === INVITATION_WRITE.CANCEL}
-            >
-              Invite
-            </Button>
           </Inline>
         </div>
         {note === undefined ? null : (
@@ -1276,7 +1324,7 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
  * GitHub, an organization's logo or a person's avatar, its login, and under
  * it Connected, or that GitHub suspended or removed its installation. The
  * tile is a workspace's, keyed by the login, so the login's letter stands
- * until the picture loads and wherever it fails to. It is `@luke/ui`'s
+ * until the picture loads and wherever it fails to. It is `@repo/ui`'s
  * `SettingsRow`, indented to GitHub's words.
  */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
@@ -1321,7 +1369,7 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
  * configure one it is on, so one door does both. Either press opens the
  * browser through the one connect, whose return to the app adds the
  * installation to this workspace; a page that could not be opened says why
- * under the row. The row is `@luke/ui`'s `SettingsRow` led by GitHub's mark,
+ * under the row. The row is `@repo/ui`'s `SettingsRow` led by GitHub's mark,
  * its press the outline `Button`.
  */
 function ManagedGitHub({
@@ -1513,7 +1561,7 @@ function ManagedSentry({
   );
   const actions = [
     sentry.installations.map((installation) => ({
-      // Note that a lone installation's act stands as a button of its own, so it says only Disconnect.
+      // Note that a lone installation's act says only Disconnect, since the menu offers no other to tell it from.
       label:
         installation.account === undefined || sentry.installations.length === 1
           ? "Disconnect"
@@ -1530,7 +1578,6 @@ function ManagedSentry({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Sentry"
-        alone
         actions={actions}
         row={{
           leading: SENTRY_MARK,
@@ -1572,7 +1619,7 @@ function ManagedSentry({
  * a read that did not land says so in the row's place, with Retry.
  */
 function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const { read, retry, changed } = useSentryRead(workspace.id);
+  const { read, retry, changed } = useWorkspaceRead(ACT_KIND.WORKSPACE_SENTRY_READ, workspace.id);
   if (read === undefined) return null;
   if ("failed" in read)
     return (
@@ -1582,7 +1629,7 @@ function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.
         onRetry={retry}
       />
     );
-  const { sentry } = read;
+  const sentry = read.answer;
   if (!sentry.configured) return null;
   if (managesWorkspace(workspace)) {
     return <ManagedSentry workspace={workspace} sentry={sentry} onChanged={changed} />;
@@ -1592,6 +1639,202 @@ function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.
       {() => null}
     </SettingsRow>
   );
+}
+
+/** The Slack bot row's line: the team it is connected to, or the ask to connect it. */
+function slackBotLine(slackBot: WorkspaceSlackBot, manages: boolean): React.ReactNode {
+  if (slackBot.team === undefined) return manages ? SLACK_BOT_LINE.MANAGES : SLACK_BOT_LINE.MEMBER;
+  return (
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+      {SLACK_BOT_LINE.CONNECTED(slackBot.team.name)}
+    </SettingsRowStateLine>
+  );
+}
+
+/**
+ * The workspace's Slack bot, for an owner or an admin: Connect Slack bot
+ * while it is not connected, which asks Slack which team the bot answers
+ * for and keeps it, a connect that failed saying why under the row; and
+ * once it is, a ⋯ whose menu disconnects it, which asks first, as the
+ * page's other rows hold their acts. A disconnect stops the bot writing to
+ * the workspace's members; the bot stays installed in Slack, which the
+ * dialog says.
+ */
+function ManagedSlackBot({
+  workspace,
+  slackBot,
+  onChanged,
+}: {
+  workspace: Workspace;
+  slackBot: WorkspaceSlackBot;
+  onChanged: (slackBot: WorkspaceSlackBot) => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const workspaceId = workspace.id;
+  const [refusal, setRefusal] = useState<string>();
+  const [connecting, setConnecting] = useState(false);
+  const underWay = useRef(false);
+  const connect = () => {
+    if (underWay.current) return;
+    underWay.current = true;
+    setConnecting(true);
+    setRefusal(undefined);
+    act(ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT, { workspaceId })
+      .then(onChanged, (refused: Error) => setRefusal(refused.message))
+      .finally(() => {
+        underWay.current = false;
+        setConnecting(false);
+      });
+  };
+  const disconnect = useConfirmDialog(
+    { subject: slackBot.team !== undefined, surfaceOpen: true },
+    () =>
+      act(ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT, { workspaceId }).then((now) => {
+        onChanged(now);
+        return ACCEPTED;
+      }, refusedWith),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_SLACK_BOT_DISCONNECT),
+  );
+  const actions =
+    slackBot.team === undefined
+      ? []
+      : [
+          [
+            {
+              label: "Disconnect",
+              icon: <GLYPH.DISCONNECT />,
+              danger: true,
+              onSelect: () => disconnect.ask(),
+            },
+          ],
+        ];
+  return (
+    <Stack gap={GAP.NONE}>
+      <MenuRow
+        thing="Slack bot"
+        actions={actions}
+        row={{
+          leading: SLACK_MARK,
+          label: "Slack bot",
+          description: slackBotLine(slackBot, true),
+          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT),
+          control:
+            slackBot.team !== undefined ? null : (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={connecting}
+                busyLabel="Connecting"
+                onClick={connect}
+              >
+                Connect Slack bot
+              </Button>
+            ),
+        }}
+      />
+      <ConfirmDialog
+        open
+        confirm={disconnect}
+        question={{
+          title: `Disconnect the Slack bot from ${workspace.name}?`,
+          body: `${PRODUCT_NAME} stops messaging this workspace's members in Slack. The bot stays installed in Slack until a Slack admin removes it.`,
+          verb: "Disconnect",
+          running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
+    </Stack>
+  );
+}
+
+/**
+ * The reader's own Slack notifications, under the bot's row once it is
+ * connected: one switch, on until they turn it off, which holds in every
+ * workspace whose bot is connected. The switch flips at once and the
+ * answer is the bot as it then stands.
+ */
+function SlackNotificationsRow({
+  workspaceId,
+  on,
+  onChanged,
+}: {
+  workspaceId: string;
+  on: boolean;
+  onChanged: (slackBot: WorkspaceSlackBot) => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  return (
+    <SwitchRow
+      label="Slack notifications"
+      detail="Get a Slack message when a thread waits on you."
+      checked={on}
+      changed={!on}
+      onChange={(notifications) =>
+        act(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS, { workspaceId, notifications }).then(
+          (now) => {
+            onChanged(now);
+            return ACCEPTED;
+          },
+          refusedWith,
+        )
+      }
+    />
+  );
+}
+
+/** The bot's row, and under it the reader's own switch where the bot is connected. */
+function SlackBotRows({
+  workspace,
+  slackBot,
+  onChanged,
+}: {
+  workspace: Workspace;
+  slackBot: WorkspaceSlackBot;
+  onChanged: (slackBot: WorkspaceSlackBot) => void;
+}): React.JSX.Element {
+  const row = managesWorkspace(workspace) ? (
+    <ManagedSlackBot workspace={workspace} slackBot={slackBot} onChanged={onChanged} />
+  ) : (
+    <SettingsRow leading={SLACK_MARK} label="Slack bot" description={slackBotLine(slackBot, false)}>
+      {() => null}
+    </SettingsRow>
+  );
+  if (slackBot.team === undefined || slackBot.notifications === undefined) return row;
+  return (
+    <Stack gap={GAP.NONE}>
+      {row}
+      <SlackNotificationsRow
+        workspaceId={workspace.id}
+        on={slackBot.notifications}
+        onChanged={onChanged}
+      />
+    </Stack>
+  );
+}
+
+/**
+ * The workspace's Slack bot: drawn only where the deployment holds
+ * our bot, an owner's or an admin's to connect for everyone, and for a
+ * member, read only, where it is connected or the ask to have it, with
+ * the reader's own Slack notifications under it once it is connected; a
+ * read that did not land says so in the row's place, with Retry.
+ */
+function WorkspaceSlackBotRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
+  const { read, retry, changed } = useWorkspaceRead(
+    ACT_KIND.WORKSPACE_SLACK_BOT_READ,
+    workspace.id,
+  );
+  if (read === undefined) return null;
+  if ("failed" in read)
+    return (
+      <ReadFailed
+        line={READ_FAILED.SLACK_BOT}
+        surface={FAILURE_SURFACE.WORKSPACE_SLACK_BOT_READ}
+        onRetry={retry}
+      />
+    );
+  const slackBot = read.answer;
+  if (!slackBot.configured) return null;
+  return <SlackBotRows workspace={workspace} slackBot={slackBot} onChanged={changed} />;
 }
 
 /** What Settings' Workspace page is handed: the workspaces, the one the sidebar lists, and the fall back after a leave. */
@@ -1659,7 +1902,7 @@ function identityLine(workspace: Workspace): string {
  * square; Remove photo, where one is set, asks first. The new name or photo
  * arrives with the workspaces the host reads again after it; a refusal, or a
  * file that cannot be a photo, is said under the row until the next try.
- * The row is `@luke/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
+ * The row is `@repo/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
  * and Rename its outline `Button`.
  */
 function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.Element {
@@ -1802,6 +2045,82 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
 }
 
 /**
+ * The workspace's link, which its owner alone changes: the slug every link
+ * to the workspace is written under, typed in place, the address it makes
+ * said under it as it is typed, and what is wrong with it said there too,
+ * in the words the service refuses it with. Save sends it, and the new slug
+ * arrives with the workspaces the host reads again after it; the slug it
+ * leaves stays the workspace's, so no link written under it stops opening.
+ */
+function WorkspaceLink({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const { act } = useAct();
+  const standing = workspace.slug ?? "";
+  const [slug, setSlug] = useState(standing);
+  const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const field = useRef<HTMLInputElement | null>(null);
+  const problem = workspaceSlugProblemOf(slug);
+  const shown = refusal ?? (problem === undefined ? undefined : WORKSPACE_SLUG_REFUSAL[problem]);
+  const save = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (problem !== undefined) {
+      field.current?.focus();
+      return;
+    }
+    setSaving(true);
+    act(ACT_KIND.WORKSPACE_SLUG_SET, { workspaceId: workspace.id, slug })
+      .then(
+        () => undefined,
+        (refused: Error) => setRefusal(refused.message),
+      )
+      .finally(() => setSaving(false));
+  };
+  return (
+    <div
+      className="workspace-link flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block"
+      {...searchAnchorProps(SETTINGS_SEARCH_ROW.WORKSPACE_SLUG)}
+    >
+      <Inline as={LAYOUT_ELEMENT.FORM} grow growFirst onSubmit={save}>
+        <FormField
+          label="Workspace link"
+          description={`${LINK_HOME.HOST}/${slug}`}
+          error={inputProblem(shown)}
+        >
+          {(control) => (
+            <Inline justify={JUSTIFY.END} growFirst>
+              <TextField
+                ref={field}
+                field={control}
+                autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                spellCheck={false}
+                autoCorrect={false}
+                value={slug}
+                disabled={saving}
+                // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+                onEscape={() => field.current?.blur()}
+                onChange={(typed) => {
+                  setSlug(typed);
+                  setRefusal(undefined);
+                }}
+              />
+              <Button
+                type={BUTTON_TYPE.SUBMIT}
+                variant={BUTTON_VARIANT.PRIMARY}
+                busy={saving}
+                busyLabel="Saving"
+                disabled={slug === standing}
+              >
+                Save
+              </Button>
+            </Inline>
+          )}
+        </FormField>
+      </Inline>
+    </div>
+  );
+}
+
+/**
  * The page for the listed workspace, one kind of thing to a group: its
  * identity, its members, its invitations for an owner or an admin, its
  * GitHub, and last the leave for anyone but an owner, the members and
@@ -1857,11 +2176,14 @@ function ShownWorkspace({
 }): React.JSX.Element {
   const members = useMembersRead(workspace);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
-  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   return (
     <>
       <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
+        {/* Keyed to the slug, so a slug changed elsewhere stands in the field rather than what was typed over the old one. */}
+        {workspace.role === WORKSPACE_ROLE.OWNER ? (
+          <WorkspaceLink key={workspace.slug} workspace={workspace} />
+        ) : null}
       </SettingsSection>
       <SettingsSection title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
         <TeamMembers
@@ -1882,7 +2204,6 @@ function ShownWorkspace({
           <Row key={service} workspace={workspace} />
         ))}
       </SettingsSection>
-      {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup
         workspace={workspace}
         members={members.read}

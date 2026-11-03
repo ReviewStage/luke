@@ -1,13 +1,18 @@
-import { isLinkHome, LINK_HOME_PATTERN } from "./link-home.js";
-import { encodeMention, insideCode, MENTION_KIND } from "./mention-link.js";
+import { encodedStep } from "./link-grammar.js";
+import { isLinkHome, LINK_HOME_PATTERN, LINK_ORIGIN } from "./link-home.js";
+import { insideCode } from "./mention-link.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
  * plan-attachment-link.ts -- a plan's picture as its address on vespin.dev: written, read back, and found in a plan's text.
  *
  * A picture stands in a plan's Markdown as `![alt](<address> "caption")`,
- * its address the plan's own, `https://vespin.dev/<workspace>/plan/<plan>`
- * (`mention-link.ts`), with `/files/<picture>` after it. The address is a
+ * its address under the plan's, `https://vespin.dev/<workspace>/plan/<plan>`,
+ * with `/files/<picture>` after it, and read under `/task/<plan>` too, the
+ * step a task's own link is written at (`link-grammar.ts`). Note that a
+ * picture is still written under `/plan/`, because a desktop build that
+ * shipped before `/task/` finds a plan's pictures under `/plan/` alone and
+ * would draw a picture written any other way as nothing. The address is a
  * real one on purpose: opened in a browser it lands on the web app, which
  * opens the plan to its readers alone, and pasted anywhere else it
  * names a picture only the plan's readers can fetch, through the service
@@ -16,6 +21,14 @@ import { parsedUrl } from "./parsed-url.js";
 
 /** The step the picture's id follows in its address. */
 const FILES_STEP = "files";
+
+/** The steps a picture's plan is read after: the one written, which every shipped build reads, and the one a task's own link is written at. */
+const PLAN_STEP = {
+  WRITTEN: "plan",
+  TASK: "task",
+} as const;
+
+const PLAN_STEPS: ReadonlySet<string> = new Set(Object.values(PLAN_STEP));
 
 /** An id as the service mints one: a UUID in lower case. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -27,7 +40,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
  * address, so a broken one that only begins with an id names nothing.
  */
 const ADDRESS_IN_TEXT = new RegExp(
-  `${LINK_HOME_PATTERN}\\/[^\\s/()]{1,200}\\/plan\\/([0-9a-f-]{36})\\/files\\/([0-9a-f-]{36})(?![\\w-])`,
+  `${LINK_HOME_PATTERN}\\/[^\\s/()]{1,200}\\/(?:${PLAN_STEP.WRITTEN}|${PLAN_STEP.TASK})\\/([0-9a-f-]{36})\\/files\\/([0-9a-f-]{36})(?![\\w-])`,
   "gu",
 );
 
@@ -60,13 +73,15 @@ export interface PlanAttachmentRef {
   readonly attachmentId: string;
 }
 
-/** The picture's address, under the workspace the plan's own address names. */
+/** The picture's address, under the workspace and the plan its own address names. */
 export function planAttachmentAddress(ref: PlanAttachmentRef, workspace: string): string {
-  const task = encodeMention(
-    { kind: MENTION_KIND.TASK, taskId: ref.taskId },
-    { workspace, repository: null },
-  );
-  return `${task}/${FILES_STEP}/${ref.attachmentId}`;
+  const plan = [
+    LINK_ORIGIN,
+    encodedStep(workspace),
+    PLAN_STEP.WRITTEN,
+    encodedStep(ref.taskId),
+  ].join("/");
+  return `${plan}/${FILES_STEP}/${ref.attachmentId}`;
 }
 
 /** The picture an address names, by either scheme; nothing for any other address, a plan's or a section's among them. */
@@ -79,7 +94,8 @@ export function planAttachmentOf(address: string): PlanAttachmentRef | undefined
     first === "" &&
     workspace !== undefined &&
     workspace !== "" &&
-    step === "plan" &&
+    step !== undefined &&
+    PLAN_STEPS.has(step) &&
     files === FILES_STEP &&
     rest.length === 0;
   if (!shaped || taskId === undefined || attachmentId === undefined) return undefined;

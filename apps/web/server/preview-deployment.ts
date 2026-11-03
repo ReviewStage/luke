@@ -28,7 +28,7 @@ const GITHUB_API = "https://api.github.com";
 const GITHUB_HEADERS = {
   accept: "application/vnd.github+json",
   "x-github-api-version": "2022-11-28",
-  "user-agent": "luke-preview-probe",
+  "user-agent": "preview-probe",
 } as const;
 /** The environment Vercel's GitHub app writes on a preview's deployment record. */
 const VERCEL_PREVIEW_ENVIRONMENT = "Preview";

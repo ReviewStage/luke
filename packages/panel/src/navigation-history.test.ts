@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@luke/ui/history-adapter";
-import { isAgentTab, isDraftTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
+import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@repo/ui/history-adapter";
+import { isAgentTab, isDraftTab } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -225,24 +225,7 @@ test("a launch that reopens the plan last open leaves nothing behind it to go ba
   assert.equal(window.history().canGoBack, false);
 });
 
-test("the Inbox the window rests on with no plan open is no step of its own, so resting on it after the plan is one step, and opening the Inbox past it is another", () => {
-  const window = mount(
-    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
-  );
-  const inboxOpen = { ...tasksControl().inboxView, open: true };
-  window.stand(tasksControl());
-  window.stand(tasksControl({ resting: true, inboxView: inboxOpen }));
-  assert.equal(window.history().canGoBack, true, "Back returns to the plan");
-
-  act(() => window.history().onBack());
-  assert.equal(window.history().canGoBack, false, "resting took no second step");
-
-  const opened = mount(tasksControl({ resting: true, inboxView: inboxOpen }));
-  opened.stand(tasksControl({ inboxView: inboxOpen }));
-  assert.equal(opened.history().canGoBack, true, "the Inbox opened is a step of its own");
-});
-
-test("leaving a plan for the page with no plan open is a step Back returns from", () => {
+test("leaving a plan for Home is a step Back returns from", () => {
   const window = mount(
     tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
   );
@@ -671,13 +654,17 @@ const ACME = {
   github: null,
 };
 
-/** A task drawn in Acme, the workspaces as `workspaces` lists them. */
-function onTask(workspaces: TasksControl["workspaces"]): TasksControl {
+/** A task drawn in Acme, the workspaces as `workspaces` lists them, numbered `number` in it where given. */
+function onTask(workspaces: TasksControl["workspaces"], number?: number): TasksControl {
+  const task = { ...DOCUMENT_TASK, workspaceId: ACME.id };
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     boundFor: DOCUMENT_TASK.id,
-    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
+    region: {
+      kind: DOCUMENT_REGION.READY,
+      task: number === undefined ? task : { ...task, number },
+    },
     workspaces,
     workspace: ACME,
   });
@@ -688,7 +675,9 @@ test("each step's address is the path of the link ⇧⌘C copies there", async (
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const listed = { workspaces: [ACME], workspace: ACME };
   const places: TasksControl[] = [
-    onTask([ACME]),
+    onTask([ACME], 42),
+    tasksControl(listed),
+    tasksControl({ ...listed, boardView: { ...tasksControl().boardView, open: true } }),
     tasksControl({ ...listed, inboxView: { ...tasksControl().inboxView, open: true } }),
     tasksControl({
       ...listed,
@@ -713,6 +702,7 @@ test("each step's address is the path of the link ⇧⌘C copies there", async (
   }
 
   assert.equal(copied.length, places.length);
+  assert.equal(copied[0], "https://vespin.dev/acme/task/42");
   assert.deepEqual(
     addresses,
     copied.map((link) => new URL(link).pathname),
@@ -726,12 +716,12 @@ test("a new automation's page has no link, so it stands at /app beside the list 
   assert.deepEqual(window.addresses(), ["/workspace-acme/automations", "/app"]);
 });
 
-test("a place with no link stands at /app: the home page, and the Board though a task stands under it", () => {
+test("the home page stands at its workspace's own address, and the Board at its /tasks though a task stands under it", () => {
   const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
   const task = onTask([ACME]);
   window.stand({ ...task, boardView: { ...task.boardView, open: true } });
 
-  assert.deepEqual(window.addresses(), ["/app", "/app"]);
+  assert.deepEqual(window.addresses(), ["/acme", "/acme/tasks"]);
 });
 
 test("the Admin place stands at its workspace's /admin though a task stands under it, a section at /admin/<section> in place, and an account's page at /admin/user/<id> as a step, as Copy link copies each", async () => {
@@ -750,7 +740,7 @@ test("the Admin place stands at its workspace's /admin though a task stands unde
   await settle();
 
   assert.deepEqual(window.addresses(), [
-    `/acme/plan/${DOCUMENT_TASK.id}`,
+    `/acme/task/${DOCUMENT_TASK.id}`,
     "/acme/admin/cost",
     "/acme/admin/user/user-ada",
   ]);
@@ -797,14 +787,26 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
   assert.deepEqual(copied, []);
 });
 
-test("a workspace's slug read after the visit moves the standing step to its address, without a step of its own", () => {
-  const window = mount(onTask([]));
-  const before = window.addresses();
-  window.stand(onTask([ACME]));
+test("a workspace's slug or a task's number read after the visit moves the standing step to its address, without a step of its own, as the home page a tab opened at /app moves to the workspace's", () => {
+  for (const [unread, read, from, to] of [
+    [
+      onTask([]),
+      onTask([ACME]),
+      `/workspace-acme/task/${DOCUMENT_TASK.id}`,
+      `/acme/task/${DOCUMENT_TASK.id}`,
+    ],
+    [onTask([ACME]), onTask([ACME], 42), `/acme/task/${DOCUMENT_TASK.id}`, "/acme/task/42"],
+    [tasksControl(), tasksControl({ workspaces: [ACME], workspace: ACME }), "/app", "/acme"],
+  ] as const) {
+    const window = mount(unread);
+    const before = window.addresses();
+    window.stand(read);
 
-  assert.deepEqual(before, [`/workspace-acme/plan/${DOCUMENT_TASK.id}`]);
-  assert.deepEqual(window.addresses(), [`/acme/plan/${DOCUMENT_TASK.id}`]);
-  assert.equal(window.history().canGoBack, false);
+    assert.deepEqual(before, [from]);
+    assert.deepEqual(window.addresses(), [to]);
+    assert.equal(window.history().canGoBack, false);
+    unmountAll();
+  }
 });
 
 test("an Inbox told no column of its own until an item stands alone in it takes that item's step, so Back from the item leaves the Inbox rather than landing on a list no column shows", async () => {
@@ -832,7 +834,7 @@ test("an Inbox told no column of its own until an item stands alone in it takes 
   await settle();
   const addresses = window.addresses();
   assert.equal(addresses.length, 2, "the Inbox and its first item are one step");
-  assert.match(addresses.at(-1) ?? "", new RegExp(ITEM.itemId, "u"));
+  assert.equal(addresses.at(-1), `/acme/inbox/${ITEM.itemId}`);
 });
 
 /** A press of the pointer, as lands before whatever door it opens. */
@@ -1332,7 +1334,7 @@ test("a task the Inbox is narrowed to, Channels off, is a step linked by it, whi
   press();
   act(() => chooseInboxTask(taskId));
 
-  assert.deepEqual(window.addresses(), ["/acme/inbox", `/acme/inbox/plan/${taskId}`]);
+  assert.deepEqual(window.addresses(), ["/acme/inbox", `/acme/inbox/task/${taskId}`]);
   act(() => window.history().onBack());
   assert.equal(narrowed, undefined, "Back shows every task's items");
   act(() => window.history().onForward());

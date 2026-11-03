@@ -6,20 +6,20 @@ import {
   automationOwner,
   automationRunStanding,
   automationTriggerText,
-} from "@luke/features/automation-list-model";
+} from "@repo/features/automation-list-model";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
   type AutomationView,
-} from "@luke/features/automation-view";
-import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { momentText } from "@luke/features/time-format";
-import { REFRESH_FAILED_WORDS } from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/automation-view";
+import type { AutomationScope, AutomationSummary } from "@repo/features/automation-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { momentText } from "@repo/features/time-format";
+import { REFRESH_FAILED_WORDS } from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BackButton,
   BUTTON_VARIANT,
@@ -58,9 +58,9 @@ import {
   useLeaving,
   useMinute,
   VisuallyHidden,
-} from "@luke/ui";
-import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, actorName } from "@repo/ui/actor-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
 import { unreachedAs, useAct } from "../act.js";
@@ -70,7 +70,7 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MemberDirectory, useCreator } from "../member-directory.js";
-import { useSentryRead } from "../settings/use-sentry-read.js";
+import { useWorkspaceRead } from "../settings/use-workspace-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -649,7 +649,7 @@ function ListPage({
         </ErrorState>
       ) : null}
       {groups.length === 0 ? (
-        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.luke-empty-state]:flex-none">
+        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.ui-empty-state]:flex-none">
           <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
         </div>
       ) : (
@@ -934,9 +934,9 @@ const SENTRY_UNREAD: SentryOffer = {
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const { act } = useAct();
-  const { read: answer, retry } = useSentryRead(workspaceId);
+  const { read: answer, retry } = useWorkspaceRead(ACT_KIND.WORKSPACE_SENTRY_READ, workspaceId);
   // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
-  const read = answer !== undefined && "sentry" in answer ? answer.sentry : undefined;
+  const read = answer !== undefined && "answer" in answer ? answer.answer : undefined;
   const failed = answer !== undefined && "failed" in answer;
   const [installing, setInstalling] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -951,15 +951,21 @@ function useWorkspaceSentry(workspaceId: string): SentryOffer {
   return { read, failed, onRetry: retry, installing, refusal, onInstall };
 }
 
-/** The editor over a listed workspace, offered that workspace's Sentry. */
+/** Whether a listed workspace's Slack bot is connected, read as Sentry is; not while the read is out or failed. */
+function useWorkspaceSlackBot(workspaceId: string): boolean {
+  const { read } = useWorkspaceRead(ACT_KIND.WORKSPACE_SLACK_BOT_READ, workspaceId);
+  return read !== undefined && "answer" in read && read.answer.team !== undefined;
+}
+
+/** The editor over a listed workspace, offered that workspace's Sentry and Slack bot. */
 function WorkspaceEditor({
   workspaceId,
   editor,
 }: {
   workspaceId: string;
-  editor: (sentry: SentryOffer) => React.JSX.Element;
+  editor: (sentry: SentryOffer, slackBot: boolean) => React.JSX.Element;
 }): React.JSX.Element {
-  return editor(useWorkspaceSentry(workspaceId));
+  return editor(useWorkspaceSentry(workspaceId), useWorkspaceSlackBot(workspaceId));
 }
 
 /** The Automations pages themselves, under the workspace their links are written in. */
@@ -1023,7 +1029,7 @@ function AutomationsPages({
     );
   }
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
-  const editor = (sentry: SentryOffer) => (
+  const editor = (sentry: SentryOffer, slackBot: boolean) => (
     <AutomationEditor
       key={editing}
       automation={opened}
@@ -1039,6 +1045,7 @@ function AutomationsPages({
       runsShown={view.runs}
       onRuns={view.onRuns}
       sentry={sentry}
+      slackBot={slackBot}
       onDeleted={(automationId) =>
         view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
       }
@@ -1052,7 +1059,7 @@ function AutomationsPages({
     // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
     <Fragment key={workspace?.id}>
       {workspace === undefined ? (
-        editor(SENTRY_UNREAD)
+        editor(SENTRY_UNREAD, false)
       ) : (
         <WorkspaceEditor workspaceId={workspace.id} editor={editor} />
       )}

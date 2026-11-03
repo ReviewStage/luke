@@ -1,5 +1,5 @@
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { BUTTON_VARIANT, Button, CommandAsk, Inline } from "@luke/ui";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { BUTTON_VARIANT, Button, CommandAsk, Inline } from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

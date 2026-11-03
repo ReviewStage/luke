@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { TaskSection, TaskSections } from "@luke/features/task-section-wire";
+import type { TaskSection, TaskSections } from "@repo/features/task-section-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@luke/features/tasks-view";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind } from "@luke/host/contract";
+} from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind } from "@repo/host/contract";
 import { Option, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -271,8 +271,8 @@ function chosen(page: HTMLElement): string[] {
 /** Presses the open menu's item named `name`. */
 function choose(name: string): void {
   const item = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
-  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
+  ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === name);
   assert.ok(item, `${name} is in the menu`);
   act(() => item.click());
 }
@@ -291,8 +291,8 @@ function openMenu(): { heading: string | undefined; items: string[] } {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
   return {
-    heading: menu.querySelector(".luke-menu-heading")?.textContent ?? undefined,
-    items: [...menu.querySelectorAll(".luke-menu-item-label")].map(
+    heading: menu.querySelector(".ui-menu-heading")?.textContent ?? undefined,
+    items: [...menu.querySelectorAll(".ui-menu-item-label")].map(
       (label) => label.textContent ?? "",
     ),
   };

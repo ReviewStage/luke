@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent, readAgent, recordAgentPublished } from "@luke/database/models/agent-store";
-import { readTask, updateTask } from "@luke/database/models/task-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { messages, turns } from "@luke/database/schemas/storage";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_ARCHIVER, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
-import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@luke/features/inbox-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
-import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+import { Database } from "@repo/database/core/query";
+import { createAgent, readAgent, recordAgentPublished } from "@repo/database/models/agent-store";
+import { readTask, updateTask } from "@repo/database/models/task-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { messages, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_ARCHIVER, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { idleStandingAgents } from "../agents/coder-host/stop.js";
@@ -40,7 +41,7 @@ const countedFor = (userId: string) =>
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -69,6 +70,7 @@ const openAgent = (userId: string, taskId: string) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/relay",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { agent } = Option.getOrThrow(started);
     const now = yield* Clock.currentTimeMillis;
@@ -177,6 +179,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
           {
             name: SERVER_EVENT.TASK_FINISH,
             userId,
+            workspaceId: task.workspaceId,
             properties: { status: TASK_STATUS.DONE, by: "merge" },
           },
         ]);

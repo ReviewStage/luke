@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { fakeHttpClient } from "@luke/wire/testing";
+import { fakeHttpClient } from "@repo/wire/testing";
 import { Effect, Layer } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { expect } from "vitest";
@@ -18,7 +18,7 @@ const OLD_BUILD = "/assets/app-Aold0001.js";
 const NEW_BUILD = "/assets/app-Bnew0002.js";
 
 /** Where the tab reads the panel's page as the origin serves it now. */
-const LIVE_PAGE = "https://luke.test/app";
+const LIVE_PAGE = "https://app.test/app";
 
 /** The origin, serving the panel's page as a deployment of the build given writes it. */
 function originServing(build: string): Layer.Layer<HttpClient.HttpClient> {

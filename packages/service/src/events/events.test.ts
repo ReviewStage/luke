@@ -7,10 +7,15 @@
  */
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { noDatabase } from "@luke/database/testing/no-database";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Effect, Layer } from "effect";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
+import { DateTime, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { PRODUCT_EVENT, type WireValue } from "../core.js";
 import { HOSTED_REFUSAL, upstreamRefused } from "../http/http-effect.js";
@@ -56,14 +61,43 @@ function post(
   posthog: ReturnType<typeof upstream>,
   overrides: Partial<EventsOptions> = {},
 ) {
+  return Effect.provide(postOverDatabase(userId, batch, posthog, overrides), noDatabase);
+}
+
+/** One batch recorded for the account named, at the test's instant, over the database the test provides. */
+function postOverDatabase(
+  userId: string,
+  batch: WireValue,
+  posthog: ReturnType<typeof upstream>,
+  overrides: Partial<EventsOptions> = {},
+) {
   return Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    return yield* Effect.provide(
-      recordEvents(userId, batch, options(overrides)),
-      Layer.merge(noDatabase, posthog.layer),
-    );
+    return yield* Effect.provide(recordEvents(userId, batch, options(overrides)), posthog.layer);
   });
 }
+
+/** A new account, with the personal workspace the app makes for every account; answers both. */
+const openAccount = Effect.gen(function* () {
+  const userId = `user-${randomUUID()}`;
+  yield* Database.use((db) =>
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
+  );
+  const personal = yield* openWorkspace(userId);
+  const now = yield* DateTime.nowAsDate;
+  yield* Database.use((db) =>
+    db.insert(personalWorkspace).values({ userId, organizationId: personal, createdAt: now }),
+  );
+  return { userId, personal };
+});
+
+/** The workspace group each event of the account's next batch was filed under, or none. */
+const groupsOfBatchFrom = (userId: string) =>
+  Effect.gen(function* () {
+    const posthog = upstream();
+    yield* postOverDatabase(userId, { events: [LAUNCH, LAUNCH] }, posthog);
+    return (posthog.forwarded[0]?.body.batch ?? []).map((item) => item.properties.$groups);
+  });
 
 it.effect(
   "an accepted batch posts every event under the account at its top level, as the capture docs ask, with geolocation off",
@@ -141,6 +175,22 @@ it.effect(
           "2026-08-19T11:59:30.000Z",
         ],
       );
+    }),
+);
+
+it.effect(
+  "a batch whose account was deleted after its caller was resolved is refused and nothing is forwarded",
+  () =>
+    Effect.gen(function* () {
+      const posthog = upstream();
+      const refusal = yield* Effect.flip(
+        post("user-deleted", { events: [LAUNCH] }, posthog, {
+          readPerson: () => Effect.succeed(undefined),
+        }),
+      );
+
+      assert.equal(refusal, HOSTED_REFUSAL.INVALID_TOKEN);
+      assert.deepEqual(posthog.forwarded, []);
     }),
 );
 
@@ -228,3 +278,41 @@ it.effect(
       assert.equal(olderEvent?.properties.packaged, undefined);
     }),
 );
+
+// The group is the service's own reading of the caller's membership, never a
+// claim the batch makes: a workspace named in the build attaches nothing.
+it.layer(getTestDB())("the workspace a batch is filed under", (it) => {
+  it.effect(
+    "a member of one shared workspace is filed under it, a solo account under its personal one, and a member of two under none, whatever the batch names",
+    () =>
+      Effect.gen(function* () {
+        const solo = yield* openAccount;
+        assert.deepEqual(yield* groupsOfBatchFrom(solo.userId), [
+          { workspace: solo.personal },
+          { workspace: solo.personal },
+        ]);
+
+        const owner = yield* openAccount;
+        const team = yield* openWorkspace(owner.userId);
+        const member = yield* openAccount;
+        yield* joinWorkspace(team, member.userId);
+        assert.deepEqual(yield* groupsOfBatchFrom(member.userId), [
+          { workspace: team },
+          { workspace: team },
+        ]);
+
+        const otherTeam = yield* openWorkspace(owner.userId);
+        yield* joinWorkspace(otherTeam, member.userId);
+        const posthog = upstream();
+        yield* postOverDatabase(
+          member.userId,
+          { events: [LAUNCH], build: { workspace: solo.personal } },
+          posthog,
+        );
+        assert.deepEqual(
+          (posthog.forwarded[0]?.body.batch ?? []).map((item) => item.properties.$groups),
+          [undefined],
+        );
+      }),
+  );
+});

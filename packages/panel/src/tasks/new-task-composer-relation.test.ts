@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import type { TaskCreateRelation, TaskSummary } from "@luke/features/task-wire";
-import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import type { TaskCreateRelation, TaskSummary } from "@repo/features/task-wire";
+import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -20,11 +20,13 @@ import { NewTaskComposer } from "./new-task-composer.js";
 import type { NewTaskStart } from "./use-tasks-tab.js";
 
 /**
- * new-task-composer-relation.test.ts -- New task's Relation pill on the card:
- * a task picked on it is sent with the start as the kind chosen, and its ×
- * drops it; as Sub-task of, a task in another repository is listed dimmed
- * with why, and a pick holds the repository chip to the other task's, the
- * start naming no repository. Synthetic throughout.
+ * new-task-composer-relation.test.ts -- New task's relations on the card:
+ * tasks picked from the + menu's Task relation are sent with the start
+ * together, each as the kind standing at the search's foot, and a row's ×
+ * drops its own; a task picked again changes its kind and a second Sub-task
+ * of replaces the first; as Sub-task of, a task in another repository is
+ * listed dimmed with why, and a pick holds the repository chip to the other
+ * task's, the start naming no repository. Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -43,6 +45,7 @@ function task(id: string, name: string, number: number, repository: string): Tas
 
 const LOGIN = task("1a2b3c4d-0000-4000-8000-000000000001", "Ship login", 212, "acme/web");
 const LIMIT = task("1a2b3c4d-0000-4000-8000-000000000002", "API rate limit", 7, "acme/api");
+const SIGNUP = task("1a2b3c4d-0000-4000-8000-000000000003", "Ship signup", 213, "acme/web");
 
 /** A read listing both of Acme's repositories on its App. */
 const LISTING = (): Promise<TasksRepositoriesAnswer> =>
@@ -86,10 +89,13 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card in Acme on acme/web, each start's repository and relation written down. */
+/** The card in Acme on acme/web, each start's repository and relations written down. */
 async function mount() {
   const control = tasksControl();
-  const starts: { repository: string | null; relation: TaskCreateRelation | undefined }[] = [];
+  const starts: {
+    repository: string | null;
+    relations: readonly TaskCreateRelation[] | undefined;
+  }[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -104,7 +110,7 @@ async function mount() {
             workspaces: [ACME],
             workspaceId: ACME.id,
             preset: { repository: "acme/web" },
-            tasks: [LOGIN, LIMIT],
+            tasks: [LOGIN, LIMIT, SIGNUP],
             repositoriesIn: () => ({ ...control.repositories, scope: ACME.id, read: LISTING }),
             start: (
               _name: string,
@@ -112,7 +118,7 @@ async function mount() {
               _workspaceId: string | undefined,
               from?: NewTaskStart,
             ) => {
-              starts.push({ repository, relation: from?.relation });
+              starts.push({ repository, relations: from?.relations });
               return Promise.resolve(undefined);
             },
           },
@@ -127,71 +133,125 @@ async function mount() {
   return { container, starts };
 }
 
-/** The head row's chip whose words hold `words`. */
-function chip(container: HTMLElement, words: string): HTMLElement {
-  return (
-    [...container.querySelectorAll<HTMLElement>(".luke-chip")].find((each) =>
-      each.textContent?.includes(words),
-    ) ?? assert.fail(`no chip reading ${words}`)
-  );
-}
-
-/** The menu's row naming `words`, a task or a pinned row. */
+/** The open menu's row naming `words`: a menu item, a task, or a pinned row. */
 function row(words: string): HTMLElement {
   return (
-    [...document.querySelectorAll<HTMLElement>('[role="option"], [data-steered="true"]')].find(
-      (each) => each.textContent?.startsWith(words),
-    ) ?? assert.fail(`no row ${words}`)
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="option"], [data-steered="true"]',
+      ),
+    ].find((each) => each.textContent?.startsWith(words)) ?? assert.fail(`no row ${words}`)
   );
 }
 
-/** Switches the open menu's kind to `kind` through its pinned Relation row. */
-async function switchKind(kind: string): Promise<void> {
+/** Opens the card's + menu and its Task relation. */
+async function openRelationSearch(container: HTMLElement): Promise<void> {
+  const plus =
+    container.querySelector<HTMLButtonElement>('button[aria-label="Add files and more"]') ??
+    assert.fail("the card's + stands");
+  act(() => plus.click());
+  await settle();
+  act(() => row("Task relation").click());
+  await settle();
+}
+
+/** Relates `name` from the + menu as `kind`, switched at the search's foot. */
+async function relate(container: HTMLElement, kind: string, name: string): Promise<void> {
+  await openRelationSearch(container);
   act(() => row("Relation").click());
   await settle();
   act(() => row(kind).click());
   await settle();
+  act(() => row(name).click());
+  await settle();
 }
 
-test("a task picked on the Relation pill is sent with the start as the kind chosen, and its × drops it", async () => {
+/** The rows docked over the card, each read as its sentence: kind, then name. */
+function docked(container: HTMLElement): string[] {
+  return [...container.querySelectorAll<HTMLElement>(".new-task-relations-dock li")].map(
+    (each) =>
+      `${each.querySelector('[aria-label^="Relation: "]')?.textContent} ${each.querySelector(".ui-task-row-press span")?.textContent}`,
+  );
+}
+
+test("tasks picked from the + menu are sent with the start together, and a row's × drops its own", async () => {
   const { container, starts } = await mount();
 
-  act(() => chip(container, "Relation").click());
-  await settle();
-  await switchKind("Blocks");
-  act(() => row("API rate limit").click());
-  await settle();
-  assert.match(chip(container, "Blocks").textContent ?? "", /Blocks ACME-7/u);
+  await relate(container, "Blocks", "API rate limit");
+  await relate(container, "Blocked by", "Ship signup");
+  assert.deepEqual(docked(container), ["Blocks API rate limit", "Blocked by Ship signup"]);
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
   const remove =
     container.querySelector<HTMLButtonElement>('button[aria-label="Remove relation"]') ??
-    assert.fail("the filled pill ends in its ×");
+    assert.fail("each row ends in its ×");
   act(() => remove.click());
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
   assert.deepEqual(starts, [
-    { repository: "acme/web", relation: { kind: "blocks", taskId: LIMIT.id } },
-    { repository: "acme/web", relation: undefined },
+    {
+      repository: "acme/web",
+      relations: [
+        { kind: "blocks", taskId: LIMIT.id },
+        { kind: "blocked-by", taskId: SIGNUP.id },
+      ],
+    },
+    { repository: "acme/web", relations: [{ kind: "blocked-by", taskId: SIGNUP.id }] },
+  ]);
+});
+
+test("a task picked again changes its kind, and a second Sub-task of replaces the first", async () => {
+  const { container, starts } = await mount();
+
+  await relate(container, "Blocked by", "Ship login");
+  await relate(container, "Sub-task of", "Ship login");
+  await relate(container, "Sub-task of", "Ship signup");
+  pressInComposer(container, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(starts, [
+    { repository: null, relations: [{ kind: "sub-task-of", taskId: SIGNUP.id }] },
   ]);
 });
 
 test("as Sub-task of, a task in another repository says why and takes no pick, and a pick holds the repository to the other task's", async () => {
   const { container, starts } = await mount();
 
-  act(() => chip(container, "Relation").click());
-  await settle();
+  await openRelationSearch(container);
   assert.match(row("API rate limit").textContent ?? "", /Another repository/u);
   act(() => row("API rate limit").click());
   await settle();
   act(() => row("Ship login").click());
   await settle();
-  assert.equal(chip(container, "acme/web").getAttribute("aria-disabled"), "true");
+  const repository =
+    [...container.querySelectorAll<HTMLElement>(".ui-chip")].find((each) =>
+      each.textContent?.includes("acme/web"),
+    ) ?? assert.fail("the repository chip stands");
+  assert.equal(repository.getAttribute("aria-disabled"), "true");
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
   assert.deepEqual(starts, [
-    { repository: null, relation: { kind: "sub-task-of", taskId: LOGIN.id } },
+    { repository: null, relations: [{ kind: "sub-task-of", taskId: LOGIN.id }] },
+  ]);
+});
+
+test("swapping the card's one tree relation takes a task of another repository, the start following it", async () => {
+  const { container, starts } = await mount();
+
+  await relate(container, "Sub-task of", "Ship login");
+  const name =
+    container.querySelector<HTMLElement>(".new-task-relations-dock .ui-task-row-press") ??
+    assert.fail("the row's name stands");
+  act(() => name.click());
+  await settle();
+  act(() => row("API rate limit").click());
+  await settle();
+  pressInComposer(container, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(starts, [
+    { repository: null, relations: [{ kind: "sub-task-of", taskId: LIMIT.id }] },
   ]);
 });

@@ -32,8 +32,8 @@ import {
   DEVICE_PLATFORM,
   type DeviceArch,
   type DevicePlatform,
-} from "@luke/features/device-agent-wire";
-import { HOST_PAIRING_POLL_STATUS } from "@luke/features/host-wire";
+} from "@repo/features/device-agent-wire";
+import { HOST_PAIRING_POLL_STATUS } from "@repo/features/host-wire";
 import { and, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

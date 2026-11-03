@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
+import { Database } from "@repo/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-vocabulary";
 import {
   type InstalledSkillOwner,
   installSkill,
   setInstalledSkillEnabled,
-} from "@luke/database/models/installed-skill-store";
-import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
+} from "@repo/database/models/installed-skill-store";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import {
   addWorkspaceTokenRepository,
   listWorkspaceTokenRepositories,
-} from "@luke/database/models/workspace-token-repository-store";
-import { user } from "@luke/database/schemas/auth";
+} from "@repo/database/models/workspace-token-repository-store";
+import { user } from "@repo/database/schemas/auth";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -21,7 +21,7 @@ import {
   openInstallationWorkspace,
   openWorkspace,
   WORKSPACE_ROLE,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import {
   accountBearer,
   GITHUB_REPOSITORIES_QUERY,
@@ -30,15 +30,15 @@ import {
   githubRepositoryPullRequestAnswerSchema,
   HOSTED_SERVICE_PATH,
   HostedTaskClient,
-} from "@luke/features";
-import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+} from "@repo/features";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   GITHUB_ACCESS,
   ISSUE_STATE,
   workspaceTokenRepositoriesAnswerSchema,
-} from "@luke/features/github-repositories-wire";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
-import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+} from "@repo/features/github-repositories-wire";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_SKILL_SOURCE,
@@ -46,10 +46,10 @@ import {
   TASK_TREE_ENTRY,
   taskSkillsAnswerSchema,
   taskTreeAnswerSchema,
-} from "@luke/features/task-wire";
-import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { recordingHttpClient } from "@luke/wire/testing";
+} from "@repo/features/task-wire";
+import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
+import { recordingHttpClient } from "@repo/wire/testing";
 import {
   Clock,
   type Context,
@@ -95,7 +95,7 @@ import { KEPT_LINK, type PullRequestLinks, pullRequestLinksLayer } from "./pull-
  * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** A pull request of `acme/relay` as GitHub's API names it by number. */
 const PULL_PATH = /^\/repos\/acme\/relay\/pulls\/(\d+)$/u;
@@ -267,7 +267,7 @@ const openAccounts = (github: FakeGitHub) =>
     const db = yield* Database;
     const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@luke.test` });
+    yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@app.test` });
     const bearers = new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],

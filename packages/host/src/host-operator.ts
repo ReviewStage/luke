@@ -1,12 +1,12 @@
-import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@luke/credentials/snapshot";
-import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
+import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import {
   ADMIN_UNANSWERED,
   type AdminFavoriteParams,
   type AdminReadAnswer,
   type AdminReadParams,
   adminReadAnswerSchema,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -23,6 +23,8 @@ import {
   type AgentInboxAttachmentParams,
   type AgentInboxAttachmentView,
   type AgentInboxCloseParams,
+  type AgentInboxItemHomeParams,
+  type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
   type AgentInboxReadAllParams,
@@ -33,7 +35,6 @@ import {
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
-  type AgentLukeToolsAnswerView,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -66,6 +67,7 @@ import {
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
   type AgentWorkspaceListParams,
+  type AgentWorkspaceToolsAnswerView,
   agentAccountInboxAnswerViewSchema,
   agentAgentAnswerSchema,
   agentChangesAnswerViewSchema,
@@ -74,11 +76,11 @@ import {
   agentGitHubImageViewSchema,
   agentInboxAnsweredViewSchema,
   agentInboxAttachmentViewSchema,
+  agentInboxItemHomeViewSchema,
   agentInboxMessagedViewSchema,
   agentInboxReadAllViewSchema,
   agentInboxReadStateViewSchema,
   agentListAnswerViewSchema,
-  agentLukeToolsAnswerViewSchema,
   agentMessagesAnswerViewSchema,
   agentModelsAnswerSchema,
   agentOverviewChecksAnswerViewSchema,
@@ -93,6 +95,7 @@ import {
   agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
+  agentWorkspaceToolsAnswerViewSchema,
   type ChatGptSignInAnswerView,
   chatGptSignInAnswerViewSchema,
   type DevicePresenceAnswerView,
@@ -118,8 +121,8 @@ import {
   providerKeysAnswerViewSchema,
   type RepositoryPullRequestActionParams,
   type RepositoryPullRequestParams,
-} from "@luke/features/agent-view";
-import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
+} from "@repo/features/agent-view";
+import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationChangeParams,
@@ -140,13 +143,13 @@ import {
   automationRunsViewSchema,
   automationRunViewSchema,
   automationViewSchema,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import {
   type BrowserLiveClosedEvent,
   type BrowserLiveMessageEvent,
   browserLiveClosedEventSchema,
   browserLiveMessageEventSchema,
-} from "@luke/features/browser-live-acts";
+} from "@repo/features/browser-live-acts";
 import {
   CHANNEL_CALL_FAILURE,
   type ChannelArchiveParams,
@@ -163,7 +166,7 @@ import {
   channelMoveViewSchema,
   channelsViewSchema,
   channelThreadsViewSchema,
-} from "@luke/features/channel-view";
+} from "@repo/features/channel-view";
 import {
   HOST_PAIRING_CALL_FAILURE,
   type HostPairingApproveView,
@@ -172,7 +175,7 @@ import {
   hostPairingApproveViewSchema,
   hostPairingDenyViewSchema,
   hostPairingViewSchema,
-} from "@luke/features/host-pairing-view";
+} from "@repo/features/host-pairing-view";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
@@ -201,7 +204,7 @@ import {
   installedSkillUpdateCheckViewSchema,
   installedSkillUpdatedViewSchema,
   installedSkillViewSchema,
-} from "@luke/features/installed-skill-view";
+} from "@repo/features/installed-skill-view";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -216,13 +219,8 @@ import {
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
-} from "@luke/features/integration-view";
-import {
-  type MacRepositoriesAnswer,
-  type MacRepository,
-  macRepositoriesAnswerSchema,
-} from "@luke/features/mac-terminal-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
+} from "@repo/features/integration-view";
+import type { ModelChoice } from "@repo/features/models-wire";
 import {
   type ChaptersModelAnswerView,
   type ChaptersModelWriteParams,
@@ -231,7 +229,7 @@ import {
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
   pullRequestChaptersAnswerViewSchema,
-} from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters-view";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
@@ -257,6 +255,8 @@ import {
   type TasksEditParams,
   type TasksFileAnswer,
   type TasksFileParams,
+  type TasksFindAnswer,
+  type TasksFindParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
@@ -314,6 +314,9 @@ import {
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceSentryDisconnectParams,
+  type TasksWorkspaceSlackBotAnswer,
+  type TasksWorkspaceSlackBotNotificationsParams,
+  type TasksWorkspaceSlugSetParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
   type TasksWorkspaceTokenRepositorySetParams,
@@ -329,6 +332,7 @@ import {
   tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
+  tasksFindAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
@@ -354,13 +358,14 @@ import {
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceSentryAnswerSchema,
+  tasksWorkspaceSlackBotAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
   type WorkspacePeopleFollowed,
   workspaceInvitationsFollowedSchema,
   workspacePeopleFollowedSchema,
-} from "@luke/features/tasks-view";
+} from "@repo/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
@@ -371,8 +376,8 @@ import {
   terminalResumedActAnswerSchema,
   terminalStateEventSchema,
   terminalsActAnswerSchema,
-} from "@luke/features/terminal-view";
-import { isSignInFailure } from "@luke/features/words";
+} from "@repo/features/terminal-view";
+import { isSignInFailure } from "@repo/features/words";
 import {
   carried,
   GATEWAY_EVENT,
@@ -381,14 +386,14 @@ import {
   type GatewayClient,
   type GatewayMethod,
   gatewayEventReader,
-} from "@luke/gateway";
+} from "@repo/gateway";
 import type {
   AppSettingField,
   AppSettingValue,
   Experiment,
   SettingsResetScope,
-} from "@luke/settings";
-import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
+} from "@repo/settings";
+import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -396,8 +401,8 @@ import {
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
-} from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type {
@@ -409,7 +414,7 @@ import type {
   AppWorkspaceChannels,
   SessionReplayState,
 } from "./app-state.js";
-import { type ThisMacHostStanding, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
+import { type ThisMacHostRead, thisMacHostReadSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
   type MacCommandAsk,
@@ -444,16 +449,10 @@ interface HostSettingsChange {
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
-  /** Every repository with a run command on this Mac; none where the host could not answer. */
-  macRepositories(): Effect.Effect<MacRepositoriesAnswer | undefined>;
-  /** One repository's run command set on this Mac, or forgotten with null; the repositories as they then stand. */
-  setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
   /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
-  /** Where This Mac's `luke-host` stands; none where the host could not answer. */
-  thisMacHostStanding(): Effect.Effect<ThisMacHostStanding | undefined>;
-  /** This Mac's `luke-host` turned on by the member's own act; where it then stands, or none where the host could not answer. */
-  turnOnThisMacHost(): Effect.Effect<ThisMacHostStanding | undefined>;
+  /** The device This Mac's host's record names; none where the host could not answer. */
+  thisMacHost(): Effect.Effect<ThisMacHostRead | undefined>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -533,6 +532,8 @@ export interface HostOperator {
   tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
   /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
+  /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
+  tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -597,6 +598,8 @@ export interface HostOperator {
   workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace's photo set or removed by an owner or admin; the workspace with its photo's new version or none, or why it was not. */
   workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
+  /** A workspace's slug changed by its owner; the workspace under its new slug, or why it was not. */
+  workspaceSlugSet(params: TasksWorkspaceSlugSetParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
   workspaceGitHubConnect(
     params: TasksWorkspaceParams,
@@ -613,6 +616,20 @@ export interface HostOperator {
   workspaceSentryDisconnect(
     params: TasksWorkspaceSentryDisconnectParams,
   ): Effect.Effect<TasksWorkspaceSentryAnswer>;
+  /** Whether the deployment holds our Slack bot, and the team a workspace's bot is connected to; or why there is no answer. */
+  workspaceSlackBot(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** A workspace's Slack bot connected; the bot as it then stands, or why it is not. */
+  workspaceSlackBotConnect(
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** A workspace's Slack bot disconnected; the bot as it then stands, or why it is not. */
+  workspaceSlackBotDisconnect(
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** The reader's own Slack notifications turned on or off; the bot as it then stands, or why it is not. */
+  workspaceSlackBotNotifications(
+    params: TasksWorkspaceSlackBotNotificationsParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
@@ -848,7 +865,7 @@ export interface HostOperator {
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now; or why there is no answer. */
-  agentLukeTools(params: AgentPullRequestParams): Effect.Effect<AgentLukeToolsAnswerView>;
+  agentWorkspaceTools(params: AgentPullRequestParams): Effect.Effect<AgentWorkspaceToolsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   agentOverviewChecks(
     params: AgentPullRequestReadParams,
@@ -901,6 +918,8 @@ export interface HostOperator {
   agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
+  /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
+  agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
   agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
@@ -1174,28 +1193,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
       ),
-    macRepositories: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ),
-        answerOf(macRepositoriesAnswerSchema, undefined),
-      ),
-    setMacRepository: (entry) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MAC_REPOSITORY_SET, {
-          repository: entry.repository,
-          command: entry.command,
-        }),
-        answerOf(macRepositoriesAnswerSchema, undefined),
-      ),
-    thisMacHostStanding: () =>
+    thisMacHost: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.THIS_MAC_HOST_READ),
-        answerOf(thisMacHostStandingSchema, undefined),
-      ),
-    turnOnThisMacHost: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON),
-        answerOf(thisMacHostStandingSchema, undefined),
+        answerOf(thisMacHostReadSchema, undefined),
       ),
     answerMacCommand: (answer) =>
       Effect.map(
@@ -1398,6 +1399,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksBrowserTabOpenAnswerSchema, TASK_UNANSWERED),
       ),
+    tasksFind: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_FIND, {
+          workspace: params.workspace,
+          number: params.number,
+        }),
+        answerOf(tasksFindAnswerSchema, TASK_UNANSWERED),
+      ),
     tasksRevisions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_REVISIONS, {
@@ -1415,6 +1424,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_COMMENTS, {
           planId: params.planId,
+          ...(params.pageId === undefined ? undefined : { pageId: params.pageId }),
           after: params.after,
         }),
         answerOf(tasksCommentsAnswerSchema, TASK_UNANSWERED),
@@ -1544,6 +1554,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),
+    workspaceSlugSet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, {
+          workspaceId: params.workspaceId,
+          slug: params.slug,
+        }),
+        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
     workspacePhotoSet: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
@@ -1581,6 +1599,33 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           installationId: params.installationId,
         }),
         answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBot: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT, { workspaceId: params.workspaceId }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotNotifications: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS, {
+          workspaceId: params.workspaceId,
+          notifications: params.notifications,
+        }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceMembers: (params) =>
       Effect.map(
@@ -2168,10 +2213,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
         answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentLukeTools: (params) =>
+    agentWorkspaceTools: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_LUKE_TOOLS, { agentId: params.agentId }),
-        answerOf(agentLukeToolsAnswerViewSchema, AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS, { agentId: params.agentId }),
+        answerOf(agentWorkspaceToolsAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentOverviewChecks: (params) =>
       Effect.map(
@@ -2325,6 +2370,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
       ),
+    agentInboxItemHome: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME, { itemId: params.itemId }),
+        answerOf(agentInboxItemHomeViewSchema, AGENT_UNANSWERED),
+      ),
     agentInboxReadAll: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_ALL, {
@@ -2422,6 +2472,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             ? {
                 admin: payload.admin,
                 ...(payload.pending === true ? { pending: true } : undefined),
+                ...(payload.startsWithoutRepository === true
+                  ? { startsWithoutRepository: true }
+                  : undefined),
               }
             : undefined,
         listener,

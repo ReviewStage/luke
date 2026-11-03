@@ -1,8 +1,8 @@
-import type { LocalAgentRefusal, RefusedDevice } from "@luke/features/agent-wire";
-import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
-import type { ModelProvider } from "@luke/features/models-wire";
-import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
-import { readEither } from "@luke/wire/effect";
+import type { LocalAgentRefusal, RefusedDevice } from "@repo/features/agent-wire";
+import type { InstalledSkillFilesRefusal } from "@repo/features/installed-skill-route-wire";
+import type { ModelProvider } from "@repo/features/models-wire";
+import type { RepositoryUnreached } from "@repo/features/repository-reach-wire";
+import { readEither } from "@repo/wire/effect";
 import { type Cause, Effect, type Layer, Option, Result, type Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type UnparsedWireValue, unparsedWire, wireUuidSchema } from "../core.js";
@@ -63,6 +63,9 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED]: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -138,11 +141,11 @@ export const HOSTED_REFUSAL = {
   MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
   /** The agent's session is still coming up; the same message a moment later is taken. */
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
-  /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
+  /** The agent's session has ended for good, as every agent's that ran on eve has, so nothing reaches it again and only a new agent goes on from its work; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
   /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
   AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
-  /** The agent runs on a native harness this function cannot reach (neither launched nor relayed from it); nothing was written, and nothing fell through to eve. */
+  /** The agent runs on a native harness this function cannot reach; nothing was written. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
   /** The account saved no OpenAI API key, which a voice call or a dictated clip runs on. */
   OPENAI_KEY_MISSING: { error: HOSTED_API_ERROR.OPENAI_KEY_MISSING },
@@ -170,6 +173,12 @@ export const HOSTED_REFUSAL = {
   SKILL_FILES_REFUSED: { error: HOSTED_API_ERROR.SKILL_FILES_REFUSED },
   /** Another open channel of the workspace goes by that name; nothing was written. */
   CHANNEL_NAME_TAKEN: { error: HOSTED_API_ERROR.CHANNEL_NAME_TAKEN },
+  /** A slug the owner chose is spelled other than a slug may be; nothing was written. */
+  WORKSPACE_SLUG_MALFORMED: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED },
+  /** A slug the owner chose is reserved; nothing was written. */
+  WORKSPACE_SLUG_RESERVED: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED },
+  /** A slug the owner chose is another workspace's; nothing was written. */
+  WORKSPACE_SLUG_TAKEN: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN },
   /** A Start on This Mac was refused (`localAgentRefused`, which names why); nothing was written. */
   LOCAL_AGENT_REFUSED: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED },
   /** A host's daemon is below the service's floor (`hostUpgradeNeeded`, which names the floor); nothing was read or written. */
@@ -254,8 +263,7 @@ export function upstreamRefused(upstreamStatus: number): HostedRefusal {
  * does not verify). An endpoint that does on a GET what a link must not
  * make a browser do asks for this itself, because a Lax cookie rides a
  * top-level navigation and every function holding a group answers every
- * path the group declares; and the work that reaches eve picks its caller
- * by it (`agents/coder-host/stop.ts`'s `eveFor`).
+ * path the group declares.
  */
 export function hostedCarriesBearer(request: Request): boolean {
   return request.headers.has("authorization");

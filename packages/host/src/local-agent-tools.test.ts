@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import type { AgentToolPin } from "@luke/agent-runner/pins";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import type { AgentToolPin } from "@repo/agent-runner/pins";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { localAgentTool } from "./local-agent-tools.js";
@@ -17,7 +17,7 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
 /** A release of the test's own: `tool-1.0/bin/tool` and a file beside it no member names, gzipped, pinned by its own size and digest. */
 const release = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
-  const scratch = yield* temporaryDirectoryScoped("luke-tool-release-");
+  const scratch = yield* temporaryDirectoryScoped("agent-tool-release-");
   yield* fileSystem.makeDirectory(`${scratch}/tool-1.0/bin`, { recursive: true });
   yield* fileSystem.writeFileString(`${scratch}/tool-1.0/bin/tool`, "#!/bin/sh\necho tool\n", {
     mode: 0o755,
@@ -44,7 +44,7 @@ describe("localAgentTool", () => {
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const root = yield* temporaryDirectoryScoped("luke-tools-");
+        const root = yield* temporaryDirectoryScoped("agent-tools-");
         const { archive, pin } = yield* release;
 
         const fetched = yield* localAgentTool(root, pin).pipe(
@@ -70,7 +70,7 @@ describe("localAgentTool", () => {
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const root = yield* temporaryDirectoryScoped("luke-tools-");
+        const root = yield* temporaryDirectoryScoped("agent-tools-");
         const { archive, pin } = yield* release;
         const tampered = Uint8Array.from(archive);
         tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
@@ -87,7 +87,7 @@ describe("localAgentTool", () => {
   it.effect("fetches again a build whose pinned file changed on disk since it was kept", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
-      const root = yield* temporaryDirectoryScoped("luke-tools-");
+      const root = yield* temporaryDirectoryScoped("agent-tools-");
       const { archive, pin } = yield* release;
       const pinned = {
         ...pin,
@@ -117,7 +117,7 @@ describe("localAgentTool", () => {
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const root = yield* temporaryDirectoryScoped("luke-tools-");
+        const root = yield* temporaryDirectoryScoped("agent-tools-");
         const { archive, pin } = yield* release;
         const fetching = fakeHttpClientLayer(() => new Response(archive));
         const folders = `${root}/agent-tools`;

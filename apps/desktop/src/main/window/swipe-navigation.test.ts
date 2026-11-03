@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import { PUSH, type PushEvent } from "@luke/host/contract";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import { PUSH, type PushEvent } from "@repo/host/contract";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { followSwipes } from "./swipe-navigation";

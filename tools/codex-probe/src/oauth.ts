@@ -16,7 +16,7 @@
  */
 
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from "node:crypto";
-import { CHATGPT_SIGN_IN } from "@luke/credentials";
+import { CHATGPT_SIGN_IN } from "@repo/credentials";
 import {
   isRecord,
   isWireNumber,
@@ -24,7 +24,7 @@ import {
   type UnparsedWireValue,
   valueFromJsonText,
   type WireRecord,
-} from "@luke/wire";
+} from "@repo/wire";
 
 /** Why a step of the sign-in refused to go on. */
 export const SIGN_IN_REFUSAL = {

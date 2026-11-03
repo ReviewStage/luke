@@ -1,4 +1,4 @@
-import type { GitHubTokenStatus } from "@luke/features/github-token-wire";
+import type { GitHubTokenStatus } from "@repo/features/github-token-wire";
 import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

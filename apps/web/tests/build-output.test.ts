@@ -39,7 +39,7 @@ const ANSWER_REQUEST =
   "const fn = await import(process.argv[1]); const answer = await fn.default.fetch(new Request(process.argv[2])); console.log(answer.status, await answer.text()); process.exit(0);";
 
 /** A database URL that connects to nothing, which the web runtime's layer names and no answer here dials. */
-const PLACEHOLDER_DATABASE_URL = "postgresql://isolation:load@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://isolation:load@127.0.0.1:5432/app";
 
 /**
  * What a load is given: a PATH to find node, and nothing else. Every bundle
@@ -58,7 +58,7 @@ async function emitFromTask(): Promise<{
   const task = await functionBundlePlan(WEB);
   const result = await build({ ...task.options, write: false });
   const contentsOf = new Map(result.outputFiles.map((file) => [file.path, file.contents] as const));
-  const outputDirectory = mkdtempSync(join(tmpdir(), "luke-build-output-"));
+  const outputDirectory = mkdtempSync(join(tmpdir(), "build-output-"));
   const functions: EmittedFunction[] = [
     ...task.functions.map((definition) => {
       const contents = contentsOf.get(join(WEB, "dist-functions", `${definition.file}.js`));
@@ -132,7 +132,7 @@ test("the default .func, loaded alone, lands the fallback's requests on the host
         "-e",
         ANSWER_REQUEST,
         functionEntryPath(outputDirectory, path),
-        `https://luke.test/${path}?${query}`,
+        `https://app.test/${path}?${query}`,
       ],
       {
         cwd: functionDirectory(outputDirectory, path),

@@ -1,5 +1,5 @@
-import { type DateSpan, dateLabel } from "@luke/features/date-mention";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
+import { type DateSpan, dateLabel } from "@repo/features/date-mention";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import { createContext, type ReactNode, useContext, useRef } from "react";
 import type { MarkdownSpan } from "../markdown-message.js";
 import {

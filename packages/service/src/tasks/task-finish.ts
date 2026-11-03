@@ -1,17 +1,22 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { readAgent } from "@repo/database/models/agent-store";
 import {
   archiveAgentOfDoneTask,
   beginTaskWork,
   finishTaskWork,
+  readTaskWorkspace,
   type TaskArchivedAgent,
-} from "@luke/database/models/task-store";
-import { TASK_STATUS } from "@luke/features/task-wire";
-import { failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/task-store";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import { failureKind } from "@repo/runtime/effect";
 import { Effect, Option } from "effect";
 import { idleStandingAgents, standsStopped } from "../agents/coder-host/stop.js";
 import { discardedOrLogged } from "../agents/device-discard.js";
-import { recordServerEvent, SERVER_EVENT, SERVER_TASK_FINISHER } from "../events/server-events.js";
+import {
+  recordServerEventIn,
+  SERVER_EVENT,
+  SERVER_TASK_FINISHER,
+} from "../events/server-events.js";
 
 /**
  * task-finish.ts -- a task's status following its work: done once the work is finished, in progress again once an agent takes it up.
@@ -67,11 +72,11 @@ function logged<A>(what: string, move: Effect.Effect<A, unknown, DatabaseService
   );
 }
 
-/** A finish counted under the account it was made for, where the task moved. */
-function finishCounted<E, R>(userId: string, finish: Effect.Effect<boolean, E, R>) {
+/** A finish counted under the account it was made for, in the task's workspace, where the task moved. */
+function finishCounted<E, R>(userId: string, taskId: string, finish: Effect.Effect<boolean, E, R>) {
   return Effect.flatMap(finish, (moved) =>
     moved
-      ? recordServerEvent(SERVER_EVENT.TASK_FINISH, userId, {
+      ? recordServerEventIn(SERVER_EVENT.TASK_FINISH, userId, readTaskWorkspace(userId, taskId), {
           status: TASK_STATUS.DONE,
           by: SERVER_TASK_FINISHER.MERGE,
         })
@@ -91,7 +96,7 @@ export function settleTaskIfFinished(
 ): Effect.Effect<void, never, DatabaseServices> {
   return logged(
     "a task's finish",
-    finishCounted(userId, finishTaskWork(userId, taskId, standsStopped)),
+    finishCounted(userId, taskId, finishTaskWork(userId, taskId, standsStopped)),
   );
 }
 
@@ -132,7 +137,11 @@ export function settleAgentTaskIfFinished(
     "a task's finish",
     Effect.flatMap(readAgent(userId, agentId), (agent) =>
       Option.isSome(agent) && agent.value.taskId !== null
-        ? finishCounted(userId, finishTaskWork(userId, agent.value.taskId, standsStopped))
+        ? finishCounted(
+            userId,
+            agent.value.taskId,
+            finishTaskWork(userId, agent.value.taskId, standsStopped),
+          )
         : Effect.void,
     ),
   );

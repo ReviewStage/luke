@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
-import { loopbackConsent } from "@luke/credentials/node";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { noNetwork } from "@luke/wire/testing";
+import { loopbackConsent } from "@repo/credentials/node";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { GATEWAY_ERROR, GATEWAY_METHOD } from "@repo/gateway";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { noNetwork } from "@repo/wire/testing";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { HostAssemblyTag, HostTag, hostStandingLayer } from "./effect/host.js";
@@ -88,14 +88,13 @@ const desktopAccountSource = Layer.provide(
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for a Mac's repositories and an agent's terminals, and which concerns it says it runs. */
+/** What a standing host answers for an agent's terminals and a ChatGPT sign-in, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
-  const repositories = yield* gateway.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ);
   const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
   const chatGptSignIn = yield* gateway.call(GATEWAY_METHOD.CHATGPT_SIGN_IN);
-  return { concerns, repositories, terminals, chatGptSignIn };
+  return { concerns, terminals, chatGptSignIn };
 });
 
 describe("the host's platform concerns", () => {
@@ -103,7 +102,7 @@ describe("the host's platform concerns", () => {
     "left out, need no spawner, terminal socket or sign-in consent, and refuse their methods",
     () =>
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-host-browser-");
+        const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
         // Note that nothing here provides a `ChildProcessSpawner`, a
         // `TerminalSocket`, or a `SignInConsent`. The layer's type, narrowed to the concerns chosen,
         // asks for neither, and a build that reached for one anyway would die
@@ -119,12 +118,10 @@ describe("the host's platform concerns", () => {
           ok: false,
           error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
         };
-        assert.deepEqual(asked.repositories, notHere);
         assert.deepEqual(asked.terminals, notHere);
         assert.deepEqual(asked.chatGptSignIn, notHere);
         assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.CHATGPT_SIGN_IN), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.MAC_TERMINAL), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
         assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
         assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.MICROPHONE]);
@@ -133,7 +130,7 @@ describe("the host's platform concerns", () => {
 
   it.effect("all chosen, as the desktop chooses them, answer", () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-host-desktop-");
+      const stateRoot = yield* temporaryDirectoryScoped("host-desktop-");
       const desktop = hostStandingLayer.pipe(
         Layer.provideMerge(hostAssemblyLayer(ALL_HOST_PLATFORM_CONCERNS)),
         Layer.provide(
@@ -144,8 +141,11 @@ describe("the host's platform concerns", () => {
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
             Layer.succeed(SignInConsent, { open: loopbackConsent }),
             Layer.succeed(ThisMacHost, {
-              loginItem: () => Effect.succeed(Result.fail("no login item in a fixture")),
-              version: Effect.succeed(Result.fail("no luke-host in a fixture")),
+              stateRoot,
+              runsHost: false,
+              loaded: Effect.succeed(false),
+              install: () => Effect.succeed(Result.fail("no install in a fixture")),
+              stop: Effect.succeed(Result.fail("no launchd in a fixture")),
               machine: Effect.succeed({
                 name: "Studio",
                 platform: DEVICE_PLATFORM.DARWIN,
@@ -158,7 +158,6 @@ describe("the host's platform concerns", () => {
 
       const asked = yield* Effect.provide(askedOfStandingHost, desktop);
 
-      assert.deepEqual(asked.repositories, { ok: true, result: { repositories: [] } });
       // A fixture run signs no account in, so the terminals concern itself answers, and refuses as signed out.
       assert.deepEqual(asked.terminals, {
         ok: false,
@@ -171,7 +170,6 @@ describe("the host's platform concerns", () => {
       assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
-        HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
         HOST_CAPABILITY.LOCAL_AGENTS,
         HOST_CAPABILITY.CHATGPT_SIGN_IN,
@@ -194,7 +192,7 @@ describe("the host's platform concerns", () => {
 describe("the host's account source", () => {
   it.effect("another source than the desktop's stands with no sign-in consent or cipher", () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-host-account-source-");
+      const stateRoot = yield* temporaryDirectoryScoped("host-account-source-");
       const account = {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",

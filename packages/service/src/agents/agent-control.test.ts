@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { createAgent, readAgent } from "@luke/database/models/agent-store";
-import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
-import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
-import { createTask } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { DateTime, Effect, Option, Redacted } from "effect";
+import { createAgent, readAgent } from "@repo/database/models/agent-store";
+import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
+import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
+import { createTask } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { DateTime, Effect, Option } from "effect";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import {
   connectWorkspaceGitHub,
@@ -21,9 +21,10 @@ import {
 } from "../testing/github-app-fake.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 import { startFromOf } from "./coder-host/replay.js";
+import { routedSessions } from "./coder-host/runtime-sessions.js";
 import { steerAgent } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { EVE_MOUNT, type EveTypedTurn, eveSessions } from "./eve-host/eve-sessions.js";
+import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 
 /**
  * Who controls a coding agent that runs on its starter's own GitHub token,
@@ -61,6 +62,7 @@ const openTokenAgent = Effect.gen(function* () {
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return { owner, reader, tokenless, workspace, task, agent: Option.getOrThrow(started).agent };
 });
@@ -71,11 +73,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
     () =>
       Effect.gen(function* () {
         const { reader, tokenless, task, agent } = yield* openTokenAgent;
-        const eve = yield* eveSessions<EveTypedTurn>({
-          origin: "https://luke.test",
-          caller: { secret: Redacted.make("fixture-deployment-secret"), account: reader },
-          mount: EVE_MOUNT.CODER,
-        });
+        const eve = yield* routedSessions<EveTypedTurn>(reader);
         const steer = (userId: string) =>
           steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
             text: "Carry on.",
@@ -122,11 +120,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agent = Option.getOrThrow(started).agent;
-        const eve = yield* eveSessions<EveTypedTurn>({
-          origin: "https://luke.test",
-          caller: { secret: Redacted.make("fixture-deployment-secret"), account: tokenless },
-          mount: EVE_MOUNT.CODER,
-        });
+        const eve = yield* routedSessions<EveTypedTurn>(tokenless);
 
         assert.ok(Option.isSome(yield* readAgent(tokenless, agent.id)));
         const refused = yield* Effect.flip(

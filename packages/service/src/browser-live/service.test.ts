@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_LIVE } from "@repo/features/browser-live-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { test } from "vitest";
 import { RELAY_UPGRADE_STATUS, type RelayCredential } from "../http/relay-upgrade.js";
@@ -26,7 +26,7 @@ import {
 const TASK = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 const AGENT = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
 const TAB = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
-const OWN_ORIGIN = "https://luke.example.test";
+const OWN_ORIGIN = "https://app.example.test";
 const OWN = new Set([OWN_ORIGIN]);
 const BEARER = { authorization: "Bearer token-1" };
 const COOKIE = { origin: OWN_ORIGIN, cookie: "__Secure-better-auth.session_token=session-1" };

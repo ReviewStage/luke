@@ -1,5 +1,5 @@
-import { backToWords } from "@luke/features/words";
-import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
+import { backToWords } from "@repo/features/words";
+import { APP_COMMAND, type KeyedCommand } from "@repo/settings/shortcuts";
 import { useMemo } from "react";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
@@ -57,7 +57,7 @@ export function BackButton({
   look?: BackButtonLook | undefined;
   /** Its words, and so its name: the place's own name ("Settings"), or a column's ("All versions"). */
   label: string;
-  /** The place it leads to as a sentence names it mid-way, which its hint reads ("inbox", "MCP servers"). */
+  /** The place it leads to as a sentence names it mid-way, which its hint reads ("inbox", "Integrations"). */
   place: string;
   /** Its accessible name in a bar, where it says more than its words, which it holds ("Back to Overview" beside a glyph standing alone). */
   name?: string | undefined;

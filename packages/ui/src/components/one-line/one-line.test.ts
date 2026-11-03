@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -86,7 +86,7 @@ test("a line drawn whole raises no hint, and one cut short says its words whole"
 test("a line whose glyphs stand a pixel past its leading is not cut short, though words that wrap and run below their box are", () => {
   vi.stubGlobal("ResizeObserver", StandInObserver);
   const view = render(createElement(OneLine, { children: "Ada Lovelace" }));
-  const line = view.querySelector<HTMLElement>(".luke-one-line") ?? assert.fail("the line");
+  const line = view.querySelector<HTMLElement>(".ui-one-line") ?? assert.fail("the line");
   // Note that jsdom reads no stylesheet, so one-line.css's nowrap is stood in for inline.
   line.style.whiteSpace = "nowrap";
   vi.spyOn(line, "scrollWidth", "get").mockReturnValue(101);
@@ -127,7 +127,7 @@ function renderUnhinted(width: number): { view: HTMLElement; line: Element } {
       createElement(OneLine, { children: "A very long task name" }),
     ),
   );
-  const line = view.querySelector(".luke-one-line") ?? assert.fail("the line");
+  const line = view.querySelector(".ui-one-line") ?? assert.fail("the line");
   vi.spyOn(line, "scrollWidth", "get").mockReturnValue(120);
   vi.spyOn(line, "clientWidth", "get").mockReturnValue(width);
   resize();
@@ -156,7 +156,7 @@ test("a caller's own hint stands in the tooltip's place", () => {
       createElement(OneLine, { hint, children: "sam@example.com" }),
     ),
   );
-  const line = view.querySelector(".luke-one-line") ?? assert.fail("the line");
+  const line = view.querySelector(".ui-one-line") ?? assert.fail("the line");
   vi.spyOn(line, "scrollWidth", "get").mockReturnValue(120);
   vi.spyOn(line, "clientWidth", "get").mockReturnValue(80);
   resize();

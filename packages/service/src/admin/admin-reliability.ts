@@ -13,7 +13,7 @@
  * product analytics, which the answer links to.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AdminAttentionAccount,
   AdminAutomationCount,
@@ -21,7 +21,7 @@ import type {
   AdminFailureCount,
   AdminIntegration,
   AdminReliability,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsScope,
@@ -29,9 +29,9 @@ import {
   type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-} from "@luke/features/admin-wire";
-import type { AgentFailure } from "@luke/features/agent-wire";
-import type { AutomationRunReason } from "@luke/features/automation-wire";
+} from "@repo/features/admin-wire";
+import type { AgentFailure } from "@repo/features/agent-wire";
+import type { AutomationRunReason } from "@repo/features/automation-wire";
 import { Clock, Effect } from "effect";
 import { lastNDayKeys, sum } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
@@ -47,7 +47,7 @@ export const ADMIN_ATTENTION_LIMIT = 50;
  */
 export interface AdminReliabilitySource {
   daily: {
-    lukeTurns: ReadonlyMap<string, AdminFailureCount>;
+    appTurns: ReadonlyMap<string, AdminFailureCount>;
     agentRuns: ReadonlyMap<string, AdminFailureCount>;
     abandonedTurns: ReadonlyMap<string, number>;
     automationRuns: ReadonlyMap<string, AdminAutomationCount>;
@@ -89,7 +89,7 @@ export function buildAdminReliability(
   const of = <Count>(map: ReadonlyMap<string, Count>, empty: Count) =>
     dayKeys.map((day) => map.get(day) ?? empty);
 
-  const lukeTurns = of(source.daily.lukeTurns, NO_FAILURES);
+  const appTurns = of(source.daily.appTurns, NO_FAILURES);
   const agentRuns = of(source.daily.agentRuns, NO_FAILURES);
   const automationRuns = of(source.daily.automationRuns, NO_AUTOMATION_RUNS);
 
@@ -97,7 +97,7 @@ export function buildAdminReliability(
     generatedAt: now,
     windowDays,
     headline: {
-      lukeTurns: totalOf(lukeTurns),
+      appTurns: totalOf(appTurns),
       agentRuns: totalOf(agentRuns),
       abandonedTurns: sum(of(source.daily.abandonedTurns, 0)),
       automationRuns: {
@@ -107,7 +107,7 @@ export function buildAdminReliability(
     },
     daily: dayKeys.map((day, index) => ({
       day,
-      lukeTurns: failureShare(lukeTurns[index] ?? NO_FAILURES),
+      appTurns: failureShare(appTurns[index] ?? NO_FAILURES),
       agentRuns: failureShare(agentRuns[index] ?? NO_FAILURES),
       automationRuns: failureShare(automationRuns[index] ?? NO_AUTOMATION_RUNS),
     })),

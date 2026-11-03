@@ -1,4 +1,4 @@
-import { isWireString, type UnparsedWireValue } from "@luke/wire";
+import { isWireString, type UnparsedWireValue } from "@repo/wire";
 
 /**
  * The identities the runtime keeps apart, each a string with one meaning.

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { HOST_CAPABILITY, type HostCapability, type ZoomPercent } from "@luke/settings";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { HOST_CAPABILITY, type HostCapability, type ZoomPercent } from "@repo/settings";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -136,7 +136,7 @@ test("a zoom size the settings refuse is said in a toast", async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 
-  const said = [...document.querySelectorAll(".luke-toast .luke-toast-words")].map(
+  const said = [...document.querySelectorAll(".ui-toast .ui-toast-words")].map(
     (words) => words.textContent,
   );
   assert.deepEqual(said, ["The window could not be zoomed. Try again."]);

@@ -129,7 +129,7 @@ jobs:
           printf '%s' "$APPLE_API_KEY_P8_BASE64" | /usr/bin/base64 -D > "$APPLE_API_KEY_PATH"
           chmod 600 "$APPLE_API_KEY_PATH"
           export APPLE_API_KEY_PATH
-          pnpm --filter @luke/desktop release
+          pnpm --filter @repo/desktop release
 
       - name: Verify signed application
         run: |
@@ -222,5 +222,5 @@ jobs:
       - name: Remove release keychain
         if: ${{ always() }}
         env:
-          LUKE_RELEASE_KEYCHAIN: ${{ env.LUKE_RELEASE_KEYCHAIN }}
+          APP_RELEASE_KEYCHAIN: ${{ env.APP_RELEASE_KEYCHAIN }}
         run: ./scripts/release/cleanup-keychain.sh

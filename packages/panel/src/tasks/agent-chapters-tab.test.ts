@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@luke/brand";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@repo/brand";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentChangedFile,
@@ -17,27 +17,27 @@ import {
   PULL_REQUEST_STATE,
   REVIEW_STATE,
   type ReviewThread,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
   type Chapter,
   LINE_REF_SIDE,
-} from "@luke/features/pull-request-chapters";
-import type { PullRequestChaptersAnswerView } from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters";
+import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersState,
-} from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/pull-request-chapters-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
-} from "@luke/features/pull-request-write-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/pull-request-write-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -319,7 +319,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   for (const style of document.head.querySelectorAll("style")) style.remove();
-  document.body.style.removeProperty("--luke-duration-pane");
+  document.body.style.removeProperty("--ui-duration-pane");
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -487,13 +487,13 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
 
 /** The rail's rows' presses, in order. */
 function railPresses(container: Element | null): HTMLButtonElement[] {
-  return [...(container?.querySelectorAll<HTMLButtonElement>(".luke-list-row-main") ?? [])];
+  return [...(container?.querySelectorAll<HTMLButtonElement>(".ui-list-row-main") ?? [])];
 }
 
 /** The rail's rows, as a reader hears each's title: its place, its title, and its risk. */
 function railRows(tab: HTMLElement): string[] {
   return railPresses(tab.querySelector(".chapter-rail")).map(
-    (each) => each.querySelector(".luke-list-row-title")?.textContent ?? "",
+    (each) => each.querySelector(".ui-list-row-title")?.textContent ?? "",
   );
 }
 
@@ -524,7 +524,7 @@ function drawnWords(node: Node): string {
 
 /** The chapter shown, by the title its bar leads with. */
 function heading(tab: HTMLElement): string {
-  return tab.querySelector(".chapter-reading .luke-pane-bar-title")?.textContent ?? "";
+  return tab.querySelector(".chapter-reading .ui-pane-bar-title")?.textContent ?? "";
 }
 
 /** The paths and patches the chapter's list was last handed, the Files changed view's own left out. */
@@ -588,7 +588,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
   );
 
   assert.equal(heading(tab), "Read the expiry");
-  const bars = tab.querySelectorAll(".chapters-view .luke-pane-bar");
+  const bars = tab.querySelectorAll(".chapters-view .ui-pane-bar");
   assert.equal(bars.length, 1, "the chapter's bar is the one bar over its list");
   assert.notEqual(
     bars[0]?.querySelector(".chapter-list-tools .file-tree-toggle"),
@@ -738,7 +738,7 @@ test("the Chapters tab counts none viewed where the files' read names no head, s
     }),
   );
 
-  assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
+  assert.match(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u);
   assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
 });
 
@@ -763,7 +763,7 @@ test("the rail's foot says which model made the chapters, inside the tab's ph-no
 
 test("stale chapters still say which model made them, and a model Settings does not offer is named by its id", async () => {
   const tab = await draw(madeBy("scripted", OLDER));
-  assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
+  assert.match(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u);
   assert.equal(tab.querySelector(".chapter-rail-credit")?.textContent, "Chapters by scripted");
 });
 
@@ -780,7 +780,7 @@ test("chapters made for an older head stand under a line saying new commits came
   );
 
   assert.match(
-    tab.querySelector(".luke-tab-notice")?.textContent ?? "",
+    tab.querySelector(".ui-tab-notice")?.textContent ?? "",
     /New commits since these chapters/u,
   );
   assert.equal(heading(tab), "Read the expiry", "the chapters stand as they were");
@@ -827,10 +827,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
   act(() => button(tab, "Generate chapters").click());
   await settle();
   assert.equal(heading(tab), "Read the expiry");
-  assert.doesNotMatch(
-    tab.querySelector(".luke-tab-notice")?.textContent ?? "",
-    /New commits since/u,
-  );
+  assert.doesNotMatch(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u);
   assert.notDeepEqual(listed(), [], "the chapter's diff is drawn from the files of its head");
 });
 
@@ -920,7 +917,7 @@ test("Refresh on chapters someone else is making shows busy once the read has wa
   const refresh = () => button(elsewhere, "Refresh");
   const busy = () =>
     elsewhere.querySelector<HTMLButtonElement>('button[aria-busy="true"]') ?? undefined;
-  const ring = () => busy()?.querySelector(".luke-spinner-ring") != null;
+  const ring = () => busy()?.querySelector(".ui-spinner-ring") != null;
   assert.equal(busy(), undefined);
 
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -961,7 +958,7 @@ function railToggle(tab: HTMLElement): HTMLButtonElement {
 /** A narrow panel with the chapters read and the rail away. */
 async function narrowChapters(): Promise<HTMLElement> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   layContainersAt({ "side-panel": 500 });
   const tab = await draw(
     controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),

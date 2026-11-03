@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import { Database } from "@luke/database/core/query";
-import { agentOwnerFactsOf } from "@luke/database/models/agent-owners";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import { Database } from "@repo/database/core/query";
+import { agentOwnerFactsOf } from "@repo/database/models/agent-owners";
 import {
   archiveAgent,
   createAgent,
@@ -13,10 +13,10 @@ import {
   pinAgentCommitted,
   recordAgentPublished,
   renameAgentCommitted,
-} from "@luke/database/models/agent-store";
-import { createAutomation, recordAutomationRun } from "@luke/database/models/automation-store";
-import { devicesNamed, registerDevice } from "@luke/database/models/device-store";
-import { addTaskBlock } from "@luke/database/models/task-block-store";
+} from "@repo/database/models/agent-store";
+import { createAutomation, recordAutomationRun } from "@repo/database/models/automation-store";
+import { devicesNamed, registerDevice } from "@repo/database/models/device-store";
+import { addTaskBlock } from "@repo/database/models/task-block-store";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
@@ -24,13 +24,13 @@ import {
   listTasks,
   updateTask,
   updateTaskCommitted,
-} from "@luke/database/models/task-store";
-import { readAccountNames } from "@luke/database/models/workspace-store";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { messages, turns } from "@luke/database/schemas/storage";
-import { task } from "@luke/database/schemas/task";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+} from "@repo/database/models/task-store";
+import { readAccountNames } from "@repo/database/models/workspace-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { messages, turns } from "@repo/database/schemas/storage";
+import { task } from "@repo/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
   getTestDB,
@@ -38,8 +38,8 @@ import {
   mutableFunctionsOf,
   openWorkspace,
   startTask,
-} from "@luke/database/testing";
-import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
+} from "@repo/database/testing";
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@repo/features/agent-status";
 import {
   AGENT_ARCHIVER,
   AGENT_KIND,
@@ -49,14 +49,14 @@ import {
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/automation-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   agentPullRequestsOfLiveRows,
   taskAgentPinsOfLiveRows,
@@ -64,8 +64,8 @@ import {
   taskListLiveRowsSchema,
   taskListOfLiveRows,
   taskPullRequestsOfLiveRows,
-} from "@luke/features/task-list-live";
-import { PLAN_ACTOR, TASK_STATUS } from "@luke/features/task-wire";
+} from "@repo/features/task-list-live";
+import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -73,7 +73,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnStatus,
-} from "@luke/wire";
+} from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -98,7 +98,7 @@ const NOW = Date.parse("2026-10-15T09:00:00Z");
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -131,6 +131,7 @@ const openAgent = (
       effort: "high",
       repository: "acme/relay",
       ...started,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { agent } = Option.getOrThrow(made);
     const db = yield* Database;
@@ -492,7 +493,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           name: "Audit log export",
           origin: { actor: PLAN_ACTOR.NOTETAKER },
         });
-        // A child task, written as a row since no start names a parent yet.
+        // The follow-up made a child of the first plan.
         const db = yield* Database;
         yield* db.update(task).set({ parentTaskId: plan.id }).where(eq(task.id, followUp.id));
 
@@ -676,6 +677,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: "acme/relay",
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
         const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW);
@@ -842,6 +844,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               repository: "acme/relay",
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             }),
             (made) => Option.getOrThrow(made).agent,
           );

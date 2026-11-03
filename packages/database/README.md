@@ -1,4 +1,4 @@
-# @luke/database
+# @repo/database
 
 The hosted store's schema, queries, and migrations. The schema modules under
 `src/schemas/` are the source of truth; Drizzle's Effect driver runs every
@@ -11,9 +11,9 @@ how to write a query and roll out a migration.
 | --- | --- |
 | `pnpm db:generate --name=<what_it_does>` | Write the folder that brings the newest snapshot up to the schema modules |
 | `pnpm db:generate --custom --name=<what_it_does>` | Write a folder for hand-written SQL |
-| `pnpm --filter @luke/database check:migrations` | `drizzle-kit check`: refuse two branches' migrations that do not commute (`./scripts/check.sh` runs it) |
-| `pnpm --filter @luke/web db:migrate` | Apply what a database has not recorded, on `DATABASE_URL_UNPOOLED` |
-| `pnpm --filter @luke/database sync:render <migration> <table>…` | Write synced tables' capture into a migration, around its own statements |
+| `pnpm --filter @repo/database check:migrations` | `drizzle-kit check`: refuse two branches' migrations that do not commute (`./scripts/check.sh` runs it) |
+| `pnpm --filter @repo/web db:migrate` | Apply what a database has not recorded, on `DATABASE_URL_UNPOOLED` |
+| `pnpm --filter @repo/database sync:render <migration> <table>…` | Write synced tables' capture into a migration, around its own statements |
 
 Each migration is a folder, `migrations/<UTC timestamp>_<name>/`, holding
 `migration.sql` and the `snapshot.json` the next one is generated from. A

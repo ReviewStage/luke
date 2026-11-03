@@ -1,9 +1,9 @@
-import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
-import type { Task } from "@luke/features/task-wire";
-import { readingWords } from "@luke/features/words";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ACCOUNT_STATUS, type AccountProvider } from "@repo/credentials/snapshot";
+import type { Task } from "@repo/features/task-wire";
+import { readingWords } from "@repo/features/words";
+import { HOST_CAPABILITY } from "@repo/settings";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BACK_BUTTON_LOOK,
   BackButton,
@@ -11,6 +11,8 @@ import {
   CollectionPage,
   DrawerScrim,
   IconButton,
+  NOT_FOUND_THING,
+  NotFound,
   PAGE_FRAME,
   PANE_PIN_ELEMENT,
   PanePin,
@@ -24,8 +26,8 @@ import {
   Toolbar,
   Tooltip,
   useDrawerSwipe,
-} from "@luke/ui";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/ui";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
@@ -70,7 +72,7 @@ import { OfflineMark } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneHead, phoneBar } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import { PanelToggleRoom, SidePanelChord, SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -165,6 +167,15 @@ const TASKS_EXIT_PLACE = "tasks";
 
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
 const HISTORY_EXIT_PLACE = "plan";
+
+/** What a phone's row is named for over a workspace's address that names none of the reader's. */
+const UNKNOWN_WORKSPACE_PHONE_PLACE = "unknown-workspace";
+
+/** The window's title over a workspace's address that names none of the reader's, as the state's own. */
+const NOT_FOUND_TITLE = "Not found";
+
+/** The way out of a workspace's address that names none of the reader's: the reader's own Home. */
+const GO_HOME = "Go home";
 
 /**
  * What stands while a version history's chunk loads: its frame, the list's
@@ -460,7 +471,7 @@ function useSettingsFocusReturn(inSettings: boolean): void {
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * task, Settings, the Inbox, the tab closed latest, opened again on its
+ * task, Settings, Home, the Inbox, the tab closed latest, opened again on its
  * task, the Keyboard shortcuts page that lists them all, and back and
  * forward, which answer whether or not their buttons are drawn.
  */
@@ -487,6 +498,15 @@ function usePlaceCommands(
       : undefined,
   );
   useAppCommand(APP_COMMAND.SETTINGS, pastGate ? () => onTabChange(PANEL_TAB.SETTINGS) : undefined);
+  useAppCommand(
+    APP_COMMAND.HOME,
+    pastGate && tasks.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.onGoHome();
+        }
+      : undefined,
+  );
   useAppCommand(
     APP_COMMAND.INBOX,
     pastGate && tasks.signedIn
@@ -578,6 +598,9 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.boardView.open) return { signedIn, subject: "Tasks", workspace: tasks.workspace };
+  // A workspace not there for the reader names none, the listed one least of all.
+  if (tasks.unknownWorkspace.open)
+    return { signedIn, subject: NOT_FOUND_TITLE, workspace: undefined };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -735,7 +758,8 @@ export function DesktopShell({
     tasks.personView.userId !== undefined ||
     tasks.automationsView.open ||
     tasks.boardView.open ||
-    tasks.adminView.open;
+    tasks.adminView.open ||
+    tasks.unknownWorkspace.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -888,6 +912,7 @@ export function DesktopShell({
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
+  const unknownWorkspace = tasks.unknownWorkspace.open;
   const inboxItemShown = tasks.inboxView.chosen !== undefined;
   // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
@@ -1005,6 +1030,17 @@ export function DesktopShell({
                     <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
                   </Suspense>
                 </PageFind>
+              ) : unknownWorkspace ? (
+                // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
+                <NotFound
+                  thing={NOT_FOUND_THING.WORKSPACE}
+                  bar={
+                    room === SHELL_ROOM.NARROW
+                      ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
+                      : {}
+                  }
+                  action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
+                />
               ) : (
                 <DesktopTasks
                   tasks={tasks}
@@ -1012,6 +1048,10 @@ export function DesktopShell({
                   summary={summary}
                   room={room}
                   away={away}
+                  accountName={
+                    account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined
+                  }
+                  staged={sidebar.staged}
                 />
               )}
               {/* Note that the Inbox kept stands after the page shown in its place, so a lookup of the page's first box finds the page's. */}

@@ -2,11 +2,11 @@
    the tables in that script and re-run it.
 
    The motion every surface reads: brand's springs, durations, and
-   delays under @luke/ui's names, so every app that imports
-   @luke/ui/tokens.css moves them alike. motion.css answers reduced motion. */
+   delays under @repo/ui's names, so every app that imports
+   @repo/ui/tokens.css moves them alike. motion.css answers reduced motion. */
 
 :root {
-  --luke-spring: linear(
+  --ui-spring: linear(
     0,
     0.0285,
     0.0993,
@@ -35,7 +35,7 @@
     1.0098,
     1
   );
-  --luke-spring-fast: linear(
+  --ui-spring-fast: linear(
     0,
     0.0288,
     0.1002,
@@ -64,17 +64,17 @@
     1.0095,
     1
   );
-  --luke-duration-hover: 70ms;
-  --luke-duration-exit: 90ms;
-  --luke-duration-quick: 140ms;
-  --luke-duration-pane: 240ms;
-  --luke-duration-fast: 280ms;
-  --luke-duration-shape: 460ms;
-  --luke-motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
-  --luke-motion-pane: cubic-bezier(0.2, 0, 0, 1);
-  --luke-row-stagger: 32ms;
-  --luke-hint-delay: 500ms;
-  --luke-late-delay: 1000ms;
-  --luke-confirm-delay: 1200ms;
-  --luke-settle-delay: 180ms;
+  --ui-duration-hover: 70ms;
+  --ui-duration-exit: 90ms;
+  --ui-duration-quick: 140ms;
+  --ui-duration-pane: 240ms;
+  --ui-duration-fast: 280ms;
+  --ui-duration-shape: 460ms;
+  --ui-motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
+  --ui-motion-pane: cubic-bezier(0.2, 0, 0, 1);
+  --ui-row-stagger: 32ms;
+  --ui-hint-delay: 500ms;
+  --ui-late-delay: 1000ms;
+  --ui-confirm-delay: 1200ms;
+  --ui-settle-delay: 180ms;
 }

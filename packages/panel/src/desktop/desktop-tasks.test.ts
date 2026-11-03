@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { type AgentInboxAnswerView, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { type AgentInboxAnswerView, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -18,26 +18,26 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
-} from "@luke/features/inbox-wire";
-import type { ReadLink } from "@luke/features/link-grammar";
+} from "@repo/features/inbox-wire";
+import type { ReadLink } from "@repo/features/link-grammar";
 import {
   PLAN_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
   type TaskStanding,
-} from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/task-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHolderInbox,
   type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
   UNREAD,
-} from "@luke/host/app-state";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/host/app-state";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -330,12 +330,12 @@ async function _narrowTaskInbox(
     title: () => tab.querySelector("[data-inbox-title]")?.textContent,
     /** The list's head as a reader meets it: its name, and whether it offers a view's menu. */
     head: () => [
-      tab.querySelector(".inbox-tasks .luke-pane-bar-title")?.textContent,
+      tab.querySelector(".inbox-tasks .ui-pane-bar-title")?.textContent,
       tab.querySelector('button[aria-label="View options"]') !== null,
     ],
     rows: () =>
-      [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
-    pager: () => tab.querySelector(".luke-pager-count")?.textContent ?? null,
+      [...tab.querySelectorAll(".inbox-tasks .ui-list-row-title")].map((row) => row.textContent),
+    pager: () => tab.querySelector(".ui-pager-count")?.textContent ?? null,
     /** What the list's foot says of a refresh that did not land, and whether it offers Retry. */
     refreshFailure: () => {
       const alert = tab.querySelector('.inbox-tasks [role="alert"]');
@@ -345,13 +345,13 @@ async function _narrowTaskInbox(
       return [alert?.firstElementChild?.nextElementSibling?.textContent ?? null, retry];
     },
     back: () =>
-      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button")].find(
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .ui-toolbar button")].find(
         (button) => button.textContent === "Inbox",
       ) ?? null,
     row: (title: string) =>
-      [
-        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
-      ].find((each) => each.textContent?.includes(title)),
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main")].find(
+        (each) => each.textContent?.includes(title),
+      ),
     unmount: () => {
       act(() => root.unmount());
       container.remove();
@@ -614,7 +614,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   );
   const chip = (name: string) =>
     [...container.querySelectorAll<HTMLButtonElement>(".desktop-document [data-mention-ref]")].find(
-      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
+      (each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#42");

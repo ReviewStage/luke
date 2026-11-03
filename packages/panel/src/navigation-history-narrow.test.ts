@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { memoryHistory } from "@luke/ui/history-adapter";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { memoryHistory } from "@repo/ui/history-adapter";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -55,7 +55,7 @@ const ACME = {
   github: null,
 };
 
-const TASK_PATH = `/acme/plan/${DOCUMENT_TASK.id}`;
+const TASK_PATH = `/acme/task/${DOCUMENT_TASK.id}`;
 
 /** A page an agent wrote for the task, as its side panel tab names it. */
 const PAGE_TAB: SidePanelTab = { page: "page-1" };
@@ -496,7 +496,7 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
     window.shown().inboxView.onChoose(ITEM);
   });
 
-  assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
+  assert.deepEqual(window.addresses(), ["/acme/inbox", "/acme/inbox/item-1"]);
   assert.equal(window.standingAddress(), copiedHere());
   const shownItem = (at: Standing) => at.inbox.chosen;
   backAndForth(window, shownItem, undefined, ITEM);
@@ -520,7 +520,7 @@ test("an Inbox narrowed to a task, showing one column, steps its item's way back
   window.press(() => window.shown().inboxView.onClear());
 
   assert.equal(window.history().canGoForward, true, "a step back, the item ahead");
-  assert.equal(window.standingAddress(), `/acme/inbox/plan/${DOCUMENT_TASK.id}`);
+  assert.equal(window.standingAddress(), `/acme/inbox/task/${DOCUMENT_TASK.id}`);
 });
 
 test("in a room still wide, as a 700px stage is, an Inbox showing one column by its own width holds its item as a step after its list, and its way back steps back to the list", () => {
@@ -532,7 +532,7 @@ test("in a room still wide, as a 700px stage is, an Inbox showing one column by 
     window.shown().inboxView.onChoose(ITEM);
   });
 
-  assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
+  assert.deepEqual(window.addresses(), ["/acme/inbox", "/acme/inbox/item-1"]);
   const shownItem = (at: Standing) => at.inbox.chosen;
   backAndForth(window, shownItem, undefined, ITEM);
 
@@ -549,8 +549,8 @@ test("on the desktop's width the step's link names the Inbox's item standing alo
       inbox: { open: true, chosen: undefined, single },
     });
     window.press(() => window.shown().inboxView.onChoose(ITEM));
-    assert.equal(window.standingAddress(), single ? `${TASK_PATH}/inbox/item-1` : "/acme/inbox");
-    assert.equal(copiedHere(), `${TASK_PATH}/inbox/item-1`, "Copy link names the item at hand");
+    assert.equal(window.standingAddress(), single ? "/acme/inbox/item-1" : "/acme/inbox");
+    assert.equal(copiedHere(), "/acme/inbox/item-1", "Copy link names the item at hand");
     unmountAll();
   }
 });

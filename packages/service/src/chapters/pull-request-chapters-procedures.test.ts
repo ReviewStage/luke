@@ -1,28 +1,29 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { createAgent, updateAgentBranch } from "@luke/database/models/agent-store";
+import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { createAgent, updateAgentBranch } from "@repo/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
   claimChapterGeneration,
-} from "@luke/database/models/pull-request-chapters-store";
-import { accountPreference } from "@luke/database/schemas/preferences";
-import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
-import { CHAPTER_KIND, CHAPTER_RISK } from "@luke/features/pull-request-chapters";
+} from "@repo/database/models/pull-request-chapters-store";
+import { accountPreference } from "@repo/database/schemas/preferences";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@repo/features/provider-key-wire";
+import { CHAPTER_KIND, CHAPTER_RISK } from "@repo/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersAnswer,
   pullRequestChaptersAnswerSchema,
-} from "@luke/features/pull-request-chapters-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/pull-request-chapters-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
@@ -63,7 +64,7 @@ import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedure
 // SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
 const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const BRANCH = "luke/expire-invitations";
@@ -96,7 +97,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
 };
@@ -233,6 +233,7 @@ const standing = (
         model: AGENT_DEFAULT_CHOICE.model,
         effort: "low",
         repository: RELAY_FULL_NAME,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
     ).agent;
     yield* updateAgentBranch(owner, agent.id, BRANCH);
@@ -394,7 +395,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
     "a Generate tells the chapters for the head, every member of the workspace reads them, and a read once the head moves answers them made for the head they were",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, analytics, ask, moveHead } = yield* standing();
+        const { owner, teammate, organizationId, analytics, ask, moveHead } = yield* standing();
         const generated = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
         const ready = {
           status: PULL_REQUEST_CHAPTERS_STATE.READY,
@@ -415,6 +416,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
             {
               name: SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE,
               userId: owner,
+              workspaceId: organizationId,
               properties: { outcome: "ready", chapters: 1, hunks: 1, duration_ms: 0 },
             },
           ],

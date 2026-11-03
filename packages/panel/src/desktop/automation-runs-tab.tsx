@@ -1,8 +1,8 @@
 import {
   AUTOMATION_RUN_STANDING,
   automationRunStanding,
-} from "@luke/features/automation-list-model";
-import type { AutomationWorkspaceRun } from "@luke/features/automation-wire";
+} from "@repo/features/automation-list-model";
+import type { AutomationWorkspaceRun } from "@repo/features/automation-wire";
 import {
   type ChoiceItem,
   type CountPart,
@@ -11,8 +11,8 @@ import {
   ListMotion,
   STATUS_TONE,
   type StatusTone,
-} from "@luke/ui";
-import { ClockIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { ClockIcon } from "@repo/ui/icons";
 import { useRef } from "react";
 import { CREATOR, RunRow } from "./automation-runs-panel.js";
 import type { WorkspaceRunsRead } from "./use-automation-runs.js";

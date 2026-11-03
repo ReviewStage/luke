@@ -4,26 +4,26 @@
    sizes its glyph cell. The four sizes are the mark's own. */
 
 @layer components {
-  .luke-provider-mark {
+  .ui-provider-mark {
     flex: none;
   }
 
-  .luke-provider-mark-caption {
+  .ui-provider-mark-caption {
     width: 12px;
     height: 12px;
   }
 
-  .luke-provider-mark-icon {
+  .ui-provider-mark-icon {
     width: 16px;
     height: 16px;
   }
 
-  .luke-provider-mark-row {
+  .ui-provider-mark-row {
     width: 20px;
     height: 20px;
   }
 
-  .luke-provider-mark-tile {
+  .ui-provider-mark-tile {
     width: 40px;
     height: 40px;
   }

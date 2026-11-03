@@ -1,6 +1,6 @@
-import type { AdminMetricsWindow } from "@luke/features/admin-wire";
-import type { ViewerAccount } from "@luke/panel/admin/chrome/page-header";
-import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
+import type { AdminMetricsWindow } from "@repo/features/admin-wire";
+import type { ViewerAccount } from "@repo/panel/admin/chrome/page-header";
+import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@repo/panel/admin/prefs";
 import {
   ADMIN_PAGE,
   ADMIN_TAB,
@@ -12,20 +12,18 @@ import {
   viewFromLocation,
   windowFromLocation,
   windowHref,
-} from "@luke/panel/admin/routing";
-import { AccountScreen } from "@luke/panel/admin/screens/account";
-import { CostScreen } from "@luke/panel/admin/screens/cost";
-import { DashboardScreen, useMetricsRead } from "@luke/panel/admin/screens/dashboard";
-import { DayScreen } from "@luke/panel/admin/screens/day";
-import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
-import { UsersScreen } from "@luke/panel/admin/screens/users";
-import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
-import { ADMIN_READ_STATUS } from "@luke/panel/admin/use-admin-read";
+} from "@repo/panel/admin/routing";
+import { AccountScreen } from "@repo/panel/admin/screens/account";
+import { CostScreen } from "@repo/panel/admin/screens/cost";
+import { DashboardScreen, useMetricsRead } from "@repo/panel/admin/screens/dashboard";
+import { DayScreen } from "@repo/panel/admin/screens/day";
+import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
+import { UsersScreen } from "@repo/panel/admin/screens/users";
+import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./admin/auth-client";
-import { ForbiddenCard, SignInCard } from "./admin/chrome/gate-cards";
+import { SignInCard } from "./admin/chrome/gate-cards";
 import { AdminShell } from "./admin/chrome/sidebar";
-import { AnimationsScreen } from "./admin/screens/animations";
 import { WebAdminDoors } from "./admin/web-admin-doors";
 
 /** The standalone page: the dashboard under this page's own doors (`web-admin-doors.tsx`). */
@@ -170,19 +168,6 @@ function AdminDashboardPage(): React.JSX.Element {
         frame={(content) => shell(ADMIN_TAB.DASHBOARD, content)}
       />
     );
-  }
-
-  if (view.kind === ADMIN_TAB.ANIMATIONS) {
-    // The reference page fetches nothing, so it cannot learn the gate's
-    // answers the way the data views do; it honors the refusals the overview's
-    // read already holds and otherwise stands on the local sign-in press
-    // alone, which the artwork — committed in the repository, observed from
-    // nobody — is content with.
-    if (metrics.state.status === ADMIN_READ_STATUS.SIGNED_OUT) return <SignInCard />;
-    if (metrics.state.status === ADMIN_READ_STATUS.FORBIDDEN) {
-      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
-    }
-    return shell(ADMIN_TAB.ANIMATIONS, <AnimationsScreen />);
   }
 
   if (view.kind === ADMIN_TAB.COST) {

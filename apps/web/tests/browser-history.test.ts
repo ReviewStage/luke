@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { ShownLink } from "@luke/features/link-grammar";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import { appStateFirstRead } from "@luke/panel/use-app-state";
+import type { ShownLink } from "@repo/features/link-grammar";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { Effect } from "effect";
 import { afterEach, test, vi } from "vitest";
 import { browserHistory, savedEntry } from "../src/app/browser-history";
@@ -291,7 +291,7 @@ test("a tab reloaded on an entry the history saved starts on it, and learns the 
 test("the panel's own paths, and an entry holding a saved step, say no link as the page loads; a Vespin link's path says its place once", () => {
   for (const address of ["/app", "/app.html", "/app/"]) {
     openAt(address);
-    assert.deepEqual(linksSaid(), [], `${address} opens where the window rests`);
+    assert.deepEqual(linksSaid(), [], `${address} opens Home`);
   }
   window.history.replaceState({ state: "settings", idx: 0 }, "", "/acme/settings");
   assert.deepEqual(linksSaid(), [], "a saved step is reopened from its state instead");
@@ -305,7 +305,7 @@ test("the panel's own paths, and an entry holding a saved step, say no link as t
 });
 
 it.effect(
-  "a tab opened at a link opens its place, the browser's Back lands on the screen before without a step of its own, Forward opens the place again, and an entry holding no step opens where the window rests",
+  "a tab opened at a link opens its place, the browser's Back lands on the screen before without a step of its own, Forward opens the place again, and an entry holding no step opens Home",
   () =>
     Effect.gen(function* () {
       openAt("/personal/settings/appearance");
@@ -318,8 +318,8 @@ it.effect(
         const entries = window.history.length;
 
         await travel(() => window.history.back());
-        assert.ok(panel.shows("Inbox items · Needs you"), "Back lands where the window rests");
-        assert.equal(addressBar(), "/personal/inbox", "at the address of the Inbox it rests on");
+        assert.ok(panel.shows("Home"), "Back lands on Home");
+        assert.equal(addressBar(), "/personal", "at its workspace's own address");
         assert.equal(window.history.length, entries, "and pushes nothing");
 
         await travel(() => window.history.forward());
@@ -331,11 +331,8 @@ it.effect(
         window.history.pushState(null, "", "/app");
         await travel(() => window.history.back());
         await travel(() => window.history.forward());
-        assert.ok(
-          panel.shows("Inbox items · Needs you"),
-          "the entry holding no step opens where the window rests",
-        );
-        assert.ok(savedEntry() !== undefined, "and the page writes its step on it");
+        assert.ok(panel.shows("Home"), "the entry holding no step opens Home");
+        assert.ok(savedEntry() !== undefined, "and Home writes its step on it");
       });
     }),
 );

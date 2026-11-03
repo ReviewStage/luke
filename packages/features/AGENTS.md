@@ -1,22 +1,23 @@
-# `@luke/features`
+# `@repo/features`
 
-The desktop-to-service wire boundary: the hosted service paths, one wire module
-per domain, and the clients that speak them.
+The client-to-service wire boundary, for the desktop and the web app: the
+hosted service paths, one wire module per domain, and the clients that speak
+them.
 
-The view models a desktop surface is drawn from (`turn-rows.ts`,
+The view models a surface is drawn from (`turn-rows.ts`,
 `integration-health.ts`, `failure-remedy.ts`, the `*-model.ts` files) sit beside
 the wire and `*-view.ts` modules they shape, each at a subpath of its own. They
 import no React and no DOM, so another app could draw the same surface.
 
 ## The dependency direction is the point
 
-It depends only on lower wire vocabulary and on `@luke/runtime` (the
+It depends only on lower wire vocabulary and on `@repo/runtime` (the
 `effect` door the analytics sender schedules through), neither of which
 imports this one, so the edge points down.
 
 A client sits here because it speaks nothing but hosted vocabulary and holds no
 credential of its own. **Behavior that needs anything above this boundary belongs
-above it**: the account preference client in `@luke/host` because the
+above it**: the account preference client in `@repo/host` because the
 snapshot it carries is settings vocabulary.
 
 **A request frame refuses a key it did not name; an answer ignores one a newer

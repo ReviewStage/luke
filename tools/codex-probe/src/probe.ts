@@ -10,8 +10,8 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { prepareImage } from "@luke/service/agents/agent-runtime/sandbox-image";
-import { isRecord, isWireString, type WireValue } from "@luke/wire";
+import { prepareImage } from "@repo/service/agents/agent-runtime/sandbox-image";
+import { isRecord, isWireString, type WireValue } from "@repo/wire";
 import { type NetworkPolicy, Sandbox } from "@vercel/sandbox";
 import {
   AGENT_USER,

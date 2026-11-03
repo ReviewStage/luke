@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
   type DiagramModule,
-} from "@luke/ui/diagram-contract";
+} from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
@@ -377,7 +377,7 @@ test("on a finger's device a tap on a diagram opens it over the window at its ow
 
   const open = viewer() ?? assert.fail("the diagram opens over the window");
   assert.equal(
-    open.querySelector(".luke-zoom-image")?.getAttribute("src"),
+    open.querySelector(".ui-zoom-image")?.getAttribute("src"),
     pictureOf(code, DIAGRAM_APPEARANCE.LIGHT),
   );
   const close =

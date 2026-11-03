@@ -1,8 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
-import { INBOX_BOUNDS, type InboxField } from "@luke/features/inbox-wire";
-import { COMPOSER_LOOK, ComposerFrame, type FieldControl } from "@luke/ui";
-import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { INBOX_BOUNDS, type InboxField } from "@repo/features/inbox-wire";
+import { COMPOSER_LOOK, ComposerFrame, type FieldControl } from "@repo/ui";
+import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef } from "react";
 import { useSideBundles } from "../bundle-loader.js";

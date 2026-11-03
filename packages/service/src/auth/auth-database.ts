@@ -1,5 +1,5 @@
 import { type DB, drizzleAdapter } from "@better-auth/drizzle-adapter";
-import * as schema from "@luke/database/schemas/auth";
+import * as schema from "@repo/database/schemas/auth";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import type { Pool, PoolClient } from "pg";
 import { getPool } from "../db/index.js";
@@ -26,7 +26,7 @@ export function authDatabaseAdapter(database: DB) {
  * The pool Drizzle queries, resolved at the first query rather than as this
  * module is imported: every function bundle imports the auth service
  * statically, so a pool built here made `DATABASE_URL` a condition of loading
- * any function at all (LUKE-184). Drizzle's node-postgres session calls only
+ * any function at all. Drizzle's node-postgres session calls only
  * `query` and, inside a transaction, `connect` on a client whose constructor
  * name says it is a pool, which this one does; the cast below is what stands
  * in for the rest of `pg.Pool`'s surface, none of which Drizzle reaches.

@@ -219,6 +219,7 @@ describe("what is on screen", () => {
     person: undefined,
     board: false,
     automations: false,
+    home: false,
     boundFor: "a",
     openTaskId: "a",
     column: { agent: "x" },
@@ -244,9 +245,12 @@ describe("what is on screen", () => {
     );
   });
 
-  test("is the place standing in the task's place, and none with no task and nothing in its place", () => {
+  test("is the place standing in the task's place, and Home with no task", () => {
     assert.deepEqual(shownStop({ ...standing, inbox: true }), inbox);
-    assert.equal(shownStop({ ...standing, boundFor: undefined }), undefined);
+    assert.deepEqual(shownStop({ ...standing, boundFor: undefined, home: true }), {
+      kind: STOP_KIND.PLACE,
+      place: SWITCHER_PLACE.HOME,
+    });
     assert.deepEqual(shownStop({ ...standing, agentId: "z" }), {
       kind: STOP_KIND.AGENT,
       agentId: "z",

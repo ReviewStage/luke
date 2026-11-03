@@ -1,5 +1,5 @@
-import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { TRANSCRIPT_KIND } from "@luke/features/agent-view";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { TRANSCRIPT_KIND } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
@@ -15,27 +15,28 @@ import {
   type AgentTranscriptMessage,
   agentMessageWords,
   QUEUE_CHANGE,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
-import { threadLineWords } from "@luke/features/inbox-wire";
-import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
-import type { KnownNames } from "@luke/features/place-chip-model";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON, type FailureReason, remedyLabel } from "@repo/features/failure-remedy";
+import { threadLineWords } from "@repo/features/inbox-wire";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@repo/features/models-wire";
+import type { KnownNames } from "@repo/features/place-chip-model";
 import {
   FAILURE_CONDITION,
   FAILURE_SURFACE,
   type FailureAbout,
-} from "@luke/features/shown-failure";
-import type { TaskStatus } from "@luke/features/task-wire";
+} from "@repo/features/shown-failure";
+import type { TaskStatus } from "@repo/features/task-wire";
+import { workingTime } from "@repo/features/time-format";
 import {
   CALL_KIND,
   CALL_WORDS,
   isMadeCallKind,
   sameFieldsBy,
   sameShape,
-} from "@luke/features/turn-rows";
-import { replyFromWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { AGENT_ENTER } from "@luke/settings";
+} from "@repo/features/turn-rows";
+import { replyFromWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { AGENT_ENTER } from "@repo/settings";
 import {
   ANNOUNCE,
   announce,
@@ -61,20 +62,21 @@ import {
   OneLine,
   STATUS_TONE,
   SUBJECT_FIT,
+  SubjectLine,
   TaskStatusMark,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   useAnnounce,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { ICON_SIZE } from "@luke/ui/icons";
-import { skillWord } from "@luke/ui/skill-mention";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
-import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
+import { AlarmClockCheckIcon, ICON_SIZE } from "@repo/ui/icons";
+import { skillWord } from "@repo/ui/skill-mention";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
+import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@repo/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
   createContext,
@@ -129,6 +131,8 @@ import {
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
   CONTINUE_LABEL,
+  commentLineOf,
+  commentLineWords,
   continuedByIds,
   continuedByTitles,
   delegates,
@@ -139,6 +143,7 @@ import {
   finishedReplyLead,
   githubLineOf,
   isTodos,
+  isWakeupLine,
   lineSender,
   macOwnerOf,
   messageWords,
@@ -161,6 +166,7 @@ import {
   transcriptRowKey,
   turnStretches,
   unreadOpeningLine,
+  wakeupDelayOf,
   workerLines,
   workerStatusOf,
   workerToolState,
@@ -189,7 +195,7 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
-import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
+import { CommentLineHead, GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
 import { CHIP_OR_LINK_FRAME, ChipOrLink, linkChip } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
 import {
@@ -348,7 +354,7 @@ export const AGENT_LEAD: TranscriptLead = {
 /** The plan's own tab, which a task's name over its plan's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 
-/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--luke-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
+/** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--ui-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
 const ROW_ESTIMATE_PX = 172;
 
 /**
@@ -1346,6 +1352,24 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   );
 }
 
+/** What a wakeup's line says the agent did, after its own chip. */
+const WAKEUP_LEAD = "woke up";
+
+/** A wakeup's head: that the agent woke up, then the wakeup it set, by how long it waited, where its call says. */
+function WakeupHead({ delay }: { delay: number | undefined }): React.JSX.Element {
+  return (
+    <SubjectLine lead={WAKEUP_LEAD} fit={SUBJECT_FIT.OWN}>
+      {delay === undefined ? null : (
+        <InlineRef
+          look={INLINE_REF_LOOK.PILL}
+          glyph={<AlarmClockCheckIcon />}
+          label={`${workingTime(delay)} wakeup`}
+        />
+      )}
+    </SubjectLine>
+  );
+}
+
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
 export interface ArrivedLine {
   readonly message: AgentTranscriptMessage;
@@ -1426,6 +1450,7 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
+  wakeupDelay,
   taskId,
   forkable = true,
   forkCut,
@@ -1451,10 +1476,12 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Who wrote or said the message, named over it: a teammate, the app, or an automation; none for the reader's own, or where nobody is named. */
+  /** Who wrote or said the message, named over it: a teammate, the app, an automation, or the agent itself, for a wakeup it set; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
   arrived?: readonly ArrivedLine[];
+  /** How long the wakeup this line hands back waited, where it is one and the turn that set it says (`wakeupDelayOf`). */
+  wakeupDelay?: number | undefined;
 }): ReactNode {
   const words = messageWords(message);
   const forkOffered = useForkOffered();
@@ -1497,9 +1524,15 @@ export function AgentMessage({
   if (github !== undefined) return <GitHubLineRow message={message} line={github} sender={named} />;
   if (message.role === MESSAGE_ROLE.USER) {
     const sentAt = message.sentAt;
-    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent.
+    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent; a comment's by the plan or page it is on, its member's words under what it is on, never the instructions the agent was handed.
     const thread = threadLineOf(message);
-    const shown = thread === undefined ? words : threadLineWords(words, thread.event);
+    const comment = commentLineOf(message);
+    const shown =
+      comment !== undefined
+        ? commentLineWords(comment)
+        : thread === undefined
+          ? words
+          : threadLineWords(words, thread.event);
     // A line open for writing again is written where it stands.
     if (drawnEditor !== undefined) {
       return (
@@ -1518,9 +1551,13 @@ export function AgentMessage({
     // A line anyone but the reader sent (a teammate's, an automation's, the app's) stands at the left under its sender, as another agent's message does, so the reader's own alone stands at the right.
     const received = sender !== undefined;
     const threadHead =
-      thread === undefined ? null : (
+      comment !== undefined ? (
+        <CommentLineHead line={comment} fit={received ? SUBJECT_FIT.OWN : undefined} />
+      ) : thread === undefined ? null : (
         <ThreadLineHead line={thread} words={words} fit={received ? SUBJECT_FIT.OWN : undefined} />
       );
+    // A wakeup is the agent's own line, headed by what it did, as a thread's line is.
+    const subject = isWakeupLine(message) ? <WakeupHead delay={wakeupDelay} /> : threadHead;
     return (
       <Message
         from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
@@ -1528,7 +1565,7 @@ export function AgentMessage({
         data-message-id={message.id}
         data-undelivered={marked ? "" : undefined}
       >
-        {received ? <MessageHead sender={named}>{threadHead}</MessageHead> : threadHead}
+        {received ? <MessageHead sender={named}>{subject}</MessageHead> : subject}
         <MessageFileChips message={message} sending={sending} />
         {shown === "" ? null : (
           <MessageContent>
@@ -1547,7 +1584,8 @@ export function AgentMessage({
               words={shown}
               copyable={shown !== ""}
               messageId={message.id}
-              rewind={shown === "" ? undefined : REWIND_ACTION.EDIT}
+              // Note that a comment's line is drawn from what it carries rather than its words, so it is written again nowhere, as GitHub's is not.
+              rewind={shown === "" || comment !== undefined ? undefined : REWIND_ACTION.EDIT}
             />
           }
         />
@@ -2336,7 +2374,7 @@ function AgentTranscriptView({
               {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
               {olderFailed && onOlder !== undefined ? (
                 <div
-                  className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
+                  className={`${FLOATING_OVER_LOG_CLASS} top-ui-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
                 >
                   <ErrorState
                     failure={unreadShown(FAILURE_SURFACE.AGENT_TRANSCRIPT_OLDER_READ)}
@@ -2383,6 +2421,11 @@ function AgentTranscriptView({
                             message === task
                               ? briefSender
                               : lineSender(message.sentBy, readerId, members, former)
+                          }
+                          wakeupDelay={
+                            isWakeupLine(message)
+                              ? wakeupDelayOf(placed[index - 1]?.message)
+                              : undefined
                           }
                           arrived={arrivals.get(message.id) ?? NO_ARRIVED}
                           piece={piece}

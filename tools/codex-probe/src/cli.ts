@@ -3,7 +3,7 @@
  *
  * `pnpm probe:codex` signs in through the browser and hands the credentials
  * straight to the probe in the same process; with
- * `LUKE_PROBE_CODEX_CREDENTIALS` naming a file `probe:codex:sign-in` wrote,
+ * `APP_PROBE_CODEX_CREDENTIALS` naming a file `probe:codex:sign-in` wrote,
  * it reads them from there instead. Either way no credential is printed, put
  * in argv, or exported. The probe opens its own sandbox, prints one line per
  * check, and writes the sanitized recording and report under
@@ -59,7 +59,7 @@ async function signInOnly(): Promise<void> {
   const credentials = await signIn({ fetch, extAgentHostId: createExtAgentHostId(), say });
   const file = await writeCredentialsFile(credentials);
   say(
-    `Credentials written to an owner-only file. Run the probe with:\nLUKE_PROBE_CODEX_CREDENTIALS=${file} pnpm probe:codex`,
+    `Credentials written to an owner-only file. Run the probe with:\nAPP_PROBE_CODEX_CREDENTIALS=${file} pnpm probe:codex`,
   );
 }
 
@@ -69,7 +69,7 @@ async function probe(values: {
   model?: string | undefined;
   "ci-seconds"?: string | undefined;
 }): Promise<boolean> {
-  const file = process.env.LUKE_PROBE_CODEX_CREDENTIALS;
+  const file = process.env.APP_PROBE_CODEX_CREDENTIALS;
   const repository = readGithubRepository(values.repository);
   const credentials =
     file === undefined || file.length === 0

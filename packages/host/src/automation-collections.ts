@@ -3,7 +3,7 @@
  *
  * The list's rows are a collection of their own (`live-collection.ts`), as
  * the service answers them. The list is built from them as the held read
- * built it (`@luke/features/automation-live`), at the host's own instant,
+ * built it (`@repo/features/automation-live`), at the host's own instant,
  * because a run's agent's status moves with the clock alone and a live
  * query reads no clock. So it is built again each time the rows move, and
  * at the nearest instant the clock alone moves it (`automationsGraceEdge`).
@@ -24,13 +24,13 @@ import {
   type AutomationsLiveRows,
   automationsGraceEdge,
   automationsOfLiveRows,
-} from "@luke/features/automation-live";
-import type { AutomationChangeParams } from "@luke/features/automation-view";
+} from "@repo/features/automation-live";
+import type { AutomationChangeParams } from "@repo/features/automation-view";
 import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { Effect, type Scope } from "effect";
 import {
   answeredCollection,
@@ -88,7 +88,7 @@ export function writtenFields(
   automation: AutomationSummary,
 ): Pick<AutomationRow, "name" | "enabled" | "trigger" | "action" | "guards" | "nextRunAt"> &
   Partial<AutomationRow> {
-  const { scope, repositories, target, archiveSuccessful } = automation;
+  const { scope, repositories, target, archiveSuccessful, slackDelivery } = automation;
   return {
     name: automation.name,
     enabled: automation.enabled,
@@ -100,6 +100,7 @@ export function writtenFields(
     ...(repositories === undefined ? undefined : { repositories }),
     ...(target === undefined ? undefined : targetFields(target)),
     ...(archiveSuccessful === undefined ? undefined : { archiveSuccessful }),
+    ...(slackDelivery === undefined ? undefined : { slackDelivery }),
   };
 }
 
@@ -120,6 +121,7 @@ function madeRow(automation: AutomationSummary): AutomationRow {
     targetKind: AUTOMATION_TARGET.NEW_AGENT,
     targetAgentId: null,
     archiveSuccessful: false,
+    slackDelivery: false,
     ...writtenFields(automation),
   };
 }

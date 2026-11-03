@@ -258,7 +258,7 @@ export function UpdateIcon(): React.JSX.Element {
 export function ArrowUpRightIcon(): React.JSX.Element {
   return (
     // Note that the ↗ follows its link's words' size, faint until the link lights; the pointer lights it only where there is a hover, because iOS plays a first tap as a hover, which a change it draws spends.
-    <Glyph className="luke-text-link-out ms-[0.12em] inline-block size-[0.78em] align-[-0.02em] opacity-55 transition-opacity duration-(--luke-duration-hover) ease-motion-exit group-hover/text-link:opacity-100 group-focus-visible/text-link:opacity-100">
+    <Glyph className="ui-text-link-out ms-[0.12em] inline-block size-[0.78em] align-[-0.02em] opacity-55 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-hover/text-link:opacity-100 group-focus-visible/text-link:opacity-100">
       <path d="M7 17 17 7" />
       <path d="M8 7h9v9" />
     </Glyph>
@@ -569,7 +569,7 @@ export function ChevronDownIcon(): React.JSX.Element {
 /** Points at a fold's body, turned down by its stylesheet while the fold is open. */
 export function FoldChevronIcon(): React.JSX.Element {
   return (
-    <Glyph className="luke-disclosure-chevron">
+    <Glyph className="ui-disclosure-chevron">
       <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
     </Glyph>
   );

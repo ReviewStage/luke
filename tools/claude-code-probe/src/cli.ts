@@ -1,8 +1,8 @@
 /**
  * cli.ts -- the probe itself: opens a Vercel Sandbox from today's image plus Claude Code, runs the plan's turns as the agent user, stops and resumes, and prints whether each of P00's two checks held.
  *
- *   LUKE_PROBE_CLAUDE_OAUTH_TOKEN=… LUKE_PROBE_GITHUB_TOKEN=… \
- *     LUKE_PROBE_REPOSITORY=owner/throwaway pnpm probe:claude-code
+ *   APP_PROBE_CLAUDE_OAUTH_TOKEN=… APP_PROBE_GITHUB_TOKEN=… \
+ *     APP_PROBE_REPOSITORY=owner/throwaway pnpm probe:claude-code
  *
  * Run once, by the developer, from a `vercel link`ed checkout: the Sandbox
  * SDK reads the linked project and the Vercel CLI's own sign-in for its OIDC
@@ -12,8 +12,8 @@
  * repository's git path, as a coding agent's does today. Neither is printed,
  * passed in argv, or written anywhere: the Claude token reaches the sandbox
  * as the first line of the driver's stdin and lives in the CLI's environment
- * there. `LUKE_PROBE_KEEP_SANDBOX=1` keeps the sandbox for a look afterwards;
- * `LUKE_PROBE_MODEL` names another model than the default.
+ * there. `APP_PROBE_KEEP_SANDBOX=1` keeps the sandbox for a look afterwards;
+ * `APP_PROBE_MODEL` names another model than the default.
  *
  * What the run saw is sanitized (`sanitize.ts`) and written over the
  * committed fixtures: the SDK's message stream, and a report of the pins,
@@ -25,8 +25,8 @@ import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { NodeRuntime } from "@effect/platform-node";
-import { PREPARE_SCRIPT } from "@luke/service/agents/agent-runtime/sandbox-image";
-import { isRecord, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
+import { PREPARE_SCRIPT } from "@repo/service/agents/agent-runtime/sandbox-image";
+import { isRecord, valueFromJsonText, type WireRecord, type WireValue } from "@repo/wire";
 import { type Command, Sandbox } from "@vercel/sandbox";
 import {
   Cause,

@@ -1,5 +1,5 @@
-import { WRITING_MARK } from "@luke/settings/shortcuts";
-import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
+import { WRITING_MARK } from "@repo/settings/shortcuts";
+import { TEXT_LINK_MARK_ATTRIBUTES } from "@repo/ui/link-face";
 import {
   cutReply,
   MESSAGE_BLOCK,
@@ -7,14 +7,14 @@ import {
   messageText,
   QUOTE_GAP,
   quoteOf,
-} from "@luke/ui/reply-quote";
+} from "@repo/ui/reply-quote";
 import {
   insideCode,
   mentionAt,
   skillTokens,
   skillWord,
   type TextRange,
-} from "@luke/ui/skill-mention";
+} from "@repo/ui/skill-mention";
 import { type AnyExtension, Editor, Extension, Node } from "@tiptap/core";
 import {
   type Fragment,
@@ -84,7 +84,7 @@ import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
  * a block of the agent's words laid in by Reply where the caret stands
  * (`insertQuote`), never edited, that one Backspace on the line under it
  * takes out whole as it does a chip, and that reads out as a Markdown
- * blockquote with a blank line around it (`@luke/ui/reply-quote`), read
+ * blockquote with a blank line around it (`@repo/ui/reply-quote`), read
  * back into a block as the words are laid in again. The words leave
  * the editor one way, `onDraft`, as the string `textOf` reads off the
  * document; nothing hands them back in. A change from outside is one of
@@ -121,10 +121,10 @@ const EDITOR_CLASS = "composer-editor";
 const COMPOSING_KEY_CODE = 229;
 
 /** What a transaction from one of the handle's commands is tagged with, which read-only still takes. */
-const COMMAND_META = "luke-composer-command";
+const COMMAND_META = "composer-command";
 
 /** What a transaction that made chips of `/name` words is tagged with, so it makes none of its own. */
-const CHIPPED_META = "luke-composer-chipped";
+const CHIPPED_META = "composer-chipped";
 
 /** A character a skill's name is spelled in, which a pick replaces through to the word's end. */
 const NAME_CHARACTER = /[A-Za-z0-9-]/u;

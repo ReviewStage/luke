@@ -15,7 +15,7 @@ set -euo pipefail
 # window, to take in wallpaper), and scales it to the whole picture's height:
 # a close-up as tall as every other screenshot, only narrower. `--zoom` says
 # the capture was taken zoomed by that factor (the changelog-screenshots
-# skill's LUKE_SHOT_ZOOM), so the crop's points hold that many times the
+# skill's APP_SHOT_ZOOM), so the crop's points hold that many times the
 # pixels and a close-up stays sharp. `--layout` frames what is not an
 # ordinary window, for the notch era: `top` hangs a borderless panel captured
 # with the app's own `--capture-evidence` flush from the top edge, and `bleed`
@@ -27,9 +27,9 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-luke_require_macos
-luke_require_command xcrun
-luke_require_command screencapture
+app_require_macos
+app_require_command xcrun
+app_require_command screencapture
 
 usage() {
     printf 'usage: %s <out.png> [--from <capture.png>] [--layout window|top|bleed] [--crop <x,y,width,height>] [--zoom <factor>]\n' "$0" >&2
@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 
-work_root="$LUKE_BUILD_ROOT/changelog-screenshot"
+work_root="$APP_BUILD_ROOT/changelog-screenshot"
 framer="$work_root/frame-screenshot"
 framer_source="$SCRIPT_DIRECTORY/lib/frame-screenshot.swift"
 mkdir -p "$work_root"

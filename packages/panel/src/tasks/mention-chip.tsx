@@ -4,15 +4,19 @@ import {
   dateDistance,
   dateWhole,
   readerZone,
-} from "@luke/features/date-mention";
+} from "@repo/features/date-mention";
 import {
   issueAddressOf,
   LINK_PLACE,
   type LinkPlace,
+  linkOf,
   MENTION_SIGIL,
   pullRequestAddressOf,
+  type ReadLink,
   readLink,
-} from "@luke/features/link-grammar";
+  taskNumberOf,
+  withTaskId,
+} from "@repo/features/link-grammar";
 import {
   decodeMention,
   encodeMention,
@@ -23,14 +27,15 @@ import {
   type MentionLines,
   type MentionPlace,
   mentionName,
+  type NumberedTaskIdOf,
   type PlanMention,
   pageRepositoryOf,
   pastedLinkMention,
   sectionAnchors,
-} from "@luke/features/mention-link";
-import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
-import { planSections } from "@luke/features/plan-document";
-import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
+} from "@repo/features/mention-link";
+import { type KnownNames, placeChipLook } from "@repo/features/place-chip-model";
+import { planSections } from "@repo/features/plan-document";
+import { UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import {
   THING_KIND,
   THING_WORD,
@@ -38,8 +43,8 @@ import {
   thingOfMention,
   thingOfPlace,
   thingWordHeard,
-} from "@luke/features/thing-kind";
-import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
+} from "@repo/features/thing-kind";
+import { isGitHubAddress, isWebAddress } from "@repo/host/acts";
 import {
   HoverCard,
   HoverCardHead,
@@ -50,10 +55,10 @@ import {
   TEXT_LINK_LOOK,
   TextLink,
   useMinute,
-} from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
-import { CalendarIcon } from "@luke/ui/icons";
-import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import type { Actor } from "@repo/ui/actor-model";
+import { CalendarIcon } from "@repo/ui/icons";
+import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
@@ -70,7 +75,12 @@ import { OpenedByRow, PullRequestCard } from "./pull-request-card.js";
 import { branchNote, thingCard } from "./thing-card.js";
 import { type AgentTiles, thingMark } from "./thing-mark.js";
 import { useKnownNames, useTaskNameCatchUp, useWordTargets } from "./use-known-names.js";
-import { type LinkStanding, useLinkStanding, useWordsWorkspaceId } from "./use-link-standing.js";
+import {
+  type LinkStanding,
+  useLinkStanding,
+  useNumberedTaskId,
+  useWordsWorkspaceId,
+} from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 import { useWordsDates } from "./words-dates.js";
 
@@ -78,7 +88,7 @@ import { useWordsDates } from "./words-dates.js";
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, or a link where that leaves the app, hanging a card that says what that is, struck through where what it names is gone.
  *
  * A mention is written into markdown as a link whose target names it
- * (`@luke/features/mention-link`'s `linkMention`), a developer's with a
+ * (`@repo/features/mention-link`'s `linkMention`), a developer's with a
  * label starting with `@`, and wherever words are drawn, the link is drawn
  * as this chip: a pill on the words' line, the kind's glyph and the name the
  * mention was written with, cut to the chip's width. A press opens it: a
@@ -120,9 +130,9 @@ import { useWordsDates } from "./words-dates.js";
  * having left, as the workspace's members around the chip say
  * (`../member-directory.tsx`), and opens their page in the workspace. A
  * link to any other place in the app, an Inbox item, an
- * automation, an agent's message (`@luke/features/link-grammar`), is drawn as
+ * automation, an agent's message (`@repo/features/link-grammar`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
- * knows it (`@luke/features/place-chip-model`): the words it was labelled
+ * knows it (`@repo/features/place-chip-model`): the words it was labelled
  * with, else the place's own name, else its kind. A plan, a section, a
  * page, an agent, a person, or an Inbox item is called by its name now
  * wherever the window holds it, whatever words its link was written with:
@@ -138,7 +148,7 @@ import { useWordsDates } from "./words-dates.js";
  * hangs, and a file's lines open at the commit the mention pins them to.
  *
  * A date is said from where the reader stands rather than by the words it
- * was written with (`@luke/features/date-mention`): Today, Tomorrow,
+ * was written with (`@repo/features/date-mention`): Today, Tomorrow,
  * Friday 3:00 PM, in the reader's own zone, said again as the minute turns
  * (`useMinute`), and its card says it in full and how far off it is. A day
  * has no page, so in words that take no change it opens nothing; in an
@@ -282,7 +292,7 @@ function pressOf(
     case MENTION_KIND.CHANNEL:
       return () => openLink(target);
     // The app has no tab of its own on a task, so its chip opens the task it thinks about.
-    case MENTION_KIND.LUKE:
+    case MENTION_KIND.APP:
       return () => doors.onOpenTask({ kind: MENTION_KIND.TASK, taskId: mention.taskId });
   }
 }
@@ -843,6 +853,53 @@ function InboxItemChip({
   return <PlaceChip place={place} read={read} {...chip} />;
 }
 
+/**
+ * A link naming its task by its number, `…/task/42`, which no mention
+ * names, since a mention names its task by its id: drawn as the chip the
+ * link by the task's id draws, the task's, a section's, or a page's, once
+ * the window finds the task among its own (`useNumberedTaskId`); a place's
+ * chip, called by its words, until it does, or where it finds none.
+ */
+function NumberedLinkChip({
+  href,
+  read,
+  label,
+  doors,
+}: {
+  href: string;
+  read: ReadLink;
+  /** The words it was written with, its address where it was written bare. */
+  label: string;
+  doors: MentionDoors;
+}): React.JSX.Element {
+  const taskId = useNumberedTaskId(read.workspace, taskNumberOf(read.place));
+  const bare = isBareLink(label, href);
+  const byId =
+    taskId === undefined ? undefined : linkOf(withTaskId(read.place, taskId), read.workspace);
+  const found =
+    byId === undefined ? undefined : linkMention(bare ? byId : label, byId, doors.place.repository);
+  if (found !== undefined) {
+    return (
+      <MentionChip
+        mention={found.mention}
+        target={href}
+        name={found.name}
+        doors={doors}
+        bare={bare}
+      />
+    );
+  }
+  return (
+    <PlaceChip
+      href={href}
+      place={read.place}
+      workspace={read.workspace}
+      label={bare ? undefined : mentionName(label.trim())}
+      doors={doors}
+    />
+  );
+}
+
 /** The kind a chip of a place in the app carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";
 
@@ -891,6 +948,9 @@ export function linkChip(
   }
   const read = readLink(href);
   if (read === undefined) return undefined;
+  if (taskNumberOf(read.place) !== undefined) {
+    return <NumberedLinkChip href={href} read={read} label={label} doors={placed} />;
+  }
   const written = bare ? undefined : mentionName(label.trim());
   if (read.place.kind === LINK_PLACE.INBOX_ITEM) {
     return (
@@ -990,9 +1050,11 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
   return (href, label, at) => linkChip(href, label, doors, at);
 }
 
-/** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */
+/** What a place pasted into knows to call a pasted address by: the names the window holds, how it finds a task a link names by its number, and the plan it stands on, whose headings name its sections. */
 export interface PastedNames {
   readonly known: KnownNames;
+  /** The id of the task a link names by its number among those the window lists (`useNumberedTaskIdOf`). */
+  readonly taskIdOf: NumberedTaskIdOf;
   /** The plan the words are pasted on; none off a plan. */
   readonly taskId: string | undefined;
   /** The plan's text as the place holds it. */
@@ -1014,19 +1076,36 @@ function pastedName(
 }
 
 /**
+ * Words pasted whole that name a task by its number, `…/task/42`, as the
+ * address naming it by the id `taskIdOf` finds for it among the window's
+ * tasks, so it is laid in as the mention a link by the task's id is, which
+ * every build reads; the words as they are where they name no number, or
+ * a task the window lists not.
+ */
+function byTaskId(words: string, taskIdOf: NumberedTaskIdOf): string {
+  const read = readLink(words.trim());
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  if (read === undefined || number === undefined) return words;
+  const taskId = taskIdOf({ workspace: read.workspace, number });
+  return taskId === undefined ? words : linkOf(withTaskId(read.place, taskId), read.workspace);
+}
+
+/**
  * The mention node words pasted whole stand for: an address of our own,
  * a plan's, a section's, a page's, or an agent's, by the scheme of the web
- * or the app's own, named as its bare link's chip is (`pastedName`); or a
- * page of an integration's, named by its address's readable form; nothing
- * for any other words, a file of the plan's repository among them, or a
- * person's page in another workspace than the place's.
+ * or the app's own, a task's by its id or by its number where the window
+ * lists the task (`byTaskId`), named as its bare link's chip is
+ * (`pastedName`); or a page of an integration's, named by its address's
+ * readable form; nothing for any other words, a file of the plan's
+ * repository among them, or a person's page in another workspace than the
+ * place's.
  */
 export function pastedMentionNode(
   words: string,
   place: MentionPlace,
   names: PastedNames,
 ): MentionNode | undefined {
-  const link = pastedLinkMention(words, place.repository);
+  const link = pastedLinkMention(byTaskId(words, names.taskIdOf), place.repository);
   // A person's page is of the workspace its link names, so one of another workspace stays the link it is.
   const elsewhere =
     link?.mention.kind === MENTION_KIND.PERSON &&

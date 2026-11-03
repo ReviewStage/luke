@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
-import { MOTION_DELAY_MS } from "@luke/brand";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -162,7 +162,7 @@ function backRow(view: HTMLElement): HTMLButtonElement | undefined {
 /** The version rows' presses, newest first. */
 function rowsOf(view: HTMLElement): HTMLButtonElement[] {
   return [
-    ...view.querySelectorAll<HTMLButtonElement>('[aria-label="Version list"] .luke-list-row-main'),
+    ...view.querySelectorAll<HTMLButtonElement>('[aria-label="Version list"] .ui-list-row-main'),
   ];
 }
 
@@ -197,7 +197,7 @@ test("focus landing on a version from outside the list does not choose it", () =
 
 /** The foot under the version list, which is the only button in it besides the rows. */
 function foot(view: HTMLElement): HTMLButtonElement | null {
-  return view.querySelector<HTMLButtonElement>(".version-earlier .luke-line-button");
+  return view.querySelector<HTMLButtonElement>(".version-earlier .ui-line-button");
 }
 
 test("the foot counts the older versions, and reading them is its press", async () => {

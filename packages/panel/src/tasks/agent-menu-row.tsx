@@ -14,9 +14,9 @@
  * it is hung, as a chip's is. A search finds it by its name and its detail.
  */
 
-import type { AgentPullRequest } from "@luke/features/agent-wire";
-import type { MenuRow } from "@luke/ui";
-import { ACTOR_KIND, type EditReader, teammateCreator } from "@luke/ui/actor-model";
+import type { AgentPullRequest } from "@repo/features/agent-wire";
+import type { MenuRow } from "@repo/ui";
+import { ACTOR_KIND, type EditReader, teammateCreator } from "@repo/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { agentName } from "./agent-model.js";

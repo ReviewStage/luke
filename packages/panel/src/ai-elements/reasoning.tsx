@@ -6,7 +6,7 @@ import {
   TEXT_VARIANT,
   Text,
   useDisclosurePreviewShown,
-} from "@luke/ui";
+} from "@repo/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Fold, FoldBody, type FoldProps } from "./fold.js";
@@ -16,8 +16,8 @@ import { Fold, FoldBody, type FoldProps } from "./fold.js";
  *
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
  * to our tokens and folded on `fold.tsx` rather than the registry's
- * collapsible. Closed by default, as docs/TASKS.md's rule for an
- * agent's transcript asks: the reasoning is there to be read, never in
+ * collapsible. Closed by default, as docs/TASKS.md's "Transcript"
+ * section has it: the reasoning is there to be read, never in
  * the way. The line leads with a brain in the 16px seat a call's icon
  * stands in, so it lines up with the calls around it, then says
  * "Thought", because the stored part carries the words alone and no

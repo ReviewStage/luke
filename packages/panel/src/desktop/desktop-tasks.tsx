@@ -1,15 +1,15 @@
-import type { AgentStatus } from "@luke/features/agent-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
-import type { MentionLines } from "@luke/features/mention-link";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { AgentStatus } from "@repo/features/agent-wire";
+import { LINK_PLACE } from "@repo/features/link-grammar";
+import type { MentionLines } from "@repo/features/mention-link";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type {
   TaskBlockRequest,
   TaskCreateRelationKind,
   TaskStanding,
-} from "@luke/features/task-wire";
-import { readingWords } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/task-wire";
+import { readingWords } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -26,20 +26,20 @@ import {
   Toolbar,
   useHeadingAway,
   useMinute,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
-import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import { agentOfTab, followedAgent, isDraftTab, sameTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { useInlineRename } from "@luke/ui/use-inline-rename";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import { openThread, PlanCommentsProvider, usePlanComments } from "@repo/ui/plan-comments";
+import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
+import { agentOfTab, followedAgent, isDraftTab, sameTab } from "@repo/ui/tab-strip-model";
+import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useInlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { failureShown, unreadShown } from "../failure-report.js";
-import { FindScope } from "../find-in-tab.js";
+import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { HERE } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -76,7 +76,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
-import { DesktopWelcome } from "./desktop-welcome.js";
+import { DesktopHome } from "./desktop-home.js";
 import {
   AgentPane,
   MainTabStrip,
@@ -129,9 +129,7 @@ import {
  * The work column while Tasks is chosen: the open task's column, its
  * toolbar above, and the side panel beside it, the
  * window's full height, while that is open (or over it, while it fills the
- * window); or, with none open, a new account's welcome (`desktop-welcome.tsx`),
- * every other account resting on a page standing in its place instead
- * (`resting-page.ts`).
+ * window); or, with none open, Home (`desktop-home.tsx`).
  * The task list itself is the sidebar's, and so is moving between tasks: the
  * toolbar offers no way out of the open task, only its actions: Start, which
  * hands the task to a coding agent, and the ⋯ menu, where Copy plan and the
@@ -181,7 +179,7 @@ const TASK_LOADING_LABEL = readingWords("the task");
 const ACTION_SKELETON_WIDTHS = { START: "104px" } as const;
 
 /** An icon press's width, the task's ⋯'s and the summary's toggle's, as tall as it is wide. */
-const ICON_PRESS_WIDTH = "var(--luke-control-height)";
+const ICON_PRESS_WIDTH = "var(--ui-control-height)";
 
 /**
  * The task's page as it and its placeholder stand it: the column, its
@@ -509,11 +507,7 @@ function PlanDocument({
   // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
   // Show terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
-  const terminalDoors = useAgentTerminalDoors(
-    tasks.sidePanel,
-    region.kind === DOCUMENT_REGION.READY ? region.task.repository : null,
-    showSide,
-  );
+  const terminalDoors = useAgentTerminalDoors(tasks.sidePanel, showSide);
   // A refusal is said beside the chip, under the task it was about and no
   // other. Note that it is held above the states with no document, because
   // a task opened from the list is drawn reading before its read lands, and
@@ -1404,7 +1398,7 @@ function StartingTaskPage({
 }
 
 /**
- * The Tasks tab's work column: the open task's page, or a new account's welcome.
+ * The Tasks tab's work column: the open task's page, or Home.
  *
  * A memo boundary: the shell drawn again over the same tasks, as a setting
  * that moves draws it, leaves the open plan, its transcripts, and its side
@@ -1416,8 +1410,14 @@ export const DesktopTasks = memo(function DesktopTasks({
   summary,
   room = SHELL_ROOM.WIDE,
   away,
+  accountName,
+  staged = false,
 }: {
   tasks: TasksControl;
+  /** The signed-in account's name, which Home greets. */
+  accountName?: string | undefined;
+  /** Whether a fixture stages the window, whose tasks' looks Home's rows read as staged. */
+  staged?: boolean;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: TaskLooks;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
@@ -1460,19 +1460,20 @@ export const DesktopTasks = memo(function DesktopTasks({
           />
         </SkillFiles>
       );
-    // With no task open the column is a new account's welcome, and ⌘N's
-    // dialog stands over it as it stands over a task; any other account rests
-    // on a page standing in the column's place.
+    // With no task open the column is Home, and ⌘N's dialog stands over it
+    // as it stands over a task.
     case TASKS_PAGE.HOME:
       // A launch reopening the task last open draws the window's ground
-      // alone until it opens, so the welcome never flashes before it.
+      // alone until it opens, so Home never flashes before it.
       if (tasks.restoring) return <div className="desktop-drag-strip" />;
       return (
         <>
           <div className="desktop-drag-strip" />
-          <Fill className="home">
-            <DesktopWelcome tasks={tasks} />
-          </Fill>
+          <PageFind page={FIND_PAGE.HOME} active={tasks.shown}>
+            <Fill as={FILL_ELEMENT.SECTION} className="home" aria-label="Home">
+              <DesktopHome tasks={tasks} room={room} accountName={accountName} staged={staged} />
+            </Fill>
+          </PageFind>
         </>
       );
   }

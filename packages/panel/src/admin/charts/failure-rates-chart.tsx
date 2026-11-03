@@ -4,26 +4,26 @@
  * failed.
  */
 
-import type { AdminReliabilityDay } from "@luke/features/admin-answer-wire";
-import { formatPercent } from "@luke/features/number-format";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { formatDayTick } from "@luke/features/time-format";
-import { formatTooltipDay, RATE_PLACES } from "@luke/ui/admin-format";
+import type { AdminReliabilityDay } from "@repo/features/admin-answer-wire";
+import { formatPercent } from "@repo/features/number-format";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { formatDayTick } from "@repo/features/time-format";
+import { formatTooltipDay, RATE_PLACES } from "@repo/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-} from "@luke/ui/chart";
-import { partialDayKey } from "@luke/ui/daily-series";
+} from "@repo/ui/chart";
+import { partialDayKey } from "@repo/ui/daily-series";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
 /** The three rates, in the order the legend names them. */
 const FAILURE_RATES_CHART = {
-  lukeTurns: { label: `${PRODUCT_NAME} turns`, color: "var(--luke-color-chart-1)" },
-  agentRuns: { label: "Agent runs", color: "var(--luke-color-chart-2)" },
-  automationRuns: { label: "Automation runs", color: "var(--luke-color-chart-3)" },
+  appTurns: { label: `${PRODUCT_NAME} turns`, color: "var(--ui-color-chart-1)" },
+  agentRuns: { label: "Agent runs", color: "var(--ui-color-chart-2)" },
+  automationRuns: { label: "Automation runs", color: "var(--ui-color-chart-3)" },
 } satisfies ChartConfig;
 
 type FailureSeries = keyof typeof FAILURE_RATES_CHART;

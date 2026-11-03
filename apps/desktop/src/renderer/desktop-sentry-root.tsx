@@ -13,7 +13,7 @@
  * a throw no boundary stood above.
  */
 
-import { ErrorBoundary } from "@luke/ui/error-boundary";
+import { ErrorBoundary } from "@repo/ui/error-boundary";
 import { type ReactNode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BLANK_WINDOW, type DesktopSentryReports } from "./desktop-sentry";

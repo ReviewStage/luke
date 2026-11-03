@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { account, user } from "@luke/database/schemas/auth";
-import { githubPersonalToken } from "@luke/database/schemas/github-personal-token";
-import { getTestDB } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { account, user } from "@repo/database/schemas/auth";
+import { githubPersonalToken } from "@repo/database/schemas/github-personal-token";
+import { getTestDB } from "@repo/database/testing";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
   type GitHubTokenAnswer,
   githubTokenAnswerSchema,
-} from "@luke/features/github-token-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
+} from "@repo/features/github-token-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
+import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -37,7 +37,7 @@ import { githubTokenProcedures } from "./github-token-procedures.js";
  * like a real one; the key-encryption key is fixed bytes written for this file.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const TOKEN_PATH = "/api/github/token";
 const RING = `1:${Buffer.alloc(32, 1).toString("base64")}`;
 const GITHUB_ID = 4242;
@@ -59,7 +59,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
 };
@@ -107,7 +106,7 @@ const openMembers = Effect.gen(function* () {
   const db = yield* Database;
   const owner = `user-${randomUUID()}`;
   for (const id of [owner]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   yield* db.insert(account).values({
     id: randomUUID(),

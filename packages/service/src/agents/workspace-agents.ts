@@ -1,13 +1,13 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   listWorkspaceAgents,
   readAgent,
   readVisibleAgent,
   taskNamesOf,
-} from "@luke/database/models/agent-store";
-import { AGENT_BOUNDS } from "@luke/features/agent-wire";
-import { describeWire } from "@luke/wire/effect";
+} from "@repo/database/models/agent-store";
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { type UnparsedWireValue, wireUuidSchema } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";

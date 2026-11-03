@@ -1,19 +1,19 @@
 import type {
   InstalledSkillContent,
   InstalledSkillSummary,
-} from "@luke/features/installed-skill-route-wire";
+} from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillFailedView,
-} from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
-import { formatBytes } from "@luke/features/number-format";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readingWords } from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTING_KEEP, settingKeepWords } from "@luke/settings";
-import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+} from "@repo/features/installed-skill-view";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { formatBytes } from "@repo/features/number-format";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { readingWords } from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTING_KEEP, settingKeepWords } from "@repo/settings";
+import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
@@ -49,10 +49,10 @@ import {
   TrashIcon,
   UpdateIcon,
   useConfirmDialog,
-} from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
-import type { SkillOption } from "@luke/ui/skill-mention";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
+import type { SkillOption } from "@repo/ui/skill-mention";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";

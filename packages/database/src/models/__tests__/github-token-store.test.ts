@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -34,7 +34,7 @@ const openAccounts = Effect.gen(function* () {
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
     yield* Database.use((db) =>
-      db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+      db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
     );
   }
   return { owner, other };

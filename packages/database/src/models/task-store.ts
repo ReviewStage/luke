@@ -3,13 +3,13 @@ import {
   AGENT_MACHINE,
   type AgentMachineKind,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { agentName } from "@luke/features/model-label";
-import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
-import type { PlanSectionWriter } from "@luke/features/plan-document";
-import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
+} from "@repo/features/agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
+import { agentName } from "@repo/features/model-label";
+import { planAttachmentIdsIn } from "@repo/features/plan-attachment-link";
+import type { PlanSectionWriter } from "@repo/features/plan-document";
+import { type PlanAgentEdit, planAgentEditSchema } from "@repo/features/plan-template";
 import {
   PLAN_ACTOR,
   type PlanLastEdit,
@@ -29,7 +29,7 @@ import {
   taskStatusSchema,
   UNKNOWN_AGENT_LABEL,
   UNTITLED_TASK_NAME,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   and,
   desc,
@@ -78,6 +78,7 @@ import {
   readTaskBlocks,
   taskBlockedFor,
 } from "./task-block-store.js";
+import { forwardTaskNumber } from "./task-number-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -887,6 +888,7 @@ const findTaskHeader = SqlSchema.findOneOption({
     parentTaskId: Schema.NullOr(Schema.String),
     mode: taskModeSchema,
     assigneeId: Schema.NullOr(Schema.String),
+    number: Schema.Number,
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -902,6 +904,7 @@ const findTaskHeader = SqlSchema.findOneOption({
           parentTaskId: task.parentTaskId,
           mode: task.mode,
           assigneeId: task.assigneeId,
+          number: task.number,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -1329,6 +1332,8 @@ export interface TaskHeader {
   readonly mode: TaskMode;
   /** The member it is assigned to; null for none. */
   readonly assigneeId: string | null;
+  /** Its number in its workspace, which its links name it by (`taskLinkStep`). */
+  readonly number: number;
 }
 
 /**
@@ -1353,6 +1358,7 @@ export function readTaskHeader(
       parentTaskId: row.parentTaskId,
       mode: row.mode,
       assigneeId: row.assigneeId,
+      number: row.number,
     })),
   );
 }
@@ -1720,6 +1726,14 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           changes.organizationId !== locked.value.organizationId;
         // A task moved to another workspace takes the next number there; its old one is never handed out again.
         const movedNumber = moved ? yield* nextTaskNumber(changes.organizationId) : undefined;
+        // The number it leaves behind still opens it, as a link written with it names it.
+        if (moved) {
+          yield* forwardTaskNumber({
+            organizationId: locked.value.organizationId,
+            number: locked.value.number,
+            taskId,
+          });
+        }
         const landsIn = moved ? changes.organizationId : locked.value.organizationId;
         yield* assigneeAdmitted(changes.assigneeId, landsIn);
         // A task moved where its assignee is no member goes unassigned rather than assigned to someone who cannot read it.
@@ -2121,15 +2135,6 @@ export function archiveAgentOfDoneTask<R = never>(
       }),
     ),
   );
-}
-
-/**
- * Whether an inbox item of the task holds a question open for the developer,
- * as a finish reads it before it moves the task to done (`finishTaskWork`).
- * The caller has read the task on the account's standing already.
- */
-export function taskHoldsOpenQuestion(taskId: string): TaskStoreEffect<boolean> {
-  return Effect.map(findOpenQuestion({ taskId }), Option.isSome);
 }
 
 /**

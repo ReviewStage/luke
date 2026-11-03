@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -119,7 +119,7 @@ function busyButton(container: HTMLElement): HTMLButtonElement {
 
 /** Whether a turning ring stands in `button`. */
 function ringIn(button: HTMLElement): boolean {
-  return button.querySelector(".luke-spinner-ring") !== null;
+  return button.querySelector(".ui-spinner-ring") !== null;
 }
 
 test("every kind of button takes the one busy shape: named by its label and refusing its press at once, its ring shown only once the settle delay has passed", () => {

@@ -23,6 +23,12 @@
  * register under an id another account holds writes nothing and answers
  * not found too, and a register keeps only the capabilities this service
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
+ * An own enroll, and a host's first register, which is a paired box's first
+ * word naming its machine, fold the account's other Macs on that machine
+ * into it (`@repo/database/models/host-store`), and the
+ * turns their agents had running are settled lost as a removed host's are;
+ * a later register never folds, so two hosts already running never remove
+ * each other.
  * A beat keeps where the host's update stands, cleared by one naming none,
  * and answers the release published (`HOST_RELEASE`) where the host's
  * daemon is below it, which the host updates itself to.
@@ -46,7 +52,7 @@
  * on the origin the request reached that opens it. Its poll
  * (`POST /api/device-agents/pairing/poll`) reads the poll secret as its
  * bearer alone (`pollSecretMiddleware`), and answers where the pairing
- * stands (`@luke/database/models/host-pairing-store`): once a member
+ * stands (`@repo/database/models/host-pairing-store`): once a member
  * approved it, the host's id and a device secret minted for it, this once,
  * counted as an install as an own enroll is.
  */
@@ -58,17 +64,17 @@ import {
   liveDeviceAgents,
   openDeviceAgentLaunches,
   stepDeviceAgentLaunch,
-} from "@luke/database/models/device-agent-store";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
+} from "@repo/database/models/device-agent-store";
+import { beatDevice, machineColumns } from "@repo/database/models/device-store";
 import {
   HOST_PAIRING,
   type HostPairingOpening,
   openHostPairing,
   pollHostPairing,
-} from "@luke/database/models/host-pairing-store";
-import { enrollOwnDevice, hostsOf } from "@luke/database/models/host-store";
-import { type DeviceAgentRelease, knownDeviceCapabilities } from "@luke/features/device-agent-wire";
-import { HOST_RELEASE } from "@luke/features/host-release";
+} from "@repo/database/models/host-pairing-store";
+import { enrollOwnDevice, hostsOf, registerHost } from "@repo/database/models/host-store";
+import { type DeviceAgentRelease, knownDeviceCapabilities } from "@repo/features/device-agent-wire";
+import { HOST_RELEASE } from "@repo/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
@@ -76,7 +82,7 @@ import {
   hostVersionMeets,
   type OwnDeviceEnrollRequest,
   shownHostUserCode,
-} from "@luke/features/host-wire";
+} from "@repo/features/host-wire";
 import { Duration, Effect, Option } from "effect";
 import {
   admittedHostVersion,
@@ -108,6 +114,7 @@ import {
   deviceAgentRequestsFor,
   settledDeviceAgentLine,
 } from "./device-agent.js";
+import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface DeviceAgentsProcedureSeams {
   /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and a released desktop build's, refused elsewhere as needing an upgrade (`deviceMiddleware`). */
@@ -216,9 +223,13 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
       }
       const poll = mintHostSecret(HOST_WIRE.POLL_SECRET_PREFIX);
+      const { name, platform, arch } = input;
+      // Note that the pairing keeps no machine the start named, since the box's first register follows its approve at once and names it again.
       const userCode = yield* openedPairing({
         pollSecretHash: poll.hash,
-        ...input,
+        name,
+        platform,
+        arch,
         version: context.hostVersion,
         ip: ip ?? null,
       });
@@ -237,9 +248,13 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         pollHostPairing(hostSecretHash(context.pollSecret), minted.hash),
       );
       if (polled.status !== HOST_PAIRING_POLL_STATUS.APPROVED) return { status: polled.status };
-      yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, polled.userId, {
-        kind: SERVER_HOST_KIND.LUKE_HOST,
-      });
+      yield* recordServerEvent(
+        SERVER_EVENT.HOST_INSTALL,
+        { userId: polled.userId },
+        {
+          kind: SERVER_HOST_KIND.BOX_HOST,
+        },
+      );
       return { status: polled.status, deviceId: polled.deviceId, deviceSecret: minted.secret };
     }),
     enrollOwn: signedIn.enrollOwn.effect(function* ({ context, input }) {
@@ -254,14 +269,20 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
           id: input.deviceId,
           version,
           secretHash: minted.hash,
+          ...machineColumns(input),
           ...(machine === undefined ? undefined : { machine }),
         }),
       );
-      if (!enrolled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (Option.isNone(enrolled)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* settleLostHostTurns(enrolled.value);
       if (!before.some((host) => host.id === input.deviceId)) {
-        yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, userId, {
-          kind: SERVER_HOST_KIND.THIS_MAC,
-        });
+        yield* recordServerEvent(
+          SERVER_EVENT.HOST_INSTALL,
+          { userId },
+          {
+            kind: SERVER_HOST_KIND.THIS_MAC,
+          },
+        );
       }
       return { deviceId: input.deviceId, deviceSecret: minted.secret };
     }),
@@ -270,11 +291,12 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       const { userId } = context;
       const { deviceId, capabilities, ...device } = input;
       const known = knownDeviceCapabilities(capabilities ?? []);
-      return yield* keptOrNotFound(
-        yield* hostedStoreOrUnavailable(
-          registerDevice(userId, { id: deviceId, ...device, capabilities: known }),
-        ),
+      const registered = yield* hostedStoreOrUnavailable(
+        registerHost(userId, { id: deviceId, ...device, capabilities: known }),
       );
+      if (Option.isNone(registered)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* settleLostHostTurns(registered.value);
+      return DONE;
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);

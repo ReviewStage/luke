@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import "@luke/panel/testing/match-media";
-import "@luke/panel/testing/resize-observer";
+import "@repo/panel/testing/match-media";
+import "@repo/panel/testing/resize-observer";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";
@@ -36,6 +36,6 @@ test("with the site's storage blocked, the tab still draws the sign-in", async (
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() =>
-    assert.ok(root.querySelector("section.luke-auth-card") !== null, "the panel draws its sign-in"),
+    assert.ok(root.querySelector("section.ui-auth-card") !== null, "the panel draws its sign-in"),
   );
 });

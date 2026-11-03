@@ -4,7 +4,7 @@ import {
   isWireString,
   THREAD_LINE_EVENT,
   type ThreadLineMetadata,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   AGENT_ATTACHMENT_TYPE,
@@ -671,13 +671,14 @@ export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
  * What a post's tool part carries as its input from version 5: the
  * thread's key, its title, which a first post under the key names, the
  * agent's message as one Markdown body, its pictures by their paths in the
- * agent's sandbox, the ask it may end with, and whether the agent waits to
- * hear a `do` done; an answer to any other ask is always heard. From
- * Channels, the channel it goes to by name, `#` or not, and the member its
- * ask is addressed to by their mention link, each read by the service
- * rather than held to a grammar here, so a name or a link that names
- * nothing is refused in words the model can act on. The model is shown
- * this schema and eve holds the call to it.
+ * agent's sandbox, and the ask it may end with, whose answer the agent
+ * always hears. From Channels, the channel it goes to by name, `#` or not,
+ * and the member its ask is addressed to by their mention link, each read
+ * by the service rather than held to a grammar here, so a name or a link
+ * that names nothing is refused in words the model can act on. The model
+ * is shown this schema and eve holds the call to it. Note that a post from
+ * an agent still holding the schema before it may name `waits`, which the
+ * service's read drops with any other key it does not name.
  */
 export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
@@ -686,7 +687,6 @@ export const inboxThreadPostInputSchema = EffectSchema.Struct({
   channel: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS)),
   to: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_ADDRESSEE_CHARS)),
   ask: EffectSchema.optionalKey(inboxAskInputSchema),
-  waits: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type InboxThreadPostInput = typeof inboxThreadPostInputSchema.Type;
@@ -820,7 +820,7 @@ export const inboxItemSchema = EffectSchema.Struct({
   /** The version of this vocabulary the service wrote the item in. */
   version: countedNumber,
   title: EffectSchema.String,
-  /** Whether the agent hears an answer to its open `do` ask as a message, rather than reading it in its own time; every other ask's answer it always hears. */
+  /** Whether the agent hears an answer to the item as a message, rather than reading it in its own time: true for every ask but a `do` posted before every answer was heard, and false for a notice. */
   needsReply: EffectSchema.Boolean,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
   /**
@@ -1118,6 +1118,19 @@ export function inboxStartTitle(
     .find((each) => each !== "");
   return shortTitle(line ?? request.attachments?.[0]?.name ?? STARTED_TITLE_FALLBACK);
 }
+
+/**
+ * Where one item stands, as a link naming it by its id alone is opened
+ * (`link-grammar.ts`): the agent that posted it, its task, null for an
+ * agent with no task, and its workspace.
+ */
+export const inboxItemHomeSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  planId: EffectSchema.NullOr(wireUuidSchema),
+  workspaceId: EffectSchema.NonEmptyString,
+});
+
+export type InboxItemHome = typeof inboxItemHomeSchema.Type;
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({

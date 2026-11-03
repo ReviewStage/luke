@@ -1,7 +1,7 @@
 /**
  * cloud-browser-live.ts -- one cloud Browser tab's live view as the panel holds it: its socket opened through the window's shell, read, sized, and opened again, and what its member sends on it.
  *
- * The socket (`@luke/features/browser-live-wire`) is opened through the
+ * The socket (`@repo/features/browser-live-wire`) is opened through the
  * shell's door (`AppPlatform.openBrowserLive`): the desktop's from its host
  * under the account's bearer, the web's from its own page under the session
  * cookie. Everything past the door is here, the same on both. A socket is
@@ -24,7 +24,7 @@
  * drives it, for the relay to take a free tab over first or refuse.
  */
 
-import type { BrowserLiveTarget } from "@luke/features/browser-live-acts";
+import type { BrowserLiveTarget } from "@repo/features/browser-live-acts";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
@@ -36,9 +36,9 @@ import {
   type BrowserLiveHistory,
   type BrowserLiveServerMessage,
   browserLiveServerMessageSchema,
-} from "@luke/features/browser-live-wire";
-import { EXCESS_KEYS, unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/browser-live-wire";
+import { EXCESS_KEYS, unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import {
   Data,
   Duration,

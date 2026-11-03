@@ -1,33 +1,33 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { renameAgent } from "@luke/database/models/agent-store";
+import { Database } from "@repo/database/core/query";
+import { renameAgent } from "@repo/database/models/agent-store";
 import {
   attachRunAgent,
   createAutomation,
   deleteAutomation,
   recordAutomationRun,
   updateAutomation,
-} from "@luke/database/models/automation-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+} from "@repo/database/models/automation-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   expectTopicsFire,
   getTestDB,
   joinWorkspace,
   openTaskAgent,
   openWorkspace,
-} from "@luke/database/testing";
+} from "@repo/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -68,7 +68,7 @@ const NOW = 1_800_000_000_000;
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

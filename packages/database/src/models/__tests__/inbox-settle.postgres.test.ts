@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -30,7 +30,7 @@ import { createTask, updateTask } from "../task-store.js";
  * that row rather than reading past it, and hands the item to the act once
  * it commits, so the item never stands open under an archived agent or a
  * task Done. This file runs in CI's Postgres job, where
- * `LUKE_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
+ * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
 /** Runs an effect on a connection of its own to the test's database, beside the test's one, as `dispatch-claim.postgres.test.ts` does. */
@@ -47,7 +47,7 @@ const anotherConnection = Effect.gen(function* () {
 const openQuestion = Effect.gen(function* () {
   const db = yield* Database;
   const dean = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: dean, name: "Test User", email: `${dean}@luke.test` });
+  yield* db.insert(user).values({ id: dean, name: "Test User", email: `${dean}@app.test` });
   const workspace = yield* openWorkspace(dean);
   const { id: taskId } = yield* createTask(dean, { organizationId: workspace });
   const agentId = yield* openTaskAgent(dean, workspace, taskId);

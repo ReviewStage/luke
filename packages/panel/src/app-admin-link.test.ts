@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
-import { PUSH_METHOD } from "@luke/host/contract";
-import { memoryHistory } from "@luke/ui/history-adapter";
+import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
+import { PUSH_METHOD } from "@repo/host/contract";
+import { memoryHistory } from "@repo/ui/history-adapter";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -69,7 +69,7 @@ beforeEach(() => {
   fakeAppPlatform({
     ...QUIET_PANEL,
     applySessionReplay: () => undefined,
-    adminDashboard: () => ({ href: "https://luke.test/admin" }),
+    adminDashboard: () => ({ href: "https://app.test/admin" }),
   });
   installWindowHistory(memoryHistory());
   const quiet = Object.fromEntries([

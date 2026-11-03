@@ -1,5 +1,5 @@
 /**
- * toast.tsx -- the window's passing notices, as state: what stands, for how long, and what pushes what out; `@luke/ui`'s `Toast`, `ToastStack`, and `ToastActions` draw them.
+ * toast.tsx -- the window's passing notices, as state: what stands, for how long, and what pushes what out; `@repo/ui`'s `Toast`, `ToastStack`, and `ToastActions` draw them.
  *
  * A toast answers an act whose control is gone by the time it lands: a copy
  * made from a menu that closed with the press, a note sent from a dialog
@@ -46,20 +46,20 @@
  * do, by Escape while focus is in it, by a sideways swipe, or by whoever showed it
  * withdrawing what it is about. One with no action is never pointed at, so
  * clicks pass through it. It arrives on the pair
- * every arriving element rides and leaves first over `--luke-duration-exit`, held
+ * every arriving element rides and leaves first over `--ui-duration-exit`, held
  * mounted through its leaving; the ones its coming or going moves glide
  * there, so reduced motion and a capture run hold all of it still at the
  * tokens.
  *
  * What each says reaches assistive tech through two regions mounted with
- * the window rather than with the toast (`@luke/ui`'s `ToastStack`), because a live region drawn
+ * the window rather than with the toast (`@repo/ui`'s `ToastStack`), because a live region drawn
  * already holding its words is one a screen reader may never read: a polite
  * one for what was done or is asked, and an alert for what was refused. The words are
  * text like any other, so the session recording masks them with the rest.
  */
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { MOTION_DURATION_MS } from "@luke/brand";
+import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   STATUS_TONE,
   TOAST_HOLD,
@@ -68,8 +68,8 @@ import {
   type ToastCopy,
   ToastStack,
   type ToastTone,
-} from "@luke/ui";
-import { visibleViewport } from "@luke/ui/visible-viewport";
+} from "@repo/ui";
+import { visibleViewport } from "@repo/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useLayoutEffect } from "react";
@@ -88,7 +88,7 @@ const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
 /** The tone said in the alert region: a refusal. */
 const ALERT_TONES: ReadonlySet<ToastTone> = new Set([STATUS_TONE.DANGER]);
 
-/** How long a toast stands, by what it reports: `@luke/ui`'s, which a copy button's check reads too. */
+/** How long a toast stands, by what it reports: `@repo/ui`'s, which a copy button's check reads too. */
 export { TOAST_HOLD };
 
 /** What a toast's action says when it takes back what the toast reports. */
@@ -154,7 +154,7 @@ export type ToastNotice = {
 /** A notice as the stack keeps it: one saying a failure with the details of its report a person may copy. */
 type KeptNotice = ToastNotice & { readonly details?: string | undefined };
 
-/** How long a toast takes to leave, as `--luke-duration-exit` says it. */
+/** How long a toast takes to leave, as `--ui-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
 
 /** How many toasts stand at once: three, or two in a window no taller than `SHORT_WINDOW`. */

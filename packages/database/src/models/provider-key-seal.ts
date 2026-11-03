@@ -3,7 +3,7 @@ import {
   PROVIDER_KEY_KIND,
   type ProviderKeyKind,
   type ProviderKeyProvider,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { Redacted, Result, Schema } from "effect";
 
 /**

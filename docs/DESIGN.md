@@ -2,47 +2,45 @@
 
 This is the contract every animated element in Vespin's window obeys, and the
 bar every word drawn in it has to clear. The "Panel motion" section of
-`apps/desktop/src/renderer/AGENTS.md` says what the Electron window under it
-is; this file says how anything drawn in it is allowed to move, how much it is
+`packages/panel/AGENTS.md` says how the panel's layout keeps to it, and the
+"The Electron window" section of `apps/desktop/src/renderer/AGENTS.md` says
+what the Electron window under it is; this file says how anything drawn in it is allowed to move, how much it is
 allowed to say, and which of the machine's keys Vespin may take. A change that
 adds or alters motion or copy is reviewed against these rules, and the fastest
 way to pass that review is to build from them.
 
 ## The vocabulary
 
-One spring drives everything that needs to travel: `--luke-spring`, and
-`--luke-spring-fast` (the same damping ratio at a higher frequency) for what is
+One spring drives everything that needs to travel: `--ui-spring`, and
+`--ui-spring-fast` (the same damping ratio at a higher frequency) for what is
 small or arrives over the window: a switch's thumb, and a menu, tooltip,
 dialog, palette, or toast rising into place. Settings pages change at once;
 task navigation does not travel. The window's panes are the one exception to
 the spring: the sidebar and the side panel open, close, and fill the window on
-`--luke-motion-pane` over `--luke-duration-pane`, a plain ease-out, because a pane
+`--ui-motion-pane` over `--ui-duration-pane`, a plain ease-out, because a pane
 stands on the window's own edge and a spring's overshoot would part the two
 for a frame. Durations and delays come only from the tokens in
-`packages/ui/src/tokens/motion-tokens.css` (`--luke-duration-shape`,
-`--luke-duration-exit`, `--luke-duration-quick`, `--luke-duration-fast`, `--luke-duration-hover`,
-`--luke-duration-pane`, `--luke-motion-exit`, `--luke-motion-pane`, `--luke-row-stagger`,
-`--luke-hint-delay`, `--luke-late-delay`, `--luke-settle-delay`, and `--luke-confirm-delay`, how long an
+`packages/ui/src/tokens/motion-tokens.css` (`--ui-duration-shape`,
+`--ui-duration-exit`, `--ui-duration-quick`, `--ui-duration-fast`, `--ui-duration-hover`,
+`--ui-duration-pane`, `--ui-motion-exit`, `--ui-motion-pane`, `--ui-row-stagger`,
+`--ui-hint-delay`, `--ui-late-delay`, `--ui-settle-delay`, and `--ui-confirm-delay`, how long an
 autosave's Saved stands). Never write a literal millisecond into a
 rule: reduced motion and capture runs zero the tokens, and a literal is a
 motion those runs cannot stop. Easings are tokens too, never `ease` or `ease-out`: a fade, a
-hover settle and a press ride `--luke-motion-exit`, a pane and a fold `--luke-motion-pane`,
+hover settle and a press ride `--ui-motion-exit`, a pane and a fold `--ui-motion-pane`,
 and a travel the spring. A script that plays motion reads the same tokens through `tokenTiming`
-(`@luke/ui`), and asks `motionHeld` rather than `matchMedia` whether to move at all. The one sanctioned exception is an endless loop
-(a spinner, a breathing idle, the face's own motions) whose
-`animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion`: those runs
+(`@repo/ui`), and asks `motionHeld` rather than `matchMedia` whether to move at all. The one sanctioned exception is an endless loop
+(a spinner, a breathing idle) whose
+`animation-play-state` answers `--ui-loop-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
-and a loop that carries one must answer a play-state token. A finite companion
-timed to a generated face gesture may also use the gesture's literal phase,
-but it must answer `--luke-face-motion`, live beside a comment naming the generated
-cycle and phase it follows, and do no work when that gesture is not selected.
-A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@luke/ui`'s `hint.tsx`)
+and a loop that carries one must answer a play-state token.
+A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@repo/ui`'s `hint.tsx`)
 names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors. A wait drawn
 over its own length, a toast's countdown bar draining over the hold its
-host hands it (`--luke-toast-hold`), takes that hold rather than a token,
+host hands it (`--ui-toast-hold`), takes that hold rather than a token,
 because it shows time passing rather than moving anything. Reduced motion
 keeps it, since the time left is information, but in whole-second steps rather
-than a glide; only a capture run holds it still, through `--luke-wait-motion`.
+than a glide; only a capture run holds it still, through `--ui-wait-motion`.
 
 ## Layout lands at once; motion is transform and opacity
 
@@ -65,8 +63,8 @@ native motion in place of the spring, so no renderer style sets
 `scroll-snap-type`.
 
 Content arriving rides the pair every arriving element rides — opacity over
-`--luke-duration-quick`, any travel on `--luke-spring` — and content leaving goes first,
-over `--luke-duration-exit`. An element that unmounts is held mounted through its
+`--ui-duration-quick`, any travel on `--ui-spring` — and content leaving goes first,
+over `--ui-duration-exit`. An element that unmounts is held mounted through its
 own exit and taken out when the exit finishes, never on the frame the state
 changed.
 
@@ -85,7 +83,7 @@ a component tells the stylesheet a measured distance.
 
 A gesture that moves several elements gives each the same duration and
 spring and staggers only the delay, so the whole reads as one object. Stagger
-a list that arrives together by `--luke-row-stagger` per step.
+a list that arrives together by `--ui-row-stagger` per step.
 
 ## Proving it
 
@@ -99,7 +97,7 @@ one transition. Chromium serializes `inset()` with collapsed components;
 parse computed clip-paths accordingly before trusting a sample.
 
 Review holds this contract: the generated brand art and motion tokens match
-their generators in `@luke/brand` (`pnpm --filter @luke/brand check` reports
+their generators in `@repo/brand` (`pnpm --filter @repo/brand check` reports
 drift when run by hand), renderer CSS may not reintroduce `@starting-style`, and no rule may transition
 a layout property. A new exception belongs in this contract in the same change.
 
@@ -119,36 +117,35 @@ its enter width so a window dragged across it does not flicker:
 Zoom is a window size. It works by shrinking the CSS pixel, so the desktop
 window's least width (760) is 608 CSS pixels at 125% and 380 at 200%, and the
 default window (1280) is 1024 at 125%. The desktop can therefore be narrow
-when zoomed, and then draws the phone's layout under a mouse. Dean accepted
-that: it is the responsive layout doing its job, and the window's least size
-does not rise with zoom. A layout change is checked at the least window at 125%
+when zoomed, and then draws the phone's layout under a mouse. That is the
+responsive layout doing its job, and the window's least size does not rise
+with zoom. A layout change is checked at the least window at 125%
 and 200% as well as at a phone's width (`desktop/shell-room.test.ts`).
 
 ## Shared tokens and components
 
 The tokens a control is drawn with, and every control any app draws,
-are `@luke/ui`'s (`packages/ui/src/tokens/`, `packages/ui/src/components/`),
+are `@repo/ui`'s (`packages/ui/src/tokens/`, `packages/ui/src/components/`),
 so the window and the site draw one control at two densities rather than two
 controls, and a control only one app draws lives there too. A root, and every overlay it portals into the body, carries two
-attributes (`surfaceAttributes` in `surface.ts`): `data-luke-profile`,
-`desktop` or `web`, which picks the density, and `data-luke-theme`, `dark`,
+attributes (`surfaceAttributes` in `surface.ts`): `data-ui-profile`,
+`desktop` or `web`, which picks the density, and `data-ui-theme`, `dark`,
 `light`, or, on the desktop alone, `system`, which picks the palette. Both
 roots follow the Theme setting: the desktop's stays `system` while Electron
 steers the Mac's appearance to the setting, and the web's wears the setting
 resolved, following the machine under System (`apps/web/src/app/web-appearance.tsx`).
 A sheet picks a colour of its own by `light-dark()`, which the theme decides
 through `color-scheme`, never by `prefers-color-scheme`, and script asks
-`@luke/ui/appearance`.
+`@repo/ui/appearance`.
 
 The tokens come in three layers. The base scale (`scale.css`) names a value
-by what it is, so `--luke-space-16` is sixteen pixels in either app. A role
+by what it is, so `--ui-space-16` is sixteen pixels in either app. A role
 (`profiles.css`) names what a value is for, a control's height, a field's gap,
 a dialog's corner, a type role's size and leading, and each profile sets every
 role its own way. A palette (`palettes.css`) names each colour by its role,
 for each profile in each theme. A component reads roles and the palette, never
 a base value at its call site, so it moves with its profile. Both profiles set
-the same roles and every palette the same names; `tokens.test.ts` holds them
-to it. Both apps read the roles alone; neither keeps a name of its own for one.
+the same roles and every palette the same names. Both apps read the roles alone; neither keeps a name of its own for one.
 
 A shared component takes its data and callbacks as props and no class or
 style: it owns its insides, and the room around it is its container's. Its
@@ -164,7 +161,7 @@ synthetic data, which is where a new one is first seen.
 
 ## Readability and access
 
-Semantic colours are named once, in `@luke/ui`'s palette, and the window's own
+Semantic colours are named once, in `@repo/ui`'s palette, and the window's own
 (whose voice is live, the code's and the terminal's inks, a file icon's, the
 sidebar's and a well's grounds) in `base.css` and `desktop.css`; component
 sheets consume the token rather than inventing another error red, overlay
@@ -188,7 +185,7 @@ control's words are not, since a control is pressed rather than read
 A control gives the Mac's arrow in the desktop's window, as Finder, Mail and
 Notes do, and the pointing hand on the web; a real link, one that opens a
 page, gives the hand on both. Every pressable component reads the one rule
-(`--luke-cursor-press` and `--luke-cursor-link` in `profiles.css`, the
+(`--ui-cursor-press` and `--ui-cursor-link` in `profiles.css`, the
 `cursor-press` and `cursor-link` utilities); a control that takes no press
 shows the plain arrow, a busy one `progress`, words the I-beam, and a resize,
 drag, or zoom its own. The style guard's `pointer-cursor` refuses the hand
@@ -197,7 +194,7 @@ spelled anywhere else.
 Every pointer action has a keyboard path and an accessible name. Tab lists use
 one tab stop and Left/Right/Home/End navigation. A control that floats over a
 thumbnail keeps at least a 24px target even when its glyph is smaller; on a
-coarse pointer every button takes a press at least `--luke-touch-target` (44px)
+coarse pointer every button takes a press at least `--ui-touch-target` (44px)
 across around what it draws, its glyph unmoved, but a close beside the words it
 closes (a tab's ×, a toast's) grows up and down alone, so a near miss on the
 label closes nothing, and a resize edge takes one across both columns' gutters,
@@ -210,42 +207,42 @@ it. Repeated structural widths, heights, gaps, radii, colors, and motion belong
 to semantic or generated tokens; a repeated literal is evidence that the
 vocabulary is missing a name.
 
-Spacing in the desktop window comes from one scale, `@luke/ui`'s, read in the
-window's stylesheets as `--luke-space-2` through `--luke-space-48`, and the
+Spacing in the desktop window comes from one scale, `@repo/ui`'s, read in the
+window's stylesheets as `--ui-space-2` through `--ui-space-48`, and the
 names built from it in `shell.css`'s and `desktop.css`'s `:root`. Every column holds its
 rows `--column-inset` from its edges, every row holds its glyph or words
 `--row-inset` from its own, so a column's words start at `--content-inset`
 whether a row carries them or not: the sidebar's text, the task's tab, the
 side panel's first tab, the transcript, and Settings' page list all read down
-that one edge. Controls in a row stand `--luke-control-gap` apart, a glyph
-`--luke-icon-gap` from its words, a column's groups `--luke-section-gap`, and a page's
-content `--luke-page-inset` from its column, each the desktop profile's role.
+that one edge. Controls in a row stand `--ui-control-gap` apart, a glyph
+`--ui-icon-gap` from its words, a column's groups `--ui-section-gap`, and a page's
+content `--ui-page-inset` from its column, each the desktop profile's role.
 No pixel of padding, margin, or gap in `shell.css` and `desktop.css` is
 anything but one of these; the optical
 exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.
 
-The window's buttons are `@luke/ui`'s Button and IconButton
+The window's buttons are `@repo/ui`'s Button and IconButton
 (`packages/ui/src/components/button/`); `desktop.css` keeps one of its own,
 `.toolbar-button`, for the file tree's Retry, a button the tree's own DOM
-builds. A glyph alone is an IconButton: a `--luke-control-height` square with a `--luke-control-icon` glyph in
-`--luke-color-text-muted`, nothing behind it at rest, the `--luke-color-fill-selected` fill and
-`--luke-color-text` under the pointer, `--luke-color-fill-pressed` held down, and the
-`--luke-color-focus-ring` for the keyboard. A glyph and words, or words alone, is a
+builds. A glyph alone is an IconButton: a `--ui-control-height` square with a `--ui-control-icon` glyph in
+`--ui-color-text-muted`, nothing behind it at rest, the `--ui-color-fill-selected` fill and
+`--ui-color-text` under the pointer, `--ui-color-fill-pressed` held down, and the
+`--ui-color-focus-ring` for the keyboard. A glyph and words, or words alone, is a
 Button of the same height, corner, glyph, and states, its glyph
-`--luke-icon-gap` from its words; its `primary` and `danger` variants are that
+`--ui-icon-gap` from its words; its `primary` and `danger` variants are that
 button filled with the accent or with red. Every glyph is drawn in a 24 box at
 the one stroke `glyphs.tsx` draws with, so the button sizes the glyph and
 never the glyph its button. A button floating over something that moves
 beneath it, the title bar over a sliding pane or the transcript's way back to
-its newest line, sets `--luke-button-ground` and fills over that rather than over
+its newest line, sets `--ui-button-ground` and fills over that rather than over
 what passes. What is not one of these is a row or a tab and says why where it
 is drawn, such as a tab's ×, which brightens without a fill. A chip, which names a value or a thing rather than an act, is
-`@luke/ui`'s Chip.
+`@repo/ui`'s Chip.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item, and anything else in the tab order, draws
-`--luke-color-focus-ring` at `--luke-focus-ring-width`, `--luke-focus-ring-offset` off its edge, and
+`--ui-color-focus-ring` at `--ui-focus-ring-width`, `--ui-focus-ring-offset` off its edge, and
 only once the keyboard has moved focus (`keyboard-modality.ts`), so a press
 never rings a control. A control whose drawn shape is a part of it, a picture
 tile's picture over its caption, marks that part `data-focus-ring`, which
@@ -254,14 +251,14 @@ unavailable button that keeps the keyboard (`aria-disabled`) fades its fill
 and words rather than itself, so its ring stays at full strength. A box that clips
 what it holds keeps the ring whole one of two ways: one that clips only to hold
 in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
-`overflow-clip-margin: var(--luke-focus-ring-room)`, which names its box because
+`overflow-clip-margin: var(--ui-focus-ring-room)`, which names its box because
 Chromium drops a bare `calc()` there), and a card whose clip is its own edge
-sets `--luke-focus-ring-offset` to `--luke-focus-ring-inset` for what it holds, so the
+sets `--ui-focus-ring-offset` to `--ui-focus-ring-inset` for what it holds, so the
 ring is drawn inside, on a header rounded as the card is. Every
-control scrolls in with `--luke-focus-ring-reach` to spare (`scroll-margin`), and a
+control scrolls in with `--ui-focus-ring-reach` to spare (`scroll-margin`), and a
 scroller that fades an edge scroll-pads by the fade, so the keyboard never
 leaves a row sliced at a scroller's edge or under its fade. A
-scroller whose rows run edge to edge pads by `--luke-focus-ring-reach` and gives it
+scroller whose rows run edge to edge pads by `--ui-focus-ring-reach` and gives it
 back as a negative margin, so a row's ring is never cut off at its sides, and a
 row holding the keyboard stands over its neighbours, so the next row's fill
 leaves its ring whole. A row that runs the scroller's width by design, a line of
@@ -274,18 +271,18 @@ with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
 
 Every menu and popover is one surface, from the menu tokens: the desktop
 profile's menu roles, and `--menu-glyph` and `--menu-shadow` in
-`desktop.css`'s `:root`. It is the `--luke-color-overlay` ground in a
-`--luke-color-border-strong` edge, the `--luke-menu-radius` corner and `--menu-shadow` under
-it, its items `--luke-menu-inset` from its edge, each row `--luke-menu-row-height` tall
-with a `--luke-menu-row-radius` highlight and a `--menu-glyph` glyph. The corner is
+`desktop.css`'s `:root`. It is the `--ui-color-overlay` ground in a
+`--ui-color-border-strong` edge, the `--ui-menu-radius` corner and `--menu-shadow` under
+it, its items `--ui-menu-inset` from its edge, each row `--ui-menu-row-height` tall
+with a `--ui-menu-row-radius` highlight and a `--menu-glyph` glyph. The corner is
 the row's corner plus the inset, so a highlighted row follows the menu's
 curve; the profile works the corner out from the other two. A task's menu, a
 picker, a submenu, a crumb's tree, the find bar, and a tooltip card all draw
 it, and none of them may spend its own corner, shadow, ground, or row. The
 command palette is a dialog rather than a menu, so it keeps a dialog's corner
-(`--luke-dialog-radius`) and deeper shadow, as the confirm dialog does; its
+(`--ui-dialog-radius`) and deeper shadow, as the confirm dialog does; its
 rows are a menu's. The summary card is a panel of the summary's own rows
-rather than a menu, so it keeps the 12px corner those rows' `--luke-control-radius`
+rather than a menu, so it keeps the 12px corner those rows' `--ui-control-radius`
 sits concentric in. The agent's context popover is a panel too, a bar and its
 legend rather than rows: it draws the menu's ground, edge, corner, and shadow,
 and pads what it holds with steps of the scale rather than a menu's inset.

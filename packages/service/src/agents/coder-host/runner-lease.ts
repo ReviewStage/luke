@@ -1,7 +1,7 @@
 /**
  * runner-lease.ts -- an agent's runner lease, held around every call that writes to its runner or queues a line for it.
  *
- * The lease is one row per agent (`@luke/database/models/agent-runner-lease`),
+ * The lease is one row per agent (`@repo/database/models/agent-runner-lease`),
  * claimed for `CODER.RUNNER_LEASE.HOLD` and let go as the call ends. It is
  * what keeps a cloud runner's writes in order and a local agent's lines
  * committed in the order of their `seq` (`device-agent-store.ts`'s header).
@@ -11,8 +11,8 @@ import { randomUUID } from "node:crypto";
 import {
   claimAgentRunnerLease,
   releaseAgentRunnerLease,
-} from "@luke/database/models/agent-runner-lease";
-import { failureKind } from "@luke/runtime/effect";
+} from "@repo/database/models/agent-runner-lease";
+import { failureKind } from "@repo/runtime/effect";
 import { Clock, Data, Duration, Effect, Option } from "effect";
 import { agentLogIds } from "./agent-log.js";
 import { CODER } from "./bounds.js";

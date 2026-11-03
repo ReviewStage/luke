@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { openGitHubConnectIntent } from "@luke/database/models/github-connection-store";
-import type { MemberSeams } from "@luke/database/models/workspace-seams";
-import { invitation, member, organization, user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
-import { browserClient, browserRefusal } from "@luke/features/contract/browser-client";
-import { GITHUB_CONNECT_CLAIM } from "@luke/features/github-connection-wire";
-import { INVITATION_OFFER_REFUSAL } from "@luke/features/workspace-invitation-wire";
-import { workspaceInvitationsProcedures } from "@luke/service/accounts/workspace-invitations-procedures";
-import { githubProcedures } from "@luke/service/github/github-procedures";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import type { WebServices } from "@luke/service/runtime";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { openGitHubConnectIntent } from "@repo/database/models/github-connection-store";
+import type { MemberSeams } from "@repo/database/models/workspace-seams";
+import { invitation, member, organization, user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { browserClient, browserRefusal } from "@repo/features/contract/browser-client";
+import { GITHUB_CONNECT_CLAIM } from "@repo/features/github-connection-wire";
+import { INVITATION_OFFER_REFUSAL } from "@repo/features/workspace-invitation-wire";
+import { workspaceInvitationsProcedures } from "@repo/service/accounts/workspace-invitations-procedures";
+import { githubProcedures } from "@repo/service/github/github-procedures";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import type { WebServices } from "@repo/service/runtime";
 import { type Context, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
 
@@ -28,7 +28,7 @@ import { afterEach, vi } from "vitest";
  * Synthetic accounts throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const ADA = "user-ada";
 const GRACE = "user-grace";
 const INVITED = "ada@example.com";

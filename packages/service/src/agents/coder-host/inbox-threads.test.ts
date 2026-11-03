@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { user } from "@luke/database/schemas/auth";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { inboxMessage } from "@luke/database/schemas/inbox-message";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
-import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
+import { user } from "@repo/database/schemas/auth";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { inboxMessage } from "@repo/database/schemas/inbox-message";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@repo/features/agent-wire";
+import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -20,7 +21,7 @@ import {
   INBOX_REPLY,
   INBOX_STATUS,
   type InboxItem,
-} from "@luke/features/inbox-wire";
+} from "@repo/features/inbox-wire";
 import { eq, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -63,7 +64,7 @@ import {
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -79,6 +80,7 @@ const openAgentIn = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: "# Preview deploys\n",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   const agent = { userId, taskId: task.id, agentId: started.value.agent.id };
@@ -100,6 +102,7 @@ const openTasklessAgent = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: null,
     prompt: "Check the preview.",
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   return { userId, taskId: null, agentId: started.value.agent.id };

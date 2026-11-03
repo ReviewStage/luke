@@ -81,21 +81,21 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * and chord trade places under the pointer and the keyboard.
  */
 const ROW =
-  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-luke-6";
+  "ui-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--ui-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-ui-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-ui-6";
 
 /** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
 const NAME =
-  "luke-nav-item-name min-w-0 flex-initial overflow-hidden whitespace-nowrap group-data-[unread=true]/nav:font-emphasis group-data-[variant=identity]/nav:font-emphasis";
+  "ui-nav-item-name min-w-0 flex-initial overflow-hidden whitespace-nowrap group-data-[unread=true]/nav:font-emphasis group-data-[variant=identity]/nav:font-emphasis";
 
 /** A step's name wraps to two lines and ends in an ellipsis past them, breaking a word too long for its line. */
-const STEP_NAME = "luke-nav-item-name min-w-0 line-clamp-2 wrap-break-word";
+const STEP_NAME = "ui-nav-item-name min-w-0 line-clamp-2 wrap-break-word";
 
 /** A step's name and its meta line, one over the other in the room the glyph and the end leave. */
-const STEP_WORDS = "luke-nav-item-words flex min-w-0 flex-1 flex-col";
+const STEP_WORDS = "ui-nav-item-words flex min-w-0 flex-1 flex-col";
 
 /** A menu's chevron at the end is the small, muted one a chip's is, centred in a glyph's room so it stands on the column the row ends' glyphs share. */
 const MARK =
-  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:mx-luke-2 [&>svg.settings-chevron]:size-luke-12 [&>svg.settings-chevron]:text-muted-foreground";
+  "ui-nav-item-mark inline-flex [&>svg.settings-chevron]:mx-ui-2 [&>svg.settings-chevron]:size-ui-12 [&>svg.settings-chevron]:text-muted-foreground";
 
 /** What a nav item is: a place, or who or where. A fold's head is `GroupHeader`. */
 export const NAV_ITEM_VARIANT = {
@@ -209,10 +209,10 @@ function said(node: ReactNode): boolean {
 function Glyph({ icon }: { icon: ReactNode }): React.JSX.Element {
   return (
     <span
-      className="luke-nav-item-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center [&>*]:grid [&>*]:place-items-center"
+      className="ui-nav-item-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center [&>*]:grid [&>*]:place-items-center"
       aria-hidden="true"
     >
-      <span className="luke-nav-item-icon [&>svg]:size-control-icon">{icon}</span>
+      <span className="ui-nav-item-icon [&>svg]:size-control-icon">{icon}</span>
     </span>
   );
 }
@@ -231,17 +231,17 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
   const counted = count !== undefined && count.value > 0;
   if (!said(mark) && !counted) return null;
   return (
-    <span className="luke-nav-item-rest ml-auto">
+    <span className="ui-nav-item-rest ml-auto">
       {said(mark) ? <span className={MARK}>{mark}</span> : null}
       {counted ? (
         <span
-          className="luke-nav-item-count"
+          className="ui-nav-item-count"
           data-shown={count.shown ?? NAV_COUNT_SHOWN.ALWAYS}
           data-tone={count.tone ?? STATUS_TONE.NEUTRAL}
         >
           {count.value}
           {count.noun === undefined ? null : (
-            <span className="luke-visually-hidden"> {count.noun}</span>
+            <span className="ui-visually-hidden"> {count.noun}</span>
           )}
         </span>
       ) : null}
@@ -256,7 +256,7 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
  * is no control a reader can reach.
  */
 const FOLD =
-  "luke-nav-item-fold absolute inset-y-0 start-0 m-0 flex cursor-press items-center border-0 bg-transparent p-0 ps-row-inset pe-icon-gap";
+  "ui-nav-item-fold absolute inset-y-0 start-0 m-0 flex cursor-press items-center border-0 bg-transparent p-0 ps-row-inset pe-icon-gap";
 
 /** The chevron that folds and unfolds the rows a row heads. */
 function FoldToggle({ fold }: { fold: NavFold }): React.JSX.Element {
@@ -269,7 +269,7 @@ function FoldToggle({ fold }: { fold: NavFold }): React.JSX.Element {
       aria-controls={fold.controls}
       // Note that a pointer's press leaves the focus where it was, so the chevron and the ⋯ go with the pointer rather than standing on a focus the press left behind.
       onMouseDown={preventFocusMove}
-      onClick={pulseOnPress(fold.state.toggle, PRESS_PULSE.QUIET)}
+      onClick={fold.state.toggle}
     >
       <DisclosureChevron open={fold.state.open} />
     </button>
@@ -296,7 +296,7 @@ function StepWords({ name, detail }: { name: ReactNode; detail: ReactNode }): Re
   return (
     <span className={STEP_WORDS}>
       <span className={STEP_NAME}>{name}</span>
-      {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+      {said(detail) ? <span className="ui-nav-item-detail">{detail}</span> : null}
     </span>
   );
 }
@@ -432,17 +432,17 @@ export function NavItem({
       ) : (
         <>
           <Name>{children}</Name>
-          {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+          {said(detail) ? <span className="ui-nav-item-detail">{detail}</span> : null}
         </>
       )}
       <AtRest mark={mark} count={count} />
-      {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
+      {said(shortcut) ? <span className="ui-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>
   );
   if (!framed) return press;
   return (
     <div
-      className="luke-nav-item-frame relative flex min-w-0"
+      className="ui-nav-item-frame relative flex min-w-0"
       data-folds={fold === undefined ? undefined : "true"}
       data-actions={said(actions) ? "true" : undefined}
       {...withContextMenu<HTMLDivElement>(props.contextMenu, {})}
@@ -450,7 +450,7 @@ export function NavItem({
       {press}
       {fold === undefined ? null : <FoldToggle fold={fold} />}
       {said(actions) ? (
-        <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
+        <span className="ui-nav-item-actions absolute inset-y-0 end-ui-4 flex items-center">
           {actions}
         </span>
       ) : null}

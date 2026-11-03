@@ -1,4 +1,4 @@
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import {
   AlertIcon,
   BoardIcon,
@@ -17,7 +17,7 @@ import {
   TerminalIcon,
   Text,
   UserIcon,
-} from "@luke/ui";
+} from "@repo/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

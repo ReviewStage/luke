@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { getTestDB } from "@luke/database/testing";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { noNetwork } from "@luke/wire/testing";
+import { getTestDB } from "@repo/database/testing";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { noNetwork } from "@repo/wire/testing";
 import { DateTime, Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { openGithubUser } from "../testing/github-app-fake.js";

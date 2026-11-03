@@ -38,6 +38,10 @@ import {
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
+import {
+  workspaceSlackBotAnswerSchema,
+  workspaceSlackBotNotificationsRequestSchema,
+} from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   listedPullRequestSchema,
@@ -54,6 +58,7 @@ import {
   taskFileRequestSchema,
   taskFileTextSchema,
   taskFileWindowSchema,
+  taskNumberSchema,
   taskPrioritySchema,
   taskPullRequestsSchema,
   taskRelationChangeRequestSchema,
@@ -84,6 +89,7 @@ import {
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
+  workspaceSlugSetRequestSchema,
   workspaceTokenRepositoryRequestSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
@@ -721,6 +727,22 @@ export const taskBrowserTabsFollowedSchema = EffectSchema.Union([
 
 export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
 
+/** A task a link names by its number, as the window asks the host to find it: the link's workspace, by the slug or the id it spells, and the number. */
+export const tasksFindParamsSchema = EffectSchema.Struct({
+  workspace: EffectSchema.NonEmptyString,
+  number: taskNumberSchema,
+});
+
+export type TasksFindParams = typeof tasksFindParamsSchema.Type;
+
+/** The task a link names by its number, as the window hears it: its id, or that none was found or the service did not answer. */
+export const tasksFindAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type TasksFindAnswer = typeof tasksFindAnswerSchema.Type;
+
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -885,6 +907,11 @@ export const tasksWorkspaceRenameParamsSchema = workspaceRenameRequestSchema;
 
 export type TasksWorkspaceRenameParams = typeof tasksWorkspaceRenameParamsSchema.Type;
 
+/** Changing a workspace's slug, as the window asks it: the workspace and the slug as typed, as the service takes them. */
+export const tasksWorkspaceSlugSetParamsSchema = workspaceSlugSetRequestSchema;
+
+export type TasksWorkspaceSlugSetParams = typeof tasksWorkspaceSlugSetParamsSchema.Type;
+
 /** Setting or removing a workspace's photo, as the window asks it: the workspace and the photo as a `data:` URL, or null, as the service takes them. */
 export const tasksWorkspacePhotoSetParamsSchema = workspacePhotoSetRequestSchema;
 
@@ -924,6 +951,21 @@ export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
+
+/** A workspace's Slack bot as the window hears it after a read, a connect, or a disconnect: whether the deployment holds the bot and the team it is connected to, or why there is no answer. */
+export const tasksWorkspaceSlackBotAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ slackBot: workspaceSlackBotAnswerSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceSlackBotAnswer = typeof tasksWorkspaceSlackBotAnswerSchema.Type;
+
+/** The reader's own Slack notifications turned on or off, as the window asks for it: the workspace it asks from, and the switch. */
+export const tasksWorkspaceSlackBotNotificationsParamsSchema =
+  workspaceSlackBotNotificationsRequestSchema;
+
+export type TasksWorkspaceSlackBotNotificationsParams =
+  typeof tasksWorkspaceSlackBotNotificationsParamsSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;
@@ -1101,9 +1143,10 @@ const planCommentFailedSchema = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(PLAN_COMMENT_CALL_FAILURE)),
 });
 
-/** A plan's comments past a cursor, as the window asks it: the plan, and where the window stands. */
+/** A plan's comments, or one of its task's pages', past a cursor, as the window asks it: the plan, the page where it names one, and where the window stands. */
 export const tasksCommentsParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
+  pageId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   after: EffectSchema.NonEmptyString,
 });
 

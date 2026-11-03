@@ -1,5 +1,5 @@
-import type { Replay } from "@luke/features/agent-replay";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import type { Replay } from "@repo/features/agent-replay";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_BOUNDS,
   AGENT_BRIEF,
@@ -8,8 +8,8 @@ import {
   type AgentTranscriptMessage,
   agentMessageWords,
   applyMessagesPage,
-} from "@luke/features/agent-wire";
-import { THREAD_LINE_LEAD, threadLineWords } from "@luke/features/inbox-wire";
+} from "@repo/features/agent-wire";
+import { THREAD_LINE_LEAD, threadLineWords } from "@repo/features/inbox-wire";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -19,8 +19,8 @@ import {
   isCommandKind,
   TURN_ROW,
   type TurnRow,
-} from "@luke/features/turn-rows";
-import { MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/turn-rows";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { unreachedAs } from "../act.js";
 import { blockSays, bodyWords, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
@@ -28,6 +28,8 @@ import {
   type AgentPart,
   agentMessageOf,
   agentRows,
+  commentLineOf,
+  commentLineWords,
   githubLineOf,
   githubLineWords,
   isDelegation,
@@ -37,6 +39,7 @@ import {
   turnStretches,
   workerLines,
 } from "./agent-model.js";
+import { COMMENT_LINE_LEAD, commentLineSubject } from "./line-cards.js";
 import {
   leftOutLine,
   replayCount,
@@ -294,13 +297,18 @@ function developerTurn(message: AgentTranscriptMessage): CopiedTurn {
 /**
  * A line steered into the agent as its row draws it from its metadata,
  * rather than as the prompt the agent read: a thread's led by what the
- * member did, without the header naming the item; GitHub's as its card
+ * member did, without the header naming the item; a comment's by what it
+ * is on and its member's words; GitHub's as its card
  * (`githubLineWords`), without the instructions and the fence. Nothing for
  * any other line, whose words are its own.
  */
 function sentLineWords(message: AgentTranscriptMessage): string | undefined {
   const github = githubLineOf(message);
   if (github !== undefined) return githubLineWords(github, messageWords(message));
+  const comment = commentLineOf(message);
+  if (comment !== undefined) {
+    return `${COMMENT_LINE_LEAD} ${commentLineSubject(comment)}\n\n${commentLineWords(comment)}`;
+  }
   const thread = threadLineOf(message);
   if (thread === undefined) return undefined;
   return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]

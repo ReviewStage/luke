@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
 import { Clock, Duration, Effect, Exit, Fiber, Random, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {

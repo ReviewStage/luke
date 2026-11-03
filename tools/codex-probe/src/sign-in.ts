@@ -18,14 +18,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { CHATGPT_SIGN_IN } from "@luke/credentials";
+import { CHATGPT_SIGN_IN } from "@repo/credentials";
 import {
   isRecord,
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
   valueFromJsonText,
-} from "@luke/wire";
+} from "@repo/wire";
 import {
   authorizeUrl,
   beginAuthorization,

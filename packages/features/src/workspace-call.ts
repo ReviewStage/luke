@@ -18,6 +18,12 @@ export const WORKSPACE_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The address is already a member of the workspace, or already holds a pending invitation to it. */
   ALREADY_INVITED: "already-invited",
+  /** A slug the owner chose is spelled other than a slug may be. */
+  SLUG_MALFORMED: "slug-malformed",
+  /** A slug the owner chose is one our own pages, or an account's first workspace, stand under. */
+  SLUG_RESERVED: "slug-reserved",
+  /** A slug the owner chose is another workspace's. */
+  SLUG_TAKEN: "slug-taken",
 } as const;
 
 export type WorkspaceCallFailure =

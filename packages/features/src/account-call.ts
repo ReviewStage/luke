@@ -5,8 +5,8 @@ import {
   text,
   type WireBoundaryInput,
   withoutTrailingSlash,
-} from "@luke/wire";
-import { webResponseFromClientResponse } from "@luke/wire/effect";
+} from "@repo/wire";
+import { webResponseFromClientResponse } from "@repo/wire/effect";
 import { Data, Duration, Effect, type Schema as EffectSchema, Result } from "effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";

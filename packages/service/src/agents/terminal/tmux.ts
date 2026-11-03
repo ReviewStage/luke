@@ -9,7 +9,7 @@
  * take a prefix of one for another. Every command is a script we write,
  * and what a developer typed reaches it only as a positional argument, never
  * spliced into its text. tmux and its settings come with the image
- * (`agent-runtime/sandbox.ts`), and nothing here installs them, since a
+ * (`agent-runtime/sandbox-image.ts`), and nothing here installs them, since a
  * Terminal's shell reaches no root: the settings keep tmux out of sight, with
  * no status line, no mouse, and its output scrolling into the terminal's own
  * scrollback. Every command runs with every capability dropped
@@ -25,8 +25,8 @@
  * own and travels in base64, which no name, title, or path can break.
  */
 
-import type { TerminalSummary } from "@luke/features/terminal-wire";
-import { readEither } from "@luke/wire/effect";
+import type { TerminalSummary } from "@repo/features/terminal-wire";
+import { readEither } from "@repo/wire/effect";
 import { Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../../core.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
@@ -34,7 +34,7 @@ import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const TMUX = {
-  /** What a Terminal tab's session names start with; the rest is the shell's id. */
+  /** What a Terminal tab's session names start with; the rest is the shell's id. Note that it and `SOCKET` keep their old names, because a running sandbox's shells are found again by them. */
   SESSION_PREFIX: "luke-",
   /** The session option a developer-given name rides in. */
   TITLE_OPTION: "@luke_title",
@@ -52,7 +52,7 @@ export const TMUX = {
 
 /**
  * The sandbox's own tmux settings, written to `/etc/tmux.conf` as its image
- * is prepared (`agent-runtime/sandbox.ts`): tmux kept out of sight, with no
+ * is prepared (`agent-runtime/sandbox-image.ts`): tmux kept out of sight, with no
  * status line and no mouse, so the terminal's own selection and scrollback
  * work, its output scrolling into that scrollback rather than an alternate
  * screen; the newest window's size, so two windows on one shell size it to

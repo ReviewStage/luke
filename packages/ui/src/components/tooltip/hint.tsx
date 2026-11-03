@@ -3,7 +3,7 @@
  *
  * It stands in for the system `title`, which waits over a second, cannot say
  * a shortcut apart from its name, and draws in a style of its own. The pill
- * shows once the pointer rests on its control for `--luke-hint-delay`, or the
+ * shows once the pointer rests on its control for `--ui-hint-delay`, or the
  * control takes focus from the keyboard; once one has shown, the next is
  * shown at once for as long as the pointer keeps moving between controls,
  * the way a menu bar stays open across its titles. Pressing, any key,
@@ -48,7 +48,7 @@
  * anywhere but on the hint or its control, Escape, and a scroll close it.
  *
  * The wait is this window's own, not the stylesheet's: nothing is drawn
- * until the pointer has rested out `--luke-hint-delay`, so a pointer sweeping
+ * until the pointer has rested out `--ui-hint-delay`, so a pointer sweeping
  * across a list mounts nothing for the rows it only crosses. The window
  * keeps one wait, since the pointer rests on one control at a time, and a
  * rest begun on the next calls off the last. Only a pill warms the window:
@@ -85,13 +85,13 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   APP_SHORTCUTS,
   type KeyedCommand,
   type ShortcutChord,
   shortcutAria,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import {
@@ -333,7 +333,7 @@ interface HintRest {
 
 /**
  * The window's one wait, for a hint of the caller's: `rest` shows it once
- * the pointer has rested `--luke-hint-delay`, and `stop` calls the wait off,
+ * the pointer has rested `--ui-hint-delay`, and `stop` calls the wait off,
  * as the caller unmounting does, and as a key, a scroll, or the window
  * losing the keyboard do while it runs, as they take a standing hint down. `Tooltip` waits through it, and so does a
  * hint drawn by hand, as the diff's gap controls draw theirs.
@@ -983,7 +983,7 @@ export const RowHint: ListRowHint = ({ label, row, children }) => {
 };
 
 /**
- * The hint over words held to one line (`@luke/ui`'s `OneLine`): the pill
+ * The hint over words held to one line (`@repo/ui`'s `OneLine`): the pill
  * reading them whole while the line cuts them short, and none while it
  * draws them whole, since a line drawn whole says nothing twice. The words
  * ride the pill rather than a `title`, which session replay would carry

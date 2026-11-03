@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core/migrator";
-import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@repo/database/core/migrator";
+import { conversations, messages, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import {
   countRowsWhere,
   deleteUser,
@@ -9,8 +9,8 @@ import {
   insertMessage,
   insertTurn,
   openHostedStoreTestDatabase,
-} from "@luke/database/testing";
-import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+} from "@repo/database/testing";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { getColumnTable, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -102,9 +102,13 @@ const DECLARED_TABLES = [
   "sandbox_terminal_lease",
   "session",
   "session_sandbox_cleanup",
+  "slack_agent_thread",
+  "slack_installation",
+  "slack_member",
   "task",
   "task_block",
   "task_number_counter",
+  "task_number_forward",
   "task_pin",
   "task_section",
   "task_section_entry",
@@ -112,6 +116,7 @@ const DECLARED_TABLES = [
   "turns",
   "user",
   "verification",
+  "workspace_former_slug",
   "workspace_token_repository",
 ].sort();
 

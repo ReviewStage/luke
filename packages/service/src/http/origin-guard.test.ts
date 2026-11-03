@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type CookieOriginGuard, cookieOriginGuard } from "./origin-guard.js";
@@ -8,17 +8,17 @@ const PRODUCTION_ORIGIN = "https://vespin.dev";
 
 const PRODUCTION = {
   VERCEL_ENV: "production",
-  VERCEL_URL: "luke-abc123-stage-review.vercel.app",
+  VERCEL_URL: "vespin-abc123-stage-review.vercel.app",
   BETTER_AUTH_URL: PRODUCTION_ORIGIN,
 } as const;
 
-const PREVIEW_ORIGIN = "https://luke-def456-stage-review.vercel.app";
-const PREVIEW_BRANCH_ORIGIN = "https://luke-web-git-feature-stage-review.vercel.app";
+const PREVIEW_ORIGIN = "https://vespin-def456-stage-review.vercel.app";
+const PREVIEW_BRANCH_ORIGIN = "https://vespin-git-feature-stage-review.vercel.app";
 
 const PREVIEW = {
   VERCEL_ENV: "preview",
-  VERCEL_URL: "luke-def456-stage-review.vercel.app",
-  VERCEL_BRANCH_URL: "luke-web-git-feature-stage-review.vercel.app",
+  VERCEL_URL: "vespin-def456-stage-review.vercel.app",
+  VERCEL_BRANCH_URL: "vespin-git-feature-stage-review.vercel.app",
   BETTER_AUTH_URL: PRODUCTION_ORIGIN,
 } as const;
 
@@ -118,6 +118,16 @@ test("a cookie POST, PUT, DELETE, or PATCH from the deployment's own origin goes
     });
     assert.equal(await verdict(guard, sent), undefined, method);
   }
+});
+
+test("a cookie PUT from the host links were once written on, which production still serves the app at, goes on to its route", async () => {
+  const guard = cookieOriginGuard(PRODUCTION);
+  const sent = request(COOKIE_ROUTE, {
+    method: "PUT",
+    headers: { cookie: SESSION_COOKIE, origin: "https://tryluke.dev" },
+  });
+
+  assert.equal(await verdict(guard, sent), undefined);
 });
 
 test("a cookie POST that names no origin goes on where the browser says its page was the same origin's", async () => {

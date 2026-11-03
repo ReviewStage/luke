@@ -3,7 +3,7 @@ import {
   PRODUCT_SURFACE_EVENT,
   type ProductLayout,
   type ProductSurface,
-} from "@luke/features/analytics";
+} from "@repo/features/analytics";
 import { useEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";

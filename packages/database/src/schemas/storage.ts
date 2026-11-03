@@ -1,4 +1,4 @@
-import type { RunModelUsage, RunUsage } from "@luke/features/turn-run";
+import type { RunModelUsage, RunUsage } from "@repo/features/turn-run";
 import {
   MESSAGE_ROLE,
   type MessageRole,
@@ -6,8 +6,8 @@ import {
   TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
-} from "@luke/wire";
-import type { StoredUIMessage } from "@luke/wire/ui-messages";
+} from "@repo/wire";
+import type { StoredUIMessage } from "@repo/wire/ui-messages";
 import { type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -31,7 +31,7 @@ import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
 /**
- * The conversation storage the LUKE-95 rework settles on: one row per
+ * The conversation storage: one row per
  * message in the AI SDK's `UIMessage` shape, its parts and metadata as plain
  * `jsonb`, beside the conversation it belongs to and the turn that wrote it.
  * Nothing here is sealed: the content stored here is readable by an
@@ -198,7 +198,7 @@ export const messages = pgTable(
     role: text("role").$type<MessageRole>().notNull(),
     /** The message's parts exactly as the SDK shapes them; read back through `readStoredUIMessages`, never the SDK's validator alone. */
     parts: jsonb("parts").$type<StoredUIMessage["parts"]>().notNull(),
-    /** The `@luke/wire` metadata for the row's role; a system row carries none. */
+    /** The `@repo/wire` metadata for the row's role; a system row carries none. */
     metadata: jsonb("metadata").$type<StoredMessageMetadata>(),
     createdAt: createdAt(),
     finishedAt: timestamptz("finished_at"),

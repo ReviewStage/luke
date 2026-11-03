@@ -23,8 +23,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@luke/features";
-import { CHECKOUT_IDENTITY_SCRIPT } from "@luke/features/checkout-identity";
+import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@repo/features";
+import { CHECKOUT_IDENTITY_SCRIPT } from "@repo/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -38,10 +38,10 @@ import {
   type DeviceSignedIn,
   deviceAgentLayout,
   HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
-import { HOST_TARGET, hostTarballUrl } from "@luke/features/host-release";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+} from "@repo/features/device-agent-wire";
+import { HOST_TARGET, hostTarballUrl } from "@repo/features/host-release";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
@@ -67,7 +67,7 @@ const GONE_LINE_ID = "3c5d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 const GONE_AGENT_ID = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
 const STATE_ROOT = "/Users/dev/Library/Application Support/Vespin";
 const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
-const SECRET_ENV = { LUKE_RUNNER_TOKEN: "runner-secret" };
+const SECRET_ENV = { APP_RUNNER_TOKEN: "runner-secret" };
 /** The runner's own start on the box, as the platform launches it. */
 const RUNNER = "/opt/luke-host/node/bin/node";
 /** Where the agent's gh keeps its sign-in, which the follower writes the agent's GitHub token into. */
@@ -310,6 +310,7 @@ const followingDevice = (
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
+        deviceMachine: {},
         devicePlatform: DEVICE_PLATFORM.DARWIN,
         deviceArch: DEVICE_ARCH.ARM64,
         deviceIsolation: DEVICE_ISOLATION.DIRECT,
@@ -378,7 +379,7 @@ it.effect(
           "the launch keeps the agent in the device's record of the agents it made",
         );
         const runner = spawned.find((each) => each.program === RUNNER);
-        assert.equal(runner?.env?.LUKE_RUNNER_TOKEN, SECRET_ENV.LUKE_RUNNER_TOKEN);
+        assert.equal(runner?.env?.APP_RUNNER_TOKEN, SECRET_ENV.APP_RUNNER_TOKEN);
         // Note that gh prefers a token in its environment to its config, so one there would never be renewed.
         assert.equal(runner?.env?.GH_TOKEN, undefined, "the runner's gh reads its config alone");
         // Note that the identity the launch carries is set in the agent's repository, as a cloud checkout sets it, beside gh's helper, before its runner starts.
@@ -387,10 +388,10 @@ it.effect(
         );
         assert.equal(spawned[identity]?.cwd, LAYOUT.checkoutPath);
         assert.equal(spawned[identity]?.env?.HOME, `${LAYOUT.folder}/home`);
-        assert.equal(spawned[identity]?.env?.LUKE_GIT_NAME, IDENTITY.name);
-        assert.equal(spawned[identity]?.env?.LUKE_GIT_EMAIL, IDENTITY.email);
+        assert.equal(spawned[identity]?.env?.APP_GIT_NAME, IDENTITY.name);
+        assert.equal(spawned[identity]?.env?.APP_GIT_EMAIL, IDENTITY.email);
         assert.equal(
-          spawned[identity]?.env?.LUKE_GIT_CREDENTIAL_HELPER,
+          spawned[identity]?.env?.APP_GIT_CREDENTIAL_HELPER,
           `!'${CLIS.paths.gh}' auth git-credential`,
         );
         assert.ok(identity < spawned.findIndex((each) => each.program === RUNNER));
@@ -916,13 +917,13 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
 const RUNNING = "0.3.0";
 const NEWER = "0.4.0";
 
-/** The newer release's tarball, as CI packs one: its `luke-host` command, which answers its version, under one `luke-host/` folder. */
+/** The newer release's tarball, as CI packs one: its `vespin-host` command, which answers its version, under one `luke-host/` folder. */
 const newerTarball = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
-  const scratch = yield* temporaryDirectoryScoped("luke-host-tarball-");
+  const scratch = yield* temporaryDirectoryScoped("host-tarball-");
   yield* fileSystem.makeDirectory(`${scratch}/luke-host/bin`, { recursive: true });
   yield* fileSystem.writeFileString(
-    `${scratch}/luke-host/bin/luke-host`,
+    `${scratch}/luke-host/bin/vespin-host`,
     `#!/bin/sh\necho ${NEWER}\n`,
     { mode: 0o755 },
   );
@@ -945,7 +946,7 @@ const newerTarball = Effect.gen(function* () {
 const updatingHost = (tarball: Uint8Array<ArrayBuffer>) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const folder = yield* temporaryDirectoryScoped("luke-host-releases-");
+    const folder = yield* temporaryDirectoryScoped("host-releases-");
     for (const version of ["0.2.0", RUNNING]) {
       yield* fileSystem.makeDirectory(`${folder}/versions/${version}/bin`, { recursive: true });
     }

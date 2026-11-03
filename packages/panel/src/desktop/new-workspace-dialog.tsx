@@ -1,5 +1,5 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { WORKSPACE_BOUNDS } from "@luke/features/workspace-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { WORKSPACE_BOUNDS } from "@repo/features/workspace-wire";
 import {
   DIALOG_TONE,
   Dialog,
@@ -8,8 +8,8 @@ import {
   FormField,
   TextField,
   useConfirmDialog,
-} from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
 import { useFormDialog } from "./use-form-dialog.js";

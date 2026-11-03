@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
@@ -28,7 +28,7 @@ import { createTask, deleteTask, readTaskPlan, updateTask } from "../task-store.
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

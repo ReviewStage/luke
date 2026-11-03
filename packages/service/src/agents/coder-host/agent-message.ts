@@ -1,17 +1,17 @@
-import { type Agent, readTakeoverPilot } from "@luke/database/models/agent-store";
-import { isWorkspaceMember } from "@luke/database/models/workspace-store";
-import { AGENT_TOOL } from "@luke/features/agent-tools";
+import { type Agent, readTakeoverPilot } from "@repo/database/models/agent-store";
+import { isWorkspaceMember } from "@repo/database/models/workspace-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_BOUNDS,
   AGENT_KIND,
   AGENT_MESSAGE_LEAD,
   AGENT_STATUS,
   agentMessageReplyLine,
-} from "@luke/features/agent-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
-import { agentName } from "@luke/features/model-label";
-import type { WireRecord } from "@luke/wire";
-import { describeWire } from "@luke/wire/effect";
+} from "@repo/features/agent-wire";
+import { MENTION_KIND } from "@repo/features/mention-link";
+import { agentName } from "@repo/features/model-label";
+import type { WireRecord } from "@repo/wire";
+import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
@@ -87,7 +87,6 @@ export const MESSAGE_AGENT_REFUSAL = {
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
   STARTER_LEFT:
     "Not sent: the member who started that agent has left your workspace, so nothing reaches it.",
-  NO_SERVICE: "Not sent: this deployment cannot reach the agents' service.",
   NOT_PERMITTED:
     "Not sent: that agent runs on its starter's own GitHub token or plan, so only they and their agents can message it.",
   NOT_REACHABLE:
@@ -231,8 +230,7 @@ export function runMessageAgent(
         return agentToolRejected(MESSAGE_AGENT_REFUSAL.STARTER_LEFT);
       }
       // The line is minted for the receiving agent's starter, whose principal its turn runs under.
-      const eve = call.eveAs?.(target.userId);
-      if (eve === undefined) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_SERVICE);
+      const eve = call.eveAs(target.userId);
       const step = yield* workspaceStepOf(userId, workspace.value);
       const mention = writtenMention(
         { kind: MENTION_KIND.AGENT, agentId: sender.id },

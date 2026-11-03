@@ -11,11 +11,11 @@
  * tarball it downloads against the digest it carries before
  * anything of it is installed. A release moves `HOST_RELEASE` whole, its
  * digests read off the release CI published, as a tool's pin moves
- * (`@luke/agent-runner/pins`).
+ * (`@repo/agent-runner/pins`).
  */
 
 /** The repository whose releases carry the host's tarballs. */
-const RELEASE_REPOSITORY = "ReviewStage/luke";
+const RELEASE_REPOSITORY = "ReviewStage/vespin";
 
 /** Each platform and architecture the host is released for, as its tarball's name spells it. */
 export const HOST_TARGET = {
@@ -45,11 +45,11 @@ export interface HostRelease {
  * published, and the script served meanwhile says there is none yet.
  */
 export const HOST_RELEASE: HostRelease | undefined = {
-  VERSION: "0.5.0",
+  VERSION: "0.7.0",
   SHA256: {
-    [HOST_TARGET.LINUX_X64]: "d455282db3b444e4f289e838d98b6ef7b49eb6cabc970af7232cfe437d03656f",
-    [HOST_TARGET.LINUX_ARM64]: "364b4b3e855b271172df3721578293c606c9cdb7c47826f6959690bb3402e00f",
-    [HOST_TARGET.DARWIN_ARM64]: "564d999f8f4d0fcc8b6e8982aa24bd0e414b9c5998f951e88ab97e0f45744143",
+    [HOST_TARGET.LINUX_X64]: "c44f741153b1282ae50066b97a0d33deb0287031bf7a4d7220c176a7b5d75104",
+    [HOST_TARGET.LINUX_ARM64]: "a995a3a7f14b31a0be2d373cfa728ff70cd377ff6909522d773a2ddc276cb5bb",
+    [HOST_TARGET.DARWIN_ARM64]: "23b06bc1a63cd69004bd0c52f7a66922ecde33477f93b3c744a43fc765ddb65d",
   },
 };
 
@@ -58,7 +58,7 @@ export function hostReleaseTag(version: string): string {
   return `host-v${version}`;
 }
 
-/** One target's tarball, by its file name, whose one top folder is `luke-host`. */
+/** One target's tarball, by its file name, whose one top folder is `luke-host`. Note that both keep the old name though the program is `vespin-host` from 0.7.0 on, since a host through 0.6.0 fetches and unpacks its update by them. */
 export function hostTarballName(version: string, target: HostTarget): string {
   return `luke-host-${version}-${target}.tar.gz`;
 }

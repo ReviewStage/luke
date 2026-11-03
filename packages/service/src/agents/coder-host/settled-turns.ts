@@ -1,32 +1,37 @@
 /**
- * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, and the report to the agent's starter.
+ * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, the report to the agent's starter, an automation run's result on Slack, and the turn in the Slack thread its agent was started from.
  *
  * The writer tells its `SettledTurnListener` once the settle's transaction
- * is done (`@luke/database/models/writer`), whichever path settled the turn:
+ * is done (`@repo/database/models/writer`), whichever path settled the turn:
  * the relay's or a runner's own end, a Stop, a lost session's, or the
  * sweep's abandon. This is the one listener the deployment provides
- * (`../../runtime.ts`), and it does two things with each turn: counts it
- * (`../../events/server-events.ts`) and hands its final message to the agent
- * that started it, where one did (`starter-report.ts`). Both run once the
- * request has answered, where the runtime runs work past the answer, since
- * neither is the settle's to wait on; and the report runs on the pool
- * rather than on a transaction the settle may have run inside, which has
- * ended by then, so its reads see the settle committed and its send holds
- * no transaction open over eve.
+ * (`../../runtime.ts`), and it does four things with each turn: counts it
+ * (`../../events/server-events.ts`), hands its final message to the agent
+ * that started it, where one did (`starter-report.ts`), and sends an
+ * automation run's result to its owner on Slack, where the run's automation
+ * asks for it (`../../automations/automation-slack-delivery.ts`), and posts
+ * the turn in the Slack thread its agent was started from, where one was
+ * (`../../slack/slack-agent-starts.ts`). Each runs
+ * once the request has answered, where the runtime runs work past the
+ * answer, since none is the settle's to wait on; and the report and the
+ * Slack message run on the pool rather than on a transaction the settle may
+ * have run inside, which has ended by then, so their reads see the settle
+ * committed and their sends hold no transaction open over eve or Slack.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
-import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { type SettledAgentTurn, SettledTurnListener } from "@repo/database/models/writer";
 import { Context, Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { deliverRunToSlack } from "../../automations/automation-slack-delivery.js";
 import type { HostedEnvironment } from "../../environment.js";
 import { turnEndCounted } from "../../events/server-events.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { afterResponse } from "../../http/after-response.js";
-import { deploymentEveForAccounts } from "../deployment-eve.js";
-import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../eve-host/eve-sessions.js";
+import { postTurnToSlackThreads } from "../../slack/slack-agent-starts.js";
+import type { SlackBot } from "../../slack/slack-bot.js";
+import { routedSessions } from "./runtime-sessions.js";
 import { reportToStarter } from "./starter-report.js";
 
 /** The work run on the pool rather than on a transaction the settle ran inside, which has ended by the time the answer has left. */
@@ -42,27 +47,42 @@ const outsideTransaction = <A, E>(
 /**
  * The deployment's listener over the services the report sends through,
  * read once as the layer is built: eve as the deployment acting for the
- * agent's account, and GitHub, which a send to an agent on a repository
- * asks whether its starter still reaches it.
+ * agent's account, GitHub, which a send to an agent on a repository asks
+ * whether its starter still reaches it, and the workspace's Slack bot.
  */
 export const settledTurnListener: Layer.Layer<
   SettledTurnListener,
   never,
-  HttpClient.HttpClient | GitHubApp | HostedEnvironment
+  HttpClient.HttpClient | GitHubApp | HostedEnvironment | SlackBot
 > = Layer.effect(
   SettledTurnListener,
   Effect.gen(function* () {
-    const reach = yield* Effect.context<HttpClient.HttpClient | GitHubApp | HostedEnvironment>();
+    const reach = yield* Effect.context<
+      HttpClient.HttpClient | GitHubApp | HostedEnvironment | SlackBot
+    >();
     const reported = (turn: SettledAgentTurn) =>
       afterResponse(
         "a started agent's final message",
-        Effect.flatMap(
-          deploymentEveForAccounts<EveTypedTurn>(deploymentEveOrigin(), EVE_MOUNT.CODER),
-          (eveFor) => reportToStarter(eveFor, turn),
-        ).pipe(Effect.provideContext(reach), outsideTransaction),
+        reportToStarter(routedSessions, turn).pipe(
+          Effect.provideContext(reach),
+          outsideTransaction,
+        ),
+      );
+    const delivered = (turn: SettledAgentTurn) =>
+      afterResponse(
+        "an automation run's result on Slack",
+        deliverRunToSlack(turn).pipe(Effect.provideContext(reach), outsideTransaction),
+      );
+    const posted = (turn: SettledAgentTurn) =>
+      afterResponse(
+        "an agent's turn in its Slack thread",
+        postTurnToSlackThreads(turn).pipe(Effect.provideContext(reach), outsideTransaction),
       );
     return {
-      heard: (turn) => Effect.all([turnEndCounted(turn), reported(turn)], { discard: true }),
+      heard: (turn) =>
+        Effect.all([turnEndCounted(turn), reported(turn), delivered(turn), posted(turn)], {
+          discard: true,
+        }),
     };
   }),
 );

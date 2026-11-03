@@ -24,11 +24,11 @@ import type {
   AgentAttachment,
   AgentSummary,
   AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
-import type { ACT_KIND } from "@luke/host/acts";
-import type { PortActPayload } from "@luke/host/contract";
-import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import type { ModelChoice } from "@repo/features/models-wire";
+import type { ACT_KIND } from "@repo/host/acts";
+import type { PortActPayload } from "@repo/host/contract";
+import { isRecord, isWireString, MESSAGE_ROLE } from "@repo/wire";
 import { AGENT_PART, choiceRequest } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
 

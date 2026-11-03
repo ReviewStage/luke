@@ -6,7 +6,7 @@
  * could not be (`FailureNote`), which takes it the same way; each hands it
  * here as it is shown, so no failure reaches a screen unreported. The
  * window's shell installs the reporter: the desktop's windows and the web's
- * tab answer it with their Sentry SDK (`@luke/features/shown-failure`),
+ * tab answer it with their Sentry SDK (`@repo/features/shown-failure`),
  * which sends a log line for every failure and an issue besides for one
  * nothing named. A window with no reporter, a test's, reports nothing,
  * which is why this is a door of its own rather than a capability every
@@ -23,7 +23,7 @@
  * version, and the Sentry event id and trace the reporter answered, so what
  * they paste to an agent finds the very line and issue that were sent.
  *
- * A failure drawn in place (`@luke/ui`'s `ErrorState`, `FailureNote`,
+ * A failure drawn in place (`@repo/ui`'s `ErrorState`, `FailureNote`,
  * `ErrorLine` and the rows and dialogs that draw one) is handed as
  * `failureShown` answers it, and stands for as long as what failed does,
  * drawn again on every render and on every remount, such as a tab switched
@@ -40,7 +40,7 @@
  * render, so a site hands the cause it holds, never one it builds.
  */
 
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   FAILURE_CONDITION,
   FAILURE_KIND,
@@ -51,13 +51,13 @@ import {
   type ShownFailureReport,
   type ShownFailureSent,
   shownFailureDetails,
-} from "@luke/features/shown-failure";
-import { ACT_ERROR, type PortActKind } from "@luke/host/contract";
-import type { ConfirmFailure } from "@luke/ui/confirm-state";
-import type { PictureUnread } from "@luke/ui/picture-cache";
-import type { ReportedFailure, ShownError } from "@luke/ui/reported-failure";
-import type { SettingRefusal } from "@luke/ui/use-setting-write";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/features/shown-failure";
+import { ACT_ERROR, type PortActKind } from "@repo/host/contract";
+import type { ConfirmFailure } from "@repo/ui/confirm-state";
+import type { PictureUnread } from "@repo/ui/picture-cache";
+import type { ReportedFailure, ShownError } from "@repo/ui/reported-failure";
+import type { SettingRefusal } from "@repo/ui/use-setting-write";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { ORPCError } from "@orpc/client";
 import { Clock, Context, Predicate } from "effect";
 import type { ReactNode } from "react";

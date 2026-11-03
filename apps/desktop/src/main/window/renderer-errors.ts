@@ -15,7 +15,7 @@
  */
 
 import path from "node:path";
-import { withoutAccessTokens } from "@luke/features/sentry-breadcrumbs";
+import { withoutAccessTokens } from "@repo/features/sentry-breadcrumbs";
 import { app, type BrowserWindow } from "electron";
 
 /** The document a window's page is, by its file's name, such as `index.html`. */

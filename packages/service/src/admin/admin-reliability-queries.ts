@@ -9,19 +9,19 @@
  * on the server, so the detail is read and never answered.
  */
 
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import { InstantColumnSchema } from "@luke/database/models/columns";
-import { utcDayKey } from "@luke/database/models/quota";
-import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { agentTable } from "@luke/database/schemas/agent";
-import { member, user } from "@luke/database/schemas/auth";
-import { automationRun } from "@luke/database/schemas/automation";
-import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { integrationConnection } from "@luke/database/schemas/integration";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@repo/database/github-installation-vocabulary";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
+import { InstantColumnSchema } from "@repo/database/models/columns";
+import { utcDayKey } from "@repo/database/models/quota";
+import { accountProviderKey } from "@repo/database/schemas/account-provider-key";
+import { agentTable } from "@repo/database/schemas/agent";
+import { member, user } from "@repo/database/schemas/auth";
+import { automationRun } from "@repo/database/schemas/automation";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { integrationConnection } from "@repo/database/schemas/integration";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import type {
   AdminAttentionAccount,
   AdminAttentionProblem,
@@ -29,25 +29,25 @@ import type {
   AdminDatabaseHealth,
   AdminFailureCount,
   AdminIntegration,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   ADMIN_ATTENTION_AGENT_DAYS,
   ADMIN_ATTENTION_KIND,
   type AdminMetricsScope,
   type AdminMetricsWindow,
-} from "@luke/features/admin-wire";
-import { AGENT_STATUS, type AgentFailure } from "@luke/features/agent-wire";
+} from "@repo/features/admin-wire";
+import { AGENT_STATUS, type AgentFailure } from "@repo/features/agent-wire";
 import {
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   type AutomationRunReason,
-} from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+} from "@repo/features/automation-wire";
+import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
+} from "@repo/features/provider-key-wire";
 import { and, count, countDistinct, eq, gte, inArray, notExists, sql } from "drizzle-orm";
 import { alias, type PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect, Result, Schema } from "effect";
@@ -391,7 +391,7 @@ const NO_RUNS: AdminAutomationCount = { failed: 0, skipped: 0, total: 0 };
 
 /** Whose work a turn is: the app's, a coding agent's own run, or a subagent one of its turns delegated to. */
 const TURN_WORK = {
-  LUKE: "luke",
+  APP: "app",
   AGENT: "agent",
   AGENT_SUBAGENT: "agent-subagent",
 } as const;
@@ -401,7 +401,7 @@ type TurnWork = (typeof TURN_WORK)[keyof typeof TURN_WORK];
 function turnWorkOf(kind: string, parentKind: string | null): TurnWork {
   if (kind === CONVERSATION_KIND.AGENT) return TURN_WORK.AGENT;
   if (parentKind === CONVERSATION_KIND.AGENT) return TURN_WORK.AGENT_SUBAGENT;
-  return TURN_WORK.LUKE;
+  return TURN_WORK.APP;
 }
 
 /**
@@ -427,7 +427,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
     { concurrency: "unbounded" },
   );
 
-  const lukeTurns = new Map<string, AdminFailureCount>();
+  const appTurns = new Map<string, AdminFailureCount>();
   const agentRuns = new Map<string, AdminFailureCount>();
   const abandonedTurns = new Map<string, number>();
   for (const row of outcomes) {
@@ -437,7 +437,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
     }
     const work = turnWorkOf(row.kind, row.parentKind);
     if (work === TURN_WORK.AGENT_SUBAGENT) continue;
-    bump(work === TURN_WORK.AGENT ? agentRuns : lukeTurns, row.day, NO_FAILURES, (counted) => ({
+    bump(work === TURN_WORK.AGENT ? agentRuns : appTurns, row.day, NO_FAILURES, (counted) => ({
       failed: counted.failed + failed,
       total: counted.total + row.value,
     }));
@@ -471,7 +471,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
     agentFailures.set(failure, (agentFailures.get(failure) ?? 0) + 1);
   }
 
-  return { lukeTurns, agentRuns, abandonedTurns, agentFailures };
+  return { appTurns, agentRuns, abandonedTurns, agentFailures };
 });
 
 const readAutomationSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityAutomations")(function* (
@@ -612,7 +612,7 @@ function emptySource(
 ): AdminReliabilitySource {
   return {
     daily: {
-      lukeTurns: new Map(),
+      appTurns: new Map(),
       agentRuns: new Map(),
       abandonedTurns: new Map(),
       automationRuns: new Map(),
@@ -661,7 +661,7 @@ export function readAdminReliabilitySource(input: {
 
     return {
       daily: {
-        lukeTurns: turnSeries.lukeTurns,
+        appTurns: turnSeries.appTurns,
         agentRuns: turnSeries.agentRuns,
         abandonedTurns: turnSeries.abandonedTurns,
         automationRuns: automations.automationRuns,

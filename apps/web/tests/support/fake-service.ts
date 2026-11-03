@@ -11,10 +11,10 @@
  * the tab follows it: polled, the listed task's row inline.
  */
 
-import type { LinkOpen } from "@luke/features/link-open";
-import { LIVE_POLL, LIVE_POLL_URL } from "@luke/features/live-wire";
-import type { WireValue } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import type { LinkOpen } from "@repo/features/link-open";
+import { LIVE_POLL, LIVE_POLL_URL } from "@repo/features/live-wire";
+import type { WireValue } from "@repo/wire";
+import { fakeHttpClientLayer } from "@repo/wire/testing";
 import type { Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 

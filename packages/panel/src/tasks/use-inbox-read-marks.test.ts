@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -9,9 +9,9 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@luke/features/inbox-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/inbox-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -127,7 +127,7 @@ function marks() {
       }),
     /** What each toast standing says, leaving out those on their way out. */
     toasts: () =>
-      [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+      [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
         (words) => words.textContent ?? "",
       ),
     markAll: (items: readonly InboxItem[]) => act(() => held().onMarkAll(items)),

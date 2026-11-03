@@ -7,17 +7,17 @@
    one. Tailwind's theme and utilities sit in cascade layers this file has
    already opened under them, so where the app imports them does not change
    which rule wins. */
-/* The shared tokens first, `@luke/ui`'s scale, each profile's roles, its
+/* The shared tokens first, `@repo/ui`'s scale, each profile's roles, its
    palette, and the window's old names for them, keyed on the root's
-   `data-luke-profile`, `data-luke-theme`, and `data-luke-density`, so every
+   `data-ui-profile`, `data-ui-theme`, and `data-ui-density`, so every
    sheet below reads them. */
-@import "@luke/ui/tokens.css";
+@import "@repo/ui/tokens.css";
 @import "./settings.css";
 @import "./base.css";
 /* The shared components' own rules, in the `components` layer: above
    base.css's element resets, which sit in `base`, and under the utilities an
    app's Tailwind entry layers last, so a reset never undoes a shared control. */
-@import "@luke/ui/styles.css";
+@import "@repo/ui/styles.css";
 @import "./tasks.css";
 /* The shell and its sidebar, which an app drawing the app's sidebar outside
    the panel imports alone, just ahead of the window's own layout. */

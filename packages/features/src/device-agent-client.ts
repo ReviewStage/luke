@@ -1,4 +1,4 @@
-import { HTTP_METHOD } from "@luke/wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type AccountCallEffects, accountCall, type CallCredential } from "./account-call.js";
@@ -14,6 +14,7 @@ import {
   type DeviceIsolation,
   type DeviceLaunchRefusal,
   type DeviceLaunchStep,
+  type DeviceMachine,
   type DevicePlatform,
   type DeviceSetup,
   type DeviceSignedIn,
@@ -82,13 +83,15 @@ export interface DeviceAgentUpdate {
   readonly updateFailure?: string | undefined;
 }
 
-/** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
-export interface DeviceAgentDevice {
+/** What a Mac registers as: its name, its platform and architecture, which machine it is where it read it (`DeviceMachine`), its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
+export interface DeviceAgentDevice extends DeviceMachine {
   readonly name: string;
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
   readonly isolation: DeviceIsolation;
   readonly home: string;
+  /** The folder its own layout puts its agents under (`deviceAgentsFolder`), absolute. */
+  readonly agentsFolder: string;
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;
   readonly signedIn: DeviceSignedIn;
@@ -186,8 +189,9 @@ export function pollHostPairing(
   return pairingOutcome(askHosted(hosted.deviceAgents.pollPairing, undefined));
 }
 
-/** The machine an own enroll names, which the service creates the device from where the account never registered its id. */
-type OwnEnrollingMachine = Required<Omit<OwnDeviceEnrollRequest, "deviceId">>;
+/** The machine an own enroll names, which the service creates the device from where the account never registered its id, and which machine it is where it was read (`DeviceMachine`). */
+type OwnEnrollingMachine = Required<Pick<OwnDeviceEnrollRequest, "name" | "platform" | "arch">> &
+  DeviceMachine;
 
 /** How an own device's enroll ended (`HostedDeviceAgentClient.enrollOwn`). */
 export const OWN_ENROLL_OUTCOME = {

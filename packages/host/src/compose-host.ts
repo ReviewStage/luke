@@ -1,4 +1,4 @@
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import {
   HostedAdminClient,
   HostedAgentClient,
@@ -11,16 +11,16 @@ import {
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
-} from "@luke/features";
-import { HostedInstalledSkillClient } from "@luke/features/installed-skill-client";
+} from "@repo/features";
+import { HostedInstalledSkillClient } from "@repo/features/installed-skill-client";
 import {
   carried,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
-} from "@luke/gateway";
-import { APP_SETTING_SCHEMA, MAC_COMMAND_MODE } from "@luke/settings";
+} from "@repo/gateway";
+import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@repo/settings";
 import { Effect, Layer, Option } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -34,7 +34,6 @@ import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
-import { composeMacTerminal } from "./compose-mac-terminal.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
@@ -99,7 +98,6 @@ type HostAssemblyRequirements =
 interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
-  [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
@@ -244,23 +242,25 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           kernel,
           account,
           accountId,
-          // Note that the account's devices are read where a Start reads them, so this Mac's setup is the one Runs on shows.
-          deviceSetup: (deviceId) =>
-            Effect.map(agentClient.models(), (answer) => {
-              if ("failure" in answer) return Option.none();
-              // Note that a device the answer does not list has no setup to say, which reads as nothing failed.
-              const device = answer.macs?.find((each) => each.deviceId === deviceId);
-              return Option.some({ setup: device?.setup, setupFailure: device?.setupFailure });
-            }),
+          experimentOn: (experiment) =>
+            Effect.map(
+              Effect.orElseSucceed(settings.store.snapshot(), () => ({
+                experiments: NO_EXPERIMENTS,
+              })),
+              (snapshot) => experimentOn(snapshot.experiments, experiment),
+            ),
+          hostListed: (deviceId) =>
+            Effect.map(agentClient.hosts(), (answer) =>
+              "failure" in answer
+                ? Option.none()
+                : Option.some(answer.hosts.some((host) => host.id === deviceId)),
+            ),
           client: new HostedDeviceAgentClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
           }),
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.LOCAL_AGENTS);
-    const macTerminal = platform.has(HOST_PLATFORM_CONCERN.MAC_TERMINAL)
-      ? composeMacTerminal({ store: settings.store })
-      : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_TERMINAL);
     const terminals: TerminalsComposer = platform.has(HOST_PLATFORM_CONCERN.TERMINALS)
       ? yield* composeTerminals({
           kernel,
@@ -341,7 +341,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.LOCAL_AGENTS]: localAgents,
-      [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
       [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
     } satisfies Readonly<Record<HostConcern, Composer>>;

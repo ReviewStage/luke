@@ -1,5 +1,5 @@
-import { TASK_BOUNDS } from "@luke/features/task-wire";
-import { backToWords } from "@luke/features/words";
+import { TASK_BOUNDS } from "@repo/features/task-wire";
+import { backToWords } from "@repo/features/words";
 import {
   BackButton,
   InlineEdit,
@@ -10,7 +10,7 @@ import {
   TEXT_VARIANT,
   Text,
   type ToolbarPickUp,
-} from "@luke/ui";
+} from "@repo/ui";
 import type { AwayStep } from "../navigation-history.js";
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import { PhoneHead } from "./phone-head.js";
@@ -145,7 +145,7 @@ export function TaskHead({
           <Text
             as={TEXT_ELEMENT.H1}
             variant={TEXT_VARIANT.TOOLBAR_TITLE}
-            className="luke-toolbar-title"
+            className="ui-toolbar-title"
           >
             {rename?.editing === true ? (
               <InlineEdit

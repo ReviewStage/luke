@@ -1,6 +1,6 @@
-import * as ui from "@luke/ui";
-import { GAP, GlyphSlot, Inline, TEXT_VARIANT, Text } from "@luke/ui";
-import { GLYPH, ICON_SIZE } from "@luke/ui/icons";
+import * as ui from "@repo/ui";
+import { GAP, GlyphSlot, Inline, TEXT_VARIANT, Text } from "@repo/ui";
+import { GLYPH, ICON_SIZE } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -9,7 +9,7 @@ import { CatalogSection } from "../section";
  * glyph that stands for it, and the four seats an icon is drawn at: 12 beside
  * a caption's words, 16 in a button or a menu row, 20 as a row's lead, and 40
  * over an empty state; and every glyph the barrel exports under its own name,
- * so a glyph added to `@luke/ui` is drawn here without a line of its own.
+ * so a glyph added to `@repo/ui` is drawn here without a line of its own.
  */
 
 /** Every glyph the barrel exports, which it names `…Icon`, by that name. */

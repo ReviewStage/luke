@@ -11,7 +11,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
+import { fakeCloudApi, HTTP_STATUS } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
@@ -19,7 +19,7 @@ import { HostedMacCommandClient, MAC_COMMAND_NOT_CLAIMED } from "./mac-command-c
 import { MAC_COMMAND_KIND, type MacCommand, type MacCommandResult } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-const BASE_URL = "https://luke.test";
+const BASE_URL = "https://app.test";
 const COMMAND_ID = "11111111-1111-4111-8111-111111111111";
 
 const COMMAND: MacCommand = {

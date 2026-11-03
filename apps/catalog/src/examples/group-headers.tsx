@@ -17,8 +17,8 @@ import {
   ProgressCount,
   STATUS_TONE,
   Text,
-} from "@luke/ui";
-import { GLYPH, ListFilterIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
+} from "@repo/ui";
+import { GLYPH, ListFilterIcon, SlidersHorizontalIcon } from "@repo/ui/icons";
 import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
   type ConnectAuthorizationResponse,
   type ConnectTokenResponse,
@@ -56,10 +56,10 @@ function beginningAt(url: string) {
 
 it.effect("beginning a sign-in answers the address the browser opens, and only an https one", () =>
   Effect.gen(function* () {
-    const begun = yield* beginningAt(SIGN_IN_URL).authorize("user-1", "https://luke.test/callback");
+    const begun = yield* beginningAt(SIGN_IN_URL).authorize("user-1", "https://app.test/callback");
     assert.deepEqual(begun, { url: SIGN_IN_URL });
     const refused = yield* Effect.result(
-      beginningAt("javascript:alert(1)").authorize("user-1", "https://luke.test/callback"),
+      beginningAt("javascript:alert(1)").authorize("user-1", "https://app.test/callback"),
     );
     assert.ok(Result.isFailure(refused));
     assert.equal(refused.failure.reason, INTEGRATION_CONNECT_FAILURE.UNAVAILABLE);
@@ -168,6 +168,13 @@ it.effect(
       assert.equal(yield* answering({ metadata: { team: { name: "Acme Eng" } } }), "Acme Eng");
       assert.equal(yield* answering({ name: "oauth/notion" }), undefined);
       assert.equal(yield* answering({ metadata: { workspace_name: "Bearer 0000" } }), undefined);
+      // An email is kept whole, though its mailbox mixes letters and digits, but not one that names a secret or runs past a label's length.
+      assert.equal(
+        yield* answering({ name: "dean.stratakos2026@gmail.example" }),
+        "dean.stratakos2026@gmail.example",
+      );
+      assert.equal(yield* answering({ name: "secret=abc123@corp.example" }), undefined);
+      assert.equal(yield* answering({ name: `${"a".repeat(60)}@corp.example` }), undefined);
       assert.equal(yield* answering({}), undefined);
     }),
 );

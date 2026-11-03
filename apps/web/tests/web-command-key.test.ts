@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { COMMAND_KEY } from "@luke/settings/shortcuts";
+import { COMMAND_KEY } from "@repo/settings/shortcuts";
 import { test } from "vitest";
 import { browserCommandKey } from "../src/app/web-platform";
 

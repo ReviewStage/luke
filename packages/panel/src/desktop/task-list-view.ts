@@ -6,7 +6,7 @@ import {
   TASK_GROUPING,
   type TaskGrouping,
   type TaskListView,
-} from "@luke/ui/task-list-model";
+} from "@repo/ui/task-list-model";
 import { Schema, SchemaTransformation } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { keptKey, useKept } from "../use-kept.js";
@@ -71,7 +71,7 @@ const storedViews = Schema.fromJsonString(
 type StoredViews = typeof storedViews.Type;
 
 /** Where the views are kept in the renderer's storage. */
-const KEPT = { VIEWS: keptKey("luke.sidebarTaskViews", storedViews) } as const;
+const KEPT = { VIEWS: keptKey("app.sidebarTaskViews", storedViews) } as const;
 
 /** The listed workspace's view, and the presses that change it. */
 export interface TaskListViewControl {

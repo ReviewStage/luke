@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import type { ActSender } from "@luke/host/act-port";
-import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import { UPDATE_ACT_KIND } from "@luke/host/contract";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import type { ActSender } from "@repo/host/act-port";
+import { type TestActPort, testActPort } from "@repo/host/act-port/testing";
+import { UPDATE_ACT_KIND } from "@repo/host/contract";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import type { WebContents } from "electron";
 import { updateProcedures } from "./update-acts";
 

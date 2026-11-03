@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { temporaryDirectory } from "@luke/wire/testing";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { Effect, Exit } from "effect";
 import { test } from "vitest";
 import { RUNNER_BUNDLE_FILE, RunnerBundle, runnerBundleFromDirectory } from "./runner-bundle.js";

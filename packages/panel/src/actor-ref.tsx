@@ -1,4 +1,4 @@
-import { githubAvatarAt } from "@luke/features/account-picture";
+import { githubAvatarAt } from "@repo/features/account-picture";
 import {
   AUTOMATION_RUN_STANDING,
   type AutomationRunStanding,
@@ -6,8 +6,8 @@ import {
   automationRunLine,
   automationRunStanding,
   automationTriggerText,
-} from "@luke/features/automation-list-model";
-import type { AutomationRunSummary, AutomationSummary } from "@luke/features/automation-wire";
+} from "@repo/features/automation-list-model";
+import type { AutomationRunSummary, AutomationSummary } from "@repo/features/automation-wire";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -25,6 +25,7 @@ import {
   HoverCardRule,
   INLINE_REF_LOOK,
   InlineRef,
+  ProductMark,
   TEXT_BUTTON_LINES,
   TextButton,
   TIME_LOOK,
@@ -34,22 +35,21 @@ import {
   UnassignedAvatar,
   useMinute,
   VisuallyHidden,
-  WingFace,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  APP_ACTOR,
   type AssigneeFace,
   actorName,
   type GitHubActor,
-  LUKE_ACTOR,
   type PersonActor,
   ROLE_WORDS,
   SOMEONE_REASON,
-} from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
+} from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
 import { BotIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useAutomation } from "./automation-directory.js";
@@ -76,7 +76,7 @@ import { AgentMark } from "./tasks/tab-look.js";
  * one. A picture on GitHub's avatar host is asked for at twice the size it
  * is drawn, so a Retina screen draws it sharp and nothing larger is
  * fetched. The app's own square holds
- * its face in its own blue, an agent's its harness, swapped for the working
+ * its mark in the working ink, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its Zap,
  * each its glyph alone on the ground beneath it, as a tab's is. In a
  * facepile (`ActorStack`) whose faces overlap each stands on one solid
@@ -152,7 +152,7 @@ const FOR_OF_SIZE = {
 /** Whether an actor stands in a rounded square rather than on a circle: the app, an agent, an automation, and an App's bot on GitHub. */
 function squared(actor: Actor): boolean {
   return (
-    actor.kind === ACTOR_KIND.LUKE ||
+    actor.kind === ACTOR_KIND.APP ||
     actor.kind === ACTOR_KIND.AGENT ||
     actor.kind === ACTOR_KIND.AUTOMATION ||
     (actor.kind === ACTOR_KIND.GITHUB && actor.bot)
@@ -284,8 +284,15 @@ function Face({
       return (
         <PersonDisc id={actor.userId} name={actor.name} pictureUrl={actor.pictureUrl} size={size} />
       );
-    case ACTOR_KIND.LUKE:
-      return <GlyphSquare name={actorName(actor)} glyph={<WingFace />} size={size} tiled={tiled} />;
+    case ACTOR_KIND.APP:
+      return (
+        <GlyphSquare
+          name={actorName(actor)}
+          glyph={<ProductMark small />}
+          size={size}
+          tiled={tiled}
+        />
+      );
     case ACTOR_KIND.AGENT:
       return (
         <GlyphSquare
@@ -361,8 +368,8 @@ export function commentAuthor(actor: Actor): CommentAuthor {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
       return { name: actor.name, id: actor.userId, picture: picture(actor.pictureUrl) };
-    case ACTOR_KIND.LUKE:
-      return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <WingFace /> };
+    case ACTOR_KIND.APP:
+      return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <ProductMark small /> };
     case ACTOR_KIND.AGENT:
       return {
         name: actorName(actor),
@@ -459,9 +466,9 @@ export function ActorMark({
         "actor-mark relative inline-grid flex-none align-middle text-foreground",
         "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
-        // The app wears its blue on its face, the colour its voice already answers in, its face filling more of its square than a glyph does. Note that the size is important, because base.css sizes every face outside the layers.
-        actor.kind === ACTOR_KIND.LUKE &&
-          "text-working [&_.luke-face]:size-actor-face-share! [&_.luke-face]:text-inherit",
+        // The app wears the working ink on its mark, the colour its voice already answers in, its mark filling more of its square than a glyph does. Note that the size is important, because base.css sizes every mark outside the layers.
+        actor.kind === ACTOR_KIND.APP &&
+          "text-working [&_.ui-product-mark]:size-actor-mark-share! [&_.ui-product-mark]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
         // A member who left keeps their own face, grayed and muted on the tile, their name saying they left.
         leftWithFace(actor) && "bg-actor-tile [&>*]:opacity-80 [&>*]:grayscale",
@@ -578,7 +585,7 @@ export function AssigneeFaceHeard({ face }: { face: AssigneeFace }): React.JSX.E
  * before the badge does.
  */
 const QUIET_BADGE =
-  "shrink-0 rounded-luke-6 bg-fill-strong px-tight-gap text-caption font-luke-medium text-muted-foreground";
+  "shrink-0 rounded-ui-6 bg-fill-strong px-tight-gap text-caption font-ui-medium text-muted-foreground";
 
 /** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
@@ -670,7 +677,7 @@ export function PersonCard({
 }
 
 /** The app's own card: its face, how long ago it wrote where the place knows, then what it wrote here. Read, never followed. */
-export function LukeCard({
+export function AppCard({
   sub,
   latest,
 }: {
@@ -680,8 +687,8 @@ export function LukeCard({
   latest?: ReactNode;
 }): React.JSX.Element {
   return (
-    <HoverCard data-actor-card={ACTOR_KIND.LUKE}>
-      <ActorHead actor={LUKE_ACTOR} sub={sub} />
+    <HoverCard data-actor-card={ACTOR_KIND.APP}>
+      <ActorHead actor={APP_ACTOR} sub={sub} />
       {latest === undefined ? null : <LatestRow latest={latest} />}
     </HoverCard>
   );
@@ -867,7 +874,7 @@ const ACTOR_CARD: { readonly [K in Actor["kind"]]: (actor: ActorOf<K>) => ReactN
   [ACTOR_KIND.PERSON]: (actor) => <PersonCard actor={actor} />,
   [ACTOR_KIND.SOMEONE]: (actor) => <SomeoneCard actor={actor} />,
   [ACTOR_KIND.GITHUB]: (actor) => <GitHubCard actor={actor} />,
-  [ACTOR_KIND.LUKE]: () => <LukeCard />,
+  [ACTOR_KIND.APP]: () => <AppCard />,
   [ACTOR_KIND.AGENT]: (actor) =>
     actor.agentId === undefined ? undefined : (
       <AgentHoverCard actor={actor} agentId={actor.agentId} />
@@ -987,7 +994,7 @@ function CardedFace({
         {face.badge === undefined ? null : (
           // Note that the badge stands over the next face, which overlaps this one's corner.
           <span
-            className="actor-stack-badge absolute -right-luke-4 -bottom-luke-4 z-1 grid size-actor-badge place-items-center rounded-disc bg-actor-stack-ground [&_svg]:size-actor-badge-glyph [&_svg]:stroke-3"
+            className="actor-stack-badge absolute -right-ui-4 -bottom-ui-4 z-1 grid size-actor-badge place-items-center rounded-disc bg-actor-stack-ground [&_svg]:size-actor-badge-glyph [&_svg]:stroke-3"
             aria-hidden="true"
           >
             {face.badge}
@@ -1066,7 +1073,7 @@ const MORE_FACES_LABEL = "Everyone else";
  * ringed by the ground as the faces are.
  */
 const PILE_COUNT =
-  "actor-stack-more inline-grid h-avatar-stack min-w-avatar-stack place-items-center rounded-luke-full bg-actor-tile px-tight-gap text-caption-inline font-luke-semibold text-muted-foreground tabular-nums shadow-actor-ring";
+  "actor-stack-more inline-grid h-avatar-stack min-w-avatar-stack place-items-center rounded-ui-full bg-actor-tile px-tight-gap text-caption-inline font-ui-semibold text-muted-foreground tabular-nums shadow-actor-ring";
 
 /**
  * How far a pile's face or count stands from the one before it: each

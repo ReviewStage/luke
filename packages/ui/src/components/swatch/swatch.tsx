@@ -34,12 +34,12 @@ export function Swatch({
     <button
       ref={ref}
       type="button"
-      className="luke-swatch"
+      className="ui-swatch"
       aria-label={label}
       aria-pressed={pressed}
       tabIndex={tabbable === false ? -1 : undefined}
       data-none={color === undefined || undefined}
-      style={color === undefined ? undefined : cssCustomProperties({ "--luke-swatch": color })}
+      style={color === undefined ? undefined : cssCustomProperties({ "--ui-swatch": color })}
       onClick={pulseOnPress(onClick)}
     />
   );

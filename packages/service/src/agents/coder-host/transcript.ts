@@ -1,4 +1,4 @@
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import {
   type Agent,
   type AgentDelegation,
@@ -17,9 +17,9 @@ import {
   readDelegation,
   turnUsagesOf,
   untitledDelegationsSince,
-} from "@luke/database/models/agent-store";
-import { latestDeviceAgentLaunch } from "@luke/database/models/device-agent-store";
-import { childConversationId } from "@luke/database/models/ids";
+} from "@repo/database/models/agent-store";
+import { latestDeviceAgentLaunch } from "@repo/database/models/device-agent-store";
+import { childConversationId } from "@repo/database/models/ids";
 import {
   type LatestTurn,
   listMessagesBefore,
@@ -31,11 +31,11 @@ import {
   type StoredMessageRecord,
   turnsBefore,
   turnsNamed,
-} from "@luke/database/models/message-reads";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import type { AgentQueue } from "@luke/features/agent-queue-wire";
+} from "@repo/database/models/message-reads";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import type { AgentQueue } from "@repo/features/agent-queue-wire";
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
@@ -55,10 +55,10 @@ import {
   type AgentSubagentTitle,
   type AgentUsage,
   type TurnRecord,
-} from "@luke/features/agent-wire";
-import { DEVICE_LAUNCH_STEPS } from "@luke/features/device-agent-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { turnRecordOf } from "@luke/features/turn-record";
+} from "@repo/features/agent-wire";
+import { DEVICE_LAUNCH_STEPS } from "@repo/features/device-agent-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { turnRecordOf } from "@repo/features/turn-record";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, type Schema } from "effect";
 import {
@@ -327,7 +327,7 @@ const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[])
 
 /** The names a line is sent under where no member's account names it: the app's, and a member's whose account is gone. */
 const SENDER_NAME = {
-  LUKE: PRODUCT_NAME,
+  APP: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",
 } as const;
 
@@ -346,8 +346,8 @@ function senderOf(sent: LineSent): AgentSender {
       return sent.member === undefined
         ? { name: SENDER_NAME.FORMER_MEMBER, kind: AGENT_SENDER.FORMER }
         : { ...sent.member, kind: AGENT_SENDER.MEMBER };
-    case MESSAGE_SENDER.LUKE:
-      return { name: SENDER_NAME.LUKE, kind: AGENT_SENDER.LUKE };
+    case MESSAGE_SENDER.APP:
+      return { name: SENDER_NAME.APP, kind: AGENT_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
       return { name: sent.name, kind: AGENT_SENDER.AUTOMATION };
     case MESSAGE_SENDER.GITHUB:

@@ -3,17 +3,17 @@ import {
   type AgentMessagesAnswerView,
   type AgentTranscriptKey,
   type AgentTranscriptPage,
-} from "@luke/features/agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+} from "@repo/features/agent-view";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import type {
   AppInboxAgentHolding,
   AppInboxTasklessItem,
   AppInboxWaitingItem,
-} from "@luke/host/app-state";
-import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+} from "@repo/host/app-state";
+import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
@@ -232,7 +232,7 @@ export function agentHoldingsOf(
 }
 
 /**
- * A signed-in Tasks tab on screen with no task open and no tasks, every
+ * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
  * holding items, where none are given, those its open items of agents with
  * no task name (`agentHoldingsOf`), as main lists both from one read.
@@ -242,7 +242,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     page: TASKS_PAGE.HOME,
     restoring: false,
     starting: undefined,
-    resting: false,
     shown: true,
     signedIn: true,
     me: undefined,
@@ -397,6 +396,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onClose: ignore,
     },
     boardView: { open: false, onOpen: ignore, onClose: ignore },
+    unknownWorkspace: { open: false, onClose: ignore },
     automationsView: {
       open: false,
       place: { kind: AUTOMATIONS_PAGE.LIST },
@@ -446,6 +446,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onShowMention: ignore,
     },
     onLeaveTask: ignore,
+    onGoHome: ignore,
     onRenameTask: () => Promise.resolve(true),
     onDraftName: ignore,
     onMarkTask: ignore,

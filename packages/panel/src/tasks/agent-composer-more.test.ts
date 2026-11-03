@@ -8,8 +8,8 @@ import {
   type AgentStatus,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+} from "@repo/features/agent-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
@@ -145,7 +145,7 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Attachment", "MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["Attachment", "Integrations", "62% of context used", "Dictate"]);
 });
 
 test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers none of its rows", async () => {
@@ -157,26 +157,26 @@ test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so
   assert.deepEqual(offered, ["62% of context used", "Dictate"]);
 });
 
-test("the + raises a menu of Attachment and MCP servers, whose servers popover stands beside the menu with its search holding the keyboard, and Escape there goes back to the row", async () => {
+test("the + raises a menu of Attachment and Integrations, whose servers popover stands beside the menu with its search holding the keyboard, and Escape there goes back to the row", async () => {
   const box = await drawnAt(CARD.WIDE);
   act(() => box.press("Add files and more").click());
   const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
   assert.deepEqual(
     rows.map((item) => item.textContent),
-    ["Attachment", "MCP servers"],
+    ["Attachment", "Integrations"],
   );
-  const servers = rows[1] ?? assert.fail("MCP servers stands");
+  const servers = rows[1] ?? assert.fail("Integrations stands");
   act(() => servers.click());
 
   const popover =
-    document.querySelector<HTMLElement>(".luke-menu-panel [role='dialog']") ??
+    document.querySelector<HTMLElement>(".ui-menu-panel [role='dialog']") ??
     assert.fail("the servers popover stands");
   const search = popover.querySelector<HTMLInputElement>("input") ?? assert.fail("it searches");
   assert.equal(document.activeElement, search);
   await act(async () => {
     search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  assert.equal(document.querySelector(".luke-menu-panel"), null);
+  assert.equal(document.querySelector(".ui-menu-panel"), null);
   assert.equal(document.activeElement, servers);
   assert.equal(box.container.querySelector('button[aria-label="Integrations"]'), null);
 });
@@ -211,9 +211,9 @@ test("a card too narrow for the model's words has its chip draw the harness's ma
     box.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
     assert.fail("the model chip stands");
   assert.equal(model().getAttribute("aria-label"), "Opus 5.5 High");
-  assert.notEqual(model().querySelector(".luke-harness-mark"), null);
+  assert.notEqual(model().querySelector(".ui-harness-mark"), null);
 
   laid.mockReturnValue(CARD.WIDE);
   act(() => relayout());
-  assert.equal(model().querySelector(".luke-harness-mark"), null);
+  assert.equal(model().querySelector(".ui-harness-mark"), null);
 });

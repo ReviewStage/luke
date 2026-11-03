@@ -25,15 +25,15 @@ describe("the readiness script", () => {
   });
 
   it.each([
-    ["a skeleton", '<div data-box class="luke-skeleton"></div>'],
-    ["a spinner", '<span data-box class="luke-spinner" role="status"></span>'],
+    ["a skeleton", '<div data-box class="ui-skeleton"></div>'],
+    ["a spinner", '<span data-box class="ui-spinner" role="status"></span>'],
     ["a busy region", '<section data-box aria-busy="true"></section>'],
   ])("waits on %s", (_name, html) => {
     expect(readyWith(html)).toBe(false);
   });
 
   it("does not wait on a spinner scrolled out of view", () => {
-    expect(readyWith('<span data-box class="luke-spinner"></span>', OFF_SCREEN)).toBe(true);
+    expect(readyWith('<span data-box class="ui-spinner"></span>', OFF_SCREEN)).toBe(true);
   });
 });
 
@@ -78,20 +78,20 @@ describe("the scroll fade pin", () => {
     const { document } = dom.window;
     // jsdom runs no scroll timeline, so the box is given the depths one would have eased it to.
     const depths: Record<string, string> = {
-      "--luke-scroll-area-fade-start": "0px",
-      "--luke-scroll-area-fade-end": "24px",
+      "--ui-scroll-area-fade-start": "0px",
+      "--ui-scroll-area-fade-end": "24px",
     };
     dom.window.getComputedStyle = ((box: Element) => ({
       animationName:
-        box.id === "faded" ? "luke-scroll-area-fade-start, luke-scroll-area-fade-end" : "none",
+        box.id === "faded" ? "ui-scroll-area-fade-start, ui-scroll-area-fade-end" : "none",
       getPropertyValue: (name: string) => depths[name] ?? "",
     })) as unknown as typeof dom.window.getComputedStyle;
 
     dom.window.eval(PIN_SCROLL_FADES_SCRIPT);
 
     const faded = document.getElementById("faded")?.style;
-    expect(faded?.getPropertyValue("--luke-scroll-area-fade-end")).toBe("24px");
-    expect(faded?.getPropertyPriority("--luke-scroll-area-fade-end")).toBe("important");
+    expect(faded?.getPropertyValue("--ui-scroll-area-fade-end")).toBe("24px");
+    expect(faded?.getPropertyPriority("--ui-scroll-area-fade-end")).toBe("important");
     expect(document.getElementById("plain")?.style.length).toBe(0);
   });
 });

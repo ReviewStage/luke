@@ -26,7 +26,7 @@
  * than replacing it. A packaged build has no instances.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 
 const RELEASE_APP_NAME = PRODUCT_NAME;
 

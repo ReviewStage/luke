@@ -6,8 +6,15 @@
  * worth asserting without one.
  */
 
-import { DESKTOP_SESSION_CLIENT_ID } from "@luke/features/desktop-session-wire";
+import { DESKTOP_SESSION_CLIENT_ID } from "@repo/features/desktop-session-wire";
 import { USER_ROLE } from "../admin/admin-access.js";
+
+/**
+ * The page the OAuth provider sends an authorization that holds no session
+ * to, whose sign-in resumes it. The local server's demo sign-in answers this
+ * path in the page's place (`apps/web/server/local-sign-in.ts`).
+ */
+export const LOGIN_PAGE = "/sign-in";
 
 /**
  * What a GitHub sign-in asks for. It is our GitHub App's user

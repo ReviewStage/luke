@@ -20,7 +20,7 @@ import { cn } from "../cn.js";
  * - Its `size` is our row density (`card`, `compact`, `list`) rather than
  *   `default`, `sm`, and `xs`: a card's padding and least height, a bare
  *   row's at a menu row's height, and a reference list's tighter ones, each
- *   a `--luke-settings-row-*` role. Its `variant` is dropped, because a
+ *   a `--ui-settings-row-*` role. Its `variant` is dropped, because a
  *   row's edge, corner, ground, and the rules between rows are its
  *   section's card's, never the row's own.
  * - None of shadcn's corner, border, `text-sm`, transition, focus ring, or
@@ -28,7 +28,7 @@ import { cn } from "../cn.js";
  *   own; the window draws the one focus ring (`shadcn-focus.test.ts`).
  * - `ItemMedia` is centred beside the words whether or not they are
  *   described, with none of shadcn's `icon` and `image` variants: the
- *   mark's box is `@luke/ui`'s `SettingsRowMark`.
+ *   mark's box is `@repo/ui`'s `SettingsRowMark`.
  * - `ItemContent`, `ItemTitle`, and `ItemDescription` are drawn in our
  *   label and caption roles with no line clamp: a long name or word breaks
  *   rather than being cut, and `ItemTitle` stands only where the label
@@ -38,17 +38,17 @@ import { cn } from "../cn.js";
  * - `ItemGroup`, `ItemSeparator`, `ItemHeader`, and `ItemFooter` are
  *   dropped, because nothing draws them: a section's card holds and rules
  *   its rows (`components/settings-section/`).
- * - Each part keeps the `luke-settings-row-*` class it wore before the move,
+ * - Each part keeps the `ui-settings-row-*` class it wore before the move,
  *   which the row's sheet (`components/settings-row/settings-row.css`)
  *   selects for what a utility cannot say: the narrow container's rules, a
  *   finger's whole-row press, and the properties those rules undo.
  *
- * `@luke/ui`'s `SettingsRow` (`components/settings-row/settings-row.tsx`) is
+ * `@repo/ui`'s `SettingsRow` (`components/settings-row/settings-row.tsx`) is
  * what an app draws; this is its inside.
  */
 
 const itemVariants = cva(
-  "luke-settings-row-body box-border flex min-w-0 flex-col justify-center gap-luke-4",
+  "ui-settings-row-body box-border flex min-w-0 flex-col justify-center gap-ui-4",
   {
     variants: {
       size: {
@@ -89,7 +89,7 @@ function ItemMedia({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="item-media"
-      className={cn("luke-settings-row-leading flex flex-none items-center", className)}
+      className={cn("ui-settings-row-leading flex flex-none items-center", className)}
       {...props}
     />
   );
@@ -100,7 +100,7 @@ function ItemContent({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="item-content"
       className={cn(
-        "luke-settings-row-copy flex min-w-0 grow basis-0 flex-col gap-luke-2 wrap-anywhere",
+        "ui-settings-row-copy flex min-w-0 grow basis-0 flex-col gap-ui-2 wrap-anywhere",
         className,
       )}
       {...props}
@@ -112,7 +112,7 @@ function ItemTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="item-title"
-      className={cn("luke-settings-row-title flex min-w-0 items-center", className)}
+      className={cn("ui-settings-row-title flex min-w-0 items-center", className)}
       {...props}
     />
   );
@@ -123,7 +123,7 @@ function ItemDescription({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="item-description"
       className={cn(
-        "luke-settings-row-description m-0 font-sans text-caption font-caption text-muted-foreground wrap-anywhere",
+        "ui-settings-row-description m-0 font-sans text-caption font-caption text-muted-foreground wrap-anywhere",
         className,
       )}
       {...props}
@@ -136,7 +136,7 @@ function ItemActions({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="item-actions"
       className={cn(
-        "luke-settings-row-controls flex min-w-0 flex-initial flex-wrap items-center justify-end gap-control-gap empty:hidden",
+        "ui-settings-row-controls flex min-w-0 flex-initial flex-wrap items-center justify-end gap-control-gap empty:hidden",
         className,
       )}
       {...props}

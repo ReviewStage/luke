@@ -1,8 +1,8 @@
-import type { FileChip } from "@luke/features/attachment-model";
-import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { ErrorState } from "@luke/ui";
-import { PICTURE_STATE } from "@luke/ui/picture-cache";
+import type { FileChip } from "@repo/features/attachment-model";
+import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ErrorState } from "@repo/ui";
+import { PICTURE_STATE } from "@repo/ui/picture-cache";
 import {
   createContext,
   type ReactNode,
@@ -26,7 +26,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  *
  * An image block names its picture by its attachment, and the item's
  * Markdown, its blocks, its thread's messages, and its answer's note, by
- * the picture's address (`@luke/features/inbox-attachment-link`), so the
+ * the picture's address (`@repo/features/inbox-attachment-link`), so the
  * pane standing an item stands `InboxPictures` around its words, and every
  * transcript's words under it draw a picture of that item as the item's
  * own, as `PlanPictures` does a plan's (`plan-pictures.tsx`). A press on

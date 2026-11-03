@@ -1,11 +1,11 @@
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { expect, test } from "vitest";
 import {
   ASSIGNED_TO,

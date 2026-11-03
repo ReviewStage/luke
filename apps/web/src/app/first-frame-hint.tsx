@@ -11,12 +11,12 @@
  * the account is unread or a sign-in is under way.
  */
 
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { APP_SLICE, useAppSlice } from "@luke/panel/use-app-state";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { APP_SLICE, useAppSlice } from "@repo/panel/use-app-state";
 import { useEffect } from "react";
 
 /** Where the word is kept, as `public/app-theme.js` reads it. */
-const SIGNED_IN_KEY = "luke.signed-in-here";
+const SIGNED_IN_KEY = "app.signed-in-here";
 
 /** Draws nothing: keeps whether the account last read signed in, for the next load's frame. */
 export function FirstFrameHint(): null {

@@ -3,13 +3,13 @@
    the Markdown that makes its block, set in the code face. */
 
 @layer components {
-  .luke-block-menu {
+  .ui-block-menu {
     width: 280px;
     max-width: 100%;
   }
 
-  .luke-block-menu-markdown {
-    font-family: var(--luke-font-mono);
-    font-size: var(--luke-type-caption-size);
+  .ui-block-menu-markdown {
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-type-caption-size);
   }
 }

@@ -35,7 +35,7 @@ import {
   type ReviewCommentMode,
   type ReviewCommentSide,
   type ReviewEvent,
-} from "@luke/features/pull-request-write-wire";
+} from "@repo/features/pull-request-write-wire";
 import { Data, Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";

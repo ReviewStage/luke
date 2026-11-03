@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
-import type { LoopbackConsentOptions } from "@luke/credentials";
-import { loopbackConsent } from "@luke/credentials/node";
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
-import type { SecretCipher as SecretCipherSeam } from "@luke/host";
+import type { LoopbackConsentOptions } from "@repo/credentials";
+import { loopbackConsent } from "@repo/credentials/node";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
+import type { SecretCipher as SecretCipherSeam } from "@repo/host";
 import {
   ALL_HOST_PLATFORM_CONCERNS,
   AppIdentity,
@@ -21,8 +21,8 @@ import {
   SignInConsent,
   StateRoot,
   TerminalSocket,
-} from "@luke/host/effect";
-import { openTerminalSocketOverWs } from "@luke/host/node";
+} from "@repo/host/effect";
+import { openTerminalSocketOverWs } from "@repo/host/node";
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
@@ -57,7 +57,7 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
-    thisMacHostLayer({ packaged: config.packaged, stateRoot: config.stateRoot }),
+    thisMacHostLayer(),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
     // cipher. Every sign-in's consent is a loopback on this Mac: the browser
     // hands the code back to a `node:http` listener on 127.0.0.1, the

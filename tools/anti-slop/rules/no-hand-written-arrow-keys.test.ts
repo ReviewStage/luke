@@ -33,7 +33,7 @@ function List({ rows, move }) {
 
 tester.run("no-hand-written-arrow-keys", noHandWrittenArrowKeysRule, {
   valid: [
-    // `@luke/ui` writes the walk once.
+    // `@repo/ui` writes the walk once.
     { code: STEPPING_BY_HAND, filename: UI_FILE },
     // The editor and the terminal need the raw keys, and are named for it in arrow-keys.json.
     { code: STEPPING_BY_HAND, filename: EDITOR_FILE },

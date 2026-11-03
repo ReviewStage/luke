@@ -1,5 +1,5 @@
 :root {
-  font-family: var(--luke-font-sans);
+  font-family: var(--ui-font-sans);
   font-synthesis: none;
   /* Note that every window draws its words without the Mac's font
      smoothing, as Linear, Slack, and the website do, because the smoothing
@@ -15,11 +15,11 @@
   text-size-adjust: 100%;
   background: transparent;
   /* The palette every shared component draws in, the inks, grounds, fills,
-     edges, accent, states, and shadows, is `@luke/ui`'s desktop palette
-     (`tokens/palettes.css`), keyed on the root's `data-luke-profile` and
-     `data-luke-theme`: the desktop's theme is `system`, so it follows the
+     edges, accent, states, and shadows, is `@repo/ui`'s desktop palette
+     (`tokens/palettes.css`), keyed on the root's `data-ui-profile` and
+     `data-ui-theme`: the desktop's theme is `system`, so it follows the
      Mac's appearance and the app's own Theme setting through it, and the web's
-     is the account's Theme setting resolved (`@luke/ui`'s
+     is the account's Theme setting resolved (`@repo/ui`'s
      `tokens/appearance.ts`). What stays here is the window's own: whose
      voice is live, the code's and the terminal's inks, a file icon's. Each
      colour of its own that differs by appearance is one `light-dark()` pair,
@@ -28,16 +28,14 @@
      draws every ink in it whatever the machine says. */
 
   /* Whose voice is live, so a glance says who is talking. Your turn is the
-     palette's green (`--luke-color-complete`); the app answers in the blue the
+     palette's green (`--ui-color-complete`); the app answers in the working ink the
      rest of the surface already uses for something live and in progress,
-     which is what a reply is. The meter and the face (`@luke/ui`'s
-     `face/face.css`) read the same two roles, so the two can never disagree
-     about who has the turn. */
-  --voice-luke: var(--luke-color-working);
+     which is what a reply is. */
+  --voice-luke: var(--ui-color-working);
   /* The keyboard's ring, how thick and how far off the edge, is the
-     profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
+     profile's `--ui-focus-ring-*` (`tokens/profiles.css`). */
   /* The code on screen, in the inks of GitHub's themes on its ground
-     (`--luke-color-code-ground`), and the mark beside a line changed in that
+     (`--ui-color-code-ground`), and the mark beside a line changed in that
      theme's blue. */
   --code-text: light-dark(#1f2328, #e6edf3);
   --code-pointed-edge: light-dark(#0969da, #388bfd);
@@ -46,8 +44,8 @@
      words a changed line changed in a deeper tint of the same, and the mark
      at a changed line's edge in the colour itself. Each is mixed from the
      palette's own, which flips with the appearance, so none is restated. */
-  --diff-added-mark: var(--luke-color-complete);
-  --diff-removed-mark: var(--luke-color-danger);
+  --diff-added-mark: var(--ui-color-complete);
+  --diff-removed-mark: var(--ui-color-danger);
   --diff-added-ground: color-mix(in srgb, var(--diff-added-mark) 14%, transparent);
   --diff-removed-ground: color-mix(in srgb, var(--diff-removed-mark) 14%, transparent);
   --diff-added-word: color-mix(in srgb, var(--diff-added-mark) 34%, transparent);
@@ -59,15 +57,14 @@
      canvas, which reads none of this itself, so the bundle reads the colour
      each resolves to off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
-  /* The well's own colour in each appearance, restated rather than read
-     through `--luke-color-well`, so every colour the canvas is handed is one
-     this sheet names. */
-  --terminal-ground: light-dark(#f8f8f9, #0f0f12);
+  /* The well read through its brand role, so a change of brand
+     (`@repo/brand`'s `brand-palette.mjs`) recolours the screen with it. */
+  --terminal-ground: var(--ui-color-well);
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: light-dark(rgba(9, 105, 218, 0.2), rgba(56, 139, 253, 0.4));
   /* The scrollbar's ink, restated rather than read through
-     `--luke-color-scrollbar` for the same reason. */
+     `--ui-color-scrollbar` for the same reason. */
   --terminal-scrollbar: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.18));
   --terminal-black: light-dark(#24292f, #484f58);
   --terminal-red: light-dark(#cf222e, #ff7b72);
@@ -109,7 +106,7 @@
   --file-icon-pink: light-dark(#d32a61, #ff678d);
   --file-icon-mauve: light-dark(#594c5b, #79697b);
 
-  /* Springs, durations, delays, and the row fan arrive from `@luke/ui`'s motion tokens,
+  /* Springs, durations, delays, and the row fan arrive from `@repo/ui`'s motion tokens,
      so no app ships a different vocabulary. One sampled damped spring drives every travel, at one
      duration: a real spring's motion is a property of the spring, not of how
      far it is asked to go, which is what makes every move read as the same
@@ -165,12 +162,12 @@ file-tree-container {
   /* No user-agent padding either: a button keeps none it did not ask for, so a
      glyph centred in a fixed box is never squeezed narrower than its own. It
      gives the one press cursor, the Mac's arrow on the desktop and the hand
-     on the web (`--luke-cursor-press`). */
+     on the web (`--ui-cursor-press`). */
   button {
     padding: 0;
     border: 0;
     color: inherit;
-    cursor: var(--luke-cursor-press);
+    cursor: var(--ui-cursor-press);
     font: inherit;
   }
 
@@ -214,8 +211,8 @@ file-tree-container {
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ):focus-visible:not(:has(> [data-focus-ring])) {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--luke-focus-ring-offset);
+    outline: var(--ui-focus-ring-width) solid var(--ui-color-focus-ring);
+    outline-offset: var(--ui-focus-ring-offset);
   }
 
   /* A control whose drawn shape is a part of it, a picture tile's picture
@@ -227,8 +224,8 @@ file-tree-container {
   }
 
   :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--luke-focus-ring-offset);
+    outline: var(--ui-focus-ring-width) solid var(--ui-color-focus-ring);
+    outline-offset: var(--ui-focus-ring-offset);
   }
 
   /* The keyboard scrolls a control in with its ring's reach to spare, so a
@@ -250,7 +247,7 @@ file-tree-container {
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ) {
-    scroll-margin: var(--luke-focus-ring-reach);
+    scroll-margin: var(--ui-focus-ring-reach);
   }
 
   :root:not([data-keyboard="true"]) :focus-visible {
@@ -306,19 +303,19 @@ body,
   user-select: none;
 }
 
-/* The app's face ------------------------------------------------------------- */
+/* The product's mark --------------------------------------------------------- */
 
-/* The face's ink, motion wiring, and generated motions are `@luke/ui`'s
-   (`face/face.css`); its size where nothing more particular lays it out is
-   the window's, except where it is asked to fill its box (`fill`), which
-   this unlayered size would otherwise beat. */
-.luke-face:not([data-fill="true"]) {
+/* The mark's ink is `@repo/ui`'s (`marks/product-mark.css`); its size where
+   nothing more particular lays it out is the window's, except where it is
+   asked to fill its box (`fill`), which this unlayered size would otherwise
+   beat. */
+.ui-product-mark:not([data-fill="true"]) {
   width: 18px;
   height: 18px;
 }
 
-/* A face handed to an auth card as its mark takes the artwork's size. */
-.luke-auth-mark .luke-face {
+/* The mark handed to an auth card takes the artwork's size. */
+.ui-auth-mark .ui-product-mark {
   width: 52px;
   height: 52px;
 }
@@ -329,20 +326,20 @@ body,
    Failed, the glyph stands as at rest, and the failed mark at its row's end
    says it (`.failed-mark`). In the `base` layer, so a shared component's
    glyph slot that holds one sizes it as it sizes any glyph of its own, at
-   the size the slot says (`--luke-glyph-size`) where nothing nearer does. */
+   the size the slot says (`--ui-glyph-size`) where nothing nearer does. */
 @layer base {
   .state-glyph {
     position: relative;
     display: inline-flex;
-    width: var(--state-glyph-size, var(--luke-glyph-size, 16px));
-    height: var(--state-glyph-size, var(--luke-glyph-size, 16px));
+    width: var(--state-glyph-size, var(--ui-glyph-size, 16px));
+    height: var(--state-glyph-size, var(--ui-glyph-size, 16px));
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
   }
 }
 
-.state-glyph > svg:not(.luke-working-mark),
+.state-glyph > svg:not(.ui-working-mark),
 .state-glyph > img {
   width: 100%;
   height: 100%;
@@ -359,28 +356,25 @@ body,
    which none stands under, holds still too. */
 .app-stage[data-capture="true"],
 body:has(.app-stage[data-capture="true"]) {
-  --luke-duration-shape: 0s;
-  --luke-duration-exit: 0s;
-  --luke-duration-quick: 0s;
-  --luke-duration-fast: 0s;
-  --luke-duration-hover: 0s;
-  --luke-duration-pane: 0s;
-  --luke-row-stagger: 0s;
+  --ui-duration-shape: 0s;
+  --ui-duration-exit: 0s;
+  --ui-duration-quick: 0s;
+  --ui-duration-fast: 0s;
+  --ui-duration-hover: 0s;
+  --ui-duration-pane: 0s;
+  --ui-row-stagger: 0s;
   /* A late state, a hint and a delayed ring show at once, so a capture never
      waits on their delay. */
-  --luke-late-delay: 0s;
-  --luke-hint-delay: 0s;
-  --luke-settle-delay: 0s;
+  --ui-late-delay: 0s;
+  --ui-hint-delay: 0s;
+  --ui-settle-delay: 0s;
   /* A confirmation stands for a beat and goes (a Saved, a landed check), so a
      capture holds none rather than catching one wherever the shutter fell. */
-  --luke-confirm-delay: 0s;
-  /* The app's face blinks and sways on a loop with no end to wait for, so a
-     capture would otherwise land wherever in it the shutter happened to fall.
-     Held on its first frame, it is the same face in every PNG. The working
-     rows' spinners hold still for exactly the same reason. */
-  --luke-loop-motion: paused;
+  --ui-confirm-delay: 0s;
+  /* The working rows' spinners loop with no end to wait for, so a capture
+     would otherwise land wherever in them the shutter happened to fall. */
+  --ui-loop-motion: paused;
   /* A toast's countdown says time passing, which a still frame cannot. */
-  --luke-wait-motion: paused;
-  --luke-face-motion: paused;
-  --luke-scroll-glide: auto;
+  --ui-wait-motion: paused;
+  --ui-scroll-glide: auto;
 }

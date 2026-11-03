@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MessageActions } from "@luke/ui";
+import { MessageActions } from "@repo/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -71,7 +71,7 @@ function tappableMessage() {
   const part = (selector: string) =>
     container.querySelector<HTMLElement>(selector) ?? assert.fail(selector);
   return {
-    actions: () => part(".luke-message-actions"),
+    actions: () => part(".ui-message-actions"),
     tap: (selector: string) => act(() => part(selector).click()),
   };
 }

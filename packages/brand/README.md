@@ -1,150 +1,99 @@
-# Luke brand assets
+# Brand assets
 
-Luke's identity is the **L-face**: a monoline capital-L nose that curls into a smile,
-with two eyes above it. The wordmark is **face-first caps**: the face *is* the L,
-followed by custom U·K·E letterforms weight-matched to the face's stroke.
+The identity is the **Keel**: a disc cut by a narrow V that opens through its
+top edge and cradles an island, in one colour. Its V opens 25° off vertical
+and meets on a round join 70% down the disc; the channel is 10.5% of the
+disc; and every corner where the channel meets the rim, and the island's tip,
+is rounded at 3%. Below 32 pixels a small cut takes over, its channel opened to
+13.5% so the V still reads at 16. The wordmark is the name set in Geist
+SemiBold at −2% tracking and outlined, the i's dot drawn round; in the lockup
+the disc is 1.3 times the cap height, centred on it, a third of the disc from
+the word.
 
-Everything here is generated. Do not hand-edit the SVGs; instead tweak the parameters
-in `packages/brand/scripts/generate-brand-assets.mjs` and re-run:
+The colours are the brand's: `scripts/brand-palette.mjs` is the one table
+both generators read, so `@repo/ui`'s palette (`tokens/brand.css`) and the
+artwork here are cut from the same values. A rebrand, or a second theme, is a
+change of that table.
+
+Everything here is generated. Do not hand-edit the SVGs; change the constants in
+`scripts/generate-brand-assets.mjs` (the mark, the wordmark, the layouts) or
+`scripts/brand-palette.mjs` (the colours), and re-run:
 
 ```sh
-node packages/brand/scripts/generate-brand-assets.mjs
+pnpm --filter @repo/brand generate
 ```
 
-PNG derivatives are rasterized from the SVGs (any SVG renderer works; these were made
-with `rsvg-convert`):
+PNG derivatives are rasterized from the SVGs with any SVG renderer; these were
+cut with `rsvg-convert`'s equivalent in Chromium. Each icon PNG of 32 pixels or
+smaller swaps the mark's path for its small cut (`MARK_ART.SMALL_PATH`):
 
 ```sh
 cd packages/brand/assets
 for s in 16 32 64 128 256 512 1024; do
-  rsvg-convert -w $s -h $s icon/luke-icon-dark.svg -o icon/luke-icon-dark-$s.png
+  rsvg-convert -w $s -h $s icon/icon-dark.svg -o icon/icon-dark-$s.png
 done
-rsvg-convert -w 512 -h 512 icon/luke-icon-light.svg -o icon/luke-icon-light-512.png
+rsvg-convert -w 512 -h 512 icon/icon-light.svg -o icon/icon-light-512.png
 for m in light dark; do
-  rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-$m.svg -o mark/luke-mark-square-$m-1024.png
-  rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-transparent-$m.svg -o mark/luke-mark-square-transparent-$m-1024.png
+  rsvg-convert -w 1024 -h 1024 mark/mark-square-$m.svg -o mark/mark-square-$m-1024.png
+  rsvg-convert -w 1024 -h 1024 mark/mark-square-transparent-$m.svg -o mark/mark-square-transparent-$m-1024.png
 done
-rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-black.svg -o mark/luke-mark-square-black-1024.png
+rsvg-convert -w 1024 -h 1024 mark/mark-square-black.svg -o mark/mark-square-black-1024.png
 for s in 256 1024; do
-  rsvg-convert -w $s -h $s mark/luke-mark-square-monochrome.svg -o mark/luke-mark-square-monochrome-$s.png
+  rsvg-convert -w $s -h $s mark/mark-square-monochrome.svg -o mark/mark-square-monochrome-$s.png
 done
 for m in light dark black; do
   for s in 400 1024; do
-    rsvg-convert -w $s -h $s avatar/luke-avatar-$m.svg -o avatar/luke-avatar-$m-$s.png
+    rsvg-convert -w $s -h $s avatar/avatar-$m.svg -o avatar/avatar-$m-$s.png
   done
 done
 for m in light dark; do
   for w in 256 512; do
-    rsvg-convert -w $w logo/luke-logo-$m.svg -o logo/luke-logo-$m-$w.png
+    rsvg-convert -w $w logo/logo-$m.svg -o logo/logo-$m-$w.png
   done
 done
-rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
-rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background@2x.png
-rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../../apps/web/public/luke-og-card.png
-cp icon/luke-favicon.svg ../../../apps/web/public/favicon.svg
-rsvg-convert -w 180 -h 180 avatar/luke-avatar-dark.svg -o ../../../apps/web/public/apple-touch-icon.png
+rsvg-convert -w 660 -h 400 dmg/dmg-background.svg -o dmg/dmg-background.png
+rsvg-convert -w 1320 -h 800 dmg/dmg-background.svg -o dmg/dmg-background@2x.png
+rsvg-convert -w 1200 -h 630 social/og-card.svg -o ../../../apps/web/public/og-card.png
+cp icon/favicon.svg ../../../apps/web/public/favicon.svg
+rsvg-convert -w 180 -h 180 icon/web-icon.svg -o ../../../apps/web/public/apple-touch-icon.png
 for s in 192 512; do
-  rsvg-convert -w $s -h $s avatar/luke-avatar-dark.svg -o ../../../apps/web/public/app-icon-$s.png
+  rsvg-convert -w $s -h $s icon/web-icon.svg -o ../../../apps/web/public/app-icon-$s.png
 done
-for s in 16 32 48; do rsvg-convert -w $s -h $s icon/luke-favicon.svg -o /tmp/favicon-$s.png; done
-# Pack the three into apps/web/public/favicon.ico with any ICO writer;
-# this one was made with Pillow's ICO format.
+for s in 16 32 48; do rsvg-convert -w $s -h $s icon/favicon.svg -o /tmp/favicon-$s.png; done
+# Pack the three into apps/web/public/favicon.ico with any ICO writer that
+# stores PNG images.
 ```
 
 ## In the app
 
-`icon/luke-icon-{light,dark}-512.png` are copied into `dist/icon/` and handed to
+`icon/icon-{light,dark}-512.png` are copied into `dist/icon/` and handed to
 `app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
-theme changes.
+theme changes; the packaged `.icns` is cut from the dark set.
 
-The panel draws the face itself rather than loading these SVGs, because it
-needs two things a baked asset cannot give it: `currentColor`, so it can take the
-microphone's colour, and CSS animation, so `@luke/ui`'s `--luke-face-motion` token can hold every loop still for
-a capture run or for reduced motion. SMIL answers to neither without JavaScript.
+The window draws the mark itself, with `@repo/ui`'s `ProductMark`, rather than
+loading these SVGs, so it takes its holder's ink through `currentColor`. Its
+geometry comes from this package as a generated file:
 
-So the generator emits its two inputs as well, from the same table these SVGs are
-cut from. They are generated files and are not to be hand-edited either:
-
-| File | What it carries |
+| File | What it holds |
 |---|---|
-| `packages/brand/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, which parts each one needs drawn, and the wordmark's letterforms for the introduction's signature reveal |
-| `packages/ui/src/face/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
+| `packages/brand/src/generated/mark-art.ts` | `MARK_ART`: the mark's viewBox, its path, and its small cut |
+| `packages/brand/src/generated/brand-palette.ts` | `BRAND_PALETTE`: the brand's colours as plain values, written by `generate-surface-shared.mjs` from `brand-palette.mjs` |
 
-`pnpm --filter @luke/brand check`, i.e. `generate-brand-assets.mjs --check`, run by hand,
-compares every committed output against what the script produces now and fails if
-any of them has drifted.
+The mark is static: it carries no motion.
 
-## Modes
-
-`-dark` assets are light ink (`#f5f5f7`) for dark UIs; `-light` assets are near-black
-(`#1d1d1f`) for light UIs. The brand accent, when one is needed, is the app's own:
-the desktop's system blue `#0071e3` and the site's cyan `#5cd5ff`, both set in `@luke/ui`'s
-`src/tokens/palettes.css`, which is the one place an accent is named. The app icon follows the same naming: a space-black tile with a white face
-for dark mode, a porcelain tile with a near-black face for light. The packaged `.icns`
-is cut from the dark set, which reads on either desktop; the running app swaps the
-Dock image between the two.
-
-## Sizing
-
-Asset viewBoxes are computed from the artwork's bounding box, not the drawing canvas:
-static wordmarks are trimmed tight (+6 units padding), avatars give the face room
-for a circle crop, and the app-icon glyph spans ~58% of the tile width (typical
-macOS glyph-in-tile proportion). The app icon's tile sits on Apple's macOS icon
-grid, an 824-unit tile centered on a 1024 canvas under the grid's drop shadow,
-because the Dock and the app switcher draw every icon's whole canvas at one size:
-a full-bleed tile stands larger than every other app's. Only the animated
-`motion/` marks keep the full 240×240 canvas, because they need headroom to move.
-
-## Files
-
-Under `assets/`:
+## Assets
 
 | File | Use |
 |---|---|
-| `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
-| `icon/luke-icon-{light,dark}.svg` + `luke-icon-dark-{16…1024}.png` + `luke-icon-light-512.png` | App icon (squircle tile), per mode. The dark set is cut at every size because the `.icns` is cut from it; the light mode needs the one size the running app swaps into the Dock |
-| `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
-| `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at its own tight crop on a square canvas, per mode: over the icon's gradient with square corners (for surfaces that only round the corners of a square, GitHub's organization avatar among them; a profile photo cut to a circle takes `avatar/` instead), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead, so pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
-| `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
-| `mark/luke-mark-square-monochrome.svg` + `-{256,1024}.png` | The same crop in pure black (`#000000`) on transparency: one ink, with the face carried by the alpha channel alone. This is the monochrome glyph a partner surface tints for its own theme, such as an integration's small icon on Sentry, which refuses any colour but black, or a template image a host recolours. Unlike `-transparent-light`, whose ink is near-black `#1d1d1f`, nothing in it is grey |
-| `avatar/luke-avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The profile photo: the face with room around it, on the icon's gradient per mode or on flat black. The square marks are cropped to the face, so the circle GitHub, X, Slack, and LinkedIn cut from a profile photo takes the eyes and the smile's end; here the face's bounding box diagonal spans 80% of the canvas, so the whole face sits inside that circle. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
-| `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide, because a lockup goes into headers and docs, not a 1024 avatar tile |
-| `icon/luke-favicon.svg` | The site's favicon: the dark tile with no Dock margin or shadow and the face a little larger, so it reads at 16 pixels in a tab. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico`, for readers that ask for `/favicon.ico` by name. The site's 180-pixel `apple-touch-icon.png` is cut from `avatar/luke-avatar-dark.svg`, whose face keeps clear of the corners iOS rounds. The web app's manifest (`apps/web/public/manifest.webmanifest`) takes the same avatar at 192 and 512 as `app-icon-{192,512}.png`, for Android's home screen, both as is and as maskable: the tile is full bleed and the face sits inside the centre circle of 80% a mask keeps |
-| `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is cut outside `assets/`, as the favicons are, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://vespin.dev/luke-og-card.png` |
-| `button/luke-cta-download-{light,dark}.svg` | The download button, drawn as the site's hero CTA, per mode, for a page that links the download |
-| `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
-
-## Motion states
-
-Animations are SMIL, baked into each SVG, so they play anywhere SVG animation is
-supported (browsers, most macOS contexts) and survive copy/paste. Motion is always
-whole-head or eyes-only; the mouth never morphs (chosen deliberately, because mouth
-morphing read as unnatural).
-
-| State file | Product moment |
-|---|---|
-| `talking` | speaking / narrating (head bob) |
-| `yes` | acknowledged (nod) |
-| `error` | something went wrong (shimmy) |
-| `reviewing` | inspecting a session (wince-like squint) |
-| `success` | task done (squash-and-stretch hop) |
-| `listening` | curious tilt |
-| `idle` | double blink |
-| `notification` | attention caught by something new (brow flash) |
-| `wink` | confirmation / easter egg |
-| `sleeping` | nothing to watch (lids down, zzz) |
-| `hushed` | voice spent for the day (awake, grayed out) |
-| `refresh` | relaunch (one pirouette) |
-| `boop` | tap feedback (puff) |
-| `monitoring` | humming along (slow sway) |
-| `appear` | attaching (peek-slide in) |
-| `wake` | first waking (introduction: eyes blink open) |
-| `attention` | attention caught (perk up) |
-| `floating` | hovering idle |
-| `hiding` | minimized (peekaboo duck) |
-| `flyoff` | hover flourish (fly off and swoop back) |
-| `tease` | playful (brow waggle) |
-| `waiting` | needs approval (fidget) |
-| `shimmy` | shaking it off (happy wiggle) |
-| `dizzy` | woozy after a flight (decaying wobble) |
-| `glance` | checking both ways (look around) |
+| `wordmark-{light,dark}.svg` | The name alone, outlined, per mode's ink |
+| `logo/logo-{light,dark}.svg` + `-{256,512}.png` | The lockup, mark and name, on a transparent ground, for headers and docs |
+| `icon/icon-{light,dark}.svg` + PNGs | The app icon on Apple's macOS grid: an 824-unit tile with a 185.4-unit corner on a 1024 canvas, the disc 78% of the tile (`ICON_MARK`, the one share every app icon takes). Dark: the night tile under the mark in copper. Light: the copper tile under a white mark. Flat, both |
+| `mark/mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The disc on a square canvas with a twelfth of air each side, per mode: over the icon's tile with square corners (for surfaces that round a square's corners themselves, GitHub's organization avatar among them), and in each mode's ink on transparency |
+| `mark/mark-square-black.svg` + `-1024.png` | The white mark on flat pure black |
+| `mark/mark-square-monochrome.svg` + `-{256,1024}.png` | The mark in pure black on transparency: the one-ink glyph a partner surface tints for its own theme, such as an integration's small icon on Sentry, which takes no colour but black |
+| `avatar/avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The profile photo: the icon's tile per mode, or flat black, with the disc at 78% of it, as in the app icons, so the circle GitHub, X, Slack, and LinkedIn cut from a profile photo still leaves a ring round the rim. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
+| `icon/web-icon.svg` | The web app icon: the dark tile, full bleed, the disc 78% of it. The site's 180-pixel `apple-touch-icon.png` is cut from it, as are the manifest's `app-icon-{192,512}.png`, for Android's home screen as is and as maskable: the disc sits inside the 80% circle a mask keeps. The invitation email shows `app-icon-192.png` by its path |
+| `icon/favicon.svg` | The site's favicon: the dark tile with no Dock margin under the copper small cut, the disc 78% of the tile, so it reads at 16 pixels in a light tab and a dark one. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico` |
+| `social/og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the lockup on the dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is cut into `apps/web/public/og-card.png`, which scrapers fetch from the site's root |
+| `button/cta-download-{light,dark}.svg` | The download button, drawn as the site's primary button in each mode's accent, for a page that links the download |
+| `dmg/dmg-background.svg` + PNGs | The disk image window's ground, with one round-ended arrow from the app to Applications, laid out by `scripts/dmg-window.mjs` |

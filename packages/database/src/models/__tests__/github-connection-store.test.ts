@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { GITHUB_CONNECT_CLAIM } from "@luke/features/github-connection-wire";
+import { GITHUB_CONNECT_CLAIM } from "@repo/features/github-connection-wire";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
@@ -28,7 +28,7 @@ const openAccounts = Effect.gen(function* () {
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
     yield* Database.use((db) =>
-      db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+      db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
     );
   }
   return { owner, other };

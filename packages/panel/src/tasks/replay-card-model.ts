@@ -9,17 +9,17 @@ import {
   type ReplayStep,
   type ReplayToolState,
   type ReplayValueForm,
-} from "@luke/features/agent-replay";
+} from "@repo/features/agent-replay";
 import {
   AGENT_SENDER,
   type AgentSender,
   type AgentSummary,
   type AgentTodos,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
-import { isRecord, valueFromJsonText, type WireValue } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { CALL_KIND, CALL_WORDS, type CallKind } from "@repo/features/turn-rows";
+import { isRecord, valueFromJsonText, type WireValue } from "@repo/wire";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { AGENT_PART, agentParts, isTaskCall, messageWords } from "./agent-model.js";
 import { foldTaskCall, NO_TASKS, type TaskFold, todosOf } from "./agent-todos.js";
@@ -37,7 +37,7 @@ import {
  * replay-card-model.ts -- the opening of an agent started from another, read out of its first message: the brief as its source's was, the replay's card, and the developer's note.
  *
  * An agent continued from another, or forked from one at a message, is
- * handed one first message holding three things (`@luke/features/agent-replay`):
+ * handed one first message holding three things (`@repo/features/agent-replay`):
  * the brief its source was handed, the source's transcript replayed, and
  * the note the developer wrote with the start. The tab draws them apart:
  * the brief as the source's transcript drew it, the replay as one folded
@@ -547,8 +547,8 @@ function sentByOf(step: ReplayStep, name: string): AgentSender | undefined {
       return sent.memberId === undefined
         ? { kind: AGENT_SENDER.MEMBER, name }
         : { kind: AGENT_SENDER.MEMBER, userId: sent.memberId, name };
-    case REPLAY_SENDER.LUKE:
-      return { kind: AGENT_SENDER.LUKE, name };
+    case REPLAY_SENDER.APP:
+      return { kind: AGENT_SENDER.APP, name };
     case REPLAY_SENDER.AUTOMATION:
       return { kind: AGENT_SENDER.AUTOMATION, name };
     case REPLAY_SENDER.GITHUB:

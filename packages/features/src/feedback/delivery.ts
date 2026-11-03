@@ -1,4 +1,4 @@
-import { HTTP_METHOD, text } from "@luke/wire";
+import { HTTP_METHOD, text } from "@repo/wire";
 import { Data, Duration, Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpBody from "effect/http/HttpBody";
@@ -10,7 +10,7 @@ import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
   /** Overrides the endpoint for local testing of the delivery path. */
-  URL: "LUKE_FEEDBACK_URL",
+  URL: "APP_FEEDBACK_URL",
 } as const;
 
 const FEEDBACK_DEFAULTS = {

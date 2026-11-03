@@ -214,6 +214,36 @@ export const DEVICE_ARCH = {
 
 export type DeviceArch = (typeof DEVICE_ARCH)[keyof typeof DEVICE_ARCH];
 
+/** The most characters of a machine's model as its host reports it. */
+export const DEVICE_MODEL_MAX_CHARS = 200;
+
+/**
+ * Which machine a device runs on, as its host reports it at its own
+ * enroll, its pairing's start, and every register: a keyed SHA-256 of the
+ * OS's own id for the machine, in lower-case hex, never the id itself
+ * (`@repo/host/node`'s `machine-identity.ts`), so every install on one
+ * machine names the same one and two machines of one name differ; and on a
+ * Mac its model as a person reads it ("MacBook Air (M2, 2022)"). Each is
+ * absent where the host could not read it, and from a host older than it.
+ * Note that the id is held to a digest's shape, so a host that sent the
+ * OS's own id by mistake is refused rather than stored.
+ */
+export const deviceMachineFields = {
+  machineId: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u)),
+  ),
+  model: EffectSchema.optionalKey(
+    EffectSchema.String.check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(DEVICE_MODEL_MAX_CHARS),
+    ),
+  ),
+};
+
+const deviceMachineSchema = EffectSchema.Struct(deviceMachineFields);
+
+export type DeviceMachine = typeof deviceMachineSchema.Type;
+
 /** A line's payload or a request's arguments: a JSON object whose shape its kind's reader holds. */
 export const deviceAgentObjectSchema = EffectSchema.Record(
   EffectSchema.String,
@@ -264,12 +294,22 @@ export interface DeviceAgentLayout {
   readonly temp: string;
 }
 
-/** The agent's folder and what stands in it, under the Mac's home folder given. */
-export function deviceAgentLayout(home: string, agentId: string): DeviceAgentLayout {
+/** The folder every local agent's folder stands in, under the Mac's home folder given, which its host registers (`agentsFolder`). */
+export function deviceAgentsFolder(home: string): string {
   let end = home.length;
   // Note that the trailing slashes are counted off by hand, because a regular expression anchored at the end runs in quadratic time on a home of many slashes.
   while (end > 1 && home[end - 1] === "/") end -= 1;
-  const folder = [home.slice(0, end), DEVICE_AGENT_FOLDER.ROOT, agentId].join("/");
+  return [home.slice(0, end), DEVICE_AGENT_FOLDER.ROOT].join("/");
+}
+
+/** The agent's folder and what stands in it, under the Mac's home folder given. */
+export function deviceAgentLayout(home: string, agentId: string): DeviceAgentLayout {
+  return deviceAgentLayoutIn(deviceAgentsFolder(home), agentId);
+}
+
+/** The agent's folder and what stands in it, under the folder of the Mac's local agents given (`deviceAgentsFolder`). */
+export function deviceAgentLayoutIn(agentsFolder: string, agentId: string): DeviceAgentLayout {
+  const folder = [agentsFolder, agentId].join("/");
   return {
     folder,
     checkoutPath: [folder, DEVICE_AGENT_FOLDER.REPOSITORY].join("/"),
@@ -428,14 +468,24 @@ const deviceField = { deviceId: wireUuidSchema };
  * (`DEVICE_SETUP`), and for one that failed, in words of its own naming no
  * secret, why; it names none once ready, so a service from before the
  * field, which refuses it, only misses a device it would never have listed.
+ * It names the machine it runs on where it read it (`deviceMachineFields`).
+ * It names the folder its own layout puts its agents under
+ * (`deviceAgentsFolder`), absolute, so a launch is laid out where the device
+ * looks for it whichever build moved `DEVICE_AGENT_FOLDER.ROOT`; a device
+ * from before the field names none, and its agents are laid out under its
+ * home as this build's root puts them. Note that a device names it on every
+ * register, default or not, because only the device knows its own root; so
+ * a host build with it ships only after every service takes it.
  */
 export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
   arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
+  ...deviceMachineFields,
   isolation: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_ISOLATION))),
   home: macPath,
+  agentsFolder: EffectSchema.optionalKey(macPath),
   claudeExecutable: macPath,
   codexExecutable: EffectSchema.optionalKey(macPath),
   signedIn: EffectSchema.optionalKey(deviceSignedInSchema),

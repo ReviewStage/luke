@@ -60,11 +60,11 @@
  * member watching after the agent's turn ended is never cut off by it.
  */
 
-import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { browserTabDriver } from "@luke/database/models/agent-browser-tabs";
-import type { BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@luke/features/browser-acts";
-import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@luke/features/browser-cdp";
+import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import { browserTabDriver } from "@repo/database/models/agent-browser-tabs";
+import type { BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@repo/features/browser-acts";
+import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@repo/features/browser-cdp";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
@@ -79,8 +79,8 @@ import {
   type BrowserLiveCloseReason,
   type BrowserLiveServerMessage,
   browserLiveClientMessageSchema,
-} from "@luke/features/browser-live-wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/browser-live-wire";
+import { readEither } from "@repo/wire/effect";
 import {
   type Cause,
   Clock,
@@ -102,6 +102,8 @@ import { controlsAgent } from "../agents/agent-reach.js";
 import { BROWSER_UNREACHABLE, type BrowserUnreachable } from "../agents/browser/agent-browser.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { EXCESS_KEYS, type UnparsedWireValue } from "../core.js";
+import type { ServerAgentTool } from "../events/server-events.js";
+import { SERVER_AGENT_TOOL } from "../events/server-events.js";
 import { jsonOf } from "../http/http-effect.js";
 import type { RelaySocket } from "../terminal/relay.js";
 import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
@@ -154,6 +156,8 @@ export interface BrowserLiveDependencies {
     now: Date,
   ) => Effect.Effect<boolean, unknown>;
   readonly handBack: (tabId: string, userId: string) => Effect.Effect<boolean, unknown>;
+  /** Counts a takeover or hand-back the member made, in the agent's workspace, once the request that made it has answered; never fails. */
+  readonly counted: (userId: string, agentId: string, tool: ServerAgentTool) => Effect.Effect<void>;
   /** Keeps the tab's page as the view saw it move, on the target named alone, so a browser that starts afresh reopens it there; a write the store did not take is logged, for the next move to try again. */
   readonly notePage: (
     tabId: string,
@@ -526,10 +530,18 @@ function takeOver(view: LiveView, at: Date): Effect.Effect<void> {
     const taken = yield* Effect.result(
       view.deps.takeOver(view.reached.tab.id, view.ask.userId, heldUntil, at),
     );
-    yield* Ref.set(
-      view.driving,
-      Result.isSuccess(taken) && taken.success ? at.getTime() : undefined,
-    );
+    // Note that the member's takeover another window of theirs holds stands too, as the tab was last read, since a takeover is theirs rather than a socket's.
+    const standing = (yield* Ref.get(view.driving)) !== undefined || (yield* adoptable(view, at));
+    const took = Result.isSuccess(taken) && taken.success;
+    yield* Ref.set(view.driving, took ? at.getTime() : undefined);
+    // Note that a takeover the member already held, moved on, is no new one, so it is not counted again.
+    if (took && !standing) {
+      yield* view.deps.counted(
+        view.ask.userId,
+        view.reached.agent.id,
+        SERVER_AGENT_TOOL.BROWSER_TAKEOVER,
+      );
+    }
     yield* checkTab(view);
   });
 }
@@ -554,6 +566,14 @@ function handBack(view: LiveView, at: Date): Effect.Effect<void> {
     yield* Ref.set(view.driving, undefined);
     const released = yield* Effect.result(view.deps.handBack(view.reached.tab.id, view.ask.userId));
     yield* Ref.set(view.releasePending, Result.isFailure(released));
+    // Counted only where the store gave the tab back, as the member's own hand-back; the close's release is not.
+    if (Result.isSuccess(released) && released.success) {
+      yield* view.deps.counted(
+        view.ask.userId,
+        view.reached.agent.id,
+        SERVER_AGENT_TOOL.BROWSER_HANDBACK,
+      );
+    }
     yield* checkTab(view);
   });
 }

@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { OpenConsent } from "@luke/credentials";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT, PRODUCT_PLATFORM } from "@luke/features/analytics";
-import { SIGN_IN_FAILURE } from "@luke/features/words";
+import type { OpenConsent } from "@repo/credentials";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT, PRODUCT_PLATFORM } from "@repo/features/analytics";
+import { SIGN_IN_FAILURE } from "@repo/features/words";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -16,10 +16,10 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
   gatewayHost,
-} from "@luke/gateway";
-import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
-import { jsonResponse } from "@luke/wire/testing";
+} from "@repo/gateway";
+import { temporaryDirectoryScoped } from "@repo/runtime/testing";
+import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
+import { jsonResponse } from "@repo/wire/testing";
 import { ConfigProvider, Effect, Fiber, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { composeAccount } from "./compose-account.js";
@@ -137,7 +137,7 @@ const desktopAccount = (input: {
 
 it.effect("a sign-in after a deletion in the same run lets session replay record again", () =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-replay-");
+    const stateRoot = yield* temporaryDirectoryScoped("account-replay-");
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const kernel = hostKernelOver({
       stateRoot,
@@ -206,7 +206,7 @@ it.effect(
   "a sign-in that ends without landing answers why as its key, and none of the consent's own words",
   () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-account-failure-");
+      const stateRoot = yield* temporaryDirectoryScoped("account-failure-");
       const reported: string[] = [];
       const kernel = hostKernelOver({
         stateRoot,
@@ -255,7 +255,7 @@ it.effect(
 
 it.effect("an admin's access reaches the windows once read, and a sign-out takes it away", () =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-access-");
+    const stateRoot = yield* temporaryDirectoryScoped("account-access-");
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const kernel = hostKernelOver({
       stateRoot,
@@ -310,7 +310,7 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
 );
 
 /** The browser tab's service, on the tab's own origin, as Better Auth and our routes answer it. */
-const TAB_ORIGIN = "https://luke.example.test";
+const TAB_ORIGIN = "https://app.example.test";
 const BROWSER_CONTEXT = { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR };
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
 const SESSION_USER = {
@@ -377,7 +377,7 @@ const tabFetch =
  */
 const browserAccount = (service: TabService) =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-browser-");
+    const stateRoot = yield* temporaryDirectoryScoped("account-browser-");
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
     /** The counts' batches already sent each time the tab left, by the address it left for. */
     const departures: { url: string; countsSent: string[] }[] = [];

@@ -11,7 +11,7 @@
  * kept there as the panel names the tab again.
  */
 
-import type { AgentNoticeDoorsSurface } from "@luke/host/agent-notices";
+import type { AgentNoticeDoorsSurface } from "@repo/host/agent-notices";
 
 /** The display mode the site runs in once installed (`public/manifest.webmanifest`'s `display`). */
 const INSTALLED_DISPLAY = "(display-mode: standalone)";

@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices } from "@repo/database/core/query";
 import {
   archiveChannel,
   CHANNEL_NAME_REFUSAL,
@@ -12,9 +12,9 @@ import {
   openChannels,
   resolveChannel,
   unarchiveChannel,
-} from "@luke/database/models/channel-store";
-import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
-import { isWireUuid } from "@luke/features";
+} from "@repo/database/models/channel-store";
+import { GENERAL_CHANNEL } from "@repo/database/schemas/channel";
+import { isWireUuid } from "@repo/features";
 import {
   CHANNEL_BOUNDS,
   CHANNEL_TOOL,
@@ -22,8 +22,8 @@ import {
   channelCreateInputSchema,
   channelUpdateInputSchema,
   threadMoveInputSchema,
-} from "@luke/features/channel-wire";
-import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
+} from "@repo/features/channel-wire";
+import { inboxSandboxPicturePaths } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -45,15 +45,16 @@ import {
   inboxWithdrawInputSchema,
   keptInboxAsk,
   recommendedLabels,
-} from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf, mentionMarkdownLink } from "@luke/features/link-grammar";
-import { decodeMention, MENTION_KIND, mentionLinksIn } from "@luke/features/mention-link";
-import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/inbox-wire";
+import { LINK_PLACE, linkOf, mentionMarkdownLink } from "@repo/features/link-grammar";
+import { decodeMention, MENTION_KIND, mentionLinksIn } from "@repo/features/mention-link";
+import { PAGE_OWNER, type PageOwner } from "@repo/features/page-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { readEither } from "@repo/wire/effect";
 import { Data, DateTime, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
+import { afterResponse } from "../../http/after-response.js";
 import { logStoreFailure, type StoreFailure } from "../../http/store-failure.js";
 import {
   agentInboxItems,
@@ -67,6 +68,7 @@ import {
   moveChannelThread,
   postInboxThread,
 } from "../../inbox/inbox-store.js";
+import { dmThreadPost, settleThreadDms, threadStandsOpen } from "../../slack/thread-dms.js";
 import { pageStepOf } from "../written-mentions.js";
 import { CODER } from "./bounds.js";
 import {
@@ -93,7 +95,7 @@ import {
  * goes to #general. The agent names each thread by a key of its own. A post is one
  * message on it, one Markdown body with its chips, its cards, and its
  * pictures where they belong, which may end with an ask, `decide`, `do`, or
- * `answer` (`@luke/features/inbox-wire`); the first post under a key opens
+ * `answer` (`@repo/features/inbox-wire`); the first post under a key opens
  * the thread and names its title, and a later one adds a message, its ask
  * replacing the one open. A picture is drawn in the body by the path of
  * its file in the agent's sandbox, a screenshot of what it rendered, which
@@ -147,6 +149,7 @@ const POST_THREAD_WORDS =
   "Put a link alone on its own line to show it as a card: a pull request, an issue, a page such as the GitHub settings page a to-do is done on, " +
   "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
   `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
+  "Each link alone on its line is a card of its own, so give a thing one: its mention alone on its line is its card, never followed by its bare address. " +
   `Draw a picture where it belongs, such as a screenshot of a UI you rendered, as ![alt](<path> "caption"): path is the file's path in your sandbox, ` +
   `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a recording of a flow, which plays there, ` +
   `at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
@@ -163,9 +166,7 @@ const POST_THREAD_WORDS =
   "It waits until they acknowledge it, which never reaches you unless they write something; " +
   `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
   "A thread holds one open ask, and a newer ask replaces it. " +
-  "An answer to decide or answer always reaches you as a message. " +
-  "waits is for a do alone: whether you need to hear it is done as a message, only where you set it true; " +
-  "a do you do not wait on is kept for you to read, though an answer carrying their words or a file still reaches you as a message. " +
+  "An answer to any ask, decide, do, or answer, always reaches you as a message. " +
   `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your threads as they stand, each with the mention you name it by.`;
 
 /** One open channel as the tool's words list it: its name and what belongs in it. */
@@ -220,7 +221,7 @@ function postThreadDescription(channels: readonly ListedChannel[]): string {
 }
 
 /**
- * The tools as the model is shown them (`apps/dev/tools/`): each one's name,
+ * The tools as the model is shown them (`../workspace-mcp/tools.ts`): each one's name,
  * words, and input. `post_thread`'s words here list no channel; an agent is
  * shown them with its workspace's (`postThreadDescription`).
  */
@@ -246,8 +247,8 @@ export const INBOX_TOOLS = {
       "Each message reads in order with who wrote it, you or a member by name, the ask it ends with and where that stands " +
       "(open, answered, replaced by a newer ask, or withdrawn, with your reason), and the answer a member's message carries. " +
       "A member may close a thread without answering, which withdraws its ask with no reason, and closedBy names them; " +
-      `where you waited on it, that reaches you as a developer's message whose first line starts "${INBOX_CLOSE_LEAD}" and names the key: ` +
-      "take it as their not wanting what the ask asked. Read it before you rely on a do you posted without waits being done.",
+      `where it held an ask open, that reaches you as a developer's message whose first line starts "${INBOX_CLOSE_LEAD}" and names the key: ` +
+      "take it as their not wanting what the ask asked.",
     inputSchema: inboxReadInputSchema,
   },
   CREATE_CHANNEL: {
@@ -287,7 +288,7 @@ interface AgentThreadLine {
   readonly answers?: Omit<InboxAnswers, "ask">;
 }
 
-/** One thread as the agent reads it back: its id and key, title, its mention, where it stands, whether the agent waits on its open ask, and its messages in order. */
+/** One thread as the agent reads it back: its id and key, title, its mention, where it stands, and its messages in order. */
 interface AgentInboxLine {
   /** The thread's id, which `move_thread` names it by as well as by its key. */
   readonly id: string;
@@ -296,8 +297,6 @@ interface AgentInboxLine {
   /** The thread as the agent names it in its words, `[@title](link)`, which the app draws as its chip; none where the member reads its workspace no longer. */
   readonly mention?: string;
   readonly status: InboxItem["status"];
-  /** Whether an answer to the open ask reaches the agent as a message, on a thread still asking. */
-  readonly waits?: boolean;
   /** How many earlier messages a settled thread's read leaves out. */
   readonly earlier?: number;
   readonly thread: readonly AgentThreadLine[];
@@ -380,9 +379,6 @@ export const INBOX_REFUSAL = {
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
   ADDRESSEE_CANNOT_SEE:
     "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
-  UNDER_PILOT:
-    "Not posted: a pilot started you, and the developer's threads are the top pilot's alone. Post nothing; " +
-    "report to the pilot that started you with message_agent instead, and it decides what reaches the developer.",
   NO_AGENT: "Not done: this conversation is no agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
@@ -476,18 +472,6 @@ function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
 }
 
 /**
- * Whether the item is a notice still open: a post that asked nothing,
- * waiting on the developer's nod alone, which the agent never hears, so it
- * reads as no ask of the agent's.
- */
-function openNotice(item: InboxItem): boolean {
-  return (
-    item.status === INBOX_STATUS.OPEN &&
-    !(item.thread ?? []).some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)
-  );
-}
-
-/**
  * What a thread no message asks or answers, a notice's, carries on itself
  * rather than on a message: why it was closed. Note that a thread that asks
  * carries it on its withdrawn ask, so it is not repeated there, and that a
@@ -533,7 +517,6 @@ function lineOf(item: InboxItem, mention: string | undefined): AgentInboxLine {
     title: item.title,
     ...(mention === undefined ? undefined : { mention }),
     status: item.status,
-    ...(open && !openNotice(item) ? { waits: item.needsReply } : undefined),
     ...(earlier > 0 ? { earlier } : undefined),
     thread: told.map(threadLineOf),
     ...closerOf(item),
@@ -557,17 +540,19 @@ function inboxOf(
   );
 }
 
-/** What the agent's items stand on, as their links name it: its task, or the agent itself where it works on none. */
+/** What the agent's items stand on, whose workspace their links are written under: its task, or the agent itself where it works on none. */
 function inboxOwner(agent: InboxAgent): PageOwner {
   return agent.taskId === null
     ? { kind: PAGE_OWNER.AGENT, agentId: agent.agentId }
     : { kind: PAGE_OWNER.TASK, taskId: agent.taskId };
 }
 
-/** An item's mention under the workspace step given, by its link under its agent, whichever task that works on. */
-function itemMention(agent: InboxAgent, step: string, item: InboxItem): string {
-  const place = { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id } as const;
-  return mentionMarkdownLink(item.title, linkOf(place, step));
+/** An item's mention under the workspace step given, by its id alone, whose agent and task a reader asks the service for. */
+function itemMention(step: string, item: InboxItem): string {
+  return mentionMarkdownLink(
+    item.title,
+    linkOf({ kind: LINK_PLACE.INBOX_ITEM, itemId: item.id }, step),
+  );
 }
 
 /** The agent's inbox as the call answers it, each thread by the mention the agent writes it as. */
@@ -578,7 +563,7 @@ function accepted(agent: InboxAgent): Effect.Effect<InboxToolResult, never, Data
     (items, step) => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       inbox: inboxOf(items, (item) =>
-        Option.isNone(step) ? undefined : itemMention(agent, step.value, item),
+        Option.isNone(step) ? undefined : itemMention(step.value, item),
       ),
     }),
   ).pipe(
@@ -654,20 +639,7 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_ADDRESSEE;
     case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:
       return INBOX_REFUSAL.ADDRESSEE_CANNOT_SEE;
-    case INBOX_POST_REFUSAL.UNDER_PILOT:
-      return INBOX_REFUSAL.UNDER_PILOT;
   }
-}
-
-/**
- * Whether the agent hears the answer to an ask as a message: a decision or
- * an answer it asked for always, whatever the post says, since an agent
- * whose turn has ended reads nothing kept for it until something wakes it,
- * and the developer who answered would wait on it for ever; a to-do, which
- * it mostly needs only done, only where the post says it waits.
- */
-function heardAnswer(ask: InboxAskInput, waits: boolean | undefined): boolean {
-  return ask.type !== INBOX_ASK.DO || waits === true;
 }
 
 /**
@@ -707,11 +679,17 @@ interface ThreadPlace {
   readonly addresseeId?: string;
 }
 
-/** The post as the store writes it: its key, title, words, and ask as a message keeps it, whether the agent hears the answer (`heardAnswer`), and where it goes. */
+/**
+ * The post as the store writes it: its key, title, words, and ask as a
+ * message keeps it, and where it goes. Note that the agent hears the answer
+ * to every ask as a message, a `do`'s as a decision's, since an agent whose
+ * turn has ended reads nothing kept for it until something wakes it, and
+ * goes on telling the developer it waits on what they already answered.
+ */
 function threadPost(post: InboxThreadPostInput, place: ThreadPlace) {
-  const { waits, ask, channel: _channel, to: _to, ...written } = post;
+  const { ask, channel: _channel, to: _to, ...written } = post;
   if (ask === undefined) return { ...written, ...place };
-  return { ...written, ...place, ask: keptInboxAsk(ask), needsReply: heardAnswer(ask, waits) };
+  return { ...written, ...place, ask: keptInboxAsk(ask), needsReply: true };
 }
 
 /** The member a post's `to` names by their mention link written whole, or its address alone, by account; nothing where it names no person, such as an agent or a task. */
@@ -776,11 +754,20 @@ export function postToInbox(
     const pictures = yield* bodyPictures(post.body, sandbox);
     if (Result.isFailure(pictures)) return inboxRejected(pictures.failure);
     const thread = threadPost(post, place.success);
-    return yield* Effect.flatMap(postInboxThread(agent, thread, pictures.success), (posted) =>
-      Result.isFailure(posted)
-        ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
-        : accepted(agent),
+    const wasOpen = yield* threadStandsOpen(agent, thread.key);
+    const posted = yield* postInboxThread(agent, thread, pictures.success);
+    if (Result.isFailure(posted)) return inboxRejected(storeRefusal(posted.failure));
+    const { organizationId } = agent;
+    yield* afterResponse(
+      "a thread's Slack DM",
+      dmThreadPost({
+        organizationId,
+        item: posted.success,
+        asked: post.ask !== undefined,
+        wasOpen,
+      }),
     );
+    return yield* accepted(agent);
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
@@ -797,11 +784,12 @@ export function withdrawAsk(
     return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_WITHDRAW));
   }
   const { key, reason } = read.success;
-  return Effect.flatMap(closeInboxItem(agent, key, reason), (withdrawn) =>
-    Option.isNone(withdrawn)
-      ? Effect.succeed(inboxRejected(INBOX_REFUSAL.NO_OPEN_ASK))
-      : accepted(agent),
-  ).pipe(
+  return Effect.gen(function* () {
+    const withdrawn = yield* closeInboxItem(agent, key, reason);
+    if (Option.isNone(withdrawn)) return inboxRejected(INBOX_REFUSAL.NO_OPEN_ASK);
+    yield* afterResponse("a withdrawn thread's Slack DM", settleThreadDms(withdrawn.value.id));
+    return yield* accepted(agent);
+  }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
   );

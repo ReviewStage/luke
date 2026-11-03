@@ -1,6 +1,6 @@
-import POLICY from "virtual:luke/privacy-policy";
-import { Prose, PublicPage, PublicSection } from "@luke/ui";
-import { SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
+import POLICY from "virtual:site/privacy-policy";
+import { Prose, PublicPage, PublicSection } from "@repo/ui";
+import { SITE_PAGE, SiteDownload, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 /** Generated inline markup, for a heading the page sets itself. */
 function Inline({ html }: { html: string }): React.JSX.Element {
@@ -18,6 +18,7 @@ export function PrivacyPage(): React.JSX.Element {
   return (
     <PublicPage
       banner={<SiteNavigation current={{ page: SITE_PAGE.PRIVACY }} />}
+      bannerCall={<SiteDownload />}
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.PRIVACY }} />}
       title={<Inline html={POLICY.title} />}
     >

@@ -33,7 +33,7 @@ import { clsx } from "clsx";
  *   a badge's type, ink, and face are picked whole by its variants, with
  *   no caller's class to settle against them.
  *
- * `@luke/ui`'s `Badge` (`components/badge/badge.tsx`) is what an app draws;
+ * `@repo/ui`'s `Badge` (`components/badge/badge.tsx`) is what an app draws;
  * this is its inside.
  */
 

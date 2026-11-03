@@ -40,7 +40,7 @@ tester.run("no-lucide-outside-door", noLucideOutsideDoorRule, {
     { code: IMPORT, filename: DOOR_FILE },
     // Icons through the door, and other libraries, are no business of the rule's.
     {
-      code: 'import { Bot } from "@luke/ui/icons"; import { x } from "lucide-react-native-not";',
+      code: 'import { Bot } from "@repo/ui/icons"; import { x } from "lucide-react-native-not";',
       filename: NEW_FILE,
     },
     // A file the baseline holds, at exactly the count it holds it to.

@@ -6,22 +6,22 @@
    press. */
 
 @layer components {
-  .luke-rect-float {
+  .ui-rect-float {
     position: absolute;
     z-index: 3;
     width: max-content;
   }
 
-  .luke-rect-float[data-side="above"] {
-    translate: 0 calc(-100% - var(--luke-space-4));
+  .ui-rect-float[data-side="above"] {
+    translate: 0 calc(-100% - var(--ui-space-4));
   }
 
-  .luke-rect-float[data-side="below"] {
-    translate: 0 var(--luke-space-4);
+  .ui-rect-float[data-side="below"] {
+    translate: 0 var(--ui-space-4);
   }
 
-  .luke-rect-float[data-leaving="true"] {
+  .ui-rect-float[data-leaving="true"] {
     pointer-events: none;
-    animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+    animation: ui-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   }
 }

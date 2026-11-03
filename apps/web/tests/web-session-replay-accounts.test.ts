@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AppPlatform } from "@luke/panel/app-platform";
+import type { AppPlatform } from "@repo/panel/app-platform";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { applyWebSessionReplay } from "../src/app/web-session-replay";
@@ -19,7 +19,7 @@ vi.hoisted(() => {
 });
 
 /** Where the tabs of a browser tell each other about the recording, as another tab would open it. */
-const RECORDING_CHANNEL = "luke-session-replay";
+const RECORDING_CHANNEL = "app-session-replay";
 
 type SessionReplayBootstrap = Parameters<AppPlatform["applySessionReplay"]>[0];
 

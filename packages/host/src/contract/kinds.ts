@@ -173,7 +173,7 @@ export const AGENT_ACT_KIND = {
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
-  AGENTS_LUKE_TOOLS: "agents.lukeTools",
+  AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
@@ -216,6 +216,8 @@ export const AGENT_INBOX_ACT_KIND = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
+  /** Where one item stands, its agent, task, and workspace, as a link by its id alone is opened; it reads, and changes nothing. */
+  AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
   AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
@@ -381,6 +383,8 @@ export const TASKS_ACT_KIND = {
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   TASKS_COLOUR_CODE: "tasks.colourCode",
+  /** The id of the task a link names by its workspace and its number, found on the service before the link opens; answered to the window, never on the document. */
+  TASKS_FIND: "tasks.find",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
   TASKS_REVISIONS: "tasks.revisions",
   /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
@@ -420,7 +424,7 @@ export const TASKS_ACT_KIND = {
 } as const;
 
 /**
- * A cloud Browser tab's live view (`@luke/features/browser-live-acts`): one
+ * A cloud Browser tab's live view (`@repo/features/browser-live-acts`): one
  * view attached for the asking panel, its socket opened by the host under
  * the account's bearer, and detached. What the page shows travels on the
  * port an attach posts to that panel, never on an act.
@@ -431,19 +435,10 @@ export const BROWSER_LIVE_ACT_KIND = {
 } as const;
 
 /**
- * A coding agent's branch run on this Mac (`@luke/features/mac-terminal-wire`):
- * each repository's run command read and set; a run of the agent's branch
- * started for the asking panel, stopped with Stop, and closed with its tab;
- * and its worktree opened in the Mac's own Terminal. What the run prints
- * travels on the port an open posts to that panel, never on an act.
+ * The Mac's own Terminal opened for a local agent, answered by the platform
+ * shell (`mac-terminals.ts`).
  */
 export const MAC_TERMINAL_ACT_KIND = {
-  MAC_REPOSITORIES: "macRepositories.read",
-  MAC_REPOSITORY_SET: "macRepositories.set",
-  MAC_TERMINAL_OPEN: "macTerminal.open",
-  MAC_TERMINAL_CLOSE: "macTerminal.close",
-  MAC_TERMINAL_STOP: "macTerminal.stop",
-  MAC_TERMINAL_REVEAL: "macTerminal.reveal",
   /** A local agent's own worktree, which the Mac's host made under `~/.vespin/agents`, opened in the Mac's Terminal. */
   MAC_TERMINAL_LOCAL_AGENT: "macTerminal.localAgent",
 } as const;
@@ -475,14 +470,12 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * This Mac's `luke-host` as Settings › Hosts reaches it
- * (`this-mac-host.ts`): where it stands, read while the switch is drawn, and
- * an explicit turn-on, which enrolls the Mac again where the service removed it or
- * the last turn-on failed. Answered by the host, which runs it.
+ * This Mac's host as Settings › Hosts reaches it (`this-mac-host.ts`): the
+ * device its record names, read while Hosts is drawn. Answered by the host,
+ * which keeps it.
  */
 export const THIS_MAC_HOST_ACT_KIND = {
   THIS_MAC_HOST_READ: "thisMacHost.read",
-  THIS_MAC_HOST_TURN_ON: "thisMacHost.turnOn",
 } as const;
 
 /**
@@ -526,6 +519,10 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SENTRY_READ: "workspace.sentryRead",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",
+  WORKSPACE_SLACK_BOT_READ: "workspace.slackBotRead",
+  WORKSPACE_SLACK_BOT_CONNECT: "workspace.slackBotConnect",
+  WORKSPACE_SLACK_BOT_DISCONNECT: "workspace.slackBotDisconnect",
+  WORKSPACE_SLACK_BOT_NOTIFICATIONS: "workspace.slackBotNotifications",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**
@@ -546,6 +543,7 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_LEAVE: "workspace.leave",
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
+  WORKSPACE_SLUG_SET: "workspace.slugSet",
   WORKSPACE_TOKEN_REPOSITORIES_READ: "workspace.tokenRepositoriesRead",
   WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
 } as const;
@@ -636,7 +634,7 @@ export type PlatformPortActKind =
  * `REQUEST`, and the preload forwards it to main on `CHANNEL`.
  */
 export const ACT_PORT = {
-  REQUEST: "luke:act-port",
+  REQUEST: "app:act-port",
   CHANNEL: "app:act-port",
 } as const;
 

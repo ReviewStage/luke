@@ -9,35 +9,35 @@ import {
   type TaskStarted,
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
-} from "@luke/features";
-import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/agent-wire";
-import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+} from "@repo/features";
+import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
+import type { GitHubConnection } from "@repo/features/github-connection-wire";
+import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   PAGE_OWNER,
   PAGE_SHOWER,
   type PageLine,
   type PageVersion,
   pagePlaceId,
-} from "@luke/features/page-wire";
-import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
+} from "@repo/features/page-wire";
+import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
-import type { PlanEditAnswer } from "@luke/features/plan-edit";
+} from "@repo/features/plan-comment-wire";
+import type { PlanEditAnswer } from "@repo/features/plan-edit";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
   type TaskSections,
   type TaskSectionWrite,
-} from "@luke/features/task-section-wire";
+} from "@repo/features/task-section-wire";
 import {
   PLAN_ACTOR,
   type PlanRevisionAnswer,
@@ -53,7 +53,7 @@ import {
   type TaskFileAnswer,
   type TaskSkillsAnswer,
   type TaskTreeAnswer,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   type BlockCallFailure,
   BROWSER_TAB_OPEN_FAILURE,
@@ -68,8 +68,8 @@ import {
   type TaskCallFailure,
   type TasksView,
   tasksViewSchema,
-} from "@luke/features/tasks-view";
-import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/tasks-view";
+import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
   type FormerMember,
   WORKSPACE_PHOTO_TYPE,
@@ -77,17 +77,17 @@ import {
   type Workspace,
   type WorkspaceMember,
   type WorkspacePhotoType,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayEventKind,
   type GatewayMethod,
-} from "@luke/gateway";
-import { isRecord, TURN_STATUS, type WireRecord, type WireValue } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/gateway";
+import { isRecord, TURN_STATUS, type WireRecord, type WireValue } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
+import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
@@ -299,7 +299,7 @@ type RecordPart = "plan" | "pages" | "calls" | "code";
 const NOT_FOUND_LIVE = { failure: TASK_CALL_FAILURE.NOT_FOUND } as const;
 
 /** The origin a workspace's invitations are answered with, which each accept link is built on. */
-const INVITATIONS_ORIGIN = "https://luke.test";
+const INVITATIONS_ORIGIN = "https://app.test";
 
 /** The sidebar as its live statements' rows carry it: what the wire leaves out is null. */
 function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly RepositoryPin[]) {
@@ -348,13 +348,13 @@ const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
-  email: "ada@luke.test",
+  email: "ada@app.test",
   role: WORKSPACE_ROLE.ADMIN,
 };
 const GRACE: WorkspaceMember = {
   userId: "user-grace",
   name: "Grace Hopper",
-  email: "grace@luke.test",
+  email: "grace@app.test",
   role: WORKSPACE_ROLE.MEMBER,
 };
 
@@ -412,6 +412,7 @@ function fakeService(tasks: Task[]): FakeService {
     // The service starts the thread as asked, the member its writer, and holds it on the plan.
     startComment: (planId, start) =>
       Effect.sync(() => {
+        if ("page" in start) throw new Error("the fake holds no page's threads");
         service.commentCalls.push(`start:${planId}:${start.quote}`);
         const thread: PlanCommentThread = {
           id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
@@ -466,6 +467,7 @@ function fakeService(tasks: Task[]): FakeService {
     history: undefined,
     olderHistory: {},
     revisions: {},
+    find: () => Effect.succeed(undefined),
     readRevisions: (_taskId, before) =>
       Effect.sync(() => (before === undefined ? service.history : service.olderHistory[before])),
     readRevision: (_taskId, seq) => Effect.sync(() => service.revisions[seq]),
@@ -658,6 +660,11 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }).pipe(Effect.tap(() => service.renameAnswered)),
+      setSlug: (workspaceId, slug) =>
+        Effect.sync(() => {
+          service.reads.push(`slugSet:${workspaceId}:${slug}`);
+          return UNANSWERED_WORKSPACE;
+        }),
       // A photo set stands as its version, the photo's own text, and null takes the version away.
       setPhoto: (workspaceId, photo) =>
         Effect.sync(() => {
@@ -694,6 +701,10 @@ function fakeService(tasks: Task[]): FakeService {
       sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBot: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotConnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotNotifications: () => Effect.succeed(UNANSWERED_WORKSPACE),
       people: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`members:${workspaceId}`);
@@ -3739,7 +3750,7 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(2));
       yield* followSettled;
       yield* answered(() => pages.set({ pages: [{ ...FUNNEL, shownBy: null }] }));
-      const shown = { ...FUNNEL, version: 2, at: 2_500, shownBy: { kind: PAGE_SHOWER.LUKE } };
+      const shown = { ...FUNNEL, version: 2, at: 2_500, shownBy: { kind: PAGE_SHOWER.APP } };
       yield* answered(() => pages.set({ pages: [shown] }));
       assert.deepEqual(pushed.slice(1), [held({ rows: [FUNNEL] }), held({ rows: [shown] })]);
       assert.equal(told.length, 0, "a plan's pages held for the Inbox are never told in the view");
@@ -4327,7 +4338,7 @@ it.effect(
       yield* settled;
 
       const accept = (id: string) =>
-        `https://luke.test/accept-invitation.html?id=${id}&email=${id}%40example.com`;
+        `https://app.test/accept-invitation?id=${id}&email=${id}%40example.com`;
       assert.deepEqual(invitations(), [
         {
           workspaceId: ACME.id,

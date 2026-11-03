@@ -1,21 +1,21 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
-import { readTaskHeader } from "@luke/database/models/task-store";
-import { workspaceOf } from "@luke/database/models/workspace-store";
-import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { PICTURE_BOUNDS, type Picture } from "@luke/features/picture-wire";
-import { planAttachmentAddress, taskPictureMarkdown } from "@luke/features/plan-attachment-link";
-import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
+import { readTaskHeader } from "@repo/database/models/task-store";
+import { workspaceOf } from "@repo/database/models/workspace-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { PICTURE_BOUNDS, type Picture } from "@repo/features/picture-wire";
+import { planAttachmentAddress, taskPictureMarkdown } from "@repo/features/plan-attachment-link";
+import { PLAN_ATTACHMENT_BOUNDS } from "@repo/features/plan-attachment-wire";
 import {
   NOTE_KIND,
   type PlanNote,
   planNoteSectionSchema,
   planNotesSchema,
   readNotes,
-} from "@luke/features/plan-template";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { describeWire, readEither } from "@luke/wire/effect";
+} from "@repo/features/plan-template";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -121,7 +121,7 @@ const readEditedTask = readEither(editedTaskSchema, { excess: EXCESS_KEYS.DROP }
 const EDIT_PLAN_INPUT = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
-    `The task whose plan to edit, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered or a mention of it names.`,
+    `The task whose plan to edit, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   ),
   ...planNotesSchema.fields,
   pictures: Schema.optionalKey(

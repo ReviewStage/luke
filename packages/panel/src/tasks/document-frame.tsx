@@ -1,5 +1,5 @@
-import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea, TIME_LOOK, Time } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
+import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea, TIME_LOOK, Time } from "@repo/ui";
+import type { Actor } from "@repo/ui/actor-model";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 
@@ -41,7 +41,7 @@ export function DocumentScroll({
     // unset, the caret, the writing ring, and the fresh tint all drew nothing.
     <ScrollArea ref={ref} fade={SCROLL_FADE.BOTH} gutter={SCROLL_GUTTER.STABLE}>
       <div
-        className={`${DOCUMENT_BODY_CLASS} py-list-inset px-luke-2 select-text [--accent:var(--voice-luke)]`}
+        className={`${DOCUMENT_BODY_CLASS} py-list-inset px-ui-2 select-text [--accent:var(--voice-luke)]`}
       >
         {children}
       </div>

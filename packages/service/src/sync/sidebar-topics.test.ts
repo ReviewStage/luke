@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
-import { readGitHubTokenRow, removeGitHubToken } from "@luke/database/models/github-token-store";
-import { setRepositoryPin } from "@luke/database/models/repository-pin-store";
-import { writeTaskSections } from "@luke/database/models/task-section-store";
-import { createTask, deleteTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+import { Database } from "@repo/database/core/query";
+import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
+import { readGitHubTokenRow, removeGitHubToken } from "@repo/database/models/github-token-store";
+import { setRepositoryPin } from "@repo/database/models/repository-pin-store";
+import { writeTaskSections } from "@repo/database/models/task-section-store";
+import { createTask, deleteTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   expectTopicsFire,
   getTestDB,
@@ -16,9 +16,9 @@ import {
   leaveWorkspace,
   openTaskAgent,
   openWorkspace,
-} from "@luke/database/testing";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
+} from "@repo/database/testing";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@repo/features/task-section-wire";
 import { Clock, Effect, Option } from "effect";
 import { openTokenMember } from "../testing/github-app-fake.js";
 import { sidebarLive } from "./live-queries.js";
@@ -40,7 +40,7 @@ import { sidebarLive } from "./live-queries.js";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

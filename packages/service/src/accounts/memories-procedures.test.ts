@@ -1,18 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { type MemoriesAnswer, memoriesAnswerSchema } from "@luke/features/memory-wire";
-import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { type MemoriesAnswer, memoriesAnswerSchema } from "@repo/features/memory-wire";
+import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { runRecall, runRemember } from "../agents/memory-tools.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { memoriesProcedures } from "./memories-procedures.js";
@@ -31,8 +32,17 @@ import { memoriesProcedures } from "./memories-procedures.js";
  * Synthetic accounts, workspaces, bearers, and words throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const MEMORIES_PATH = "/api/account/memories";
+
+/** What the procedures counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The workspaces each forget of the account was counted in, in order. */
+const forgetsCountedFor = (userId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.MEMORY_FORGET)
+    .map((event) => event.workspaceId);
 
 const TESTS_RUN = "The web server's store tests run on PGlite through test:store.";
 const DEPLOYS = "Deployments go out from the release branch through Vercel.";
@@ -55,7 +65,7 @@ const openTeam = Effect.gen(function* () {
     [teammate, "Tom Teammate"],
     [outsider, "Ola Outsider"],
   ] as const) {
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
   }
   const workspaceId = yield* openWorkspace(owner);
   yield* joinWorkspace(workspaceId, teammate);
@@ -80,6 +90,7 @@ const answer = (procedures: ReturnType<typeof memoriesProcedures>, request: Requ
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      ANALYTICS.layer,
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
@@ -176,6 +187,9 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         assert.equal(recalled.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(recalled.memories, []);
         assert.deepEqual(wordsOf(byOwner), []);
+        // The refused forget is not counted, and each of the others is, in the workspace and under whoever made it.
+        assert.deepEqual(forgetsCountedFor(owner), [workspaceId]);
+        assert.deepEqual(new Set(forgetsCountedFor(teammate)), new Set([workspaceId]));
       }),
   );
 
@@ -188,7 +202,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         const third = `user-${randomUUID()}`;
         yield* db
           .insert(user)
-          .values({ id: third, name: "Thea Third", email: `${third}@luke.test` });
+          .values({ id: third, name: "Thea Third", email: `${third}@app.test` });
         yield* joinWorkspace(workspaceId, third);
         yield* keep(third, DEPLOYS);
         yield* db.delete(user).where(eq(user.id, third));

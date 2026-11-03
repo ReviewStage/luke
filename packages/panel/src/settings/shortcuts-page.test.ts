@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { NO_EXPERIMENTS } from "@luke/settings";
-import { COMMAND_KEY, installCommandKey } from "@luke/settings/shortcuts";
+import { NO_EXPERIMENTS } from "@repo/settings";
+import { COMMAND_KEY, installCommandKey } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -48,7 +48,7 @@ function groupRows(title: string, capabilities = DESKTOP_CAPABILITIES): string[]
   );
   if (section === undefined) return [];
   return [...section.querySelectorAll("[data-search-anchor]")].map((row) =>
-    [...row.querySelectorAll(".luke-settings-row-label, .luke-text, .luke-shortcut-glyph")]
+    [...row.querySelectorAll(".ui-settings-row-label, .ui-text, .ui-shortcut-glyph")]
       .map((part) => part.textContent)
       .join(" "),
   );
@@ -75,7 +75,7 @@ test("the window's Escape is one row, under General, however many layers it step
   // Note that Files changed's own Escape, which lets go of the file stood on, is the view's to list, as its sheet does.
   const escapes = [...document.querySelectorAll("section")]
     .filter((section) => section.querySelector("h2")?.textContent !== "Files changed")
-    .flatMap((section) => [...section.querySelectorAll(".luke-shortcut")])
+    .flatMap((section) => [...section.querySelectorAll(".ui-shortcut")])
     .filter((chord) => chord.textContent === "Esc");
 
   assert.equal(escapes.length, 1);

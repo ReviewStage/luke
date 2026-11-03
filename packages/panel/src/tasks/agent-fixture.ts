@@ -18,7 +18,8 @@
  * profile stages.
  */
 
-import { AGENT_CALL_FAILURE, type AgentTranscriptPage } from "@luke/features/agent-view";
+import { AsyncIteratorClass } from "@orpc/client";
+import { AGENT_CALL_FAILURE, type AgentTranscriptPage } from "@repo/features/agent-view";
 import {
   AGENT_AUTHOR,
   AGENT_BRIEF,
@@ -39,21 +40,21 @@ import {
   PULL_REQUEST_STATE,
   REVIEW_DECISION,
   REVIEW_STATE,
-} from "@luke/features/agent-wire";
-import { CHAPTER_KIND, CHAPTER_RISK, LINE_REF_SIDE } from "@luke/features/pull-request-chapters";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
+} from "@repo/features/agent-wire";
+import { CHAPTER_KIND, CHAPTER_RISK, LINE_REF_SIDE } from "@repo/features/pull-request-chapters";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
   FILE_VIEWED_STATE,
   MERGE_METHOD,
   PULL_REQUEST_WRITE_OUTCOME,
-} from "@luke/features/pull-request-write-wire";
+} from "@repo/features/pull-request-write-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
   type TaskSummary,
   type TaskTreeEntry,
-} from "@luke/features/task-wire";
-import type { TasksView } from "@luke/features/tasks-view";
+} from "@repo/features/task-wire";
+import type { TasksView } from "@repo/features/tasks-view";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_PORT_CHANNEL,
@@ -61,14 +62,13 @@ import {
   TERMINAL_REFUSAL,
   type TerminalConnection,
   type TerminalPortOutbound,
-} from "@luke/features/terminal-acts";
-import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
-import { FIXTURE_IDS, FIXTURE_PAGE } from "@luke/host/fixture-stage";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
-import { AsyncIteratorClass } from "@orpc/client";
+} from "@repo/features/terminal-acts";
+import { SANDBOX_STATE, type SandboxState } from "@repo/features/terminal-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import { FIXTURE_IDS, FIXTURE_PAGE } from "@repo/host/fixture-stage";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { longRunPicture, longRunStream } from "./agent-long-run-fixture.js";
 import { MAIN_TAB, type MainTab } from "./use-main-tabs.js";
 import {

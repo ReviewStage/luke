@@ -1,25 +1,27 @@
 {
-  "name": "@luke/host-daemon",
-  "version": "0.5.0",
+  "name": "@repo/host-daemon",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
-  "description": "Vespin's host daemon: a headless Linux box's own follower of the local agents its member starts on it, and the install script that sets it up",
+  "description": "Vespin's host daemon, `vespin-host`: it runs on a Linux box or an Apple silicon Mac and follows the local agents its member starts there",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/luke-host.mjs --define:process.env.LUKE_HOST_VERSION='\"'$npm_package_version'\"' --define:PACKAGED_WITH_DEVELOPER_ID_SIGNING=${LUKE_HOST_DEVELOPER_ID_SIGNED:-false} --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/vespin-host.mjs --define:process.env.APP_HOST_VERSION='\"'$npm_package_version'\"' --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "package": "tsx scripts/package.ts",
+    "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@luke/features": "workspace:*",
-    "@luke/host": "workspace:*",
+    "@repo/features": "workspace:*",
+    "@repo/host": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@luke/agent-runner": "workspace:*",
+    "@repo/agent-runner": "workspace:*",
     "@types/node": "catalog:",
     "esbuild": "0.28.2",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

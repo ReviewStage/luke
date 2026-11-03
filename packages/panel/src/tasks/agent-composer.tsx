@@ -9,17 +9,17 @@ import {
   type AgentStatus,
   type AgentUsage,
   hasWordsOrFiles,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
   remedyLabel,
   retriesBesideRemedy,
-} from "@luke/features/failure-remedy";
-import type { CatalogModel } from "@luke/features/models-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { pasteCutWords } from "@luke/features/words";
-import type { ShortcutChord } from "@luke/settings/shortcuts";
+} from "@repo/features/failure-remedy";
+import type { CatalogModel } from "@repo/features/models-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { pasteCutWords } from "@repo/features/words";
+import type { ShortcutChord } from "@repo/settings/shortcuts";
 import {
   ComposerBody,
   ComposerFoot,
@@ -29,11 +29,11 @@ import {
   PlusIcon,
   riseAboveEnd,
   useMenu,
-} from "@luke/ui";
-import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
-import { GLYPH } from "@luke/ui/icons";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
-import { type ReportedFailure, UNREPORTED, type Unreported } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { lapsedServer, SERVER_HANDED } from "@repo/ui/agent-servers-model";
+import { GLYPH } from "@repo/ui/icons";
+import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
+import { type ReportedFailure, UNREPORTED, type Unreported } from "@repo/ui/reported-failure";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,
@@ -45,7 +45,7 @@ import {
 } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { ActionMenu, type PanelMenuEntry } from "../desktop/action-menu.js";
+import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
@@ -76,7 +76,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
  * at its default type, its files over its words and its foot as every message
- * box's (`@luke/ui`'s `ComposerBody` and `ComposerFoot`). Its foot is laid
+ * box's (`@repo/ui`'s `ComposerBody` and `ComposerFoot`). Its foot is laid
  * out as ChatGPT's and Codex's are: at the left the "+", which raises a
  * menu of Attachment, which attaches files, and MCP servers, which opens
  * the servers popover beside the menu as its submenu, where the agent is
@@ -104,7 +104,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * there are words or files, disabled while there are neither and the agent
  * is idle, and Stop while there are neither and a turn runs, which is the
  * one Stop the tab has. A message that did not go stays in the box with why under the foot's
- * bar and what mends it (`@luke/ui`'s `ErrorState`): Retry, which sends it again
+ * bar and what mends it (`@repo/ui`'s `ErrorState`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
  * (`repository-remedy.tsx`), a move of the task sending it again by itself
@@ -189,9 +189,11 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * calls its round button (`wording`), stands its Runs on chip after the "+" (`tools`),
  * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
- * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
- * switches, so its "+" opens the file picker itself, as every box that
- * takes nothing but files does (`attach-files-button.tsx`).
+ * the chosen repository's skills to its `@` and `/` lists, and hands the
+ * MCP servers' switches its first agent starts with, which its "+" menu
+ * opens as an agent's does, with no Built in section, since no agent has
+ * started yet, and after them Task relation, which its owner hands the
+ * menu (`plus`).
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */
@@ -256,7 +258,7 @@ type OverflowPress = (typeof OVERFLOW_PRESS)[keyof typeof OVERFLOW_PRESS];
 /** A press the ⋯ may take in, and the rows the menu offers in its place. */
 interface OverflowOffer {
   press: OverflowPress;
-  entries: readonly PanelMenuEntry[];
+  entries: readonly MenuEntry[];
 }
 
 /** The presses standing on the card's foot that the stylesheet hid for want of room. */
@@ -313,7 +315,7 @@ function useFootFold(card: RefObject<HTMLDivElement | null>): FoldWidth | undefi
  * draft's box take the room in as their own sheets say.
  */
 export const COMPOSER_ROOM_CLASS =
-  "agent-composer relative flex flex-col gap-control-gap px-luke-16 pt-0 pb-list-inset";
+  "agent-composer relative flex flex-col gap-control-gap px-ui-16 pt-0 pb-list-inset";
 
 /**
  * What docks over the composer, the to-do list, the pull request's row, and
@@ -321,11 +323,11 @@ export const COMPOSER_ROOM_CLASS =
  * composer's line up; a column or a panel that pads the composer in pads
  * these in alike.
  */
-export const COMPOSER_DOCK_CLASS = "px-luke-16 pt-0 pb-row-inset";
+export const COMPOSER_DOCK_CLASS = "px-ui-16 pt-0 pb-row-inset";
 
 /**
  * A log that runs right up to the card's top edge, its words dissolving
- * over `--luke-scroll-fade` just above it rather than being sliced short of
+ * over `--ui-scroll-fade` just above it rather than being sliced short of
  * the card: its foot pads past the fade, so the newest line stands whole
  * above it.
  */
@@ -446,6 +448,7 @@ export function AgentComposer({
   usage,
   payer,
   servers,
+  plus = [],
   context,
   brief,
   published,
@@ -466,6 +469,7 @@ export function AgentComposer({
   onKey,
   onLeave,
   focusedByOwner = false,
+  takesFocus = true,
   listSide = MENTION_MENU_SIDE.ABOVE,
   queueing,
 }: {
@@ -486,8 +490,10 @@ export function AgentComposer({
   usage: AgentUsage | undefined;
   /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
   payer?: AgentPayer | undefined;
-  /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, as New task's does, whose + opens the file picker itself. */
+  /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, whose + opens the file picker itself. */
   servers: AgentServersControl | undefined;
+  /** Rows the + menu offers after MCP servers, its owner's: New task's Task relation. */
+  plus?: readonly MenuEntry[] | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: AgentContext | undefined;
   /** What the agent was handed, which names the brief's part of the context. */
@@ -527,7 +533,9 @@ export function AgentComposer({
   onLeave?: (() => void) | undefined;
   /** Whether the owner hands the field focus where it stands as the box first draws, as a dialog's card does, so the field takes it itself only where its editor lands later. */
   focusedByOwner?: boolean;
-  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on a new account's welcome. */
+  /** Whether the field takes the caret as it mounts at all; none on a phone's Home, where the keyboard would cover the places bar. */
+  takesFocus?: boolean;
+  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on Home. */
   listSide?: MentionMenuSide;
   /** How the box queues behind the turn and edits a queued message; none where it queues nothing. */
   queueing?: ComposerQueueing | undefined;
@@ -594,7 +602,7 @@ export function AgentComposer({
       }
     });
   };
-  // Note that a box handing no servers, as New task's, offers none to reconnect either.
+  // Note that a box handing no servers offers none to reconnect either.
   const lapsed =
     servers === undefined
       ? undefined
@@ -799,16 +807,18 @@ export function AgentComposer({
     const more = card.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const press = more?.querySelector<HTMLElement>("button") ?? null;
     const returning =
-      !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
+      !open && (document.activeElement?.closest(".ui-anchored-popover") ?? null) !== null;
     set(open);
     if (returning && more !== null && press !== null && getComputedStyle(more).display !== "none") {
       queueMicrotask(() => press.focus());
     }
   };
 
-  // What the + offers beside files, its menu's rows after Attachment: the servers' popover, where the box hands servers.
-  const plusRows: readonly PanelMenuEntry[] =
-    servers === undefined ? [] : [serversMenuPanel(servers, statuses)];
+  // What the + offers beside files, its menu's rows after Attachment: the servers' popover, where the box hands servers, then its owner's.
+  const plusRows: readonly MenuEntry[] = [
+    ...(servers === undefined ? [] : [serversMenuPanel(servers, statuses)]),
+    ...plus,
+  ];
   const openPicker = () => picker.current?.open();
   const offers: OverflowOffer[] = [
     {
@@ -888,7 +898,7 @@ export function AgentComposer({
                   : COMPOSER_INPUT.EDITABLE
             }
             maxLength={maxLength}
-            takesFocus={!(focusedByOwner && mountedFirst)}
+            takesFocus={takesFocus && !(focusedByOwner && mountedFirst)}
             {...pickers.field}
             onKey={(event) =>
               pickers.field.onKey(event) ||

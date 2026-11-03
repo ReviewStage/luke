@@ -2,20 +2,20 @@ import {
   type LiveStatement,
   liveSelection,
   liveStatementOf,
-} from "@luke/database/core/live-statement";
-import { queryBuilder } from "@luke/database/core/query";
-import { taskBlockedFor } from "@luke/database/models/task-block-store";
+} from "@repo/database/core/live-statement";
+import { queryBuilder } from "@repo/database/core/query";
+import { taskBlockedFor } from "@repo/database/models/task-block-store";
 import {
   AGENT_WORKSPACE,
   agentVisibleTo,
   taskReachableBy,
-} from "@luke/database/models/workspace-store";
-import { agentPin, conversations, device, taskPin } from "@luke/database/schemas";
-import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
-import { automationRun } from "@luke/database/schemas/automation";
-import { task } from "@luke/database/schemas/task";
-import { AGENT_BRIEF, AGENT_KIND } from "@luke/features/agent-wire";
+} from "@repo/database/models/workspace-store";
+import { agentPin, conversations, device, taskPin } from "@repo/database/schemas";
+import { agentTable } from "@repo/database/schemas/agent";
+import { user } from "@repo/database/schemas/auth";
+import { automationRun } from "@repo/database/schemas/automation";
+import { task } from "@repo/database/schemas/task";
+import { AGENT_BRIEF, AGENT_KIND } from "@repo/features/agent-wire";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
@@ -40,7 +40,7 @@ import {
  * Mac a local one runs on, and the names of the members each names. A third, the issues
  * the plans linked, answers no rows now that a plan links none, and stands
  * because a released desktop follows it. Every column stands
- * under the key `@luke/features/task-list-live` reads it by and every
+ * under the key `@repo/features/task-list-live` reads it by and every
  * instant as epoch milliseconds. Nothing here reads the clock: an agent's
  * status, which turns on it, is the reader's to read, and so is the order,
  * since Realtime keeps none.

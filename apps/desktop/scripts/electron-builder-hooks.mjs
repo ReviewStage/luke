@@ -17,7 +17,7 @@ import {
   stapleWithRetry,
 } from "./release-config.mjs";
 
-const ELECTRON_BUILDER_NOTARIZE_ENV = "LUKE_ELECTRON_BUILDER_NOTARIZE";
+const ELECTRON_BUILDER_NOTARIZE_ENV = "APP_ELECTRON_BUILDER_NOTARIZE";
 
 function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
@@ -89,7 +89,7 @@ export async function notarizeElectronBuilderApp(context) {
   if (!shouldNotarize()) return;
   const credentials = resolveNotaryCredentials(process.env);
   const appPath = path.join(context.appOutDir, "Vespin.app");
-  const submissionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-builder-notary-"));
+  const submissionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "builder-notary-"));
   try {
     const submissionPath = path.join(submissionDirectory, "Vespin.app.zip");
     execFileSync("ditto", ["-c", "-k", "--keepParent", appPath, submissionPath], {

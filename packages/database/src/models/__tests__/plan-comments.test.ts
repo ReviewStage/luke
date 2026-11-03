@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
+import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -12,10 +13,11 @@ import {
   PLAN_COMMENT_STATUS,
   type PlanCommentStartRequest,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
+} from "@repo/features/plan-comment-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
 import { readPlanAttachment } from "../plan-attachments.js";
@@ -29,6 +31,7 @@ import {
   readPlanCommentThreads,
   startPlanCommentThread,
 } from "../plan-comments.js";
+import { writePage } from "../plan-pages.js";
 import { createTask, savePlanText } from "../task-store.js";
 
 /**
@@ -39,7 +42,8 @@ import { createTask, savePlanText } from "../task-store.js";
  * editor's undo reports them back, answered, resolved, and reopened by any
  * member, and a comment edited or deleted only by its writer. A comment's
  * files are kept with it, read by every member and nobody else, and go
- * with it.
+ * with it. A thread on one of the task's pages is read with that page's
+ * alone, never the plan's.
  *
  * Synthetic accounts and plans throughout.
  */
@@ -51,7 +55,7 @@ const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
     return id;
   });
 
@@ -438,6 +442,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
             planSnapshot: PLAN_TEXT,
             prompt: null,
             repository: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent.id;
         const deleteWhole = (writer: PlanCommentWriterRef, threadId: string) =>
@@ -478,6 +483,80 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
           status: PLAN_COMMENT_OUTCOME.DONE,
           answer: { deleted: agents.id },
         });
+      }),
+  );
+
+  it.effect(
+    "a thread on a page is read with that page's alone, on the element and version it was left on, and a version the task does not hold is no page",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            taskPageOwner(taskId),
+            { title: "Invite funnel", html: "<h1>Invites</h1><p>12 sent</p>" },
+            { kind: PAGE_SHOWER.APP },
+          ),
+        );
+        yield* startPlanCommentThread(
+          member(owner),
+          taskId,
+          startOn(PLAN_TEXT, "seven days", "On the plan."),
+        );
+        const onElement = {
+          clientKey: randomUUID(),
+          page: { id: shown.id, version: 1 },
+          element: { path: "body > p:nth-of-type(1)", quote: "12 sent", section: "Invites" },
+          words: "Is this a week's worth?",
+        };
+
+        const started = threadOf(
+          yield* startPlanCommentThread(member(teammate), taskId, onElement),
+        );
+        const whole = threadOf(
+          yield* startPlanCommentThread(member(teammate), taskId, {
+            clientKey: randomUUID(),
+            page: { id: shown.id, version: 1 },
+            words: "Add a chart.",
+          }),
+        );
+
+        const onPage = Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId, shown.id));
+        // Note that the two may be started in one millisecond, which orders them by their ids, so they are compared in the order of their scopes.
+        const byScope = [...onPage].sort((a, b) => a.scope.localeCompare(b.scope));
+        assert.deepEqual(
+          byScope.map((thread) => [
+            thread.id,
+            thread.scope,
+            thread.quote,
+            thread.section,
+            thread.page,
+          ]),
+          [
+            [
+              started.id,
+              PLAN_COMMENT_SCOPE.ELEMENT,
+              "12 sent",
+              "Invites",
+              { id: shown.id, version: 1, element: "body > p:nth-of-type(1)" },
+            ],
+            [whole.id, PLAN_COMMENT_SCOPE.PAGE, "Invite funnel", "", { id: shown.id, version: 1 }],
+          ],
+        );
+        const onPlan = Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId));
+        assert.deepEqual(
+          onPlan.map((thread) => thread.quote),
+          ["seven days"],
+        );
+        assert.deepEqual(
+          yield* startPlanCommentThread(member(teammate), taskId, {
+            ...onElement,
+            clientKey: randomUUID(),
+            page: { id: shown.id, version: 2 },
+          }),
+          { status: PLAN_COMMENT_OUTCOME.NO_PAGE },
+        );
       }),
   );
 

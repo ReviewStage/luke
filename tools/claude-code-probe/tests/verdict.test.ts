@@ -5,7 +5,7 @@
  * 0.3.304's `SDKMessage`), the fields the verdict reads and a few it does not.
  */
 
-import type { WireValue } from "@luke/wire";
+import type { WireValue } from "@repo/wire";
 import { describe, expect, it } from "vitest";
 import {
   CHECK,
@@ -83,7 +83,7 @@ function leakResult(report: WireValue): WireValue {
         {
           type: "tool_result",
           tool_use_id: "toolu_Bash",
-          content: [{ type: "text", text: `LUKE_PROBE_LEAK_CHECK ${JSON.stringify(report)}\n` }],
+          content: [{ type: "text", text: `APP_PROBE_LEAK_CHECK ${JSON.stringify(report)}\n` }],
         },
       ],
     },

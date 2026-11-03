@@ -11,7 +11,7 @@ import path from "node:path";
  * than once, and a record would record a joined byte no client is sent.
  */
 
-const UPDATE_FIXTURES = process.env.LUKE_UPDATE_FIXTURES === "1";
+const UPDATE_FIXTURES = process.env.APP_UPDATE_FIXTURES === "1";
 const GOLDEN_SUFFIX = ".json";
 
 export interface RecordedResponse {
@@ -30,7 +30,7 @@ export async function recordedResponse(response: Response): Promise<RecordedResp
   };
 }
 
-/** The recorded response against the file named for it, which `LUKE_UPDATE_FIXTURES=1` writes. */
+/** The recorded response against the file named for it, which `APP_UPDATE_FIXTURES=1` writes. */
 export async function settleResponseGolden(
   root: string,
   name: string,

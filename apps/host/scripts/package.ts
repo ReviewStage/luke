@@ -1,30 +1,22 @@
 /**
- * package.ts -- one host release for the OS and architecture given: the daemon's and the runner's bundles and the Node they run on, under one `luke-host/` folder; as a tarball beside its SHA-256, with the `luke-host` command, or on a Mac as the folder the desktop app carries.
+ * package.ts -- one host release for the OS and architecture given: the daemon's and the runner's bundles, the `vespin-host` command, and the Node they run on, under one `luke-host/` folder, as a tarball beside its SHA-256.
  *
  * Run by CI for each Linux architecture and for an Apple silicon Mac
  * (`.github/workflows/release-host.yml`) once both bundles are built
- * (`pnpm --filter @luke/host-daemon build`,
- * `pnpm --filter @luke/agent-runner build`):
+ * (`pnpm --filter @repo/host-daemon build`,
+ * `pnpm --filter @repo/agent-runner build`):
  *
  *   tsx scripts/package.ts --arch x64
  *   tsx scripts/package.ts --os darwin --arch arm64
  *
- * and by the desktop's package script for the folder its app ships in its
- * resources (`apps/desktop/scripts/build-host.mjs`), where the app's own
- * `luke-host` command and login item run it:
- *
- *   tsx scripts/package.ts --os darwin --into <folder>
- *
- * Node is fetched as its pin names it (`@luke/agent-runner/pins`'
+ * Node is fetched as its pin names it (`@repo/agent-runner/pins`'
  * `NODE_LINUX_PINS`, `NODE_MAC_PIN`), refused unless it arrived at its
  * pinned size and digest, and only its pinned members are kept. Claude Code and Codex are
  * not carried: the daemon fetches each at its pin on the box
- * (`@luke/host/daemon`). The tarball is written by GNU tar, a Mac's `gtar`,
- * with every entry owned by root and stamped at one time, in name order, so
- * its digest is the contents' alone. It lands in `dist/release/`, named as
- * the release names it (`@luke/features/host-release`), with a `.sha256`
- * beside it in `sha256sum`'s own format, which the install script's digest is
- * read off.
+ * (`@repo/host/daemon`). The release is laid out and packed as
+ * `release-layout.ts` says. It lands in `dist/release/`, named as the release
+ * names it (`@repo/features/host-release`), with a `.sha256` beside it in
+ * `sha256sum`'s own format, which the install script's digest is read off.
  */
 
 import { execFileSync } from "node:child_process";
@@ -40,22 +32,21 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
-import { type AgentToolPin, NODE_LINUX_PINS, NODE_MAC_PIN } from "@luke/agent-runner/pins";
-import { DEVICE_ARCH, DEVICE_PLATFORM, type DeviceArch } from "@luke/features/device-agent-wire";
-import { HOST_TARGET, type HostTarget, hostTarballName } from "@luke/features/host-release";
+import { type AgentToolPin, NODE_LINUX_PINS, NODE_MAC_PIN } from "@repo/agent-runner/pins";
+import { DEVICE_ARCH, DEVICE_PLATFORM, type DeviceArch } from "@repo/features/device-agent-wire";
+import { HOST_TARGET, type HostTarget, hostTarballName } from "@repo/features/host-release";
+import {
+  packedRelease,
+  type ReleaseSources,
+  ROOT_FOLDER,
+  stagedRelease,
+} from "./release-layout.js";
 
 const APP = join(import.meta.dirname, "..");
 const REPOSITORY = join(APP, "..", "..");
 /** Where a checked pinned archive is kept between runs: the repository's own scratch, which git ignores. */
 const KEPT_PINS = join(REPOSITORY, ".build", "pins");
 const RELEASE = join(APP, "dist", "release");
-const ROOT_FOLDER = "luke-host";
-
-/** One time every entry of the tarball is stamped with, so the same contents make the same bytes. */
-const STAMP = "2026-01-01T00:00:00Z";
-
-/** GNU tar, whose flags the tarball is written with: a Mac's own `tar` is bsdtar, and GNU's is `gtar` there. */
-const GNU_TAR = process.platform === DEVICE_PLATFORM.DARWIN ? "gtar" : "tar";
 
 /** Each Linux architecture's release target. */
 const LINUX_TARGETS: Readonly<Record<DeviceArch, HostTarget>> = {
@@ -63,31 +54,16 @@ const LINUX_TARGETS: Readonly<Record<DeviceArch, HostTarget>> = {
   [DEVICE_ARCH.ARM64]: HOST_TARGET.LINUX_ARM64,
 };
 
-const USAGE =
-  "usage: package.ts --arch x64|arm64 | --os darwin --arch arm64 | --os darwin --into <folder>";
+const USAGE = "usage: package.ts --arch x64|arm64 | --os darwin --arch arm64";
 
-/** The files every release carries, by where each lands under the root folder, and where each comes from. */
-const BUNDLES = [
-  { from: join(APP, "dist", "luke-host.mjs"), to: "lib/luke-host.mjs", mode: 0o644 },
-  {
-    from: join(REPOSITORY, "packages", "agent-runner", "dist", "agent-runner.mjs"),
-    to: "lib/agent-runner.mjs",
-    mode: 0o644,
-  },
-] as const;
-
-/**
- * What a tarball carries beside them: its `luke-host` command and the
- * license. The folder a Mac's app carries has neither: its command is the
- * app's own (`HostLoginItem.swift`), and the app carries the license.
- */
-const TARBALL_ONLY = [
-  { from: join(APP, "scripts", "luke-host.sh"), to: "bin/luke-host", mode: 0o755 },
-  { from: join(REPOSITORY, "LICENSE"), to: "LICENSE", mode: 0o644 },
-  { from: join(REPOSITORY, "NOTICE"), to: "NOTICE", mode: 0o644 },
-] as const;
-
-type Copied = (typeof BUNDLES)[number] | (typeof TARBALL_ONLY)[number];
+/** Where each file a release carries comes from: both bundles, its `vespin-host` command, and the license. */
+const SOURCES: ReleaseSources = {
+  daemon: join(APP, "dist", "vespin-host.mjs"),
+  runner: join(REPOSITORY, "packages", "agent-runner", "dist", "agent-runner.mjs"),
+  command: join(APP, "scripts", "vespin-host.sh"),
+  license: join(REPOSITORY, "LICENSE"),
+  notice: join(REPOSITORY, "NOTICE"),
+};
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -100,8 +76,8 @@ function isPinned(pin: AgentToolPin, archive: Uint8Array): boolean {
 
 /**
  * The pin's archive: the copy kept in the repository's scratch from an
- * earlier run where it still checks out, so a development start stages the
- * host offline, and fetched and checked otherwise, then kept for the next.
+ * earlier run where it still checks out, so a release packaged again needs
+ * no network, and fetched and checked otherwise, then kept for the next.
  */
 async function pinnedArchive(pin: AgentToolPin): Promise<Uint8Array> {
   const kept = join(KEPT_PINS, `${pin.NAME}-${pin.SHA256}.tgz`);
@@ -136,15 +112,10 @@ async function fetchPinned(pin: AgentToolPin, folder: string, scratch: string): 
 }
 
 /** The release's files and its pinned Node laid out under `root`, fetched through `scratch`, which is removed after. */
-async function stage(root: string, copied: readonly Copied[], node: AgentToolPin): Promise<void> {
+async function stage(root: string, node: AgentToolPin): Promise<void> {
   const scratch = join(dirname(root), ".scratch");
-  rmSync(root, { recursive: true, force: true });
+  stagedRelease(root, SOURCES);
   mkdirSync(scratch, { recursive: true });
-  for (const file of copied) {
-    mkdirSync(dirname(join(root, file.to)), { recursive: true });
-    copyFileSync(file.from, join(root, file.to));
-    chmodSync(join(root, file.to), file.mode);
-  }
   await fetchPinned(node, join(root, "node"), scratch);
   rmSync(scratch, { recursive: true, force: true });
 }
@@ -157,26 +128,12 @@ async function packageTarball(target: HostTarget, node: AgentToolPin): Promise<v
   const name = hostTarballName(version, target);
   const staging = join(RELEASE, target);
   rmSync(staging, { recursive: true, force: true });
-  await stage(join(staging, ROOT_FOLDER), [...BUNDLES, ...TARBALL_ONLY], node);
+  await stage(join(staging, ROOT_FOLDER), node);
   const tarball = join(RELEASE, name);
-  execFileSync(GNU_TAR, [
-    "--create",
-    "--gzip",
-    "--file",
-    tarball,
-    "--directory",
-    staging,
-    "--owner=0",
-    "--group=0",
-    "--numeric-owner",
-    "--mode=go-w,a-s",
-    "--sort=name",
-    `--mtime=${STAMP}`,
-    ROOT_FOLDER,
-  ]);
+  packedRelease(staging, tarball);
+  rmSync(staging, { recursive: true, force: true });
   const digest = sha256(readFileSync(tarball));
   writeFileSync(`${tarball}.sha256`, `${digest}  ${name}\n`);
-  rmSync(staging, { recursive: true, force: true });
   process.stdout.write(`${name} ${digest}\n`);
 }
 
@@ -185,13 +142,8 @@ async function main(): Promise<void> {
   const given = process.argv.slice(2);
   const { values } = parseArgs({
     args: given[0] === "--" ? given.slice(1) : given,
-    options: { arch: { type: "string" }, os: { type: "string" }, into: { type: "string" } },
+    options: { arch: { type: "string" }, os: { type: "string" } },
   });
-  if (values.os === DEVICE_PLATFORM.DARWIN && values.into !== undefined) {
-    await stage(values.into, BUNDLES, NODE_MAC_PIN);
-    process.stdout.write(`Staged the host for macOS in ${values.into}\n`);
-    return;
-  }
   // Note that a Mac release is Apple silicon's alone, since NODE_MAC_PIN is its Node.
   if (values.os === DEVICE_PLATFORM.DARWIN) {
     if (values.arch !== DEVICE_ARCH.ARM64) throw new Error(USAGE);

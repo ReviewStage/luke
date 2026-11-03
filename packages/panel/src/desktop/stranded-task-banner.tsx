@@ -1,4 +1,4 @@
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { TaskBanner } from "./task-banner.js";

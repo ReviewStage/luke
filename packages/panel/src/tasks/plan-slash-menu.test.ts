@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Task } from "@luke/features/task-wire";
+import type { Task } from "@repo/features/task-wire";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -136,7 +136,7 @@ function menuRows(container: HTMLElement): string[] | undefined {
   const menu = container.querySelector<HTMLElement>('[role="listbox"][aria-label="Blocks"]');
   if (menu === null) return undefined;
   return [...menu.querySelectorAll<HTMLElement>('[role="option"]')].map((row) =>
-    (row.querySelector(".luke-combobox-option-label")?.textContent ?? row.textContent ?? "").trim(),
+    (row.querySelector(".ui-combobox-option-label")?.textContent ?? row.textContent ?? "").trim(),
   );
 }
 

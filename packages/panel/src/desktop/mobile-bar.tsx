@@ -1,5 +1,5 @@
-import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@luke/ui";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@repo/ui";
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -16,7 +16,7 @@ import { groupCount } from "./sidebar-fold.js";
  * sidebar's drawer for everything else.
  *
  * It stands only in a narrow room and only on a place's list, the Inbox's,
- * the Tasks page, Automations, or the window resting with no task open, so
+ * the Tasks page, Automations, or Home, so
  * a task, an agent's page, an item, or a channel being read keeps the whole
  * screen and is left by Back. Each press lands on its place's list, not on
  * the item or channel last read, since on a phone the list is the place
@@ -32,7 +32,7 @@ import { groupCount } from "./sidebar-fold.js";
  * (`places-waiting.ts`), so the two never disagree, and said in the
  * sidebar's words.
  *
- * With Channels on (STAG-547) the bar is the same: the channels are
+ * With Channels on the bar is the same: the channels are
  * listed in the drawer under the Inbox, as the sidebar lists them, and a
  * channel chosen there narrows the Inbox to it, which the bar stands over
  * with no place marked, since the drawer's row is the place it is.
@@ -83,7 +83,7 @@ export function MobileBar({
   };
   return (
     <nav
-      className="mobile-bar flex border-t border-border bg-ground px-luke-4 py-luke-2"
+      className="mobile-bar flex border-t border-border bg-ground px-ui-4 py-ui-2"
       aria-label="Places"
       {...MENU_KEEPS_CLEAR}
     >

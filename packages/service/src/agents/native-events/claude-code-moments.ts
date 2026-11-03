@@ -1,8 +1,8 @@
-import { CLAUDE_CODE_LUKE_TOOL_PREFIX, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
-import { redactCredentials } from "@luke/features/credential-redaction";
-import { integrationOfRemoteTool } from "@luke/features/integration-wire";
-import type { ToolCallSettlement } from "@luke/features/turn-run";
-import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
+import { CLAUDE_CODE_TOOL, claudeCodeWorkspaceTool } from "@repo/features/agent-tools";
+import { redactCredentials } from "@repo/features/credential-redaction";
+import { integrationOfRemoteTool } from "@repo/features/integration-wire";
+import type { ToolCallSettlement } from "@repo/features/turn-run";
+import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@repo/wire";
 import { Option, Predicate, Schema } from "effect";
 import { storedServerCall } from "../../integrations/connection-tools.js";
 import {
@@ -36,8 +36,9 @@ import {
  * CLI runs in the background, as it does by default, answers its call at
  * once with words that say only that it launched, so that call is kept
  * open instead and settled by the task notification its end posts. A call to our
- * own MCP server is named as our tool (`mcp__luke__read_inbox` is
- * `read_inbox`) and its answer read as the JSON that tool answers; a call
+ * own MCP server is named as our tool (`mcp__workspace__read_inbox` is
+ * `read_inbox`, as is the `mcp__luke__` a transcript stored before the
+ * server's rename names it by) and its answer read as the JSON that tool answers; a call
  * to an integration's own server (`mcp__linear__list_issues`) is stored as
  * eve's call of that integration's tool is, so it draws with the service's
  * mark and the tool's own name; every other call keeps the CLI's own name,
@@ -216,9 +217,8 @@ function storedClaudeCodeCall(
   name: string,
   input: WireValue,
 ): { readonly name: string; readonly input: UnparsedWireValue } {
-  if (name.startsWith(CLAUDE_CODE_LUKE_TOOL_PREFIX)) {
-    return { name: name.slice(CLAUDE_CODE_LUKE_TOOL_PREFIX.length), input };
-  }
+  const workspaceTool = claudeCodeWorkspaceTool(name);
+  if (workspaceTool !== undefined) return { name: workspaceTool, input };
   if (!name.startsWith(MCP_TOOL_PREFIX)) return { name, input };
   const named = name.slice(MCP_TOOL_PREFIX.length);
   const separator = named.indexOf(MCP_SERVER_SEPARATOR);
@@ -263,12 +263,12 @@ function settlementOf(
   content: string | readonly WireValue[] | undefined,
   isError: boolean,
 ): ToolCallSettlement {
-  const lukeTool =
+  const workspaceTool =
     !CLI_TOOL_NAMES.has(storedName) && integrationOfRemoteTool(storedName) === undefined;
-  const text = answerText(content, !lukeTool);
-  return lukeTool
-    ? toolAnswerSettlement({ lukeTool: true, text }, isError)
-    : toolAnswerSettlement({ lukeTool: false, text, output: text }, isError);
+  const text = answerText(content, !workspaceTool);
+  return workspaceTool
+    ? toolAnswerSettlement({ workspaceTool: true, text }, isError)
+    : toolAnswerSettlement({ workspaceTool: false, text, output: text }, isError);
 }
 
 /**
@@ -489,7 +489,7 @@ function taskNotificationMoments(message: WireValue): readonly NativeMoment[] {
       kind: NATIVE_MOMENT.SUBAGENT_ENDED,
       key: tool_use_id,
       settlement: toolAnswerSettlement(
-        { lukeTool: false, text, output: text },
+        { workspaceTool: false, text, output: text },
         status !== TASK_COMPLETED,
       ),
     },

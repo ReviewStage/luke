@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { user } from "@luke/database/schemas/auth";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { expectTopicsFire } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
+import { user } from "@repo/database/schemas/auth";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { expectTopicsFire } from "@repo/database/testing";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "@luke/features/github-installation-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+} from "@repo/features/github-installation-wire";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { linkInstallation, setInstallationStatus } from "../github/github-installations.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
@@ -40,7 +40,7 @@ const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
     return id;
   });
 
@@ -132,9 +132,15 @@ it.effect(
       const plugin = yield* openWorkspacePlugin;
       yield* Effect.gen(function* () {
         const userId = yield* openAccount("Ada Lovelace");
-        // Note that the workspace is made first under the account's own slug, as a racing ensure
-        // would have made it, so the ensure held below adopts it and writes only the row naming it.
-        const workspaceId = yield* openTeam(plugin, userId, `personal-${userId}`);
+        // Note that the workspace is made first under the account's own slug and marked personal,
+        // as a racing ensure would have made it, so the ensure held below adopts it and writes only
+        // the row naming it.
+        const { id: workspaceId } = yield* plugin.seams.createOrganization({
+          name: "Ada Lovelace",
+          slug: "ada-lovelace",
+          userId,
+          metadata: { personal: true },
+        });
 
         yield* wakesTheWorkspaces(
           ensurePersonalWorkspace(userId, plugin.seams),

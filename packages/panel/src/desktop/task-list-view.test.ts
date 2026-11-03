@@ -6,11 +6,11 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type TasklessAgent,
-} from "@luke/features/agent-wire";
-import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+} from "@repo/features/agent-wire";
+import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@repo/features/task-wire";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -178,7 +178,7 @@ let tasksPageOpened = 0;
 /** Keeps Assigned to › Anyone for `workspace`, as a reader who chose it on an earlier launch has, for a test of what the list draws whoever's it is. */
 function keepAnyone(workspace: Workspace = ACME): void {
   window.localStorage.setItem(
-    "luke.sidebarTaskViews",
+    "app.sidebarTaskViews",
     JSON.stringify({ [workspace.id]: { grouping: "repository", assignee: { kind: "anyone" } } }),
   );
 }
@@ -235,7 +235,7 @@ function mountSidebar(
 
 /** The words each standing menu item says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
-  return (item.querySelector(".luke-menu-item-label") ?? item).textContent?.trim() ?? "";
+  return (item.querySelector(".ui-menu-item-label") ?? item).textContent?.trim() ?? "";
 }
 
 /** The menu item that says `label`, in whichever menu stands. */
@@ -268,7 +268,7 @@ function groupNames(sidebar: HTMLElement): string[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
   return [
-    ...tasks.querySelectorAll(".luke-group-header-head button[aria-expanded]:not([aria-haspopup])"),
+    ...tasks.querySelectorAll(".ui-group-header-head button[aria-expanded]:not([aria-haspopup])"),
   ].map(heardName);
 }
 
@@ -279,7 +279,7 @@ function taskRows(
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
   return [...tasks.querySelectorAll(".sidebar-tasks > li > button")].map((row) => ({
-    name: row.querySelector(".luke-list-row-title")?.firstChild?.textContent ?? "",
+    name: row.querySelector(".ui-list-row-title")?.firstChild?.textContent ?? "",
     repository: row.querySelector(".sidebar-task-repository")?.textContent ?? undefined,
     face: row.querySelector(".actor-mark") !== null,
   }));
@@ -293,9 +293,7 @@ const MINE_UNASSIGNED = [
 
 /** The words a card hung now names its subject by. */
 function cardName(): string | undefined {
-  return (
-    document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent ?? undefined
-  );
+  return document.querySelector(".ui-tooltip-card .ui-hover-card-name")?.textContent ?? undefined;
 }
 
 /** The words of each item of the menu standing last, its glyph left out. */
@@ -320,7 +318,7 @@ async function mountRead(
 /** What the Tasks head says, which the list is called by too. */
 function headWords(sidebar: HTMLElement): string | undefined {
   const list = sidebar.querySelector(TASK_LIST);
-  const said = list?.querySelector(".luke-group-header-lead")?.textContent ?? undefined;
+  const said = list?.querySelector(".ui-group-header-lead")?.textContent ?? undefined;
   assert.equal(
     list?.getAttribute("aria-label") ?? undefined,
     said,
@@ -354,7 +352,7 @@ test("View options offers Group by, Repository or None, and Assigned to: Me, Any
   assert.deepEqual(
     [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]') ?? [])].map((item) => [
       itemLabel(item),
-      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
       item.getAttribute("aria-checked"),
     ]),
     [
@@ -399,7 +397,7 @@ test("the pins stand in a section of their own above Tasks, whatever the view li
   const sidebar = mountSidebar(ACME, [...TASKS, pinnedTheirs]);
   const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(pinned?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+    [...(pinned?.querySelectorAll(".ui-list-row-title") ?? [])].map(
       (name) => name.firstChild?.textContent,
     ),
     ["Onboarding rewrite", "Release checklist"],
@@ -436,7 +434,7 @@ test("a list of your own that holds nothing says so, and Show all lists everyone
   const theirs = TASKS.filter((each) => each.createdBy?.userId === CHARLES);
   const sidebar = await mountRead(ACME, theirs);
   assert.equal(taskRows(sidebar).length, 0);
-  const note = [...sidebar.querySelectorAll(".luke-note-line")].find((each) =>
+  const note = [...sidebar.querySelectorAll(".ui-note-line")].find((each) =>
     each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
@@ -450,7 +448,7 @@ test("with every task pinned, a filter still says it leaves nothing under Tasks,
   const pinnedAll = TASKS.map((each, at) => ({ ...each, pinnedAt: 900 + at }));
   const sidebar = await mountRead(ACME, pinnedAll);
   choose(sidebar, "Assigned to", "Charles Pan");
-  const notes = [...sidebar.querySelectorAll(".luke-note-line")].map((note) => note.textContent);
+  const notes = [...sidebar.querySelectorAll(".ui-note-line")].map((note) => note.textContent);
   assert.ok(
     notes.some((note) => note?.startsWith("No tasks match this view.")),
     "the empty filter says so",
@@ -482,7 +480,7 @@ test("in one run, a task with no repository says so on its row", async () => {
 test("an empty workspace says only that it holds no tasks", async () => {
   const sidebar = await mountRead(ACME, []);
   // Note that the pinned section's own "Drag tasks here to pin them" is a line of the sidebar too.
-  const notes = [...sidebar.querySelectorAll(".luke-note-line")]
+  const notes = [...sidebar.querySelectorAll(".ui-note-line")]
     .map((note) => note.textContent)
     .filter((note) => !note?.startsWith("Drag tasks here"));
   assert.deepEqual(notes, ["No tasks yet."]);
@@ -576,7 +574,7 @@ test("an automation's run that finished and holds nothing of the reader's stands
 test("the agent whose page stands is the row the sidebar marks", () => {
   const sidebar = mountSidebar(ACME, TASKS, [TRIAGE], "a-1");
   const marked = [...sidebar.querySelectorAll('[aria-current="page"]')].map(
-    (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent,
+    (row) => row.querySelector(".ui-list-row-title")?.firstChild?.textContent,
   );
   assert.deepEqual(marked, ["Triage overnight issues"]);
 });
@@ -670,7 +668,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   const sidebar = mountSidebar(ACME, TASKS, [pinned, SWEEP]);
   const section = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(section?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+    [...(section?.querySelectorAll(".ui-list-row-title") ?? [])].map(
       (name) => name.firstChild?.textContent,
     ),
     ["Triage overnight issues", "Release checklist"],
@@ -720,7 +718,7 @@ function rowMarks(sidebar: HTMLElement, title: string): string[] {
     (each) => each.querySelector("button")?.textContent?.includes(title) === true,
   );
   assert.ok(item, `the row of ${title} stands`);
-  return [...item.querySelectorAll(".luke-list-row-actions button")].map(
+  return [...item.querySelectorAll(".ui-list-row-actions button")].map(
     (button) => button.getAttribute("aria-label") ?? "",
   );
 }
@@ -733,7 +731,7 @@ test("a one-off agent's row draws Pin and Archive at its end where a task's row 
   assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), ["Pin", "Archive"]);
   const pin = [
     ...(sidebar.querySelectorAll<HTMLButtonElement>(
-      '.luke-list-row-actions button[aria-label="Pin"]',
+      '.ui-list-row-actions button[aria-label="Pin"]',
     ) ?? []),
   ].find((button) => button.closest("li")?.textContent?.includes("Triage overnight issues"));
   assert.ok(pin);
@@ -767,7 +765,7 @@ test("the list holds the tasks to do and in progress, each led by its status's m
     ["Fix Safari login", "CSV export"],
   );
   const marks = [
-    ...sidebar.querySelectorAll(`${TASK_LIST} .luke-list-row-leading .luke-task-status-mark`),
+    ...sidebar.querySelectorAll(`${TASK_LIST} .ui-list-row-leading .ui-task-status-mark`),
   ].map((mark) => mark.getAttribute("data-status"));
   assert.deepEqual(marks, [TASK_STATUS.IN_PROGRESS, TASK_STATUS.TODO]);
   assert.equal(hiddenLine(sidebar)?.textContent, "3 more in Backlog, Done");
@@ -790,8 +788,8 @@ function heardFaces(sidebar: HTMLElement): [string, string | undefined][] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
   return [...tasks.querySelectorAll(".sidebar-tasks > li > button")].map((row) => [
-    row.querySelector(".luke-list-row-title")?.firstChild?.textContent ?? "",
-    row.querySelector(".luke-list-row-title .luke-visually-hidden:last-child")?.textContent ??
+    row.querySelector(".ui-list-row-title")?.firstChild?.textContent ?? "",
+    row.querySelector(".ui-list-row-title .ui-visually-hidden:last-child")?.textContent ??
       undefined,
   ]);
 }
@@ -814,7 +812,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
 
   assert.equal(headWords(sidebar), "Charles Pan's tasks");
   assert.equal(taskRows(sidebar).length, 0);
-  const note = [...sidebar.querySelectorAll(".luke-note-line")].find((each) =>
+  const note = [...sidebar.querySelectorAll(".ui-note-line")].find((each) =>
     each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
@@ -844,7 +842,7 @@ test("Assigned to says the members could not be read, with Retry, after Me and A
         []),
     ].map((item) => [
       itemLabel(item),
-      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
     ]);
   };
 

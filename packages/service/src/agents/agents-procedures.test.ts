@@ -1,24 +1,30 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { archiveAgent, createAgent, readAgent } from "@luke/database/models/agent-store";
-import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
-import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { lapsedSandboxLeases, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { createTask } from "@luke/database/models/task-store";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { Database } from "@repo/database/core/query";
+import { archiveAgent, createAgent, readAgent } from "@repo/database/models/agent-store";
+import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
+import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { lapsedSandboxLeases, sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { createTask } from "@repo/database/models/task-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
   type TerminalSummary,
-} from "@luke/features/terminal-wire";
-import { noNetwork } from "@luke/wire/testing";
+} from "@repo/features/terminal-wire";
+import { noNetwork } from "@repo/wire/testing";
 import { Clock, type Context, Duration, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import {
+  recordingProductAnalytics,
+  SERVER_AGENT_TOOL,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
@@ -42,7 +48,7 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * tasks, and sessions throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SHELL: TerminalSummary = {
   id: "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d",
   title: "zsh",
@@ -96,6 +102,7 @@ const openAgentWith = (options: { readonly claimed: boolean }) =>
       planSnapshot: null,
       prompt: null,
       repository: "acme/relay",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -141,6 +148,7 @@ const openTokenAgent = Effect.gen(function* () {
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   const { agent } = started.value;
@@ -151,6 +159,15 @@ const openTokenAgent = Effect.gen(function* () {
   );
   return { userId, reader, tokenless, agent };
 });
+
+/** What the routes counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The tools the account was counted as opening, each with the workspace it was counted in, in order. */
+const toolsCounted = (userId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.AGENT_TOOL_OPEN)
+    .map((event) => ({ workspaceId: event.workspaceId, ...event.properties }));
 
 /** The agents procedures over the test's store and the sandbox given, each bearer answering for the account it maps to. */
 const standing = (
@@ -169,6 +186,7 @@ const standing = (
         Layer.mergeAll(
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
+          ANALYTICS.layer,
           noNetwork,
         ),
       ),
@@ -179,7 +197,6 @@ const standing = (
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-        eveOrigin: () => undefined,
         sandbox,
         sessionSandboxes,
         keepAwake,
@@ -276,6 +293,7 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         assert.equal(started.status, 409);
         assert.deepEqual(started.body, { error: HOSTED_API_ERROR.SANDBOX_STOPPED });
         assert.equal(woken, false, "nothing but the resume path wakes the sandbox");
+        assert.deepEqual(toolsCounted(userId), [], "a shell refused is not counted");
         assert.deepEqual(resumed.body, { sandbox: SANDBOX_STATE.RUNNING });
         assert.deepEqual(sandbox.asked.at(-1), { what: "resume", sessionId });
       }),
@@ -356,6 +374,9 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
 
       assert.equal(started.status, 201);
       assert.notEqual(started.body.terminal.id, SHELL.id);
+      assert.deepEqual(toolsCounted(userId), [
+        { workspaceId: agent.organizationId, tool: SERVER_AGENT_TOOL.TERMINAL },
+      ]);
     }),
   );
 

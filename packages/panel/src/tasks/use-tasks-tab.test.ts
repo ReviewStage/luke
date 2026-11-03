@@ -2,46 +2,46 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+} from "@repo/features/agent-wire";
+import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import {
   LINK_PLACE,
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/link-grammar";
-import { MENTION_KIND } from "@luke/features/mention-link";
-import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
+} from "@repo/features/link-grammar";
+import { MENTION_KIND } from "@repo/features/mention-link";
+import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
   PLAN_ACTOR,
   TASK_CREATE_RELATION_KIND,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksView,
-} from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
-import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { EXPERIMENT } from "@luke/settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { timeRuntime } from "@luke/ui";
-import { memoryHistory } from "@luke/ui/history-adapter";
-import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@repo/host/app-state";
+import type { PortActKind, PortActResult } from "@repo/host/contract";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
+import { timeRuntime } from "@repo/ui";
+import { memoryHistory } from "@repo/ui/history-adapter";
+import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -537,6 +537,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
         prompt: "Dark mode",
         attachments: [],
         choice: undefined,
+        disabledServers: [],
       },
     });
   });
@@ -693,7 +694,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     recent: readonly string[] | undefined,
   ) => {
     window.localStorage.setItem(
-      "luke.mainTabs",
+      "app.mainTabs",
       JSON.stringify({
         closedAgents: [],
         tasks:
@@ -735,7 +736,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
 
 test("a column kept while the plan, the Inbox, and the Call stood in it, and a side panel kept on its Plan tab, read with each let go, the agents' order, the tab last viewed, and the panel's other tabs still standing", async () => {
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({
       open: true,
       tabs: ["plan", "inbox", "comments"],
@@ -752,7 +753,7 @@ test("a column kept while the plan, the Inbox, and the Call stood in it, and a s
     }),
   );
   window.localStorage.setItem(
-    "luke.mainTabs",
+    "app.mainTabs",
     JSON.stringify({
       closedAgents: [],
       tasks: {
@@ -915,6 +916,41 @@ test("Show panel beside the Inbox, its item's plan's strip holding no tab, asks 
   act(() => tab.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
   assert.equal(tab.control().sidePanel.toggleAsked, true);
+});
+
+test("a Vespin link naming a task by its number opens the task the service finds by its workspace and number, and one it finds none for opens as an id naming none", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_FIND]: (payload) =>
+        Promise.resolve(
+          (payload as { number: number }).number === 42
+            ? { taskId: OTHER_TASK_ID }
+            : { failure: TASK_CALL_FAILURE.UNANSWERED },
+        ),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
+  );
+  const open = (planId: string) =>
+    act(() =>
+      tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.TASK, planId } }),
+    );
+
+  open("42");
+  await settle();
+  open("43");
+  await settle();
+
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_FIND)
+      .map((asked) => asked.payload),
+    [
+      { workspace: "acme", number: 42 },
+      { workspace: "acme", number: 43 },
+    ],
+  );
+  assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID, "43"]);
 });
 
 test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
@@ -1283,6 +1319,47 @@ test("a Vespin link to an Inbox item opens it in the window's Inbox narrowed to 
     automationId,
   });
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+test("a Vespin link to an Inbox item by its id alone opens it where the service says it stands, in the workspace the service names whatever the slug, and one the service does not find opens the Inbox on it", async () => {
+  const alerts = "alerts";
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const unknownId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
+  // The service finds the first item, and then not the second.
+  const homes = [
+    { agentId: AGENT_ID, planId: alerts, workspaceId: ACME.id },
+    { failure: AGENT_CALL_FAILURE.NOT_FOUND },
+  ] as const;
+  let asked = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () => Promise.resolve(homes[asked++] ?? homes[1]),
+    },
+  );
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.INBOX_ITEM, itemId },
+    }),
+  );
+  await settle();
+  const found = tab.control().inboxView.chosen;
+  const listed = tab.control().workspace?.id;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX_ITEM, itemId: unknownId },
+    }),
+  );
+  await settle();
+
+  assert.deepEqual(found, { taskId: alerts, itemAgentId: AGENT_ID, itemId, opened: true });
+  assert.equal(listed, ACME.id);
+  assert.equal(tab.control().inboxView.open, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { itemId: unknownId, opened: true });
 });
 
 /** The window's channel place, and the task the Inbox is narrowed to, as a surface drawing them reads them now. */
@@ -1682,7 +1759,7 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   act(() => tab.control().onSelect("alerts"));
   await settle();
   const refused = tab.control().workspace?.id;
-  const keptAfterRefusal = window.localStorage.getItem("luke.chosenWorkspace");
+  const keptAfterRefusal = window.localStorage.getItem("app.chosenWorkspace");
   opens = true;
   act(() => tab.control().onSelect("billing"));
   await settle();
@@ -1749,7 +1826,7 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so i
   assert.equal(tab.control().inboxShown, null);
 });
 
-test("the Inbox opens on nothing chosen, from its row, from a link, and as the window rests on it, whatever was chosen in it before", () => {
+test("the Inbox opens on nothing chosen, from its row and from a link, whatever was chosen in it before", () => {
   const tab = mount(
     { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
@@ -1765,14 +1842,29 @@ test("the Inbox opens on nothing chosen, from its row, from a link, and as the w
   choose();
   act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.INBOX } }));
   const fromLink = tab.control().inboxView.chosen;
-  choose();
-  act(() => tab.control().onSelect(TASK.id));
-  act(() => tab.control().onLeaveTask());
 
   assert.equal(fromRow, undefined);
   assert.equal(fromLink, undefined);
-  assert.equal(tab.control().inboxView.open, true, "leaving the plan rests on the Inbox");
-  assert.equal(tab.control().inboxView.chosen, undefined);
+});
+
+test("a workspace's Board link opens in the workspace its step names, and one naming none of the reader's stands as not found rather than in the workspace listed", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const open = (workspace: string) =>
+    act(() => tab.control().onOpenLink({ workspace, place: { kind: LINK_PLACE.BOARD } }));
+
+  open("acme");
+  const named = [tab.control().workspace?.id, tab.control().boardView.open];
+  open("xyz");
+
+  assert.deepEqual(named, [ACME.id, true]);
+  assert.deepEqual(
+    [
+      tab.control().workspace?.id,
+      tab.control().boardView.open,
+      tab.control().unknownWorkspace.open,
+    ],
+    [ACME.id, false, true],
+  );
 });
 
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
@@ -2237,7 +2329,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     ),
   );
   await settle();
-  act(() => chip.querySelector<HTMLButtonElement>(".luke-chip")?.click());
+  act(() => chip.querySelector<HTMLButtonElement>(".ui-chip")?.click());
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
@@ -2245,7 +2337,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     [
       // A row names the repository, then its owner after it.
       [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".luke-combobox-option-detail", ".luke-combobox-option-label"]
+        [".ui-combobox-option-detail", ".ui-combobox-option-label"]
           .map((part) => row.querySelector(part)?.textContent)
           .join("/"),
       ),
@@ -2630,52 +2722,22 @@ test("the Board and the Inbox stand in the plan's place in turn: opening one put
   assert.equal(tab.control().boardView.open, false);
 });
 
-test("with no plan open the window rests on the Inbox: it stands once the list lands, and closing it or any page over it lands on it again", () => {
-  const tab = mount({ shown: true, tasks: listRead([listed()]) });
-  assert.equal(tab.control().inboxView.open, true, "the window opens on the Inbox");
-
-  act(() => tab.control().inboxView.onClose());
-  assert.equal(tab.control().inboxView.open, true, "the Inbox has nothing under it to close to");
-
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().boardView.onClose());
-  assert.equal(tab.control().inboxView.open, true, "the Tasks page put away lands on the Inbox");
-  assert.equal(tab.control().resting, true, "the Inbox stands as the page rested on");
-
-  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
-  assert.equal(tab.control().resting, true, "an item chosen in it keeps it the page rested on");
-
-  act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-2" }));
-  assert.equal(tab.control().resting, false, "an item opened by a press is a place of its own");
-});
-
-test("another workspace listed with no plan open rests the window again, on that workspace's Inbox rather than the item chosen in the last", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  act(() =>
-    tab.control().inboxView.onChoose({ agentId: "agent-personal", itemId: "item-personal" }),
+test("Home from an open plan leaves it, and from Home only puts the page in its place away, asking the host nothing", () => {
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
+    { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
   );
-  assert.deepEqual(tab.control().inboxView.chosen, {
-    agentId: "agent-personal",
-    itemId: "item-personal",
-  });
+  act(() => tab.control().onGoHome());
+  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
+  assert.equal(tab.control().boundFor, undefined);
 
-  act(() => tab.control().onChooseWorkspace(ACME.id));
-  assert.equal(tab.control().inboxView.open, true, "the other workspace rests on its Inbox");
-  assert.equal(tab.control().inboxView.chosen, undefined, "on none of the last workspace's items");
-});
-
-test("an account with nothing yet rests on no page, its welcome standing, and neither does a window whose list is still read", () => {
-  const fresh = mount({ shown: true, tasks: listRead([]) });
-  assert.equal(fresh.control().page, TASKS_PAGE.HOME);
-  assert.equal(fresh.control().inboxView.open, false);
-  assert.equal(fresh.control().boardView.open, false);
-
-  const reading = mount({
-    shown: true,
-    tasks: { ...listRead([listed()]), listStatus: TASKS_READ.READING },
-  });
-  assert.equal(reading.control().inboxView.open, false);
+  const home = mount({ shown: true, tasks: listRead([]) });
+  act(() => home.control().inboxView.onOpen());
+  const toldBefore = home.told.length;
+  act(() => home.control().onGoHome());
+  assert.equal(home.control().inboxView.open, false);
+  assert.equal(home.control().page, TASKS_PAGE.HOME);
+  assert.deepEqual(home.told.slice(toldBefore), [], "the host is asked nothing");
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
@@ -2782,7 +2844,7 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
   const pin = (task: string, at: number) => ({ task, tab: "plan", label: "Plan", at });
   const kept = () =>
     window.localStorage.setItem(
-      "luke.sidePanel",
+      "app.sidePanel",
       JSON.stringify({
         open: true,
         tabs: ["plan"],
@@ -2835,7 +2897,7 @@ const readAgentPin = Schema.decodeUnknownOption(
 test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list followed live names its task, and leaves this Mac only once that pin landed or the account already pinned it", async () => {
   const kept = () =>
     window.localStorage.setItem(
-      "luke.sidePanel",
+      "app.sidePanel",
       JSON.stringify({
         open: true,
         tabs: ["plan"],
@@ -2844,7 +2906,7 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
       }),
     );
   const storedPins = () =>
-    JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").pins as unknown[];
+    JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}").pins as unknown[];
   const asked = (tab: ReturnType<typeof mount>) =>
     tab.payloads
       .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
@@ -2932,7 +2994,7 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   let note: Failure | undefined = { reason: FAILURE_REASON.OTHER, text: "unanswered" };
   await act(async () => {
     note = await tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice },
+      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice, disabledServers: [] },
     });
   });
   tab.stand({ tasks: AGENT_TASK });
@@ -3122,7 +3184,13 @@ test("New task's agent start opens its page at once on the words as its agent's 
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice: undefined },
+      handed: {
+        idempotencyKey: AGENT_KEY,
+        prompt,
+        attachments: [],
+        choice: undefined,
+        disabledServers: [],
+      },
     });
   });
 
@@ -3151,7 +3219,13 @@ test("what the developer opened while New task's agent start was out, a page and
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt: "Fix it.", attachments: [], choice: undefined },
+      handed: {
+        idempotencyKey: AGENT_KEY,
+        prompt: "Fix it.",
+        attachments: [],
+        choice: undefined,
+        disabledServers: [],
+      },
     });
   });
   act(() => tab.control().automationsView.onOpen());
@@ -3187,14 +3261,16 @@ test("New task's agent start refused after its page opened opens the card again 
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
     choice: undefined,
+    disabledServers: [],
   };
   const card = {
     repository: "acme/web",
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
     press: {
       key: AGENT_KEY,
-      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, relations: [], agent: handed },
     },
+    relations: [],
     words: handed.prompt,
   };
   act(() => tab.control().onNewTask());
@@ -3233,6 +3309,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
     prompt: "# Create an automation",
     attachments: [],
     choice: undefined,
+    disabledServers: [],
   };
   const card = {
     purpose: NEW_TASK_PURPOSE.AUTOMATION,
@@ -3240,8 +3317,9 @@ test("Create with an agent opens New task's card for an automation's agent over 
     choice: undefined,
     press: {
       key: AGENT_KEY,
-      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, relations: [], agent: handed },
     },
+    relations: [],
     words: handed.prompt,
   };
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
@@ -3711,7 +3789,7 @@ it.effect(
     Effect.gen(function* () {
       yield* TestClock.setTime(Duration.toMillis(Duration.days(30)));
       window.localStorage.setItem(
-        "luke.mainTabs",
+        "app.mainTabs",
         JSON.stringify({
           closedAgents: [],
           tasks: { [TASK.id]: { recent: [{ agent: FINISHED_ID }, { agent: AGENT_ID }] } },

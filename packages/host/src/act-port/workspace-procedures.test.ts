@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import { ORPCError } from "@orpc/client";
+import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import type {
   TasksWorkspaceGitHubConnectAnswer,
   WorkspaceInvitationsFollowed,
   WorkspacePeopleFollowed,
-} from "@luke/features/tasks-view";
-import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ORPCError } from "@orpc/client";
+} from "@repo/features/tasks-view";
+import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
 import { ALREADY_INVITED_REFUSAL, WORKSPACE_NOT_PERMITTED_REFUSAL } from "../acts.js";
 import {
@@ -45,10 +45,10 @@ const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const INVITATION = {
   id: "inv-1",
-  email: "alan@luke.test",
+  email: "alan@app.test",
   role: WORKSPACE_ROLE.MEMBER,
   expiresAt: "2026-10-16T12:00:00.000Z",
-  acceptUrl: "https://luke.test/accept-invitation.html?id=inv-1",
+  acceptUrl: "https://app.test/accept-invitation.html?id=inv-1",
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 /** A workspace's photo as the window sends it: a WebP's `data:` URL. */
@@ -63,7 +63,7 @@ const ACME = {
 const GRACE = {
   userId: "user-grace",
   name: "Grace Hopper",
-  email: "grace@luke.test",
+  email: "grace@app.test",
   role: WORKSPACE_ROLE.MEMBER,
 };
 const ALAN = { userId: "user-alan", name: "Alan Turing" };
@@ -100,6 +100,7 @@ const REFUSAL = {
     "Could not read that workspace's photo on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET]:
     "Could not change that workspace's photo on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: "Could not change that workspace's link on this system.",
 } as const;
 
 type WorkspaceKind = keyof typeof REFUSAL;
@@ -138,6 +139,7 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...WORKSPACE, photo: null } },
+  { kind: WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET, payload: { ...WORKSPACE, slug: "acme-labs" } },
 ];
 
 /** What the fake host answers, set by each test before it asks. */
@@ -204,6 +206,10 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`rename:${params.workspaceId}:${params.name}`, () =>
         script.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } },
       ),
+    workspaceSlugSet: (params) =>
+      ask(`slugSet:${params.workspaceId}:${params.slug}`, () =>
+        script.notPermitted ? refusal() : { workspace: { ...ACME, slug: params.slug } },
+      ),
     workspacePhotoSet: (params) =>
       ask(`photoSet:${params.workspaceId}:${params.photo ?? "none"}`, () => {
         if (script.notPermitted) return refusal();
@@ -235,6 +241,20 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`sentry-disconnect:${params.workspaceId}:${params.installationId}`, () =>
         script.notPermitted ? refusal() : { sentry: { configured: true, installations: [] } },
       ),
+    workspaceSlackBot: (params) =>
+      ask(`slack-bot:${params.workspaceId}`, () => ({ slackBot: { configured: true } })),
+    workspaceSlackBotConnect: (params) =>
+      ask(`slack-bot-connect:${params.workspaceId}`, () =>
+        script.notPermitted ? refusal() : { slackBot: { configured: true } },
+      ),
+    workspaceSlackBotDisconnect: (params) =>
+      ask(`slack-bot-disconnect:${params.workspaceId}`, () =>
+        script.notPermitted ? refusal() : { slackBot: { configured: true } },
+      ),
+    workspaceSlackBotNotifications: (params) =>
+      ask(`slack-bot-notifications:${params.workspaceId}`, () => ({
+        slackBot: { configured: true },
+      })),
     workspaceMembers: (params) =>
       ask(`members:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id ? { members: [GRACE], former: [ALAN] } : refusal(),

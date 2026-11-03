@@ -1,11 +1,11 @@
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { scheduleOnce } from "@luke/runtime/effect";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { scheduleOnce } from "@repo/runtime/effect";
 import {
   UPDATE_STATUS,
   type UpdateProgress,
   type UpdateSnapshot,
   type UpdateStatus,
-} from "@luke/settings/update";
+} from "@repo/settings/update";
 import { type Context, Duration, Effect, type Fiber, Schedule, Scope } from "effect";
 
 /**
@@ -21,8 +21,8 @@ export const UPDATE_ENDPOINT = {
   // The trailing slash keeps the last segment a directory under every URL
   // resolver; electron-updater normalizes a slashless base itself, but the
   // literal should not need that reading.
-  UPDATE_FEED_URL: "https://github.com/ReviewStage/luke/releases/latest/download/",
-  LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/luke/releases/latest",
+  UPDATE_FEED_URL: "https://github.com/ReviewStage/vespin/releases/latest/download/",
+  LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/vespin/releases/latest",
   CHANGELOG_PAGE_URL: `${LINK_ORIGIN}/changelog`,
 } as const;
 

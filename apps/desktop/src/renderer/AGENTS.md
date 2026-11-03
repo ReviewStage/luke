@@ -1,7 +1,7 @@
 # The renderer
 
 The panel itself, with its state and act channels, its motion, confirms,
-settings rows, and experiments, is `@luke/panel` (`packages/panel/AGENTS.md`).
+settings rows, and experiments, is `@repo/panel` (`packages/panel/AGENTS.md`).
 What lives here is the desktop's shell around it: the window's entry and
 root, the desktop's answer to the panel's platform door
 (`desktop-platform.ts`), and session replay.

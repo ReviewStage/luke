@@ -5,29 +5,29 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   createAutomation,
   recordAutomationRun,
   settleAutomationRun,
-} from "@luke/database/models/automation-store";
-import { readMessageByClientId } from "@luke/database/models/message-reads";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { savePlanText, updateTask } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
-import { inboxItem } from "@luke/database/schemas/inbox";
-import { conversations } from "@luke/database/schemas/storage";
-import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
-import { HOSTED_API_ERROR } from "@luke/features";
+} from "@repo/database/models/automation-store";
+import { readMessageByClientId } from "@repo/database/models/message-reads";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { savePlanText, updateTask } from "@repo/database/models/task-store";
+import { storeWriter } from "@repo/database/models/writer";
+import { inboxItem } from "@repo/database/schemas/inbox";
+import { conversations } from "@repo/database/schemas/storage";
+import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
+import { HOSTED_API_ERROR } from "@repo/features";
 import {
   ACCOUNT_INBOX_ARCHIVED,
   accountInboxAnswerSchema,
-} from "@luke/features/account-inbox-wire";
+} from "@repo/features/account-inbox-wire";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_STATUS,
   agentMessagesAnswerSchema,
-} from "@luke/features/agent-wire";
+} from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -35,7 +35,7 @@ import {
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   INBOX_ANSWER_LEAD,
   INBOX_APPROVAL_OPTION,
@@ -50,13 +50,14 @@ import {
   type InboxItem,
   inboxAnsweredSchema,
   inboxAnswerSchema,
+  inboxItemHomeSchema,
   inboxMessagedSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
-} from "@luke/features/inbox-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
-import type { WireBoundaryInput } from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/features/inbox-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import type { WireBoundaryInput } from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Duration, Effect, Fiber, Option, Result } from "effect";
@@ -1290,6 +1291,31 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [INBOX_MESSAGE_AUTHOR.AGENT, DEPLOY.body, INBOX_ASK_STATUS.OPEN, undefined],
         ]);
         assert.equal(countedFor(inbox.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 0);
+      }),
+  );
+
+  it.effect(
+    "a member finds where an item stands by its id alone, its agent, task, and workspace, and an account outside the workspace is answered as for an item that does not exist",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask, post } = yield* openInbox();
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const { id } = asked.success;
+        const home = (itemId: string, bearer = owner) =>
+          ask(request(INBOX_ITEM, bearer, { method: "GET", id: itemId }));
+
+        assert.deepEqual(readAnswer(inboxItemHomeSchema, HOSTED_HTTP_STATUS.OK, yield* home(id)), {
+          agentId: agent.id,
+          planId: task.id,
+          workspaceId: task.workspaceId,
+        });
+        const unknown = yield* home(randomUUID());
+        assert.deepEqual(
+          unknown,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(yield* home(id, other), unknown);
       }),
   );
 

@@ -10,7 +10,7 @@ import {
   type AutomationTargetKind,
   type AutomationTrigger,
   type AutomationTriggerKind,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
@@ -22,7 +22,7 @@ import { organization, user } from "./auth.js";
  *
  * An automation is its account's and works in its workspace: the trigger, the
  * action, and the guards are the wire's own JSON
- * (`@luke/features/automation-wire`), so a trigger kind added later is a
+ * (`@repo/features/automation-wire`), so a trigger kind added later is a
  * member of that JSON rather than a column. Two things are columns because a
  * statement reads them: `trigger_kind`, which a GitHub delivery finds its
  * automations by, and `next_run_at`, the instant a schedule is next due,
@@ -40,6 +40,8 @@ import { organization, user } from "./auth.js";
  * where a run lands: a new agent each run, or the agent `target_agent_id`
  * names, which goes null where that agent is deleted. `archive_successful`
  * archives a new agent once its run finishes without failing.
+ * `slack_delivery` sends each run's result to the automation's owner as a
+ * Slack message from the workspace's own bot once the run's agent ends.
  */
 export const automation = pgTable(
   "automation",
@@ -74,6 +76,7 @@ export const automation = pgTable(
       onDelete: "set null",
     }),
     archiveSuccessful: boolean("archive_successful").notNull().default(false),
+    slackDelivery: boolean("slack_delivery").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -117,7 +120,7 @@ export const automationRun = pgTable(
     /** A webhook firing's body as its caller sent it, bounded, for the agent's prompt; null for every other firing. */
     payload: text("payload"),
     status: text("status").$type<AutomationRunStatus>().notNull(),
-    /** Why it was skipped or failed; null while queued and once started. */
+    /** Why it was skipped or failed, or, on one that started, that it started a fresh agent in place of a gone one; null otherwise. */
     reason: text("reason").$type<AutomationRunReason>(),
     /** The coding agent it started; null before, and where that agent is gone. */
     agentId: uuid("agent_id").references(() => agentTable.id, {
@@ -142,6 +145,12 @@ export const automationRun = pgTable(
      * away by hand; null until then, and for every other run.
      */
     archiveSettledAt: timestamptz("archive_settled_at"),
+    /**
+     * When the run's result was claimed for its owner's Slack message, for
+     * an automation that delivers to Slack, so a run sends it once however
+     * often its agent's turns settle; null until then, and for every other run.
+     */
+    slackDeliveredAt: timestamptz("slack_delivered_at"),
   },
   (table) => [
     // One run per firing: a second claim of the same firing finds this row.

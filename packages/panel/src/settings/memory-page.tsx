@@ -1,16 +1,16 @@
-import type { MemorySummary } from "@luke/features/memory-wire";
-import { PRODUCT_NAME } from "@luke/features/product-name";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { MemorySummary } from "@repo/features/memory-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   countWords,
   readFailedWords,
   readingWords,
   SIGNED_OUT_WORDS,
   TERM,
-} from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+} from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
@@ -50,12 +50,12 @@ import {
   useLeaving,
   useMenu,
   VisuallyHidden,
-} from "@luke/ui";
-import { ACTOR_KIND, type Actor, actorName, personActor } from "@luke/ui/actor-model";
-import { GLYPH, ListFilterIcon } from "@luke/ui/icons";
-import { markdownTree } from "@luke/ui/markdown-words";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-model";
+import { GLYPH, ListFilterIcon } from "@repo/ui/icons";
+import { markdownTree } from "@repo/ui/markdown-words";
+import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
@@ -165,7 +165,7 @@ const MEMORIES_SKELETON: readonly {
  * link, and the ⋯, lifted over the press so a press on one is its own.
  */
 const MEMORY_ROW =
-  "memory-row relative list-none rounded-control px-row-inset ps-select-gutter py-luke-8 [&:hover]:bg-muted";
+  "memory-row relative list-none rounded-control px-row-inset ps-select-gutter py-ui-8 [&:hover]:bg-muted";
 const MEMORY_NOTE = "memory-note pointer-events-none";
 const LIFTED = "pointer-events-auto relative z-1";
 const MEMORY_WORDS = "memory-words [&_a]:pointer-events-auto [&_a]:relative [&_a]:z-1";
@@ -175,11 +175,11 @@ const SEARCH_LINE =
   "memory-search flex items-center gap-control-gap [&>:first-child]:min-w-0 [&>:first-child]:flex-1";
 
 /** The memories' list, a column of rows. */
-const MEMORY_LIST = "memory-list m-0 flex flex-col gap-luke-2 p-0";
+const MEMORY_LIST = "memory-list m-0 flex flex-col gap-ui-2 p-0";
 
 /** Where the selection bar floats: at the foot of the page, over the rows, as the Tasks list's does. */
 const SELECTION_FOOT =
-  "memory-selection pointer-events-none sticky bottom-luke-16 z-4 flex justify-center *:pointer-events-auto";
+  "memory-selection pointer-events-none sticky bottom-ui-16 z-4 flex justify-center *:pointer-events-auto";
 
 /** A Markdown node, as far as its words go: the words it holds itself, and what it holds. */
 interface WordsNode {

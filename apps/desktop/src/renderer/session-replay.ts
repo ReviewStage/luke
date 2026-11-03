@@ -1,5 +1,5 @@
 /**
- * session-replay.ts -- the desktop panel window's answer to session replay: the masked recording `@luke/panel/session-replay` runs, filed under the release build's project and an address that names no one's disk.
+ * session-replay.ts -- the desktop panel window's answer to session replay: the masked recording `@repo/panel/session-replay` runs, filed under the release build's project and an address that names no one's disk.
  *
  * What is recorded, and what is masked, is the shared controller's
  * (`packages/panel/src/session-replay.ts`), which every shell records
@@ -14,14 +14,15 @@
  * keep doing it.
  */
 
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
-import type { BundleImporter } from "@luke/panel/bundle-loader";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import type { BundleImporter } from "@repo/panel/bundle-loader";
 import {
   type ApplySessionReplay,
   sessionReplay,
   withoutOwnAddress,
-} from "@luke/panel/session-replay";
-import type { UnparsedWireValue } from "@luke/wire";
+} from "@repo/panel/session-replay";
+import type { UnparsedWireValue } from "@repo/wire";
 
 /**
  * What this window says its address is, in place of the one it has.
@@ -32,7 +33,7 @@ import type { UnparsedWireValue } from "@luke/wire";
  * properties also feed the library's own URL matching, and matching against
  * nothing is its own surprise.
  */
-const RENDERER_ADDRESS = "app://luke/panel";
+const RENDERER_ADDRESS = "app://desktop/panel";
 
 /**
  * Where macOS keeps home folders, and so where the account name sits in any
@@ -110,10 +111,19 @@ function projectApiKey(): string {
 /** The recorder's bundle, imported where the bundler put it; it registers itself as it runs. */
 const importSessionRecorder: BundleImporter<unknown> = () => import("./session-recorder/index");
 
+/**
+ * Where the recording posts: PostHog's own hosts, which the window's connect
+ * policy names (`index.html`), rather than the web's path on its own origin,
+ * because a `file://` page has no origin to proxy through and no ad blocker
+ * sees what it sends.
+ */
+const POSTHOG_HOST = { api: POSTHOG_PROXY.INGEST_ORIGIN, ui: POSTHOG_PROXY.UI_ORIGIN } as const;
+
 /** The panel window's recording, which `desktop-platform.ts` answers the panel's platform with. */
 export const applySessionReplay: ApplySessionReplay = sessionReplay({
   platform: PRODUCT_PLATFORM.DESKTOP,
   projectApiKey,
+  host: POSTHOG_HOST,
   ...ADDRESS,
   importRecorder: importSessionRecorder,
 });

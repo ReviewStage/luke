@@ -1,20 +1,20 @@
-import type { AgentInboxScope } from "@luke/features/agent-view";
-import type { WorkspaceChannels } from "@luke/features/channel-live";
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
+import type { AgentInboxScope } from "@repo/features/agent-view";
+import type { WorkspaceChannels } from "@repo/features/channel-live";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PAGE_OWNER,
   type PageLine,
   type PageOwner,
   type PagePlace,
-} from "@luke/features/page-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/page-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppHolderInbox,
   AppHolderPages,
   AppHostRead,
   AppInboxItems,
-} from "@luke/host/app-state";
+} from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect } from "react";
 import { askAct, tellAct } from "./act.js";
@@ -25,7 +25,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * use-host-read.ts -- the one way a surface reads server data: a read the host holds for the panel, drawn from app state, with where it stands and Try again.
  *
  * The host follows each read for as long as its lifetime holds it
- * (`@luke/host`'s `live-collection.ts`) and lays its rows in the app-state
+ * (`@repo/host`'s `live-collection.ts`) and lays its rows in the app-state
  * slice named for it (`LIVE_READ`), which outlives every page, so a surface
  * drawn again draws its rows in its first frame, before anything is pushed.
  * A read is loading until it first answers, failed where it said it could
@@ -132,7 +132,7 @@ function useHolderInbox(key: InboxHolderKey | undefined): HostRead<readonly Inbo
  * One task's pages, or one agent's on no task, held by this surface while
  * `place` names one, as a holder's inbox is. Note that it offers no Try
  * again, because the host reads pages that did not answer again on its own
- * (`@luke/host`'s `live-push.ts`).
+ * (`@repo/host`'s `live-push.ts`).
  */
 function useHolderPages(place: PagePlace | undefined): HeldRead<readonly PageLine[]> {
   const kind =

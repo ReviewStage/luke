@@ -12,8 +12,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
-import { SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
+} from "@repo/ui";
+import { SITE_PAGE, SiteDownload, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 type Founder = {
   readonly name: string;
@@ -63,6 +63,7 @@ export function AboutPage(): React.JSX.Element {
   return (
     <PublicPage
       banner={<SiteNavigation current={{ page: SITE_PAGE.ABOUT }} />}
+      bannerCall={<SiteDownload />}
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.ABOUT }} />}
       title="About"
     >

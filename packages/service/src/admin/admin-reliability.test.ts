@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
-import { AGENT_FAILURE } from "@luke/features/agent-wire";
-import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
+import { ADMIN_METRICS_WINDOW } from "@repo/features/admin-wire";
+import { AGENT_FAILURE } from "@repo/features/agent-wire";
+import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
 import { test } from "vitest";
 import { type AdminReliabilitySource, buildAdminReliability } from "./admin-reliability.js";
 
@@ -19,7 +19,7 @@ const NOW = Date.UTC(2026, 9, 17, 12);
 function source(overrides: Partial<AdminReliabilitySource["daily"]> = {}): AdminReliabilitySource {
   return {
     daily: {
-      lukeTurns: new Map(),
+      appTurns: new Map(),
       agentRuns: new Map(),
       abandonedTurns: new Map(),
       automationRuns: new Map(),
@@ -42,7 +42,7 @@ function source(overrides: Partial<AdminReliabilitySource["daily"]> = {}): Admin
 test("every window day stands in the series, and a day with nothing ended reads no rate", () => {
   const answer = buildAdminReliability(
     source({
-      lukeTurns: new Map([
+      appTurns: new Map([
         ["2026-10-16", { failed: 1, total: 4 }],
         // A day before the window, which the source may hold and the answer must not count.
         ["2026-10-01", { failed: 9, total: 9 }],
@@ -53,7 +53,7 @@ test("every window day stands in the series, and a day with nothing ended reads 
   );
 
   assert.deepEqual(
-    answer.daily.map((day) => [day.day, day.lukeTurns]),
+    answer.daily.map((day) => [day.day, day.appTurns]),
     [
       ["2026-10-11", null],
       ["2026-10-12", null],
@@ -64,7 +64,7 @@ test("every window day stands in the series, and a day with nothing ended reads 
       ["2026-10-17", null],
     ],
   );
-  assert.deepEqual(answer.headline.lukeTurns, { failed: 1, total: 4 });
+  assert.deepEqual(answer.headline.appTurns, { failed: 1, total: 4 });
 });
 
 test("the cards total the window's days, the automation card its skips beside its failures", () => {

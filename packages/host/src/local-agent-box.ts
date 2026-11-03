@@ -1,4 +1,4 @@
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@repo/features/device-agent-wire";
 import { Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
@@ -73,7 +73,7 @@ const GITHUB = { HOST: "github.com", USER: "x-access-token" } as const;
 const CREDENTIAL_HELPER_KEY = "credential.https://github.com.helper";
 
 /** The variable the repository's helper script reads the helper from, so no path is spliced into shell text. */
-const HELPER_VARIABLE = "LUKE_GIT_CREDENTIAL_HELPER";
+const HELPER_VARIABLE = "APP_GIT_CREDENTIAL_HELPER";
 
 /**
  * What sets gh's helper in the agent's repository, run in it: any helper
@@ -153,7 +153,7 @@ export interface AgentBox {
  * home: pnpm's store in both pnpm's settings files, and npm's cache in its
  * `.npmrc`, each written only where it stands nowhere, so whatever the
  * agent set there itself is kept. A value is quoted as JSON, which ini and
- * YAML both read, since a Mac's state stands under `Application Support`.
+ * YAML both read, since the state root's path may hold a space.
  * Note that an agent that already keeps a pnpm store of its own goes on
  * with it, because pnpm, with no terminal to ask, refuses to install into
  * a `node_modules` linked from another store; once its folder is cleared,

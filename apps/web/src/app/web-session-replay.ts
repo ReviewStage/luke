@@ -1,13 +1,13 @@
 /**
- * web-session-replay.ts -- the web app's answer to session replay: the masked recording `@luke/panel/session-replay` runs, filed under the site's project from the production deployment alone, with an address that names nothing of the tab's, and stood down in every tab when one deletes the account.
+ * web-session-replay.ts -- the web app's answer to session replay: the masked recording `@repo/panel/session-replay` runs, filed under the site's project from the production deployment alone, with an address that names nothing of the tab's, and stood down in every tab when one deletes the account.
  *
  * What is recorded, and what is masked, is the shared controller's
  * (`packages/panel/src/session-replay.ts`), the same the desktop's panel
  * window records through, so the tab records exactly what the Mac app does:
  * every word masked. Whether to record at all is the host's word, as on the
  * desktop. What this file decides is only what is the tab's own: the project
- * key, the address it says it has, where its recorder's chunk is, and what
- * the other tabs of this browser say.
+ * key, where it posts, the address it says it has, where its recorder's chunk
+ * is, and what the other tabs of this browser say.
  *
  * Each tab runs a host of its own, so an account deleted in one tab is
  * nothing its neighbours' hosts hear of until their next read finds the
@@ -17,10 +17,11 @@
  * own, until that tab sees a sign-in after the sign-out that follows.
  */
 
-import { PRODUCT_PLATFORM } from "@luke/features/analytics";
-import type { AppPlatform } from "@luke/panel/app-platform";
-import type { BundleImporter } from "@luke/panel/bundle-loader";
-import { type ApplySessionReplay, sessionReplay } from "@luke/panel/session-replay";
+import { PRODUCT_PLATFORM } from "@repo/features/analytics";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import type { AppPlatform } from "@repo/panel/app-platform";
+import type { BundleImporter } from "@repo/panel/bundle-loader";
+import { type ApplySessionReplay, sessionReplay } from "@repo/panel/session-replay";
 import { PANEL_PATH } from "./web-address";
 import { webDeployment } from "./web-sentry";
 
@@ -42,8 +43,8 @@ const OWN_PATH = /^\/(?![/*])\S*$/u;
  * counting too.
  */
 const RECORDING_STORAGE = {
-  persistence: "luke_app_replay",
-  consent: "luke_app_replay_consent",
+  persistence: "app_replay",
+  consent: "app_replay_consent",
 } as const;
 
 /** What may follow the origin in an address on it: its path, its query, or its fragment. */
@@ -53,7 +54,7 @@ const AFTER_ORIGIN = new Set(["/", "?", "#"]);
 const PRODUCTION_DEPLOYMENT = "production";
 
 /** Where the tabs of this browser tell each other about the recording. */
-const RECORDING_CHANNEL = "luke-session-replay";
+const RECORDING_CHANNEL = "app-session-replay";
 
 /** What one tab tells the others on `RECORDING_CHANNEL`. */
 const RECORDING_NOTICE = {
@@ -116,6 +117,9 @@ const importSessionRecorder: BundleImporter<unknown> = () => import("./session-r
 const recording: ApplySessionReplay = sessionReplay({
   platform: PRODUCT_PLATFORM.WEB,
   projectApiKey,
+  // A path of whichever origin served the tab, which the web service passes on
+  // to PostHog, because ad blockers refuse PostHog's own host.
+  host: { api: POSTHOG_PROXY.PATH, ui: POSTHOG_PROXY.UI_ORIGIN },
   address: `${location.origin}${PANEL_PATH}`,
   namesOwnAddress: namesAddress,
   importRecorder: importSessionRecorder,

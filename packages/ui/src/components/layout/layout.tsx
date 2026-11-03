@@ -43,9 +43,9 @@ import { motionRows } from "../list-motion/list-motion.js";
 /** The room between items, by what they are: from none, through a list's rows and a glyph and its words, to two sections of a pane and two of a page. */
 export const GAP = {
   NONE: "none",
-  /** A list's rows, as a list of rows stands them (`--luke-list-gap`). */
+  /** A list's rows, as a list of rows stands them (`--ui-list-gap`). */
   ROW: "row",
-  /** The parts of one item, close enough to read as one (`--luke-tight-gap`). */
+  /** The parts of one item, close enough to read as one (`--ui-tight-gap`). */
   TIGHT: "tight",
   /** A list's items that each stand as a box of their own: cards, threads, people. */
   ITEM: "item",
@@ -54,9 +54,9 @@ export const GAP = {
   FIELD: "field",
   /** Blocks of words one under another, as comments in a thread stand. */
   BLOCK: "block",
-  /** Two groups inside a pane or a form (`--luke-section-gap`). */
+  /** Two groups inside a pane or a form (`--ui-section-gap`). */
   SECTION: "section",
-  /** Two sections of a page, Settings' and every other page's (`--luke-page-section-gap`). */
+  /** Two sections of a page, Settings' and every other page's (`--ui-page-section-gap`). */
   PAGE: "page",
 } as const;
 
@@ -158,6 +158,16 @@ function listRole(element: LayoutElement): "list" | undefined {
   return element === LAYOUT_ELEMENT.UL || element === LAYOUT_ELEMENT.OL ? "list" : undefined;
 }
 
+/**
+ * Whether the browser is kept from checking a form's fields, which it always
+ * is: its own bubble is drawn outside the design system, so the form's owner
+ * checks what it holds on submit and says what is wrong in the field's
+ * `ErrorLine` (`FormField`'s `error`).
+ */
+function browserUnchecked(element: LayoutElement): true | undefined {
+  return element === LAYOUT_ELEMENT.FORM ? true : undefined;
+}
+
 interface LayoutProps {
   gap?: Gap;
   align?: Align;
@@ -222,8 +232,9 @@ export function Stack({
     Element,
     {
       ...named,
-      className: layoutClass("luke-stack flex-col", gap, align, justify, inset, className),
+      className: layoutClass("ui-stack flex-col", gap, align, justify, inset, className),
       role: listRole(Element),
+      noValidate: browserUnchecked(Element),
       ...(moves ? motionRows() : {}),
       "data-gap": gap,
       "data-align": align,
@@ -261,7 +272,7 @@ export function Inline({
     {
       ...named,
       className: layoutClass(
-        cn("luke-inline", wrap && "flex-wrap", grow && "grow shrink basis-field-least"),
+        cn("ui-inline", wrap && "flex-wrap", grow && "grow shrink basis-field-least"),
         gap,
         align,
         justify,
@@ -269,6 +280,7 @@ export function Inline({
         className,
       ),
       role: listRole(Element),
+      noValidate: browserUnchecked(Element),
       ...(moves ? motionRows() : {}),
       "data-gap": gap,
       "data-align": align,
@@ -326,7 +338,7 @@ export function Fill({
       ...rest,
       ref,
       className: cn(
-        "luke-fill flex min-h-0 min-w-0 flex-1",
+        "ui-fill flex min-h-0 min-w-0 flex-1",
         flow === FILL_FLOW.ROW ? "flex-row" : "flex-col",
         clip && "overflow-clip",
         className,

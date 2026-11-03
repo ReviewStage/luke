@@ -110,16 +110,14 @@ test("a record kept before tasks had their name holds each task's choices under 
   act(() => first.control().onChoose({ changes: AGENT }));
   act(() => first.control().onPin({ task: TASK }, { changes: AGENT }, "Changes: Invite flow"));
   first.quit();
-  const { tasks, pins, ...kept } = JSON.parse(
-    window.localStorage.getItem("luke.sidePanel") ?? "{}",
-  );
+  const { tasks, pins, ...kept } = JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}");
   assert.ok(tasks, "the record keeps the task's choices");
   const earlierPins = pins.map(({ task, ...pin }: { readonly task: string }) => ({
     ...pin,
     plan: task,
   }));
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({ ...kept, plans: tasks, pins: earlierPins }),
   );
 
@@ -207,7 +205,7 @@ test("a tab pinned on an agent's own page keeps its pin across a launch, under a
   act(() => first.control().onPin({ agent: AGENT }, { changes: AGENT }, "#88 Quarantine"));
   act(() => first.control().onPin({ task: TASK }, { changes: OTHER_AGENT }, "#42 Invites"));
   first.quit();
-  const { pins, agentPins } = JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}");
+  const { pins, agentPins } = JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}");
   assert.deepEqual(
     [
       pins.map((pin: { task?: string }) => pin.task),
@@ -390,14 +388,14 @@ test("a panel kept open launches shown only where the task's strip holds a tab, 
   // Note that the tab chosen as the window quit is kept nowhere here, as a Terminal's is not.
   const kept = { open: true, tabs: ["comments"], width: 400, pins: [] };
   const opened = { opened: ["comments"], closed: [], recent: ["comments"], order: ["comments"] };
-  window.localStorage.setItem("luke.sidePanel", JSON.stringify({ ...kept, tasks: {} }));
+  window.localStorage.setItem("app.sidePanel", JSON.stringify({ ...kept, tasks: {} }));
   const bare = launch({ task: TASK, taskAgents: [], bare: true });
   assert.deepEqual(bare.control().strip, []);
   assert.equal(bare.control().open, false, "with nothing to draw it stands hidden, not empty");
   bare.quit();
 
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({ ...kept, tasks: { [TASK]: opened } }),
   );
   const held = launch({ task: TASK, taskAgents: [] });
@@ -407,7 +405,7 @@ test("a panel kept open launches shown only where the task's strip holds a tab, 
 
 test("a record kept while the Call and Code stood in the panel reads with their tabs let go from the strip, and the Call's pin let go too", () => {
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({
       open: true,
       tabs: ["board", "code", "call", "comments"],
@@ -429,7 +427,7 @@ test("a record kept while the Call and Code stood in the panel reads with their 
 
 test("an Inbox tab an earlier version pinned, a task's or an agent's, is let go, since threads open in the window's Inbox", () => {
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({
       open: false,
       tabs: ["comments"],
@@ -504,7 +502,7 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
   render(SHELL_ROOM.NARROW, usedTask(TASK));
   act(() => now().onToggle());
   assert.equal(now().open, true);
-  assert.equal(JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").open, true);
+  assert.equal(JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}").open, true);
 
   for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
     render(room, { id: undefined, holds: {}, bare: true });

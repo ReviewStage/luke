@@ -8,8 +8,8 @@ import {
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -20,7 +20,8 @@ import { toolCallView } from "./tool-call-model.js";
 /**
  * connection-names.test.ts -- a call of an MCP server's tool says the server
  * by the name its card gives: "Notion · Work" where the provider holds two
- * labelled accounts, the provider's name where it holds one, and the name its
+ * labelled accounts or one alone that carries a label, the provider's name
+ * where its one account carries none, and the name its
  * connection's id gives where the accounts were not read. Synthetic accounts.
  */
 
@@ -91,8 +92,12 @@ test("a call on one of two labelled accounts says the account's name as its card
   assert.equal(await serverSaid("notion", accounts), "Notion · Personal");
 });
 
-test("a call on a provider's only account says the provider, and one the accounts do not hold says what its id gives", async () => {
-  assert.equal(await serverSaid("notion", [{ connection: "notion", label: "Personal" }]), "Notion");
+test("a call on a provider's only account says its label where it carries one and the provider where not, and one the accounts do not hold says what its id gives", async () => {
+  assert.equal(
+    await serverSaid("notion", [{ connection: "notion", label: "Personal" }]),
+    "Notion · Personal",
+  );
+  assert.equal(await serverSaid("notion", [{ connection: "notion" }]), "Notion");
   assert.equal(await serverSaid("notion-2", []), "Notion 2");
 });
 

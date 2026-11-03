@@ -57,13 +57,13 @@ test("a link GitHub refused or the developer canceled comes back with its intent
   // Better Auth appends its own code to the error address the page handed it.
   const returned = new URL(
     `${failedLinkAddress("opaque/1")}&error=access_denied`,
-    "https://luke.test",
+    "https://app.test",
   );
   const step = connectStepFromSearch(returned.search);
   assert.equal(step.kind, CONNECT_STEP.FAILED);
   assert.equal(step.kind === CONNECT_STEP.FAILED ? step.code : undefined, "access_denied");
   const retry = step.kind === CONNECT_STEP.FAILED ? step.retry : undefined;
-  assert.deepEqual(connectStepFromSearch(new URL(retry ?? "/", "https://luke.test").search), {
+  assert.deepEqual(connectStepFromSearch(new URL(retry ?? "/", "https://app.test").search), {
     kind: CONNECT_STEP.CONNECT,
     intent: "opaque/1",
   });

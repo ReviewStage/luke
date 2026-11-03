@@ -2,7 +2,7 @@
  * reload-dialog.ts -- the question the panel asks once its renderer gave up loading: reload once more, or quit.
  */
 
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { app, type BrowserWindow, dialog, type MessageBoxOptions } from "electron";
 import { MAXIMUM_REVIVALS_PER_LOAD } from "./renderer-revival";
 

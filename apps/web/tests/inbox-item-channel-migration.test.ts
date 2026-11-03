@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
-import { Database } from "@luke/database/core/query";
-import { ensureGeneralChannel } from "@luke/database/models/channel-store";
-import { user } from "@luke/database/schemas/auth";
-import { openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
-import { postInboxThread } from "@luke/service/inbox/inbox-store";
+import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
+import { Database } from "@repo/database/core/query";
+import { ensureGeneralChannel } from "@repo/database/models/channel-store";
+import { user } from "@repo/database/schemas/auth";
+import { openWorkspace, unmigratedPgliteSqlClient } from "@repo/database/testing";
+import { postInboxThread } from "@repo/service/inbox/inbox-store";
 import { Effect, Layer, Result } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -29,7 +29,7 @@ const MIGRATION = "20261025202554_inbox_item_channel";
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-channel-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-channel-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(MIGRATION) < 0,
   );
@@ -44,7 +44,7 @@ const BEFORE_RENAME = { table: "coding_agent", kind: "coding_agent" };
 const AFTER_RENAME = { table: "agent", kind: "agent" };
 
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
+  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
 
 /**
  * A task and its agent in the account's new workspace, written as the schema of then holds them,

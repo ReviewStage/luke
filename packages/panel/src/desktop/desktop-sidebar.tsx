@@ -1,19 +1,19 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import type { AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
+import type { AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
   inPinOrder,
   type PinPlace,
   pinPositionsForInsert,
   pinPositionsForMove,
-} from "@luke/features/pin-order";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TaskSectionWrite } from "@luke/features/task-section-wire";
-import { isAgentEntry, type SectionMember } from "@luke/features/task-section-writes";
-import type { TaskAgentPin, TaskSummary } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
-import type { UpdateControl } from "@luke/settings/settings-controls";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+} from "@repo/features/pin-order";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { TaskSectionWrite } from "@repo/features/task-section-wire";
+import { isAgentEntry, type SectionMember } from "@repo/features/task-section-writes";
+import type { TaskAgentPin, TaskSummary } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import type { UpdateControl } from "@repo/settings/settings-controls";
+import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -69,9 +69,16 @@ import {
   useResizeEdge,
   useRovingKeys,
   VisuallyHidden,
-} from "@luke/ui";
-import { FolderPlusIcon, FolderXIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@luke/ui/icons";
-import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
+} from "@repo/ui";
+import {
+  FolderPlusIcon,
+  FolderXIcon,
+  HouseIcon,
+  ListTodoIcon,
+  ShieldUserIcon,
+  ZapIcon,
+} from "@repo/ui/icons";
+import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -98,15 +105,15 @@ import {
   taskRowsAssignedTo,
   taskRowsInStatuses,
   taskRowTime,
-} from "@luke/ui/task-list-model";
+} from "@repo/ui/task-list-model";
 import {
   memberSection,
   placeWrites,
   sectionOrder,
   unplaceAllWrites,
   workspaceSections,
-} from "@luke/ui/task-sections-model";
-import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+} from "@repo/ui/task-sections-model";
+import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
@@ -147,16 +154,15 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
-import { welcomed } from "./desktop-welcome.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 import { withoutFinishedRuns } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
-import { LukeIdentity } from "./luke-identity.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
+import { ProductIdentity } from "./product-identity.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -1159,7 +1165,7 @@ function RepositorySection({
         count={foldedCount(folded, group.rows.length, TASK_NOUN)}
         mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
-            <span className="sidebar-repository-pinned inline-flex flex-none text-muted-foreground [&_svg]:size-luke-12">
+            <span className="sidebar-repository-pinned inline-flex flex-none text-muted-foreground [&_svg]:size-ui-12">
               <PinIcon />
               <VisuallyHidden>(pinned)</VisuallyHidden>
             </span>
@@ -1459,6 +1465,35 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
 }
 
 /**
+ * Home's row, between Search and the Inbox and drawn as they are: the
+ * house, its name, and its chord at its end while the row is hovered or
+ * reached from the keyboard. A press goes to Home from wherever the window
+ * stands, and the row is the place shown while Home is.
+ */
+function SidebarHomeRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <NavItem
+      icon={<HouseIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.HOME)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.HOME].chord} />}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      Home
+    </NavItem>
+  );
+}
+
+/**
  * The Tasks page's row, under the Inbox's. A press opens the listed
  * workspace's tasks as a List or a Board (`tasks-page.tsx`), as its chord
  * does, and the row is the place shown while it stands. It is always offered.
@@ -1652,9 +1687,8 @@ interface DesktopSidebarProps {
  * searches the workspace's Linear issues where Linear is connected
  * (`new-task-dialog.tsx`). While words left in its card wait as the
  * workspace's draft, it wears the Draft pencil at its end, which its chord
- * takes the place of while it is hovered; none while the card or a new
- * account's welcome, whose composer shows those words, is open, as a task
- * open wears none.
+ * takes the place of while it is hovered; none while the card or Home,
+ * whose composer shows those words, is open, as a task open wears none.
  */
 function NewTaskButton({
   tasks,
@@ -1662,7 +1696,7 @@ function NewTaskButton({
   onNewTask,
 }: {
   tasks: TasksControl;
-  /** Whether New task's words are in sight: its card open, or a new account's welcome shown. */
+  /** Whether New task's words are in sight: its card open, or Home shown. */
   shown: boolean;
   onNewTask: () => void;
 }): React.JSX.Element {
@@ -1707,11 +1741,10 @@ function useFirstUsableSpan(tasks: TasksControl): void {
  * (`workspace-switcher.tsx`), or the app's identity while no workspace is read; the way to
  * a new task, Search, which opens the command palette, every task of the
  * workspace chosen, and the account's
- * row, whose menu and gear lead to Settings and the rest. The Inbox's row
- * and the Automations page's follow Search above the rule: the Inbox's
- * counts what waits on the developer and opens the window's Inbox, which is
- * also where the window rests with no task open (`resting-page.ts`), and
- * the Automations page's opens the window's Automations page. The pinned tasks, and the side panel tabs
+ * row, whose menu and gear lead to Settings and the rest. Home's row, the
+ * Inbox's, and the Automations page's follow Search above the rule: Home's
+ * goes to Home (`desktop-home.tsx`), the Inbox's counts what waits on the
+ * developer and opens the window's Inbox, and the Automations page's opens the window's Automations page. The pinned tasks, and the side panel tabs
  * pinned to the sidebar, stand in the Pinned section while any are pinned,
  * newest pinned first, under a head that folds it, every row one line whose
  * hover card says the rest; whatever the list's view says, they stand as
@@ -1840,11 +1873,14 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.adminView.onOpen();
   };
-  // A new account's welcome stands while no task is open, nothing stands in
-  // its place, and no launch is still reopening a task: New task's composer is
+  const goHome = () => {
+    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    tasks.onGoHome();
+  };
+  // Home is the place shown while no task is open, nothing stands in its
+  // place, and no launch is still reopening a task. New task's composer is
   // on it, so its row draws no Draft pencil for the words shown there.
-  const atWelcome =
-    onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME && !tasks.restoring && welcomed(tasks);
+  const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME && !tasks.restoring;
   const newTaskIn = (repository: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onNewTaskIn(repository);
@@ -2149,8 +2185,11 @@ function SidebarColumn({
       <SidebarPlaces>
         <NewTaskButton
           tasks={tasks}
-          // A person's page stands in the welcome's place without leaving its page, and draws no composer.
-          shown={tasks.newTask.open || (atWelcome && tasks.personView.userId === undefined)}
+          // A person's page stands in Home's place without leaving its page, and draws no composer.
+          shown={
+            tasks.newTask.open ||
+            (atHome && tasks.signedIn && tasks.personView.userId === undefined)
+          }
           onNewTask={chosen(newTask)}
         />
         {/* Search is a second door to the command palette, drawn as New task
@@ -2163,6 +2202,7 @@ function SidebarColumn({
         >
           Search
         </NavItem>
+        <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
         {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters, the row heading them. */}
         {channelsOn && tasks.signedIn ? (
           <SidebarChannels
@@ -2231,7 +2271,7 @@ function SidebarColumn({
       {tasks.signedIn && tasks.workspace !== undefined ? (
         <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
       ) : (
-        <LukeIdentity />
+        <ProductIdentity />
       )}
 
       {/* One scroller for the pages' rows and both sections, so neither the

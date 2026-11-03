@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { keptImageOf, lineParts, receivedPartsOf } from "@luke/database/models/attached-file-parts";
-import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
-import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
-import { PICTURE_OMISSION } from "@luke/features/conversation-picture-wire";
+import { keptImageOf, lineParts, receivedPartsOf } from "@repo/database/models/attached-file-parts";
+import { COALESCED_LINE_SEPARATOR } from "@repo/database/models/message-reads";
+import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { PICTURE_OMISSION } from "@repo/features/conversation-picture-wire";
 import type { MessageReceivedPart } from "eve/client";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "./attached-files.js";

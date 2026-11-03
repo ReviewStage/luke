@@ -5,7 +5,7 @@ import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   type AutomationFollowed,
-} from "@luke/features/automation-view";
+} from "@repo/features/automation-view";
 import { Effect } from "effect";
 import {
   type ActPortClient,

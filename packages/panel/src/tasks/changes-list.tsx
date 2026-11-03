@@ -1,4 +1,4 @@
-import type { AgentChangedFile } from "@luke/features/agent-wire";
+import type { AgentChangedFile } from "@repo/features/agent-wire";
 import {
   FILES_CHANGED_KEY,
   FILES_CHANGED_SHORTCUTS,
@@ -6,7 +6,7 @@ import {
   filesChangedKeyFor,
   type ShortcutChord,
   shortcutAria,
-} from "@luke/settings/shortcuts";
+} from "@repo/settings/shortcuts";
 import {
   BUTTON_SIZE,
   DISCLOSURE_FILL,
@@ -21,7 +21,7 @@ import {
   Text,
   TextButton,
   Tooltip,
-} from "@luke/ui";
+} from "@repo/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -60,12 +60,12 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * stage-cli's does, ⇧F shows or hides the file tree beside the list,
  * Escape lets go of the file stood on, and `?`
  * opens the sheet that lists them all (`files-changed-keys.tsx`). Each is a
- * row of `@luke/settings/shortcuts`'s Files changed table, which the press is
+ * row of `@repo/settings/shortcuts`'s Files changed table, which the press is
  * matched against and the sheet and the Keyboard shortcuts page list, so a
  * key listed is a key that answers. They answer only
  * where the press lands inside Files changed and is not typing, and go no
  * further once answered, so J and K keep their meaning everywhere else in
- * the window (the Inbox's next and previous item, `@luke/settings/shortcuts`), an
+ * the window (the Inbox's next and previous item, `@repo/settings/shortcuts`), an
  * Escape with no file stood on reaches the window's layers, and the tab's ⌘F
  * is never one of them. The file stood on is outlined in the list, marked in
  * the tree and its strip, and what the bar's ⋯ copies; with none stood on,
@@ -422,7 +422,7 @@ function PathParts({ path }: { path: string }): React.JSX.Element {
         </OneLine>
       )}
       <OneLine
-        className="diff-list-name max-w-full flex-none font-luke-medium group-data-moved/part:text-muted-foreground group-data-moved/part:[font-weight:inherit]"
+        className="diff-list-name max-w-full flex-none font-ui-medium group-data-moved/part:text-muted-foreground group-data-moved/part:[font-weight:inherit]"
         words={path.slice(cut)}
       >
         <bdi>{path.slice(cut)}</bdi>
@@ -533,7 +533,7 @@ export function FileHead({
   const letter = (
     <span
       ref={partAt(1)}
-      className="file-view-status inline-flex h-luke-16 flex-none items-center justify-center rounded-luke-6 bg-status-letter font-mono text-caption-inline font-luke-semibold text-attention data-[status=added]:text-complete data-[status=deleted]:text-danger data-[status=renamed]:text-working"
+      className="file-view-status inline-flex h-ui-16 flex-none items-center justify-center rounded-ui-6 bg-status-letter font-mono text-caption-inline font-ui-semibold text-attention data-[status=added]:text-complete data-[status=deleted]:text-danger data-[status=renamed]:text-working"
       data-status={file.status}
     >
       {STATUS_LETTER[file.status]}

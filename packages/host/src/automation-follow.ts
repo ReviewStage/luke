@@ -10,14 +10,14 @@ import {
   automationWorkspaceRunsGraceEdge,
   automationWorkspaceRunsLiveRowsSchema,
   automationWorkspaceRunsOfLiveRows,
-} from "@luke/features/automation-live";
+} from "@repo/features/automation-live";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   type AutomationFollow,
   type AutomationFollowed,
-} from "@luke/features/automation-view";
-import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+} from "@repo/features/automation-view";
+import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
 import {
   decodedLiveRows,
@@ -38,7 +38,7 @@ import {
  * (`automation-collections.ts` keeps them and builds the list), before the
  * follow carries the answer's txids on to a write waiting for them, so a
  * write confirmed on the list finds its rows already taken. A history is
- * built from its rows (`@luke/features/automation-live`) at the host's own
+ * built from its rows (`@repo/features/automation-live`) at the host's own
  * instant, and again at the one instant the clock alone moves a run's
  * agent, the end of a grace. Only what is built from the rows leaves here.
  *

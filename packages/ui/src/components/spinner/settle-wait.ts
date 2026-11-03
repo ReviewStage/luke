@@ -2,7 +2,7 @@
  * settle-wait.ts -- the one wait a ring stands out before it shows, so a wait that lands at once never flashes one.
  *
  * Every ring a wait draws, a Spinner's, a busy control's, a busy button's,
- * shows only once its wait has stood `--luke-settle-delay` (180ms), read as
+ * shows only once its wait has stood `--ui-settle-delay` (180ms), read as
  * it stands on the window, so a capture run, which zeroes it, shows the ring
  * at once. Each wait begun waits afresh, and one that ends before the delay
  * has shown nothing. The wait is an atom's work on the registry the app's
@@ -12,14 +12,14 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useState } from "react";
 import { milliseconds } from "../../motion-timing.js";
 
 /** The token the wait stands out, which a capture run zeroes. */
-const SETTLE_DELAY_TOKEN = "--luke-settle-delay";
+const SETTLE_DELAY_TOKEN = "--ui-settle-delay";
 
 /**
  * How long a wait stands before its ring shows, read where a capture run

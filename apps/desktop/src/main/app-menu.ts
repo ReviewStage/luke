@@ -12,8 +12,8 @@
  * is on.
  */
 
-import { PUSH } from "@luke/host/contract";
-import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
+import { PUSH } from "@repo/host/contract";
+import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@repo/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -26,8 +26,8 @@ import {
   shortcutAccelerator,
   shortcutLabel,
   shortcutShown,
-} from "@luke/settings/shortcuts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+} from "@repo/settings/shortcuts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import { windowPushes } from "./window/window-pushes";
 
@@ -83,12 +83,13 @@ export interface UpdateMenu {
 
 /**
  * What the menu reaches of the panel window beyond the window chosen over:
- * whether that window is the panel, and the panel brought back, for a
- * command chosen while it stands closed or behind another of the app's windows.
+ * whether that window is the panel, and the panel brought back, on the
+ * command chosen where there is one, for a press while it stands closed or
+ * behind another of the app's windows.
  */
 export interface PanelMenu {
   isPanel: (window: BaseWindow) => boolean;
-  onReopen: (command: AppCommand) => void;
+  onReopen: (command?: AppCommand) => void;
 }
 
 /** What the menu's Reload hands main: the window chosen over, to reload once nothing its page holds would be lost. */
@@ -189,6 +190,41 @@ function newTaskItem(panel: PanelMenu | undefined): MenuItemConstructorOptions {
         panel.onReopen(APP_COMMAND.NEW_TASK);
       }
     },
+  };
+}
+
+/**
+ * Actual Size, handed to the window on a click as any command is. Note that
+ * a ⌘0 reaching the menu while the panel is closed or behind another of the
+ * app's windows brings the panel back instead, as the Window menu's item
+ * named for the app does: no window's keymap stands to answer ⌘0 then, and
+ * ⌘0 is the key a Mac app's main window comes back on, as Messages' does.
+ * The zoom is left as it stood.
+ */
+function actualSizeItem(panel: PanelMenu | undefined): MenuItemConstructorOptions {
+  const handOn = sendCommand(APP_COMMAND.ACTUAL_SIZE);
+  return {
+    ...commandItem(APP_COMMAND.ACTUAL_SIZE),
+    click: (item, window: BaseWindow | undefined, event) => {
+      const panelInFront = window !== undefined && panel?.isPanel(window) === true;
+      if (panel !== undefined && event.triggeredByAccelerator && !panelInFront) panel.onReopen();
+      else handOn(item, window, event);
+    },
+  };
+}
+
+/**
+ * The Window menu's item named for the app, which brings the panel back,
+ * closed or behind, as Messages' own item does. It shows Actual Size's ⌘0,
+ * the key that brings the panel back from the menu (`actualSizeItem`), since
+ * a key reaching the menu runs the first item that names it, and View's
+ * stands before Window's.
+ */
+function mainWindowItem(appName: string, panel: PanelMenu): MenuItemConstructorOptions {
+  return {
+    label: appName,
+    accelerator: shortcutAccelerator(APP_SHORTCUTS[APP_COMMAND.ACTUAL_SIZE].chord),
+    click: () => panel.onReopen(),
   };
 }
 
@@ -309,8 +345,9 @@ function developerItem(): MenuItemConstructorOptions {
  * the people who make the app are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), a command item is
  * called what `named` says, which an experiment may rename (`shortcutLabel`), and View's
- * Developer submenu only where `developerTools` is true. New Task brings a
- * closed window back only where `panel` is given, and Reload asks before it
+ * Developer submenu only where `developerTools` is true. New Task and ⌘0
+ * bring a closed window back, and the Window menu holds an item named for
+ * the app that does, only where `panel` is given, and Reload asks before it
  * loses unsaved edits only where `reload` is.
  */
 export function appMenuTemplate(
@@ -539,7 +576,7 @@ function fullMenuTemplate(
         SEPARATOR,
         roleItem("togglefullscreen", APP_COMMAND.FULL_SCREEN),
         SEPARATOR,
-        commandItem(APP_COMMAND.ACTUAL_SIZE),
+        actualSizeItem(panel),
         // "In" is a particle here rather than the preposition a title leaves
         // lower case, so the item reads as every Mac app's Zoom In.
         { ...commandItem(APP_COMMAND.ZOOM_IN), label: "Zoom In" },
@@ -555,6 +592,7 @@ function fullMenuTemplate(
       submenu: [
         commandItem(APP_COMMAND.COMMAND_PALETTE),
         SEPARATOR,
+        commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
         commandItem(APP_COMMAND.TASKS),
         commandItem(APP_COMMAND.AUTOMATIONS),
@@ -577,6 +615,7 @@ function fullMenuTemplate(
         roleItem("minimize", APP_COMMAND.MINIMIZE),
         { role: "zoom" },
         SEPARATOR,
+        ...(panel ? [mainWindowItem(appName, panel), SEPARATOR] : []),
         { role: "front" },
       ],
     },

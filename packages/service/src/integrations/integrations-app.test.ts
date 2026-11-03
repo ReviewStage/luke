@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
+import { Database } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   INTEGRATION_ACCOUNTS_MAX,
   INTEGRATION_LANDING_STATUS,
@@ -14,9 +14,9 @@ import {
   type IntegrationProvider,
   integrationLandingPath,
   integrationStatusesAnswerSchema,
-} from "@luke/features/integration-wire";
-import type { WireBoundaryInput } from "@luke/wire";
-import { fakeHttpClientLayer, noNetwork } from "@luke/wire/testing";
+} from "@repo/features/integration-wire";
+import type { WireBoundaryInput } from "@repo/wire";
+import { fakeHttpClientLayer, noNetwork } from "@repo/wire/testing";
 import { Clock, type Context, Effect, Layer, Option, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -49,6 +49,7 @@ import {
   readIntegrationSignIn,
   renameIntegrationConnection,
 } from "./integration-store.js";
+import { INTEGRATION } from "./integrations.js";
 import {
   type IntegrationsAppSeams,
   integrationsApp,
@@ -69,12 +70,13 @@ import { integrationsProcedures } from "./integrations-procedures.js";
  * through the real GitHub App over the account rows a sign-in leaves.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const SLACK = INTEGRATION_PROVIDER.SLACK;
 const SLACK_CONNECTOR = { SLACK_CONNECTOR_UID: "oauth/slack" } as const;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 const NOTION_CONNECTOR = { NOTION_CONNECTOR_UID: "oauth/notion" } as const;
+const GMAIL = INTEGRATION_PROVIDER.GMAIL;
 
 /** The deployment the origin guard reads its own origins from. */
 const DEPLOYMENT = { VERCEL_ENV: "production", BETTER_AUTH_URL: ORIGIN } as const;
@@ -142,6 +144,36 @@ function githubServer(listed: () => readonly string[]) {
     return Response.json({ jsonrpc: "2.0", id: message.id, result });
   });
   return { layer, bearers };
+}
+
+/** A provider's MCP server that answers `tool` with `text` only to the bearer `token`, and refuses everything else. */
+function accountNameServer(token: string, tool: string, text: string) {
+  return fakeHttpClientLayer(async (_url, init) => {
+    if (new Headers(init.headers).get("authorization") !== `Bearer ${token}`) {
+      return new Response(null, { status: 401 });
+    }
+    // The session's end, and a notification, answer nothing.
+    if ((init.method ?? "GET") !== "POST") return new Response(null, { status: 200 });
+    // SAFETY: the client sends one JSON-RPC message per request.
+    const message = JSON.parse(await new Response(init.body).text()) as {
+      id?: number;
+      method: string;
+      params?: { name?: string };
+    };
+    if (message.id === undefined) return new Response(null, { status: 202 });
+    if (message.method === "tools/call" && message.params?.name !== tool) {
+      return Response.json({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32602, message: "Unknown tool" },
+      });
+    }
+    const result =
+      message.method === "tools/call"
+        ? { content: [{ type: "text", text }] }
+        : { protocolVersion: "2025-06-18", capabilities: {} };
+    return Response.json({ jsonrpc: "2.0", id: message.id, result });
+  });
 }
 
 /**
@@ -553,10 +585,10 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
     Effect.gen(function* () {
       const group = yield* standing({
         ...SLACK_CONNECTOR,
-        SLACK_ALLOWED_ACCOUNTS: "@other.example,pat@luke.example",
+        SLACK_ALLOWED_ACCOUNTS: "@other.example,pat@app.example",
       });
-      const pat = yield* openAccount("pat@luke.example");
-      const colleague = yield* openAccount("sam@luke.example");
+      const pat = yield* openAccount("pat@app.example");
+      const colleague = yield* openAccount("sam@app.example");
 
       assert.equal(yield* group.slackStatus(pat), INTEGRATION_STATUS.DISCONNECTED);
       assert.equal(yield* group.slackStatus(colleague), INTEGRATION_STATUS.UNAVAILABLE);
@@ -568,7 +600,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
     () =>
       Effect.gen(function* () {
         const anyone = yield* openAccount("quinn@elsewhere.example");
-        for (const listed of ["   ", "@", " @ , luke.example, @@elsewhere.example, quinn@"]) {
+        for (const listed of ["   ", "@", " @ , app.example, @@elsewhere.example, quinn@"]) {
           const group = yield* standing({ ...SLACK_CONNECTOR, SLACK_ALLOWED_ACCOUNTS: listed });
           assert.equal(yield* group.slackStatus(anyone), INTEGRATION_STATUS.UNAVAILABLE, listed);
         }
@@ -923,18 +955,18 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const userId = yield* openAccount("pat@unnamed.example");
         yield* beginIntegrationSignIn(
           userId,
-          firstIntegrationAccount(userId, NOTION),
+          firstIntegrationAccount(userId, SLACK),
           `state-unnamed-${userId}`,
         );
-        yield* completeIntegrationSignIn(userId, NOTION, `state-unnamed-${userId}`);
-        const unnamed = yield* standing(NOTION_CONNECTOR);
+        yield* completeIntegrationSignIn(userId, SLACK, `state-unnamed-${userId}`);
+        const unnamed = yield* standing(SLACK_CONNECTOR);
         const read = yield* unnamed.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
         assert.deepEqual(
           accountsIn(read.body).map((account) => account.label),
           [undefined],
         );
         // Asked once: a grant that names the workspace later is not asked again for it.
-        const naming = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
+        const naming = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
           names: () => "Acme",
         });
         const after = yield* naming.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
@@ -942,6 +974,200 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           accountsIn(after.body).map((account) => account.label),
           [undefined],
         );
+      }),
+  );
+
+  it.effect(
+    "a Google account, whose grant names nothing, is called by its email at Google, one stored unnamed before among them, and keeps it",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dean@google-email.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, GMAIL),
+          `state-gmail-${userId}`,
+        );
+        yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-${userId}`);
+        // As a read before Google was asked for the email left it: read once, and named nothing.
+        const [connected] = yield* readIntegrationConnections(userId);
+        yield* fillIntegrationLabel(connected ?? assert.fail("Gmail has a row"), "");
+        let down = false;
+        // Gmail's profile, answered only to the account's own token.
+        const google = fakeHttpClientLayer((url, init) =>
+          !down &&
+          url === "https://gmail.googleapis.com/gmail/v1/users/me/profile" &&
+          new Headers(init.headers).get("authorization") === `Bearer token_${userId}`
+            ? Response.json({ emailAddress: "dean.stratakos2026@gmail.example" })
+            : new Response(null, { status: 401 }),
+        );
+        const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
+        const labels = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          ({ body }) => accountsIn(body).map((account) => account.label),
+        );
+
+        assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+        // The name is kept: a Google that no longer answers still leaves it.
+        down = true;
+        assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+      }),
+  );
+
+  // Each provider's answer is shaped as its MCP server answered it when checked, over made-up values.
+  it.effect.each([
+    [
+      INTEGRATION_PROVIDER.GRANOLA,
+      "get_account_info",
+      JSON.stringify({
+        email: "ana@granola.example",
+        active_workspace: { id: "w-1", display_name: "Acme" },
+        workspaces: [{ id: "w-1", display_name: "Acme" }],
+      }),
+      "ana@granola.example",
+    ],
+    [
+      INTEGRATION_PROVIDER.MERCURY,
+      "getOrganization",
+      JSON.stringify({
+        organization: { id: "o-1", kind: "business", legalBusinessName: "Acme Inc.", dbas: [] },
+      }),
+      "Acme Inc.",
+    ],
+    [
+      INTEGRATION_PROVIDER.NEON,
+      "list_organizations",
+      JSON.stringify([{ id: "org-acme", name: "Acme", handle: "acme" }]),
+      "Acme",
+    ],
+    [
+      NOTION,
+      "notion-get-self",
+      JSON.stringify({
+        workspace: { id: "ws-1", name: "Acme HQ" },
+        user: { type: "person", id: "u-1", name: "Ana", email: "ana@notion.example" },
+      }),
+      "Acme HQ",
+    ],
+    [
+      INTEGRATION_PROVIDER.POSTHOG,
+      "organization-get",
+      'id: org-1\nname: Acme\nslug: acme\ncreated_at: "2026-01-01T00:00:00Z"\nteams[1]{id,name}:\n  1,Web',
+      "Acme",
+    ],
+    [
+      INTEGRATION_PROVIDER.SENTRY,
+      "find_organizations",
+      JSON.stringify({ organizations: [{ slug: "acme" }], hasMore: false, nextCursor: null }),
+      "acme",
+    ],
+    [
+      INTEGRATION_PROVIDER.SUPABASE,
+      "list_organizations",
+      JSON.stringify({ organizations: [{ id: "o-1", slug: "o-1", name: "Acme" }] }),
+      "Acme",
+    ],
+    // An account in several organizations, with no email to call it by, stays unnamed rather than take one of them.
+    [
+      INTEGRATION_PROVIDER.SUPABASE,
+      "list_organizations",
+      JSON.stringify({
+        organizations: [
+          { id: "o-1", slug: "o-1", name: "Acme" },
+          { id: "o-2", slug: "o-2", name: "Globex" },
+        ],
+      }),
+      undefined,
+    ],
+    [
+      INTEGRATION_PROVIDER.VERCEL,
+      "get_auth_user",
+      JSON.stringify({ result: { user: { email: "ana@vercel.example", username: "ana" } } }),
+      "ana@vercel.example",
+    ],
+    [
+      INTEGRATION_PROVIDER.YCOMBINATOR,
+      "profile",
+      JSON.stringify({
+        name: "profile",
+        result: {
+          status: "success",
+          profile: { email: "ana@yc.example", company: { name: "Acme" } },
+        },
+      }),
+      "ana@yc.example",
+    ],
+  ] as const)(
+    "a %s account whose grant names nothing is called by what its MCP server's %s answers",
+    ([provider, tool, text, expected]) =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount(`ana-${randomUUID()}@${provider}-names.example`);
+        const state = `state-${provider}-names-${userId}`;
+        yield* beginIntegrationSignIn(userId, firstIntegrationAccount(userId, provider), state);
+        yield* completeIntegrationSignIn(userId, provider, state);
+        const variable = INTEGRATION[provider].CONNECTOR_VARIABLE;
+        const group = yield* standing(
+          { [variable]: `oauth/${provider}` },
+          undefined,
+          accountNameServer(`token_${userId}`, tool, text),
+        );
+        const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+        assert.deepEqual(
+          accountsIn(read.body).map((account) => account.label),
+          [expected],
+        );
+      }),
+  );
+
+  it.effect(
+    "a provider that could not answer whose account a token is leaves the read as it was, and is asked again only once its hold lapses",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dee@google-down.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, GMAIL),
+          `state-gmail-down-${userId}`,
+        );
+        yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-down-${userId}`);
+        let down = true;
+        const google = fakeHttpClientLayer(() =>
+          down
+            ? new Response(null, { status: 503 })
+            : Response.json({ emailAddress: "dee@gmail.example" }),
+        );
+        const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
+        const accounts = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          ({ body }) => accountsIn(body).map((account) => [account.status, account.label]),
+        );
+
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
+        // Google answers again, but the account is not asked until its hold lapses.
+        down = false;
+        yield* TestClock.adjust("4 minutes");
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
+        yield* TestClock.adjust("2 minutes");
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, "dee@gmail.example"]]);
+
+        // A hold is its grant's: an account connected again within it is asked at once.
+        const other = yield* openAccount("dom@google-reconnects.example");
+        const connectOther = (state: string) =>
+          Effect.gen(function* () {
+            yield* beginIntegrationSignIn(other, firstIntegrationAccount(other, GMAIL), state);
+            yield* completeIntegrationSignIn(other, GMAIL, state);
+          });
+        const otherAccounts = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId: other }),
+          ({ body }) => accountsIn(body).map((account) => account.label),
+        );
+        yield* connectOther(`state-gmail-first-${other}`);
+        down = true;
+        assert.deepEqual(yield* otherAccounts, [undefined]);
+        down = false;
+        yield* TestClock.adjust("1 minute");
+        yield* deleteIntegrationConnection(other, GMAIL);
+        yield* connectOther(`state-gmail-again-${other}`);
+        assert.deepEqual(yield* otherAccounts, ["dee@gmail.example"]);
       }),
   );
 

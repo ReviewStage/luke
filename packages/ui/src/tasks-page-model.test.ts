@@ -5,7 +5,7 @@ import {
   type TaskPriority,
   type TaskStatus,
   type TaskSummary,
-} from "@luke/features/task-wire";
+} from "@repo/features/task-wire";
 import { expect, test } from "vitest";
 import {
   COMPLETED_WINDOW,
@@ -518,7 +518,7 @@ test("Made by keeps the tasks a person made by hand, those a coding agent made, 
   expect([...valueCounts(tasks, TASKS_FILTER_FIELD.MADE_BY)]).toEqual([
     [TASK_MAKER.PERSON, 1],
     [TASK_MAKER.AGENT, 1],
-    [TASK_MAKER.LUKE, 1],
+    [TASK_MAKER.APP, 1],
   ]);
 });
 

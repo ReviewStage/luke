@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, matchesGlob, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PAGE_SANDBOX_ORIGIN } from "@luke/features/page-frame";
-import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
-import { temporaryDirectory } from "@luke/runtime/testing";
-import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
+import { PAGE_SANDBOX_ORIGIN } from "@repo/features/page-frame";
+import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import { RESERVED_WORKSPACE_SLUGS } from "@repo/features/workspace-wire";
+import { temporaryDirectory } from "@repo/runtime/testing";
+import { PAGE_LINK_ROUTE } from "@repo/service/pages/page-links";
 import { test } from "vitest";
 import { functionPublicPath, webFunctions } from "../server/function-layout";
-import { apiRewrites, readVercelConfig, vercelConfigSource } from "../server/function-rewrites";
+import {
+  generatedRewrites,
+  readVercelConfig,
+  vercelConfigSource,
+} from "../server/function-rewrites";
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
@@ -27,7 +32,7 @@ const vercel = await readVercelConfig(WEB);
 const heldToAHost = (route: object) => "has" in route;
 
 test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes but the sandbox host's", async () => {
-  const generated = apiRewrites(await webFunctions(WEB));
+  const generated = generatedRewrites(await webFunctions(WEB));
   const { routes } = vercel.services[SERVICE.WEB];
   const locked = routes.filter(heldToAHost);
   const rest = routes.slice(locked.length);
@@ -48,13 +53,15 @@ function deploys(branch: string): boolean {
   return !refused;
 }
 
-test("a GitHub merge-queue branch, a PR media branch, or an evidence branch is not deployed, and every other branch is", () => {
+test("a GitHub merge-queue branch, an agent's branch, a PR media branch, or an evidence branch is not deployed, and every other branch is", () => {
   for (const branch of [
     "gh-readonly-queue/main/pr-3551-d1c107a6f00dbb4b1e5bd2d1b8f3a5c7e9d01234",
     "gh-readonly-queue/release/1.2/pr-7-0123456789abcdef0123456789abcdef01234567",
+    "agent/fix-relay",
+    "luke/fix-relay",
     "pr-assets",
     "pr-assets-card-redesign",
-    "evidence/luke-267",
+    "evidence/app-267",
   ]) {
     assert.equal(deploys(branch), false, branch);
   }
@@ -74,7 +81,7 @@ test("regenerating vercel.json gives back the committed file byte for byte", asy
 });
 
 test("a vercel.json key the generator does not know refuses the generation rather than being dropped", async (t) => {
-  const root = await temporaryDirectory(t, "luke-vercel-config-");
+  const root = await temporaryDirectory(t, "vercel-config-");
   const web = join(root, "apps", "web");
   mkdirSync(web, { recursive: true });
   writeFileSync(join(root, "vercel.json"), JSON.stringify({ ...vercel, images: { sizes: [256] } }));
@@ -118,9 +125,9 @@ interface HostCondition {
 /**
  * A route of the web service as the platform reads it: a rewrite to a file
  * of the build and the headers sent beside it, held to one host where it
- * names one, with the status it is answered with where it names one; a
- * redirect's status and `Location`; or headers alone that routing carries on
- * past (`continue`).
+ * names one, with the status it is answered with where it names one, or the
+ * request headers it takes off; a redirect's status and `Location`; or
+ * headers alone that routing carries on past (`continue`).
  */
 interface WebRoute {
   readonly src: string;
@@ -128,6 +135,11 @@ interface WebRoute {
   readonly dest?: string;
   readonly status?: number;
   readonly headers?: Readonly<Record<string, string>>;
+  readonly transforms?: readonly {
+    readonly type: string;
+    readonly op: string;
+    readonly target: { readonly key: string };
+  }[];
   readonly continue?: true;
 }
 
@@ -180,7 +192,7 @@ const WEB_ROUTES: readonly WebRoute[] = vercel.services[SERVICE.WEB].routes;
 /**
  * What the web service answers a path made to a host with, the app's unless
  * named, read as Vercel reads its routes, in order: each whose pattern
- * matches the whole path, whatever its case, and whose conditions the request
+ * matches the whole path, in its own case, and whose conditions the request
  * meets lays its headers on the answer, a later route's header standing in
  * for an earlier one of the same name; one that continues lets routing go on,
  * and the first that does not rewrites the path to its destination, the
@@ -191,7 +203,7 @@ function servedBy(path: string, host = APP_HOST): Served {
   const headers = new Map<string, string>();
   const named = new Map<string, string[]>();
   for (const route of WEB_ROUTES) {
-    const pattern = new RegExp(`^${route.src}$`, "iu");
+    const pattern = new RegExp(`^${route.src}$`, "u");
     if (!heldTo(route, host) || !pattern.test(path)) continue;
     for (const [name, value] of Object.entries(route.headers ?? {})) {
       const key = name.toLowerCase();
@@ -205,7 +217,10 @@ function servedBy(path: string, host = APP_HOST): Served {
         ? { file, headers, named }
         : { file, forced: route.status, headers, named };
     }
-    return { status: route.status ?? 0, location: route.headers?.Location ?? "" };
+    return {
+      status: route.status ?? 0,
+      location: path.replace(pattern, route.headers?.Location ?? ""),
+    };
   }
   return { file: undefined, headers, named };
 }
@@ -243,10 +258,15 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-test("a link to any place in Vespin, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Vespin's own is", () => {
+test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Vespin's own is", () => {
   for (const path of [
     "/app",
     "/app/",
+    "/acme",
+    "/acme/",
+    "/personal-u_1",
+    "/application",
+    "/acme/tasks",
     "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
     "/personal-u_1/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/",
     "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01",
@@ -264,6 +284,7 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
     "/acme/admin/user/user_9Fq2-x",
     "/acme/admin/day/2026-10-12",
     "/connect/BCDF-GHJK",
+    "/acme/settings/",
   ]) {
     assert.equal(servedFile(path), "/app.html", path);
   }
@@ -274,6 +295,18 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
   assert.equal(servedFile("/changelog"), "/changelog.html");
   assert.equal(servedFile("/changelog/page/2"), "/changelog/page/2.html");
   assert.equal(servedFile("/admin"), "/admin.html");
+  // A page of the site written with a slash after it is sent to its bare address for good, and the changelog's first page, which no file is built for, to the changelog.
+  for (const [path, location] of [
+    ["/about/", "/about"],
+    ["/privacy/", "/privacy"],
+    ["/changelog/", "/changelog"],
+    ["/changelog/page/2/", "/changelog/page/2"],
+    ["/changelog/0.24.0/", "/changelog/0.24.0"],
+    ["/changelog/page/1", "/changelog"],
+    ["/changelog/page/1/", "/changelog"],
+  ] as const) {
+    assert.deepEqual(servedBy(path), { status: 308, location }, path);
+  }
   // An API path still reaches the oRPC route with the whole path it names, and an exception its own route with the id.
   for (const path of [
     "/api/plans/x/revisions",
@@ -301,12 +334,66 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
     "/sign-in.html",
     "/favicon.svg",
     "/app/marks/codex-16.png",
+    "/robots.txt",
     "/acme/plans/x",
     "/acme/issue/i1",
-    "/acme",
-    "/application",
   ]) {
     assert.equal(servedFile(path), undefined, path);
+  }
+});
+
+test("no page of Vespin's own, by any first step a workspace's slug may not take, nor a file of the site's, is served the web app as a workspace's Home", () => {
+  // `/app` is the app's own path, which serves it by a rule of its own.
+  const reserved = [...RESERVED_WORKSPACE_SLUGS].filter((step) => step !== "app");
+  for (const step of reserved) {
+    for (const path of [`/${step}`, `/${step}/`, `/${step}.html`]) {
+      assert.notEqual(servedFile(path), "/app.html", path);
+    }
+  }
+  for (const path of [
+    "/robots.txt",
+    "/favicon.ico",
+    "/sitemap.xml",
+    "/manifest.webmanifest",
+    "/@vite",
+  ]) {
+    assert.notEqual(servedFile(path), "/app.html", path);
+  }
+});
+
+test("a first step no workspace's slug or id could be is answered the site's not-found page under a 404, and one a workspace's could be is served the web app, to say nothing of which are taken", () => {
+  // A slug is lower case but `personal-<account id>`, and an id is 32 letters and digits of either case, or a UUID.
+  for (const path of ["/About", "/Stage/", `/${"a".repeat(97)}`]) {
+    const served = servedBy(path);
+    assert.ok("file" in served && served.file === "/404.html" && served.forced === 404, path);
+  }
+  for (const path of [
+    "/xyz",
+    "/Xq3vT9bLmN2pRw7sYk4dHc6fJg8aZe1u",
+    `/personal-${"Ab3".repeat(10)}Cd-3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b`,
+  ]) {
+    assert.equal(servedFile(path), "/app.html", path);
+  }
+});
+
+test("each standalone page is served at its clean path and at its .html file's alike, under the same headers, and neither is redirected", () => {
+  for (const page of [
+    "sign-in",
+    "consent",
+    "desktop-session",
+    "accept-invitation",
+    "connect-github",
+    "github-installed",
+    "integration-connected",
+    "page-in-mac-app",
+  ]) {
+    const file = `/${page}.html`;
+    const clean = servedBy(`/${page}`);
+    const alias = servedBy(file);
+    assert.ok("file" in clean && clean.file === file && clean.forced === undefined, page);
+    // A shipped desktop and a sent invitation open the file's own address, which a route rewrites or leaves to the build's file.
+    assert.ok("file" in alias && (alias.file ?? file) === file && alias.forced === undefined, page);
+    assert.deepEqual([...clean.named], [...alias.named], page);
   }
 });
 
@@ -379,7 +466,7 @@ test("on any host but the sandbox's, a link's address reaches no route, and the 
   // A host that holds the sandbox's name within it is no spelling of the sandbox's.
   for (const host of [
     APP_HOST,
-    "luke-web-git-main-stage-review.vercel.app",
+    "vespin-web-git-main-stage-review.vercel.app",
     `www.${SANDBOX_HOST}`,
     `${SANDBOX_HOST}.example`,
     `${SANDBOX_HOST}s`,
@@ -394,15 +481,7 @@ test("on any host but the sandbox's, a link's address reaches no route, and the 
 test("every path the web app is served at sends its own Content Security Policy and no other, refuses to be framed, keeps the connect tabs it opens, and is never sniffed", () => {
   const app = WEB_ROUTES.filter((route) => route.dest === "/app.html");
   assert.ok(app.length > 0);
-  for (const path of [
-    "/app",
-    "/app/",
-    // Vercel matches a route's pattern whatever the address's case.
-    "/App",
-    "/acme/plan/p1",
-    "/acme/inbox",
-    "/acme/settings/agents",
-  ]) {
+  for (const path of ["/app", "/app/", "/acme/plan/p1", "/acme/inbox", "/acme/settings/agents"]) {
     const answer = answeredHeaders(path);
     const { headers } = answer;
     // The app is sent its own policy alone, never the site's beside it to be enforced too.
@@ -415,21 +494,17 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.deepEqual(directives.get("base-uri"), ["'self'"], path);
     assert.deepEqual(directives.get("form-action"), ["'self'"], path);
     assert.deepEqual(directives.get("frame-ancestors"), ["'none'"], path);
-    // An agent's page is framed from the sandbox's own site (`@luke/features/page-frame`), and no other.
+    // An agent's page is framed from the sandbox's own site (`@repo/features/page-frame`), and no other.
     assert.deepEqual(directives.get("frame-src"), ["'self'", PAGE_SANDBOX_ORIGIN], path);
     // The installed app's manifest and its icons are the site's own files.
     assert.deepEqual(directives.get("manifest-src"), ["'self'"], path);
     assert.ok(directives.get("img-src")?.includes("'self'"), path);
-    // The tab reaches the processor for session replay, its configuration's host among it,
-    // and Sentry's ingest in the organization's region, and no other address.
+    // The tab reaches the processor for session replay through its own origin
+    // (`@repo/features/posthog-proxy`), and Sentry's ingest in the organization's region,
+    // and no other address.
     assert.deepEqual(
       directives.get("connect-src"),
-      [
-        "'self'",
-        "https://us.i.posthog.com",
-        "https://us-assets.i.posthog.com",
-        "https://*.ingest.us.sentry.io",
-      ],
+      ["'self'", "https://*.ingest.us.sentry.io"],
       path,
     );
     assert.equal(headers.get("x-frame-options"), "DENY", path);
@@ -451,6 +526,38 @@ test("every path the web app is served at sends its own Content Security Policy 
     "/api/auth/get-session",
   ]) {
     assert.equal(answeredHeaders(path).headers.size, 0, path);
+  }
+});
+
+test("PostHog's path passes what the browser sends on to PostHog, without this origin's cookies or a page's headers", () => {
+  for (const [path, upstream] of [
+    [`${POSTHOG_PROXY.PATH}/i/v0/e/`, "https://us.i.posthog.com/i/v0/e/"],
+    [`${POSTHOG_PROXY.PATH}/s/`, "https://us.i.posthog.com/s/"],
+    [
+      `${POSTHOG_PROXY.PATH}/static/recorder.js`,
+      "https://us-assets.i.posthog.com/static/recorder.js",
+    ],
+    [
+      `${POSTHOG_PROXY.PATH}/array/phc_test/config.js`,
+      "https://us-assets.i.posthog.com/array/phc_test/config.js",
+    ],
+  ] as const) {
+    assert.equal(servedFile(path), upstream, path);
+    assert.equal(answeredHeaders(path).headers.size, 0, path);
+    const route = WEB_ROUTES.find(
+      (each) =>
+        !each.continue && heldTo(each, APP_HOST) && new RegExp(`^${each.src}$`, "iu").test(path),
+    );
+    // The session cookie is this origin's, and Vercel passes on every header a rewrite does not take off.
+    assert.ok(
+      route?.transforms?.some(
+        (transform) =>
+          transform.type === "request.headers" &&
+          transform.op === "delete" &&
+          transform.target.key === "cookie",
+      ),
+      path,
+    );
   }
 });
 
@@ -564,7 +671,7 @@ test("every HTML page the build emits is served at every address under one Conte
   }
 });
 
-test("the site's pages run scripts from this origin and PostHog's assets alone, connect to this origin and PostHog alone, and draw no inline style", () => {
+test("the site's pages run scripts from this origin alone, connect to it alone, and draw no inline style", () => {
   const site = pageAnswers().filter(
     ({ file }) => file !== "app.html" && file !== ADMIN_PAGE && !FRAMED_BY_THE_APP.has(file),
   );
@@ -572,18 +679,11 @@ test("the site's pages run scripts from this origin and PostHog's assets alone, 
   for (const { address, answer } of site) {
     const directives = directivesOf(answer.headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], address);
-    // The analytics client (`src/analytics.ts`) loads its configuration and its recorder from PostHog's assets.
-    assert.deepEqual(
-      directives.get("script-src"),
-      ["'self'", "https://us-assets.i.posthog.com"],
-      address,
-    );
+    // The analytics client (`src/analytics.ts`) loads its configuration and its recorder,
+    // and posts what it counts, through this origin (`@repo/features/posthog-proxy`).
+    assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("style-src"), ["'self'"], address);
-    assert.deepEqual(
-      directives.get("connect-src"),
-      ["'self'", "https://us.i.posthog.com", "https://us-assets.i.posthog.com"],
-      address,
-    );
+    assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
     assert.deepEqual(directives.get("img-src"), ["'self'", "data:"], address);
     // Only the app frames the sandbox's site.
     assert.equal(directives.get("frame-src"), undefined, address);
@@ -597,9 +697,9 @@ test("the maintainers' dashboard runs scripts from this origin alone and connect
     );
     assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
-    // A chart's colours are an inline sheet `@luke/ui`'s chart writes (`ChartStyle`).
+    // A chart's colours are an inline sheet `@repo/ui`'s chart writes (`ChartStyle`).
     assert.deepEqual(directives.get("style-src"), ["'self'", "'unsafe-inline'"], address);
-    // An account's picture is its provider's (`@luke/features/account-picture`).
+    // An account's picture is its provider's (`@repo/features/account-picture`).
     assert.deepEqual(
       directives.get("img-src"),
       [

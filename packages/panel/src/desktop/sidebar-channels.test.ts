@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { ACT_KIND } from "@luke/host/acts";
+import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -334,7 +334,7 @@ test("the Inbox's chevron folds the channels under it, the channel shown still s
     { currentId: "c-app" },
   );
   const rows = () =>
-    [...sidebar.querySelectorAll('[role="group"][aria-label="Channels"] .luke-nav-item')].map(
+    [...sidebar.querySelectorAll('[role="group"][aria-label="Channels"] .ui-nav-item')].map(
       (row) => row.textContent,
     );
   assert.deepEqual(rows(), ["general", "app", "launch"]);

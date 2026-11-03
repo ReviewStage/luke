@@ -21,8 +21,8 @@ import {
   Tooltip,
   useDisclosurePreviewShown,
   useDisclosureState,
-} from "@luke/ui";
-import { UNREPORTED } from "@luke/ui/reported-failure";
+} from "@repo/ui";
+import { UNREPORTED } from "@repo/ui/reported-failure";
 import type { ReactNode } from "react";
 import { copyThroughShell } from "../copy-feedback.js";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
@@ -143,7 +143,7 @@ const TOOL_LABEL_CLASS = "tool-label min-w-0 overflow-hidden whitespace-nowrap t
 /**
  * The body under an open line, set in past its icon to the line's words,
  * where a call's body, a model's reasoning, and a call's pictures stand
- * (`--transcript-gutter`, tasks.css): `@luke/ui`'s tinted card holding what a
+ * (`--transcript-gutter`, tasks.css): `@repo/ui`'s tinted card holding what a
  * call sent, a hairline between its blocks, or cards of their own one over
  * the next with no frame around them.
  */

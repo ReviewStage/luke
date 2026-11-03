@@ -15,7 +15,7 @@
  * outage, answered as unavailable for the caller to ask again.
  */
 
-import { failureKind } from "@luke/runtime/effect";
+import { failureKind } from "@repo/runtime/effect";
 import { Effect } from "effect";
 import {
   accountFastOffer,

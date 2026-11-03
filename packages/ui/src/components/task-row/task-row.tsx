@@ -1,7 +1,6 @@
 import { type KeyboardEvent, type ReactNode, type RefObject, useId, useRef } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { FoldChevronIcon } from "../../face/glyphs.js";
-import { pulseOnPress } from "../../press-pulse.js";
 import { LIST_COLUMN, TASK_PROPERTY } from "../../tasks-page-model.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, CARD_SHADOW, Card } from "../card/card.js";
@@ -133,7 +132,7 @@ const QUIET_AFTER: readonly TaskRowCell[] = [
 ];
 
 /** The ⋯'s own column, where the list keeps one: a compact button's width. */
-const MORE_COLUMN = "var(--luke-space-24)";
+const MORE_COLUMN = "var(--ui-space-24)";
 
 /** The cells a related task's row draws, in its own list: how it stands to the list's task, its chips, its key, its assignee, its pull requests, and how many of its sub-tasks are finished. */
 export const RELATED_TASK_CELLS: readonly TaskRowCell[] = [
@@ -165,7 +164,7 @@ const COLUMN_WIDTH = {
 
 /** A row's cell: a line in the caption's type, in its column, letting the pointer through to the row's press. */
 const CELL =
-  "luke-task-row-cell flex items-center gap-item-gap text-caption text-muted-foreground tabular-nums whitespace-nowrap";
+  "ui-task-row-cell flex items-center gap-item-gap text-caption text-muted-foreground tabular-nums whitespace-nowrap";
 
 /**
  * How narrow a cell may stand: as narrow as its column, but the one the ⋯
@@ -173,7 +172,7 @@ const CELL =
  * the ⋯ never reaches past it onto a control in the cell before where every
  * row leaves the last one empty.
  */
-const CELL_LEAST = { REST: "min-w-0", UNDER_MORE: "min-w-luke-24" } as const;
+const CELL_LEAST = { REST: "min-w-0", UNDER_MORE: "min-w-ui-24" } as const;
 
 /** A cell over the row's press where it holds anything, and the press's own where it stands empty. */
 const OVER_WHERE_FILLED =
@@ -211,10 +210,10 @@ const CELL_PLACE = {
 } as const satisfies Record<TaskRowCell, string>;
 
 /** A cell after the name, which steps aside while the ⋯ stands at rest over the last on a screen with no hover (`task-row.css`). */
-const AFTER = "luke-task-row-after";
+const AFTER = "ui-task-row-after";
 
 /** The ⋯'s place: out of the row's columns, at its end inset, over its press while it shows (`task-row.css`). */
-const MORE = "luke-task-row-more z-1 flex items-center";
+const MORE = "ui-task-row-more z-1 flex items-center";
 
 /**
  * A row: a subgrid of the list's columns a little taller than a control,
@@ -223,7 +222,7 @@ const MORE = "luke-task-row-more z-1 flex items-center";
  * Linear's list does, so every row's name lines up whether or not it shows one.
  */
 const ROW_FRAME =
-  "luke-task-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control py-luke-2 text-foreground [transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast),background-color_var(--luke-duration-hover)_var(--luke-motion-exit),opacity_var(--luke-duration-quick)_var(--luke-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge [&:hover]:bg-muted";
+  "ui-task-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control py-ui-2 text-foreground [transition:transform_var(--ui-duration-fast)_var(--ui-spring-fast),background-color_var(--ui-duration-hover)_var(--ui-motion-exit),opacity_var(--ui-duration-quick)_var(--ui-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge [&:hover]:bg-muted";
 
 /** A task's row by the room it keeps at its edges: its gutter at its start for its box, or its first cell at its inset. */
 const ROW = {
@@ -232,11 +231,11 @@ const ROW = {
 } as const satisfies Record<TaskRowEdges, string>;
 
 /** A draft's row, raised as a card, its hairline taken out of its inset so its cells stand on the rows' lines. */
-const DRAFT_ROW = `${ROW_FRAME} px-task-row-draft luke-task-row-draft`;
+const DRAFT_ROW = `${ROW_FRAME} px-task-row-draft ui-task-row-draft`;
 
 /** The name's cell, the one that takes the row's press, in the text's ink. */
 const NAME_CELL =
-  "luke-task-row-cell pointer-events-auto order-4 flex min-w-0 flex-col items-stretch gap-0 text-label tabular-nums whitespace-nowrap";
+  "ui-task-row-cell pointer-events-auto order-4 flex min-w-0 flex-col items-stretch gap-0 text-label tabular-nums whitespace-nowrap";
 
 /** The name's ink: the text's, or the muted ink for a row whose task is settled. */
 const NAME_INK = { REST: "text-foreground", SETTLED: "text-muted-foreground" } as const;
@@ -245,27 +244,27 @@ const NAME_INK = { REST: "text-foreground", SETTLED: "text-muted-foreground" } a
 const NESTED = "ps-list-row-nest";
 
 /** What a row's press shows: its name on one line, in the label's weight. */
-const PRESS = "luke-task-row-press flex min-w-0 items-center font-luke-medium";
+const PRESS = "ui-task-row-press flex min-w-0 items-center font-ui-medium";
 
 /** A mark beside the name, a gap from its last letter. */
-const BESIDE = "luke-task-row-beside ms-icon-gap inline-flex flex-none items-center";
+const BESIDE = "ui-task-row-beside ms-icon-gap inline-flex flex-none items-center";
 
 /** Where a row's name gives way to its field while it is renamed. */
-const EDITOR = "luke-task-row-press flex min-w-0 items-center font-luke-regular";
+const EDITOR = "ui-task-row-press flex min-w-0 items-center font-ui-regular";
 
 /** What did not land, in the name's cell. */
-const NOTE = "luke-task-row-note text-caption text-danger";
+const NOTE = "ui-task-row-note text-caption text-danger";
 
 /** A row folding the rows nested under it: its chevron, then its press. */
-const FOLDS = "luke-task-row-folds flex min-w-0 items-center";
+const FOLDS = "ui-task-row-folds flex min-w-0 items-center";
 
 /** The fold's chevron, a control of its own beside the press, standing over it, a glyph's size. */
 const FOLD =
-  "luke-task-row-fold relative z-1 me-icon-gap grid min-h-control-icon min-w-control-icon flex-none cursor-press place-items-center rounded-control border-0 bg-transparent p-0 text-muted-foreground";
+  "ui-task-row-fold relative z-1 me-icon-gap grid min-h-control-icon min-w-control-icon flex-none cursor-press place-items-center rounded-control border-0 bg-transparent p-0 text-muted-foreground";
 
 /** A list of its own: one grid of the cells its rows draw, its rows edge to edge. */
 const ROWS =
-  "luke-task-rows m-0 grid list-none grid-cols-tasks-list content-start gap-x-block-gap gap-y-0 p-0";
+  "ui-task-rows m-0 grid list-none grid-cols-tasks-list content-start gap-x-block-gap gap-y-0 p-0";
 
 /** Which way a key asks a row's fold to stand: → open, ← folded. */
 const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, ArrowLeft: false };
@@ -438,7 +437,7 @@ export function TaskRow({
           depth === 0 ? "" : NESTED,
         ].join(" ")}
         data-cell="name"
-        style={depth === 0 ? undefined : cssCustomProperties({ "--luke-list-row-depth": depth })}
+        style={depth === 0 ? undefined : cssCustomProperties({ "--ui-list-row-depth": depth })}
       >
         {fold === undefined ? (
           named
@@ -449,10 +448,10 @@ export function TaskRow({
               className={FOLD}
               aria-label={fold.label}
               aria-expanded={fold.open}
-              onClick={pulseOnPress(() => fold.onOpenChange(!fold.open))}
+              onClick={() => fold.onOpenChange(!fold.open)}
             >
               {/* Note that the chevron turns on the one turn every fold makes (`disclosure.css`). */}
-              <span className="luke-disclosure-turn" data-open={fold.open}>
+              <span className="ui-disclosure-turn" data-open={fold.open}>
                 <FoldChevronIcon />
               </span>
             </button>

@@ -1,18 +1,18 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import { utcDayKey } from "@luke/database/models/quota";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { utcDayKey } from "@repo/database/models/quota";
 import type {
   AdminMetrics,
   AdminRetentionCohort,
   AdminSignInMethods,
   AdminTrend,
-} from "@luke/features/admin-answer-wire";
+} from "@repo/features/admin-answer-wire";
 import {
   type AdminMetricsScope,
   type AdminMetricsWindow,
   type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-} from "@luke/features/admin-wire";
+} from "@repo/features/admin-wire";
 import { Clock, Effect } from "effect";
 import { DAY_MS } from "../core.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";

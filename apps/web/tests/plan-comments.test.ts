@@ -1,20 +1,22 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { createTask, savePlanText } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { messages } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { Database } from "@repo/database/core/query";
+import { archiveAgent, createAgent } from "@repo/database/models/agent-store";
+import { writePage } from "@repo/database/models/plan-pages";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { createTask, savePlanText } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { messages } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
-} from "@luke/database/testing";
-import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/agent-wire";
+} from "@repo/database/testing";
+import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@repo/features/agent-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -25,37 +27,38 @@ import {
   PLAN_COMMENT_STATUS,
   PLAN_COMMENTS_CURSOR_START,
   type PlanCommentActionRequest,
-  type PlanCommentStartRequest,
+  type PlanCommentStart,
   type PlanCommentThread,
   planCommentsAnswerSchema,
   planCommentThreadAnswerSchema,
-} from "@luke/features/plan-comment-wire";
-import type { PlanEditRequest } from "@luke/features/plan-edit";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
+} from "@repo/features/plan-comment-wire";
+import type { PlanEditRequest } from "@repo/features/plan-edit";
+import { CODER } from "@repo/service/agents/coder-host/bounds";
 import {
   type AgentSessions,
   EVE_SEND_OUTCOME,
   type EveMessage,
-} from "@luke/service/agents/eve-host/eve-sessions";
-import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
-import { recordingProductAnalytics, SERVER_EVENT } from "@luke/service/events/server-events";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { hostedFetch } from "@luke/service/orpc/handler";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import type { WebServices } from "@luke/service/runtime";
-import { planCommentsProcedures } from "@luke/service/tasks/plan-comments-procedures";
-import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
-import { connectAgentApiKeys } from "@luke/service/testing/agent-credentials";
-import { announcingClock, driven } from "@luke/service/testing/clock-driven";
-import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
+} from "@repo/service/agents/eve-host/eve-sessions";
+import { sessionSandboxesLayer } from "@repo/service/agents/session-sandboxes";
+import { recordingProductAnalytics, SERVER_EVENT } from "@repo/service/events/server-events";
+import { type AfterResponse, keptAfterResponse } from "@repo/service/http/after-response";
+import { HOSTED_HTTP_STATUS } from "@repo/service/http/http";
+import { hostedFetch } from "@repo/service/orpc/handler";
+import { modelCatalogOf } from "@repo/service/providers/model-catalog";
+import type { WebServices } from "@repo/service/runtime";
+import { planCommentsProcedures } from "@repo/service/tasks/plan-comments-procedures";
+import { tasksProcedures } from "@repo/service/tasks/tasks-procedures";
+import { connectAgentApiKeys } from "@repo/service/testing/agent-credentials";
+import { announcingClock, driven } from "@repo/service/testing/clock-driven";
+import { NO_GITHUB } from "@repo/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
-} from "@luke/service/testing/integration-connect";
-import { scriptedHarnessLayer } from "@luke/service/testing/native-harness-fake";
-import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/service/testing/integration-connect";
+import { scriptedHarnessLayer } from "@repo/service/testing/native-harness-fake";
+import { keepAwakeDetached } from "@repo/service/testing/session-sandboxes-fake";
+import { unparsedWire } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { sql } from "drizzle-orm";
 import { Clock, type Context, DateTime, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -74,7 +77,7 @@ import { SqlClient } from "effect/sql";
  * Synthetic accounts, bearers, and plans throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const EDIT = (taskId: string) => `/api/plans/${taskId}/edit`;
 
 const commentsPath = (taskId: string) => `/api/plans/${taskId}/comments`;
@@ -94,7 +97,7 @@ const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
     return id;
   });
 
@@ -139,10 +142,11 @@ const countedProperties = (userId: string, name: string) =>
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/** The services a request runs on: the test's own database and clock, the analytics, and no GitHub or model catalog. */
-const servicesOver = (clock: Clock.Clock) =>
+/** The services a request runs on: the test's own database and clock, the analytics, no GitHub or model catalog, and where a case keeps it, the work run past the answer. */
+const servicesOver = (clock: Clock.Clock, after: Layer.Layer<AfterResponse> | undefined) =>
   Effect.gen(function* () {
     return Layer.mergeAll(
+      after ?? Layer.empty,
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, clock),
@@ -155,24 +159,22 @@ const servicesOver = (clock: Clock.Clock) =>
   });
 
 /** The web runtime's services as a request runs on them: the test's own database and clock. */
-const webServicesOver = (clock: Clock.Clock) =>
+const webServicesOver = (clock: Clock.Clock, after?: Layer.Layer<AfterResponse>) =>
   Effect.gen(function* () {
     const provided = yield* Effect.context<Database>().pipe(
-      Effect.provide(yield* servicesOver(clock)),
+      Effect.provide(yield* servicesOver(clock, after)),
     );
     // SAFETY: the procedures yield the database, the clock, GitHub and the analytics alone, which is all a test provides of the web runtime's services.
     return provided as Context.Context<WebServices>;
   });
 
-/** The comments resource behind the hosted handler, answering one request on the clock handed in. */
-const commentsAnswer = (request: Request, clock: Clock.Clock) =>
+/** The comments resource behind the hosted handler, answering one request on the clock handed in, keeping the work past its answer where `after` keeps it. */
+const commentsAnswer = (request: Request, clock: Clock.Clock, after?: Layer.Layer<AfterResponse>) =>
   Effect.gen(function* () {
-    const services = yield* webServicesOver(clock);
+    const services = yield* webServicesOver(clock, after);
     const handle = hostedFetch({
       planComments: planCommentsProcedures({
         resolveUserId,
-        eveOrigin: () => undefined,
-        eve: fakeEve,
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
@@ -192,7 +194,6 @@ const answer = (routes: "comments" | "plans", request: Request) =>
       plans: tasksProcedures({
         resolveUserId,
         workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
       }),
@@ -208,7 +209,7 @@ function request(
   path: string,
   userId: string,
   query: Record<string, string>,
-  body?: PlanCommentStartRequest | PlanCommentActionRequest | PlanEditRequest,
+  body?: PlanCommentStart | PlanCommentActionRequest | PlanEditRequest,
 ): Request {
   const url = new URL(path, ORIGIN);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
@@ -280,7 +281,7 @@ const agentLink = (taskId: string, agentId: string) =>
   `[@Invite email](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
 
 /** A task's mention of the app, as a chip wrote it while a task had one. */
-const lukeLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
+const appLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
 
 /** A start of a thread on the sentence above. */
 function startBody(comment: string) {
@@ -427,7 +428,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
 
 it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   it.effect(
-    "a thread started with an agent mentioned hands it the thread as the member's message, kept as the comment thread's line, and the thread says who asked it",
+    "a thread started with an agent mentioned hands it the thread as the member's message, kept as the comment thread's line with what a window draws it by, and the thread says who asked it",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -460,7 +461,15 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         );
         assert.deepEqual(
           lines.map((line) => line.metadata),
-          [{ channel: "comment", thread_id: thread.id }],
+          [
+            {
+              channel: "comment",
+              thread_id: thread.id,
+              task_id: taskId,
+              quote: WORDS,
+              words: `${agentLink(taskId, agentId)} is withdrawing in v1?`,
+            },
+          ],
         );
         const [after] = threadsIn(
           yield* answer("comments", request(commentsPath(taskId), teammate, {})),
@@ -472,6 +481,109 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
             [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.AGENT],
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a reply in a plan's thread reaches the agent an earlier comment mentioned, with no mention of its own, and none once it is archived",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const agentId = yield* startAgent(owner, taskId);
+        const thread = threadIn(
+          yield* answer(
+            "comments",
+            request(
+              commentsPath(taskId),
+              teammate,
+              {},
+              startBody(`${agentLink(taskId, agentId)} is withdrawing in v1?`),
+            ),
+          ),
+        );
+        const before = opened.length;
+        const reply = (words: string) =>
+          answer(
+            "comments",
+            request(
+              threadPath(taskId, thread.id),
+              owner,
+              {},
+              { action: PLAN_COMMENT_ACTION.REPLY, clientKey: randomUUID(), words },
+            ),
+          );
+
+        yield* reply("And withdrawing by email?");
+        const [message] = opened.slice(before);
+        assert.ok(message, "the agent in the thread was handed the reply");
+        assert.ok(JSON.stringify(message.message).includes("And withdrawing by email?"));
+
+        yield* archiveAgent(owner, agentId, true);
+        yield* reply("Never mind.");
+        assert.equal(opened.length, before + 1, "the archived agent was handed nothing");
+      }),
+  );
+
+  it.effect(
+    "a comment on a page is answered first, then hands the thread to the agent that showed it, mentioned or not, naming the page and its version, and one whose agent was archived is said back as not sent",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const agentId = yield* startAgent(owner, taskId);
+        const page = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            taskPageOwner(taskId),
+            { title: "Invite funnel", html: "<h1>Invites</h1><p>12 sent</p>" },
+            { kind: PAGE_SHOWER.AGENT, agentId },
+          ),
+        );
+        const before = opened.length;
+        const kept = keptAfterResponse();
+
+        const thread = threadIn(
+          yield* commentsAnswer(
+            request(
+              commentsPath(taskId),
+              teammate,
+              {},
+              {
+                clientKey: randomUUID(),
+                page: { id: page.id, version: page.version },
+                element: { path: "body > p", quote: "12 sent", section: "Invites" },
+                words: "Is this a week's worth?",
+              },
+            ),
+            yield* Clock.Clock,
+            kept.layer,
+          ),
+        );
+        assert.equal(opened.length, before, "the comment was answered before any agent was woken");
+        yield* kept.run;
+
+        const [message] = opened.slice(before);
+        assert.ok(message, "the page's writer was handed the thread");
+        const words = JSON.stringify(message.message);
+        assert.ok(words.includes('the page \\"Invite funnel\\"'), words);
+        assert.ok(words.includes(`version 1 of page ${page.id}`), words);
+        assert.ok(words.includes(thread.id));
+
+        yield* archiveAgent(owner, agentId, true);
+        const replied = yield* answer(
+          "comments",
+          request(
+            threadPath(taskId, thread.id),
+            teammate,
+            {},
+            { action: PLAN_COMMENT_ACTION.REPLY, clientKey: randomUUID(), words: "Any news?" },
+          ),
+        );
+        const read = readEither(planCommentThreadAnswerSchema)(
+          unparsedWire(JSON.parse(replied.body)),
+        );
+        assert.ok(Result.isSuccess(read) && "thread" in read.success, replied.body);
+        assert.deepEqual(read.success.unsent, [{ actor: PLAN_COMMENT_ACTOR.AGENT, agentId }]);
+        assert.equal(opened.length, before + 1, "the archived agent was handed nothing");
       }),
   );
 
@@ -489,7 +601,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
               commentsPath(taskId),
               teammate,
               {},
-              startBody(`${lukeLink(taskId)} is withdrawing in v1?`),
+              startBody(`${appLink(taskId)} is withdrawing in v1?`),
             ),
           ),
         );
@@ -503,7 +615,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
               {
                 action: PLAN_COMMENT_ACTION.REPLY,
                 clientKey: randomUUID(),
-                words: `${lukeLink(taskId)} what do you think?`,
+                words: `${appLink(taskId)} what do you think?`,
               },
             ),
           ),
@@ -525,7 +637,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
-    "a reply that mentions an agent hands it the thread once, sent again or not, and one that mentions an agent not on the task asks no one",
+    "a reply that mentions an agent hands it the thread once, sent again or not, and one that mentions an agent not on the task asks it nothing",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -552,28 +664,31 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
 
         yield* reply(words, key);
         yield* reply(words, key);
-        const elsewhere = threadIn(
-          yield* reply(
-            `[@Other](https://vespin.dev/acme/plan/${randomUUID()}/agent/${randomUUID()}) saw this`,
-            randomUUID(),
-          ),
-        );
-
         assert.equal(opened.length - before, 1, "the agent was handed the thread once");
         assert.ok(
           JSON.stringify(opened.at(-1)?.message).includes(
             "Dean Stratakos sent you a comment thread",
           ),
         );
+        yield* reply(
+          `[@Other](https://vespin.dev/acme/plan/${randomUUID()}/agent/${randomUUID()}) saw this`,
+          randomUUID(),
+        );
+        const [elsewhere] = threadsIn(
+          yield* answer("comments", request(commentsPath(taskId), owner, {})),
+        );
+
         assert.deepEqual(
           countedProperties(owner, SERVER_EVENT.PLAN_COMMENT),
           [{ is_reply: true }, { is_reply: true }],
           "the retry under the first key is not counted again",
         );
-        assert.equal(
-          elsewhere.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
-          1,
-          "the other task's agent was asked nothing",
+        assert.deepEqual(
+          elsewhere?.entries.flatMap((entry) =>
+            entry.kind === PLAN_COMMENT_ENTRY.ASKED ? [entry.asked?.agentId] : [],
+          ),
+          [agentId, agentId],
+          "the other task's agent was asked nothing, and the agent in the thread was handed it again",
         );
       }),
   );

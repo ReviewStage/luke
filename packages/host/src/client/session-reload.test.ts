@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { Effect } from "effect";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
@@ -26,7 +26,7 @@ const signedIn = (id: string) =>
   ({
     status: ACCOUNT_STATUS.SIGNED_IN,
     id,
-    email: `${id}@luke.test`,
+    email: `${id}@app.test`,
     provider: ACCOUNT_PROVIDER.GITHUB,
   }) as const;
 

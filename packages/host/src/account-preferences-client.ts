@@ -1,6 +1,6 @@
-import type { CallCredential } from "@luke/features";
-import type { AccountPreferencesAnswerWire } from "@luke/features/account-wire";
-import { askHosted, type HostedClient, hostedClient } from "@luke/features/hosted-link";
+import type { CallCredential } from "@repo/features";
+import type { AccountPreferencesAnswerWire } from "@repo/features/account-wire";
+import { askHosted, type HostedClient, hostedClient } from "@repo/features/hosted-link";
 import {
   type AccountPreferences,
   accountPreferencesFromParts,
@@ -8,14 +8,14 @@ import {
   type ExperimentChoices,
   experimentChoicesFrom,
   NO_EXPERIMENTS,
-} from "@luke/settings";
+} from "@repo/settings";
 import {
   isRecord,
   isWireNumber,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@luke/wire";
+} from "@repo/wire";
 import { Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -63,7 +63,7 @@ function accountPreferencesAnswerFromWire(
 /**
  * The snapshot the link read, through the settings vocabulary's own reader,
  * which stays the one parser for its shape: the wire knows each part only as
- * far as it is JSON (`@luke/features/account-wire`).
+ * far as it is JSON (`@repo/features/account-wire`).
  */
 function answerOf(answer: AccountPreferencesAnswerWire): AccountPreferencesAnswer | undefined {
   // SAFETY: the link read the snapshot out of the response's JSON text, so every part is a JSON value.

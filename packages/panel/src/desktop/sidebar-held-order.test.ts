@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -89,7 +89,7 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
 /** The names of the tasks drawn under Tasks, in the order drawn. */
 function names(sidebar: HTMLElement): string[] {
   const region = sidebar.querySelector('nav[aria-label="My tasks"]');
-  return [...(region?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+  return [...(region?.querySelectorAll(".ui-list-row-title") ?? [])].map(
     (name) => name.firstChild?.textContent ?? "",
   );
 }
@@ -169,7 +169,7 @@ test("a chosen child task the view comes to hide with its parent is no longer ch
         new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }),
       );
     });
-    const words = document.querySelector(".luke-menu-heading")?.textContent;
+    const words = document.querySelector(".ui-menu-heading")?.textContent;
     act(() => {
       document.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),

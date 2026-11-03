@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { UsageChart } from "@luke/panel/admin/charts/usage-chart";
+import { UsageChart } from "@repo/panel/admin/charts/usage-chart";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";

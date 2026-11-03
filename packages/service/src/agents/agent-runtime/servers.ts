@@ -1,9 +1,9 @@
 /**
  * servers.ts -- which integrations' MCP servers one turn of an agent is handed, read as the turn starts.
  *
- * Every agent is handed its account's integrations through one dynamic
- * connection resolved at `turn.started` (`connections.ts`), and what it is
- * handed is its role's connection policy (`role.ts`), among the
+ * Every agent is handed its account's integrations as its launch starts
+ * (`../../integrations/connection-door.ts`), and what it is handed is its
+ * role's connection policy (`role.ts`), among the
  * integrations this deployment offers the account
  * (`accountIntegrationConnect`): one not set up here, or withheld from the
  * account, is handed to none of its agents. The brain agents are handed
@@ -41,12 +41,12 @@
  * store failure's message may name a statement.
  */
 
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
+import type { DatabaseServices, QueryError } from "@repo/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import {
   readAgentOfConversation,
   takeAgentMentionedServers,
-} from "@luke/database/models/agent-store";
+} from "@repo/database/models/agent-store";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -56,9 +56,9 @@ import {
   type IntegrationProvider,
   integrationAccountNames,
   integrationConnectionOf,
-} from "@luke/features/integration-wire";
-import { andList } from "@luke/features/words";
-import { causeKind } from "@luke/runtime/effect";
+} from "@repo/features/integration-wire";
+import { andList } from "@repo/features/words";
+import { causeKind } from "@repo/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import type { GitHubApp } from "../../github/github-app.js";

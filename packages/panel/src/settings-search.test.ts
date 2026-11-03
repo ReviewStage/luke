@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
-import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { experimentsOn, settingsView } from "@repo/settings/testing";
 import { test } from "vitest";
 import {
   type SettingsSearchEntry,
@@ -260,23 +260,12 @@ function labelsFound(query: string, input: SettingsSearchInput = FULL_INPUT): re
   );
 }
 
-test("repositories, skills and rename each find the row the page draws", () => {
-  assert.ok(labelsFound("repositories").includes("Repositories on this Mac"));
+test("skills and rename each find the row the page draws", () => {
   assert.ok(labelsFound("skills").includes("Add a skill"));
   assert.deepEqual(labelsFound("rename"), ["Rename workspace"]);
 });
 
-test("the Mac repositories need a terminal here, and renaming needs a workspace the reader manages that is not their own first", () => {
-  const withoutTerminal = {
-    ...FULL_INPUT,
-    capabilities: DESKTOP_CAPABILITIES.filter(
-      (capability) => capability !== HOST_CAPABILITY.MAC_TERMINAL,
-    ),
-  };
-  assert.equal(
-    labelsFound("repositories", withoutTerminal).includes("Repositories on this Mac"),
-    false,
-  );
+test("renaming needs a workspace the reader manages that is not their own first", () => {
   assert.equal(
     labelsFound("add a skill", { ...FULL_INPUT, workspace: undefined }).includes("Add a skill"),
     false,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, jsonResponse, recordingHttpClient } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer, sessionBearer } from "./account-call.js";
 import type { AccountSessionToken } from "./account-token.js";
@@ -124,11 +124,11 @@ it.effect("disconnects GitHub, answering the workspace with no GitHub account", 
   }),
 );
 
-const ADA = { userId: "user-ada", name: "Ada Lovelace", email: "ada@luke.test", role: "owner" };
+const ADA = { userId: "user-ada", name: "Ada Lovelace", email: "ada@app.test", role: "owner" };
 const GRACE = {
   userId: "user-grace",
   name: "Grace Hopper",
-  email: "grace@luke.test",
+  email: "grace@app.test",
   role: "member",
 };
 

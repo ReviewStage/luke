@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import { HOST_PAIRING_CALL_FAILURE, type HostPairingView } from "@luke/features/host-pairing-view";
-import { ACT_KIND } from "@luke/host/acts";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { HOST_PAIRING_CALL_FAILURE, type HostPairingView } from "@repo/features/host-pairing-view";
+import { ACT_KIND } from "@repo/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
@@ -24,7 +24,7 @@ declare global {
 
 beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  fakeAppPlatform({ assetBase: () => "https://luke.test/" });
+  fakeAppPlatform({ assetBase: () => "https://app.test/" });
 });
 
 const roots: Root[] = [];

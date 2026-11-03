@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import {
   FEEDBACK_KIND,
   FEEDBACK_LIMITS,
   type FeedbackKind,
   type FeedbackResult,
-} from "@luke/features/feedback";
-import { formatCount } from "@luke/features/number-format";
-import { ACT_KIND } from "@luke/host/acts";
-import type { PortActPayload } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
-import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
-import { holdExits } from "@luke/ui/testing/held-exits";
+} from "@repo/features/feedback";
+import { formatCount } from "@repo/features/number-format";
+import { ACT_KIND } from "@repo/host/acts";
+import type { PortActPayload } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
+import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
+import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -257,7 +257,7 @@ test("a note being written is nudged rather than closed by the first Escape, clo
 
 /** The counter the field's label line draws once the words near the cap, or nothing before. */
 function counter(): string | null {
-  return dialog()?.querySelector(".luke-length-counter")?.textContent ?? null;
+  return dialog()?.querySelector(".ui-length-counter")?.textContent ?? null;
 }
 
 /** Pastes `text` into the field, as the clipboard does. */

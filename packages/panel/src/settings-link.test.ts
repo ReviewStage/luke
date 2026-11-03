@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -84,7 +84,7 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
   assert.deepEqual(turned, [ACME.id, PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
   assert.equal(landed.on?.querySelector("h2")?.textContent, "Workspace connections");
   assert.ok(
-    [...(landed.on?.querySelectorAll('.luke-settings-row [id$="label"]') ?? [])].some(
+    [...(landed.on?.querySelectorAll('.ui-settings-row [id$="label"]') ?? [])].some(
       (name) => name.textContent === "GitHub",
     ),
     "the group the old GitHub repositories link names holds GitHub's row",

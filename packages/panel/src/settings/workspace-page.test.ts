@@ -6,33 +6,33 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
+} from "@repo/features/automation-wire";
 import {
   GITHUB_ACCESS,
   type GitHubAccess,
   type WorkspaceTokenRepository,
-} from "@luke/features/github-repositories-wire";
-import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { MacRepository } from "@luke/features/mac-terminal-wire";
-import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+} from "@repo/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
-} from "@luke/features/tasks-view";
-import { dayAndTimeText } from "@luke/features/time-format";
-import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/tasks-view";
+import { dayAndTimeText } from "@repo/features/time-format";
+import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@luke/features/workspace-wire";
+} from "@repo/features/workspace-wire";
 import {
   ACT_KIND,
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "@luke/host/acts";
+} from "@repo/host/acts";
 import {
   type ActPortClient,
   type PortActKind,
@@ -40,11 +40,10 @@ import {
   type PortActResult,
   TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
-} from "@luke/host/contract";
-import { HOST_CAPABILITY } from "@luke/settings";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { ProviderMark, SettingsPage } from "@luke/ui";
+} from "@repo/host/contract";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { ProviderMark, SettingsPage } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -146,16 +145,14 @@ let refuseGitHubOpen = false;
 const SENTRY_NOT_SET_UP: WorkspaceSentry = { configured: false, installations: [] };
 /** The workspace's Sentry as the service answers it; none where the read is refused. */
 let sentry: WorkspaceSentry | undefined = SENTRY_NOT_SET_UP;
+/** The workspace's Slack bot as the fake service holds it; unset, it holds none. */
+let slackBot: WorkspaceSlackBot = { configured: false };
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
 let refusePhoto = false;
 /** Whether the service refuses a role change for the account's role. */
 let refuseRole = false;
-/** Each repository's clone and command set on this Mac, as its settings file holds them. */
-let macRepositories: MacRepository[] = [];
-/** While set, the Repositories group's save waits on it before it is answered. */
-let macSaveHeld: Promise<void> | undefined;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
 /** While set, the read of the repositories the workspace reaches waits on it before it is answered. */
@@ -228,12 +225,6 @@ type Answered = FakeActAnswer;
 
 const done = (value: AnswerValue): Answered => ({ status: FAKE_ANSWER.DONE, value });
 
-/** What the Repositories group reads as the page opens, which a test of another group's acts leaves aside. */
-const MAC_GROUP_READS: ReadonlySet<string> = new Set([
-  ACT_KIND.TASKS_REPOSITORIES,
-  ACT_KIND.MAC_REPOSITORIES,
-]);
-
 /** The bridge, answering the section's acts the way the host would. */
 function answer(request: Asked): Promise<Answered> {
   sent.push(request);
@@ -303,6 +294,14 @@ function answer(request: Asked): Promise<Answered> {
       return Promise.resolve(done(sentry));
     case ACT_KIND.WORKSPACE_SENTRY_INSTALL:
       return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_SLACK_BOT_READ:
+      return Promise.resolve(done(slackBot));
+    case ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT:
+      slackBot = { configured: true, team: SLACK_TEAM };
+      return Promise.resolve(done(slackBot));
+    case ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT:
+      slackBot = { configured: true };
+      return Promise.resolve(done(slackBot));
     case ACT_KIND.WORKSPACE_SENTRY_DISCONNECT: {
       const { installationId } = request.payload;
       const was: WorkspaceSentry = sentry ?? { configured: true, installations: [] };
@@ -397,23 +396,6 @@ function answer(request: Asked): Promise<Answered> {
       );
     case ACT_KIND.GITHUB_TOKEN_READ:
       return Promise.resolve(done({ token: tokenSaved ? SAVED_TOKEN : null }));
-    case ACT_KIND.MAC_REPOSITORIES:
-      return Promise.resolve(done({ repositories: macRepositories }));
-    case ACT_KIND.MAC_REPOSITORY_SET: {
-      if (macSaveHeld !== undefined) {
-        const held = macSaveHeld;
-        macSaveHeld = undefined;
-        return held.then(() => answer({ ...request }));
-      }
-      const entry = request.payload;
-      macRepositories = [
-        ...macRepositories.filter(
-          (each) => each.repository.toLowerCase() !== entry.repository.toLowerCase(),
-        ),
-        entry,
-      ];
-      return Promise.resolve(done(undefined));
-    }
     case ACT_KIND.WORKSPACE_LEAVE:
       return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ: {
@@ -452,14 +434,12 @@ function onPort(kind: PortActKind) {
   };
 }
 
-/** The act port answering every workspace and task kind, and the run commands', as `answer` does. */
+/** The act port answering every workspace and task kind, as `answer` does. */
 function workspacePort(): Parameters<typeof fakeActPort>[0] {
   const kinds: readonly PortActKind[] = [
     ...Object.values(TASKS_ACT_KIND),
     ...Object.values(WORKSPACE_ACT_KIND),
     ACT_KIND.GITHUB_TOKEN_READ,
-    ACT_KIND.MAC_REPOSITORIES,
-    ACT_KIND.MAC_REPOSITORY_SET,
   ];
   const procedures = kinds.map((kind) => [kind, onPort(kind)]);
   // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
@@ -535,12 +515,11 @@ beforeEach(() => {
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   sentry = SENTRY_NOT_SET_UP;
+  slackBot = { configured: false };
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
   automations = undefined;
-  macRepositories = [];
-  macSaveHeld = undefined;
   githubRepositories = [];
   repositoriesHeld = undefined;
   tokenReach = [];
@@ -674,11 +653,11 @@ const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
 /** Every row of the page, the shared row and the window's own alike. */
-const ROWS = ".settings-row, .luke-settings-row";
+const ROWS = ".settings-row, .ui-settings-row";
 
 /** What a row names: the shared row's label, or the window's own row's first words. */
 const nameOf = (row: Element) =>
-  row.matches(".luke-settings-row")
+  row.matches(".ui-settings-row")
     ? row.querySelector('[id$="label"]')?.textContent
     : row.querySelector("strong")?.firstChild?.textContent;
 
@@ -703,7 +682,7 @@ const invitationRows = (page: HTMLElement) =>
   );
 
 /** A pending invitation's address, its row's label. */
-const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .luke-one-line');
+const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .ui-one-line');
 
 /** The items of the ⋯ on `row`, or none where it draws no ⋯. */
 function rowActions(row: HTMLElement): string[] {
@@ -780,14 +759,14 @@ const placeholderOf = (within: Element) => {
   const status = within.querySelector('[role="status"][aria-busy="true"]');
   return status === null
     ? undefined
-    : [status.textContent, status.querySelectorAll(".luke-settings-row").length];
+    : [status.textContent, status.querySelectorAll(".ui-settings-row").length];
 };
 
 /** The boxes the first settings row in `within` is built of, in order, its words and blocks aside. */
 const rowBoxes = (within: Element) =>
-  [...(within.querySelector(".luke-settings-row")?.querySelectorAll("[class]") ?? [])]
+  [...(within.querySelector(".ui-settings-row")?.querySelectorAll("[class]") ?? [])]
     .map((element) => element.getAttribute("class") ?? "")
-    .filter((name) => name.startsWith("luke-settings-row"));
+    .filter((name) => name.startsWith("ui-settings-row"));
 
 /** The workspace's name, as the identity row's label says it. */
 const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
@@ -1022,7 +1001,9 @@ test("the chosen team workspace's members are listed with their email and role, 
     sent
       .filter(
         (request) =>
-          request.kind.startsWith("workspace.") && request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ,
+          request.kind.startsWith("workspace.") &&
+          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => request.kind),
     [
@@ -1034,7 +1015,7 @@ test("the chosen team workspace's members are listed with their email and role, 
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
     ["Dana", "Sam"].map(
-      (name) => memberNamed(page, name).querySelector(".luke-settings-row-value")?.textContent,
+      (name) => memberNamed(page, name).querySelector(".ui-settings-row-value")?.textContent,
     ),
     ["Owner", "Member"],
   );
@@ -1062,7 +1043,7 @@ test("a member's address and an invited one, where the row cuts them short, are 
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
   const addresses = [
-    memberNamed(page, "Sam").querySelector("p .luke-one-line"),
+    memberNamed(page, "Sam").querySelector("p .ui-one-line"),
     addressOf(invitationRows(page)[0] ?? assert.fail("no pending invitation")),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 
@@ -1156,17 +1137,17 @@ test("before the workspaces are read, placeholder sections stand in the page's s
   );
 
   // The identity unheaded, the members, and a row to each integration the page draws.
-  const sections = [...container.querySelectorAll('[role="status"] .luke-settings-section')].map(
+  const sections = [...container.querySelectorAll('[role="status"] .ui-settings-section')].map(
     (group) => [
-      group.querySelector(".luke-settings-section-head") !== null,
-      group.querySelectorAll(".luke-settings-row").length,
+      group.querySelector(".ui-settings-section-head") !== null,
+      group.querySelectorAll(".ui-settings-row").length,
     ],
   );
   assert.deepEqual(placeholderOf(container)?.[0], "Reading your workspaces");
   assert.deepEqual(sections, [
     [false, 1],
     [true, 1],
-    [true, 2],
+    [true, 3],
   ]);
 });
 
@@ -1259,7 +1240,7 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
     ],
   ]);
   assert.equal(
-    memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent,
+    memberNamed(page, "Sam").querySelector(".ui-settings-row-value")?.textContent,
     "Admin",
   );
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
@@ -1286,7 +1267,7 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
   assert.equal(
-    memberNamed(page, "Ola").querySelector(".luke-settings-row-value")?.textContent,
+    memberNamed(page, "Ola").querySelector(".ui-settings-row-value")?.textContent,
     "Owner",
   );
 });
@@ -1343,7 +1324,7 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   const offered = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
   const names = offered.map((item) => item.textContent);
   const besides = offered.map((item) =>
-    item.querySelector(".luke-menu-item-copy")?.getAttribute("data-place"),
+    item.querySelector(".ui-menu-item-copy")?.getAttribute("data-place"),
   );
   act(() => offered.find((item) => item.textContent?.includes("ola@example.com"))?.click());
   assert.equal((dialog().textContent ?? "").includes(`Transfer ownership of ${ACME.name}?`), true);
@@ -1477,7 +1458,7 @@ test("a members read sent before a role change and landing after it does not put
   await settle();
 
   assert.equal(
-    memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent,
+    memberNamed(page, "Sam").querySelector(".ui-settings-row-value")?.textContent,
     "Admin",
   );
 });
@@ -1589,7 +1570,7 @@ const githubGroup = (page: HTMLElement) =>
 /** What a row says: its name, and the line under it. */
 const rowWords = (row: HTMLElement) => [
   nameOf(row),
-  row.matches(".luke-settings-row")
+  row.matches(".ui-settings-row")
     ? row.querySelector('[id$="description"]')?.textContent
     : row.querySelector("small")?.textContent,
 ];
@@ -1630,7 +1611,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
 
     assert.equal(group.querySelector("h2")?.textContent, "Workspace connections");
     assert.equal(
-      row.querySelector(".luke-settings-row-mark")?.innerHTML,
+      row.querySelector(".ui-settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
     assert.deepEqual(
@@ -1651,12 +1632,12 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     for (const name of ["acme-org", "acme-labs"]) {
       const account = rowNamed(group, name);
       assert.equal(
-        account.querySelector(".luke-avatar[data-shape='tile']")?.textContent,
+        account.querySelector(".ui-avatar[data-shape='tile']")?.textContent,
         "A",
         `${name}'s tile`,
       );
       assert.equal(
-        account.querySelector<HTMLImageElement>(".luke-avatar-picture")?.getAttribute("src"),
+        account.querySelector<HTMLImageElement>(".ui-avatar-picture")?.getAttribute("src"),
         `https://github.com/${name}.png?size=32`,
         `${name}'s picture is its own on GitHub`,
       );
@@ -1776,7 +1757,7 @@ test("the repositories members added on their tokens stand under GitHub's accoun
     ["GitHub", "acme-org", "acme-labs", "octo-member/side", "acme/relay"],
   );
   for (const name of ["octo-member/side", "acme/relay"]) {
-    assert.equal(rowNamed(group, name).querySelector(".luke-badge")?.textContent, "Token");
+    assert.equal(rowNamed(group, name).querySelector(".ui-badge")?.textContent, "Token");
   }
   assert.deepEqual(rowButtons(rowNamed(group, "octo-member/side")), []);
 
@@ -1822,7 +1803,7 @@ test("Add repository offers the repositories the reader's own token may push to 
     [{ workspaceId: SEVERAL.id, repository: "octo-member/side", added: true }],
   );
   assert.equal(
-    rowNamed(githubGroup(page), "octo-member/side").querySelector(".luke-badge")?.textContent,
+    rowNamed(githubGroup(page), "octo-member/side").querySelector(".ui-badge")?.textContent,
     "Token",
   );
 });
@@ -1869,7 +1850,7 @@ test("with a token saved and nothing left to add, Add repository still says ther
 
 /** A picker option's name and its muted owner, as the repository chip's menu draws a repository. */
 function optionWords(option: Element): (string | null | undefined)[] {
-  return [".luke-combobox-option-label", ".luke-combobox-option-detail"].map(
+  return [".ui-combobox-option-label", ".ui-combobox-option-detail"].map(
     (part) => option.querySelector(part)?.textContent,
   );
 }
@@ -1897,7 +1878,7 @@ test("Add repository draws each repository as the repository chip's menu does, b
 
   assert.deepEqual(optionWords(zed()), ["zed", "side-org"]);
   assert.equal(
-    zed().querySelector("img.luke-avatar-picture")?.getAttribute("src"),
+    zed().querySelector("img.ui-avatar-picture")?.getAttribute("src"),
     "https://github.com/side-org.png?size=32",
   );
   assert.equal(document.querySelectorAll('[role="option"]').length, 1);
@@ -2051,7 +2032,28 @@ test("the invite form's address field is named by a visible label, and, being re
     [...(address.labels ?? [])].map((each) => each.textContent),
     ["Email address"],
   );
-  assert.equal(address.required, true);
+  assert.equal(address.getAttribute("aria-required"), "true");
+});
+
+test("an address the service would refuse is said under the field, in the app's error line rather than the browser's, and nothing is sent until it is fixed", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const address = form.querySelector("input") ?? assert.fail("no address field");
+
+  await invite(page, "alan", WORKSPACE_ROLE.MEMBER);
+
+  assert.equal(
+    form.querySelector('[data-slot="field-error"]')?.textContent,
+    "Enter an address like name@example.com.",
+  );
+  assert.equal(address.getAttribute("aria-invalid"), "true");
+  assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 0);
+
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+
+  assert.equal(address.getAttribute("aria-invalid"), null);
+  assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 1);
 });
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
@@ -2091,7 +2093,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
           request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
-          !MAC_GROUP_READS.has(request.kind),
+          request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [
@@ -2428,8 +2430,11 @@ test("the Sentry row reads again as the window comes forward: an install made on
   });
   await settle();
 
-  assert.deepEqual(before, ["Sentry", "Not installed."]);
-  assert.deepEqual(installed, ["Sentry", "Installed · acme"]);
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed. Install to start automations from Sentry alerts.",
+  ]);
+  assert.deepEqual(installed, ["Sentry", "Installed for automations · acme"]);
   assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
   assert.ok(sentryFailure(page));
 });
@@ -2470,7 +2475,10 @@ test("a Sentry read that failed says so with Retry, for a member too, and Retry 
 
   assert.equal(failed, true);
   assert.equal(sentryFailure(page), undefined);
-  assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), ["Sentry", "Installed · acme"]);
+  assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), [
+    "Sentry",
+    "Installed for automations · acme",
+  ]);
 });
 
 test("an admin installs Sentry for the workspace from its row, which opens Sentry at once", async () => {
@@ -2482,12 +2490,15 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   act(() => button(row, "Install for workspace").click());
   await settle();
 
-  assert.deepEqual(before, ["Sentry", "Not installed."]);
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed. Install to start automations from Sentry alerts.",
+  ]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
 
-test("an installed workspace's Sentry names its organization, its Disconnect button asks first, and a member sees it read only", async () => {
+test("an installed workspace's Sentry names its organization, its ⋯ holds Disconnect, which asks first, and a member sees it read only", async () => {
   sentry = SENTRY_INSTALLED;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const row = rowNamed(githubGroup(admin.page), "Sentry");
@@ -2501,15 +2512,52 @@ test("an installed workspace's Sentry names its organization, its Disconnect but
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
   const memberRow = rowNamed(githubGroup(member.page), "Sentry");
 
-  assert.deepEqual(words, ["Sentry", "Installed · acme"]);
+  assert.deepEqual(words, ["Sentry", "Installed for automations · acme"]);
   assert.deepEqual(sentrySent(), [
     [
       ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
       { workspaceId: ACME.id, installationId: "installation-1" },
     ],
   ]);
-  assert.deepEqual(after, ["Sentry", "Not installed."]);
-  assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed · acme"]);
+  assert.deepEqual(after, [
+    "Sentry",
+    "Not installed. Install to start automations from Sentry alerts.",
+  ]);
+  assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed for automations · acme"]);
+  assert.deepEqual(rowButtons(memberRow), []);
+});
+
+const SLACK_TEAM = { id: "T0001", name: "Acme Slack" };
+
+test("an admin connects the Slack bot, which then names its team, and disconnects it after asking; a member sees it read only", async () => {
+  slackBot = { configured: true };
+  const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const before = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+
+  act(() => button(rowNamed(githubGroup(admin.page), "Slack bot"), "Connect Slack bot").click());
+  await settle();
+  const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  await chooseAction(rowNamed(githubGroup(admin.page), "Slack bot"), "Disconnect");
+  await confirm("Disconnect");
+  const after = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  slackBot = { configured: true, team: SLACK_TEAM };
+  const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
+  const memberRow = rowNamed(githubGroup(member.page), "Slack bot");
+
+  assert.deepEqual(before, [
+    "Slack bot",
+    "Not connected. Connect Vespin's bot to message members in Slack.",
+  ]);
+  assert.deepEqual(connected, [
+    "Slack bot",
+    "Connected to Acme Slack · Messages members whose email matches",
+  ]);
+  assert.deepEqual(after, before);
+  assert.deepEqual(rowWords(memberRow), [
+    "Slack bot",
+    "Connected to Acme Slack · Messages members whose email matches",
+  ]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 
@@ -2536,110 +2584,6 @@ test("each member's ⋯ holds Copy link, which copies that person's link under t
 
   assert.deepEqual(copied, [`https://vespin.dev/acme/person/${MEMBER.userId}`]);
   assert.match(document.body.textContent ?? "", /Link copied/u);
-});
-
-test("on a platform without this Mac's terminal, the Workspace page draws no Repositories group beside its Integrations", async () => {
-  githubRepositories = ["acme/app"];
-  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MAC_TERMINAL));
-  const { page } = await mount(ACME);
-  const group = (section: string) =>
-    page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`);
-
-  assert.equal(group(SETTINGS_SECTION.GITHUB_REPOSITORIES) !== null, true, "the page is drawn");
-  assert.equal(group(SETTINGS_SECTION.MAC_REPOSITORIES) !== null, false);
-});
-
-test("while the repositories are read, placeholder rows stand in the Repositories group's, and the repositories land in their place", async () => {
-  githubRepositories = ["acme/app"];
-  const { promise: held, resolve: land } = Promise.withResolvers<void>();
-  repositoriesHeld = held;
-  const { page } = await mount(ACME);
-  const group = section(page, SETTINGS_SECTION.MAC_REPOSITORIES);
-
-  // Note that the group is named for the Mac, since the page around it is the workspace's.
-  assert.equal(group.querySelector("h2")?.textContent, "Repositories on this Mac");
-  assert.deepEqual(placeholderOf(group), ["Reading the repositories", 2]);
-  land();
-  await settle();
-  assert.equal(placeholderOf(group), undefined);
-  assert.deepEqual(
-    [...group.querySelectorAll("input")].map((each) => each.getAttribute("aria-label")),
-    ["acme/app run command"],
-  );
-});
-
-test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {
-  githubRepositories = ["acme/app"];
-  macRepositories = [{ repository: "acme/old", command: "make run" }];
-  const { page } = await mount(ACME);
-  const group = page.querySelector<HTMLElement>(
-    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
-  );
-  assert.ok(group !== null);
-  const fields = () => [...group.querySelectorAll<HTMLInputElement>("input")];
-  const field = (name: string) => {
-    const input = fields().find(
-      (each) => each.getAttribute("aria-label") === `${name} run command`,
-    );
-    assert.ok(input !== undefined, name);
-    return input;
-  };
-  assert.deepEqual(
-    fields().map((each) => each.getAttribute("aria-label")),
-    ["acme/app run command", "acme/old run command"],
-  );
-  assert.equal(field("acme/app").value, "");
-  assert.equal(field("acme/old").value, "make run");
-
-  const typed = field("acme/app");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      typed,
-      " pnpm dev ",
-    );
-    typed.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => typed.form?.requestSubmit());
-  await settle();
-
-  assert.deepEqual(
-    sent.flatMap((request) =>
-      request.kind === ACT_KIND.MAC_REPOSITORY_SET ? [request.payload] : [],
-    ),
-    [{ repository: "acme/app", command: "pnpm dev" }],
-  );
-  assert.equal(field("acme/app").value, "pnpm dev");
-});
-
-test("a repository's Save is named Saving while its command is sent, and Save again once it is kept", async () => {
-  githubRepositories = ["acme/app"];
-  let release: () => void = () => undefined;
-  macSaveHeld = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const { page } = await mount(ACME);
-  const group = page.querySelector<HTMLElement>(
-    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
-  );
-  assert.ok(group !== null);
-  const typed = group.querySelector<HTMLInputElement>("form input");
-  assert.ok(typed !== null);
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      typed,
-      "pnpm dev",
-    );
-    typed.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  const save = button(group, "Save");
-
-  act(() => typed.form?.requestSubmit());
-  const during = [save.getAttribute("aria-label"), save.getAttribute("aria-busy")];
-  release();
-  await settle();
-
-  assert.deepEqual(during, ["Saving", "true"]);
-  assert.deepEqual([save.getAttribute("aria-label"), save.getAttribute("aria-busy")], [null, null]);
 });
 
 /**
@@ -2680,25 +2624,4 @@ test("Escape in the invite email field lets go of it, its words kept, and the wi
   assert.equal(seen.taken, true, "the window's Escape passes a taken press by");
   assert.notEqual(document.activeElement, address, "the caret is let go");
   assert.equal(address.value, "alan@example.com");
-});
-
-test("Escape in a repository's run command field lets go of it, its words kept, and the window never takes it to leave Settings", async () => {
-  githubRepositories = ["acme/app"];
-  const { page } = await mount(ACME);
-  const command =
-    page.querySelector<HTMLInputElement>('input[aria-label="acme/app run command"]') ??
-    assert.fail("no command field");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      command,
-      "pnpm dev",
-    );
-    command.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-
-  const seen = escapeIn(command);
-
-  assert.equal(seen.taken, true, "the window's Escape passes a taken press by");
-  assert.notEqual(document.activeElement, command, "the caret is let go");
-  assert.equal(command.value, "pnpm dev");
 });

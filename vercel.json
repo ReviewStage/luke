@@ -3,6 +3,7 @@
   "git": {
     "deploymentEnabled": {
       "gh-readonly-queue/**": false,
+      "agent/**": false,
       "luke/**": false,
       "pr-assets": false,
       "pr-assets-*": false,
@@ -13,7 +14,7 @@
     "web": {
       "root": "apps/web",
       "framework": "vite",
-      "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
+      "installCommand": "pnpm install --frozen-lockfile --filter @repo/web...",
       "buildCommand": "(pnpm db:migrate && pnpm auth:seed) & db=$!; pnpm build && wait $db",
       "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md :/vercel.json",
       "routes": [
@@ -46,6 +47,45 @@
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "no-referrer"
           }
+        },
+        {
+          "src": "/k7x2/static/(.*)",
+          "dest": "https://us-assets.i.posthog.com/static/$1",
+          "transforms": [
+            {
+              "type": "request.headers",
+              "op": "delete",
+              "target": {
+                "key": "cookie"
+              }
+            }
+          ]
+        },
+        {
+          "src": "/k7x2/array/(.*)",
+          "dest": "https://us-assets.i.posthog.com/array/$1",
+          "transforms": [
+            {
+              "type": "request.headers",
+              "op": "delete",
+              "target": {
+                "key": "cookie"
+              }
+            }
+          ]
+        },
+        {
+          "src": "/k7x2/(.*)",
+          "dest": "https://us.i.posthog.com/$1",
+          "transforms": [
+            {
+              "type": "request.headers",
+              "op": "delete",
+              "target": {
+                "key": "cookie"
+              }
+            }
+          ]
         },
         {
           "src": "/install\\.sh",
@@ -93,11 +133,11 @@
         },
         {
           "src": "/api/agents/mcp",
-          "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp"
+          "dest": "/api/workspace-mcp.js?route=agents/mcp&route-path=agents/mcp"
         },
         {
           "src": "/api/agents/mcp/integrations/([^/]+)",
-          "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp/integrations/$1"
+          "dest": "/api/workspace-mcp.js?route=agents/mcp&route-path=agents/mcp/integrations/$1"
         },
         {
           "src": "/api/account/integrations/connected",
@@ -138,6 +178,10 @@
         {
           "src": "/api/maintenance/provider-keys-rewrap",
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
+        },
+        {
+          "src": "/api/slack/events",
+          "dest": "/api/default.js?route=slack/events"
         },
         {
           "src": "/api/triggers/sentry",
@@ -194,7 +238,7 @@
           "src": "/app/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -206,7 +250,7 @@
           "src": "/connect/[^/]+/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -215,10 +259,10 @@
           }
         },
         {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|channel|automations?|settings|person|admin)(?:/[^/]+)*/?",
+          "src": "/(?!api/)[^/]+/(?:plan|tasks?|agent|inbox|channel|automations?|settings|person|admin)(?:/[^/]+)*/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -227,7 +271,19 @@
           }
         },
         {
-          "src": "/page-in-mac-app\\.html",
+          "src": "/(?!(?:404|about|accept-invitation|account|admin|agents|api|app|assets|auth|billing|blog|board|changelog|cli|connect|connect-github|consent|dashboard|desktop-session|docs|download|downloads|eve|feed|github-installed|help|home|inbox|install|integration-connected|integrations|invite|join|k7x2|legal|login|logout|mac|mcp|new|notifications|oauth|open|page-in-mac-app|pages|plan|plans|pricing|privacy|search|security|settings|sign-in|sign-out|sign-up|status|support|task|tasks|team|teams|terms|workspaces)/?$)(?=[A-Za-z0-9_-]{1,96}/?$)(?:[a-z0-9-]+|[A-Za-z0-9]{32}|personal-[A-Za-z0-9_-]+)/?",
+          "dest": "/app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/page-in-mac-app(?:\\.html)?",
           "dest": "/page-in-mac-app.html",
           "headers": {
             "Content-Security-Policy": "default-src 'none'; style-src 'sha256-T8LCl/OB0jEsLle1y3r4VpAUju2q/bJyH99iBqhrZi8='; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
@@ -238,10 +294,10 @@
           }
         },
         {
-          "src": "/(connect-github|github-installed|integration-connected)\\.html",
+          "src": "/(connect-github|github-installed|integration-connected)(?:\\.html)?",
           "dest": "/$1.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' https://us-assets.i.posthog.com; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -270,7 +326,7 @@
         {
           "src": "/(?!api/|assets/).*",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' https://us-assets.i.posthog.com; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -278,6 +334,24 @@
             "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
           },
           "continue": true
+        },
+        {
+          "src": "/changelog/page/1/?",
+          "status": 308,
+          "headers": {
+            "Location": "/changelog"
+          }
+        },
+        {
+          "src": "/(about|privacy|changelog|changelog/page/\\d+|changelog/\\d+\\.\\d+\\.\\d+)/",
+          "status": 308,
+          "headers": {
+            "Location": "/$1"
+          }
+        },
+        {
+          "src": "/(sign-in|consent|desktop-session|accept-invitation)",
+          "dest": "/$1.html"
         },
         {
           "src": "/about",
@@ -298,6 +372,11 @@
         {
           "src": "/changelog/(\\d+\\.\\d+\\.\\d+)",
           "dest": "/changelog/$1.html"
+        },
+        {
+          "src": "/[A-Za-z0-9_-]+/?",
+          "dest": "/404.html",
+          "status": 404
         }
       ]
     }

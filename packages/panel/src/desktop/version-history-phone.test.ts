@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -174,7 +174,7 @@ test("on a phone a revision's sections are headed by the way back to every versi
 
   assert.deepEqual(readPhoneHead(view, "version-log").start, ["All versions"]);
   assert.ok(
-    ![...view.querySelectorAll(".luke-nav-item-name")].some(
+    ![...view.querySelectorAll(".ui-nav-item-name")].some(
       (each) => each.textContent === "All versions",
     ),
     "no All versions row",

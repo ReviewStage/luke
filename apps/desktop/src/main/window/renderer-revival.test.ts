@@ -1,5 +1,5 @@
 /** renderer-revival.test.ts -- a panel renderer that dies is stood back up after a pause, a bounded number of times before a load succeeds. */
-import type { RunMode } from "@luke/host";
+import type { RunMode } from "@repo/host";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { PanelManager } from "./panel-manager";
 

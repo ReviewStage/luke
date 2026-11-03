@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   INVITATION_OFFER_REFUSAL,
   type InvitationOfferAnswer,
-} from "@luke/features/workspace-invitation-wire";
+} from "@repo/features/workspace-invitation-wire";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { PANEL_PATH } from "../src/app/web-address";

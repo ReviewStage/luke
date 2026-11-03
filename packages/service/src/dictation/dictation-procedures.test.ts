@@ -1,21 +1,26 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey } from "@luke/database/models/provider-key-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+import { Database } from "@repo/database/core/query";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
+import { saveProviderKey } from "@repo/database/models/provider-key-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB } from "@repo/database/testing";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import {
   HTTP_STATUS,
   jsonResponse,
   type RecordedRequest,
   recordingHttpClient,
-} from "@luke/wire/testing";
+} from "@repo/wire/testing";
 import { Cause, type Context, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import {
+  recordingProductAnalytics,
+  SERVER_DICTATION_DURATION,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -32,7 +37,10 @@ import { dictationProcedures } from "./dictation-procedures.js";
  * Synthetic accounts, bearers, clip bytes, and words throughout.
  */
 
-const ORIGIN = "https://luke.test";
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+const ORIGIN = "https://app.test";
 const DICTATION_PATH = "/api/dictation";
 const TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const OPENAI_KEY = "sk-proj-account-test-key-0000000000000dict";
@@ -53,7 +61,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -109,7 +116,7 @@ const openAccount = (
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const model = recordingHttpClient(() => modelResponse(options.model ?? { text: SAID }));
     const logged: string[] = [];
     const procedures = dictationProcedures({
@@ -152,6 +159,7 @@ const answer = (
         Layer.mergeAll(
           Layer.succeed(HostedEnvironment, environment),
           seams.model,
+          ANALYTICS.layer,
           Logger.layer([recorder]),
         ),
       ),
@@ -219,6 +227,28 @@ it.layer(getTestDB())("the dictation route", (it) => {
         assert.ok(file instanceof File);
         assert.equal(file.type, "audio/webm");
         assert.deepEqual(new Uint8Array(yield* Effect.promise(() => file.arrayBuffer())), CLIP);
+      }),
+  );
+
+  it.effect(
+    "each clip answered is counted under the account by how long it ran, in no workspace, and a clip refused is not",
+    () =>
+      Effect.gen(function* () {
+        const { userId, ask } = yield* openAccount();
+
+        yield* ask(clip(userId));
+        yield* ask(clip(userId, { durationMs: 45_000 }));
+        yield* ask(clip(userId, { durationMs: 120_001 }));
+
+        assert.deepEqual(
+          ANALYTICS.recorded
+            .filter((event) => event.userId === userId && event.name === SERVER_EVENT.DICTATION_USE)
+            .map((event) => ({ workspaceId: event.workspaceId, ...event.properties })),
+          [
+            { workspaceId: undefined, duration: SERVER_DICTATION_DURATION.UNDER_10S },
+            { workspaceId: undefined, duration: SERVER_DICTATION_DURATION.UNDER_1M },
+          ],
+        );
       }),
   );
 

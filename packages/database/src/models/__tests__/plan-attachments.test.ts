@@ -6,10 +6,10 @@ import {
   PICTURE_MEDIA_TYPE,
   PICTURE_TYPE,
   type Picture,
-} from "@luke/features/picture-wire";
-import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
-import { paddedTo, pngBytes, webmBytes } from "@luke/wire/testing";
+} from "@repo/features/picture-wire";
+import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { PLAN_ATTACHMENT_BOUNDS } from "@repo/features/plan-attachment-wire";
+import { paddedTo, pngBytes, webmBytes } from "@repo/wire/testing";
 import { Effect, Exit, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -44,7 +44,7 @@ const VIDEO: Picture = { contentType: PICTURE_MEDIA_TYPE.WEBM, bytes: webmBytes(
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

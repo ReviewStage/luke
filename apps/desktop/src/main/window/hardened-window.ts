@@ -1,4 +1,4 @@
-import type { RunMode } from "@luke/host";
+import type { RunMode } from "@repo/host";
 import type { BrowserWindow } from "electron";
 
 /**

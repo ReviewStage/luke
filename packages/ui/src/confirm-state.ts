@@ -1,4 +1,4 @@
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReportedFailure } from "./reported-failure.js";
 

@@ -2,7 +2,7 @@
  * polled-live.ts -- a live read as the service answers it polled, for a host test: each part's rows as the test sets them, and a poll past where they stood held until the test moves them.
  */
 
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@repo/features/live-wire";
 import { Deferred, Effect } from "effect";
 
 /**

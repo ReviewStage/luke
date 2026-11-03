@@ -1,23 +1,19 @@
 /* badge.css -- what the badge's utilities cannot say (`badge.tsx`, drawn by
    `../../shadcn/badge.tsx` in the shared Tailwind theme): its words given up
-   under a room's width, a filled label's fade, and its figures.
-
-   Note that its tabular figures stay a rule here rather than a utility,
-   because the type roles' check reads every counting surface's sheet for
-   them (`../../tokens/roles.test.ts`). */
+   under a room's width, a filled label's fade, and its figures. */
 
 @layer components {
   /* A badge often holds a count or a time, which must not shift as it ticks. */
-  .luke-badge {
+  .ui-badge {
     font-variant-numeric: tabular-nums;
   }
 
   /* A badge given a step in a header too narrow for its words keeps them for
      a reader, as `VisuallyHidden`'s `under` does. Note that these stay here,
-     because they answer a `luke-room` container the badge's caller draws. */
+     because they answer a `ui-room` container the badge's caller draws. */
   /* off-scale: 520px, where a snug badge's words stop fitting (visually-hidden.css reads the same line) */
-  @container luke-room (width < 520px) {
-    .luke-badge-words[data-under="snug"] {
+  @container ui-room (width < 520px) {
+    .ui-badge-words[data-under="snug"] {
       position: absolute;
       overflow: hidden;
       width: 1px;
@@ -28,8 +24,8 @@
   }
 
   /* off-scale: 440px, where a tight badge's words stop fitting (visually-hidden.css reads the same line) */
-  @container luke-room (width < 440px) {
-    .luke-badge-words[data-under="tight"] {
+  @container ui-room (width < 440px) {
+    .ui-badge-words[data-under="tight"] {
       position: absolute;
       overflow: hidden;
       width: 1px;
@@ -44,11 +40,11 @@
      the fade stays here, because it turns on the writing direction
      (`:dir()`), and Tailwind's mask utilities compose the gradient through
      variables rather than drawing it, which the label fade's test reads. */
-  .luke-badge-line[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+  .ui-badge-line[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
-  .luke-badge-line[data-overflow="true"]:dir(rtl) {
-    mask-image: linear-gradient(to right, transparent, #000 var(--luke-label-fade));
+  .ui-badge-line[data-overflow="true"]:dir(rtl) {
+    mask-image: linear-gradient(to right, transparent, #000 var(--ui-label-fade));
   }
 }

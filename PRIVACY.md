@@ -1,8 +1,8 @@
 # Privacy
 
-Last updated: 27 October 2026
+Last updated: 2 November 2026
 
-Vespin is a macOS app for planning a feature. This policy explains
+Vespin is an inbox for all your coding agents. This policy explains
 what we collect, who we send it to, and how to turn it off.
 
 ## In short
@@ -27,9 +27,9 @@ what we collect, who we send it to, and how to turn it off.
 - **Commands on your Mac.** Agents can run commands on your Mac, and
   what those commands print leaves it. See "Commands agents run on your Mac"
   under [What we collect](#what-we-collect).
-- **Off switches.** Turn off "Share usage data" in Settings › Account, turn
-  off "Let agents run commands on this Mac", disconnect any integration, or
-  delete your account, which erases what our service keeps under it. See
+- **Off switches.** Turn off "Share usage data" in Settings › Account, set
+  "Let agents run commands on this Mac" to Never, disconnect any integration,
+  or delete your account, which erases what our service keeps under it. See
   [Your choices](#your-choices).
 
 ## What we collect
@@ -57,20 +57,6 @@ you send it or the agent changes the item, each shown only while the account
 that wrote it is signed in. The files attached to such a message or answer
 stay in memory only.
 None of it is sent anywhere.
-
-**Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
-Vespin, in a tab of its side panel, on this Mac. Its shell clones the repository
-from GitHub into Vespin's application data the first time, with your own git
-login, fetches the agent's pushed branch, checks it out in a worktree there,
-runs the run command you set for that repository if you set one, and stays
-open for you to type in. It runs as your macOS user in your login shell, and
-reaches what you can. Each repository's run command is kept in this Mac's
-settings, under Settings › Workspace › Repositories, and never sent anywhere;
-what the terminal prints and what you type pass only between Vespin's windows
-on this Mac, are held in memory up to the latest 256 KB of output while the
-tab stays open, and are never written to disk, logged, counted, or recorded.
-Closing the tab, or quitting Vespin, hangs up the terminal and everything it
-started on it; the clone and the worktree stay until you delete them.
 
 **Commands agents run on your Mac.** Every agent can run any shell
 command on your Mac, as many at a time as you allow; the workers an agent hands work to cannot, and run their own commands in the agent's
@@ -458,39 +444,44 @@ it expire. The sandbox of each session a task's own Vespin ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A local agent on your Mac.** Once you turn on Bring your own host in
-Settings › Experimental and then This Mac in Settings › Hosts, an agent you
-start on This Mac runs Claude Code, or Codex for a GPT model, straight on your
-Mac, as you, in a folder of its own under `~/.vespin/agents` that holds its
-repository, its home, and its caches. It has full access to whatever your
-account on the Mac can reach, as a program you run yourself does: your files,
-the folders of your other agents, your running programs, and the network;
-neither Claude Code nor Codex runs a sandbox of its own there or asks before a
-command. Its transcript, its events, and the files its tools read still reach
-our service as any agent's do. It runs on the plan or key you saved in Vespin,
-never on the sign-in of Claude Code or Codex on your Mac; a Codex agent asks
-our service for your ChatGPT plan's access token over HTTPS as it needs one, so
-no token waits in our database for your Mac. A Claude Code agent's plan token
-or key is in the agent's environment, where any command it runs can read it,
-unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
-service hands your Mac, as for a host below, which your Mac writes into `gh`'s
-sign-in in the agent's own folder, where the agent's `git` and `gh` read it
-and any command it runs can too, rewrites as it renews, and deletes as each
-turn ends. No copy of an agent's work goes to Vespin: its folder stays on your
-Mac for the agent's life, and each turn goes on from it. An agent you archive or delete loses its
-folder from your Mac as soon as the archive reaches it, or within minutes of
-your Mac's next being online once our service no longer lists the agent; one
-where your Mac's check finds work that no remote has, or cannot tell, is kept
-for seven days, and then deleted. Only the agents this copy of Vespin started
-are ever touched, never another copy's sharing your Mac. Nothing of this
-happens until you turn This Mac on. Turning it on registers a login item that
-runs Vespin's host program, `luke-host`, on your Mac at each login, whether the
-app is open or not, and the app keeps it registered from then on; removing
-This Mac in Settings › Hosts stops its agents, and it runs none until you turn
-it on again. To run them, `luke-host` downloads Claude Code, Codex, and
-GitHub's CLI from their publishers once, and keeps each in Vespin's own folder
-on your Mac only once it matches the checksum Vespin pins. An agent that ran on
-your Mac before Vespin gave each agent a folder of its own is not started again;
-continue it into a new agent.
+Settings › Experimental, an agent you start on This Mac runs Claude Code, or
+Codex for a GPT model, straight on your Mac, as you, in a folder of its own
+under `~/.vespin/agents` that holds its repository, its home, and its caches.
+It has full access to whatever your account on the Mac can reach, as a program
+you run yourself does: your files, the folders of your other agents, your
+running programs, and the network; neither Claude Code nor Codex runs a
+sandbox of its own there or asks before a command. Its transcript, its events,
+and the files its tools read still reach our service as any agent's do. It
+runs on the plan or key you saved in Vespin, never on the sign-in of Claude
+Code or Codex on your Mac; a Codex agent asks our service for your ChatGPT
+plan's access token over HTTPS as it needs one, so no token waits in our
+database for your Mac. A Claude Code agent's plan token or key is in the
+agent's environment, where any command it runs can read it, unlike in a Vercel
+Sandbox. It reaches GitHub with a short-lived token our service hands your
+Mac, as for a host below, which your Mac writes into `gh`'s sign-in in the
+agent's own folder, where the agent's `git` and `gh` read it and any command
+it runs can too, rewrites as it renews, and deletes as each turn ends. No copy
+of an agent's work goes to Vespin: its folder stays on your Mac for the
+agent's life, and each turn goes on from it. An agent you archive or delete
+loses its folder from your Mac as soon as the archive reaches it, or within
+minutes of your Mac's next being online once our service no longer lists the
+agent; one where your Mac's check finds work that no remote has, or cannot
+tell, is kept for seven days, and then deleted. Only the folders of the agents
+your Mac's host made are ever touched. Nothing of this happens until you turn
+Bring your own host on. Turning it on enrolls your Mac on your sign-in and
+installs Vespin's host program, `vespin-host`, into your account on the Mac, as
+the install command in Settings › Hosts does: the app runs the install script
+our service serves, which puts the host under `~/.local` with a LaunchAgent
+that runs it at each login, whether the app is open or not, and the host keeps
+the secret it acts on in `~/.local/state/luke-host`, readable by you alone.
+Every copy of Vespin on your Mac drives that one host. Turning Bring your own
+host off stops it and keeps it from starting at the next login, with its files
+left in place; `vespin-host uninstall` removes it, with the folders of the
+agents it ran. To run them, `vespin-host` downloads Claude Code, Codex, and
+GitHub's CLI from their publishers once, and keeps each in its own folder on
+your Mac only once it matches the checksum Vespin pins. An agent that ran on
+your Mac before Vespin gave each agent a folder of its own is not started
+again; continue it into a new agent.
 
 **A local agent on a host.** A host is a Linux machine or Mac of your own
 that you add to Vespin to run your agents, as This Mac does. Each agent on
@@ -525,6 +516,24 @@ with the code, its IP address included, is deleted once the box collects its
 secret, or within a few minutes of the code lapsing. To stop codes being
 guessed, our service also counts, for 15 minutes at a time, how many codes
 your account named that matched none.
+
+**Which machine a host is.** This Mac and every host tell our service which
+machine they run on, so that two of your machines with one name can be told
+apart, and two installs on one machine known as one. A Mac reads its hardware
+UUID (`IOPlatformUUID`) and a Linux box its machine id (`/etc/machine-id`),
+asking nothing of you; that id never leaves the machine and is never logged.
+What is sent in its place is a keyed SHA-256 hash (HMAC) of it under a fixed
+key of Vespin's own, which the id cannot be worked back from and no other
+app's hash of it matches, but which stays the same for as long as the
+machine's id does: for a Mac's life, and on a Linux box until its machine id
+is made anew. A Mac also sends its model as macOS names it, such as "MacBook
+Air (M2, 2022)"; a Linux box sends none. Nothing else the system reports beside
+them, its serial number among it, is kept or sent. They go with This Mac's
+enroll as you turn on Bring your own host, with a box's ask for its code, and
+each time the host program starts; our service keeps them with the host from
+its enroll or its first call after you approve it, keeping none from the ask
+for a code, lists them only to your own account's apps, and keeps them for as
+long as it keeps the host, which goes with your account.
 
 **An agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, an agent your Claude plan pays for runs on
@@ -871,10 +880,18 @@ memory for a short while, and sends it only to Linear's MCP server, never to
 your Mac, a model, or a sandbox. We keep only your connection's state
 (waiting for sign-in, connected, or expired), when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. Where you connect more than one
-account at one service, we also keep a name for each: the name the service
-gives that account's workspace when Vercel Connect hands us its token, or one
-you give it in Settings › Integrations. An agent handed more than one account
+one-time value that matches its return. We also keep a name for each
+account, which Settings › Integrations shows beside the service's: the name
+the service gives that account's workspace when Vercel Connect hands us its
+token; where that names none, the name the service itself answers for the
+account, read with the same token, from Google's API for Google's products
+(below), and otherwise through one tool of the service's own MCP server that
+only reads: your organization's or workspace's name for Mercury, Neon, Notion,
+PostHog, Sentry, and Supabase (Neon, Sentry, and Supabase only where you belong
+to one organization there), and your email there for Granola, Vercel, and
+Y Combinator; or one you give it in Settings › Integrations. Of what the
+service answers we keep only that name, and a read that fails is not tried
+again for five minutes. An agent handed more than one account
 at a service is told each one's name, so it can ask which you mean and say
 which it used. The list of Linear's tools that menu
 shows is held in our service's memory for five minutes. While you are
@@ -958,6 +975,64 @@ and asks Vercel Connect to revoke the grant; what agents already sent or
 changed in Slack, and the record of it, stays, and a grant Vercel Connect
 could not revoke stays until you remove Vespin in Slack's own settings.
 
+**Vespin's Slack bot, where an owner or admin connects it.** Apart from the
+Slack each member connects for their agents, a workspace's owner or admin can
+connect Vespin's own Slack bot under Settings › Workspace, so Vespin can
+message the workspace's members in Slack. The bot's token stays in Vercel
+Connect, which holds it for the bot rather than for any account; our service
+asks for it each time it calls Slack and never stores it. Connecting asks
+Slack which Slack workspace the bot belongs to, and our service keeps that
+Slack workspace's id and name, and who connected it. The first time the bot
+is to message you, our service finds you in that Slack workspace. Where you
+connected your own Slack account under Settings › Integrations, it asks
+Slack who that account is, on that account's token from Vercel Connect,
+which it does not store, and takes your Slack user id where the account is
+in the bot's Slack workspace. Otherwise it sends your Vespin account's email
+address to Slack to find you there. It keeps the Slack user id it found, or
+that the email found no one, which it asks again after a day; a member it
+finds neither way is sent nothing. What the bot sends
+you, such as a thread's title and a link to it or an automation's result,
+goes to Slack, which keeps it under Slack's own policy. Disconnecting the bot
+deletes the Slack workspace's record and every member's Slack user id with
+it; deleting the workspace does the same, and deleting your account deletes
+your Slack user id. Messages the bot already sent stay in Slack.
+
+When an agent posts a thread that waits on you, the bot messages you its
+title, the agent's words as plain text, and a link to the thread, and our
+service keeps that Slack message's conversation and timestamp beside the
+agent's message so it can rewrite it once the ask is answered, withdrawn, or
+replaced, then forgets them. Slack notifications, under the bot's row in
+Settings › Workspace, turns these messages off for you in every workspace.
+Where the thread asks you to pick one option, the message carries a button
+for each, and pressing one answers the ask as you, as picking it in Vespin
+would: Slack sends the press through Vercel Connect to our service, which
+reads only the Slack user and Slack workspace who pressed it and the
+thread, message, and option the button names, finds you by the Slack user
+id it kept, and keeps nothing else of the press.
+
+When you mention @Vespin in a Slack channel the bot is in, or write to the
+bot directly, Slack sends that message through Vercel Connect to our
+service, which finds you as a member of a Vespin workspace connected to that
+Slack workspace: by the Slack user id it kept; or else by asking Slack who
+each Slack account that workspace's members connected themselves is, for the
+members whose Slack user id it does not keep yet, as above; or else by asking
+Slack for the email address on your Slack profile and matching it to your
+Vespin account's. It keeps each Slack user id it finds from then on. A Slack
+user it finds no member for is told to connect Slack in Vespin's Settings ›
+Integrations, and nothing is started or kept. For
+a member, it starts a coding agent as you, or, in a thread an agent was
+already started from, sends the message to that agent as yours. The agent is
+handed your message, the earlier messages of the Slack thread it stands in,
+which our service reads from Slack and which other people may have written,
+with their Slack user ids, and the message's Slack link, so all of these
+reach the agent's prompt, the model, its transcript, and its traces, as
+anything you type to an agent does. Our service keeps which Slack
+conversation and thread each such agent was started from, so it can post the
+agent's final message, or that it failed or was stopped, back in that
+thread, where everyone in the conversation can read it; that record is
+deleted with the agent, with the workspace's bot connection, or with your
+account. Messages the bot posted stay in Slack.
+
 **Gmail, Google Calendar, and Google Drive, where they are offered.** Our
 service offers them only to the accounts of the organization it names, while
 Google's sign-in for them is limited to that organization's Google
@@ -966,7 +1041,10 @@ signs you in to Google in your browser through Vercel Connect for that one
 product, so connecting Calendar never grants mail. Vercel Connect stores
 Google's token for your account, encrypted, and renews it. Our service
 handles the token as it does Linear's, keeps the same record of your
-connection, and sends it only to Google's MCP server for that product. While
+connection, and sends it only to Google's MCP server for that product, and
+to that product's own API to read your Google account's email, which names
+the connection: Gmail's profile, your primary calendar's entry, or Drive's
+account details. A read that fails is not tried again for five minutes. While
 you are connected, the agents, as for Linear, can do whatever that grant
 allows, through Google's own MCP servers, without asking you first: for
 Gmail, search and read your mail and apply labels, and write drafts, but
@@ -1074,40 +1152,76 @@ or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text. Each count also carries Vespin's version, whether
 it is a released build or a development one, whether it came from Vespin for Mac
 or Vespin in a browser tab (`platform`), and which deployment of our
-service recorded it. Settings › Account › "Share usage data" turns these
-counts off (see "Your choices").
+service recorded it. Our service also files them under a workspace, by its id
+alone, from its own record of the workspaces you are a member of, never from
+anything Vespin sends: the one workspace you share with others, or your own
+first workspace if you share none; if you are a member of two or more shared
+workspaces, they carry none. So if you are a member of a team's workspace,
+what you count while working in your own first workspace is filed under the
+team's. Settings › Account › "Share usage data" turns these counts off (see
+"Your choices").
 
 Our service also counts, under the same account, the work done through it:
-a task or a workspace made (with where it was started from), an agent started (with the model and effort
-it runs on, and whether an automation started it), a message you sent an agent
-(with what runs it, where, what kind of agent it is, and whether it was at
-work), each of an agent's turns ended (with how it ended: answered, failed,
-stopped, or given up on by our service, roughly how long it ran, and what
+a task or a workspace made (with where it was started from), a task finished or
+canceled (by you, or on the merge of its work), an agent started (with the model and effort
+it runs on, who started it (you, another agent, or an automation), and what kind of agent it is),
+an agent whose start failed (with how it failed), a message you sent an agent
+(with what runs it, where, what kind of agent it is, whether it was at
+work, and whether it waited in the agent's queue), each of an agent's turns ended (with how it ended: answered, failed,
+stopped, or given up on by our service, why a failed one failed, roughly how long it ran, and what
 kind of agent it is), an agent stopped or archived (with what kind of agent
-it is), a pull
+it is), an agent's model or effort changed, a pull
 request an agent opened (as you or as Vespin's GitHub App, and whether as a
-draft) and one it opened merged, an Inbox item
-answered, an automation made (with
-what triggers it), a message handed to an agent's runner (with which harness it
+draft), one it opened merged, and one you merged, reviewed, set to merge
+automatically, or closed from Vespin (which of those), an Inbox item
+answered, an automation made (with what triggers it), edited, or deleted (with
+whether you or an agent made the change), a message handed to an agent's runner (with which harness it
 runs, how the message reached it, whether a turn was under way, and how long the
 agent had been idle), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how
 many chapters and parts of the diff they hold, and how long it took). It
 counts how a team comes together and sets up the same way, each under the
 account that did it: an account's first sign-in (with whether it was through
-Google or GitHub), an invitation to a workspace sent (with the role it offers)
-and accepted, a post a member made on a thread (with whether it answered an ask
+Google or GitHub), a GitHub account linked or a GitHub token saved, a model
+provider's key or sign-in added (with which provider), a repository pinned or
+unpinned (never which), an invitation to a workspace sent (with the role it offers)
+and accepted or canceled, a member removed, given another role, or handed the
+workspace, a member who left, a workspace renamed, a post a member made on a thread (with whether it answered an ask
 and whether it carried a picture or a file), a plan a member edited, a comment
 a member wrote on one (with whether it replied on a thread or started one), an
 automation run started (with what fired it: its schedule, GitHub, a webhook, an
 integration, or Run now), counted under the automation's owner, the GitHub App
-connected to a workspace, and a Linux host or this Mac enrolled (with which).
+connected to a workspace, a Linux host or this Mac enrolled (with which), a
+box's pairing approved or denied and a host removed, a channel made, edited, or
+archived and a thread moved into one, a skill installed, turned on or off,
+updated, shared with a workspace, or removed (never which), a workspace memory
+forgotten (never what it held), a clip you dictated (with a rough length, never
+its words), and a terminal or a browser tab you opened in an agent's sandbox, a
+browser tab you took over or handed back, or a file you added to a plan.
 What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
 `platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them
 with the rest of your usage data.
+
+Our service's counts are also grouped by workspace, so PostHog can count
+workspaces as well as people: a count of something done in a workspace (a
+task, an agent and its messages and turns, a pull request, a thread, a plan, an
+automation, an invitation, a member or workspace change, a channel, a memory, a
+tool you opened for an agent, the GitHub App, or the workspace made) carries the
+workspace's id, and a count of your account's own setup and belongings (your
+first sign-in, a GitHub account or token, an integration, an API key, a pinned
+repository, an enrolled host or a pairing, a skill, or a dictated clip) carries
+none. For each workspace it counts, PostHog holds that
+workspace's name, as its members see it, and when it was made, and nothing
+else of it; our service sends them beside the workspace's first count on each
+of its servers, again once a day, and when the workspace is renamed. Your own
+first workspace is named with your name, so PostHog holds your name for it
+too. A workspace is never deleted, and PostHog cannot delete a single
+workspace's record, so PostHog keeps a workspace's name and creation date;
+deleting your account leaves them, your first workspace's name among them, as
+the workspace itself stays on our service.
 
 **Screen recordings.** Vespin records what its own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
@@ -1142,10 +1256,15 @@ account, which carries your name and email address as you are shown in
 Vespin, so that we can find the recordings of a person who reports a problem;
 deleting your account erases them. Each recording carries Vespin's version,
 whether it is a released build or a development one, and whether it came
-from the Mac app or the web app; only a released build records at all.
+from the Mac app or the web app; only a released build records at all. It is
+also filed under the workspace Vespin's sidebar was showing as it was made, by
+the workspace's id alone, and under the next one when you switch; signing out
+lets it go with your account.
 Each also carries what PostHog's library reports of your device by default:
 its operating system and that system's version, the browser, your language
-and time zone, and the size of your screen.
+and time zone, and the size of your screen. The Mac app sends its recordings
+to PostHog directly; Vespin in a browser sends them through vespin.dev, which
+passes them on to PostHog (see "Our website").
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
 small, downscaled still of a screen you visited, taken by the app as you
@@ -1348,8 +1467,10 @@ only when you press Send.
   under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app, screen
   recordings from Vespin in a browser, and the counts our service makes of the
-  work done through it. The counts go through our own service; the
-  recordings go from Vespin, on the Mac or in your browser, to PostHog directly.
+  work done through it, all grouped by workspace, with each workspace's name
+  and creation date. The counts go through our own service; the
+  recordings go from the Mac app to PostHog directly, and from your browser
+  through vespin.dev, which passes them on to PostHog.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
   reports, and our service's and Vespin's agents' error, performance, log, and
   agent reports, described above.
@@ -1486,6 +1607,10 @@ only when you press Send.
 - Vercel Connect and Slack, if you connect Slack where it is offered: Vercel
   Connect keeps Slack's token, and our service sends each Slack call, with its
   input, to Slack's MCP server, which keeps it under Slack's own policy.
+- Vercel Connect and Slack, if your workspace connects Vespin's Slack bot:
+  Vercel Connect keeps the bot's token, and our service sends Slack your
+  email address to find you there and each message the bot sends you, which
+  Slack keeps under its own policy.
 - GitHub's MCP server, if you signed in with GitHub: our service sends each
   GitHub call, with its input and your Vespin GitHub App token, to GitHub's MCP
   server, which keeps it under GitHub's own policy.
@@ -1549,8 +1674,12 @@ is shown, the site names you to PostHog by your account's id, name, and
 email address, which links your earlier visits to your account, and counts
 the sign-in once, remembering in your browser which sign-in it last counted.
 The hand-off page is one of the sign-in pages above: not recorded, its
-address cut to the page itself. Your browser contacts PostHog directly, so
-PostHog sees your network address, as it does for the app's recordings.
+address cut to the page itself. Your browser sends all of this to a path on
+vespin.dev rather than to PostHog, and our hosting passes each request on to
+PostHog as your browser sent it, without the site's cookies. So PostHog still
+sees what the request carries, your browser's user agent among it, and is
+handed your network address beside it; our PostHog project is set to discard
+client IP addresses, so PostHog does not keep it.
 
 Vespin in a browser, the app at vespin.dev/app and at every link to something
 in Vespin, is not one of the site's pages above: it records and reports what the
@@ -1571,9 +1700,10 @@ word for it, such as inline, all using Sentry's default data
 collection and each naming the account signed in in that tab, as described
 under "Crash and performance reports from the Mac app", where the page's
 address, your browser's details, and the addresses of the requests it made
-take the place of the Mac's. Your browser contacts
-PostHog and Sentry (see "Who we send it to") directly, so each sees your
-network address.
+take the place of the Mac's. Your browser contacts Sentry (see "Who we send
+it to") directly, so Sentry sees your network address. It sends the app's
+recordings through vespin.dev as the site's pages do, so PostHog is handed
+your network address too, and does not keep it.
 
 A link to something in Vespin, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Vespin's own card: the Vespin name and logo, the
@@ -1588,14 +1718,13 @@ keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversations with agents or their working memory is kept on your Mac
 beyond the layout of its window described under "On your Mac", and the
-switch for commands on your Mac and each repository's run command for Run
-are kept with that Mac's settings. Vespin in a browser keeps your settings in
+switch for commands on your Mac is kept with that Mac's settings. Vespin in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
 account id it files under while you are signed in, an id of its own it
-keeps beside it, and whether it may send, under `luke_app_replay` and
-`luke_app_replay_consent`, apart from the site's own counting. A connect
+keeps beside it, and whether it may send, under `app_replay` and
+`app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it
 lands on, or the app opened again in that tab, lets go of it. A sign-in
@@ -1617,8 +1746,8 @@ and error, performance, and agent reports by Sentry.
   download, and off in a Vespin you build and run from its source, which sends
   no usage counts unless you turn it on. It does not stop the counts our
   service makes of the work done through it.
-- Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
-  agents running commands on that Mac; it is set on each Mac apart, and
+- Set Settings › This Mac › "Let agents run commands on this Mac" to Never to
+  stop agents running commands on that Mac; it is set on each Mac apart, and
   signing out stops it too.
 - Switch an integration off for one agent in its message box's MCP
   menu, or disconnect it for every agent in Settings › Integrations.

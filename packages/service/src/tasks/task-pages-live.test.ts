@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import { Database } from "@luke/database/core/query";
-import { createAgent } from "@luke/database/models/agent-store";
-import { listPages, writePage } from "@luke/database/models/plan-pages";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { pagesOfLiveRows, taskPagesLiveRowsSchema } from "@luke/features/live-wire";
-import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
+import { listPages, writePage } from "@repo/database/models/plan-pages";
+import { user } from "@repo/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, startTask } from "@repo/database/testing";
+import { pagesOfLiveRows, taskPagesLiveRowsSchema } from "@repo/features/live-wire";
+import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "./task-pages-live.js";
@@ -28,7 +29,7 @@ import { agentPagesLiveStatements, taskPagesLiveStatements } from "./task-pages-
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -47,6 +48,7 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
     (started) => Option.getOrThrow(started).agent.id,
   );
@@ -89,7 +91,7 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
             owner,
             taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         yield* writePage(
@@ -102,14 +104,14 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
           owner,
           taskPageOwner(other.id),
           { title: "Another task's page", html: "<p>Elsewhere</p>" },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
         assert.equal((yield* agrees).length, 2);
         yield* writePage(
           owner,
           taskPageOwner(task.id),
           { pageId: funnel.id, title: "Invite funnel, revised", html: "<p>Two</p>" },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
         const pages = yield* agrees;
         assert.deepEqual(
@@ -143,7 +145,7 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
           owner,
           taskPageOwner(task.id),
           { title: "The task's", html: "<p>t</p>" },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
 
         const held = yield* listPages(owner, owned);

@@ -11,8 +11,8 @@
  * served at, so both render the same view.
  */
 
-import { LINK_ORIGIN } from "@luke/features/link-home";
-import { PRODUCT_NAME } from "@luke/features/product-name";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 
 export const CHANGELOG_PATH = "/changelog";
 /** The changelog's RSS feed, every release an item linking to its own page. */

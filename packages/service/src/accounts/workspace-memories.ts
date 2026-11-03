@@ -3,14 +3,14 @@ import {
   listMemories,
   MEMORY_FORGET,
   type StoredMemory,
-} from "@luke/database/models/memory-store";
+} from "@repo/database/models/memory-store";
 import {
   readAccountNames,
   type WorkspaceStoreEffect,
   workspaceOf,
-} from "@luke/database/models/workspace-store";
-import type { MemorySummary } from "@luke/features/memory-wire";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/database/models/workspace-store";
+import type { MemorySummary } from "@repo/features/memory-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { Effect, Option } from "effect";
 
 /**

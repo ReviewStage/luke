@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { OrganizationRefused } from "@luke/database/models/workspace-seams";
-import { account } from "@luke/database/schemas/auth";
-import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
-import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
-import type { WireBoundaryInput } from "@luke/wire";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { OrganizationRefused } from "@repo/database/models/workspace-seams";
+import { account } from "@repo/database/schemas/auth";
+import { openMigratedPglite, sqlClientOverPglite } from "@repo/database/testing";
+import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@repo/features/github-connection-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
 import { bearer } from "better-auth/plugins";
@@ -46,7 +46,7 @@ import { type GitHubUnlink, githubUnlink } from "./github-unlink.js";
  * Synthetic accounts, bearers, secrets, and tokens throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SECRET = "github-connection-test-secret-with-enough-length";
 const PASSWORD = "fixture-password-of-enough-length";
 const GITHUB_ACCOUNT_ID = 4242;
@@ -152,7 +152,7 @@ const openService = Effect.gen(function* () {
   const signUp = (name: string) =>
     Effect.gen(function* () {
       const browser = new Browser();
-      const email = `${name.toLowerCase()}@luke.test`;
+      const email = `${name.toLowerCase()}@app.test`;
       const response = yield* toAuth(browser, "/sign-up/email", {
         email,
         password: PASSWORD,

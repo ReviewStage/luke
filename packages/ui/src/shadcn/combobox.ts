@@ -7,7 +7,7 @@
  * spell, so a later `shadcn add combobox` reads as a small diff against
  * them. Its Base UI parts are left out, because Base UI's combobox owns
  * whether the list is open, what it filters, and which item is lit, and
- * every caller of `@luke/ui`'s `Combobox` owns all three
+ * every caller of `@repo/ui`'s `Combobox` owns all three
  * (`components/combobox/use-combobox-field.ts`), a list engine of the app's
  * (cmdk) among them; and its input, trigger, clear, chips, and popup are
  * left out, because the field is the text field's own and the list stands
@@ -18,10 +18,10 @@
  * rather than Base UI's `data-highlighted`, dimmed by `aria-disabled`, its
  * indicator a slot of its own at the row's end rather than an absolute
  * check; the list is capped by the app's placement hook
- * (`--luke-combobox-list-max`), scrolls only down (its ring is `combobox.css`'s
+ * (`--ui-combobox-list-max`), scrolls only down (its ring is `combobox.css`'s
  * to leave off, the active option marking it); the label is the muted caption; and the empty
  * line is a row or two tall, so a list with nothing never falls to a sliver.
- * `@luke/ui`'s `Combobox` (`components/combobox/combobox.tsx`) is what an
+ * `@repo/ui`'s `Combobox` (`components/combobox/combobox.tsx`) is what an
  * app draws; these are its inside.
  */
 
@@ -49,19 +49,19 @@ export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-la
 
 /** An item's detail, quieter, giving way first where the row runs short. */
 export const COMBOBOX_ITEM_DETAIL =
-  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-luke-12 text-caption leading-[inherit] text-muted-foreground";
+  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-ui-12 text-caption leading-[inherit] text-muted-foreground";
 
 /** An item's hint at its end, at a menu's distance from what stands before it, as a chord is. */
 export const COMBOBOX_ITEM_HINT =
-  "inline-flex flex-none items-center gap-luke-4 pl-luke-16 text-caption leading-[inherit] text-muted-foreground";
+  "inline-flex flex-none items-center gap-ui-4 pl-ui-16 text-caption leading-[inherit] text-muted-foreground";
 
 /** An item's end slot, one glyph wide: a chevron, or the check of the one chosen now in the text's own ink. */
 export const COMBOBOX_ITEM_END =
   "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
 
 /** Where a group's heading stands over its run; its words are `Text`'s group role. */
-export const COMBOBOX_HEADING = "px-row-inset pt-row-inset pb-luke-4";
+export const COMBOBOX_HEADING = "px-row-inset pt-row-inset pb-ui-4";
 
 /** What stands where no option does, or after them: one quiet line, centred, a row or two tall. */
 export const COMBOBOX_EMPTY =
-  "m-0 flex min-h-luke-40 items-center justify-center px-list-inset py-luke-4 text-center text-caption text-muted-foreground";
+  "m-0 flex min-h-ui-40 items-center justify-center px-list-inset py-ui-4 text-center text-caption text-muted-foreground";

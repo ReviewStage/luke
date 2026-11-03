@@ -80,13 +80,13 @@ async function mount(admin: boolean): Promise<{ sidebar: HTMLElement; opened: nu
 /** The names of the rows the sidebar's places draw, top to bottom. */
 function placeNames(sidebar: HTMLElement): string[] {
   const places = sidebar.querySelector(".sidebar-places") ?? assert.fail("the sidebar's places");
-  return [...places.querySelectorAll(".luke-nav-item-name")].map((name) => name.textContent ?? "");
+  return [...places.querySelectorAll(".ui-nav-item-name")].map((name) => name.textContent ?? "");
 }
 
 /** The Admin row, wherever it is drawn. */
 function adminRow(sidebar: HTMLElement): HTMLElement | undefined {
-  return [...sidebar.querySelectorAll<HTMLElement>(".luke-nav-item")].find(
-    (row) => row.querySelector(".luke-nav-item-name")?.textContent === "Admin",
+  return [...sidebar.querySelectorAll<HTMLElement>(".ui-nav-item")].find(
+    (row) => row.querySelector(".ui-nav-item-name")?.textContent === "Admin",
   );
 }
 

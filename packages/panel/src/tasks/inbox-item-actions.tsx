@@ -1,6 +1,6 @@
-import type { InboxItem } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
-import { GLYPH } from "@luke/ui/icons";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
+import { GLYPH } from "@repo/ui/icons";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { closeAction } from "./inbox-close.js";
@@ -41,9 +41,9 @@ interface InboxItemActions {
   readonly groups: (lead?: readonly MenuAction[][]) => MenuAction[][];
 }
 
-/** The place an item is linked by: under its agent, whichever task holds it, which its reader finds by the agent. */
+/** The place an item is linked by: its id alone, whose agent and task its reader asks the service for. */
 function inboxItemPlace(item: InboxItem): LinkPlace {
-  return { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id };
+  return { kind: LINK_PLACE.INBOX_ITEM, itemId: item.id };
 }
 
 /** One item's acts. */

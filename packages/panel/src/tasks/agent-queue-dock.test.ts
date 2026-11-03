@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { QueuedMessage } from "@luke/features/agent-queue-wire";
-import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import type { QueuedMessage } from "@repo/features/agent-queue-wire";
+import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
+import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -96,7 +96,7 @@ function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
     );
   return {
     row: (index: number) => presses(rows[index]),
-    words: (index: number) => rows[index]?.querySelector(".luke-one-line")?.textContent ?? "",
+    words: (index: number) => rows[index]?.querySelector(".ui-one-line")?.textContent ?? "",
     /** Whether a reader reaches the row's files, which no hidden region holds back. */
     filesReached: (index: number) => {
       const files = rows[index]?.querySelector('[aria-label="Attached files"]');
@@ -109,7 +109,7 @@ function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
     chips: (index: number) =>
       [...(rows[index]?.querySelectorAll<HTMLElement>("[data-mention-ref]") ?? [])].map((chip) => [
         chip.dataset.kind,
-        chip.querySelector(".luke-inline-ref-label")?.textContent,
+        chip.querySelector(".ui-inline-ref-label")?.textContent,
       ]),
     all: () => presses(container),
   };

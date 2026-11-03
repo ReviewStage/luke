@@ -1,1236 +1,105 @@
 #!/usr/bin/env node
-// Brand-asset generator — the single source of truth for the artwork.
-// The identity is the L-face: a monoline capital-L nose curling into a smile,
-// two eyes above it. Edit the constants below and re-run:
+// Brand-asset generator -- the single source of truth for the artwork.
+// The identity is the Keel: a disc cut by a narrow V that opens through its
+// top edge and cradles an island, drawn in one colour. Edit the constants
+// below and re-run:
 //
 //   node packages/brand/scripts/generate-brand-assets.mjs
 //
-// It writes three kinds of output, all from the one description of the face and
-// its motions further down:
+// It writes two kinds of output, both from the one description of the mark:
 //
-//   packages/brand/assets/**.svg                              standalone assets (SMIL)
-//   packages/brand/src/generated/face-art.ts       the face and the wordmark's letters
-//   packages/ui/src/face/face-motion.css           the motions, as @keyframes
+//   packages/brand/assets/**.svg                 standalone assets
+//   packages/brand/src/generated/mark-art.ts     the mark's and the wordmark's geometry, for @repo/ui
 //
-// The app draws the face itself rather than loading these SVGs, because it needs
-// what a baked asset cannot give it: `currentColor` and CSS animation, so `@luke/ui`'s motion tokens
-// can hold every loop still for a capture run or for reduced motion. Emitting
-// its two inputs from here keeps that second copy from being a second source.
+// The colours are the brand's, read from brand-palette.mjs, the table
+// @repo/ui's palette is generated from too, so a change of brand redraws
+// the icons with the app.
 //
-// PNG derivatives (app icon sizes) are rasterized
-// separately — see packages/brand/README.md.
+// PNG derivatives (app icon sizes, the cards) are rasterized separately --
+// see packages/brand/README.md.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PRODUCT_NAME } from "../../features/src/product-name.ts";
+import { BRAND } from "./brand-palette.mjs";
 import { DMG_WINDOW } from "./dmg-window.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "..", "assets");
-const UI_FACE = join(HERE, "..", "..", "ui", "src", "face");
 const SURFACE = join(HERE, "..", "src", "generated");
+
+// ---------- The mark ----------
+// Keel H, on a 100-unit disc of radius 50 centred at (50, 50), built from
+// straight lines and circular arcs only and booleaned into one outline: the
+// V's arms open 25 degrees off vertical and meet on a round join 70% down,
+// the channel is 10.5% of the disc, and every corner where the channel meets
+// the rim, and the island's tip, is rounded at 3%. Its one colour fills it,
+// the body and the island alike. Below 32 pixels the small cut takes over,
+// its channel opened to 13.5% so the V still reads at 16, the way a typeface
+// has optical sizes.
+const MARK = {
+  VIEW_BOX: "0 0 100 100",
+  PATH: "M0,50c0,-13.55 5.39,-25.84 14.14,-34.84c0.54,-0.56 1.30,-0.90 2.15,-0.90c1.22,0 2.28,0.73 2.74,1.79l26.14,56.07c0.81,1.84 2.65,3.13 4.80,3.13c2.14,0 3.99,-1.29 4.80,-3.13l26.14,-56.07c0.46,-1.05 1.51,-1.79 2.74,-1.79c0.84,0 1.60,0.34 2.15,0.90c8.75,9.00 14.14,21.29 14.14,34.84c0,27.61 -22.38,50 -50,50c-27.61,0 -50,-22.38 -50,-50zM28.66,4.76c6.46,-3.05 13.70,-4.76 21.33,-4.76c7.63,0 14.86,1.70 21.33,4.76l-0.00,0.01c1.01,0.48 1.72,1.51 1.72,2.71c0,0.47 -0.11,0.92 -0.30,1.32l-19.99,42.87c-0.46,1.05 -1.51,1.79 -2.74,1.79c-1.22,0 -2.28,-0.73 -2.74,-1.79l-19.99,-42.87c-0.19,-0.39 -0.30,-0.84 -0.30,-1.32c0,-1.19 0.70,-2.23 1.72,-2.71z",
+  SMALL_PATH:
+    "M0,50c0,-12.93 4.91,-24.71 12.96,-33.59l0.00,0.00c0.54,-0.60 1.34,-0.98 2.22,-0.98c1.22,0 2.28,0.73 2.74,1.79l25.88,55.50c1.04,2.37 3.41,4.03 6.18,4.03c2.76,0 5.13,-1.65 6.18,-4.03l25.88,-55.50c0.46,-1.05 1.51,-1.79 2.74,-1.79c0.88,0 1.67,0.37 2.22,0.98l0.00,-0.00c8.05,8.87 12.96,20.66 12.96,33.59c0,27.61 -22.38,50 -50,50c-27.61,0 -50,-22.38 -50,-50zM30.12,4.10c6.09,-2.64 12.81,-4.10 19.87,-4.10c7.06,0 13.78,1.46 19.87,4.10l-0.00,0.01c1.06,0.46 1.80,1.52 1.80,2.75c0,0.47 -0.11,0.92 -0.30,1.32l-18.16,38.95c-0.54,1.23 -1.77,2.09 -3.20,2.09c-1.43,0 -2.66,-0.86 -3.20,-2.09l-18.16,-38.95c-0.19,-0.39 -0.30,-0.84 -0.30,-1.32c0,-1.23 0.74,-2.29 1.80,-2.75z",
+};
+
+// ---------- The wordmark ----------
+// The name set in Geist SemiBold at -2% tracking and outlined, so no asset
+// depends on an installed font, with the i's square dot drawn as a circle a
+// touch wider than the stem, since a round dot reads smaller than a square
+// one. Units are the type's, at 100 to the em: the baseline is y 0, the cap
+// height 71 above it, and INK the outline's own box.
+const WORDMARK = {
+  PATH: "M43.2 0L27.6 0L1.9 -71L15.6 -71L35.5 -14.5L55.3 -71L69 -71L43.2 0M94.2 1.2L94.2 1.2Q86.2 1.2 80.3 -2.25Q74.4 -5.7 71.2 -12Q68 -18.3 68 -26.7L68 -26.7Q68 -35.1 71.2 -41.4Q74.4 -47.7 80.25 -51.15Q86.1 -54.6 93.9 -54.6L93.9 -54.6Q101.5 -54.6 107.2 -51.2Q112.9 -47.8 116.05 -41.4Q119.2 -35 119.2 -26L119.2 -26L119.2 -23.1L81.3 -23.1Q81.6 -16.1 85.1 -12.55Q88.6 -9 94.3 -9L94.3 -9Q103 -9 105.4 -16.4L105.4 -16.4L118.5 -15.6Q116.3 -7.8 109.85 -3.3Q103.4 1.2 94.2 1.2M81.3 -31.7L81.3 -31.7L106 -31.7Q105.5 -38.2 102.25 -41.35Q99 -44.5 93.9 -44.5L93.9 -44.5Q88.7 -44.5 85.4 -41.2Q82.1 -37.9 81.3 -31.7M148.9 1.2L148.9 1.2Q136.7 1.2 130.7 -3.9Q124.7 -9 124.1 -16.8L124.1 -16.8L137.2 -17.4Q137.9 -13.2 140.55 -10.9Q143.2 -8.6 149 -8.6L149 -8.6Q153.5 -8.6 155.85 -10.05Q158.2 -11.5 158.2 -14.6L158.2 -14.6Q158.2 -16.4 157.35 -17.6Q156.5 -18.8 154.05 -19.7Q151.6 -20.6 146.9 -21.5L146.9 -21.5Q138.8 -22.9 134.2 -24.95Q129.6 -27 127.75 -30.1Q125.9 -33.2 125.9 -37.8L125.9 -37.8Q125.9 -45.2 131.65 -49.9Q137.4 -54.6 148.5 -54.6L148.5 -54.6Q156.2 -54.6 161.15 -52.15Q166.1 -49.7 168.65 -45.65Q171.2 -41.6 171.6 -36.6L171.6 -36.6L158.6 -36Q158.4 -39.8 156 -42.3Q153.6 -44.8 148.3 -44.8L148.3 -44.8Q143.8 -44.8 141.45 -43Q139.1 -41.2 139.1 -38.2L139.1 -38.2Q139.1 -35 141.35 -33.45Q143.6 -31.9 149.6 -30.9L149.6 -30.9Q157.8 -29.7 162.6 -27.6Q167.4 -25.5 169.45 -22.35Q171.5 -19.2 171.5 -14.8L171.5 -14.8Q171.5 -7.1 165.35 -2.95Q159.2 1.2 148.9 1.2M192.3 15L179.5 15L179.5 -53.4L191.8 -53.4L192 -45.4Q194.3 -49.9 198.5 -52.25Q202.7 -54.6 208 -54.6L208 -54.6Q215.6 -54.6 220.65 -50.85Q225.7 -47.1 228.2 -40.75Q230.7 -34.4 230.7 -26.7L230.7 -26.7Q230.7 -19 228.15 -12.7Q225.6 -6.4 220.55 -2.6Q215.5 1.2 207.9 1.2L207.9 1.2Q202.8 1.2 198.65 -1.05Q194.5 -3.3 192.3 -7.3L192.3 -7.3L192.3 15M204.9 -9.2L204.9 -9.2Q210.7 -9.2 214.05 -13.85Q217.4 -18.5 217.4 -26.7L217.4 -26.7Q217.4 -34.9 214.05 -39.55Q210.7 -44.2 204.9 -44.2L204.9 -44.2Q199.1 -44.2 195.7 -39.8Q192.3 -35.4 192.3 -26.7L192.3 -26.7Q192.3 -18 195.65 -13.6Q199 -9.2 204.9 -9.2M237.83 -66.20a7.17 7.17 0 1 0 14.34 0a7.17 7.17 0 1 0 -14.34 0ZM251.4 0L238.6 0L238.6 -53.4L251.4 -53.4L251.4 0M276.9 0L264.1 0L264.1 -53.4L275.7 -53.4L276 -44.3Q278.2 -49.8 282.45 -52.2Q286.7 -54.6 292 -54.6L292 -54.6Q300.8 -54.6 305.5 -48.95Q310.2 -43.3 310.2 -34.3L310.2 -34.3L310.2 0L297.4 0L297.4 -30.2Q297.4 -37 295.35 -40.6Q293.3 -44.2 288.1 -44.2L288.1 -44.2Q282.9 -44.2 279.9 -40.6Q276.9 -37 276.9 -30.2L276.9 -30.2L276.9 0",
+  CAP_HEIGHT: 71,
+  INK: { LEFT: 1.9, RIGHT: 310.2, TOP: -75, BOTTOM: 15 },
+};
+// The lockup: the disc 1.3 times the cap height, centred on it, a third of
+// the disc from the word.
+const LOCKUP = { DISC: 1.3, GAP: 0.34 };
 
 // ---------- Palette ----------
 // Inks are named for the UI mode they serve: the dark-mode asset is light.
-const INKS = { light: "#1d1d1f", dark: "#f5f5f7" };
-// Icon tiles follow the same naming: the dark-mode tile is space black under a
-// light face, the light-mode tile is porcelain under a dark one.
+const INKS = { light: BRAND.LIGHT.TEXT, dark: BRAND.DARK.TEXT };
+// The app icon's two tiles: the dark mode's is the night ground under the
+// mark in copper, the light mode's is copper under a white mark. Flat, both:
+// no gradient and no shadow.
 const TILES = {
-  light: { gradient: ["#fbfbfd", "#d8d8dd"], ink: "#1d1d1f" },
-  dark: { gradient: ["#48484a", "#1c1c1e"], ink: "#f8fafc" },
+  light: { tile: BRAND.LIGHT.ACCENT, ink: BRAND.LIGHT.ON_ACCENT },
+  dark: { tile: BRAND.DARK.OVERLAY, ink: BRAND.DARK.ACCENT },
 };
-
-// ---------- Artwork parameters ----------
-// The face lives on a 240x240 canvas: stroke weight, nose corner radius,
-// smile lift, base head tilt, and eye size/spread/height.
-const FACE = { sw: 16, r: 14, lift: 22, tilt: -8, eyeR: 12, spread: 84, eyeY: 92 };
-// Face-first caps wordmark: the face is the capital L, followed by custom
-// U-K-E letterforms at cap height. Letter weight matches the face's
-// effective stroke (sw x scale) so the face-L does not read heavier.
-const WORDMARK = { scale: 1.55, gap: 14, uRadius: 46, sp: 8 };
-// The square window the app draws the face through, centred on the artwork's
-// optical centre. It is wider than the face so the quiet motions have room;
-// the loud ones are allowed to leave it, which is why the app does not clip it.
-const APP_VIEW = { size: 146, cx: 121, cy: 124 };
 
 // ---------- Helpers ----------
 const fmt = (v) => Math.round(v * 100) / 100;
-// Four decimals for the values two are too coarse for: keyTime fractions of a
-// long clock, and a short stroke's share of the written length.
-const fmt4 = (v) => Math.round(v * 10000) / 10000;
-const EASE = "0.4 0 0.6 1";
-// A spline is written for SMIL; CSS wants the same four numbers as a function.
-const bezier = (spline) => `cubic-bezier(${spline.split(" ").join(", ")})`;
-
-function animT(type, values, dur, opts = {}) {
-  const kt = opts.keyTimes ? ` keyTimes="${opts.keyTimes}"` : "";
-  const ks = opts.spline ? ` calcMode="spline" keySplines="${opts.spline}"` : "";
-  return `<animateTransform attributeName="transform" type="${type}" values="${values}"${kt}${ks} dur="${fmt(dur)}s" repeatCount="indefinite"/>`;
-}
-const wrapAnim = (inner, anim) => `<g>${anim}${inner}</g>`;
-// Scales about the face's optical center (SMIL scale has no origin of its own).
-const scaleAbout = (inner, values, dur, opts = {}) =>
-  `<g transform="translate(120 124)"><g>${animT("scale", values, dur, opts)}` +
-  `<g transform="translate(-120 -124)">${inner}</g></g></g>`;
-
-const stroke = (w) =>
-  `fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"`;
-
-// ---------- The face ----------
-const smileD = (lift) =>
-  `M 104 84 V ${fmt(164 - FACE.r)} Q 104 164 ${fmt(104 + FACE.r)} 164 Q 140 164 168 ${fmt(164 - lift)}`;
-const eyeXs = () => [120 - FACE.spread / 2, 120 + FACE.spread / 2];
-
-const eye = (cx) =>
-  `<circle cx="${fmt(cx)}" cy="${fmt(FACE.eyeY)}" r="${fmt(FACE.eyeR)}" fill="currentColor"/>`;
-// An eye whose vertical radius animates through `values` (blinks, squeezes).
-const eyeRy = (cx, values, kt, dur) =>
-  `<ellipse cx="${fmt(cx)}" cy="${FACE.eyeY}" rx="${FACE.eyeR}" ry="${FACE.eyeR}" fill="currentColor">` +
-  `<animate attributeName="ry" values="${values}" keyTimes="${kt}" dur="${dur}s" repeatCount="indefinite"/></ellipse>`;
-// An eye whose whole radius animates — widening rather than closing.
-const eyeR = (cx, values, kt, dur) =>
-  `<circle cx="${fmt(cx)}" cy="${FACE.eyeY}" r="${FACE.eyeR}" fill="currentColor">` +
-  `<animate attributeName="r" values="${values}" keyTimes="${kt}" dur="${dur}s" repeatCount="indefinite"/></circle>`;
-const browD = (cx) => {
-  const r = FACE.eyeR;
-  const y = FACE.eyeY;
-  return `M ${fmt(cx - r * 0.85)} ${fmt(y - r - 9)} Q ${fmt(cx)} ${fmt(y - r - 15)} ${fmt(cx + r * 0.85)} ${fmt(y - r - 9)}`;
-};
-const BROW_WIDTH = 5;
-const brow = (cx) =>
-  `<path d="${browD(cx)}" stroke="currentColor" stroke-width="${BROW_WIDTH}" stroke-linecap="round" fill="none"/>`;
-const lidD = (cx) => {
-  const r = FACE.eyeR;
-  const y = FACE.eyeY;
-  return `M ${fmt(cx - r)} ${fmt(y - r * 0.05)} Q ${fmt(cx)} ${fmt(y + r * 0.75)} ${fmt(cx + r)} ${fmt(y - r * 0.05)}`;
-};
-const LID_WIDTH = fmt(Math.max(4.5, FACE.eyeR * 0.5));
-const lid = (cx) =>
-  `<path d="${lidD(cx)}" stroke="currentColor" stroke-width="${LID_WIDTH}" stroke-linecap="round" fill="none"/>`;
-
-// The z's that drift off a sleeping head: where each starts, how big, and where
-// in the shared three-second loop its rise begins. The stagger is a keyframe
-// phase rather than a negative delay: a paused animation with a negative delay
-// holds at its resolved current time, not its first frame, so a capture run or
-// reduced motion stopping the loop at time zero would freeze two z's mid-air.
-// With every glyph's own loop starting invisible, paused means unseen.
-const SLEEP_Z = [
-  { x: 176, y: 62, size: 8, start: 0 },
-  { x: 190, y: 46, size: 11, start: 0.4 },
-  { x: 166, y: 44, size: 6, start: 0.2 },
-];
-const SLEEP_Z_DURATION = 3;
-// How much of the loop a z spends rising; the rest of it is spent unseen.
-const SLEEP_Z_RISE = 0.6;
-const SLEEP_Z_WIDTH = 3.5;
-const SLEEP_Z_DRIFT = [6, -16];
-const zGlyphD = (size) => `M 0 0 H ${size} L 0 ${size} H ${size}`;
-/** A z's rise as keyframe times, holding its resting value outside the window. */
-const zTrack = (start, times, values) => {
-  const shifted = times.map((time, index) => [+(start + time).toFixed(4), values[index]]);
-  const framed = [[0, values[0]], ...shifted, [1, values[values.length - 1]]];
-  // A window already touching either edge needs no frame drawn onto it.
-  const kept = framed.filter(([time], index) => index === 0 || time > framed[index - 1][0]);
-  return {
-    times: kept.map(([time]) => time),
-    values: kept.map(([, value]) => value),
-  };
-};
-const zGlyph = ({ x, y, size, start }) => {
-  const rise = SLEEP_Z_RISE;
-  const opacity = zTrack(start, [0, rise / 2, rise], ["0", "0.85", "0"]);
-  const travel = zTrack(
-    start,
-    [0, rise],
-    [`${x} ${y}`, `${x + SLEEP_Z_DRIFT[0]} ${y + SLEEP_Z_DRIFT[1]}`],
-  );
-  return (
-    `<g opacity="0" transform="translate(${x} ${y})">` +
-    `<animate attributeName="opacity" values="${opacity.values.join(";")}" keyTimes="${opacity.times.join(";")}" dur="${SLEEP_Z_DURATION}s" repeatCount="indefinite"/>` +
-    `<animateTransform attributeName="transform" type="translate" values="${travel.values.join(";")}" keyTimes="${travel.times.join(";")}" dur="${SLEEP_Z_DURATION}s" repeatCount="indefinite"/>` +
-    `<path d="${zGlyphD(size)}" stroke="currentColor" stroke-width="${SLEEP_Z_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`
-  );
-};
-
-// How faded a hushed face draws, everywhere the face draws: nothing
-// corner-sized reads at menu-bar scale, so the state is carried by the ink
-// itself — the grayed-out idiom every UI says "present but unavailable"
-// with, over eyes that stay open and blinking. A `dim` on a motion reaches
-// both outputs from this one number, so the app's face and the standalone
-// SVG cannot disagree about how quiet the hush looks.
-const HUSH_DIM = 0.45;
-
-// Composes the face. opts: { eyes, extra } override the defaults.
-function face(opts = {}) {
-  const [c1, c2] = eyeXs();
-  const smile = `<path d="${smileD(FACE.lift)}" ${stroke(FACE.sw)}/>`;
-  const eyes = opts.eyes !== undefined ? opts.eyes : eye(c1) + eye(c2);
-  return `<g transform="rotate(${FACE.tilt} 120 124)">${smile}${eyes}${opts.extra || ""}</g>`;
-}
-
-// ---------- Motion states ----------
-// Emotion is expressed by whole-head or eyes-only motion; the mouth never
-// morphs — mouth morphing read as unnatural. Each motion is a stack of
-// transform layers, innermost first, over a face that may need more parts drawn
-// than the resting one. Every easing is spline-based so nothing reads
-// mechanical; a layer that does not name its own splines eases every interval.
-//
-// Layers: { type: rotate | translate | scale, values, dur, keyTimes?, splines? }
-// and `pivot` for a rotation. Rotation values are degrees; translation values
-// are canvas units; scale values are factors. A layer with `hold` instead of
-// `values` is a fixed offset rather than an animation.
-//
-// Eyes: { kind, factors, keyTimes, dur } scales the eye radius through
-// `factors` — vertically for a blink or a squeeze, both ways for a widening.
-const MOTIONS = {
-  // Quick head rocking with a vertical bob on an offset period, like a person
-  // mid-sentence.
-  talking: {
-    moment: "speaking / narrating (head bob)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 150],
-        values: [0, -4, 4, 0],
-        keyTimes: [0, 0.25, 0.75, 1],
-        dur: 0.65,
-      },
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [0, 2.5],
-          [0, 0],
-        ],
-        dur: 0.4,
-      },
-    ],
-  },
-  // An easy nod from a pivot near the chin.
-  yes: {
-    moment: "acknowledged (nod)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 190],
-        values: [0, 0, 8, 0, 0],
-        keyTimes: [0, 0.15, 0.45, 0.75, 1],
-        dur: 2.2,
-      },
-    ],
-  },
-  // An agitated wiggle that decays to stillness, then a long rest.
-  error: {
-    moment: "something went wrong (shimmy)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 124],
-        values: [0, 6, -6, 4.2, -4.2, 1.8, 0, 0],
-        keyTimes: [0, 0.05, 0.11, 0.17, 0.23, 0.29, 0.35, 1],
-        dur: 3,
-      },
-    ],
-  },
-  // Eyes squeeze nearly shut while the face leans in — peering at detail.
-  reviewing: {
-    moment: "inspecting a session (wince-like squint)",
-    layers: [
-      {
-        type: "scale",
-        values: [
-          [1, 1],
-          [1, 1],
-          [1.03, 1.03],
-          [1.03, 1.03],
-          [1, 1],
-          [1, 1],
-        ],
-        keyTimes: [0, 0.35, 0.42, 0.68, 0.76, 1],
-        dur: 4.4,
-      },
-    ],
-    eyes: {
-      kind: "squeeze",
-      factors: [1, 1, 0.18, 0.18, 1, 1],
-      keyTimes: [0, 0.35, 0.42, 0.68, 0.76, 1],
-      dur: 4.4,
-    },
-  },
-  // A happy hop with squash-and-stretch: crouch, spring, land.
-  success: {
-    moment: "task done (squash-and-stretch hop)",
-    layers: [
-      {
-        type: "scale",
-        values: [
-          [1, 1],
-          [1.05, 0.93],
-          [0.96, 1.06],
-          [1.07, 0.9],
-          [1, 1],
-          [1, 1],
-        ],
-        keyTimes: [0, 0.25, 0.45, 0.65, 0.75, 1],
-        dur: 2,
-      },
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [0, 0],
-          [0, -14],
-          [0, 0],
-          [0, 0],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.25, 0.45, 0.65, 0.75, 1],
-        dur: 2,
-      },
-    ],
-  },
-  // Ease over to one side, hold, ease back — the curious tilt.
-  listening: {
-    moment: "curious tilt",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 124],
-        values: [0, 0, -12, -12, 0, 0],
-        keyTimes: [0, 0.18, 0.32, 0.68, 0.82, 1],
-        dur: 3.6,
-      },
-    ],
-  },
-  // An occasional quick double-blink — the smallest sign of life.
-  idle: {
-    moment: "double blink",
-    layers: [],
-    eyes: {
-      kind: "blink",
-      factors: [1, 1, 0.1, 1, 0.1, 1, 1],
-      keyTimes: [0, 0.55, 0.585, 0.62, 0.655, 0.69, 1],
-      dur: 4.6,
-    },
-  },
-  // Brows pop up and the eyes widen for a beat — "oh!".
-  notification: {
-    moment: "attention caught by something new (brow flash)",
-    layers: [],
-    eyes: {
-      kind: "widen",
-      factors: [1, 1, 1.2, 1.2, 1, 1],
-      keyTimes: [0, 0.5, 0.55, 0.72, 0.77, 1],
-      dur: 4,
-    },
-    brows: {
-      values: [
-        [0, 0],
-        [0, 0],
-        [0, -6],
-        [0, -6],
-        [0, 0],
-        [0, 0],
-      ],
-      keyTimes: [0, 0.5, 0.55, 0.72, 0.77, 1],
-      dur: 4,
-    },
-  },
-  // One eye closes with a small head-tip toward it.
-  wink: {
-    moment: "confirmation / easter egg",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 150],
-        values: [0, 0, 2.5, 2.5, 0, 0],
-        keyTimes: [0, 0.5, 0.56, 0.68, 0.74, 1],
-        dur: 4,
-      },
-    ],
-    eyes: {
-      kind: "wink",
-      factors: [1, 1, 0.12, 0.12, 1, 1],
-      keyTimes: [0, 0.5, 0.56, 0.68, 0.74, 1],
-      dur: 4,
-    },
-  },
-  // Lids down, head drooped, slow deep breathing, z's drifting up.
-  sleeping: {
-    moment: "nothing to watch (lids down, zzz)",
-    layers: [
-      { type: "rotate", pivot: [120, 150], hold: 7 },
-      {
-        type: "scale",
-        values: [
-          [1, 1],
-          [1.035, 1.035],
-          [1, 1],
-        ],
-        dur: 4.8,
-      },
-    ],
-    eyes: { kind: "lids" },
-    sleepZ: true,
-  },
-  // Awake but voiceless: the day's spoken allowance is spent, and the face
-  // keeps watching. The eyes stay open on a slow single blink — a hush that
-  // closed them would read as a face that stopped watching, which is the
-  // one thing this state must not say — the head holds a shade of the
-  // sleeper's droop, and the whole face dims to the grayed-out idiom's ink.
-  hushed: {
-    moment: "voice spent for the day (awake, grayed out)",
-    layers: [{ type: "rotate", pivot: [120, 150], hold: 4 }],
-    eyes: {
-      kind: "blink",
-      factors: [1, 1, 0.1, 1, 1],
-      keyTimes: [0, 0.6, 0.64, 0.68, 1],
-      dur: 5.2,
-    },
-    dim: HUSH_DIM,
-  },
-  // One full pirouette with an ease-out landing, then a long rest.
-  refresh: {
-    moment: "relaunch (one pirouette)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 124],
-        values: [0, 360, 360],
-        keyTimes: [0, 0.3, 1],
-        splines: ["0.35 0 0.25 1", EASE],
-        dur: 4.5,
-      },
-    ],
-  },
-  // A quick puff, as if tapped — feedback for clicks and hovers.
-  boop: {
-    moment: "tap feedback (puff)",
-    layers: [
-      {
-        type: "scale",
-        values: [
-          [1, 1],
-          [1, 1],
-          [1.09, 1.09],
-          [0.985, 0.985],
-          [1, 1],
-        ],
-        keyTimes: [0, 0.55, 0.63, 0.72, 1],
-        dur: 3.2,
-      },
-    ],
-  },
-  // One slow rock from the base, out to each side and back — quiet work, made
-  // visible. It begins and ends upright, so the app can spend it as a gesture
-  // between stretches of stillness rather than rocking for as long as work runs.
-  monitoring: {
-    moment: "humming along (slow sway)",
-    layers: [{ type: "rotate", pivot: [120, 196], values: [0, 3.5, 0, -3.5, 0], dur: 3.6 }],
-  },
-  // Leans in from the side and settles — an entrance. It ends at the resting
-  // pose and stays there: a play that ended leaning back out would snap to the
-  // drawn rest the instant the animation dropped. It alone begins away from
-  // rest, because it is made for the moment the face is first drawn, where
-  // there is no earlier pose to snap from.
-  appear: {
-    moment: "attaching (peek-slide in)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [76, 190],
-        values: [8, 8, 0, 0],
-        keyTimes: [0, 0.15, 0.3, 1],
-        dur: 4,
-      },
-      {
-        type: "translate",
-        values: [
-          [-16, 0],
-          [-16, 0],
-          [0, 0],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.15, 0.3, 1],
-        dur: 4,
-      },
-    ],
-  },
-  // Drawn into being and waking: the nose-and-smile stroke draws itself first
-  // over an eyeless face (the introduction's companion rule draws the stroke;
-  // the eyes hold at nothing until it lands), then the eyes blink open while
-  // the head rises out of its droop, with a touch of overshoot on the way up.
-  // Like `appear` it begins away from rest, because it is made for the moment
-  // the face is first drawn (the onboarding introduction), where there is no
-  // earlier pose to snap from; it ends at the resting pose and stays there.
-  wake: {
-    moment: "first waking (introduction: eyes blink open)",
-    layers: [
-      {
-        type: "translate",
-        values: [
-          [0, 5],
-          [0, 5],
-          [0, -1.2],
-          [0, 0],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.28, 0.62, 0.78, 1],
-        dur: 2.8,
-      },
-    ],
-    eyes: {
-      kind: "blink",
-      factors: [0, 0, 1, 0.1, 1, 1],
-      keyTimes: [0, 0.35, 0.45, 0.55, 0.68, 1],
-      dur: 2.8,
-    },
-  },
-  // Settles into a slouch, bolts upright with a touch of overshoot, and comes
-  // back to rest. The slouch is inside the gesture rather than at either end of
-  // it: a motion that begins away from rest starts by snapping there.
-  attention: {
-    moment: "attention caught (perk up)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 150],
-        values: [0, 6, 6, -2.5, 0.8, 0, 0],
-        keyTimes: [0, 0.2, 0.42, 0.5, 0.58, 0.75, 1],
-        dur: 4.5,
-      },
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [0, 3],
-          [0, 3],
-          [0, -1.5],
-          [0, 0],
-          [0, 0],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.2, 0.42, 0.5, 0.58, 0.75, 1],
-        dur: 4.5,
-      },
-    ],
-  },
-  // A slow vertical drift with a lazy rotation, out of rest and back into it.
-  // Both layers share a period: the app plays a motion once and returns the face
-  // to rest, so a layer on its own period would be cut wherever it had got to.
-  floating: {
-    moment: "hovering idle",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 124],
-        values: [0, -2, 2, 0],
-        keyTimes: [0, 0.25, 0.75, 1],
-        dur: 4.8,
-      },
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [0, -8],
-          [0, 0],
-        ],
-        dur: 4.8,
-      },
-    ],
-  },
-  // Ducks down, waits, then pops back up with a little overshoot.
-  hiding: {
-    moment: "minimized (peekaboo duck)",
-    layers: [
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [0, 0],
-          [0, 55],
-          [0, 55],
-          [0, -4],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.35, 0.45, 0.65, 0.78, 1],
-        dur: 5,
-      },
-    ],
-  },
-  // The hover showpiece: a little crouch, a banked dash off the edge, a beat
-  // out of sight, and a swoop back in from the other side that lands with a
-  // touch of overshoot. The teleport from one side to the other happens far
-  // above the frame, so the wing's clip never draws the face crossing back —
-  // it leaves to the right and returns from the upper left.
-  flyoff: {
-    moment: "hover flourish (fly off and swoop back)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 124],
-        values: [0, -10, 22, 10, -14, -14, 5, 0, 0],
-        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
-        dur: 3,
-      },
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [-16, 6],
-          [280, -90],
-          [280, -240],
-          [-340, -240],
-          [-340, -110],
-          [16, 8],
-          [0, 0],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
-        // The dash accelerates away and the swoop brakes in; everything the
-        // frame cannot see keeps the default curve.
-        splines: [EASE, "0.5 0 0.9 0.5", EASE, EASE, EASE, "0.1 0.5 0.3 1", EASE, EASE],
-        dur: 3,
-      },
-    ],
-  },
-  // Two eyebrow waggles — pure mischief.
-  tease: {
-    moment: "playful (brow waggle)",
-    layers: [],
-    brows: {
-      values: [
-        [0, 0],
-        [0, 0],
-        [0, -6],
-        [0, 0],
-        [0, -6],
-        [0, 0],
-        [0, 0],
-      ],
-      keyTimes: [0, 0.45, 0.52, 0.59, 0.66, 0.73, 1],
-      dur: 4.2,
-    },
-  },
-  // Two impatient little bounces, then waiting — a foot-tap.
-  waiting: {
-    moment: "needs approval (fidget)",
-    layers: [
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [0, -5],
-          [0, 0],
-          [0, -5],
-          [0, 0],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.07, 0.14, 0.21, 0.28, 1],
-        dur: 2.4,
-      },
-    ],
-  },
-  // A relaxed side-to-side wiggle that eases out — shaking something off,
-  // happily. The same decaying shape as the error shimmy, but spread over most
-  // of the cycle at a lower tempo, so it reads as loosening up rather than
-  // agitation; the two must not share artwork, because one carries a failure
-  // and the other must never.
-  shimmy: {
-    moment: "shaking it off (happy wiggle)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 124],
-        values: [0, -9, 8, -5.5, 3, -1.2, 0, 0],
-        keyTimes: [0, 0.12, 0.26, 0.4, 0.52, 0.62, 0.7, 1],
-        dur: 2.6,
-      },
-    ],
-  },
-  // A woozy wobble that settles: the head rolls in decaying arcs while a small
-  // counter-sway keeps it off balance, and the eyes sit half-lidded until the
-  // world stops moving. Both layers and the eyes share the period, as every
-  // one-shot must.
-  dizzy: {
-    moment: "woozy after a flight (decaying wobble)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 150],
-        values: [0, 9, -8, 6, -4, 2, 0, 0],
-        keyTimes: [0, 0.1, 0.24, 0.38, 0.52, 0.66, 0.78, 1],
-        dur: 3.2,
-      },
-      {
-        type: "translate",
-        values: [
-          [0, 0],
-          [2, 0],
-          [-2, 0],
-          [1.5, 0],
-          [-1, 0],
-          [0.5, 0],
-          [0, 0],
-          [0, 0],
-        ],
-        keyTimes: [0, 0.1, 0.24, 0.38, 0.52, 0.66, 0.78, 1],
-        dur: 3.2,
-      },
-    ],
-    eyes: {
-      kind: "squeeze",
-      factors: [1, 0.55, 0.55, 1, 1],
-      keyTimes: [0, 0.15, 0.55, 0.75, 1],
-      dur: 3.2,
-    },
-  },
-  // A look to one side, a hold, a sweep to the other, and back — checking both
-  // ways. The eyes cannot travel (they only ever scale), so the glance is the
-  // whole head's, leaning from a pivot near the chin the way the nod does.
-  glance: {
-    moment: "checking both ways (look around)",
-    layers: [
-      {
-        type: "rotate",
-        pivot: [120, 190],
-        values: [0, 0, -7, -7, 7, 7, 0, 0],
-        keyTimes: [0, 0.12, 0.24, 0.42, 0.56, 0.74, 0.86, 1],
-        dur: 3.4,
-      },
-    ],
-  },
-};
-
-const MOTION_NAMES = Object.keys(MOTIONS);
-// Per-interval easing for anything with `values`: its own splines, or the
-// default ease on every interval. Eyes are the exception — they animate with
-// no splines at all, which SMIL and CSS both read as linear.
-const motionSplines = (part) => part.splines ?? Array(part.values.length - 1).fill(EASE);
-/** The longest loop in a motion: how long a caller must wait to see all of it. */
-function motionCycleMs(motion) {
-  const durations = [
-    ...motion.layers.filter((layer) => layer.values).map((layer) => layer.dur),
-    ...(motion.eyes?.dur ? [motion.eyes.dur] : []),
-    ...(motion.brows?.dur ? [motion.brows.dur] : []),
-    ...(motion.sleepZ ? [SLEEP_Z_DURATION] : []),
-  ];
-  return Math.round(Math.max(...durations, 0) * 1000);
-}
-
-// ---------- Motions as SMIL ----------
-function svgEyes(motion) {
-  const [c1, c2] = eyeXs();
-  const eyes = motion.eyes;
-  if (!eyes) return eye(c1) + eye(c2);
-  if (eyes.kind === "lids") return lid(c1) + lid(c2);
-  const kt = eyes.keyTimes.join(";");
-  const radii = eyes.factors.map((factor) => fmt(FACE.eyeR * factor)).join(";");
-  // The wink animates the eye it closes and draws the open one after it.
-  if (eyes.kind === "wink") return eyeRy(c2, radii, kt, eyes.dur) + eye(c1);
-  if (eyes.kind === "widen") return eyeR(c1, radii, kt, eyes.dur) + eyeR(c2, radii, kt, eyes.dur);
-  return eyeRy(c1, radii, kt, eyes.dur) + eyeRy(c2, radii, kt, eyes.dur);
-}
-
-function svgBrows(motion) {
-  const [c1, c2] = eyeXs();
-  if (!motion.brows) return "";
-  const { values, keyTimes, dur } = motion.brows;
-  return wrapAnim(
-    brow(c1) + brow(c2),
-    animT("translate", values.map((pair) => pair.join(" ")).join(";"), dur, {
-      keyTimes: keyTimes.join(";"),
-      spline: motionSplines(motion.brows).join(";"),
-    }),
-  );
-}
-
-function motionSvg(motion) {
-  let body = face({ eyes: svgEyes(motion), extra: svgBrows(motion) });
-  for (const layer of motion.layers) {
-    if (layer.hold !== undefined) {
-      body = `<g transform="rotate(${layer.hold} ${layer.pivot.join(" ")})">${body}</g>`;
-      continue;
-    }
-    const opts = {
-      keyTimes: layer.keyTimes ? layer.keyTimes.join(";") : undefined,
-      spline: motionSplines(layer).join(";"),
-    };
-    if (layer.type === "scale") {
-      body = scaleAbout(
-        body,
-        layer.values.map((pair) => pair.join(" ")).join(";"),
-        layer.dur,
-        opts,
-      );
-      continue;
-    }
-    const values =
-      layer.type === "rotate"
-        ? layer.values.map((angle) => `${angle} ${layer.pivot.join(" ")}`).join(";")
-        : layer.values.map((pair) => pair.join(" ")).join(";");
-    body = wrapAnim(body, animT(layer.type, values, layer.dur, opts));
-  }
-  if (motion.sleepZ) body += SLEEP_Z.map(zGlyph).join("");
-  if (motion.dim !== undefined) body = `<g opacity="${motion.dim}">${body}</g>`;
-  return body;
-}
-
-// ---------- Motions as CSS ----------
-// The app cannot use the SMIL above: it needs `@luke/ui`'s `--luke-face-motion`
-// token to be able to stop every loop at once, which only CSS animation offers.
-// Each layer, each eye, and each brow becomes one @keyframes and one rule that
-// names it. A part that eases every interval with one curve carries it on the
-// rule; only mixed curves become per-keyframe timing functions, which is the
-// only way CSS can express a keySplines list. No curve at all is linear, which
-// the wiring in face.css already says.
-const cssTime = (fraction) => `${+(fraction * 100).toFixed(4)}%`;
-
-// How each transform a part can play is written. Eye factors are scalars: a
-// widen scales the whole eye and everything else squeezes it vertically.
-const TRANSFORM_CSS = {
-  rotate: (angle) => `rotate(${angle}deg)`,
-  scale: ([x, y]) => `scale(${x}, ${y})`,
-  translate: ([x, y]) => `translate(${x}px, ${y}px)`,
-};
-
-const evenTimes = (count) => Array.from({ length: count }, (_, index) => index / (count - 1));
-
-function cssKeyframes(name, steps, easings = []) {
-  const blocks = steps.map(({ at, declaration }, index) => {
-    const easing = easings[index] ? `\n    animation-timing-function: ${easings[index]};` : "";
-    return `  ${cssTime(at)} {\n    ${declaration}${easing}\n  }`;
-  });
-  return `@keyframes ${name} {\n${blocks.join("\n\n")}\n}`;
-}
-
-const originCss = (pivot) =>
-  pivot ? `\n  transform-origin: ${pivot.map((n) => `${n}px`).join(" ")};` : "";
-
-// One moving part: its @keyframes, and the rule that plays them on `target`.
-// `splines` is per-interval SMIL easing, or undefined for a part with none.
-function partCss({ target, name, part, transform, splines, pivot }) {
-  const times = part.keyTimes ?? evenTimes(part.values.length);
-  const steps = part.values.map((value, index) => ({
-    at: times[index],
-    declaration: `transform: ${transform(value)};`,
-  }));
-  const uniform = splines === undefined || splines.every((spline) => spline === splines[0]);
-  const block = cssKeyframes(name, steps, uniform ? [] : splines.map(bezier));
-  const easing = uniform && splines ? `\n  animation-timing-function: ${bezier(splines[0])};` : "";
-  const rule = `${target} {${originCss(pivot)}\n  animation-name: ${name};\n  animation-duration: ${part.dur}s;${easing}\n}`;
-  return { block, rule };
-}
-
-function motionCss(name, motion) {
-  const selector = `.luke-face[data-motion="${name}"]`;
-  const blocks = [];
-  const rules = [];
-  const emit = (part) => {
-    const { block, rule } = partCss(part);
-    blocks.push(block);
-    rules.push(rule);
-  };
-
-  // A dim is a state, not an animation: it holds through pauses and reduced
-  // motion, which is exactly why it can carry the hush where a loop cannot.
-  if (motion.dim !== undefined) {
-    rules.push(`${selector} {\n  opacity: ${motion.dim};\n}`);
-  }
-
-  motion.layers.forEach((layer, index) => {
-    const target = `${selector} .luke-face-layer-${index + 1}`;
-    const pivot = layer.type === "translate" ? undefined : (layer.pivot ?? [120, 124]);
-    if (layer.hold !== undefined) {
-      rules.push(`${target} {${originCss(pivot)}\n  transform: rotate(${layer.hold}deg);\n}`);
-      return;
-    }
-    emit({
-      target,
-      name: `luke-${name}-${index + 1}`,
-      part: layer,
-      transform: TRANSFORM_CSS[layer.type],
-      splines: motionSplines(layer),
-      pivot,
-    });
-  });
-
-  const eyes = motion.eyes;
-  if (eyes && eyes.kind !== "lids") {
-    emit({
-      // The wink closes one eye; every other motion moves both.
-      target: `${selector} ${eyes.kind === "wink" ? ".luke-face-eye-right" : ".luke-face-eye"}`,
-      name: `luke-${name}-eyes`,
-      part: { values: eyes.factors, keyTimes: eyes.keyTimes, dur: eyes.dur },
-      transform: (factor) => (eyes.kind === "widen" ? `scale(${factor})` : `scaleY(${factor})`),
-    });
-  }
-
-  if (motion.brows) {
-    emit({
-      target: `${selector} .luke-face-brows`,
-      name: `luke-${name}-brows`,
-      part: motion.brows,
-      transform: TRANSFORM_CSS.translate,
-      splines: motionSplines(motion.brows),
-    });
-  }
-
-  return [`/* ${name} — ${motion.moment} */`, ...blocks, ...rules].join("\n\n");
-}
-
-function faceMotionCss() {
-  const resting = "opacity: 0;\n    transform: translate(0, 0);";
-  const drifted = `opacity: 0;\n    transform: translate(${SLEEP_Z_DRIFT[0]}px, ${SLEEP_Z_DRIFT[1]}px);`;
-  const zBlocks = SLEEP_Z.map((z, index) => {
-    const end = +(z.start + SLEEP_Z_RISE).toFixed(4);
-    const steps = [
-      { at: 0, declaration: resting },
-      ...(z.start > 0 ? [{ at: z.start, declaration: resting }] : []),
-      { at: +(z.start + SLEEP_Z_RISE / 2).toFixed(4), declaration: "opacity: 0.85;" },
-      { at: end, declaration: drifted },
-      ...(end < 1 ? [{ at: 1, declaration: drifted }] : []),
-    ];
-    return cssKeyframes(`luke-sleep-z-${index + 1}`, steps);
-  });
-  const zRules = [
-    `.luke-face-z {\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,
-    ...SLEEP_Z.map(
-      (_z, index) => `.luke-face-z-${index + 1} {\n  animation-name: luke-sleep-z-${index + 1};\n}`,
-    ),
-  ];
-  return [
-    "/* Generated by packages/brand/scripts/generate-brand-assets.mjs. Do not edit by hand: change",
-    "   the motion table in that script and re-run it.",
-    "",
-    "   One @keyframes per moving part, and one rule per part that names it. The",
-    "   wiring these depend on — the layer stack, the play state, and the ink —",
-    "   lives beside it in face.css, in the same `components` layer. */",
-    "",
-    "@layer components {",
-    indentCss(
-      [
-        MOTION_NAMES.map((name) => motionCss(name, MOTIONS[name])).join("\n\n"),
-        "",
-        "/* The z's share one loop, each rising through its own window of it so they",
-        "   never rise as a group. The stagger is cut into the keyframes rather than",
-        "   carried as a delay: every glyph's first frame is invisible, so a paused",
-        "   loop — a capture run, reduced motion — shows no z at all. */",
-        "",
-        [...zBlocks, ...zRules].join("\n\n"),
-      ].join("\n"),
-    ),
-    "}",
-    "",
-  ].join("\n");
-}
-
-// Every line of a block one level in, blank lines left blank, so the motions
-// sit inside their layer the way the formatter would write them.
-const indentCss = (css) =>
-  css
-    .split("\n")
-    .map((line) => (line === "" ? line : `  ${line}`))
-    .join("\n");
-
-// ---------- The face, as a renderer module ----------
-const tsList = (values) => values.join(", ");
-const tsRecord = (entries, indent = "  ") =>
-  entries.map(([key, value]) => `${indent}${key}: ${value},`).join("\n");
-
-// The wordmark's letters and layout, in the lockup's own coordinates, for the
-// introduction's signature reveal: the renderer draws the face itself, so what
-// it needs is where the letters stand relative to the face window it already
-// draws, not another baked SVG.
-function wordmarkArt() {
-  const s = WORDMARK.scale;
-  const x0 = 20;
-  const tx = x0 - 66 * s;
-  const ty = 170 - 164 * s;
-  const caps = capsUKE(tx + 176 * s + WORDMARK.gap, fmt(FACE.sw * s));
-  const sw = FACE.sw * s;
-  const u0 = tx + 176 * s + WORDMARK.gap;
-  // The lockup's ink centre, the same optical centre the social card uses:
-  // the crop's own box carries uneven air, so centring on it reads off-centre.
-  const inkLeft = tx + faceBBox().x * s;
-  const inkRight = caps.end + sw / 2;
-  const totalLength = caps.letters.flat().reduce((sum, penStroke) => sum + penStroke.length, 0);
-  return {
-    letters: caps.letters.map((strokes) =>
-      strokes.map((penStroke) => ({
-        d: penStroke.d,
-        weight: fmt4(penStroke.length / totalLength),
-      })),
-    ),
-    sw: fmt(sw),
-    box: {
-      x: fmt(u0 - sw / 2),
-      y: fmt(44 - sw / 2),
-      w: fmt(caps.end + sw / 2 - (u0 - sw / 2)),
-      h: fmt(170 + sw / 2 - (44 - sw / 2)),
-    },
-    faceView: {
-      centerX: fmt(tx + APP_VIEW.cx * s),
-      centerY: fmt(ty + APP_VIEW.cy * s),
-      size: fmt(APP_VIEW.size * s),
-    },
-    centerX: fmt((inkLeft + inkRight) / 2),
-  };
-}
-
-function faceArtModule() {
-  const [c1, c2] = eyeXs();
-  const view = APP_VIEW;
-  const box = [view.cx - view.size / 2, view.cy - view.size / 2, view.size, view.size];
-  const wordmarkData = wordmarkArt();
-  const parts = MOTION_NAMES.map((name) => {
-    const motion = MOTIONS[name];
-    const flags = [
-      `brows: ${Boolean(motion.brows)}`,
-      `lids: ${motion.eyes?.kind === "lids"}`,
-      `sleepZ: ${Boolean(motion.sleepZ)}`,
-    ];
-    return [name, `{ ${tsList(flags)} }`];
-  });
-
-  return `// Generated by packages/brand/scripts/generate-brand-assets.mjs. Do not edit by hand: change the
-// artwork parameters in that script and re-run it.
-//
-// The face the renderer draws, in the artwork's own canvas coordinates, and the
-// vocabulary of things it can be doing. The motions themselves are @keyframes in
-// @luke/ui's face/face-motion.css, generated from the same table.
-
-/** Luke's face, on the 240x240 canvas every asset in packages/brand/assets/ is cut from. */
-export const FACE_ART = {
-  /** A square window centred on the face. Loud motions leave it, and may. */
-  VIEW_BOX: "${box.map(fmt).join(" ")}",
-  /**
-   * The face cropped to itself, the tight crop the square marks square off.
-   * Only for a mark that never moves: it is tight enough that any motion
-   * would leave it.
-   */
-  MARK_VIEW_BOX: "${markBox().map(fmt).join(" ")}",
-  /** The head's resting tilt, about the point the motions pivot on. */
-  TILT: "rotate(${FACE.tilt} 120 124)",
-  /** The capital-L nose, curling into the smile. */
-  SMILE: "${smileD(FACE.lift)}",
-  STROKE_WIDTH: ${FACE.sw},
-  EYE_Y: ${FACE.eyeY},
-  EYE_RADIUS: ${FACE.eyeR},
-  EYE_X: { LEFT: ${fmt(c1)}, RIGHT: ${fmt(c2)} },
-  /** Drawn only by the motions that raise them. */
-  BROW: { LEFT: "${browD(c1)}", RIGHT: "${browD(c2)}" },
-  BROW_WIDTH: ${BROW_WIDTH},
-  /** Closed eyes, for a face that is asleep rather than blinking. */
-  LID: { LEFT: "${lidD(c1)}", RIGHT: "${lidD(c2)}" },
-  LID_WIDTH: ${LID_WIDTH},
-  SLEEP_Z: [
-${SLEEP_Z.map((z) => `    { x: ${z.x}, y: ${z.y}, path: "${zGlyphD(z.size)}" },`).join("\n")}
-  ],
-  SLEEP_Z_WIDTH: ${SLEEP_Z_WIDTH},
-} as const;
-
-/** Every motion the artwork defines, whether or not the app has a moment for it. */
-export const FACE_MOTION = {
-${MOTION_NAMES.map((name) => `  ${name.toUpperCase()}: "${name}",`).join("\n")}
-} as const;
-
-export type FaceMotion = (typeof FACE_MOTION)[keyof typeof FACE_MOTION];
-
-/** One full cycle: how long a caller waits to see a motion out before moving on. */
-export const FACE_MOTION_CYCLE_MS = {
-${tsRecord(MOTION_NAMES.map((name) => [name, motionCycleMs(MOTIONS[name])]))}
-} as const satisfies Record<FaceMotion, number>;
-
-/** What a motion needs drawn beyond the resting smile and eyes. */
-export const FACE_MOTION_PARTS = {
-${tsRecord(parts)}
-} as const satisfies Record<FaceMotion, { brows: boolean; lids: boolean; sleepZ: boolean }>;
-
-/**
- * The wordmark's U-K-E letterforms, in the lockup's own coordinates, so the
- * introduction's signature reveal can draw LUKE around the face it already
- * draws. FACE_VIEW is where FACE_ART.VIEW_BOX's window sits in these
- * coordinates: everything here scales from the drawn face's size through it.
- */
-export const WORDMARK_ART = {
-  /**
-   * Each letter as the pen strokes that would write it, in writing order and
-   * direction. A stroke's WEIGHT is its share of the whole word's written
-   * length — what paces a constant-speed pen — and its length in the path
-   * data is normalized to 1 for a dash reveal.
-   */
-  LETTERS: [
-${wordmarkData.letters
-  .map(
-    (strokes) =>
-      `    [\n${strokes
-        .map(
-          (penStroke) =>
-            `      {\n        D: "${penStroke.d}",\n        WEIGHT: ${penStroke.weight},\n      },`,
-        )
-        .join("\n")}\n    ],`,
-  )
-  .join("\n")}
-  ],
-  STROKE_WIDTH: ${wordmarkData.sw},
-  /** The letters' ink box, stroke caps included: their viewBox and extent. */
-  LETTERS_BOX: { X: ${wordmarkData.box.x}, Y: ${wordmarkData.box.y}, WIDTH: ${wordmarkData.box.w}, HEIGHT: ${wordmarkData.box.h} },
-  /** The face's drawn window: its centre and its side, in lockup units. */
-  FACE_VIEW: { CENTER_X: ${wordmarkData.faceView.centerX}, CENTER_Y: ${wordmarkData.faceView.centerY}, SIZE: ${wordmarkData.faceView.size} },
-  /** The lockup's ink centre, for centring the reveal on screen. */
-  CENTER_X: ${wordmarkData.centerX},
-} as const;
-`;
-}
-
-// ---------- Wordmark ----------
-// Custom monoline U-K-E letterforms at cap height (44..170), following the
-// face-L. The U keeps a fully round bottom, echoing the smile.
-// Each letter is described as the pen strokes that would write it, in writing
-// order and direction — the stem before the arms, a bar left to right —
-// because the signature reveal draws them one at a time, paced by length.
-// Static assets join a letter's strokes into one path, which inks identically:
-// every meeting of strokes lands inside another stroke's own width.
-function capsUKE(u0, w) {
-  const A = 44;
-  const B = 170;
-  const sp = WORDMARK.sp;
-  const uW = 92;
-  const r = Math.min(WORDMARK.uRadius, uW / 2);
-  const seg = (x0, y0, x1, y1) => Math.hypot(x1 - x0, y1 - y0);
-  const quad = ([x0, y0], [x1, y1], [x2, y2]) => {
-    let length = 0;
-    let px = x0;
-    let py = y0;
-    for (let i = 1; i <= 16; i += 1) {
-      const t = i / 16;
-      const mt = 1 - t;
-      const x = mt * mt * x0 + 2 * mt * t * x1 + t * t * x2;
-      const y = mt * mt * y0 + 2 * mt * t * y1 + t * t * y2;
-      length += Math.hypot(x - px, y - py);
-      px = x;
-      py = y;
-    }
-    return length;
-  };
-  const xk = u0 + uW + 46 + sp;
-  const kArm = 64;
-  const xe = xk + kArm + 46 + sp;
-  const eW = 70;
-  const letters = [
-    // U: one stroke, down the left side, around the bowl, back up the right.
-    [
-      {
-        d: `M ${fmt(u0)} ${A} V ${fmt(B - r)} Q ${fmt(u0)} ${B} ${fmt(u0 + r)} ${B} H ${fmt(u0 + uW - r)} Q ${fmt(u0 + uW)} ${B} ${fmt(u0 + uW)} ${fmt(B - r)} V ${A}`,
-        length:
-          2 * (B - r - A) +
-          (uW - 2 * r) +
-          quad([u0, B - r], [u0, B], [u0 + r, B]) +
-          quad([u0 + uW - r, B], [u0 + uW, B], [u0 + uW, B - r]),
-      },
-    ],
-    // K: the stem, then the right half in one stroke — in from the top arm's
-    // tip to the joint and out to the leg's.
-    [
-      { d: `M ${fmt(xk)} ${A} V ${B}`, length: B - A },
-      {
-        d: `M ${fmt(xk + kArm)} ${A} L ${fmt(xk)} 112 L ${fmt(xk + kArm + 4)} ${B}`,
-        length: seg(xk + kArm, A, xk, 112) + seg(xk, 112, xk + kArm + 4, B),
-      },
-    ],
-    // E: the spine, then the three bars, top to bottom, each left to right.
-    [
-      { d: `M ${fmt(xe)} ${A} V ${B}`, length: B - A },
-      { d: `M ${fmt(xe)} ${A} H ${fmt(xe + eW)}`, length: eW },
-      { d: `M ${fmt(xe)} 107 H ${fmt(xe + eW * 0.72)}`, length: eW * 0.72 },
-      { d: `M ${fmt(xe)} ${B} H ${fmt(xe + eW)}`, length: eW },
-    ],
-  ];
-  const S = stroke(w);
-  const body = letters
-    .map((strokes) => `<path d="${strokes.map((penStroke) => penStroke.d).join(" ")}" ${S}/>`)
-    .join("");
-  return { body, end: xe + eW, letters };
-}
-
-// The face scaled up to cap height (smile on the baseline), then the letters.
-function wordmark() {
-  const s = WORDMARK.scale;
-  const x0 = 20;
-  const tx = x0 - 66 * s;
-  const ty = 170 - 164 * s;
-  const scaledFace = `<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(s)})">${face()}</g>`;
-  const caps = capsUKE(tx + 176 * s + WORDMARK.gap, fmt(FACE.sw * s));
-  return { body: scaledFace + caps.body, width: caps.end + 40 - x0 };
-}
-
-// ---------- Sizing ----------
-// The face is drawn on a 240x240 canvas with margins so animations have room
-// to move. Standalone assets must not inherit that padding, so everything is
-// sized from the artwork's true bounding box (stroke caps included, base tilt
-// applied).
-function faceBBox() {
-  const sw2 = FACE.sw / 2;
-  const [c1, c2] = eyeXs();
-  const x0 = Math.min(104 - sw2, c1 - FACE.eyeR);
-  const x1 = Math.max(168 + sw2, c2 + FACE.eyeR);
-  const y0 = Math.min(84 - sw2, FACE.eyeY - FACE.eyeR);
-  const y1 = Math.max(164 + sw2, FACE.eyeY + FACE.eyeR);
-  const th = (FACE.tilt * Math.PI) / 180;
-  const cos = Math.cos(th);
-  const sin = Math.sin(th);
-  const pts = [
-    [x0, y0],
-    [x1, y0],
-    [x1, y1],
-    [x0, y1],
-  ].map(([x, y]) => [
-    120 + (x - 120) * cos - (y - 124) * sin,
-    124 + (x - 120) * sin + (y - 124) * cos,
-  ]);
-  const xs = pts.map((p) => p[0]);
-  const ys = pts.map((p) => p[1]);
-  const bx0 = Math.min(...xs);
-  const by0 = Math.min(...ys);
-  const bx1 = Math.max(...xs);
-  const by1 = Math.max(...ys);
-  return { x: bx0, y: by0, w: bx1 - bx0, h: by1 - by0, cx: (bx0 + bx1) / 2, cy: (by0 + by1) / 2 };
-}
-
-// ---------- SVG assembly ----------
 const svgOpenAt = (x, y, w, h) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)}" fill="none">`;
 const svgOpen = (w, h) => svgOpenAt(0, 0, w, h);
-// Motion marks keep the full animation canvas; static artwork is cropped tight.
-const markSvg = (body) => `${svgOpen(240, 240)}${body}</svg>`;
-/**
- * The window the app draws the still face through: the face's bounding box
- * with a little air, the same crop the square marks square off.
- */
-function markBox() {
-  const pad = 6;
-  const b = faceBBox();
-  return [b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad];
-}
+// The mark in one ink, its 100-unit disc set at (x, y) and `side` across.
+const markAt = (x, y, side, ink, path = MARK.PATH) =>
+  `<g transform="translate(${fmt(x)} ${fmt(y)}) scale(${fmt(side / 100)})"><path d="${path}" fill="${ink}"/></g>`;
 
-// Words are trimmed vertically to the taller of the face and the letters.
-function wordSvg({ body, width }, pad = 6) {
-  const b = faceBBox();
-  const s = WORDMARK.scale;
-  const ty = 170 - 164 * s;
-  const lw2 = (FACE.sw * s) / 2;
-  const yTop = Math.min(b.y * s + ty, 44 - lw2) - pad;
-  const yBot = Math.max((b.y + b.h) * s + ty, 170 + lw2) + pad;
-  return `${svgOpenAt(0, yTop, width + 30, yBot - yTop)}${body}</svg>`;
+// The lockup in one ink, in the word's own units, and its ink box.
+function lockup(ink) {
+  const disc = WORDMARK.CAP_HEIGHT * LOCKUP.DISC;
+  const gap = disc * LOCKUP.GAP;
+  const top = -WORDMARK.CAP_HEIGHT / 2 - disc / 2;
+  const body =
+    markAt(0, top, disc, ink) +
+    `<path transform="translate(${fmt(disc + gap)} 0)" d="${WORDMARK.PATH}" fill="${ink}"/>`;
+  const box = {
+    left: 0,
+    right: disc + gap + WORDMARK.INK.RIGHT,
+    top: Math.min(top, WORDMARK.INK.TOP),
+    bottom: Math.max(top + disc, WORDMARK.INK.BOTTOM),
+  };
+  return { body, box };
 }
 
 // ---------- Emission ----------
 // `--check` reports whether the committed outputs still match what this script
-// produces, without touching any of them, for running by hand:
-// three sets of outputs are committed alongside this one source, and a check that
-// depended on the state of the working tree could only tell you so while the tree
-// was clean.
+// produces, without touching any of them, for running by hand.
 const CHECK_ONLY = process.argv.includes("--check");
 const written = [];
 const stale = [];
@@ -1251,200 +120,169 @@ function emit(relPath, svg, title) {
   put(join(OUT, relPath), `${titled}\n`);
   written.push(relPath);
 }
-function emitModes(baseName, svgWithCurrentColor, title) {
-  for (const [mode, ink] of Object.entries(INKS)) {
-    emit(`${baseName}-${mode}.svg`, svgWithCurrentColor.replaceAll("currentColor", ink), title);
+
+// Wordmark and logo, per mode, on a transparent ground: the wordmark is the
+// name alone, for where the mark already stands nearby; the logo is the
+// lockup, for headers and docs.
+const PAD = 6;
+for (const [mode, ink] of Object.entries(INKS)) {
+  const { INK } = WORDMARK;
+  emit(
+    `wordmark-${mode}.svg`,
+    `${svgOpenAt(INK.LEFT - PAD, INK.TOP - PAD, INK.RIGHT - INK.LEFT + 2 * PAD, INK.BOTTOM - INK.TOP + 2 * PAD)}<path d="${WORDMARK.PATH}" fill="${ink}"/></svg>`,
+    PRODUCT_NAME,
+  );
+  const { body, box } = lockup(ink);
+  emit(
+    `logo/logo-${mode}.svg`,
+    `${svgOpenAt(box.left - PAD, box.top - PAD, box.right - box.left + 2 * PAD, box.bottom - box.top + 2 * PAD)}${body}</svg>`,
+    PRODUCT_NAME,
+  );
+}
+
+// The share of an app icon's tile the disc spans, in every app icon alike:
+// the macOS icon, the web app icon, the favicon, and the avatar. Note that
+// it is larger than a round glyph's usual half, because at half the mark
+// stood small beside every other app's glyph in the Dock, and smaller than
+// the 80% circle Android's maskable icon keeps, so no mask clips its rim.
+const ICON_MARK = 0.78;
+
+// App icon, one per mode, on Apple's macOS icon grid: an 824-unit tile with a
+// 185.4-unit corner, centred on a 1024 canvas, the disc spanning ICON_MARK of
+// the tile. The packaged `.icns` is cut from the dark set, and the running
+// app swaps the Dock image between the two as the theme changes. Note that
+// the Dock and the app switcher draw the whole canvas at one size, so a tile
+// that filled it would stand a fifth larger than every other app's.
+const ICON_GRID = { canvas: 1024, tile: 824, radius: 185.4 };
+{
+  const origin = (ICON_GRID.canvas - ICON_GRID.tile) / 2;
+  const disc = ICON_GRID.tile * ICON_MARK;
+  const at = (ICON_GRID.canvas - disc) / 2;
+  for (const [mode, { tile, ink }] of Object.entries(TILES)) {
+    emit(
+      `icon/icon-${mode}.svg`,
+      `${svgOpen(ICON_GRID.canvas, ICON_GRID.canvas)}<rect x="${origin}" y="${origin}" width="${ICON_GRID.tile}" height="${ICON_GRID.tile}" rx="${ICON_GRID.radius}" fill="${tile}"/>${markAt(at, at, disc, ink)}</svg>`,
+      `${PRODUCT_NAME} app icon`,
+    );
   }
 }
 
-emitModes("luke-wordmark", wordSvg(wordmark()), "LUKE");
-
-// App icon, one per mode: the same squircle tile under the face, space black
-// for dark mode and porcelain for light. The packaged `.icns` is cut from the
-// dark set — one bundle icon has to serve both modes and space black does —
-// and the running app swaps the Dock image between the two as the theme
-// changes. The tile sits on Apple's macOS icon grid: an 824-unit tile with a
-// 185.4-unit corner, centered on a 1024 canvas, under the grid's drop shadow.
-// The shadow is a blurred copy of the tile drawn beneath it rather than a
-// filter on the tile itself, because a filter re-quantizes its whole input to
-// 8 bits and the tile's dark gradient would come out in visible bands.
-// Note that the Dock and the app switcher draw the whole canvas at one size,
-// so a tile that filled it would stand a fifth larger than every other app's.
-// The glyph spans ~58% of the tile width, centered — typical macOS
-// glyph-in-tile proportion, measured from the artwork's bounding box.
-const ICON_GRID = { canvas: 1024, tile: 824, radius: 185.4, shadowY: 10, shadowBlur: 10 };
-const gridUnit = 240 / ICON_GRID.canvas;
-const tileSide = ICON_GRID.tile * gridUnit;
-const tileOrigin = (240 - tileSide) / 2;
-const bbox = faceBBox();
-const glyphScale = (tileSide * 0.58) / bbox.w;
-const gx = 120 - bbox.cx * glyphScale;
-const gy = 120 - bbox.cy * glyphScale;
-const tileShape = `width="${fmt(tileSide)}" height="${fmt(tileSide)}" rx="${fmt(ICON_GRID.radius * gridUnit)}"`;
-for (const [mode, tile] of Object.entries(TILES)) {
-  const icon =
-    `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient>` +
-    `<filter id="shadow" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">` +
-    `<feGaussianBlur stdDeviation="${fmt((ICON_GRID.shadowBlur / 2) * gridUnit)}"/></filter></defs>` +
-    `<rect x="${fmt(tileOrigin)}" y="${fmt(tileOrigin + ICON_GRID.shadowY * gridUnit)}" ${tileShape} fill="#000000" fill-opacity="0.3" filter="url(#shadow)"/>` +
-    `<rect x="${fmt(tileOrigin)}" y="${fmt(tileOrigin)}" ${tileShape} fill="url(#tile)"/>` +
-    `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
-  emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
+// Web app icon: the dark mode's tile, full bleed, for the platform to round
+// or mask itself, the disc spanning ICON_MARK of it. The site's
+// apple-touch-icon and its manifest's icons, as is and maskable, are cut from
+// it -- see packages/brand/README.md.
+const WEB_ICON = { side: 100 };
+{
+  const { tile, ink } = TILES.dark;
+  const disc = WEB_ICON.side * ICON_MARK;
+  const at = (WEB_ICON.side - disc) / 2;
+  emit(
+    "icon/web-icon.svg",
+    `${svgOpen(WEB_ICON.side, WEB_ICON.side)}<rect width="${WEB_ICON.side}" height="${WEB_ICON.side}" fill="${tile}"/>${markAt(at, at, disc, ink)}</svg>`,
+    `${PRODUCT_NAME} app icon`,
+  );
 }
 
-// Favicon: the dark tile without the Dock grid's margin or shadow, since a
-// browser tab draws no other app's icon beside it, and the face a little
-// larger on it, so the glyph still reads at 16 pixels. The dark set serves
-// both tab themes, as the packaged `.icns` serves both modes. The site
+// Favicon: the dark mode's tile with no Dock margin, which reads as black in
+// a light tab and a dark one alike, under the copper small cut, so the V
+// still reads at 16 pixels, the disc spanning ICON_MARK of the tile. The site
 // serves it as /favicon.svg, with /favicon.ico cut from it for readers that
-// take no SVG — see packages/brand/README.md.
-const FAVICON = { inset: 8, radius: 52, glyph: "translate(-8.54 -11.59) scale(1.06)" };
+// take no SVG -- see packages/brand/README.md.
+const FAVICON = { side: 240, inset: 8, radius: 52 };
 {
-  const side = 240 - FAVICON.inset * 2;
-  const favicon =
-    `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${TILES.dark.gradient[0]}"/><stop offset="1" stop-color="${TILES.dark.gradient[1]}"/></linearGradient></defs>` +
-    `<rect x="${FAVICON.inset}" y="${FAVICON.inset}" width="${side}" height="${side}" rx="${FAVICON.radius}" fill="url(#tile)"/>` +
-    `<g transform="${FAVICON.glyph}">${face()}</g></svg>`;
-  emit("icon/luke-favicon.svg", favicon.replaceAll("currentColor", TILES.dark.ink), "Luke");
-}
-
-// Square mark: the face's own tight fill — its bounding box padded by the
-// same 6 units, squared by its larger side — with the corners left square,
-// one per mode, tiled and transparent. The tiled pair carries
-// the icon's gradient full-bleed and is the shape for surfaces that only
-// round the corners of a square — GitHub's organization avatar among them,
-// where a pre-rounded tile would show seams in the corners. A profile photo
-// cut to a circle takes the avatar below instead. The transparent pair is the same crop with no
-// tile: the see-through version of the icon and the tiled mark alike, since
-// the tile is all they do not share. A transparent avatar shows GitHub's
-// badge background color instead of a tile: pair the dark set with #1c1c1e,
-// the space-black end of the dark tile, which reads on either GitHub theme.
-const squareSide = Math.max(bbox.w, bbox.h) + 12;
-const squareX = bbox.cx - squareSide / 2;
-const squareY = bbox.cy - squareSide / 2;
-for (const [mode, tile] of Object.entries(TILES)) {
-  const open = svgOpenAt(squareX, squareY, squareSide, squareSide);
-  const tiled =
-    `${open}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
-    `<rect x="${fmt(squareX)}" y="${fmt(squareY)}" width="${fmt(squareSide)}" height="${fmt(squareSide)}" fill="url(#tile)"/>` +
-    `${face()}</svg>`;
-  emit(`mark/luke-mark-square-${mode}.svg`, tiled.replaceAll("currentColor", tile.ink), "Luke");
+  const tile = FAVICON.side - FAVICON.inset * 2;
+  const disc = tile * ICON_MARK;
+  const at = (FAVICON.side - disc) / 2;
   emit(
-    `mark/luke-mark-square-transparent-${mode}.svg`,
-    `${open}${face()}</svg>`.replaceAll("currentColor", tile.ink),
-    "Luke",
+    "icon/favicon.svg",
+    `${svgOpen(FAVICON.side, FAVICON.side)}<rect x="${FAVICON.inset}" y="${FAVICON.inset}" width="${tile}" height="${tile}" rx="${FAVICON.radius}" fill="${TILES.dark.tile}"/>${markAt(at, at, disc, TILES.dark.ink, MARK.SMALL_PATH)}</svg>`,
+    PRODUCT_NAME,
   );
 }
 
-// And the dark mark once more over flat pure black instead of the tile's
-// gradient, for surfaces that want the mark on true black.
-const squareBlack =
-  `${svgOpenAt(squareX, squareY, squareSide, squareSide)}` +
-  `<rect x="${fmt(squareX)}" y="${fmt(squareY)}" width="${fmt(squareSide)}" height="${fmt(squareSide)}" fill="#000000"/>` +
-  `${face()}</svg>`;
-emit(
-  "mark/luke-mark-square-black.svg",
-  squareBlack.replaceAll("currentColor", TILES.dark.ink),
-  "Luke",
-);
-
-// And the mark in pure black on transparency: one ink, no tile, no grey,
-// with the face's shape carried by the alpha channel alone. This is the
-// monochrome glyph that partner surfaces tint themselves, such as an
-// integration's small icon on Sentry, which refuses any colour but black,
-// or a template image a host recolours for its own theme.
-emit(
-  "mark/luke-mark-square-monochrome.svg",
-  `${svgOpenAt(squareX, squareY, squareSide, squareSide)}${face()}</svg>`.replaceAll(
-    "currentColor",
-    "#000000",
-  ),
-  "Luke",
-);
-
-// Avatar: the face with room around it, for profile photos. The square marks
-// are cropped to the face itself, so the circle GitHub, X, Slack, and LinkedIn
-// cut from a profile photo takes the eyes and the end of the smile. Here the
-// face's bounding box is set so its diagonal spans 80% of the canvas, which
-// keeps every corner of the artwork inside the inscribed circle with air to
-// spare. The tiles are opaque, because a profile photo rarely shows through.
-const AVATAR = { diagonalFill: 0.8 };
-const avatarSide = Math.hypot(bbox.w, bbox.h) / AVATAR.diagonalFill;
-const avatarX = bbox.cx - avatarSide / 2;
-const avatarY = bbox.cy - avatarSide / 2;
-const avatarRect = `x="${fmt(avatarX)}" y="${fmt(avatarY)}" width="${fmt(avatarSide)}" height="${fmt(avatarSide)}"`;
-for (const [mode, tile] of Object.entries(TILES)) {
-  const avatar =
-    `${svgOpenAt(avatarX, avatarY, avatarSide, avatarSide)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
-    `<rect ${avatarRect} fill="url(#tile)"/>${face()}</svg>`;
-  emit(`avatar/luke-avatar-${mode}.svg`, avatar.replaceAll("currentColor", tile.ink), "Luke");
-}
-emit(
-  "avatar/luke-avatar-black.svg",
-  `${svgOpenAt(avatarX, avatarY, avatarSide, avatarSide)}<rect ${avatarRect} fill="#000000"/>${face()}</svg>`.replaceAll(
-    "currentColor",
-    TILES.dark.ink,
-  ),
-  "Luke",
-);
-
-// Logo: the wordmark lockup as its own shareable set, per mode — the face-L
-// and the letters together on a transparent background, no tile and no
-// rounded corners, for the places that take a logo rather than an avatar.
-// Its PNG derivatives are cut smaller than the mark's 1024 square because a
-// lockup is handed to headers and docs, not enlarged into a tile — see
-// packages/brand/README.md.
-emitModes("logo/luke-logo", wordSvg(wordmark()), "LUKE");
-
-// Social card: the image the web pages' `og:image` points at. 1200x630 is the
-// one size every link unfurler renders whole — Facebook and LinkedIn ask for
-// 1.91:1, X's large summary card cuts a 2:1 crop out of it, and Slack,
-// Discord, iMessage, WhatsApp, and Telegram read the same Open Graph tags —
-// so one card serves them all. The ground is the landing page's own dark
-// background rather than an icon tile, so the preview reads as a corner of
-// the site, and the wordmark keeps air on every side because the 2:1 crops
-// take the top and bottom edges. One card, dark only: a link preview follows
-// no UI theme. Its PNG is cut into apps/web/public/ — see
-// packages/brand/README.md.
-const CARD = { WIDTH: 1200, HEIGHT: 630, GROUND: "#08090b", WORDMARK_FILL: 0.56 };
+// Square mark: the disc with a twelfth of air on each side, corners left
+// square, per mode, tiled and transparent. The tiled pair is the shape for
+// surfaces that round a square's corners themselves (GitHub's organization
+// avatar among them); the transparent pair is the mark in each mode's ink.
+const SQUARE = { side: 120, disc: 100 };
 {
-  const wm = wordmark();
-  const s = WORDMARK.scale;
-  const ty = 170 - 164 * s;
-  const lw2 = (FACE.sw * s) / 2;
-  // The lockup's ink box, stroke caps included: the face's tilted bounding
-  // box scaled into word coordinates, and the letters' cap height and final
-  // stem from capsUKE (top 44, baseline 170, end at wm.width - 20).
-  const inkLeft = 20 - 66 * s + bbox.x * s;
-  const inkRight = wm.width - 20 + lw2;
-  const inkTop = Math.min(bbox.y * s + ty, 44 - lw2);
-  const inkBottom = Math.max((bbox.y + bbox.h) * s + ty, 170 + lw2);
-  const k = (CARD.WIDTH * CARD.WORDMARK_FILL) / (inkRight - inkLeft);
-  const cardTx = CARD.WIDTH / 2 - (k * (inkLeft + inkRight)) / 2;
-  const cardTy = CARD.HEIGHT / 2 - (k * (inkTop + inkBottom)) / 2;
-  const card =
-    `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}` +
-    `<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${CARD.GROUND}"/>` +
-    `<g transform="translate(${fmt(cardTx)} ${fmt(cardTy)}) scale(${fmt(k)})">${wm.body}</g></svg>`;
+  const at = (SQUARE.side - SQUARE.disc) / 2;
+  const open = svgOpen(SQUARE.side, SQUARE.side);
+  const ground = (fill) => `<rect width="${SQUARE.side}" height="${SQUARE.side}" fill="${fill}"/>`;
+  for (const [mode, { tile, ink }] of Object.entries(TILES)) {
+    emit(
+      `mark/mark-square-${mode}.svg`,
+      `${open}${ground(tile)}${markAt(at, at, SQUARE.disc, ink)}</svg>`,
+      PRODUCT_NAME,
+    );
+    emit(
+      `mark/mark-square-transparent-${mode}.svg`,
+      `${open}${markAt(at, at, SQUARE.disc, INKS[mode])}</svg>`,
+      PRODUCT_NAME,
+    );
+  }
+  // On true black, for surfaces that want the mark on black.
   emit(
-    "social/luke-og-card.svg",
-    card.replaceAll("currentColor", INKS.dark),
-    "Luke — your AI engineering manager",
+    "mark/mark-square-black.svg",
+    `${open}${ground("#000000")}${markAt(at, at, SQUARE.disc, "#ffffff")}</svg>`,
+    PRODUCT_NAME,
+  );
+  // In pure black on transparency: the one-ink glyph a partner surface tints
+  // for its own theme, such as an integration's icon on Sentry, which takes
+  // no colour but black.
+  emit(
+    "mark/mark-square-monochrome.svg",
+    `${open}${markAt(at, at, SQUARE.disc, "#000000")}</svg>`,
+    PRODUCT_NAME,
   );
 }
-// CTA button: a download link drawn as the hero's own download CTA in
-// apps/web/src/App.tsx, so a page that links the download offers the same door
-// as the site. An SVG served as an image can reach no stylesheet, so the
-// hero's values are restated here — the filled button's --primary pair with
-// its oklch values resolved to hex, the 0.5rem radius, and the 14px/600
-// label; a change to the hero's look belongs in both places or in neither.
-// The label is forced to its designed advance with textLength, because the
-// button renders on machines without Geist and the padding must hold under
-// whatever font answers.
+
+// Avatar: the disc spanning ICON_MARK of the square, as in the app icons,
+// so the circle a profile photo is cut to (GitHub, X, Slack, LinkedIn) still
+// leaves a ring of the tile round the rim. Opaque tiles, because a profile
+// photo rarely shows through.
+const AVATAR = { side: 100, disc: 100 * ICON_MARK };
+{
+  const at = (AVATAR.side - AVATAR.disc) / 2;
+  const open = svgOpen(AVATAR.side, AVATAR.side);
+  for (const [mode, { tile, ink }] of Object.entries(TILES)) {
+    emit(
+      `avatar/avatar-${mode}.svg`,
+      `${open}<rect width="${AVATAR.side}" height="${AVATAR.side}" fill="${tile}"/>${markAt(at, at, AVATAR.disc, ink)}</svg>`,
+      PRODUCT_NAME,
+    );
+  }
+  emit(
+    "avatar/avatar-black.svg",
+    `${open}<rect width="${AVATAR.side}" height="${AVATAR.side}" fill="#000000"/>${markAt(at, at, AVATAR.disc, "#ffffff")}</svg>`,
+    PRODUCT_NAME,
+  );
+}
+
+// Social card: the image the web pages' `og:image` points at, 1200 by 630,
+// the one size every link unfurler draws whole. The lockup in the dark ink on
+// the dark ground, 56% of the card wide, with air on every side because a 2:1
+// crop takes the top and bottom edges. One card, dark only: a link preview
+// follows no UI theme. Its PNG is cut into apps/web/public/.
+const CARD = { WIDTH: 1200, HEIGHT: 630, FILL: 0.56 };
+{
+  const { body, box } = lockup(INKS.dark);
+  const k = (CARD.WIDTH * CARD.FILL) / (box.right - box.left);
+  const tx = CARD.WIDTH / 2 - (k * (box.left + box.right)) / 2;
+  const ty = CARD.HEIGHT / 2 - (k * (box.top + box.bottom)) / 2;
+  emit(
+    "social/og-card.svg",
+    `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${BRAND.DARK.GROUND}"/><g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(k)})">${body}</g></svg>`,
+    PRODUCT_NAME,
+  );
+}
+
+// CTA button: a download link drawn as the site's own primary button, for a
+// page that links the download: the accent's fill under its own words, per
+// mode. An SVG served as an image reaches no stylesheet, so the values are
+// the brand table's, the 0.5rem radius, and the 14px/600 label, forced to its
+// designed advance with textLength because the button renders on machines
+// without Geist.
 const CTA = {
   HEIGHT: 44,
   RADIUS: 8,
@@ -1454,17 +292,15 @@ const CTA = {
   WEIGHT: 600,
 };
 const CTA_INKS = {
-  // The filled pair carries no dark restatement on the site either: a filled
-  // button owns its own ground, so #04121a on #5cd5ff serves both modes.
-  light: { fill: "#5cd5ff", ink: "#04121a" },
-  dark: { fill: "#5cd5ff", ink: "#04121a" },
+  light: { fill: BRAND.LIGHT.ACCENT, ink: BRAND.LIGHT.ON_ACCENT },
+  dark: { fill: BRAND.DARK.ACCENT, ink: BRAND.DARK.ON_ACCENT },
 };
 const CTA_BUTTONS = [
   {
     name: "download",
     label: "Download for macOS",
     advance: 133,
-    title: "Download Luke for macOS",
+    title: `Download ${PRODUCT_NAME} for macOS`,
   },
 ];
 for (const { name, label, advance, title } of CTA_BUTTONS) {
@@ -1475,40 +311,69 @@ for (const { name, label, advance, title } of CTA_BUTTONS) {
       `<text x="${fmt(width / 2)}" y="${fmt(CTA.HEIGHT / 2)}" text-anchor="middle" dominant-baseline="central" ` +
       `font-family="${CTA.FONT}" font-size="${CTA.FONT_SIZE}" font-weight="${CTA.WEIGHT}" ` +
       `textLength="${advance}" fill="${inks.ink}">${label}</text>`;
-    // Sized explicitly, unlike every asset above: an <img> gives a viewBox-only
-    // SVG no intrinsic size, and a button drawn at the browser's fallback size
-    // is no longer the hero's button.
+    // Sized explicitly: an <img> gives a viewBox-only SVG no intrinsic size.
     const open =
       `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${CTA.HEIGHT}" ` +
       `viewBox="0 0 ${width} ${CTA.HEIGHT}" fill="none">`;
-    emit(`button/luke-cta-${name}-${mode}.svg`, `${open}${ground}${text}</svg>`, title);
+    emit(`button/cta-${name}-${mode}.svg`, `${open}${ground}${text}</svg>`, title);
   }
 }
 
-// DMG background: a quiet field with the same rounded monoline language as the
-// face. Shared window geometry keeps the arrow centered between the two icons.
+// DMG background: the light ground with one round-ended arrow from the app to
+// Applications, the shared window geometry keeping it centred between them.
 const dmgBackground = DMG_WINDOW.BACKGROUND.PNG;
 const arrowY = DMG_WINDOW.POSITIONS.APP.Y;
 const arrowStart = DMG_WINDOW.POSITIONS.APP.X + DMG_WINDOW.ICON_SIZE;
 const arrowEnd = DMG_WINDOW.POSITIONS.APPLICATIONS.X - DMG_WINDOW.ICON_SIZE;
 const arrowHead = 28;
-const dmg =
+emit(
+  "dmg/dmg-background.svg",
   `${svgOpen(dmgBackground.WIDTH, dmgBackground.HEIGHT)}` +
-  `<rect width="${dmgBackground.WIDTH}" height="${dmgBackground.HEIGHT}" fill="#f5f5f7"/>` +
-  `<path d="M ${arrowStart} ${arrowY} H ${arrowEnd} M ${arrowEnd - arrowHead} ${arrowY - arrowHead} L ${arrowEnd} ${arrowY} L ${arrowEnd - arrowHead} ${arrowY + arrowHead}" ` +
-  `fill="none" stroke="#6e6e73" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-emit("dmg/luke-dmg-background.svg", dmg, "Drag Luke to Applications");
+    `<rect width="${dmgBackground.WIDTH}" height="${dmgBackground.HEIGHT}" fill="${BRAND.LIGHT.SIDEBAR}"/>` +
+    `<path d="M ${arrowStart} ${arrowY} H ${arrowEnd} M ${arrowEnd - arrowHead} ${arrowY - arrowHead} L ${arrowEnd} ${arrowY} L ${arrowEnd - arrowHead} ${arrowY + arrowHead}" ` +
+    `fill="none" stroke="${BRAND.LIGHT.TEXT_MUTED}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  `Drag ${PRODUCT_NAME} to Applications`,
+);
 
-for (const name of MOTION_NAMES) {
-  emitModes(`motion/luke-${name}`, markSvg(motionSvg(MOTIONS[name])), `Luke — ${name}`);
+// A string property as Biome formats it, since the file is committed and
+// linted and the two must agree exactly: on its key's line where it fits the
+// 100-column width or the key is short (four characters or fewer, which
+// Biome never breaks after), and on the next line where it is neither.
+function tsEntry(key, value) {
+  const line = `  ${key}: "${value}",`;
+  return line.length <= 100 || key.length <= 4 ? line : `  ${key}:\n    "${value}",`;
 }
-// The face component's two inputs, from the same table the SVGs came from.
-put(join(SURFACE, "face-art.ts"), faceArtModule());
-put(join(UI_FACE, "face-motion.css"), faceMotionCss());
+
+// The mark's geometry, for @repo/ui's ProductMark to draw from, and the
+// wordmark's, for the landing's footer.
+put(
+  join(SURFACE, "mark-art.ts"),
+  `// Generated by packages/brand/scripts/generate-brand-assets.mjs. Do not edit by hand: change
+// the mark in that script and re-run it.
+//
+// The product's mark, drawn in one colour on a 100-unit disc: the regular cut,
+// and the small one a 32-pixel mark or smaller draws.
+
+export const MARK_ART = {
+  VIEW_BOX: "${MARK.VIEW_BOX}",
+${tsEntry("PATH", MARK.PATH)}
+${tsEntry("SMALL_PATH", MARK.SMALL_PATH)}
+} as const;
+
+// The wordmark's outline in the type's units, its baseline at y 0, and the
+// box its ink fills, with no room around it.
+
+export const WORDMARK_ART = {
+  VIEW_BOX: "${[WORDMARK.INK.LEFT, WORDMARK.INK.TOP, fmt(WORDMARK.INK.RIGHT - WORDMARK.INK.LEFT), WORDMARK.INK.BOTTOM - WORDMARK.INK.TOP].join(" ")}",
+${tsEntry("PATH", WORDMARK.PATH)}
+} as const;
+`,
+);
 
 if (!CHECK_ONLY) {
-  process.stdout.write(`${written.length} SVGs written to packages/brand/assets/\n`);
-  process.stdout.write("face-art.ts written to @luke/brand and face-motion.css to @luke/ui\n");
+  process.stdout.write(
+    `${written.length} SVGs written to packages/brand/assets/, and mark-art.ts\n`,
+  );
 } else if (stale.length > 0) {
   process.stderr.write(
     `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +
@@ -1516,5 +381,5 @@ if (!CHECK_ONLY) {
   );
   process.exit(1);
 } else {
-  process.stdout.write(`${written.length + 2} generated files are up to date\n`);
+  process.stdout.write(`${written.length + 1} generated files are up to date\n`);
 }

@@ -53,7 +53,7 @@ export function ReadableControls({ children }: { children: ReactNode }): React.J
   const before = useRef<SelectionEnds | undefined>(undefined);
   return (
     <div
-      className="luke-readable-controls"
+      className="ui-readable-controls"
       onPointerDownCapture={() => {
         before.current = selectionEnds();
       }}

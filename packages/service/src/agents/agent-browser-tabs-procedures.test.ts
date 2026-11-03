@@ -1,43 +1,49 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { LiveStatement } from "@luke/database/core/live-statement";
-import { Database } from "@luke/database/core/query";
+import type { LiveStatement } from "@repo/database/core/live-statement";
+import { Database } from "@repo/database/core/query";
 import {
   browserTabsLiveStatement,
   pointBrowserTab,
   takeOverBrowserTab,
   upsertBrowserTab,
-} from "@luke/database/models/agent-browser-tabs";
-import { createAgent } from "@luke/database/models/agent-store";
-import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
-import { saveGitHubToken } from "@luke/database/models/github-token-store";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { createTask } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { task } from "@luke/database/schemas/task";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+} from "@repo/database/models/agent-browser-tabs";
+import { createAgent } from "@repo/database/models/agent-store";
+import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
+import { saveGitHubToken } from "@repo/database/models/github-token-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { createTask } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { task } from "@repo/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import {
   AGENT_BROWSER_TAB_OPENER,
   type AgentBrowserTab,
   agentBrowserTabAnswerSchema,
   agentBrowserTabsAnswerSchema,
   type BrowserTabsPlace,
-} from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   browserTabsOfLiveRows,
   nextBrowserTabLapse,
   taskBrowserTabsLiveRowsSchema,
-} from "@luke/features/live-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+} from "@repo/features/live-wire";
+import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
+import { readEither } from "@repo/wire/effect";
 import { eq } from "drizzle-orm";
 import { type Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import {
+  recordingProductAnalytics,
+  SERVER_AGENT_TOOL,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -71,7 +77,7 @@ import { AgentBrowser, agentBrowserOver } from "./browser/agent-browser.js";
  * Synthetic accounts, bearers, workspaces, agents, and pages throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** The repository a coding agent on its starter's token works in, which a reader's token reads. */
 const TOKEN_REPOSITORY = "octo-member/side";
@@ -84,7 +90,7 @@ interface Answer {
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });
@@ -143,6 +149,7 @@ const openTask = Effect.gen(function* () {
         effort: "high",
         repository,
         githubAccess,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
       (started) => Option.getOrThrow(started).agent,
     );
@@ -179,14 +186,28 @@ const openTask = Effect.gen(function* () {
   };
 });
 
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The tools the account was counted as opening, in order, each in the workspace given. */
+const toolsCounted = (userId: string, workspaceId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.AGENT_TOOL_OPEN)
+    .map((event) => {
+      assert.equal(event.workspaceId, workspaceId);
+      return "tool" in event.properties ? event.properties.tool : undefined;
+    });
+
 const answer = (
   bearers: ReadonlyMap<string, string>,
   request: Request,
   agentBrowser: Layer.Layer<AgentBrowser>,
 ) =>
   Effect.gen(function* () {
-    // SAFETY: the procedures yield the database and the clock alone, which the test's own context holds.
-    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>().pipe(
+      Effect.provide(ANALYTICS.layer),
+    )) as Context.Context<WebServices>;
     const handle = hostedFetch({
       agentBrowserTabs: agentBrowserTabsProcedures({
         resolveUserId: (incoming) =>
@@ -417,7 +438,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
     "a takeover makes the member the driver for the hold, another member's answers them as driver until it lapses, and a hand-back gives the tab back",
     () =>
       Effect.gen(function* () {
-        const { starter, teammate, taskId, coderTab, ask } = yield* openTask;
+        const { starter, teammate, taskId, workspace, coderTab, ask } = yield* openTask;
         const path = driverPath(taskId, coderTab.id);
         const takenAt = (yield* DateTime.nowAsDate).getTime();
 
@@ -434,6 +455,12 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
         assert.equal(lapsed?.driver, null);
         assert.equal(tabOf(yield* ask(request(teammate, path, "POST"))).driver?.userId, teammate);
         assert.equal(tabOf(yield* ask(request(teammate, path, "DELETE"))).driver, null);
+        // Only a takeover that took the tab and a hand-back that gave it back are counted.
+        assert.deepEqual(toolsCounted(starter, workspace), [SERVER_AGENT_TOOL.BROWSER_TAKEOVER]);
+        assert.deepEqual(toolsCounted(teammate, workspace), [
+          SERVER_AGENT_TOOL.BROWSER_TAKEOVER,
+          SERVER_AGENT_TOOL.BROWSER_HANDBACK,
+        ]);
       }),
   );
 
@@ -478,7 +505,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
     "a member who controls the agent opens a tab in its browser, kept with them as its opener and taken over by them",
     () =>
       Effect.gen(function* () {
-        const { starter, teammate, taskId, coder, ask } = yield* openTask;
+        const { starter, teammate, taskId, workspace, coder, ask } = yield* openTask;
         yield* runAgent(coder);
         const { peer, layer } = yield* runningBrowser;
 
@@ -513,6 +540,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           listed.find((tab) => tab.id === opened.id),
           opened,
         );
+        assert.deepEqual(toolsCounted(starter, workspace), [SERVER_AGENT_TOOL.BROWSER]);
       }),
   );
 
@@ -532,6 +560,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
             effort: "high",
             repository: TOKEN_REPOSITORY,
             githubAccess: GITHUB_ACCESS.TOKEN,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const kept = yield* upsertBrowserTab({

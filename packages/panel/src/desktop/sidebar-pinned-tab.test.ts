@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS } from "@luke/brand";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/agent-wire";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -119,7 +119,7 @@ function drawPin(
       ),
     ),
   );
-  return list.querySelector<HTMLElement>("button.luke-list-row-main") ?? assert.fail("the row");
+  return list.querySelector<HTMLElement>("button.ui-list-row-main") ?? assert.fail("the row");
 }
 
 async function settled(): Promise<void> {
@@ -139,7 +139,7 @@ function leave(press: HTMLElement): void {
   });
 }
 
-const card = () => document.querySelector(".luke-tooltip-card [data-pinned-tab-card]");
+const card = () => document.querySelector(".ui-tooltip-card [data-pinned-tab-card]");
 
 test("a pointer crossing a pinned agent's row asks the service nothing", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
@@ -383,7 +383,7 @@ describe("a pinned Changes tab's card", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     restOn(drawPin(pin, TASK, openTask([summary])));
     await settled();
-    const tabCard = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
+    const tabCard = document.querySelector(".ui-tooltip-card [data-pull-request-card]");
     assert.match(tabCard?.textContent ?? "", /Newer title/u);
     assert.match(tabCard?.textContent ?? "", /3 files/u);
     assert.match(tabCard?.textContent ?? "", /Expiry job/u);
@@ -396,7 +396,7 @@ describe("a pinned Changes tab's card", () => {
     restOn(drawPin(pin));
     await settled();
     assert.ok(card() !== null, "the pin's card stands");
-    assert.equal(document.querySelector(".luke-tooltip-card [data-pull-request-card]"), null);
+    assert.equal(document.querySelector(".ui-tooltip-card [data-pull-request-card]"), null);
     assert.deepEqual(reads, [AGENT]);
   });
 
@@ -405,7 +405,7 @@ describe("a pinned Changes tab's card", () => {
     restOn(drawPin(pin, TASK, openTask([])));
     await settled();
     assert.match(card()?.textContent ?? "", /No longer on this task/u);
-    assert.equal(document.querySelector(".luke-tooltip-card [data-pull-request-card]"), null);
+    assert.equal(document.querySelector(".ui-tooltip-card [data-pull-request-card]"), null);
   });
 });
 

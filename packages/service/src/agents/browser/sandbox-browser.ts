@@ -2,7 +2,7 @@
  * sandbox-browser.ts -- the commands that keep a Chromium running in an agent's sandbox, and the bridge that carries its DevTools protocol over a PTY's stdio.
  *
  * The browser is the full Chromium Playwright installs in the image
- * (`agent-runtime/sandbox.ts`), run headful on an Xvfb display of its own,
+ * (`agent-runtime/sandbox-image.ts`), run headful on an Xvfb display of its own,
  * so a site sees an ordinary browser rather than a headless one. Its
  * DevTools port is bound to the sandbox's loopback alone and is never
  * exposed: Vercel Sandbox's exposed ports are public, so the service reaches
@@ -20,12 +20,12 @@
  * every capability dropped (`sandbox-capabilities.ts`), since the pages the
  * browser loads are no one's we vouch for, which would make it read as
  * the agent's own work; it is told apart by its sessions' leaders instead
- * (`@luke/agent-runner/pins`'s `LUKE_BROWSER_PIN`), so it never holds a
+ * (`@repo/agent-runner/pins`'s `LUKE_BROWSER_PIN`), so it never holds a
  * sandbox up through a pause. Every value the script reads
  * is a constant of this module, handed to it as a positional argument.
  */
 
-import { LUKE_BROWSER_PIN, PLAYWRIGHT_PIN } from "@luke/agent-runner/pins";
+import { LUKE_BROWSER_PIN, PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
@@ -37,7 +37,7 @@ export const SANDBOX_BROWSER = {
   /** The display's and the browser window's size. */
   WIDTH: 1280,
   HEIGHT: 800,
-  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. */
+  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. Note that it keeps its old folder, because a persistent sandbox made before still holds its profile there. */
   STATE_DIRECTORY: ".luke/browser",
   /** How long the start waits on Xvfb's socket and on the browser's DevTools, in tenths of a second. */
   DISPLAY_WAIT_TENTHS: 50,
@@ -170,7 +170,7 @@ export function startBrowser(): CommandAsk {
       "bash",
       "-c",
       START_SCRIPT,
-      "luke-browser",
+      "agent-browser",
       String(SANDBOX_BROWSER.DEVTOOLS_PORT),
       String(SANDBOX_BROWSER.DISPLAY),
       String(SANDBOX_BROWSER.WIDTH),

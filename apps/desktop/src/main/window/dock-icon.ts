@@ -2,18 +2,18 @@ import path from "node:path";
 import { app, nativeImage, nativeTheme } from "electron";
 
 /**
- * The Dock tile per theme: the porcelain tile for a light desktop, the
- * space-black one for a dark. The bundle's `.icns` is cut from the dark tile
+ * The Dock tile per theme: the copper tile for a light desktop, the night
+ * one for a dark. The bundle's `.icns` is cut from the dark tile
  * and cannot follow the theme, and an unpackaged run has only Electron's stock
  * icon, so the running app draws the Dock image itself from these.
  */
 const DOCK_ICON_FILES = {
-  LIGHT: "luke-icon-light.png",
-  DARK: "luke-icon-dark.png",
+  LIGHT: "icon-light.png",
+  DARK: "icon-dark.png",
 } as const;
 
 /**
- * Draws the app's own face in the Dock, matched to the theme. Artwork missing
+ * Draws the app's own icon in the Dock, matched to the theme. Artwork missing
  * from a build draws nothing, leaving the bundle icon (or the stock one) in
  * place rather than an empty tile.
  */

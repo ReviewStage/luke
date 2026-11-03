@@ -1,4 +1,4 @@
-import type { SessionKey } from "@luke/runtime/vocabulary";
+import type { SessionKey } from "@repo/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -6,7 +6,7 @@ import {
   type UnparsedWireValue,
   valueFromJsonText,
   type WireRecord,
-} from "@luke/wire";
+} from "@repo/wire";
 import type { UIMessage } from "ai";
 import type { RunModelUsage, RunStatus, RunUsage, TurnFailure } from "./requests.js";
 import { spokenProse } from "./spoken-prose.js";

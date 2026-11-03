@@ -127,23 +127,23 @@ test("a layer over the body is measured by the visible height, above the keyboar
   const viewport = new FakeVisualViewport();
   standViewport(viewport);
   mount();
-  assert.equal(readOverBody("--luke-viewport-top"), "0px");
-  assert.equal(readOverBody("--luke-stage-height"), "800px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  assert.equal(readOverBody("--ui-viewport-top"), "0px");
+  assert.equal(readOverBody("--ui-stage-height"), "800px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 
   act(() => viewport.change({ height: 480 }, "resize"));
-  assert.equal(readOverBody("--luke-stage-height"), "480px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+  assert.equal(readOverBody("--ui-stage-height"), "480px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 
   // Note that a viewport panned down to the field is seen, not covered.
   act(() => viewport.change({ height: 480, offsetTop: 120 }, "scroll"));
-  assert.equal(readOverBody("--luke-viewport-top"), "120px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "200px");
+  assert.equal(readOverBody("--ui-viewport-top"), "120px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "200px");
 
   act(() => viewport.change({ height: 800, offsetTop: 0 }, "resize"));
-  assert.equal(readOverBody("--luke-viewport-top"), "0px");
-  assert.equal(readOverBody("--luke-stage-height"), "800px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  assert.equal(readOverBody("--ui-viewport-top"), "0px");
+  assert.equal(readOverBody("--ui-stage-height"), "800px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 });
 
 for (const engine of [ENGINE.BLINK, ENGINE.WEBKIT]) {
@@ -155,14 +155,14 @@ for (const engine of [ENGINE.BLINK, ENGINE.WEBKIT]) {
     // Zoomed in twice over, the viewport shows half the page and follows the finger down it.
     act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
     act(() => viewport.change({ height: 400, offsetTop: 250, scale: 2 }, "scroll"));
-    assert.equal(readOverBody("--luke-viewport-top"), "0px");
-    assert.equal(readOverBody("--luke-stage-height"), "800px");
-    assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+    assert.equal(readOverBody("--ui-viewport-top"), "0px");
+    assert.equal(readOverBody("--ui-stage-height"), "800px");
+    assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 
     act(() => viewport.change({ height: 800, offsetTop: 0, scale: 1 }, "resize"));
     act(() => viewport.change({ height: 480 }, "resize"));
-    assert.equal(readOverBody("--luke-stage-height"), "480px");
-    assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+    assert.equal(readOverBody("--ui-stage-height"), "480px");
+    assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
   });
 
   test(`in ${engine} a keyboard opened while zoomed in still lifts the stage above it, and closed while zoomed lets it down again`, () => {
@@ -173,13 +173,13 @@ for (const engine of [ENGINE.BLINK, ENGINE.WEBKIT]) {
 
     // Twice over, a keyboard 320px tall at the page's own scale leaves 240px of the zoomed box seen.
     act(() => viewport.change({ height: 240, offsetTop: 300 }, "resize"));
-    assert.equal(readOverBody("--luke-viewport-top"), "0px");
-    assert.equal(readOverBody("--luke-stage-height"), "480px");
-    assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+    assert.equal(readOverBody("--ui-viewport-top"), "0px");
+    assert.equal(readOverBody("--ui-stage-height"), "480px");
+    assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 
     act(() => viewport.change({ height: 400, offsetTop: 100 }, "resize"));
-    assert.equal(readOverBody("--luke-stage-height"), "800px");
-    assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+    assert.equal(readOverBody("--ui-stage-height"), "800px");
+    assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
   });
 }
 
@@ -188,25 +188,25 @@ test("a window that shrinks for the keyboard, as Android's does, counts no keybo
   standViewport(viewport);
   mount();
   act(() => viewport.change({ height: 480, layoutHeight: 480 }, "resize"));
-  assert.equal(readOverBody("--luke-stage-height"), "480px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  assert.equal(readOverBody("--ui-stage-height"), "480px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 
   act(() => viewport.change({ height: 240, scale: 2 }, "resize"));
-  assert.equal(readOverBody("--luke-stage-height"), "480px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  assert.equal(readOverBody("--ui-stage-height"), "480px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 
   // The keyboard put away while zoomed hands the window its height back.
   act(() => viewport.change({ height: 400, layoutHeight: 800 }, "resize"));
-  assert.equal(readOverBody("--luke-stage-height"), "800px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  assert.equal(readOverBody("--ui-stage-height"), "800px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 });
 
 test("without a visual viewport nothing is written, so the tokens' own window height stands", () => {
   standViewport(undefined);
   mount();
-  assert.equal(readOverBody("--luke-viewport-top"), "");
-  assert.equal(readOverBody("--luke-stage-height"), "");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "");
+  assert.equal(readOverBody("--ui-viewport-top"), "");
+  assert.equal(readOverBody("--ui-stage-height"), "");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "");
 });
 
 test("a panel taken down leaves the window to the tokens' own height", () => {
@@ -214,9 +214,9 @@ test("a panel taken down leaves the window to the tokens' own height", () => {
   mount();
   act(() => root?.unmount());
   root = undefined;
-  assert.equal(readOverBody("--luke-viewport-top"), "");
-  assert.equal(readOverBody("--luke-stage-height"), "");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "");
+  assert.equal(readOverBody("--ui-viewport-top"), "");
+  assert.equal(readOverBody("--ui-stage-height"), "");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "");
 });
 
 test("in WebKit the keyboard's pan is undone, so the stage stays at the window's top and ends where the keyboard begins", () => {
@@ -229,9 +229,9 @@ test("in WebKit the keyboard's pan is undone, so the stage stays at the window's
   act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
 
   assert.equal(viewport.offsetTop, 0, "the pan is undone");
-  assert.equal(readOverBody("--luke-viewport-top"), "0px");
-  assert.equal(readOverBody("--luke-stage-height"), "480px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+  assert.equal(readOverBody("--ui-viewport-top"), "0px");
+  assert.equal(readOverBody("--ui-stage-height"), "480px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 });
 
 test("a pinch's pan is the developer's own and is never undone", () => {
@@ -244,7 +244,7 @@ test("a pinch's pan is the developer's own and is never undone", () => {
   act(() => viewport.change({ height: 400, offsetTop: 250, scale: 2 }, "scroll"));
 
   assert.equal(viewport.offsetTop, 250);
-  assert.equal(readOverBody("--luke-viewport-top"), "0px");
+  assert.equal(readOverBody("--ui-viewport-top"), "0px");
 });
 
 test("a keyboard rising over a focused field scrolls its caret into view within its own column, and one over nothing focused scrolls nothing", () => {
@@ -285,28 +285,28 @@ test("the focus leaving the field lets the stage down at once, ahead of WebKit m
   mount();
   field.focus();
   act(() => viewport.change({ height: 480 }, "resize"));
-  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 
   // The focus moving to another field keeps the keyboard up.
   act(() => other.focus());
-  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 
   // Done: the keyboard slides away while WebKit still measures it, until it has gone.
   act(() => button.focus());
-  assert.equal(readOverBody("--luke-stage-height"), "800px");
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  assert.equal(readOverBody("--ui-stage-height"), "800px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
   act(() => viewport.change({ height: 480 }, "scroll"));
   assert.equal(
-    readOverBody("--luke-keyboard-inset"),
+    readOverBody("--ui-keyboard-inset"),
     "0px",
     "a late event of the keyboard going holds the stage down",
   );
   act(() => viewport.change({ height: 800 }, "resize"));
-  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 
   act(() => field.focus());
   act(() => viewport.change({ height: 480 }, "resize"));
-  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+  assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 });
 
 /** A column 700 tall holding more than it shows, in the body, measured as a laid-out page measures it. */

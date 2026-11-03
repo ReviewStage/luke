@@ -160,7 +160,7 @@ when the capture activates the window; reopen it from an interval or a
 The helpers in `scripts/` run on the Mac from the synced copy of this skill,
 through `bash`, since file sync drops the executable bit.
 `SHOTS_WORKTREE` (default `~/Developer/luke-changelog-shots`) is a throwaway
-worktree of the clone at `LUKE_REPO` (default `~/Developer/luke`); nothing
+worktree of the clone at `APP_REPO` (default `~/Developer/luke`); nothing
 touches the developer's own checkout or a running Vespin.
 
 ```sh
@@ -185,14 +185,14 @@ for the batch. The first launch after a build may still be downloading
 Electron's binary, so capture again if that one fails. A batch of ten takes about two minutes after a
 three-minute build. `window.sh` captures 8 seconds after launch; a shot that
 stages late, such as a menu reopened after the activation, takes
-`LUKE_SHOT_SETTLE=12` or more.
+`APP_SHOT_SETTLE=12` or more.
 
 ### Phone pictures (0.21.0 on)
 
 From 0.21.0 the web app draws the panel on fixture data at
 `/app.html?fixture=<profile>`, a shot profile among them, so a phone picture
 is the staged web app in Safari on an iPhone simulator. Check out and install
-the release with its staging (`LUKE_SHOT_PATCH_DIST=0 build.sh`), then:
+the release with its staging (`APP_SHOT_PATCH_DIST=0 build.sh`), then:
 
 ```sh
 bash $S/.agents/skills/changelog-screenshots/scripts/phone.sh ~/luke-shots/<v>/phone.png shot-<name>
@@ -214,7 +214,7 @@ that against a real tap before staging around it.
 
 Before 0.7.0 Vespin drew no ordinary window: a borderless panel hung from the
 notch at a high window level, and onboarding was a full-display overlay, so
-`window.sh` finds nothing to capture. Build with `LUKE_SHOT_PATCH_DIST=0` (the
+`window.sh` finds nothing to capture. Build with `APP_SHOT_PATCH_DIST=0` (the
 window patches would pull the panel off the top edge), have the staging raise
 the tag's capture settle to about 3 s, isolate its state on `--user-data-dir`
 where the tag overrides it (v0.3.9–v0.5.0), and pick the window it captures,
@@ -237,11 +237,11 @@ Frame with the repository's own script, from the synced checkout:
 
 ```sh
 bash $S/scripts/changelog-screenshot.sh out/the-call-tab.png --from ~/luke-shots/<v>/call.png
-LUKE_SHOT_ZOOM=2 bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/luke-shots/<v>/skills.png --profile shot-skills
+APP_SHOT_ZOOM=2 bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/luke-shots/<v>/skills.png --profile shot-skills
 bash $S/scripts/changelog-screenshot.sh out/skills.png --from ~/luke-shots/<v>/skills.png --crop 30,230,860,830 --zoom 2
 ```
 
-Capture a close-up zoomed, so it is sharp: `LUKE_SHOT_ZOOM=2 window.sh …`
+Capture a close-up zoomed, so it is sharp: `APP_SHOT_ZOOM=2 window.sh …`
 opens the window twice as large in points (past the screen, which
 `patch-dist.sh` allows) with its page zoomed to match, so the layout is the
 same 1600 by 1000 points drawn at 4 pixels a point; frame it with `--zoom 2`

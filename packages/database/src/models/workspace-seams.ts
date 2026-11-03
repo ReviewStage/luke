@@ -1,4 +1,4 @@
-import type { ASSIGNABLE_ROLE, WorkspaceRole } from "@luke/features/workspace-wire";
+import type { ASSIGNABLE_ROLE, WorkspaceRole } from "@repo/features/workspace-wire";
 import { Cause, Data, Effect, Option, Schema } from "effect";
 
 /**
@@ -16,7 +16,8 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * the plugin's `updateMemberRole` under the same headers. A rename, and a photo set or removed, is the plugin's
  * `updateOrganization` under the same headers, given the name alone or the
  * logo alone, so the plugin checks that the caller may update the workspace
- * and leaves its slug as it was. An
+ * and leaves its slug as it was; a slug is the store's alone to change
+ * (`workspace-slug-store.ts`), which keeps the one it leaves. An
  * invitation is made, listed, and canceled the same way, through
  * `createInvitation`, `listInvitations`, and `cancelInvitation`. Each call is the auth service's promise, wrapped once
  * here the way `bearer.ts` wraps `oauth2UserInfo`. The auth service is
@@ -24,7 +25,7 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * the API of a Better Auth over its own database.
  */
 
-/** The metadata the plugin stores on the workspace made for an account, as JSON text; only the server writes it, and nothing reads it to behave differently. */
+/** The metadata the plugin stores on the workspace made for an account, as JSON text; only the server writes it, and only a racing ensure reads it, to adopt the account's own. */
 export const PERSONAL_WORKSPACE_METADATA = { personal: true } as const;
 
 /** What a workspace is created with: its name and slug, the account that will own it, and the metadata the plugin stores as JSON text. */

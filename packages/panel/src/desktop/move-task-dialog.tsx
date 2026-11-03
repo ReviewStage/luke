@@ -1,7 +1,7 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { countWords, TERM } from "@luke/features/words";
-import type { Workspace } from "@luke/features/workspace-wire";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { countWords, TERM } from "@repo/features/words";
+import type { Workspace } from "@repo/features/workspace-wire";
 import {
   ChoiceList,
   DIALOG_SIZE,
@@ -13,10 +13,10 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   useConfirmDialog,
-} from "@luke/ui";
-import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
-import { strandedTaskHome, workspaceReaches } from "@luke/ui/tasks-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui";
+import { CONFIRM_STAGE, confirmAsked } from "@repo/ui/confirm-state";
+import { strandedTaskHome, workspaceReaches } from "@repo/ui/tasks-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -41,7 +41,7 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
  * other gains it, and that its agents go with it. The dialog is the move's
  * confirmation, so its act is the move itself, at the foot of a `Dialog` that
  * picks a destination rather than a `ConfirmDialog`, which only asks yes or
- * no. The question goes with its task and its surface (`@luke/ui`'s
+ * no. The question goes with its task and its surface (`@repo/ui`'s
  * `useConfirmDialog`), a move landed puts it away, and a refused one keeps it up saying so under the
  * list, the toast the move would raise held back in its favour.
  */
@@ -208,7 +208,7 @@ function MoveTaskCard({
           onChoose={onChoose}
         />
         {chosen === undefined ? null : (
-          <ul className="move-effects m-0 grid gap-tight-gap rounded-control bg-muted p-card-inset-snug pl-luke-24 text-body-foreground text-caption">
+          <ul className="move-effects m-0 grid gap-tight-gap rounded-control bg-muted p-card-inset-snug pl-ui-24 text-body-foreground text-caption">
             <li>{lossLine(from, chosen)}</li>
             <li>{gainLine(chosen)}</li>
             <li>{`Its agents keep running, now in ${chosen.name}.`}</li>

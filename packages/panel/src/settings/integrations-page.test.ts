@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { IntegrationTool } from "@luke/features/integration-health";
-import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "@luke/features/integration-sign-in";
+import type { IntegrationTool } from "@repo/features/integration-health";
+import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "@repo/features/integration-sign-in";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationStatusesView,
   type IntegrationToolsView,
-} from "@luke/features/integration-view";
+} from "@repo/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -19,13 +19,13 @@ import {
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
-} from "@luke/features/integration-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateDelivery } from "@luke/host/app-state";
-import type { PortActKind, PortActPayload } from "@luke/host/contract";
-import type { SettingsLink } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { SettingsPage, timeRuntime } from "@luke/ui";
+} from "@repo/features/integration-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateDelivery } from "@repo/host/app-state";
+import type { PortActKind, PortActPayload } from "@repo/host/contract";
+import type { SettingsLink } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { SettingsPage, timeRuntime } from "@repo/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -296,8 +296,8 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
 /** Granola's row as the page draws it. */
 function granolaRowOf(page: HTMLElement): Element {
   return (
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Granola",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Granola",
     ) ?? assert.fail("Granola has a row")
   );
 }
@@ -311,7 +311,7 @@ interface RowRead {
 /** Granola's row: its line, and the labels of the buttons it offers. */
 /** A row's state lines as a reader reads them, each on its own line; none where it draws none. */
 function stateLines(row: Element): string | undefined {
-  const lines = [...row.querySelectorAll(".luke-settings-row-state")].map(
+  const lines = [...row.querySelectorAll(".ui-settings-row-state")].map(
     (line) => line.textContent ?? "",
   );
   return lines.length === 0 ? undefined : lines.join("\n");
@@ -346,9 +346,16 @@ async function focusWindow(): Promise<void> {
 
 const WAITING = { line: "Waiting for Granola in your browser…", buttons: ["Reopen", "Cancel"] };
 
+/** A row's name as it reads: its provider's, and the account's words beside it where it draws them. */
+function nameOf(label: Element | null): string | undefined {
+  const beside = label?.nextElementSibling;
+  const account = beside?.classList.contains("ui-account-words") ? beside.textContent : undefined;
+  return account ? `${label?.textContent} · ${account}` : (label?.textContent ?? undefined);
+}
+
 /** The providers the page draws a row for, by name. */
 function rowNames(page: HTMLElement): (string | undefined)[] {
-  return [...page.querySelectorAll('[id$="label"]')].map((name) => name.textContent);
+  return [...page.querySelectorAll('[id$="label"]')].map(nameOf);
 }
 
 /** The words of the buttons standing on a row, its ⋯ and its tools' toggle aside. */
@@ -370,7 +377,7 @@ function menuOf(row: Element): MenuRead {
   if (ellipsis === null) return { items: [], heading: undefined } satisfies MenuRead;
   act(() => ellipsis.click());
   const items = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
-  const heading = document.querySelector(".luke-menu-heading")?.textContent ?? undefined;
+  const heading = document.querySelector(".ui-menu-heading")?.textContent ?? undefined;
   act(() => ellipsis.click());
   return { items, heading } satisfies MenuRead;
 }
@@ -550,7 +557,7 @@ test("a connection that works stands quiet, with Reconnect in its ⋯ beside Dis
   listed.set(INTEGRATION_PROVIDER.LINEAR, [{ name: "list_issues", description: "Lists issues." }]);
   const page = await mount();
   const row = rowNamed(page, "Linear");
-  const line = row.querySelector(".luke-settings-row-state")?.textContent;
+  const line = row.querySelector(".ui-settings-row-state")?.textContent;
   const buttons = rowButtons(row);
   const menu = menuOf(row);
 
@@ -595,11 +602,14 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
   const expired = rowNamed(page, "Notion");
   const refused = rowNamed(page, "Slack");
 
-  assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired");
+  assert.equal(
+    expired.querySelector(".ui-settings-row-state")?.textContent,
+    "Sign-in expired · Reconnect",
+  );
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
   assert.equal(
-    refused.querySelector(".luke-settings-row-state")?.textContent,
-    "Slack refused the sign-in.",
+    refused.querySelector(".ui-settings-row-state")?.textContent,
+    "Slack refused the sign-in. · Reconnect",
   );
   assert.deepEqual(rowButtons(refused), ["Reconnect"]);
   assert.deepEqual(menuOf(refused), { items: ["Disconnect"], heading: undefined });
@@ -617,12 +627,12 @@ test("a server's own error stands quoted on a plain line under our sentence, nev
     },
   });
   const page = await mount();
-  const lines = [...rowNamed(page, "Slack").querySelectorAll(".luke-settings-row-state")].map(
+  const lines = [...rowNamed(page, "Slack").querySelectorAll(".ui-settings-row-state")].map(
     (line) => [line.textContent, line.getAttribute("data-state")],
   );
 
   assert.deepEqual(lines, [
-    ["Slack could not be reached.", "attention"],
+    ["Slack could not be reached. · Reconnect", "attention"],
     ["Slack said: “App is not enabled for Slack MCP server access”", "plain"],
   ]);
 });
@@ -635,7 +645,7 @@ test("a connection whose tools could not be read says so in the attention tint, 
   toolReads.set(INTEGRATION_PROVIDER.LINEAR, { failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
   const page = await mount();
   const row = rowNamed(page, "Linear");
-  const state = row.querySelector(".luke-settings-row-state");
+  const state = row.querySelector(".ui-settings-row-state");
 
   assert.equal(state?.textContent, "The tools could not be read.");
   assert.deepEqual(rowButtons(row), ["Retry"]);
@@ -647,7 +657,7 @@ test("a connection whose tools could not be read says so in the attention tint, 
   await settle();
 
   const mended = rowNamed(page, "Linear");
-  assert.equal(mended.querySelector(".luke-settings-row-state")?.textContent, "Connected · 1 tool");
+  assert.equal(mended.querySelector(".ui-settings-row-state")?.textContent, "Connected · 1 tool");
   assert.deepEqual(rowButtons(mended), []);
 });
 
@@ -692,7 +702,7 @@ test("the window's focus still reads for the surfaces left once the first one dr
 
   touched.set(GRANOLA, INTEGRATION_STATUS.EXPIRED);
   await focusWindow();
-  assert.equal(granolaRow(other).line, "Sign-in expired");
+  assert.equal(granolaRow(other).line, "Sign-in expired · Reconnect");
 });
 
 test("a sign-out leaves nothing of one account's integrations to the next account signed in", async () => {
@@ -736,12 +746,12 @@ test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Ret
   signInFailures = [{ provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED }];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "You cancelled connecting Granola.",
+    line: "You cancelled connecting Granola. · Retry",
     buttons: ["Retry"],
   });
   // The service names a failure once; the next read leaves the line as it stood.
   await focusWindow();
-  assert.equal(granolaRow(page).line, "You cancelled connecting Granola.");
+  assert.equal(granolaRow(page).line, "You cancelled connecting Granola. · Retry");
 });
 
 test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Retry", async () => {
@@ -758,7 +768,7 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
   ];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
+    line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
     buttons: ["Retry"],
   });
 
@@ -775,7 +785,7 @@ test("a sign-in the browser came back from without a grant says it could not con
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected: the sign-in came back without access.",
+    line: "Granola could not be connected: the sign-in came back without access. · Retry",
     buttons: ["Retry"],
   });
 
@@ -795,7 +805,7 @@ it.effect(
       yield* TestClock.adjust(SIGN_IN_WAIT);
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
-        line: "Sign-in didn't finish.",
+        line: "Sign-in didn't finish. · Retry",
         buttons: ["Retry"],
       });
 
@@ -826,7 +836,7 @@ it.effect(
 
       yield* TestClock.adjust("1 minute");
       yield* Effect.promise(settle);
-      assert.equal(granolaRow(page).line, "Sign-in didn't finish.");
+      assert.equal(granolaRow(page).line, "Sign-in didn't finish. · Retry");
     }),
 );
 
@@ -837,8 +847,8 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
     yield* Effect.promise(() => pressOnGranola(page, "Connect"));
     yield* TestClock.adjust("2 minutes");
     const linear =
-      [...page.querySelectorAll(".luke-settings-row")]
-        .find((row) => row.querySelector('[id$="label"]')?.textContent === "Linear")
+      [...page.querySelectorAll(".ui-settings-row")]
+        .find((row) => nameOf(row.querySelector('[id$="label"]')) === "Linear")
         ?.querySelector("button") ?? assert.fail("Linear offers Connect");
     act(() => linear.click());
     yield* Effect.promise(settle);
@@ -846,7 +856,7 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
     yield* TestClock.adjust("1 minute");
     yield* Effect.promise(settle);
     assert.deepEqual(granolaRow(page), {
-      line: "Sign-in didn't finish.",
+      line: "Sign-in didn't finish. · Retry",
       buttons: ["Retry"],
     });
     assert.ok(
@@ -869,7 +879,7 @@ it.effect(
       yield* TestClock.adjust(SIGN_IN_GRACE);
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
-        line: "Sign-in didn't finish.",
+        line: "Sign-in didn't finish. · Retry",
         buttons: ["Retry"],
       });
     }),
@@ -894,8 +904,8 @@ function connectVercelAndLinear(): void {
 /** The row named `name`, as the page draws it. */
 function rowNamed(page: HTMLElement, name: string): Element {
   return (
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === name,
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === name,
     ) ?? assert.fail(`${name} has a row`)
   );
 }
@@ -903,7 +913,7 @@ function rowNamed(page: HTMLElement, name: string): Element {
 /** Each tool the page shows opened: its name and its badge, where it wears one. */
 function shownTools(page: HTMLElement) {
   return [...page.querySelectorAll('.integration-tools-panel ul[aria-label$=" tools"] > li')].map(
-    (tool) => [toolName(tool), tool.querySelector(".luke-badge")?.textContent ?? undefined],
+    (tool) => [toolName(tool), tool.querySelector(".ui-badge")?.textContent ?? undefined],
   );
 }
 
@@ -918,7 +928,7 @@ function toolName(tool: Element | null | undefined): string | null | undefined {
 function openRow(page: HTMLElement, name: string): void {
   act(() =>
     (
-      rowNamed(page, name).querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
+      rowNamed(page, name).querySelector<HTMLButtonElement>(".ui-settings-row-state button") ??
       assert.fail(`${name}'s row opens onto its tools`)
     ).click(),
   );
@@ -965,9 +975,9 @@ async function searchFor(page: HTMLElement, query: string): Promise<void> {
 
 /** The sections the page draws, each its heading and the names of its rows. */
 function sections(page: HTMLElement) {
-  return [...page.querySelectorAll(".luke-settings-section")].map((group) => [
+  return [...page.querySelectorAll(".ui-settings-section")].map((group) => [
     group.querySelector("h2")?.textContent,
-    [...group.querySelectorAll('[id$="label"]')].map((name) => name.textContent),
+    [...group.querySelectorAll('[id$="label"]')].map(nameOf),
   ]);
 }
 
@@ -997,13 +1007,13 @@ test("a query keeps only the rows it found, opening one onto the tools it found,
   assert.deepEqual(sections(page), [["Connected", ["Vercel"]]]);
   assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
   assert.equal(
-    rowNamed(page, "Vercel").querySelector(".luke-settings-row-state button")?.textContent,
+    rowNamed(page, "Vercel").querySelector(".ui-settings-row-state button")?.textContent,
     "1 of 3 tools match",
   );
   assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
   assert.equal(
     rowNamed(page, "Vercel")
-      .querySelector(".luke-settings-row-state button")
+      .querySelector(".ui-settings-row-state button")
       ?.getAttribute("aria-label"),
     "1 of 3 tools match, hide Vercel tools",
   );
@@ -1046,7 +1056,7 @@ test("while where the providers stand is read, the search stands usable above pl
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no placeholder");
   assert.equal(status.textContent, "Reading the integrations");
-  assert.equal(status.querySelectorAll(".luke-settings-section-card").length, 2);
+  assert.equal(status.querySelectorAll(".ui-settings-section-card").length, 2);
   // Note that the field is checked as a yes or no, because a failure's diff of an element would print the whole document.
   assert.equal(searchField(page).closest('[aria-busy="true"]') === null, true);
   await searchFor(page, "linear");
@@ -1100,9 +1110,8 @@ test("a query that finds an integration by its own name opens nothing by itself,
   assert.deepEqual(shownTools(page), []);
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
-        ".luke-settings-row-state button",
-      ) ?? assert.fail("Vercel's row opens onto its tools")
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".ui-settings-row-state button") ??
+      assert.fail("Vercel's row opens onto its tools")
     ).click(),
   );
   assert.equal(shownTools(page).length, 3);
@@ -1116,9 +1125,8 @@ test("a row closed under one query opens again when that query comes back after 
 
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
-        ".luke-settings-row-state button",
-      ) ?? assert.fail("Vercel's row closes")
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".ui-settings-row-state button") ??
+      assert.fail("Vercel's row closes")
     ).click(),
   );
   assert.deepEqual(shownTools(page), []);
@@ -1339,7 +1347,7 @@ test("a tool its server says nothing of has a page that says so", async () => {
   const page = await mount();
   openRow(page, "Vercel");
 
-  assert.equal(page.querySelector(".luke-list-row-description"), null);
+  assert.equal(page.querySelector(".ui-list-row-description"), null);
   assert.equal(page.querySelector(".integration-tool-detail-body")?.textContent, "No description.");
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
@@ -1367,8 +1375,8 @@ test("two accounts at a provider stand as two rows named by their labels, each o
   ];
   const page = await mount();
   const rowOf = (label: string) =>
-    [...page.querySelectorAll(".luke-settings-row")].find((row) =>
-      row.querySelector('[id$="label"]')?.textContent?.startsWith(`Notion · ${label}`),
+    [...page.querySelectorAll(".ui-settings-row")].find((row) =>
+      nameOf(row.querySelector('[id$="label"]'))?.startsWith(`Notion · ${label}`),
     ) ?? assert.fail(`Notion · ${label} has a row`);
 
   for (const label of ["Acme", "Personal"]) {
@@ -1389,9 +1397,31 @@ test("two accounts at a provider stand as two rows named by their labels, each o
   // The new account stands pending under the name the service gave it, as a row of its own.
   assert.ok(
     [...page.querySelectorAll('[id$="label"]')].some(
-      (name) => name.textContent === "Notion · Account 3",
+      (name) => nameOf(name) === "Notion · Account 3",
     ),
   );
+});
+
+test("an account alone at its provider is named by its label where it carries one, and by its provider alone where it carries none", async () => {
+  const gmail = INTEGRATION_PROVIDER.GMAIL;
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(gmail, INTEGRATION_STATUS.CONNECTED);
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  accounts = [
+    {
+      provider: gmail,
+      connection: "gmail",
+      label: "dean@example.com",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+    { provider: notion, connection: "notion", status: INTEGRATION_STATUS.CONNECTED },
+  ];
+  const page = await mount();
+  const names = [...page.querySelectorAll('[id$="label"]')].map(nameOf);
+
+  assert.ok(names.includes("Gmail · dean@example.com"));
+  assert.ok(names.includes("Notion"));
+  assert.ok(!names.some((name) => name?.includes("Account 1")));
 });
 
 test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one", async () => {
@@ -1408,8 +1438,8 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
   ];
   const page = await mount();
   const rowOf = (label: string) =>
-    [...page.querySelectorAll(".luke-settings-row")].find((row) =>
-      row.querySelector('[id$="label"]')?.textContent?.startsWith(`Notion · ${label}`),
+    [...page.querySelectorAll(".ui-settings-row")].find((row) =>
+      nameOf(row.querySelector('[id$="label"]'))?.startsWith(`Notion · ${label}`),
     ) ?? assert.fail(`Notion · ${label} has a row`);
   const field = () =>
     page.querySelector<HTMLInputElement>('input[aria-label="Notion · Acme account name"]');
@@ -1461,8 +1491,8 @@ test("a refused rename says the account could not be renamed and what to do, in 
   refuseRename = true;
   const page = await mount();
   const row =
-    [...page.querySelectorAll(".luke-settings-row")].find((each) =>
-      each.querySelector('[id$="label"]')?.textContent?.startsWith("Notion · Acme"),
+    [...page.querySelectorAll(".ui-settings-row")].find((each) =>
+      nameOf(each.querySelector('[id$="label"]'))?.startsWith("Notion · Acme"),
     ) ?? assert.fail("Notion has a row");
 
   await choose(row, "Rename");
@@ -1496,8 +1526,8 @@ test("an added account whose first sign-in Connect refused keeps its row with th
   ];
   const page = await mount();
   const acme =
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Acme",
     ) ?? assert.fail("Notion has a row");
   await choose(acme, "Add another account");
 
@@ -1512,8 +1542,8 @@ test("an added account whose first sign-in Connect refused keeps its row with th
   ];
   await focusWindow();
   const added =
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
   assert.match(stateLines(added) ?? "", /access_denied/u);
 
@@ -1548,14 +1578,14 @@ test("an account added under the provider's own name, beside one that stands, wa
   ];
   const page = await mount();
   const personal =
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Personal",
     ) ?? assert.fail("Notion has a row");
   await choose(personal, "Add another account");
 
   const added =
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 1",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 1",
     ) ?? assert.fail("the account added has a row of its own");
   assert.deepEqual(
     [...added.querySelectorAll("button")]
@@ -1585,8 +1615,8 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
   ];
   const page = await mount();
   const pending =
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 2",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 2",
     ) ?? assert.fail("the pending account has a row");
   // The service deletes the cancelled first sign-in's account, so its next read lists Acme alone.
   accounts = accounts.slice(0, 1);
@@ -1600,7 +1630,7 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
 
   assert.equal(
     [...page.querySelectorAll('[id$="label"]')].some(
-      (name) => name.textContent === "Notion · Account 2",
+      (name) => nameOf(name) === "Notion · Account 2",
     ),
     false,
   );
@@ -1618,8 +1648,8 @@ test("a cancelled sign-in that held a provider's last place frees it at once, of
   }));
   const page = await mount();
   const rowOf = (label: string) =>
-    [...page.querySelectorAll(".luke-settings-row")].find((row) =>
-      row.querySelector('[id$="label"]')?.textContent?.startsWith(`Notion · ${label}`),
+    [...page.querySelectorAll(".ui-settings-row")].find((row) =>
+      nameOf(row.querySelector('[id$="label"]'))?.startsWith(`Notion · ${label}`),
     ) ?? assert.fail(`Notion · ${label} has a row`);
   assert.ok(!menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
 
@@ -1671,7 +1701,7 @@ test("a statuses read answered after a newer one changes nothing the newer one d
 
   assert.ok(
     [...page.querySelectorAll('[id$="label"]')].some(
-      (name) => name.textContent === "Notion · Personal",
+      (name) => nameOf(name) === "Notion · Personal",
     ),
   );
 });
@@ -1695,7 +1725,7 @@ test("a statuses read answered after a newer one still says why the sign-in it s
   await settle();
 
   assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected.\nGranola's sign-in said: “access_denied”",
+    line: "Granola could not be connected. · Retry\nGranola's sign-in said: “access_denied”",
     buttons: ["Retry"],
   });
 });
@@ -1739,13 +1769,13 @@ test("Reopen on an added account still waiting on its first sign-in reopens that
   ];
   const page = await mount();
   const acme =
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Acme",
     ) ?? assert.fail("Notion has a row");
   await choose(acme, "Add another account");
   const added =
-    [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
+    [...page.querySelectorAll(".ui-settings-row")].find(
+      (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 3",
     ) ?? assert.fail("the account added has a row");
 
   sent = [];
@@ -1808,7 +1838,7 @@ function offerThree(): void {
 test("with motion held still, an integration that connects takes its place and nothing plays", async () => {
   const motions = playListMotions();
   try {
-    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+    for (const name of ["--ui-duration-exit", "--ui-duration-shape"]) {
       document.documentElement.style.setProperty(name, "0ms");
     }
     offerThree();
@@ -1848,7 +1878,7 @@ function layInDocumentOrder(): void {
 function toolsChevron(page: HTMLElement, name: string): HTMLElement {
   return (
     rowNamed(page, name).querySelector<HTMLElement>(
-      ".luke-settings-row-state button .luke-disclosure-turn",
+      ".ui-settings-row-state button .ui-disclosure-turn",
     ) ?? assert.fail(`${name}'s tools press wears a turning chevron`)
   );
 }
@@ -1865,8 +1895,8 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
   const motions = playListMotions();
   // Note that the arrival's fade and stagger are tokens the list motion's helper leaves unset.
   for (const [name, value] of [
-    ["--luke-duration-quick", "140ms"],
-    ["--luke-row-stagger", "32ms"],
+    ["--ui-duration-quick", "140ms"],
+    ["--ui-row-stagger", "32ms"],
   ] as const) {
     document.documentElement.style.setProperty(name, value);
   }
@@ -1881,9 +1911,7 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
     await settle();
 
     assert.equal(toolsChevron(page, "Linear").dataset.open, "true");
-    const box = rowNamed(page, "Linear")
-      .closest("[data-motion-key]")
-      ?.querySelector(".luke-reveal");
+    const box = rowNamed(page, "Linear").closest("[data-motion-key]")?.querySelector(".ui-reveal");
     assert.notEqual(box?.querySelector(".integration-tools-panel"), null);
     assert.deepEqual(motionsOn(motions, box).at(-1), [
       { clipPath: "inset(0 0 100% 0)" },
@@ -1904,8 +1932,8 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
     act(() => motions.played.findLast((each) => each.element === box)?.finish());
     assert.equal(box?.isConnected, false);
   } finally {
-    document.documentElement.style.removeProperty("--luke-duration-quick");
-    document.documentElement.style.removeProperty("--luke-row-stagger");
+    document.documentElement.style.removeProperty("--ui-duration-quick");
+    document.documentElement.style.removeProperty("--ui-row-stagger");
     motions.remove();
   }
 });
@@ -1913,7 +1941,7 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
 test("with motion held still, a row's tools show at once and fold at once", async () => {
   const motions = playListMotions();
   try {
-    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+    for (const name of ["--ui-duration-exit", "--ui-duration-shape"]) {
       document.documentElement.style.setProperty(name, "0ms");
     }
     connectVercelAndLinear();

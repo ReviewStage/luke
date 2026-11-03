@@ -22,7 +22,7 @@ export const DESKTOP_SESSION_CLIENT_ID = "luke-desktop-session";
 
 /** The hand-off page, and the query the plugin's transfer reads from it. */
 const DESKTOP_SESSION_PAGE = {
-  PATH: "/desktop-session.html",
+  PATH: "/desktop-session",
   /** Where the page sends the code: the Mac's loopback. */
   RETURN_PARAM: "return_to",
 } as const;

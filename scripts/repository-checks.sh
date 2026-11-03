@@ -13,11 +13,11 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 # therefore fails nothing and announces nothing local, and quietly ships
 # production on a major no test ever ran on, which is how `22.x` outlived the
 # move to 24. `.nvmrc` is the source; every declared major is checked against it.
-nvmrc_major=$(sed -E 's/^v?([0-9]+).*$/\1/' "$LUKE_REPO_ROOT/.nvmrc" | head -1)
+nvmrc_major=$(sed -E 's/^v?([0-9]+).*$/\1/' "$APP_REPO_ROOT/.nvmrc" | head -1)
 engines_drift=""
-for manifest in "$LUKE_REPO_ROOT/package.json" \
-    "$LUKE_REPO_ROOT"/apps/*/package.json \
-    "$LUKE_REPO_ROOT"/packages/*/package.json; do
+for manifest in "$APP_REPO_ROOT/package.json" \
+    "$APP_REPO_ROOT"/apps/*/package.json \
+    "$APP_REPO_ROOT"/packages/*/package.json; do
     declared=$(node -e 'const n = require(process.argv[1]).engines?.node; if (n) process.stdout.write(n)' \
         "$manifest")
     if [[ -z "$declared" ]]; then
@@ -25,7 +25,7 @@ for manifest in "$LUKE_REPO_ROOT/package.json" \
     fi
     declared_major=$(printf '%s' "$declared" | grep -oE '[0-9]+' | head -1)
     if [[ "$declared_major" != "$nvmrc_major" ]]; then
-        engines_drift+="${manifest#"$LUKE_REPO_ROOT/"}: engines.node \"$declared\" is not Node $nvmrc_major"$'\n'
+        engines_drift+="${manifest#"$APP_REPO_ROOT/"}: engines.node \"$declared\" is not Node $nvmrc_major"$'\n'
     fi
 done
 if [[ -n "$engines_drift" ]]; then
@@ -35,36 +35,36 @@ if [[ -n "$engines_drift" ]]; then
 fi
 
 # The packages below the runtime (live, features) open
-# `@luke/runtime/vocabulary` precisely because it resolves no Node module
+# `@repo/runtime/vocabulary` precisely because it resolves no Node module
 # and no Effect layer that would carry one in. The renderer's own `node:` grep
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
-# `@luke/host` and every door of it a browser loads are walked the same way:
+# `@repo/host` and every door of it a browser loads are walked the same way:
 # `/effect`, `/client`, `/act-port`, `/service-layer`, `/agent-notices` and
 # `/task-code`, which the web app runs the host in a tab through, and
 # `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
 # (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
-# `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
+# `electron`, no `@repo/host/node`, and no `Buffer` or `process` global, and
 # what needs one sits behind
-# `@luke/host/node`. The walk crosses into `@luke/credentials` through the
+# `@repo/host/node`. The walk crosses into `@repo/credentials` through the
 # doors the host names (its barrel and `/snapshot`), since the account's
 # sign-in lives there: the loopback consent sits behind
-# `@luke/credentials/node`, handed to the host as its `SignInConsent` seam.
+# `@repo/credentials/node`, handed to the host as its `SignInConsent` seam.
 # Every other package a walk reaches is still left unchecked here.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
   const doors = [
     {
-      name: "@luke/runtime/vocabulary",
+      name: "@repo/runtime/vocabulary",
       root: "packages/runtime/src",
       entries: ["vocabulary.ts"],
       forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
     },
     {
-      name: "@luke/host and the doors of it a browser loads",
+      name: "@repo/host and the doors of it a browser loads",
       root: "packages/host/src",
       entries: [
         "index.ts",
@@ -79,9 +79,9 @@ node --input-type=module -e '
         "contract/index.ts",
         "task-code.ts",
       ],
-      forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
+      forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@repo\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,
-      follows: ["@luke/credentials"],
+      follows: ["@repo/credentials"],
     },
   ];
   const repository = process.argv[1];
@@ -90,7 +90,7 @@ node --input-type=module -e '
   const followed = async (door, specifier) => {
     const name = door.follows?.find((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
     if (!name) return undefined;
-    const directory = path.join(repository, "packages", name.slice("@luke/".length));
+    const directory = path.join(repository, "packages", name.slice("@repo/".length));
     const manifest = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
     const target = manifest.exports[`.${specifier.slice(name.length)}`];
     return path.join(directory, target.replace(/\.js$/, ".ts"));
@@ -126,21 +126,21 @@ node --input-type=module -e '
     }
   }
   if (failed) process.exit(1);
-' "$LUKE_REPO_ROOT"
+' "$APP_REPO_ROOT"
 
 # The vercel.json rewrites are what land a route on its grouped function, and
 # they are generated from server/routes/ and the functions, ending in the one
 # fallback onto the hosted oRPC route; --check fails if a rewrite went stale.
-pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
+pnpm --dir "$APP_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
-# production answers 404 (LUKE-186). Every /api/ literal and path builder under
+# production answers 404. Every /api/ literal and path builder under
 # apps/desktop/src, packages/*/src, scripts, and tools must resolve to an
 # extensionless alias the Build Output emits, a rewrite of the table ahead of
 # its fallback, or a procedure of the hosted oRPC contract; the fallback alone
 # resolves nothing, since a path no procedure matches is the router's 404.
-pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
+pnpm --dir "$APP_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
 # Every relative import the Vercel builder compiles must carry its .js
 # extension. The builder compiles this TypeScript into the web functions but
@@ -160,8 +160,8 @@ pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 # bundle inlines (`apps/web/server/function-bundles.ts`), so no loader ever
 # reads its specifier.
 extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
-    "$LUKE_REPO_ROOT"/packages/*/src \
-    "$LUKE_REPO_ROOT"/apps/web/server |
+    "$APP_REPO_ROOT"/packages/*/src \
+    "$APP_REPO_ROOT"/apps/web/server |
     grep -vE '\.(js|css)"|\?raw"' || true)
 if [[ -n "$extensionless_imports" ]]; then
     printf 'error: relative imports in packages/ and the web function sources must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
@@ -172,7 +172,7 @@ fi
 # The web functions are bundled from server/routes/ and server/orpc-route.ts
 # into dist-functions/ and
 # the Build Output tree with every workspace package inlined, so a bare
-# `@luke/…` specifier is resolved by
+# `@repo/…` specifier is resolved by
 # esbuild at build time from apps/web's own node_modules. pnpm links there only
 # what apps/web/package.json declares, so a specifier the web app's sources name
 # without declaring resolves in a developer's hoisted tree, typechecks, and
@@ -182,11 +182,11 @@ undeclared_packages() {
     local manifest=$1
     shift
     local declared named named_name undeclared=""
-    declared=$(grep -oE '"@luke/[a-z-]+": "workspace:\*"' "$manifest" |
-        sed -E 's#"@luke/([a-z-]+)".*#\1#' | sort -u)
+    declared=$(grep -oE '"@repo/[a-z-]+": "workspace:\*"' "$manifest" |
+        sed -E 's#"@repo/([a-z-]+)".*#\1#' | sort -u)
     named=$(grep -rhoE --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
-        '(from|import) "@luke/[a-z-]+(/[a-z-]+)*"' "$@" |
-        sed -E 's#.*"@luke/([a-z-]+).*"#\1#' | sort -u || true)
+        '(from|import) "@repo/[a-z-]+(/[a-z-]+)*"' "$@" |
+        sed -E 's#.*"@repo/([a-z-]+).*"#\1#' | sort -u || true)
     while IFS= read -r named_name; do
         [[ -z "$named_name" ]] && continue
         if ! grep -qx "$named_name" <<<"$declared"; then
@@ -195,16 +195,16 @@ undeclared_packages() {
     done <<<"$named"
     printf '%s' "$undeclared"
 }
-undeclared_web_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/package.json" \
-    "$LUKE_REPO_ROOT/apps/web/server" "$LUKE_REPO_ROOT/apps/web/src" "$LUKE_REPO_ROOT/apps/web/scripts")
+undeclared_web_packages=$(undeclared_packages "$APP_REPO_ROOT/apps/web/package.json" \
+    "$APP_REPO_ROOT/apps/web/server" "$APP_REPO_ROOT/apps/web/src" "$APP_REPO_ROOT/apps/web/scripts")
 if [[ -n "$undeclared_web_packages" ]]; then
-    printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @luke specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
+    printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @repo specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
         "$undeclared_web_packages" >&2
     exit 1
 fi
 
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `@luke/host/bridge`, `#shared/messages/*`,
+# through the preload bridge alone, so `@repo/host/bridge`, `#shared/messages/*`,
 # and the packages' own wire vocabularies are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are
@@ -215,7 +215,7 @@ fi
 # door stays shut for it either way — a renderer test that needs main is
 # testing the wrong side.
 renderer_escapes=$(grep -ranE 'from "(#main/|node:)' \
-    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" |
+    "$APP_REPO_ROOT/apps/desktop/src/renderer" "$APP_REPO_ROOT/packages/panel/src" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
 if [[ -n "$renderer_escapes" ]]; then
     printf 'error: the renderer is sandboxed — it reaches the main process only through the shared bridge and wire modules:\n%s\n' \
@@ -227,7 +227,7 @@ fi
 # parser throws on any other shape — at module load in the browser, which no
 # build step executes. This check is what keeps a malformed heading out of a
 # visitor's tab.
-malformed_release_headings=$(grep -E '^## ' "$LUKE_REPO_ROOT/CHANGELOG.md" |
+malformed_release_headings=$(grep -E '^## ' "$APP_REPO_ROOT/CHANGELOG.md" |
     grep -vE '^## [0-9]+\.[0-9]+\.[0-9]+ — [0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
 if [[ -n "$malformed_release_headings" ]]; then
     printf 'error: CHANGELOG.md release headings must read "## <version> — <YYYY-MM-DD>":\n%s\n' \
@@ -242,7 +242,7 @@ fi
 # copy.
 literal_effect_versions=$(grep -rnE '"effect": *"[^c]' --include=package.json \
     --exclude-dir=node_modules \
-    "$LUKE_REPO_ROOT/apps" "$LUKE_REPO_ROOT/packages" "$LUKE_REPO_ROOT/tools" || true)
+    "$APP_REPO_ROOT/apps" "$APP_REPO_ROOT/packages" "$APP_REPO_ROOT/tools" || true)
 if [[ -n "$literal_effect_versions" ]]; then
     printf 'error: "effect" must be declared as "catalog:", never a literal version:\n%s\n' \
         "$literal_effect_versions" >&2
@@ -324,12 +324,12 @@ node --input-type=module -e '
     );
     process.exit(1);
   }
-' "$LUKE_REPO_ROOT"
+' "$APP_REPO_ROOT"
 
 # Turbo's global hash covers the lockfile, `globalDependencies`, `globalEnv`
 # values and its own flags, and no OS, CPU architecture, or Node version, so a
 # check that passed on one platform would replay as a pass on another.
-# `lib/turbo.mjs` names the platform in `LUKE_TURBO_PLATFORM` and `turbo.json`
+# `lib/turbo.mjs` names the platform in `APP_TURBO_PLATFORM` and `turbo.json`
 # hashes it through `globalEnv`; this holds both halves. The first asks turbo
 # for one task's hash, which its dry run documents as the key it caches under,
 # under two values of the variable; the second asks the wrapper what it sets.
@@ -338,12 +338,12 @@ node --input-type=module -e '
   import path from "node:path";
   const root = process.argv[1];
   const { turboInvocation } = await import(path.join(root, "scripts/lib/turbo.mjs"));
-  const TASK = "@luke/wire#typecheck";
+  const TASK = "@repo/wire#typecheck";
   const hashUnder = (platform) => {
     const { TURBO_TOKEN, ...env } = process.env;
-    const dry = execFileSync("pnpm", ["exec", "turbo", "run", "typecheck", "--filter=@luke/wire", "--dry=json"], {
+    const dry = execFileSync("pnpm", ["exec", "turbo", "run", "typecheck", "--filter=@repo/wire", "--dry=json"], {
       cwd: root,
-      env: { ...env, LUKE_TURBO_PLATFORM: platform, TURBO_TELEMETRY_DISABLED: "1" },
+      env: { ...env, APP_TURBO_PLATFORM: platform, TURBO_TELEMETRY_DISABLED: "1" },
       encoding: "utf8",
     });
     return JSON.parse(dry).tasks.find((task) => task.taskId === TASK)?.hash;
@@ -352,18 +352,18 @@ node --input-type=module -e '
   const linux = hashUnder("linux-x64-node24");
   const darwin = hashUnder("darwin-arm64-node24");
   if (!linux || linux === darwin) {
-    errors.push(`  turbo hashes ${TASK} the same under two values of LUKE_TURBO_PLATFORM, so turbo.json does not name it in globalEnv`);
+    errors.push(`  turbo hashes ${TASK} the same under two values of APP_TURBO_PLATFORM, so turbo.json does not name it in globalEnv`);
   }
   const expected = `${process.platform}-${process.arch}-node${process.versions.node.split(".")[0]}`;
-  const set = turboInvocation([]).env.LUKE_TURBO_PLATFORM;
+  const set = turboInvocation([]).env.APP_TURBO_PLATFORM;
   if (set !== expected) {
-    errors.push(`  lib/turbo.mjs starts turbo with LUKE_TURBO_PLATFORM=${set}, not ${expected}`);
+    errors.push(`  lib/turbo.mjs starts turbo with APP_TURBO_PLATFORM=${set}, not ${expected}`);
   }
   if (errors.length > 0) {
     process.stderr.write(`error: turbo cache hits would cross platforms:\n${errors.join("\n")}\n`);
     process.exit(1);
   }
-' "$LUKE_REPO_ROOT"
+' "$APP_REPO_ROOT"
 
 # `@effect/platform-node` and `effect/sql` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
@@ -374,7 +374,7 @@ node --input-type=module -e '
 # loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
     '"(@effect/platform-node|effect/sql)' \
-    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" || true)
+    "$APP_REPO_ROOT/apps/desktop/src/renderer" "$APP_REPO_ROOT/packages/panel/src" || true)
 if [[ -n "$node_reaching_effect" ]]; then
     printf 'error: @effect/platform-node and effect/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
@@ -385,30 +385,46 @@ fi
 # pins against what is installed, the coding agent's tool files against its
 # registry and what eve can build of each, the probes' committed fixtures
 # against their own leak guards, the lint rules' baselines against the files
-# they name, the catalog against `@luke/ui`'s components, the panel's launch
+# they name, the catalog against `@repo/ui`'s components, the panel's launch
 # bundle, and the site's page heads and Tailwind entries. Each was a test that
 # read the repository, which root AGENTS.md's "Testing" leaves to a check
 # (`tools/anti-slop/repository-guard.ts`); several load the module whose
 # constants they compare, so they run under the tsx loader.
-(cd "$LUKE_REPO_ROOT" && node --import tsx tools/anti-slop/repository-guard.ts)
+(cd "$APP_REPO_ROOT" && node --import tsx tools/anti-slop/repository-guard.ts)
 
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's
 # secret scanning raises an alert on, which history keeps open once pushed. So
-# a tracked file may hold no literal in the shape of a live provider key, a
-# GitHub token, a Slack token, an AWS access key id, or a private key block:
-# a test that needs one builds it at run time or uses a low-entropy fake.
+# a tracked file may hold no literal in the shape of a provider's key or token
+# (each pattern below is held to the length and characters the real one has),
+# an AWS access key id, or a private key block: a test that needs one builds it
+# at run time or uses a low-entropy fake shorter than the real shape.
 # Note that git grep answers 1 for no match and more for a scan that failed,
 # which must fail the check rather than pass it, and that a hit is named by its
-# file and line alone, so the literal never reaches a CI log.
+# file and line alone, so the literal never reaches a CI log. This file is
+# tracked too, so no pattern's own text may match a pattern.
 provider_shaped_status=0
-provider_shaped_literals=$(git -C "$LUKE_REPO_ROOT" grep -nIE \
-    -e 'sk_live_[0-9A-Za-z]{24,}' \
+provider_shaped_literals=$(git -C "$APP_REPO_ROOT" grep -nIE \
+    -e 'sk-ant-(api03|admin01|oat01)-[A-Za-z0-9_-]{93}AA' \
+    -e 'sk-proj-[A-Za-z0-9_-]{100,}' \
+    -e 'AIza[0-9A-Za-z_-]{35}' \
+    -e 'GOCSPX-[0-9A-Za-z_-]{28}' \
+    -e '(sk|rk)_(live|test)_[0-9A-Za-z]{24,}' \
+    -e 'whsec_[0-9A-Za-z+/]{32,}' \
     -e 'gh[pousr]_[A-Za-z0-9]{36}' \
     -e 'github_pat_[A-Za-z0-9_]{22,}' \
+    -e 'glpat-[0-9A-Za-z_-]{20,}' \
     -e 'xox[baprs]-[0-9]+-' \
-    -e 'AKIA[0-9A-Z]{16}' \
-    -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' | cut -d: -f1,2) || provider_shaped_status=$?
+    -e 'xoxe(\.xox[bp])?-[0-9]+-[0-9A-Za-z]{40,}' \
+    -e 'xapp-[0-9]+-[0-9A-Za-z]+-[0-9]+-[0-9A-Za-z]{32,}' \
+    -e 'hooks\.slack\.com/services/T[0-9A-Z]{8,}/B[0-9A-Z]{8,}/[0-9A-Za-z]{24}' \
+    -e 'sntrys_eyJ[0-9A-Za-z+/=_]{40,}' \
+    -e 'phx_[0-9A-Za-z_]{43}' \
+    -e 'lin_api_[0-9A-Za-z]{40}' \
+    -e 'npm_[0-9A-Za-z]{36}' \
+    -e 'npg_[0-9A-Za-z]{12}([^0-9A-Za-z_]|$)' \
+    -e '(AKIA|ASIA)[0-9A-Z]{16}' \
+    -e '-----BEGIN [A-Z ]*PRIVATE KEY( BLOCK)?-----' | cut -d: -f1,2) || provider_shaped_status=$?
 if ((provider_shaped_status > 1)); then
     printf 'error: the scan for provider-shaped literals could not run (git grep exited %s)\n' \
         "$provider_shaped_status" >&2

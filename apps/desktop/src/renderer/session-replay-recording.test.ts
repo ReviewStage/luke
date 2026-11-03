@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
-import { CHOICE_SELECT, ChoiceList, useFilePicker } from "@luke/ui";
-import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
-import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
+import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
+import { CHOICE_SELECT, ChoiceList, useFilePicker } from "@repo/ui";
+import { writeWithheldSheet } from "@repo/ui/session-replay-marks";
+import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@repo/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,7 +20,7 @@ import { applySessionReplay } from "./session-replay";
  * arrives while they load has to hold. This runs the
  * library's own client and recorder over a page of words, through the
  * module's public door, and reads what the recording would send: the page,
- * the controls `@luke/ui` draws over ids and a picked file, and the sheets
+ * the controls `@repo/ui` draws over ids and a picked file, and the sheets
  * the window adopts.
  */
 
@@ -75,13 +75,15 @@ const WORDS = [
   // A diagram's class and a thread's id, in the sheets built from them.
   "launch-review",
   "thread-04aa",
+  // A comment in the page's markup, which no text masking reaches.
+  "standup-notes",
 ];
 
 /** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
 const GZIP_MAGIC = "\u001f\u008b";
 
 /** The account's name and email, as the host holds them for whoever is signed in. */
-const PERSON = { name: "Ada Lovelace", email: "ada@luke.test" } as const;
+const PERSON = { name: "Ada Lovelace", email: "ada@app.test" } as const;
 
 function bootstrap(permitted: boolean, accountId = "user-1"): SessionReplayBootstrap {
   return { permitted, appVersion: "1.2.3", packaged: true, accountId, ...PERSON };
@@ -95,6 +97,7 @@ function signedOut(permitted: boolean): SessionReplayBootstrap {
 function drawPage(): void {
   document.body.innerHTML = `
     <link rel="stylesheet" href="styles.css" />
+    <!-- standup-notes -->
     <main>
       <h1>Quarterly roadmap</h1>
       <a href="https://example.test/invite?token=private-token">roadmap</a>
@@ -119,7 +122,7 @@ function drawPage(): void {
     </main>`;
 }
 
-/** What `@luke/ui` draws over values a recording must not carry: a list picking a workspace, one picking channels, and a file picker. */
+/** What `@repo/ui` draws over values a recording must not carry: a list picking a workspace, one picking channels, and a file picker. */
 function Controls(): React.JSX.Element {
   const picker = useFilePicker({ onFiles: () => undefined });
   return createElement(
@@ -313,19 +316,19 @@ test("a signed-out run records nothing, a sign-in records under the person it na
   );
   assert.deepEqual(identify?.$set, {
     name: "Ada Lovelace",
-    email: "ada@luke.test",
+    email: "ada@app.test",
     platform: "desktop",
   });
   assert.equal(identify?.properties.platform, "desktop");
 
   // The same account renamed while it records: the person is shown by what it is called now.
-  applySessionReplay({ ...bootstrap(true, "user-2"), email: "ada@new.luke.test" }, importRecorder);
+  applySessionReplay({ ...bootstrap(true, "user-2"), email: "ada@new.app.test" }, importRecorder);
   assert.equal(posthog.get_distinct_id(), "user-2");
   const renamed = sent.findLast((event) => event.event === "$set");
-  assert.equal(renamed?.properties.$set?.email, "ada@new.luke.test");
+  assert.equal(renamed?.properties.$set?.email, "ada@new.app.test");
   // And its name taken away: the old one is not left standing on the person.
   applySessionReplay(
-    { ...bootstrap(true, "user-2"), email: "ada@new.luke.test", name: undefined },
+    { ...bootstrap(true, "user-2"), email: "ada@new.app.test", name: undefined },
     importRecorder,
   );
   const unnamed = sent.findLast((event) => event.properties.$unset !== undefined);

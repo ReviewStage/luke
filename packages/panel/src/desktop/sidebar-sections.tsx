@@ -1,4 +1,4 @@
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_ICON_KIND,
@@ -7,15 +7,15 @@ import {
   type TaskSectionIcon,
   type TaskSections,
   type TaskSectionWrite,
-} from "@luke/features/task-section-wire";
+} from "@repo/features/task-section-wire";
 import {
   applySectionWrite,
   memberOf,
   type SectionEntry,
   type SectionMember,
-} from "@luke/features/task-section-writes";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { countWords, TERM } from "@luke/features/words";
+} from "@repo/features/task-section-writes";
+import type { TaskSummary } from "@repo/features/task-wire";
+import { countWords, TERM } from "@repo/features/words";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -47,21 +47,21 @@ import {
   useConfirmDialog,
   useLeaving,
   useMenu,
-} from "@luke/ui";
+} from "@repo/ui";
 import {
   FolderOutputIcon,
   FolderPlusIcon,
   GLYPH,
   MailOpenIcon,
   SmilePlusIcon,
-} from "@luke/ui/icons";
+} from "@repo/ui/icons";
 import {
   type DrawnTaskRow,
   type HiddenStatus,
   TASK_ROW,
   type TaskRow,
   taskRowKey,
-} from "@luke/ui/task-list-model";
+} from "@repo/ui/task-list-model";
 import {
   memberSection,
   placeAllWrites,
@@ -71,8 +71,8 @@ import {
   sectionOrder,
   unplaceAllWrites,
   workspaceSections,
-} from "@luke/ui/task-sections-model";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+} from "@repo/ui/task-sections-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useLayoutEffect, useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
@@ -124,7 +124,7 @@ export const TASKS_DROP_ZONE = "tasks";
 export const PINNED_DROP_ZONE = "pinned";
 
 /** What a press must land in to drag a section rather than one of its tasks. */
-const SECTION_HANDLE = ".luke-group-header-head";
+const SECTION_HANDLE = ".ui-group-header-head";
 
 /** Why a blank title was not kept. */
 const TITLE_ASKED = "Name the section.";
@@ -831,7 +831,7 @@ function SidebarSection({
   // Note that a head named in place by a key takes the focus back once it is drawn again.
   useLayoutEffect(() => {
     if (edits.focusing !== section.id || edits.inPlace !== undefined) return;
-    root.current?.querySelector<HTMLElement>(".luke-group-header-lead")?.focus();
+    root.current?.querySelector<HTMLElement>(".ui-group-header-lead")?.focus();
     edits.focused();
   });
   const renaming =

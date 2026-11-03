@@ -1,4 +1,4 @@
-import { SELECTION_WORDS } from "@luke/features/words";
+import { SELECTION_WORDS } from "@repo/features/words";
 import {
   type ComponentType,
   type CSSProperties,
@@ -19,7 +19,7 @@ import {
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon, FoldChevronIcon } from "../../face/glyphs.js";
-import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
@@ -240,6 +240,20 @@ export const LIST_ROW_TITLE_LINES = {
 
 export type ListRowTitleLines = (typeof LIST_ROW_TITLE_LINES)[keyof typeof LIST_ROW_TITLE_LINES];
 
+/**
+ * Where a row's chevron stands: in room of its own beside its metadata, kept
+ * so nothing moves as it shows, or in its metadata's place, the metadata
+ * giving way while the row is in hand, as a sidebar row's count gives way to
+ * its ⋯ (`nav-item.css`). The second keeps no room for an unseen glyph, so
+ * words that run to the metadata fade there rather than short of it.
+ */
+export const LIST_ROW_CHEVRON = {
+  ROOM: "room",
+  META: "meta",
+} as const;
+
+export type ListRowChevron = (typeof LIST_ROW_CHEVRON)[keyof typeof LIST_ROW_CHEVRON];
+
 /** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
   ALWAYS: "always",
@@ -342,15 +356,15 @@ export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
  * it set, the words' type and ink, the hover acts' crossfade and the room
  * they take, and every reveal the pointer, the keyboard, or a menu makes,
  * through `:has()` and the pointer's media. Each part keeps its
- * `luke-list-row-*` class, which that sheet, the panel's, and the tests find
+ * `ui-list-row-*` class, which that sheet, the panel's, and the tests find
  * it by.
  */
 const LIST_CLASS =
-  "luke-list flex list-none flex-col gap-list-gap p-0 data-[variant=card]:gap-0 data-[variant=card]:overflow-hidden data-[variant=card]:rounded-control data-[variant=card]:border data-[variant=card]:border-border data-[variant=card]:bg-surface";
+  "ui-list flex list-none flex-col gap-list-gap p-0 data-[variant=card]:gap-0 data-[variant=card]:overflow-hidden data-[variant=card]:rounded-control data-[variant=card]:border data-[variant=card]:border-border data-[variant=card]:bg-surface";
 
 /** The row: a grid of five tracks, its parts centred on its middle, in the text's ink, in by a nest for each level it stands nested at. */
 const ROW_CLASS =
-  "luke-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+  "ui-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * The fold's chevron, a control of its own standing over the leading mark's
@@ -360,14 +374,14 @@ const ROW_CLASS =
  * margin or self-alignment is spelled here to outrank them.
  */
 const FOLD_CLASS =
-  "luke-list-row-fold col-[leading] row-1 z-1 grid min-h-control-icon min-w-control-icon cursor-press place-items-center rounded-control border-0 bg-transparent p-0 text-muted-foreground";
+  "ui-list-row-fold col-[leading] row-1 z-1 grid min-h-control-icon min-w-control-icon cursor-press place-items-center rounded-control border-0 bg-transparent p-0 text-muted-foreground";
 
 /** Which way a key asks a row's fold to stand: → open, ← folded. */
 const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, ArrowLeft: false };
 
 /** The press spans the mark, the words, and the end, its parts standing in the row's own tracks. */
 const MAIN_CLASS =
-  "luke-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center border-0 bg-transparent text-start text-inherit [font:inherit]";
+  "ui-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center border-0 bg-transparent text-start text-inherit [font:inherit]";
 
 /** A press that is a button, pressed as a Mac's list is on the desktop, without the web's pointing hand. */
 const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-press disabled:cursor-default`;
@@ -378,15 +392,15 @@ const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-press disabled:cursor-default`;
  * the provider's identity, not a muted glyph.
  */
 const LEADING_CLASS =
-  "luke-list-row-leading col-[leading] me-icon-gap inline-flex text-muted-foreground [&>.luke-provider-mark]:text-foreground [&>svg]:size-control-icon";
+  "ui-list-row-leading col-[leading] me-icon-gap inline-flex text-muted-foreground [&>.ui-provider-mark]:text-foreground [&>svg]:size-control-icon";
 
 /** The row's end, its metadata and its chevron, at the end of its track, so it lines up with the acts that share it. */
 const END_CLASS =
-  "luke-list-row-end col-[end] ms-icon-gap flex min-w-0 items-center justify-self-end gap-icon-gap";
+  "ui-list-row-end col-[end] ms-icon-gap flex min-w-0 items-center justify-self-end gap-icon-gap";
 
 /** A chevron at the end of a row that goes deeper, its room kept so nothing moves as it shows. */
 const CHEVRON_CLASS =
-  "luke-list-row-chevron inline-flex flex-none text-muted-foreground transition-opacity duration-(--luke-duration-hover) ease-plain [&>svg]:size-luke-12";
+  "ui-list-row-chevron inline-flex flex-none text-muted-foreground transition-opacity duration-(--ui-duration-hover) ease-plain [&>svg]:size-ui-12";
 
 /**
  * What a row belongs to: a small chip of a glyph and a name cut short at a
@@ -396,10 +410,10 @@ const CHEVRON_CLASS =
  */
 const LEAD_CLASS = {
   [LIST_ROW_LEAD.DESCRIPTION]:
-    "luke-list-row-lead me-luke-4 inline-flex max-w-list-row-lead items-center gap-luke-2 rounded-luke-6 bg-fill-strong px-luke-4 py-0 align-bottom text-muted-foreground",
+    "ui-list-row-lead me-ui-4 inline-flex max-w-list-row-lead items-center gap-ui-2 rounded-ui-6 bg-fill-strong px-ui-4 py-0 align-bottom text-muted-foreground",
   [LIST_ROW_LEAD.INLINE]:
-    "luke-list-row-lead inline-flex max-w-full items-center gap-luke-4 align-bottom text-muted-foreground",
-  [LIST_ROW_LEAD.ABOVE]: "luke-list-row-lead flex min-w-0 items-center gap-luke-6",
+    "ui-list-row-lead inline-flex max-w-full items-center gap-ui-4 align-bottom text-muted-foreground",
+  [LIST_ROW_LEAD.ABOVE]: "ui-list-row-lead flex min-w-0 items-center gap-ui-6",
 } as const satisfies Record<ListRowLeadAt, string>;
 
 /** What stands between a lead's plain words and the description they lead. */
@@ -437,7 +451,7 @@ const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
 /** The custom properties a row's sheet reads: how deep it stands. */
 function rowProperties(depth: number): CSSProperties | undefined {
-  return depth === 0 ? undefined : cssCustomProperties({ "--luke-list-row-depth": depth });
+  return depth === 0 ? undefined : cssCustomProperties({ "--ui-list-row-depth": depth });
 }
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -550,6 +564,7 @@ export function ListRow({
   currentLook = LIST_ROW_CURRENT_LOOK.SHEET,
   menuOpen = false,
   chevron = false,
+  chevronAt = LIST_ROW_CHEVRON.ROOM,
   keepFocus = false,
   disabled = false,
   tabbable,
@@ -613,6 +628,8 @@ export function ListRow({
   menuOpen?: boolean | undefined;
   /** Whether a chevron at its end says the press goes somewhere deeper. */
   chevron?: boolean | undefined;
+  /** Where the chevron stands: in room of its own, or in its metadata's place while the row is in hand. */
+  chevronAt?: ListRowChevron | undefined;
   /** Whether a pointer's press leaves the focus where it is, as on a field beside the list that holds the keys. */
   keepFocus?: boolean | undefined;
   /** Whether its press is unavailable: refused and out of the tab order. */
@@ -704,7 +721,7 @@ export function ListRow({
     <span
       ref={titleMeasured}
       id={moreDrawn || said(actions) || describedAs !== undefined ? titleId : undefined}
-      className="luke-list-row-title"
+      className="ui-list-row-title"
       data-overflow={String(titleClipped)}
       data-lines={titleLines === LIST_ROW_TITLE_LINES.ONE ? undefined : titleLines}
     >
@@ -718,9 +735,9 @@ export function ListRow({
   // the place a hover row's acts step into.
   const end =
     said(meta) || chevron ? (
-      <span className={END_CLASS}>
+      <span className={END_CLASS} data-chevron={chevron ? chevronAt : undefined}>
         {said(meta) ? (
-          <span id={metaId} className="luke-list-row-meta">
+          <span id={metaId} className="ui-list-row-meta">
             {meta}
           </span>
         ) : null}
@@ -735,7 +752,7 @@ export function ListRow({
     lead === undefined ? null : (
       <span className={LEAD_CLASS[leadAt]} data-at={leadAt}>
         <span
-          className="luke-list-row-lead-icon inline-flex flex-none text-muted-foreground [&>svg]:size-words-glyph"
+          className="ui-list-row-lead-icon inline-flex flex-none text-muted-foreground [&>svg]:size-words-glyph"
           aria-hidden="true"
         >
           {lead.icon}
@@ -743,7 +760,7 @@ export function ListRow({
         <span
           ref={leadMeasured}
           id={leadId}
-          className="luke-list-row-lead-label min-w-0 overflow-hidden whitespace-nowrap"
+          className="ui-list-row-lead-label min-w-0 overflow-hidden whitespace-nowrap"
           data-overflow={String(leadClipped)}
         >
           {lead.label}
@@ -772,17 +789,17 @@ export function ListRow({
           {leading}
         </span>
       ) : null}
-      <span className="luke-list-row-text col-[text] min-w-0">
+      <span className="ui-list-row-text col-[text] min-w-0">
         {said(attachments) ? (
           <span
-            className="luke-list-row-attachments flex gap-luke-6 overflow-hidden"
+            className="ui-list-row-attachments flex gap-ui-6 overflow-hidden"
             aria-hidden={attachmentsOpen ? undefined : "true"}
           >
             {attachments}
           </span>
         ) : null}
         {metaAt === LIST_ROW_META.TITLE ? (
-          <span className="luke-list-row-head">
+          <span className="ui-list-row-head">
             {firstLine}
             {end}
           </span>
@@ -793,7 +810,7 @@ export function ListRow({
         {said(description) || (!above && lead !== undefined) ? (
           <span
             ref={descriptionMeasured}
-            className="luke-list-row-description"
+            className="ui-list-row-description"
             data-overflow={String(descriptionClipped)}
           >
             {above ? null : leadMark}
@@ -825,7 +842,7 @@ export function ListRow({
       onMouseDown={keepFocus ? preventFocusMove : choosable ? holdRun : undefined}
       onClick={(event) => {
         // Note that the row around the press is what is pressed, its fill and its actions with it.
-        const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
+        const row = event.currentTarget.closest<HTMLElement>(".ui-list-row");
         pulsePress(row ?? event.currentTarget, pressPulse);
         // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
         if (rowMenu.open) rowMenu.close(false);
@@ -848,10 +865,10 @@ export function ListRow({
           className={FOLD_CLASS}
           aria-label={fold.label}
           aria-expanded={fold.open}
-          onClick={pulseOnPress(() => fold.onOpenChange(!fold.open), pressPulse)}
+          onClick={() => fold.onOpenChange(!fold.open)}
         >
           {/* Note that the chevron turns on the one turn every fold makes (`disclosure.css`). */}
-          <span className="luke-disclosure-turn" data-open={fold.open}>
+          <span className="ui-disclosure-turn" data-open={fold.open}>
             <FoldChevronIcon />
           </span>
         </button>
@@ -879,13 +896,13 @@ export function ListRow({
         <div
           role="group"
           aria-labelledby={titleId}
-          className="luke-list-row-actions row-1 flex items-center gap-luke-4"
+          className="ui-list-row-actions row-1 flex items-center gap-ui-4"
         >
           {actions}
         </div>
       ) : null}
       {moreDrawn ? (
-        <div className="luke-list-row-more row-1 flex items-center">
+        <div className="ui-list-row-more row-1 flex items-center">
           {rowMenu.button({
             size:
               (density ?? listDensity) === LIST_DENSITY.REGULAR ? undefined : BUTTON_SIZE.COMPACT,

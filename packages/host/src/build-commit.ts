@@ -1,5 +1,5 @@
 // build-commit.ts -- the commit `scripts/build.mjs` stamped this bundle with.
-import type { BuildCommit } from "@luke/settings/update";
+import type { BuildCommit } from "@repo/settings/update";
 
 /**
  * Baked by `build.mjs` from `git` in the checkout the bundle was built in,

@@ -115,7 +115,7 @@ export const CHOICE_NUMBERED_ROWS = 9;
  * side by side, and pills wrap onto as many lines as they need, never
  * jumping between a line's end and the line under it. Each look names its own gap, so no two utilities set one.
  */
-const LIST = "luke-choice-list min-w-0 m-0 p-0 [border:0] list-none";
+const LIST = "ui-choice-list min-w-0 m-0 p-0 [border:0] list-none";
 
 const LIST_LOOK = {
   plain: "flex gap-1",
@@ -133,7 +133,7 @@ const LIST_LOOK = {
  * where a utility would outrank it.
  */
 const ROW =
-  "luke-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-press transition-[--luke-choice-fill,background-color] duration-(--luke-duration-hover) ease-motion-exit";
+  "ui-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--ui-focus-ring-width))] font-ui text-body text-left cursor-press transition-[--ui-choice-fill,background-color] duration-(--ui-duration-hover) ease-motion-exit";
 
 /**
  * Each look's own row. A pill's corners are half its one-line height
@@ -145,7 +145,7 @@ const ROW =
 const ROW_LOOK = {
   plain: "",
   marked: "",
-  pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--luke-control-height)/2)] text-caption leading-body",
+  pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--ui-control-height)/2)] text-caption leading-body",
   card: "p-0",
 } as const satisfies Record<ChoiceLook, string>;
 
@@ -158,7 +158,7 @@ const ROW_ACROSS = "flex-[1_1_0] items-start";
  * in a radio and a tick in a box.
  */
 const CONTROL =
-  "luke-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--luke-duration-hover) ease-motion-exit";
+  "ui-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--ui-duration-hover) ease-motion-exit";
 
 /**
  * A checked control's fill: the accent, or what picking it means, going
@@ -185,11 +185,11 @@ const CONTROL_INK = {
  * its own under them, ringed once picked, and steps back whole while its
  * option is unavailable.
  */
-const CARD = "luke-choice-card flex flex-col gap-2 p-3 rounded-control";
+const CARD = "ui-choice-card flex flex-col gap-2 p-3 rounded-control";
 
 const CARD_RING = {
-  rest: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border)]",
-  picked: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border-selected)]",
+  rest: "[box-shadow:inset_0_0_0_1px_var(--ui-color-border)]",
+  picked: "[box-shadow:inset_0_0_0_1px_var(--ui-color-border-selected)]",
 } as const;
 
 /** One option: the value it chooses, its words, and what stands beside them. */
@@ -267,7 +267,7 @@ export interface ChoiceListSettled<Value extends string> extends ChoiceListBase<
 function PickedCheck({ className }: { className: string }): React.JSX.Element {
   return (
     <svg
-      className={cn("luke-choice-check size-3 align-[-1px]", className)}
+      className={cn("ui-choice-check size-3 align-[-1px]", className)}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -331,14 +331,14 @@ function ChoiceWords({
   return (
     <span
       className={cn(
-        "luke-choice-words flex flex-col gap-0.5 min-w-0",
+        "ui-choice-words flex flex-col gap-0.5 min-w-0",
         look === CHOICE_LOOK.CARD ? "flex-initial" : "flex-auto",
       )}
     >
-      <span className="luke-choice-head flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+      <span className="ui-choice-head flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
         <span
           className={cn(
-            "luke-choice-label min-w-0 font-label wrap-anywhere",
+            "ui-choice-label min-w-0 font-label wrap-anywhere",
             labelFlex(option, look),
           )}
         >
@@ -346,12 +346,12 @@ function ChoiceWords({
           {hung}
         </span>
         {option.badge === undefined && number === undefined ? null : (
-          <span className="luke-choice-end inline-flex flex-none items-center gap-2">
+          <span className="ui-choice-end inline-flex flex-none items-center gap-2">
             {option.badge === undefined ? null : <Badge tone={tone}>{option.badge}</Badge>}
             {/* The number is the row's key, which the row says to a reader as its key shortcut. */}
             {number === undefined ? null : (
               <span
-                className="luke-choice-number min-w-[1ch] text-muted-foreground text-caption leading-body tabular-nums text-center"
+                className="ui-choice-number min-w-[1ch] text-muted-foreground text-caption leading-body tabular-nums text-center"
                 aria-hidden="true"
               >
                 {number}
@@ -361,7 +361,7 @@ function ChoiceWords({
         )}
       </span>
       {option.detail === undefined ? null : (
-        <span className="luke-choice-detail text-caption">{option.detail}</span>
+        <span className="ui-choice-detail text-caption">{option.detail}</span>
       )}
     </span>
   );
@@ -390,7 +390,7 @@ function ChoiceControl({
         // Note that an unsaved credential's radio in a card cannot be picked, so its ring steps back while its label stays readable.
         inCard
           ? "mt-0 self-center [:disabled>&]:opacity-disabled"
-          : "self-start mt-[calc((var(--luke-type-body-leading)-var(--luke-space-16))/2)]",
+          : "self-start mt-[calc((var(--ui-type-body-leading)-var(--ui-space-16))/2)]",
         !checked && "border-muted-foreground",
         checked && (toned ? CONTROL_TONE_FILL : CONTROL_ACCENT_FILL),
         checked && CONTROL_MARK[shape],
@@ -432,7 +432,7 @@ function RowInside({
         />
       ) : null}
       {option.mark === undefined ? null : (
-        <span className="luke-choice-mark inline-flex flex-none">{option.mark}</span>
+        <span className="ui-choice-mark inline-flex flex-none">{option.mark}</span>
       )}
       <ChoiceWords
         option={option}
@@ -515,9 +515,7 @@ function ChoiceRow({
       event.preventBaseUIHandler();
       if (readOnly) return;
       // Note that a row's radio or box is what gives, as a checkbox's box does; a pill gives whole.
-      const control = event.currentTarget.querySelector<HTMLElement>(
-        ":scope > .luke-choice-control",
-      );
+      const control = event.currentTarget.querySelector<HTMLElement>(":scope > .ui-choice-control");
       pulsePress(control ?? event.currentTarget);
       onPress();
     },
@@ -556,14 +554,14 @@ function ChoiceRow({
       data-checked={checked}
       data-unavailable={option.detail === undefined ? undefined : true}
     >
-      <div className="luke-choice-card-head flex items-center justify-between gap-2">
+      <div className="ui-choice-card-head flex items-center justify-between gap-2">
         {row}
         {option.aside === undefined ? null : (
-          <span className="luke-choice-aside text-caption-inline">{option.aside}</span>
+          <span className="ui-choice-aside text-caption-inline">{option.aside}</span>
         )}
       </div>
       {option.below === undefined || option.below === null ? null : (
-        <div className="luke-choice-card-body flex flex-col gap-1.5">{option.below}</div>
+        <div className="ui-choice-card-body flex flex-col gap-1.5">{option.below}</div>
       )}
     </div>
   );
@@ -698,7 +696,7 @@ function SettledChoices<Value extends string>({
         return (
           <li key={option.value} className={ROW} data-picked={picked}>
             {option.mark === undefined ? null : (
-              <span className="luke-choice-mark inline-flex flex-none">{option.mark}</span>
+              <span className="ui-choice-mark inline-flex flex-none">{option.mark}</span>
             )}
             <ChoiceWords
               option={option}
@@ -706,7 +704,7 @@ function SettledChoices<Value extends string>({
               after={
                 picked ? (
                   // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's centre.
-                  <span className="luke-choice-picked ml-2 text-muted-foreground text-caption leading-body font-caption whitespace-nowrap">
+                  <span className="ui-choice-picked ml-2 text-muted-foreground text-caption leading-body font-caption whitespace-nowrap">
                     <PickedCheck className="mr-0.5" />
                     {pickedNote}
                   </span>

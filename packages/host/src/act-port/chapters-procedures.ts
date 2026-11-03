@@ -4,7 +4,7 @@ import type {
   PullRequestChaptersAnswerView,
   PullRequestChaptersParams,
   PullRequestChaptersReadParams,
-} from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters-view";
 import { Effect } from "effect";
 import { CHAPTERS_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";

@@ -31,7 +31,7 @@
  * leaves harmless.
  */
 
-import { githubImageOf } from "@luke/features/github-image";
+import { githubImageOf } from "@repo/features/github-image";
 
 /** A property's value as the parsed tree holds it: HTML's own attribute values. */
 type PropertyValue = string | number | boolean | readonly (string | number)[] | null | undefined;

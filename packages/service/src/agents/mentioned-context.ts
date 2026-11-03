@@ -1,35 +1,42 @@
-import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
-import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
+import { AGENT_TOOL, CONNECTION_TOOL } from "@repo/features/agent-tools";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
   type IntegrationProvider,
-} from "@luke/features/integration-wire";
-import { mentionMarkdownLink } from "@luke/features/link-grammar";
-import { LINK_SITE, type LinkSite } from "@luke/features/link-site";
+} from "@repo/features/integration-wire";
+import {
+  LINK_PLACE,
+  linkOf,
+  mentionMarkdownLink,
+  readLink,
+  taskNumberOf,
+} from "@repo/features/link-grammar";
+import { LINK_SITE, type LinkSite } from "@repo/features/link-site";
 import {
   handedMentionsIn,
   linkMention,
   MENTION_KIND,
   type Mention,
   mentionName,
+  type NumberedTaskIdOf,
   type PersonMention,
   type PlanMention,
   type ServerMention,
   sectionAnchors,
   type TaskMention,
-} from "@luke/features/mention-link";
-import { PAGE_OWNER, type PageLine, type PageOwner } from "@luke/features/page-wire";
-import { planSections } from "@luke/features/plan-document";
-import { planMarkdown } from "@luke/features/plan-markdown";
-import type { Task } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
+} from "@repo/features/mention-link";
+import { PAGE_OWNER, type PageLine, type PageOwner } from "@repo/features/page-wire";
+import { planSections } from "@repo/features/plan-document";
+import { planMarkdown } from "@repo/features/plan-markdown";
+import type { Task } from "@repo/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 
 /**
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.
  *
  * A message names things as links whose label starts with `@`
- * (`@luke/features/mention-link`), or as the bare address of a plan, one of
+ * (`@repo/features/mention-link`), or as the bare address of a plan, one of
  * its sections, a page, or an agent, which the window draws as the same chip
  * and which is handed as the same mention (`handedMentionsIn`); a bare
  * address of anything else is words. The words go to the model as written,
@@ -44,7 +51,11 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
  * more part after its words, the plan or each section it named as it stood
  * at the send, under a heading eve's receipt is read back by
  * (`attached-file-parts.ts`). Only the agent's own plan is read, the plan the
- * send already read as its sender; a mention of another task adds nothing.
+ * send already read as its sender; a mention of another task adds nothing,
+ * but where its link names it by its number, `…/task/42`, which spells
+ * none of the id the task tools take: that link is handed the task's id, as
+ * the send found it for the sender among the workspaces they are a member
+ * of (`mentioned-reads.ts`), so the agent can read the task.
  *
  * Each excerpt is cut on a line to its own bound, and the part to one bound
  * over all of them, in the order the mentions stand; an excerpt cut short
@@ -120,19 +131,29 @@ export interface MentionedPerson {
   readonly role: WorkspaceRole;
 }
 
-/** What the send read of the pages a message mentions on the agent's own plan and the agents and people it mentions in its workspace, each by its id; one it did not find is absent. */
+/** The tasks a message's links name by their number, as the send found them for its sender: each task's id, by the workspace step the link spells and then the number. */
+type MentionedTasks = ReadonlyMap<string, ReadonlyMap<number, string>>;
+
+/** What the send read of the pages a message mentions on the agent's own plan and the agents and people it mentions in its workspace, each by its id, and of the tasks its links name by their number; one it did not find is absent. */
 export interface MentionedReads {
   readonly pages: ReadonlyMap<string, PageLine>;
   readonly agents: ReadonlyMap<string, MentionedAgent>;
   readonly people: ReadonlyMap<string, MentionedPerson>;
+  readonly tasks: MentionedTasks;
 }
 
-/** The reads of a message that mentions no page, no agent, and no person. */
+/** The reads of a message that mentions no page, no agent, no person, and no task by its number. */
 export const NO_MENTIONED_READS: MentionedReads = {
   pages: new Map(),
   agents: new Map(),
   people: new Map(),
+  tasks: new Map(),
 };
+
+/** A task a link names by its number, found by its id among those the send found. */
+function foundTask(tasks: MentionedTasks): NumberedTaskIdOf {
+  return ({ workspace, number }) => tasks.get(workspace)?.get(number);
+}
 
 /** The room an excerpt leaves in the part for the closing line saying what was left out, which never names a heading. */
 const LEFT_OUT_ROOM = 120;
@@ -216,8 +237,27 @@ function excerptOf({ mention, name }: NamedMention, task: Task): string {
 /** A mention of a file, which the part hands a note for where it pins the file's lines. */
 type LinesMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.FILE }>;
 
+/** What the part hands beside the mentions themselves. */
+const HANDED_KIND = {
+  /** Another task a link names by its number, which spells none of the id the task tools take. */
+  NUMBERED_TASK: "numbered-task",
+} as const;
+
+/** Another task than the agent's own a link names by its number: its id, as the send found it for the sender, and its own link by that number. */
+interface NumberedTask {
+  readonly kind: typeof HANDED_KIND.NUMBERED_TASK;
+  readonly taskId: string;
+  readonly link: string;
+}
+
 /** A mention the part hands something for. */
-type Handed = PlanMention | ServerMention | LinesMention | TaskMention | PersonMention;
+type Handed =
+  | PlanMention
+  | ServerMention
+  | LinesMention
+  | TaskMention
+  | PersonMention
+  | NumberedTask;
 
 /**
  * What a mention of a page is handed as: its title, id, and version, the
@@ -306,6 +346,11 @@ function linesNoteOf({ path, lines }: LinesMention): string {
   return `The developer pointed you at ${span} of \`${path}\` as they stood at commit \`${lines.commit}\` for this message: read just those lines, as \`git show ${lines.commit}:${path}\` holds them, since your branch may have moved them.`;
 }
 
+/** What a link naming another task by its number is handed as: the task's id, which its link no longer spells and the task tools take. */
+function numberedTaskNoteOf({ taskId, link }: NumberedTask): string {
+  return `The link ${link} names the task whose id is \`${taskId}\`, which \`${AGENT_TOOL.READ_TASK}\` and the other task tools take.`;
+}
+
 /** What a mention of an MCP server or one of its tools is handed as: which the developer pointed the agent at, and how to reach it. */
 function noteOf(mention: ServerMention): string {
   const connection =
@@ -347,12 +392,34 @@ function standsOn(
     : "agentId" in mention && mention.agentId.toLowerCase() === owner.agentId.toLowerCase();
 }
 
-/** The mention as the part hands it, where it hands it anything: what stands on another plan, or on a plan where the agent has none, is handed nothing, nor a page that stands on neither its task nor, on none, itself, but for a coding agent, which is read across the workspace. */
+/**
+ * Another task than the agent's own a link names by its number, `…/task/42`,
+ * its section or a page on it among them, as the id the send found for it;
+ * none for a link naming its task by its id, which spells it already, or
+ * naming the agent's own.
+ */
+function numberedTaskOf(
+  mention: Mention,
+  target: string,
+  task: Task | undefined,
+): NumberedTask | undefined {
+  if (!("taskId" in mention) || mention.taskId === task?.id) return undefined;
+  const read = readLink(target);
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  if (read === undefined || number === undefined) return undefined;
+  const link = linkOf({ kind: LINK_PLACE.TASK, planId: String(number) }, read.workspace);
+  return { kind: HANDED_KIND.NUMBERED_TASK, taskId: mention.taskId, link };
+}
+
+/** The mention as the part hands it, where it hands it anything: what stands on another plan, or on a plan where the agent has none, is handed nothing but the id of a task a link names by its number, nor a page that stands on neither its task nor, on none, itself, but for a coding agent, which is read across the workspace. */
 function handedMention(
   mention: Mention,
+  target: string,
   task: Task | undefined,
   owner: PageOwner | undefined,
 ): Handed | undefined {
+  const numbered = numberedTaskOf(mention, target, task);
+  if (numbered !== undefined) return numbered;
   switch (mention.kind) {
     case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
@@ -377,7 +444,7 @@ function handedMention(
       return mention.lines === undefined ? undefined : mention;
     case MENTION_KIND.FOLDER:
     // The app named in words is a comment's ask of it, which hands an agent nothing.
-    case MENTION_KIND.LUKE:
+    case MENTION_KIND.APP:
     // A date's words are the date in full, which is all there is to hand.
     case MENTION_KIND.DATE:
     // A channel's link names it, which the agent posts to by name; nothing more is handed.
@@ -425,6 +492,8 @@ function sameMention(first: Handed, second: Handed): boolean {
       );
     case MENTION_KIND.PERSON:
       return second.kind === MENTION_KIND.PERSON && first.userId === second.userId;
+    case HANDED_KIND.NUMBERED_TASK:
+      return second.kind === HANDED_KIND.NUMBERED_TASK && first.taskId === second.taskId;
   }
 }
 
@@ -451,6 +520,8 @@ function handedAs(
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
       return noteOf(mention);
+    case HANDED_KIND.NUMBERED_TASK:
+      return numberedTaskNoteOf(mention);
   }
 }
 
@@ -466,12 +537,14 @@ export function mentionedIds(
   words: string,
   task: Task | undefined,
   agentId?: string | undefined,
+  tasks: MentionedTasks = NO_MENTIONED_READS.tasks,
 ): MentionedIds {
   const owner = pagesOwnerOf(task, agentId);
   const pages = new Set<string>();
   const agents = new Set<string>();
   const people = new Set<string>();
-  for (const { mention } of handedMentionsIn(words, task?.repository ?? null)) {
+  const handed = handedMentionsIn(words, task?.repository ?? null, { taskIdOf: foundTask(tasks) });
+  for (const { mention } of handed) {
     if (mention.kind === MENTION_KIND.PAGE && standsOn(mention, owner)) pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
     if (mention.kind === MENTION_KIND.PERSON) people.add(mention.userId);
@@ -513,8 +586,9 @@ export function mentionedContext(
   const owner = pagesOwnerOf(task, agentId);
   const named: HandedMention[] = [];
   const repository = task?.repository ?? null;
-  for (const { mention, label, target } of handedMentionsIn(words, repository)) {
-    const handed = handedMention(mention, task, owner);
+  const taskIdOf = foundTask(reads.tasks);
+  for (const { mention, label, target } of handedMentionsIn(words, repository, { taskIdOf })) {
+    const handed = handedMention(mention, target, task, owner);
     if (handed === undefined) continue;
     // A bare address is named by what it says of the thing, a section by its anchor, as its chip is.
     const name = linkMention(label, target, repository)?.name ?? mentionName(label);

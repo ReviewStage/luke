@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
+import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
+import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
@@ -13,12 +13,13 @@ import {
   BROWSER_LIVE_REFUSAL,
   BROWSER_LIVE_SERVER,
   type BrowserLiveClientMessage,
-} from "@luke/features/browser-live-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+} from "@repo/features/browser-live-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { type Cause, Clock, Duration, Effect, Fiber, Option, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { agentBrowserOver } from "../agents/browser/agent-browser.js";
 import { CODER } from "../agents/coder-host/bounds.js";
+import { SERVER_AGENT_TOOL } from "../events/server-events.js";
 import type { RelayFrame } from "../terminal/relay.js";
 import {
   type FakeCdpCommand,
@@ -165,6 +166,7 @@ function world(
     if (tab?.driverUserId == null || tab.heldUntil === null) return null;
     return tab.heldUntil.getTime() > now.getTime() ? tab.driverUserId : null;
   };
+  const counted: string[] = [];
   const deps: BrowserLiveDependencies = {
     readTab: () => Effect.sync(() => Option.fromUndefinedOr(row)),
     sessionOf: () => Effect.succeed(options.session ?? Option.some(SESSION)),
@@ -189,6 +191,7 @@ function world(
         setDriver(null, null);
         return true;
       }),
+    counted: (_userId, _agentId, tool) => Effect.sync(() => void counted.push(tool)),
     notePage: (_tab, targetId, page) =>
       Effect.sync(() => void notedPages.push({ targetId, address: page.address })),
     hold: (_conversation, heldUntil) => Effect.sync(() => void holds.push(heldUntil.getTime())),
@@ -202,6 +205,7 @@ function world(
     holds,
     keptAlive,
     handedBack,
+    counted,
     notedPages,
     close: () => {
       row = undefined;
@@ -1076,6 +1080,59 @@ it.effect(
       yield* panel.leave;
       yield* Fiber.join(fiber);
     }),
+);
+
+it.effect(
+  "a member's takeover and hand-back are each counted once, and the release as the socket closes is not",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HAND_BACK });
+      yield* until(() => store.handedBack.length === 1);
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* until(() => store.counted.length === 3);
+
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+      assert.deepEqual(store.handedBack, [MEMBER, MEMBER]);
+      assert.deepEqual(store.counted, [
+        SERVER_AGENT_TOOL.BROWSER_TAKEOVER,
+        SERVER_AGENT_TOOL.BROWSER_HANDBACK,
+        SERVER_AGENT_TOOL.BROWSER_TAKEOVER,
+      ]);
+    }),
+);
+
+it.effect("a takeover the member's other window already holds is not counted again", () =>
+  Effect.gen(function* () {
+    const { peer, browser, commands } = yield* liveBrowser();
+    const panel = yield* scriptedViewer;
+    const store = world(browser);
+    store.driveAs(MEMBER, AN_HOUR_IN);
+    const { fiber } = yield* started(
+      peer,
+      commands,
+      Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+    );
+    yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+    yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+    yield* panel.push({ type: BROWSER_LIVE_CLIENT.HAND_BACK });
+    yield* until(() => store.counted.length === 1);
+
+    yield* panel.leave;
+    yield* Fiber.join(fiber);
+    assert.deepEqual(store.counted, [SERVER_AGENT_TOOL.BROWSER_HANDBACK]);
+  }),
 );
 
 it.effect("a hand-back the store did not take is tried again as the socket closes", () =>

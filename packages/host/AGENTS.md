@@ -1,4 +1,4 @@
-# `@luke/host`
+# `@repo/host`
 
 ## Everything of the machine arrives as a seam
 
@@ -51,20 +51,20 @@ cut off.**
 ## One door that exists for the graph
 
 `account-preferences-client.ts` would belong beside the task client in
-`@luke/features`, but the snapshot it carries is `@luke/settings` vocabulary
+`@repo/features`, but the snapshot it carries is `@repo/settings` vocabulary
 and `settings` already reaches `features`. This is the lowest package holding both.
 
 ## The doors a browser loads
 
-`@luke/host/acts` and `@luke/host/app-state` are the desktop's
+`@repo/host/acts` and `@repo/host/app-state` are the desktop's
 renderer-and-main vocabulary, kept here because this is the lowest package that
-reaches every package they name, and `@luke/host/bridge` is the window's bridge
+reaches every package they name, and `@repo/host/bridge` is the window's bridge
 contract built from the app state, which the preload builds its bridge from and
-the web bridge does too; `@luke/host/contract` is the act port's oRPC contract that the
-window's client is typed by. The panel reads these four, and `@luke/host/act-port`
+the web bridge does too; `@repo/host/contract` is the act port's oRPC contract that the
+window's client is typed by. The panel reads these four, and `@repo/host/act-port`
 beside them.
 
 The web app (`apps/web/src/app/web-host.ts`) runs the host itself in the tab,
-so it also loads the barrel, `@luke/host/effect`, `@luke/host/client`,
-`@luke/host/service-layer`, and `@luke/host/agent-notices`. Every door named
+so it also loads the barrel, `@repo/host/effect`, `@repo/host/client`,
+`@repo/host/service-layer`, and `@repo/host/agent-notices`. Every door named
 here, and everything it imports, stays free of Node.

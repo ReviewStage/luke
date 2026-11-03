@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database } from "@repo/database/core/query";
 import {
   claimMacCommands,
   macCommandResult,
@@ -27,18 +27,18 @@ import {
   markMacListening,
   queueMacCommand,
   settleMacCommand,
-} from "@luke/database/models/mac-command-store";
-import { user } from "@luke/database/schemas/auth";
-import { conversations, messages } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB } from "@luke/database/testing";
-import { RUN_ON_MAC_OFF } from "@luke/features/luke-tools-wire";
+} from "@repo/database/models/mac-command-store";
+import { user } from "@repo/database/schemas/auth";
+import { conversations, messages } from "@repo/database/schemas/storage";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { getTestDB } from "@repo/database/testing";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
   type MacCommandResult,
-} from "@luke/features/mac-command-wire";
-import { unparsedWire } from "@luke/wire";
+} from "@repo/features/mac-command-wire";
+import { RUN_ON_MAC_OFF } from "@repo/features/workspace-tools-wire";
+import { unparsedWire } from "@repo/wire";
 import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -46,11 +46,11 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { wokenOnHub } from "../testing/sync-woken.js";
-import { runOnMacStanding } from "./luke-tools.js";
 import { askMac, MAC_COMMAND_STATUS, macCommandsFor, runOnMacTool } from "./mac-command.js";
 import { macCommandsProcedures } from "./mac-commands-procedures.js";
+import { runOnMacStanding } from "./workspace-tools.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const MAC_COMMANDS = "/api/mac-commands";
 const CLAIM = "/api/mac-commands/claim";
 const LISTENING = "/api/mac-commands/listening";
@@ -156,7 +156,7 @@ const bytes = (incoming: Request) =>
 const account = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   });
 
 /** The commands a read was answered with, as the Mac reads its bytes. */

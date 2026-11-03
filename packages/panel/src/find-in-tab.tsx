@@ -1,4 +1,4 @@
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   CloseIcon,
   DisclosureFind,
@@ -10,9 +10,9 @@ import {
   SearchField,
   Tooltip,
   useDisclosureFinding,
-} from "@luke/ui";
-import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { useDisclosure } from "@luke/ui/use-disclosure";
+} from "@repo/ui";
+import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -89,6 +89,7 @@ export interface FindTally {
 
 /** The pages that stand in the plan's place, each finding in its words as one scope (`PageFind`). */
 export const FIND_PAGE = {
+  HOME: "home",
   INBOX: "inbox",
   AUTOMATIONS: "automations",
   BOARD: "board",
@@ -282,7 +283,7 @@ function FindBar({
   return (
     <MenuSurface
       ref={surface}
-      className="find-bar absolute top-luke-8 right-column-inset z-3"
+      className="find-bar absolute top-ui-8 right-column-inset z-3"
       flow={MENU_SURFACE_FLOW.ROW}
       leaving={leaving}
       role="search"
@@ -459,7 +460,7 @@ export function FindScope({
 }
 
 /**
- * A page standing in the plan's place, found in as one scope: the
+ * A page standing in the plan's place, found in as one scope: Home, the
  * window's Inbox, the Automations page, the Board, a version history, and
  * an Admin view. It
  * fills the place as the page did, its bar under the page's toolbar

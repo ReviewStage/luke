@@ -11,14 +11,14 @@ import {
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_HARNESS,
-} from "@luke/agent-runner/protocol";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { queueAgentMessage, readAgentQueue } from "@luke/database/models/agent-queue-store";
+} from "@repo/agent-runner/protocol";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { queueAgentMessage, readAgentQueue } from "@repo/database/models/agent-queue-store";
 import {
   claimAgentRunnerLease,
   releaseAgentRunnerLease,
-} from "@luke/database/models/agent-runner-lease";
+} from "@repo/database/models/agent-runner-lease";
 import {
   type Agent,
   createAgent,
@@ -26,35 +26,35 @@ import {
   readAgentRouting,
   recordAgentNativeSession,
   updateAgentChoice,
-} from "@luke/database/models/agent-store";
-import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { installSkill } from "@luke/database/models/installed-skill-store";
-import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
+} from "@repo/database/models/agent-store";
+import { readNativeRewind, rewindConversation } from "@repo/database/models/conversation-rewind";
+import { beatDevice, registerDevice } from "@repo/database/models/device-store";
+import { installSkill } from "@repo/database/models/installed-skill-store";
+import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import {
   removeProviderKey,
   saveProviderKey,
   setPlanStatus,
   setProviderKeyForAgents,
-} from "@luke/database/models/provider-key-store";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { runnerLinesPast } from "@luke/database/models/runner-line-store";
-import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
-import { messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_FAILURE, AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+} from "@repo/database/models/provider-key-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { runnerLinesPast } from "@repo/database/models/runner-line-store";
+import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
+import { storeWriter } from "@repo/database/models/writer";
+import { user } from "@repo/database/schemas/auth";
+import { messages, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
+import { AGENT_FAILURE, AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
-} from "@luke/features/provider-key-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { fakeHttpClientLayer, temporaryDirectory } from "@luke/wire/testing";
+} from "@repo/features/provider-key-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { MESSAGE_ROLE } from "@repo/wire";
+import { fakeHttpClientLayer, temporaryDirectory } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import {
   Clock,
@@ -103,13 +103,13 @@ import {
   KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { handOnQueue } from "./agent-queue.js";
 import { CODER } from "./bounds.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
@@ -137,9 +137,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  */
 
 const SNAPSHOT = "snap_fixture_image";
-const EVENTS_URL = "https://luke.test/api/agents/runner/events";
-const LINES_URL = "https://luke.test/api/agents/runner-lines";
-const MCP_URL = "https://luke.test/api/agents/mcp";
+const EVENTS_URL = "https://app.test/api/agents/runner/events";
+const LINES_URL = "https://app.test/api/agents/runner-lines";
+const MCP_URL = "https://app.test/api/agents/mcp";
 
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
@@ -164,7 +164,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
 };
@@ -201,7 +200,7 @@ function services(
 const openAgentWithoutPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createAgent(userId, {
@@ -212,6 +211,7 @@ const openAgentWithoutPlan = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   return { userId, agent: started.value.agent };
@@ -388,7 +388,7 @@ const repositoryAgent = (
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
     yield* Effect.flatMap(Database, (db) =>
-      db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+      db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
     );
     yield* savePlan(userId);
     const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
@@ -401,6 +401,7 @@ const repositoryAgent = (
       planSnapshot: "# Relay\n",
       prompt: null,
       repository: RELAY_FULL_NAME,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const agent = Option.getOrThrow(started).agent;
     const github = githubReaching([installation], undefined, {}, (sent) => {
@@ -474,6 +475,7 @@ const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
       prompt: null,
       repository: RELAY_FULL_NAME,
       ...(startBranch === undefined ? undefined : { startBranch }),
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     return Option.getOrThrow(started).agent;
   });
@@ -543,10 +545,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(command.args.at(-1), createHash("sha256").update(BUNDLE).digest("hex"));
         // The bundle is uploaded as the default user and installed by root where only root writes.
         assert.equal(
-          api.uploads[0]?.get("/tmp/luke-agent-runner.mjs"),
+          api.uploads[0]?.get("/tmp/agent-runner.mjs"),
           new TextDecoder().decode(BUNDLE),
         );
-        assert.match(script, /install -D -o root -g root -m 0444 \/tmp\/luke-agent-runner\.mjs/u);
+        assert.match(script, /install -D -o root -g root -m 0444 \/tmp\/agent-runner\.mjs/u);
 
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
@@ -569,7 +571,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
           allowedDomains: config.allowedDomains,
-          installedSkills: "/opt/luke/installed-skills",
+          installedSkills: "/opt/agent/installed-skills",
           warm: true,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);
@@ -671,28 +673,28 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         const skills = api.uploads.find((upload) =>
-          [...upload.keys()].some((path) => path.startsWith("/tmp/luke-installed-skills/")),
+          [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
         );
         assert.ok(skills !== undefined);
         // A Claude Code local plugin named luke, each skill a whole folder.
         assert.deepEqual([...skills.keys()].sort(), [
-          "/tmp/luke-installed-skills/.claude-plugin/plugin.json",
-          "/tmp/luke-installed-skills/skills/incident-notes/SKILL.md",
-          "/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md",
-          "/tmp/luke-installed-skills/skills/sentry-triage/scripts/triage.sh",
+          "/tmp/agent-installed-skills/.claude-plugin/plugin.json",
+          "/tmp/agent-installed-skills/skills/incident-notes/SKILL.md",
+          "/tmp/agent-installed-skills/skills/sentry-triage/SKILL.md",
+          "/tmp/agent-installed-skills/skills/sentry-triage/scripts/triage.sh",
         ]);
         assert.equal(
-          JSON.parse(skills.get("/tmp/luke-installed-skills/.claude-plugin/plugin.json") ?? "")
+          JSON.parse(skills.get("/tmp/agent-installed-skills/.claude-plugin/plugin.json") ?? "")
             .name,
-          "luke",
+          "workspace",
         );
         // Every other key and the body as installed, under the name and description we keep.
         assert.equal(
-          skills.get("/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md"),
+          skills.get("/tmp/agent-installed-skills/skills/sentry-triage/SKILL.md"),
           '---\nname: sentry-triage\ndescription: "Triage a Sentry issue."\nallowed-tools: Bash\n---\n\nRun `scripts/triage.sh`.\n',
         );
         assert.equal(
-          skills.get("/tmp/luke-installed-skills/skills/incident-notes/SKILL.md"),
+          skills.get("/tmp/agent-installed-skills/skills/incident-notes/SKILL.md"),
           '---\nname: incident-notes\ndescription: "Write incident notes."\nuser-invocable: false\n---\n\nWrite them.\n',
         );
         // Nothing lands in the checkout, so nothing can be committed.
@@ -703,10 +705,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const script = command.args[1] ?? "";
         assert.match(
           script,
-          /mv \/tmp\/luke-installed-skills \/opt\/luke\/installed-skills && chown -R root:root \/opt\/luke\/installed-skills && chmod -R u=rwX,go=rX/u,
+          /mv \/tmp\/agent-installed-skills \/opt\/agent\/installed-skills && chown -R root:root \/opt\/agent\/installed-skills && chmod -R u=rwX,go=rX/u,
         );
         const [config] = (yield* launchLines(command)) as [ClaudeCodeConfig];
-        assert.equal(config.installedSkills, "/opt/luke/installed-skills");
+        assert.equal(config.installedSkills, "/opt/agent/installed-skills");
 
         // An account with no installed skills uploads none, and the launch installs nothing.
         const bare = runnerSandboxApi();
@@ -717,7 +719,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* otherSessions.open(message(other.agent, "Triage it."));
         assert.ok(
           !bare.uploads.some((upload) =>
-            [...upload.keys()].some((path) => path.startsWith("/tmp/luke-installed-skills/")),
+            [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
           ),
         );
       }),
@@ -795,7 +797,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const deviceId = randomUUID();
         yield* registerDevice(userId, {
@@ -881,7 +883,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
@@ -967,7 +969,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
@@ -1051,8 +1053,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
 
-        const firstPath = `/tmp/luke-attachments/${firstId}/2-Spec-v2.pdf`;
-        const laterPath = `/tmp/luke-attachments/${laterId}/2-etc-notes.pdf`;
+        const firstPath = `/tmp/agent-attachments/${firstId}/2-Spec-v2.pdf`;
+        const laterPath = `/tmp/agent-attachments/${laterId}/2-etc-notes.pdf`;
         const written = new Map(api.uploads.flatMap((upload) => [...upload]));
         assert.equal(written.get(firstPath), pdf);
         assert.equal(written.get(laterPath), pdf);
@@ -2411,6 +2413,23 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const [sandbox] = api.sandboxes;
         assert.ok(sandbox !== undefined);
+        // The first turn took the opening line and settled, as its IDLE's batch writes it, so its runner is warm.
+        const db = yield* Database;
+        const [settled] = yield* db
+          .insert(turns)
+          .values({
+            userId,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.SETTLED,
+            queuedAt: new Date(0),
+            settledAt: new Date(0),
+          })
+          .returning({ id: turns.id });
+        yield* db
+          .update(messages)
+          .set({ turnId: settled?.id })
+          .where(eq(messages.conversationId, agent.conversationId));
         const retired = yield* retireWarmRunner({
           sessionId: opened.sessionId,
           userId,
@@ -2526,7 +2545,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const userId = `user-${randomUUID()}`;
         yield* db
           .insert(user)
-          .values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+          .values({ id: userId, name: "Test User", email: `${userId}@app.test` });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
           taskId: task.id,

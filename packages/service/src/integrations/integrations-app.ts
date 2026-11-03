@@ -18,15 +18,15 @@
  */
 
 import { randomBytes } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_NAME,
   type IntegrationLandingStatus,
   type IntegrationProvider,
   integrationLandingPath,
-} from "@luke/features/integration-wire";
+} from "@repo/features/integration-wire";
 import { Effect, Layer, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
@@ -90,7 +90,7 @@ export interface IntegrationsAppSeams {
   deleteAccount: (
     account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
   ) => IntegrationStoreEffect<boolean>;
-  /** Labels an account that carries no label yet, once, with what its grant named or an empty label for nothing; only the account under that grant's subject. */
+  /** Labels an account that carries no label yet, or an empty one, with what its grant or its provider named or an empty label for nothing; only the account under that grant's subject. */
   fillLabel: (account: IntegrationConnectionRow, label: string) => IntegrationStoreEffect<void>;
   /** Names one account; answers whether the account held it. */
   renameConnection: (
@@ -171,9 +171,13 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
     seams.completeSignIn(row.userId, row.connectionName, state, issued.success.accountName),
   );
   if (completed) {
-    yield* recordServerEvent(SERVER_EVENT.INTEGRATION_CONNECTION_CREATE, row.userId, {
-      provider: row.provider,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.INTEGRATION_CONNECTION_CREATE,
+      { userId: row.userId },
+      {
+        provider: row.provider,
+      },
+    );
   }
   // A Disconnect pressed while the browser was away, or a sign-in begun again, wins: this one completes nothing.
   return landed(

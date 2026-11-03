@@ -22,7 +22,7 @@
  * Disconnect.
  */
 
-import { CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { CONNECTION_TOOL } from "@repo/features/agent-tools";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -30,9 +30,9 @@ import {
   type IntegrationProvider,
   integrationConnectionOf,
   integrationRemoteCallSchema,
-} from "@luke/features/integration-wire";
-import { WireValueSchema } from "@luke/wire";
-import { verbatimJsonSchema } from "@luke/wire/effect";
+} from "@repo/features/integration-wire";
+import { WireValueSchema } from "@repo/wire";
+import { verbatimJsonSchema } from "@repo/wire/effect";
 import type { Tool } from "ai";
 import { Schema } from "effect";
 import { type UnparsedWireValue, wireValidatedTool } from "../core.js";
@@ -82,7 +82,7 @@ interface RemoteTool {
 
 /** The integration and account a connection is named for, with a remote tool's own name; nothing where the connection is no integration's or the name no tool's. */
 function remoteToolIn(connection: string, remoteTool: string): RemoteTool | undefined {
-  // Note that a connection is named for its account, the first after its provider (`agent-runtime/connections.ts`).
+  // Note that a connection is named for its account, the first after its provider (`integration-wire.ts`'s `mintIntegrationConnectionName`).
   const account = integrationConnectionOf(connection);
   if (account === undefined || !isRemoteToolWord(remoteTool)) return undefined;
   return { ...account, connection, remoteTool };
@@ -134,7 +134,7 @@ export function storedRemoteCall(
 
 /**
  * A native agent's call of a tool on an integration's own MCP server
- * (`../agents/luke-mcp/app.ts`), as the record keeps it: as eve's nested
+ * (`../agents/workspace-mcp/app.ts`), as the record keeps it: as eve's nested
  * call of the same tool is kept, under the integration's fixed name and its
  * envelope, the call standing as its own parent, since no
  * `connection_execute` wraps it; nothing for a server that is no

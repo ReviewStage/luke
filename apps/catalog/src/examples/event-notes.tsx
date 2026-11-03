@@ -1,5 +1,5 @@
-import { EventNotes, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import { EventNotes, TEXT_LINK_LOOK, TextLink } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 

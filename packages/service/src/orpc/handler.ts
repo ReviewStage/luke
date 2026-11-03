@@ -16,7 +16,7 @@
  * as this origin's alone (`SAME_ORIGIN_ANSWER`), which no old group said.
  *
  * Every body is counted once, as it is read, against the matched
- * procedure's own cap (`bodyCap` in `@luke/features/contract`), or the
+ * procedure's own cap (`bodyCap` in `@repo/features/contract`), or the
  * platform's ceiling for a procedure that names none: a `content-length`
  * past the cap is refused before anything is read, and a body that states
  * none, or understates it, is refused the moment the bytes read pass the
@@ -25,8 +25,8 @@
  * answered it.
  */
 
-import { getBodyCap } from "@luke/features/contract";
-import { HTTP_METHOD } from "@luke/wire";
+import { getBodyCap } from "@repo/features/contract";
+import { HTTP_METHOD } from "@repo/wire";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIMatcher } from "@orpc/openapi/standard";
 import { ORPCError, type Router } from "@orpc/server";

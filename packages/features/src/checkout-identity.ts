@@ -10,7 +10,7 @@ import { Schema } from "effect";
  * deepens (`repository-shell.ts`'s `setCheckoutIdentity`); a device has it
  * handed on the launch line (`device-agent-wire.ts`) and sets it in the
  * agent's own repository before the runner starts
- * (`@luke/host`'s `compose-local-agents.ts`). Both run this script, in the
+ * (`@repo/host`'s `compose-local-agents.ts`). Both run this script, in the
  * checkout, with the identity in these variables, so neither splices a name
  * into shell text and the two can never set it differently.
  */
@@ -25,8 +25,8 @@ export type CheckoutIdentity = typeof checkoutIdentitySchema.Type;
 
 /** The variables the script reads the identity from. */
 export const CHECKOUT_IDENTITY_VARIABLE = {
-  NAME: "LUKE_GIT_NAME",
-  EMAIL: "LUKE_GIT_EMAIL",
+  NAME: "APP_GIT_NAME",
+  EMAIL: "APP_GIT_EMAIL",
 } as const;
 
 /**

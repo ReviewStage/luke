@@ -1,9 +1,10 @@
 # The panel
 
-`@luke/panel` is the panel every client mounts: the desktop's panel window
-mounts `App` from here, and the web will mount the same. It may draw with the
-DOM (`packages/AGENTS.md`), and it reaches no shell: no Electron, no
-`window.luke`, and no alias of the desktop's. What only a shell can do, its root installs before anything is
+`@repo/panel` is the panel every client mounts: the desktop's panel window
+mounts `App` from here, and so does the web app
+(`apps/web/src/app/web-root.tsx`). It may draw with the DOM
+(`packages/AGENTS.md`), and it reaches no shell: no Electron, no
+`window.appBridge`, and no alias of the desktop's. What only a shell can do, its root installs before anything is
 drawn: the bridge to the host (`app-bridge.ts`) and what its platform answers
 (`app-platform.ts`). The panel reads each through its door, at the moment it
 calls.
@@ -29,7 +30,7 @@ a fiber of its own runs under the services it was built over, read through
 `rendererServicesNow`, so nothing here builds a second runtime to fork on.
 
 Effects leave on the window's act port alone, one oRPC call per kind from
-`ACT_KIND`, its payload and answer checked against `@luke/host/contract`, a
+`ACT_KIND`, its payload and answer checked against `@repo/host/contract`, a
 refusal crossing back as the declared `REFUSED` error so nothing an exception
 happened to carry ever crosses back. `act.ts` is the only caller — `act` when a
 row reads the answer, `tell` when nothing does. **A new command is a new
@@ -63,7 +64,7 @@ it (the window under it is the shell's: `apps/desktop/src/renderer/AGENTS.md`):
 
 ## Confirms
 
-An act that cannot be undone asks first, over `@luke/ui/confirm-state`, its act in
+An act that cannot be undone asks first, over `@repo/ui/confirm-state`, its act in
 red (`CONFIRM_LOSS.IRREVERSIBLE`). One that can be undone but reaches someone else (a
 member removed, an invitation canceled, a shared channel archived, a teammate's working
 agent archived) still asks, its act in the accent (`CONFIRM_LOSS.AFFECTS_OTHERS`). One that
@@ -84,15 +85,9 @@ dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 
 The generated outputs are regenerated from `packages/brand`'s sources
 (`generate-brand-assets.mjs`, whose `--check` reports drift when run by hand),
-never hand-edited. The app draws the face rather than loading the SVGs because it needs
-`currentColor` and CSS animation, and `@luke/ui`'s `--luke-face-motion` is what holds every loop
-still for a capture run and for reduced motion. SMIL answers to neither.
-
-The face is still unless something is happening. A gesture plays once and a rest
-repeats, so only a motion that stays true for as long as it holds may be a rest.
-Every motion begins and ends at the resting pose, or it snaps there on the way in
-and out; every layer of a gesture shares a period, because the app hands the face
-back after the longest of them.
+never hand-edited. The app draws the mark (`@repo/ui`'s `ProductMark`) rather
+than loading the SVGs because it takes its holder's ink through
+`currentColor`. The mark is static: it carries no motion of its own.
 
 ## Settings rows
 
@@ -110,7 +105,7 @@ the same change.
 ## Experiments
 
 A feature still behind Settings › Experimental is gated by its key in
-`@luke/settings`'s `EXPERIMENT`, the one registry the page, the store, and the
+`@repo/settings`'s `EXPERIMENT`, the one registry the page, the store, and the
 counting read; the account's choice is the service's, carried to every window
 on the settings snapshot.
 
@@ -127,7 +122,7 @@ on the settings snapshot.
 
 ## Test fixtures
 
-`src/testing/` holds what the panel's tests share, behind `@luke/panel/testing/*`.
+`src/testing/` holds what the panel's tests share, behind `@repo/panel/testing/*`.
 **A fixture earns its place by having more than one caller** — a helper one test
 file needs stays in that file, where a reader can see it beside the assertions it
 serves.

@@ -9,7 +9,7 @@
  * Meet by its code, a post by its author, rather than the address.
  * Nothing here reads the page, so a page whose address spells nothing of
  * it, a Google Doc's or a short link's, is called by its site's name. A site joins the set only
- * with its brand's own mark beside it (`@luke/ui`'s `provider-mark.tsx`).
+ * with its brand's own mark beside it (`@repo/ui`'s `provider-mark.tsx`).
  */
 
 /** The well-known sites a link may be a page of. */

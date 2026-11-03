@@ -6,7 +6,7 @@ import { ICON_SIZE, type IconSize } from "../../icons/icon-size.js";
  *
  * A slot is a glyph's footprint, 16px where nothing says otherwise, its
  * glyph (an svg, a picture, or a mark of the app's) centred in it and
- * filling it. Its size is `--luke-glyph-size` where a component's own glyph
+ * filling it. Its size is `--ui-glyph-size` where a component's own glyph
  * slot or the app's container sets it, the one placement hook a slot reads,
  * so a note's face stands at the note's face size and a tab's glyph at the
  * tab's. Before words that may wrap, it stands as tall as their first line
@@ -32,7 +32,7 @@ import { ICON_SIZE, type IconSize } from "../../icons/icon-size.js";
  * as it stands, so a list opened or read back does not play its history.
  *
  * It is drawn in the Tailwind theme's utilities (`size-glyph` reads
- * `--luke-glyph-size`); a seat sets that size on the slot itself, ahead of
+ * `--ui-glyph-size`); a seat sets that size on the slot itself, ahead of
  * any a container hands down, and draws its glyph whole, whatever weight the
  * glyph's own class gave it. The arrival's keyframes are `glyph-slot.css`'s.
  */
@@ -56,7 +56,7 @@ export const GLYPH_ARRIVAL = {
 export type GlyphArrival = (typeof GLYPH_ARRIVAL)[keyof typeof GLYPH_ARRIVAL];
 
 /** The slot's square, or a line's height before words that may wrap, its glyph centred in it. */
-const SLOT_BASE = "luke-glyph-slot inline-flex flex-none items-center justify-center";
+const SLOT_BASE = "ui-glyph-slot inline-flex flex-none items-center justify-center";
 
 /** How the glyph stands in its slot: filling it, or a step inside it. */
 const FIT_CLASS = {
@@ -66,10 +66,10 @@ const FIT_CLASS = {
 
 /** The size each seat sets, from the icon scale (`tokens/scale.css`). */
 const SEAT_CLASS = {
-  [ICON_SIZE.SMALL]: "[--luke-glyph-size:var(--luke-icon-12)] [&>svg]:opacity-100",
-  [ICON_SIZE.MEDIUM]: "[--luke-glyph-size:var(--luke-icon-16)] [&>svg]:opacity-100",
-  [ICON_SIZE.LARGE]: "[--luke-glyph-size:var(--luke-icon-20)] [&>svg]:opacity-100",
-  [ICON_SIZE.EMPTY]: "[--luke-glyph-size:var(--luke-icon-40)] [&>svg]:opacity-100",
+  [ICON_SIZE.SMALL]: "[--ui-glyph-size:var(--ui-icon-12)] [&>svg]:opacity-100",
+  [ICON_SIZE.MEDIUM]: "[--ui-glyph-size:var(--ui-icon-16)] [&>svg]:opacity-100",
+  [ICON_SIZE.LARGE]: "[--ui-glyph-size:var(--ui-icon-20)] [&>svg]:opacity-100",
+  [ICON_SIZE.EMPTY]: "[--ui-glyph-size:var(--ui-icon-40)] [&>svg]:opacity-100",
 } as const satisfies Record<IconSize, string>;
 
 /** Each ink a slot names; `inherit` takes its holder's. */

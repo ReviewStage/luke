@@ -3,7 +3,7 @@ import {
   PRODUCT_SETTINGS_VIEW,
   type ProductExperiment,
   type ProductSettingsView,
-} from "@luke/features/analytics";
+} from "@repo/features/analytics";
 import { EXPERIMENT, type Experiment } from "./experiments.js";
 import { SETTINGS_PAGE, type SettingsPage } from "./schema.js";
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { unparsedWire } from "@luke/wire";
+import { unparsedWire } from "@repo/wire";
 import { test } from "vitest";
 import { taskPicturesIn } from "./plan-attachment-link.js";
 import { planSections } from "./plan-document.js";

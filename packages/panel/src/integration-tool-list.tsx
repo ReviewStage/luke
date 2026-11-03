@@ -1,4 +1,4 @@
-import type { IntegrationTool } from "@luke/features/integration-health";
+import type { IntegrationTool } from "@repo/features/integration-health";
 import {
   requiredFirst,
   TOOL_BADGE,
@@ -9,7 +9,7 @@ import {
   toolHintWords,
   toolSummary,
   toolTitle,
-} from "@luke/features/integration-tool-model";
+} from "@repo/features/integration-tool-model";
 import {
   ALIGN,
   BackButton,
@@ -34,7 +34,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-} from "@luke/ui";
+} from "@repo/ui";
 import { cloneElement, createContext, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
@@ -60,7 +60,7 @@ import { Highlighted } from "./search-field.js";
  * the words a search landed on marked in it, then its parameters, those a
  * call must give first, each its name, its
  * type, what it is, and the values it takes as chips, its default outlined.
- * The badge and the hints are `@luke/ui`'s Badge, the danger tone for what
+ * The badge and the hints are `@repo/ui`'s Badge, the danger tone for what
  * destroys.
  * A page whose server said nothing of its tool says so. The page's body is
  * its one scroller, which the owner may hand the focus to, so the arrows
@@ -69,11 +69,11 @@ import { Highlighted } from "./search-field.js";
 
 /** A value a parameter takes, as a chip in the code face, its default outlined. */
 const PARAMETER_VALUE =
-  "rounded-luke-6 bg-fill-strong px-tight-gap font-mono text-caption text-muted-foreground data-[default=true]:text-foreground data-[default=true]:shadow-tool-default";
+  "rounded-ui-6 bg-fill-strong px-tight-gap font-mono text-caption text-muted-foreground data-[default=true]:text-foreground data-[default=true]:shadow-tool-default";
 
 /** A tool's page's title, in the head's weight, given way before the name after it. */
 const DETAIL_TITLE =
-  "integration-tool-detail-title m-0 flex-initial text-section font-luke-semibold text-foreground";
+  "integration-tool-detail-title m-0 flex-initial text-section font-ui-semibold text-foreground";
 
 /** Keeps a row inside its scroller's view, scrolling only the scroller (the renderer's rule against `scrollIntoView`). */
 export function keepInView(list: HTMLElement | null, row: Element | null): void {
@@ -169,7 +169,7 @@ export function IntegrationToolList({
               id={idOf?.(tool)}
               ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
               title={
-                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.luke-badge]:flex-none [&>.luke-badge]:self-center">
+                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.ui-badge]:flex-none [&>.ui-badge]:self-center">
                   <OneLine
                     className={
                       namedApart(tool)
@@ -182,7 +182,7 @@ export function IntegrationToolList({
                   </OneLine>
                   {namedApart(tool) ? (
                     <OneLine
-                      className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-luke-regular text-muted-foreground"
+                      className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-ui-regular text-muted-foreground"
                       words={tool.name}
                     >
                       <Highlighted text={tool.name} tokens={tokens} />
@@ -246,7 +246,7 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
                   {parameter.type}
                 </span>
                 {parameter.required ? (
-                  <span className="integration-tool-parameter-required ml-auto text-caption-inline font-luke-semibold text-attention">
+                  <span className="integration-tool-parameter-required ml-auto text-caption-inline font-ui-semibold text-attention">
                     required
                   </span>
                 ) : null}

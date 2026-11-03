@@ -5,30 +5,30 @@ import {
   AGENT_CALL_FAILURE,
   type AgentInboxStartParams,
   INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+} from "@repo/features/agent-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
-} from "@luke/features/automation-wire";
-import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
+} from "@repo/features/automation-wire";
+import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
+import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppInboxTask,
   AppInboxTasklessItem,
   AppWorkspaceChannels,
-} from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
+} from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, test } from "vitest";
@@ -211,7 +211,7 @@ test("an item a link names before the account's task list is read says no Not fo
   });
   await settle();
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
     "Expire after 7 days?",
   );
 });
@@ -405,22 +405,22 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
 
   const rows = [...page.querySelectorAll('[data-inbox-message-text] [data-lone-link="page"]')];
   assert.equal(rows.length, 2, "each link alone on its line stands as a page's row");
-  const [mine, theirs] = rows.map((row) => row.querySelector("button.luke-list-row-main"));
+  const [mine, theirs] = rows.map((row) => row.querySelector("button.ui-list-row-main"));
   assert.ok(mine && theirs);
   restOn(mine);
   await settle();
-  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-page-card]");
   assert.ok(card, "the agent's page hangs the page's own card");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "Flake ledger");
   assert.deepEqual(
     [
-      card.querySelector(".luke-hover-card-sub")?.textContent,
-      card.querySelector(".luke-hover-card-row")?.textContent,
+      card.querySelector(".ui-hover-card-sub")?.textContent,
+      card.querySelector(".ui-hover-card-row")?.textContent,
     ],
     ["Version 3", "Shown by Sweep the flaky tests"],
   );
   assert.equal(
-    card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+    card.querySelector(".ui-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ agentId: SWEEP_AGENT, pageId: ledger.id, version: 3 }),
   );
   act(() => {
@@ -429,11 +429,11 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
 
   restOn(theirs);
   await settle();
-  const refused = document.querySelector(".luke-tooltip-card [data-page-card]");
+  const refused = document.querySelector(".ui-tooltip-card [data-page-card]");
   assert.deepEqual(
     [
-      refused?.querySelector(".luke-hover-card-name")?.textContent,
-      refused?.querySelector(".luke-hover-card-note")?.textContent,
+      refused?.querySelector(".ui-hover-card-name")?.textContent,
+      refused?.querySelector(".ui-hover-card-note")?.textContent,
     ],
     ["Their ledger", "Can't read this page."],
   );
@@ -522,7 +522,7 @@ test("an agent's row hangs a card naming the agent and the automation that start
   );
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.equal(
-    document.querySelector('.luke-tooltip-card [data-actor-card="automation"] button')?.textContent,
+    document.querySelector('.ui-tooltip-card [data-actor-card="automation"] button')?.textContent,
     undefined,
     "the crumb's card offers nothing to press, since the crumb opens the automation",
   );
@@ -565,13 +565,13 @@ test("an item's card names the automation that holds it by a chip that hangs the
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   const chip =
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-item-card] [data-holder-ref][data-kind="agent"]',
+      '.ui-tooltip-card [data-inbox-item-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip");
   restOn(chip);
   await settle();
 
   assert.match(
-    wordsOf(document.querySelector('.luke-tooltip-card [data-actor-card="automation"]')) ?? "",
+    wordsOf(document.querySelector('.ui-tooltip-card [data-actor-card="automation"]')) ?? "",
     /Nightly flake sweep/u,
   );
 });
@@ -592,12 +592,12 @@ test("an item from a service that names no workspace for it still names its auto
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   restOn(
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-item-card] [data-holder-ref][data-kind="agent"]',
+      '.ui-tooltip-card [data-inbox-item-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip"),
   );
 
   assert.match(
-    wordsOf(document.querySelector('.luke-tooltip-card [data-actor-card="automation"]')) ?? "",
+    wordsOf(document.querySelector('.ui-tooltip-card [data-actor-card="automation"]')) ?? "",
     /Nightly flake sweep/u,
   );
 });
@@ -680,7 +680,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   assert.match(hoveredCard(row, "[data-inbox-item-card]") ?? "", /Nightly flake sweep$/u);
 });
 
-test("an item's row offers Copy link on a right-click, copying the item's link under the agent that posted it, whichever task holds it", async () => {
+test("an item's row offers Copy link on a right-click, copying the item's link by its id alone, whichever agent posted it and task holds it", async () => {
   world.listedWorkspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -701,9 +701,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   assert.ok(item, "the row's menu offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(world.copied, [
-    `https://vespin.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
-  ]);
+  assert.deepEqual(world.copied, [`https://vespin.dev/acme/inbox/${THRESHOLD.id}`]);
 });
 
 test("an item a link names that no read holds, of a task the reader cannot read, is not found in its pane, and no other item is chosen in its place", async () => {
@@ -738,7 +736,7 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
 
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
     "Bump the Node image?",
   );
 });
@@ -879,7 +877,7 @@ test("a link to an item newer than its task's last read waits for the read of it
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
     "Page on-call too?",
   );
 });
@@ -928,7 +926,7 @@ test("a link to an agent's item newer than the agent's last read waits for the r
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
     "Retry the flaky job?",
   );
 });
@@ -958,10 +956,10 @@ test("a teammate's open item of an agent with no plan is listed, wearing the tea
   await settle();
   const rows = listed(page);
   assert.ok(rows.includes("Quarantine the flaky test?"), rows.join(" | "));
-  const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".luke-list-row-meta");
+  const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".ui-list-row-meta");
   assert.equal(meta?.querySelector(".attention-mark"), null);
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
-  assert.equal(meta?.querySelector(".luke-visually-hidden")?.textContent, "Waiting on Charles Pan");
+  assert.equal(meta?.querySelector(".ui-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
   showScope(page, "Open");
   chooseView(page, "Addressed to", "Me");
@@ -995,13 +993,13 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     act(() => more().click());
     const item = [
       ...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'),
-    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+    ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === name);
     assert.ok(item, `the ⋯ offers ${name}`);
     act(() => item.click());
   };
   act(() => more().click());
   assert.deepEqual(
-    [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
+    [...document.querySelectorAll('[role="menu"] .ui-menu-item-label')].map(
       (each) => each.textContent,
     ),
     ["View options", "Find", "Mark all as read"],
@@ -1074,7 +1072,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     "one control a corner, the item's task between them",
   );
   assert.equal(
-    head.querySelector(".luke-toolbar-heading")?.textContent,
+    head.querySelector(".ui-toolbar-heading")?.textContent,
     INVITES.name,
     "the bar names the item's task, not the title its thread is headed by under it",
   );
@@ -1090,9 +1088,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "the ⋯ opens");
   assert.match(menu.textContent ?? "", /\d of \d/, "it says where the item stands");
-  const labels = [...menu.querySelectorAll(".luke-menu-item-label")].map(
-    (each) => each.textContent,
-  );
+  const labels = [...menu.querySelectorAll(".ui-menu-item-label")].map((each) => each.textContent);
   for (const offered of [
     "Previous inbox item",
     "Next inbox item",
@@ -1105,7 +1101,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     assert.ok(labels.includes(offered), `the ⋯ offers ${offered}`);
   }
   const openTask = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "Open task",
+    (each) => each.querySelector(".ui-menu-item-label")?.textContent === "Open task",
   );
   act(() => openTask?.click());
   assert.deepEqual(
@@ -1149,7 +1145,7 @@ test("on a phone the panel open over an item heads itself: the way back to the i
   );
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Panel actions"]')?.click());
   assert.ok(
-    [...document.querySelectorAll(".luke-menu-item-label")].some(
+    [...document.querySelectorAll(".ui-menu-item-label")].some(
       (each) => each.textContent === "Tabs",
     ),
     "the ⋯ lists the panel's tabs",
@@ -1216,13 +1212,13 @@ function answerChannels(answers: {
 /** The rows the list draws, by their titles, in its order. */
 function rowTitles(page: HTMLElement): (string | null | undefined)[] {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main"),
   ].map((row) => row.querySelector(ROW_TITLE)?.textContent);
 }
 
 /** The words after the list's head's title: a channel's purpose, or when it was archived. */
 function headDetail(page: HTMLElement): string | null | undefined {
-  return page.querySelector(".inbox-tasks .luke-toolbar-detail")?.textContent;
+  return page.querySelector(".inbox-tasks .ui-toolbar-detail")?.textContent;
 }
 
 /** The sidebar's channel rows under its Inbox row, as a reader meets them: each one's words, its count among them. */
@@ -1230,7 +1226,7 @@ function sidebarChannels(page: HTMLElement): (string | null)[] {
   const group =
     page.querySelector('.sidebar-places [role="group"][aria-label="Channels"]') ??
     assert.fail("the channels stand among the sidebar's places");
-  return [...group.querySelectorAll(".luke-nav-item")].map((row) => row.textContent);
+  return [...group.querySelectorAll(".ui-nav-item")].map((row) => row.textContent);
 }
 
 /** Types `words` into a field as a reader would. */
@@ -1569,7 +1565,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch"]);
   act(() =>
     (
-      [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(
+      [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .ui-nav-item')].find(
         (row) => row.textContent === "app",
       ) ?? assert.fail("#app's row stands")
     ).click(),
@@ -1674,7 +1670,7 @@ test("archiving the channel shown moves the window to #general and says so", asy
   act(() => chooseChannel(APP_CHANNEL.id));
   await settle();
   const row =
-    [...page.querySelectorAll<HTMLElement>('[aria-label="Channels"] .luke-nav-item')].find(
+    [...page.querySelectorAll<HTMLElement>('[aria-label="Channels"] .ui-nav-item')].find(
       (each) => each.textContent === "app",
     ) ?? assert.fail("#app's row stands");
   act(() => {
@@ -1713,8 +1709,8 @@ test("an item opened whose agent's inbox could not be read says so in the pane, 
 /** The count a sidebar row wears, by the row's name; none where it wears none. */
 function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
   const row =
-    [...page.querySelectorAll<HTMLElement>(".luke-nav-item")].find(
-      (each) => each.querySelector(".luke-nav-item-name")?.textContent === name,
+    [...page.querySelectorAll<HTMLElement>(".ui-nav-item")].find(
+      (each) => each.querySelector(".ui-nav-item-name")?.textContent === name,
     ) ?? assert.fail(`the sidebar draws the row ${name}`);
   const count = row.textContent?.match(/\d+/u)?.[0];
   return count === undefined ? undefined : Number(count);
@@ -1800,7 +1796,7 @@ test("an item of an agent with no task reads the lines its code names through th
 
   const chip = [
     ...page.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
-  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent === "flaky.test.ts");
+  ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent === "flaky.test.ts");
   assert.ok(chip, "the file is its chip");
   act(() => chip.click());
   assert.deepEqual(previewed, [`${JSON.stringify({ path: "src/flaky.test.ts" })} undefined`]);

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { type AutomationFiring, FIRING_HANDS_OUTSIDE_WORDS } from "@luke/features/automation-wire";
+import { type AutomationFiring, FIRING_HANDS_OUTSIDE_WORDS } from "@repo/features/automation-wire";
 import {
   RUN_EVENT,
   RUN_STATUS,
@@ -12,15 +12,15 @@ import {
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
-} from "@luke/features/turn-run";
+} from "@repo/features/turn-run";
 import {
   type AgentMessageMetadata,
+  type AppLineMetadata,
   type AutomationLineMetadata,
   type CommentLineMetadata,
   type GitHubLineMetadata,
   isWireString,
   jsonRoundTrip,
-  type LukeLineMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -36,8 +36,8 @@ import {
   type TypedAskMetadata,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
-} from "@luke/wire";
-import { sentLineId } from "@luke/wire/host-ids";
+} from "@repo/wire";
+import { sentLineId } from "@repo/wire/host-ids";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -45,7 +45,7 @@ import {
   type StoredToolPart,
   type StoredUIMessage,
   TOOL_PART_STATE,
-} from "@luke/wire/ui-messages";
+} from "@repo/wire/ui-messages";
 import {
   asSchema,
   type ReasoningUIPart,
@@ -72,7 +72,7 @@ import {
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER, messageSenderSchema } from "../storage-vocabulary.js";
 import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -310,7 +310,7 @@ type TurnEnqueueResult = Result.Result<
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
-  | { readonly kind: typeof MESSAGE_SENDER.LUKE }
+  | { readonly kind: typeof MESSAGE_SENDER.APP }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
@@ -360,7 +360,7 @@ export type AwaitingLineMetadata =
   | CommentLineMetadata
   | StartLineMetadata
   | GitHubLineMetadata
-  | LukeLineMetadata
+  | AppLineMetadata
   | AutomationLineMetadata;
 
 /** An awaiting line naming no channel is the developer's typed ask. */
@@ -369,7 +369,7 @@ const TYPED_LINE_METADATA: TypedAskMetadata = {
 };
 
 /** A line the brain sent the agent on its own. */
-export const LUKE_LINE_METADATA: LukeLineMetadata = { channel: MESSAGE_CHANNEL.LUKE };
+export const APP_LINE_METADATA: AppLineMetadata = { channel: MESSAGE_CHANNEL.APP };
 
 /**
  * An automation's run's prompt, saying whether what fired the run put words
@@ -623,7 +623,7 @@ const MessageInsertSchema = Schema.Struct({
   createdAt: Schema.Date,
   placedAt: Schema.Date,
   finishedAt: Schema.NullOr(Schema.Date),
-  sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
+  sender: Schema.NullOr(messageSenderSchema),
   senderUserId: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
@@ -1176,7 +1176,7 @@ function landJournals(context: WriterContext): Write<void> {
               parts: held.row.parts,
             }),
             Effect.andThen(
-              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation is only ever opened for a worker (`openChildConversation`).
+              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation was only ever opened for an eve agent's worker.
               TRANSCRIPT_KINDS.has(context.kind)
                 ? Metric.update(
                     JOURNAL_METRIC.REWRITE_BYTES,

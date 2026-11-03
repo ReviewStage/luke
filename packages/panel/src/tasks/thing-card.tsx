@@ -1,8 +1,8 @@
-import type { MentionLines } from "@luke/features/mention-link";
-import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
-import { HoverCardSkeleton } from "@luke/ui";
+import type { MentionLines } from "@repo/features/mention-link";
+import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@repo/features/thing-kind";
+import { HoverCardSkeleton } from "@repo/ui";
 import type { ReactNode } from "react";
-import { LukeCard } from "../actor-ref.js";
+import { AppCard } from "../actor-ref.js";
 import { tabCard } from "../desktop/tab-card.js";
 import { ChannelChipCard } from "./channel-card.js";
 import {
@@ -25,7 +25,7 @@ import { ServerCard } from "./server-card.js";
 import { TAB_KIND } from "./tab-look.js";
 
 /**
- * thing-card.tsx -- the card a chip hangs for each kind of thing it names, one entry per kind (`@luke/features/thing-kind`).
+ * thing-card.tsx -- the card a chip hangs for each kind of thing it names, one entry per kind (`@repo/features/thing-kind`).
  *
  * A mention's chip and an app link's chip both hang their thing's card
  * through `thingCard`, so a plan's chip hangs the plan's card whichever way
@@ -145,7 +145,7 @@ export const THING_CARD: ThingCards = {
     />
   ),
   [THING_KIND.WORKER]: OWN_CARD,
-  [THING_KIND.LUKE]: () => <LukeCard />,
+  [THING_KIND.APP]: () => <AppCard />,
   [THING_KIND.CHANGES]: (changes, at) => (
     <AgentPullRequestChipCard
       agentId={changes.agentId}
@@ -161,6 +161,8 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.ISSUE]: OWN_CARD,
   [THING_KIND.LINK]: OWN_CARD,
   [THING_KIND.MESSAGE]: OWN_CARD,
+  [THING_KIND.HOME]: OWN_CARD,
+  [THING_KIND.BOARD]: OWN_CARD,
   [THING_KIND.INBOX]: OWN_CARD,
   [THING_KIND.INBOX_ITEM]: (item, at) => <InboxItemChipCard place={item} fallback={at.own} />,
   [THING_KIND.CHANNEL]: (channel, at) => (

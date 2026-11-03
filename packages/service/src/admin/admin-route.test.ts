@@ -8,29 +8,19 @@
  * is signed out rather than read past to the cookie. The read behind the gate
  * is a fake; nothing reads the deployment's database.
  *
- * The same seams' System health, read over a database of its own, says
- * whether the deployment acting for accounts at eve is configured, by the
- * rule every reader of `EVE_DEPLOYMENT_SECRET` shares: a secret that is
- * unset, blank, or the cron's own value reads as not configured, so a
- * missing or shared one shows there before any delegation is refused.
- *
  * Synthetic accounts, sessions, and secrets throughout.
  */
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB } from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
-import type { AdminMetrics } from "@luke/features/admin-answer-wire";
-import { ADMIN_ERROR, ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { user } from "@repo/database/schemas/auth";
+import { noDatabase } from "@repo/database/testing/no-database";
+import type { AdminMetrics } from "@repo/features/admin-answer-wire";
+import { ADMIN_ERROR } from "@repo/features/admin-wire";
 import { type Context, Effect } from "effect";
-import { afterEach, vi } from "vitest";
-import { EVE_HOST_ENVIRONMENT } from "../agents/eve-host/bounds.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
@@ -38,7 +28,7 @@ import { USER_ROLE } from "./admin-access.js";
 import { adminProcedures } from "./admin-procedures.js";
 import { type AdminSessionApi, hostedAdminSeams } from "./admin-route.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const METRICS_PATH = "/api/admin/metrics";
 
 // SAFETY: the resource writes the metrics read's answer as it came, so a marker object stands in for the whole answer.
@@ -52,7 +42,7 @@ const openAdmin = Effect.gen(function* () {
     db.insert(user).values({
       id: admin,
       name: "Test Admin",
-      email: `${admin}@luke.test`,
+      email: `${admin}@app.test`,
       role: USER_ROLE.ADMIN,
     }),
   ).pipe(Effect.provide(plugin.database));
@@ -96,44 +86,3 @@ it.effect(
       }
     }),
 );
-
-/** Noon on Oct 17, 2026. */
-const NOW = Date.UTC(2026, 9, 17, 12);
-const CRON_SECRET = "cron-secret-1";
-/** The health row's stable key (`admin-health.ts`). */
-const EVE_ROW = "eve-deployment-secret";
-/** An auth service that knows no session; the health list asks it nothing. */
-const NO_SESSION: AdminSessionApi = { getSession: async () => null };
-
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
-
-/** Whether the health list reads the eve secret as configured, on a deployment whose environment holds the two values given. */
-const eveRowUnder = (eve: string | undefined, cron: string | undefined) =>
-  Effect.gen(function* () {
-    yield* Effect.sync(() => {
-      vi.stubEnv(EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET, eve);
-      vi.stubEnv(CRON_ENVIRONMENT.CRON_SECRET, cron);
-    });
-    const reliability = yield* hostedAdminSeams(NO_SESSION).readReliability(
-      NOW,
-      ADMIN_METRICS_SCOPE.ALL,
-      ADMIN_METRICS_WINDOW.WEEK,
-    );
-    return reliability.systemHealth.integrations.find((row) => row.key === EVE_ROW)?.configured;
-  });
-
-it.layer(getTestDB())("the dashboard's health list", (it) => {
-  it.effect(
-    "reads the deployment's eve secret as configured only where it is set, not blank, and not the cron's own value",
-    () =>
-      Effect.gen(function* () {
-        const own = yield* eveRowUnder("eve-deployment-secret-1", CRON_SECRET);
-        const unset = yield* eveRowUnder(undefined, CRON_SECRET);
-        const blank = yield* eveRowUnder("   ", CRON_SECRET);
-        const shared = yield* eveRowUnder(` ${CRON_SECRET} `, CRON_SECRET);
-        assert.deepEqual([own, unset, blank, shared], [true, false, false, false]);
-      }),
-  );
-});

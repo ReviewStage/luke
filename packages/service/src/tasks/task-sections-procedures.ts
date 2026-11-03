@@ -11,7 +11,7 @@
  * as a plan's id.
  */
 
-import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
+import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,

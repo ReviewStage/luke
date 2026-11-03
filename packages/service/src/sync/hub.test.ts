@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { SyncListener, type SyncListenerShape } from "@luke/database/sync/listener";
-import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { defineSyncTable } from "@luke/database/sync/sync-table";
-import { getTestDB, installSyncTables } from "@luke/database/testing";
-import { noDatabase } from "@luke/database/testing/no-database";
+import { Database } from "@repo/database/core/query";
+import { SyncListener, type SyncListenerShape } from "@repo/database/sync/listener";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { defineSyncTable } from "@repo/database/sync/sync-table";
+import { getTestDB, installSyncTables } from "@repo/database/testing";
+import { noDatabase } from "@repo/database/testing/no-database";
 import { sql } from "drizzle-orm";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import {

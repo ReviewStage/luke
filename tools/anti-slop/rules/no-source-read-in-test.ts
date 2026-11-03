@@ -22,7 +22,7 @@ const SOURCE_TREE = /(?:^|\/)src(?:\/|$)/u;
  * holds the same names; a path into one is data, not source.
  */
 const CHECKOUT_PATH =
-  /^@luke\/|(?:^|\/)\.{1,2}(?:\/|$)|(?:^|\/)(?:apps|packages|tools)\/[^/]+\/src(?:\/|$)/u;
+  /^@repo\/|(?:^|\/)\.{1,2}(?:\/|$)|(?:^|\/)(?:apps|packages|tools)\/[^/]+\/src(?:\/|$)/u;
 
 /** The names a module reaches its own place on disk by. */
 const OWN_PLACE: ReadonlySet<string> = new Set(["__dirname", "__filename"]);
@@ -41,7 +41,7 @@ function reachesCheckout(nodes: readonly ESTree.Node[], strings: readonly string
  * Root AGENTS.md's "Testing": a rule about source text, such as a banned
  * class or import, is a lint rule, never a test that reads source files. A
  * test reads a stylesheet or a module's text only to pin a pattern in it,
- * which is a lint rule's job, or appearance, which `@luke/ui` and its rules
+ * which is a lint rule's job, or appearance, which `@repo/ui` and its rules
  * hold. A test asserts what a caller sees through the public export.
  */
 export const noSourceReadInTestRule = defineRule({

@@ -1,5 +1,5 @@
-import type { ChartConfig } from "@luke/ui/chart";
-import { DailyBars } from "@luke/ui/daily-bars";
+import type { ChartConfig } from "@repo/ui/chart";
+import { DailyBars } from "@repo/ui/daily-bars";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -23,7 +23,7 @@ const GENERATED_AT = Date.parse("2026-10-23T12:00:00Z");
 const RADIUS: [number, number, number, number] = [6, 6, 0, 0];
 
 const CALLS_CHART = {
-  calls: { label: "Calls", color: "var(--luke-color-chart-1)" },
+  calls: { label: "Calls", color: "var(--ui-color-chart-1)" },
 } satisfies ChartConfig;
 
 const CALLS = DAYS.map((day, index) => ({
@@ -32,9 +32,9 @@ const CALLS = DAYS.map((day, index) => ({
 }));
 
 const STACKED_CHART = {
-  agents: { label: "Agents started", color: "var(--luke-color-chart-1)" },
-  plans: { label: "Plan revisions", color: "var(--luke-color-chart-2)" },
-  calls: { label: "Calls held", color: "var(--luke-color-chart-3)" },
+  agents: { label: "Agents started", color: "var(--ui-color-chart-1)" },
+  plans: { label: "Plan revisions", color: "var(--ui-color-chart-2)" },
+  calls: { label: "Calls held", color: "var(--ui-color-chart-3)" },
 } satisfies ChartConfig;
 
 const STACKED = DAYS.map((day, index) => ({

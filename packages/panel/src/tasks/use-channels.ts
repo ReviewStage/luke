@@ -2,13 +2,13 @@ import {
   CHANNEL_CALL_FAILURE,
   type ChannelCallFailure,
   type ChannelsView,
-} from "@luke/features/channel-view";
-import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { LIVE_READ } from "@luke/features/live-wire";
-import { ACT_UNREACHED_WORDS } from "@luke/features/words";
-import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { STATUS_TONE } from "@luke/ui";
+} from "@repo/features/channel-view";
+import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { ACT_UNREACHED_WORDS } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { STATUS_TONE } from "@repo/ui";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { tellAct, useAct } from "../act.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -17,7 +17,7 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "./channels-model.js";
 
 /**
- * use-channels.ts -- a workspace's channels as the host holds them, the channel or the task the Inbox is narrowed to, and the writes on them (STAG-547).
+ * use-channels.ts -- a workspace's channels as the host holds them, the channel or the task the Inbox is narrowed to, and the writes on them.
  *
  * A workspace's channels, open and archived, reach every surface on app
  * state, held by the host while any surface reads them and a while after

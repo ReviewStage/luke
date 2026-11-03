@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import { sectionAnchors } from "@luke/features/mention-link";
-import type { PageLine, PagePlace } from "@luke/features/page-wire";
-import { planSections } from "@luke/features/plan-document";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@luke/ui";
+import { sectionAnchors } from "@repo/features/mention-link";
+import type { PageLine, PagePlace } from "@repo/features/page-wire";
+import { planSections } from "@repo/features/plan-document";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
+import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@repo/ui";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -310,11 +310,10 @@ export function PageChipCard({
   );
 }
 
-/** The workspace a link was written under, by its slug, or its id where it has none, as the account holds it; none where it holds no such workspace. */
+/** The workspace a link was written under, by its slug, one it stood under before, or its id where it has none, as the account holds it; none where it holds no such workspace. */
 export function useLinkWorkspace(written: string): Workspace | undefined {
-  return useAppSlice(APP_SLICE.TASKS)?.workspaces.find(
-    (each) => each.slug === written || each.id === written,
-  );
+  const workspaces = useAppSlice(APP_SLICE.TASKS)?.workspaces;
+  return workspaces === undefined ? undefined : workspaceOfSlug(workspaces, written);
 }
 
 /**

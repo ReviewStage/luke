@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@luke/features/agent-view";
+import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@repo/features/agent-view";
 import {
   AGENT_FAILURE,
   AGENT_STATUS,
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
-} from "@luke/features/agent-wire";
-import { type ShownFailureSentry, sendShownFailure } from "@luke/features/shown-failure";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+} from "@repo/features/agent-wire";
+import { type ShownFailureSentry, sendShownFailure } from "@repo/features/shown-failure";
+import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

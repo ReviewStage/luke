@@ -1,10 +1,17 @@
-import { CHECK_SUMMARY } from "@luke/features/agent-wire";
-import type { KnownNames } from "@luke/features/place-chip-model";
-import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
-import type { Workspace } from "@luke/features/workspace-wire";
-import { ProviderMark } from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
-import { CalendarIcon, GLYPH, HashIcon, MessageSquareIcon, ShieldUserIcon } from "@luke/ui/icons";
+import { CHECK_SUMMARY } from "@repo/features/agent-wire";
+import type { KnownNames } from "@repo/features/place-chip-model";
+import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@repo/features/thing-kind";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
+import { ProviderMark } from "@repo/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, APP_ACTOR } from "@repo/ui/actor-model";
+import {
+  CalendarIcon,
+  GLYPH,
+  HashIcon,
+  HouseIcon,
+  MessageSquareIcon,
+  ShieldUserIcon,
+} from "@repo/ui/icons";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
@@ -26,7 +33,7 @@ import { useTaskStatus } from "./use-known-names.js";
 import { type ChipWhere, type LinkStanding, useWordsWorkspaceId } from "./use-link-standing.js";
 
 /**
- * thing-mark.tsx -- the mark a chip leads with for each kind of thing it names, one entry per kind (`@luke/features/thing-kind`).
+ * thing-mark.tsx -- the mark a chip leads with for each kind of thing it names, one entry per kind (`@repo/features/thing-kind`).
  *
  * A thing wears the mark its row wears wherever the window lists it, and
  * its chip wears that same mark whichever way it was written: a mention's
@@ -39,7 +46,7 @@ import { type ChipWhere, type LinkStanding, useWordsWorkspaceId } from "./use-li
  * A mark that reads where the thing stands, a plan's status, a pull
  * request's or an issue's state, an agent's harness, an automation's last
  * run, what an Inbox item asks, falls back while the window holds none of it
- * to the one glyph `@luke/ui/icons`' `GLYPH` stands for the kind by, never
+ * to the one glyph `@repo/ui/icons`' `GLYPH` stands for the kind by, never
  * to the mark of the site its address is on; a person falls back to the
  * initials the people rows draw where they have no picture.
  */
@@ -150,9 +157,8 @@ function PersonMark({
   name: string;
   workspace: string;
 }): React.JSX.Element {
-  const named = useAppSlice(workspacesAtom)?.find(
-    (each) => each.slug === workspace || each.id === workspace,
-  );
+  const listed = useAppSlice(workspacesAtom);
+  const named = listed === undefined ? undefined : workspaceOfSlug(listed, workspace);
   const face = <PersonFace userId={userId} name={name} />;
   return named === undefined ? (
     face
@@ -184,7 +190,8 @@ function AutomationTile({
 
 /** A workspace's tile as its rows draw it; its letter by its slug where the window holds it not. */
 function WorkspaceMark({ slug }: { slug: string }): React.JSX.Element {
-  const listed = useAppSlice(workspacesAtom)?.find((each) => each.slug === slug);
+  const workspaces = useAppSlice(workspacesAtom);
+  const listed = workspaces === undefined ? undefined : workspaceOfSlug(workspaces, slug);
   return <WorkspaceTile workspace={listed ?? { id: slug, name: slug }} size={TILE_SIZE.INLINE} />;
 }
 
@@ -207,7 +214,7 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.PAGE]: () => <GLYPH.PAGE />,
   [THING_KIND.AGENT]: (agent, at) => <AgentThingMark agent={agent} at={at} />,
   [THING_KIND.WORKER]: () => <GLYPH.AGENT />,
-  [THING_KIND.LUKE]: () => <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />,
+  [THING_KIND.APP]: () => <ActorMark actor={APP_ACTOR} size={ACTOR_SIZE.INLINE} />,
   [THING_KIND.CHANGES]: () => <GLYPH.PULL_REQUEST_CHANGES />,
   // A pull request its provider answered for wears its mark for where it stands, as everywhere the window draws one.
   [THING_KIND.PULL_REQUEST]: (_pullRequest, { standing }) =>
@@ -223,6 +230,8 @@ const THING_MARK: ThingMarks = {
     <ProviderMark provider={"site" in link ? link.site : link.provider} />
   ),
   [THING_KIND.MESSAGE]: () => <MessageSquareIcon aria-hidden="true" />,
+  [THING_KIND.HOME]: () => <HouseIcon aria-hidden="true" />,
+  [THING_KIND.BOARD]: () => <GLYPH.TASK />,
   [THING_KIND.INBOX]: () => <GLYPH.INBOX />,
   [THING_KIND.INBOX_ITEM]: (item) => <InboxItemChipGlyph place={item} />,
   [THING_KIND.CHANNEL]: () => <GLYPH.CHANNEL />,

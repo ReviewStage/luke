@@ -1,8 +1,8 @@
-import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
-import { cookieOriginGuard } from "@luke/service/http/origin-guard";
-import { sentryReportedFetch } from "@luke/service/observability/sentry";
-import { type Route, traceIdAnnotated, type WebRoutes } from "@luke/service/route";
-import type { WebServices } from "@luke/service/runtime";
+import type { NativeAgentSessions } from "@repo/service/agents/coder-host/runtime-sessions";
+import { cookieOriginGuard } from "@repo/service/http/origin-guard";
+import { sentryReportedFetch } from "@repo/service/observability/sentry";
+import { type Route, traceIdAnnotated, type WebRoutes } from "@repo/service/route";
+import type { WebServices } from "@repo/service/runtime";
 import { waitUntil } from "@vercel/functions";
 import type { Context, Layer } from "effect";
 import { HttpRouter } from "effect/http";

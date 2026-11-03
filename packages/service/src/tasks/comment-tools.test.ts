@@ -1,30 +1,38 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { startPlanCommentThread } from "@luke/database/models/plan-comments";
-import { createTask, savePlanText } from "@luke/database/models/task-store";
-import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { Database } from "@repo/database/core/query";
+import { startPlanCommentThread } from "@repo/database/models/plan-comments";
+import { writePage } from "@repo/database/models/plan-pages";
+import { createTask, savePlanText } from "@repo/database/models/task-store";
+import { user } from "@repo/database/schemas/auth";
+import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
-} from "@luke/features/plan-comment-wire";
-import { unparsedWire } from "@luke/wire";
-import { Effect } from "effect";
+} from "@repo/features/plan-comment-wire";
+import { unparsedWire } from "@repo/wire";
+import { Effect, Option } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
-import { OPEN_THREADS_MARKER, openThreadsText, runCommentTool } from "./comment-tools.js";
+import {
+  COMMENT_TOOL_REFUSAL,
+  OPEN_THREADS_MARKER,
+  openThreadsText,
+  runCommentTool,
+} from "./comment-tools.js";
 
 /**
  * The coding agents' comment tools, over a real dialect: the open threads
  * read with what they are on and every comment by its writer, a reply
  * written under its writer beside a teammate's, a resolved thread read only
  * when asked for and taking no reply until reopened, a thread of another
- * plan named as none, and the open threads handed to an agent as one line
- * each. Synthetic accounts and plans.
+ * plan named as none, a page's threads read by naming the page, and the
+ * open threads handed to an agent as one line each. Synthetic accounts and
+ * plans.
  */
 
 const PLAN_TEXT = "## Approach\n\nAdmins can withdraw an invite from the members page.\n";
@@ -34,7 +42,7 @@ const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
     return id;
   });
 
@@ -130,6 +138,69 @@ it.layer(getTestDB())("the comment tools", (it) => {
         assert.deepEqual(openAfter, { status: ACTION_RESULT_STATUS.ACCEPTED, threads: [] });
         assert.ok(
           "threads" in resolved && Array.isArray(resolved.threads) && resolved.threads.length === 1,
+        );
+      }),
+  );
+
+  it.effect(
+    "a page's threads are read by naming the page, each with its version and element, and a resolved one takes no reply",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId, thread } = yield* openThreadedTask;
+        const writer = asOwner(owner, taskId);
+        const page = Option.getOrThrow(
+          yield* writePage(
+            owner,
+            taskPageOwner(taskId),
+            { title: "Invite funnel", html: "<p>12 sent</p>" },
+            { kind: PAGE_SHOWER.APP },
+          ),
+        );
+        const started = yield* startPlanCommentThread(writer.writer, taskId, {
+          clientKey: randomUUID(),
+          page: { id: page.id, version: 1 },
+          element: { path: "body > p", quote: "12 sent", section: "" },
+          words: "Per week?",
+        });
+        assert.ok("answer" in started && "thread" in started.answer);
+
+        const onPage = yield* runCommentTool(
+          AGENT_TOOL.READ_COMMENTS,
+          writer,
+          unparsedWire({ taskId, page: page.id }),
+        );
+        const onPlan = yield* runCommentTool(
+          AGENT_TOOL.READ_COMMENTS,
+          writer,
+          unparsedWire({ taskId }),
+        );
+
+        assert.deepEqual(
+          "threads" in onPage && Array.isArray(onPage.threads)
+            ? onPage.threads.map((each) => [each.thread, each.on, each.page])
+            : onPage,
+          [[started.answer.thread.id, "12 sent", { id: page.id, version: 1, element: "body > p" }]],
+        );
+        assert.deepEqual(
+          "threads" in onPlan && Array.isArray(onPlan.threads)
+            ? onPlan.threads.map((each) => each.thread)
+            : onPlan,
+          [thread.id],
+        );
+
+        const onThread = { taskId, thread: started.answer.thread.id };
+        yield* runCommentTool(
+          AGENT_TOOL.UPDATE_COMMENT,
+          writer,
+          unparsedWire({ ...onThread, resolved: true }),
+        );
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.REPLY_TO_COMMENT,
+            writer,
+            unparsedWire({ ...onThread, words: "Per week." }),
+          ),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: COMMENT_TOOL_REFUSAL.RESOLVED },
         );
       }),
   );

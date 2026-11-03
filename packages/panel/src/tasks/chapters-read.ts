@@ -1,7 +1,7 @@
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
-} from "@luke/features/pull-request-chapters-view";
+} from "@repo/features/pull-request-chapters-view";
 import { useCallback, useRef, useState } from "react";
 import { useAgentRead } from "./agent-changes-tab.js";
 import type { PullRequestSource } from "./pull-request-source.js";

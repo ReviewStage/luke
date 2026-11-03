@@ -1,4 +1,4 @@
-import { ErrorLine, FormField, GAP, SettingsRow, Stack, TextField } from "@luke/ui";
+import { ErrorLine, FormField, GAP, SettingsRow, Stack, TextField } from "@repo/ui";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
