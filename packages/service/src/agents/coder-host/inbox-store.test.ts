@@ -22,6 +22,7 @@ import { automationRun, automation as automationTable } from "@luke/database/sch
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { task as taskTable } from "@luke/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import type { AccountInboxTask } from "@luke/features/account-inbox-wire";
 import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
@@ -144,6 +145,7 @@ const openAgentIn = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   const agent = { userId, taskId: task.id, agentId: started.value.agent.id };
@@ -261,6 +263,7 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
       repository: "acme/relay",
       planSnapshot: null,
       prompt: "Sweep the flaky tests.",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const agent: InboxAgent = { userId, taskId: null, agentId: started.value.agent.id };
@@ -471,6 +474,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Billing export\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(shelvedAgent));
         yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
@@ -1065,6 +1069,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           githubAccess: GITHUB_ACCESS.APP,
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         // The task moves onto its owner's own token, which the teammate keeps none to read through.
         yield* Database.use((db) =>
@@ -1697,6 +1702,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
               repository: "acme/relay",
               planSnapshot: null,
               prompt: null,
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             });
             assert.ok(Option.isSome(started));
             return { userId, taskId: onTask, agentId: started.value.agent.id };

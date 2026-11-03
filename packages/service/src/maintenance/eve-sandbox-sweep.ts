@@ -1,8 +1,8 @@
 /**
  * eve-sandbox-sweep.ts -- the scheduled sweep's stop of an eve coding agent's sandbox left running with no turn, Terminal, or watched browser to hold it.
  *
- * eve opens a coding agent's sandbox and the store hook stops it as each
- * turn ends (`apps/dev/hooks/store.ts`), unless a developer's Terminal or
+ * eve opened a coding agent's sandbox and its store hook stopped it as each
+ * turn ended, unless a developer's Terminal or
  * a watched Browser tab holds it, when the lease sweep stops it once the
  * lease lapses (`terminal-lease-sweep.ts`). A sandbox whose turn-end stop
  * never ran, because the function died first, a step before it threw, or

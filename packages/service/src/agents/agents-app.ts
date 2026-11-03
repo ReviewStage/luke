@@ -156,8 +156,9 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
 
 /**
  * GET serves one picture a tool answered an agent, kept beside its
- * transcript (`eve-host/relay-pictures.ts`), as its bytes under the media
- * type the service sniffed them to be, to whoever may read the agent; one of
+ * transcript (`coder-host/show-image.ts`, `browser/browser-tool.ts`), as
+ * its bytes under the media type the service sniffed them to be, to whoever
+ * may read the agent; one of
  * its workers' where the path names the delegation call, read from that
  * worker's own transcript. A picture of another agent's transcript, or of
  * another worker's, is not found, as an agent the account cannot reach is.

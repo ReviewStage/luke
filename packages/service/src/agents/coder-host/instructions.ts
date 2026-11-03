@@ -42,8 +42,8 @@ const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * which the plan also decided. The repository's name and the checkout's
  * place are two facts the session needs that the plan does not carry, and
  * whether its token reads the repository's CI is the third; the checkout's
- * place is told as where every tool starts, the shell (`shell.ts`) and the
- * file tools (`files.ts`) alike.
+ * place is told as where every tool starts, the harness's shell and its
+ * file tools alike.
  * The commit identity is the one thing the checkout set that the session
  * is told to leave alone (`checkout.ts`): the developer's own GitHub
  * account where the agent writes as them, with the trailer that names our

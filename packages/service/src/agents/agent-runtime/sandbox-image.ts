@@ -1,14 +1,10 @@
 /**
  * sandbox-image.ts -- the coding agent's image: the script that prepares it, the function that runs it, and nothing of eve's runtime.
  *
- * `sandbox.ts` hands this preparation to eve, which prepares its own
- * snapshot from it at build time, and `native-sandbox-template.ts` prepares
- * our own template from it for a native harness's sandbox. It lives
- * apart from `sandbox.ts` because that module reaches eve's sandbox runtime,
- * which a web function cannot bundle, while this one reaches only the code
- * extension's tooling installer, a few self-contained modules.
- *
- * What the image carries, and why, is told in `sandbox.ts`.
+ * `native-sandbox-template.ts` prepares our own template from it for a
+ * native harness's sandbox. It reaches only the code extension's tooling
+ * installer, a few self-contained modules, and none of eve's sandbox
+ * runtime, which a web function cannot bundle.
  */
 
 import {

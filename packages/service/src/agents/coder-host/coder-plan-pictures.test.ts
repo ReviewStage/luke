@@ -11,6 +11,7 @@ import {
 } from "@luke/database/models/plan-attachments";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   PICTURE_BOUNDS,
@@ -102,6 +103,7 @@ const openAgentTask = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: "# Invites\n",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agentId = Option.getOrThrow(started).agent.id;
   return { owner, teammate, outsider, taskId: task.id, agentId };

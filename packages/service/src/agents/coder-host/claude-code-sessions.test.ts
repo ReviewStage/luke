@@ -212,6 +212,7 @@ const openAgentWithoutPlan = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   return { userId, agent: started.value.agent };
@@ -401,6 +402,7 @@ const repositoryAgent = (
       planSnapshot: "# Relay\n",
       prompt: null,
       repository: RELAY_FULL_NAME,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const agent = Option.getOrThrow(started).agent;
     const github = githubReaching([installation], undefined, {}, (sent) => {
@@ -474,6 +476,7 @@ const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
       prompt: null,
       repository: RELAY_FULL_NAME,
       ...(startBranch === undefined ? undefined : { startBranch }),
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     return Option.getOrThrow(started).agent;
   });
@@ -2411,6 +2414,23 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const [sandbox] = api.sandboxes;
         assert.ok(sandbox !== undefined);
+        // The first turn took the opening line and settled, as its IDLE's batch writes it, so its runner is warm.
+        const db = yield* Database;
+        const [settled] = yield* db
+          .insert(turns)
+          .values({
+            userId,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.SETTLED,
+            queuedAt: new Date(0),
+            settledAt: new Date(0),
+          })
+          .returning({ id: turns.id });
+        yield* db
+          .update(messages)
+          .set({ turnId: settled?.id })
+          .where(eq(messages.conversationId, agent.conversationId));
         const retired = yield* retireWarmRunner({
           sessionId: opened.sessionId,
           userId,

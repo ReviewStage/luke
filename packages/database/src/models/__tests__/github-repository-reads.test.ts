@@ -6,6 +6,7 @@ import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { createAgent, listAgents, listWorkspaceAgents, readAgent } from "../agent-store.js";
 import { recordRepositoryReads, unaskedTokenRepositories } from "../github-repository-reads.js";
@@ -67,6 +68,7 @@ const tokenWorkspace = Effect.gen(function* () {
     effort: "high",
     repository: "Octo-Member/Side",
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agent = Option.getOrThrow(started).agent;
   return { owner, workspace, tokenTask, appTask, agent };
@@ -148,6 +150,7 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
           effort: "high",
           repository: "octo-member/side",
           githubAccess: GITHUB_ACCESS.TOKEN,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const onToken = Option.getOrThrow(started).agent;
 

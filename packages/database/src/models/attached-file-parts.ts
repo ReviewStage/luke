@@ -48,7 +48,7 @@ import { Schema as EffectSchema, Option } from "effect";
  * own, so the transcript draws and counts the same files it always did; a
  * receipt is matched by the line in the place eve was handed it, and a
  * receipt's own row reads the id back from it. Note that a kept image's part
- * carries an empty URL rather than its bytes, as `relay-pictures.ts` names
+ * carries an empty URL rather than its bytes, as `show-image.ts` names
  * a tool's pictures, because bytes in the row ride every transcript read,
  * journal amend, and long poll: each reader takes the bytes from the kept
  * picture by its id instead (`/api/agents/picture`, `replay.ts`). An image

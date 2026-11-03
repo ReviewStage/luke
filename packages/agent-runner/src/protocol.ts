@@ -508,9 +508,7 @@ export const RUNNER_RELEASE = {
    * How long a wait lasts before it is released, and how far off its
    * earliest wakeup must still be then. Vercel bills a sandbox's memory by
    * the minute it runs, and a released wait costs a stop, a resume, and a
-   * relaunch of the CLI, so a wait shorter than two billed minutes is held;
-   * the same bound eve's agent stops its sandbox for a pause at
-   * (`CODER.SLEEP_STOPS_AT`).
+   * relaunch of the CLI, so a wait shorter than two billed minutes is held.
    */
   SETTLE_MS: 2 * 60 * 1_000,
   /** How often a wait not yet released is looked at again, for a process of the agent's that has since ended. */

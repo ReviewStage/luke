@@ -131,6 +131,7 @@ const openAgent = (
       effort: "high",
       repository: "acme/relay",
       ...started,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { agent } = Option.getOrThrow(made);
     const db = yield* Database;
@@ -676,6 +677,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: "acme/relay",
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
         const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW);
@@ -842,6 +844,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               repository: "acme/relay",
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             }),
             (made) => Option.getOrThrow(made).agent,
           );

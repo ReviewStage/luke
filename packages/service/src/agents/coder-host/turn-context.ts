@@ -6,8 +6,8 @@
  * so the system message and the tools that lead every request are the same
  * whatever kind of turn it is. What does
  * change from turn to turn rides as a user-role message of the turn's own,
- * which eve appends to the history after what came before
- * (`apps/dev/instructions/turn-message.ts`): the provider's prompt cache
+ * which the harness appends to the history after what came before, ahead
+ * of the developer's line (`turn-message.ts`): the provider's prompt cache
  * then holds the system prompt, the tools, and the whole history from one
  * turn to the next.
  *

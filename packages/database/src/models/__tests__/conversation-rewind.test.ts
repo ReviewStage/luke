@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
+import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { createAgent, readNativeHanded, recordNativeHanded } from "../agent-store.js";
 import {
@@ -40,6 +40,7 @@ const openConversation = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agent = Option.getOrThrow(started).agent;
   return { userId, conversationId: agent.conversationId };

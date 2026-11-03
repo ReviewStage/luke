@@ -1,13 +1,11 @@
 /**
- * turn-message.ts -- a coding agent's turn message composed, on either runtime: the call's words, the time, and the task where it changed.
+ * turn-message.ts -- a coding agent's turn message composed, on either harness: the call's words, the time, and the task where it changed.
  *
- * What a turn opens with after the history is the same whatever answers the
- * agent's conversation, eve or a native harness: the pieces are
+ * What a turn opens with after the history is the same whichever native
+ * harness answers the agent's conversation: the pieces are
  * `turn-context.ts`'s, and this composes them once, so an agent reads the
- * same words on either runtime. eve's host hands it on at each turn's start
- * (`host.ts`'s `turnMessage`, from the eve app's `turn-message.ts`
- * instructions), with what eve's durable session state has handed; a native
- * harness's sessions hand it ahead of the developer's line in the message
+ * same words on either harness. A harness's sessions hand it ahead of the
+ * developer's line in the message
  * written to the runner (`runner-sessions.ts`), with what the conversation's
  * row has handed (`native_handed`, read and written here).
  */

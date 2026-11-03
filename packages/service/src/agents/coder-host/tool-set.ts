@@ -15,13 +15,13 @@ import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
  *
- * The coding agent runs eve's own tools, authored one file each under
- * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
- * beside it but its tools over each connection it is handed (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
+ * An eve agent ran eve's own tools, authored one file each in the eve app,
+ * so the set is exactly this list and eve added nothing
+ * beside it but its tools over each connection it was handed (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, eve's provider-run web search on the agent's own model call and
- * key, the hosted page read (`../public-research.ts`), the delegation of a slice of its
- * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
- * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
+ * key, the hosted page read, the delegation of a slice of its
+ * work to a worker, the notes it takes on
+ * its plan (`plan-edit.ts`), its to-do list, and the
  * threads it posts to its workspace's channels (`inbox.ts`), the pull
  * request the service opens for it (`pull-request.ts`), its reach to the
  * other coding agents of its workspace, a message to one among it
@@ -174,13 +174,12 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
 ]);
 
 /**
- * Every tool eve offers the agent on a turn, in the registry's order: each
+ * Every tool eve offered the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
  * repository or where it runs offers it, `run_on_mac` where no one but its
  * starter has put words into it, and `save_memory` and `search_memory` where
  * its starter has Memory on, the same rules eve's tool files read as each
- * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools` and
- * `memoryOffered`).
+ * turn started; an eve agent's MCP popover reads it (`../luke-tools.ts`).
  */
 export function offeredCoderTools(
   agent: CoderOfferedTo,
@@ -303,8 +302,8 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 });
 
 /**
- * The two task controls eve adds beside any task, which a coding agent's
- * \`delegate\` is (\`apps/dev/tools/delegate.ts\`): eve runs them, so they are no
+ * The two task controls eve added beside any task, which a coding agent's
+ * \`delegate\` was: eve ran them, so they are no
  * tool of ours, but a turn that waits on its worker or stops one names them.
  * Their tasks are eve's subagent tasks, not a task of ours.
  */

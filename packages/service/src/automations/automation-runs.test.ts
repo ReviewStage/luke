@@ -544,6 +544,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           githubAccess: GITHUB_ACCESS.APP,
           planSnapshot: "# Billing\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const aimed = yield* toSameAgent(automation, Option.getOrThrow(theirs).agent.id);
         const unseen = yield* agentOfRun(eve, yield* runNow(aimed));

@@ -9,7 +9,7 @@
  * take a prefix of one for another. Every command is a script we write,
  * and what a developer typed reaches it only as a positional argument, never
  * spliced into its text. tmux and its settings come with the image
- * (`agent-runtime/sandbox.ts`), and nothing here installs them, since a
+ * (`agent-runtime/sandbox-image.ts`), and nothing here installs them, since a
  * Terminal's shell reaches no root: the settings keep tmux out of sight, with
  * no status line, no mouse, and its output scrolling into the terminal's own
  * scrollback. Every command runs with every capability dropped
@@ -52,7 +52,7 @@ export const TMUX = {
 
 /**
  * The sandbox's own tmux settings, written to `/etc/tmux.conf` as its image
- * is prepared (`agent-runtime/sandbox.ts`): tmux kept out of sight, with no
+ * is prepared (`agent-runtime/sandbox-image.ts`): tmux kept out of sight, with no
  * status line and no mouse, so the terminal's own selection and scrollback
  * work, its output scrolling into that scrollback rather than an alternate
  * screen; the newest window's size, so two windows on one shell size it to

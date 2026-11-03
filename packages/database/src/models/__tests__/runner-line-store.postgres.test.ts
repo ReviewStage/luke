@@ -6,6 +6,7 @@ import { SqlClient } from "effect/sql";
 import { Database, type DatabaseServices } from "../../core/query.js";
 import { sqlClientOverUrl } from "../../core/sql-client.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, STORE_TEST_DATABASE_ENVIRONMENT, startTask } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
 import { queueRunnerLine, runnerLinesPast } from "../runner-line-store.js";
@@ -50,6 +51,7 @@ const openAccount = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return { userId, agentId: Option.getOrThrow(started).agent.id };
 });

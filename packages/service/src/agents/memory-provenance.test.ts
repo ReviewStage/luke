@@ -8,7 +8,7 @@ import { listMemories, MEMORY_OUTCOME } from "@luke/database/models/memory-store
 import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
@@ -60,6 +60,7 @@ const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
       effort: "high",
       repository: null,
       automationOrigin,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     return { agent: started.value.agent, workspaceId };

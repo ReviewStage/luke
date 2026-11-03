@@ -139,7 +139,8 @@ import { task } from "./task.js";
  * prefix cache read or wrote, and the estimates of what the step read that
  * the provider does not count apart, the instructions, the tool
  * definitions, and the plan or task the agent was handed, each estimated
- * as eve's own compaction estimates (`coder-host/context-estimate.ts`).
+ * as eve's own compaction estimates (`coder-host/token-estimate.ts`); a
+ * native step estimates the plan or task alone and tells the rest as 0.
  * `at` is the epoch milliseconds the step's end was relayed.
  */
 export interface StoredAgentStep {

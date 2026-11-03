@@ -231,9 +231,10 @@ const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
  * than a log line, and the stops at Vercel are handed to the reach to keep
  * the function awake for, so this returns without waiting on Vercel and the
  * archive never fails on it. A stop that fails or runs past its bound is
- * logged and left: the turn's own end stops a sandbox a turn ran
- * (`agent-runtime/sandbox.ts`), so what is left running here is one a
- * terminal held. A local agent among them is let go of on its device beside
+ * logged and left: the runner's own end stops a sandbox a turn ran
+ * (`coder-host/runner-sessions.ts`'s `runnerEnded`), so what is left
+ * running here is one a terminal held. A local agent among them is let go
+ * of on its device beside
  * the stops, its runner stopped and its folder removed (`device-discard.ts`).
  */
 export const stoppedInBackground = /* @__PURE__ */ Effect.fnUntraced(function* (

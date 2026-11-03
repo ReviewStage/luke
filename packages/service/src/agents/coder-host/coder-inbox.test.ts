@@ -9,6 +9,7 @@ import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
 import { inboxItem } from "@luke/database/schemas/inbox";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
@@ -90,6 +91,7 @@ const agentOn = (userId: string, task: { readonly id: string; readonly workspace
       repository: "acme/relay",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const agent = {

@@ -1,10 +1,9 @@
 /**
  * token-estimate.ts -- eve's own estimate of a text's tokens, the bytes of its JSON over four, kept apart from eve so a route may read it.
  *
- * `context-estimate.ts` estimates an eve step's instructions, tools, and
- * brief with it, and reaches eve's tools to do so; the runner events route
- * (`../native-events/runner-events-app.ts`) estimates a native step's brief
- * with the same rule and may load no eve module.
+ * The runner events route (`../native-events/runner-events-app.ts`)
+ * estimates a native step's brief with it, the rule an eve step's
+ * instructions, tools, and brief were estimated by.
  */
 
 /** The bytes a token stands for in eve's own estimate. */

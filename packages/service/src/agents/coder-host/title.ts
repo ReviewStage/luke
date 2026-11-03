@@ -1,6 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { type Agent, fillAgentTitle } from "@luke/database/models/agent-store";
-import { childTitlesOf, fillChildTitle } from "@luke/database/models/child-titles";
 import {
   listMessagesPast,
   listRecentMessages,
@@ -389,29 +388,6 @@ function titledWithTask(
     yield* nameUntitledTask(userId, agent.taskId, title);
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written));
-}
-
-/**
- * A subagent's title generated from the task it was handed and filled on
- * its child conversation, for a child that has none yet: a title already
- * standing is never asked for again, and a call that fails leaves the child
- * untitled. With no model the title is cut from the task's first words.
- * A child not yet opened is filled nowhere.
- */
-export function titleSubagent(
-  model: LanguageModel | undefined,
-  parent: ConversationTarget,
-  childConversationId: string,
-  task: string,
-): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
-  return Effect.gen(function* () {
-    const standing = yield* childTitlesOf(parent, [childConversationId]);
-    if (standing.has(childConversationId)) return;
-    const title =
-      model === undefined ? firstWordsTitle(task) : yield* generateAgentTitle(model, task);
-    if (Option.isNone(title)) return;
-    yield* fillChildTitle(parent, childConversationId, title.value);
-  });
 }
 
 /**

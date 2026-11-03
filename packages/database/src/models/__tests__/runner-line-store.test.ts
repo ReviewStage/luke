@@ -5,6 +5,7 @@ import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
 import {
@@ -43,6 +44,7 @@ const openAccount = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return { userId, agentId: Option.getOrThrow(started).agent.id };
 });
