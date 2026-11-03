@@ -24,7 +24,7 @@ import { app } from "electron";
 const LABEL = "dev.vespin.host.standalone";
 
 /** The oldest macOS the install script installs on (`MAC_MIN_VERSION` in the install script). */
-const MAC_MIN_VERSION = [12, 3] as const;
+const MAC_MIN_VERSION = [13, 5] as const;
 
 /** How long launchd may take to answer; the install script, which downloads a release, longer. */
 const ANSWER_WITHIN = {

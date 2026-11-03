@@ -67,9 +67,9 @@ MAC_EARLIER_FOLDER="Library/Application Support/Vespin Host"
 # Where a Linux box's install that came before put the host and its service.
 EARLIER_INSTALL_DIR="/opt/luke-host"
 EARLIER_UNIT_FILE="/etc/systemd/system/$UNIT"
-# The oldest macOS it installs on: the release's launcher reads its own path
-# with readlink -f, which macOS has had since 12.3.
-MAC_MIN_VERSION="12.3"
+# The oldest macOS it installs on: the release's Node runs on 13.5 or later.
+# The desktop app reads the same floor (MAC_MIN_VERSION in host-login-item.ts).
+MAC_MIN_VERSION="13.5"
 # The folder that stands where systemd runs the box; a test points it elsewhere.
 SYSTEMD_RUN_DIR="${LUKE_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 # How long a Mac's install waits for its running LaunchAgent to stop before it
