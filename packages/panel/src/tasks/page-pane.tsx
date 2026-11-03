@@ -254,7 +254,7 @@ function useFrameFind(frame: RefObject<HTMLIFrameElement | null>) {
  * press of the developer's, which a press in the frame hands it, because the
  * page's own scripts can post the same message without one.
  */
-function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
+export function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
   const open = useOpenLink();
   useEffect(() => {
     const hear = (event: MessageEvent) => {

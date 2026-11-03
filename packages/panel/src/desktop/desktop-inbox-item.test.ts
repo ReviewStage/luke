@@ -26,6 +26,7 @@ import {
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { formatCount } from "@repo/features/number-format";
+import { pageFrameUrl } from "@repo/features/page-frame";
 import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { pasteCutWords } from "@repo/features/words";
@@ -75,6 +76,7 @@ import {
   draftReply,
   EXPIRY,
   EXPIRY_ASK,
+  FUNNEL,
   faceKind,
   footWords,
   handFiles,
@@ -360,6 +362,38 @@ test("an item's Markdown draws its own pictures, read once its item's own read l
   );
   // What the item's words draw stands inside the pane's masked region.
   assert.ok(page.querySelector(".ph-no-capture [data-lone-link]"));
+});
+
+test("a page's link alone on its line, naming its task by the task's number, is the page's row with the page itself drawn under it", async () => {
+  const numbered = { ...BILLING, number: 182 };
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        tasks: [numbered],
+        workspaces: [
+          {
+            id: BILLING.workspaceId,
+            name: "Stage",
+            slug: "stage",
+            role: WORKSPACE_ROLE.OWNER,
+            github: null,
+          },
+        ],
+      },
+    },
+  );
+  const link = `https://vespin.dev/stage/task/182/page/${FUNNEL.id}`;
+  world.inboxes.set(BILLING.id, [saying(THRESHOLD, `[@${FUNNEL.title}](${link})`), RETRY]);
+  const { page } = mount([], { chosen: ON_THRESHOLD, standing: [numbered, INVITES] });
+  await settle();
+  assert.equal(
+    page
+      .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
+      ?.getAttribute("src"),
+    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  );
 });
 
 test("a picture of an item opens a viewer the arrow keys walk across every picture of the item, its Markdown's pair and a picture it carried alike, in the order they are drawn", async () => {
