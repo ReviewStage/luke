@@ -2551,12 +2551,12 @@ test("an admin connects the Slack bot, which then names its team, and disconnect
   ]);
   assert.deepEqual(connected, [
     "Slack bot",
-    "Connected to Acme Slack · Messages members whose email matches",
+    "Connected to Acme Slack",
   ]);
   assert.deepEqual(after, before);
   assert.deepEqual(rowWords(memberRow), [
     "Slack bot",
-    "Connected to Acme Slack · Messages members whose email matches",
+    "Connected to Acme Slack",
   ]);
   assert.deepEqual(rowButtons(memberRow), []);
 });

@@ -15,26 +15,22 @@ import {
   ConfirmDialog,
   ErrorState,
   type MenuRow,
-  POPOVER_ALIGN,
-  POPOVER_WIDTH,
   SETTINGS_ROW_INDENT,
-  SearchableMenu,
   SettingsLine,
   SettingsRow,
   SettingsRowMark,
   useConfirmDialog,
 } from "@repo/ui";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
-import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { PlusIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
 import { repositoryMenuRow } from "../repository-row.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { AddMenuButton } from "./add-menu-button.js";
 
 /**
  * workspace-token-repositories.tsx -- the repositories members added to a workspace on their own GitHub tokens, under GitHub's row on Settings › Workspace.
@@ -158,16 +154,7 @@ export function AddTokenRepository({
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [open, setOpen] = useState(false);
   const [candidates, setCandidates] = useState<Candidates>({ kind: "reading" });
-  const drawn = useDisclosure(open);
-  const menuId = useId();
-  const holder = useRef<HTMLSpanElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const close = () => {
-    setOpen(false);
-    button.current?.focus();
-  };
   const read = () => {
     setCandidates({ kind: "reading" });
     const added = new Set(repositories.listed.map((one) => one.fullName.toLowerCase()));
@@ -198,7 +185,7 @@ export function AddTokenRepository({
     );
   };
   const rows = candidates.kind === "read" ? candidates.rows : [];
-  const note =
+  const note = (close: () => void) =>
     candidates.kind === "reading" ? (
       WORDS.READING
     ) : candidates.kind === "failed" ? (
@@ -212,49 +199,18 @@ export function AddTokenRepository({
       WORDS.NONE
     ) : undefined;
   return (
-    <span
-      className="settings-picker relative inline-flex min-w-0 flex-initial items-center"
-      ref={holder}
-    >
-      <Button
-        ref={button}
-        variant={BUTTON_VARIANT.OUTLINE}
-        icon={<PlusIcon aria-hidden="true" />}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => {
-          if (!open) read();
-          setOpen(!open);
-        }}
-      >
-        {WORDS.ADD}
-      </Button>
-      {drawn.mounted ? (
-        <SearchableMenu
-          leaving={drawn.leaving}
-          ref={drawn.ref}
-          id={menuId}
-          label={WORDS.ADD}
-          placeholder={WORDS.SEARCH}
-          rows={rows}
-          value={undefined}
-          note={note}
-          noMatch={WORDS.NO_MATCH}
-          align={POPOVER_ALIGN.END}
-          width={POPOVER_WIDTH.NARROW}
-          onPick={(id) => {
-            close();
-            onRefused(undefined);
-            repositories.change(id, true).then(onRefused, () => undefined);
-          }}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && holder.current?.contains(left))) setOpen(false);
-          }}
-        />
-      ) : null}
-    </span>
+    <AddMenuButton
+      label={WORDS.ADD}
+      placeholder={WORDS.SEARCH}
+      noMatch={WORDS.NO_MATCH}
+      rows={rows}
+      note={note}
+      onOpen={read}
+      onPick={(id) => {
+        onRefused(undefined);
+        repositories.change(id, true).then(onRefused, () => undefined);
+      }}
+    />
   );
 }
 

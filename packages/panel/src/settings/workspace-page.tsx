@@ -112,7 +112,7 @@ import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
-import { SlackBotChannelRows } from "./slack-bot-channels.js";
+import { AddSlackChannel, SlackBotChannelRows } from "./slack-bot-channels.js";
 import { SwitchRow } from "./switch-row.js";
 import { useWorkspaceRead } from "./use-workspace-read.js";
 import {
@@ -317,7 +317,7 @@ const SLACK_MARK = (
  * to the workspace's members.
  */
 const SLACK_BOT_LINE = {
-  CONNECTED: (team: string) => `Connected to ${team} · Messages members whose email matches`,
+  CONNECTED: (team: string) => `Connected to ${team}`,
   MANAGES: `Not connected. Connect ${PRODUCT_NAME}'s bot to message members in Slack.`,
   MEMBER: `Not connected. Ask an owner or admin to connect ${PRODUCT_NAME}'s bot.`,
 } as const;
@@ -1673,6 +1673,7 @@ function ManagedSlackBot({
   const { act } = useAct();
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
+  const [addRefusal, setAddRefusal] = useState<string>();
   const [connecting, setConnecting] = useState(false);
   const underWay = useRef(false);
   const connect = () => {
@@ -1718,9 +1719,20 @@ function ManagedSlackBot({
           leading: SLACK_MARK,
           label: "Slack bot",
           description: slackBotLine(slackBot, true),
-          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT),
+          error:
+            refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT) ??
+            refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
           control:
-            slackBot.team !== undefined ? null : (
+            slackBot.team !== undefined ? (
+              slackBot.channels === undefined ? null : (
+                <AddSlackChannel
+                  workspaceId={workspaceId}
+                  channels={slackBot.channels}
+                  onChanged={onChanged}
+                  onRefused={setAddRefusal}
+                />
+              )
+            ) : (
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
                 busy={connecting}
@@ -1800,8 +1812,9 @@ function SlackBotRows({
     </SettingsRow>
   );
   if (slackBot.team === undefined || slackBot.notifications === undefined) return row;
+  // Note that the rows stand side by side as the card's own, as GitHub's do, so the card rules a line between each.
   return (
-    <Stack gap={GAP.NONE}>
+    <>
       {row}
       {managesWorkspace(workspace) ? (
         <SlackBotChannelRows workspace={workspace} slackBot={slackBot} onChanged={onChanged} />
@@ -1811,7 +1824,7 @@ function SlackBotRows({
         on={slackBot.notifications}
         onChanged={onChanged}
       />
-    </Stack>
+    </>
   );
 }
 
