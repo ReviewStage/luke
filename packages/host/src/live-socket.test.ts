@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fixedBearer, HOSTED_SERVICE_PATH } from "@repo/features";
 import { type LiveSocketAsk, liveSocketAskSchema } from "@repo/features/live-wire";
-import { type Cause, Duration, Effect, Fiber, Queue, Schema, Stream } from "effect";
+import { type Cause, Deferred, Duration, Effect, Fiber, Queue, Schema, Stream } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import type {
@@ -14,12 +14,12 @@ import { liveSocketClient } from "./live-socket.js";
 
 /**
  * The host's client with its live reads over one socket, on a scripted
- * relay, a scripted HTTP client, and the test clock: a live read's GET
- * travels over the socket as its path and query and is answered with what
- * the socket answered, while a write goes over HTTP; a 401 closes the
- * socket and is asked again over HTTP; a socket past its time takes no new
- * asks while the ones it holds are still answered; and an ask left
- * unanswered closes its socket.
+ * relay, a scripted HTTP client, and the test clock: a read goes over HTTP
+ * while a socket opens, and once one stands, a live read's GET travels over
+ * it as its path and query and is answered with what the socket answered,
+ * while a write goes over HTTP; a 401 closes the socket and is asked again
+ * over HTTP; a socket past its time takes no new asks while the ones it
+ * holds are still answered; and an ask left unanswered closes its socket.
  */
 
 const SERVICE = "https://app.test";
@@ -32,14 +32,17 @@ const ROTATE_AFTER = Duration.minutes(12);
 const DRAIN = Duration.seconds(40);
 const ANSWER_WITHIN = Duration.seconds(30);
 
-/** One relay socket as a test drives it: the asks the host sent read in order, answers pushed in, and whether its scope closed. */
+/** One relay socket as a test drives it: once the host reads it, the asks it sent read in order, answers pushed in, and whether its scope closed. */
 const scriptedSocket = Effect.gen(function* () {
   const arrivals = yield* Queue.unbounded<TerminalSocketArrival, Cause.Done>();
   const asked = yield* Queue.unbounded<LiveSocketAsk>();
+  const read = yield* Deferred.make<void>();
   const state = { closed: false };
   const opening: TerminalSocketOpening = {
     socket: {
-      arrivals: Stream.fromQueue(arrivals),
+      arrivals: Stream.unwrap(
+        Effect.as(Deferred.succeed(read, undefined), Stream.fromQueue(arrivals)),
+      ),
       send: (frame) =>
         "text" in frame
           ? Effect.asVoid(
@@ -56,6 +59,8 @@ const scriptedSocket = Effect.gen(function* () {
   return {
     opening,
     state,
+    /** Done once the host reads the socket, which it does from the moment the socket takes asks. */
+    reading: Deferred.await(read),
     asked: Queue.take(asked),
     answer: (id: number, status: number, body: string) =>
       Queue.offer(arrivals, { text: JSON.stringify({ id, status, body }) }),
@@ -125,9 +130,13 @@ it.effect(
       Effect.gen(function* () {
         const { relay, http, client, poll } = yield* subject;
 
-        const polled = yield* poll;
+        // The first read goes over HTTP while the socket opens, so no read waits on an open.
+        assert.deepEqual(yield* Fiber.join(yield* poll), { status: 200, text: HTTP_BODY });
         const socket = yield* relay.opened;
         assert.deepEqual(relay.addresses, ["wss://app.test/api/live/socket Bearer token-1"]);
+        yield* socket.reading;
+
+        const polled = yield* poll;
         const ask = yield* socket.asked;
         assert.equal(ask.path, "/api/live/tasks?userId=user-1&poll=true&after=d1");
         yield* socket.answer(ask.id, 200, JSON.stringify({ rows: [] }));
@@ -138,13 +147,21 @@ it.effect(
 
         const wrote = yield* client.execute(HttpClientRequest.put(INBOX_READ));
         assert.equal(wrote.status, 200);
-        assert.deepEqual(http.asked, [`PUT ${INBOX_READ}`], "a write never rides the socket");
+        assert.deepEqual(
+          http.asked,
+          [`GET ${TASKS_POLL}`, `PUT ${INBOX_READ}`],
+          "a write never rides the socket",
+        );
 
         const refused = yield* poll;
         const stale = yield* socket.asked;
         yield* socket.answer(stale.id, 401, JSON.stringify({ error: "invalid-token" }));
         assert.deepEqual(yield* Fiber.join(refused), { status: 200, text: HTTP_BODY });
-        assert.deepEqual(http.asked, [`PUT ${INBOX_READ}`, `GET ${TASKS_POLL}`]);
+        assert.deepEqual(http.asked, [
+          `GET ${TASKS_POLL}`,
+          `PUT ${INBOX_READ}`,
+          `GET ${TASKS_POLL}`,
+        ]);
         assert.equal(
           socket.state.closed,
           true,
@@ -160,11 +177,9 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const { relay, poll } = yield* subject;
-        const first = yield* poll;
+        yield* Fiber.join(yield* poll);
         const older = yield* relay.opened;
-        const opening = yield* older.asked;
-        yield* older.answer(opening.id, 200, "{}");
-        yield* Fiber.join(first);
+        yield* older.reading;
 
         // An ask held on the first socket as its time runs out.
         yield* TestClock.adjust(Duration.subtract(ROTATE_AFTER, Duration.seconds(10)));
@@ -172,8 +187,11 @@ it.effect(
         const heldAsk = yield* older.asked;
         yield* TestClock.adjust(Duration.seconds(15));
 
-        const next = yield* poll;
+        // Past its time, a read goes over HTTP while the next socket opens.
+        yield* Fiber.join(yield* poll);
         const newer = yield* relay.opened;
+        yield* newer.reading;
+        const next = yield* poll;
         const nextAsk = yield* newer.asked;
         yield* older.answer(heldAsk.id, 200, JSON.stringify({ held: true }));
         assert.deepEqual(yield* Fiber.join(held), {

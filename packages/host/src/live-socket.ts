@@ -9,12 +9,15 @@
  * back into a response, so nothing above here knows which way a poll went.
  * A write, and any other request, goes over HTTP unchanged.
  *
- * The socket is opened on the first ask, under the account's credential as
- * the terminals open theirs (`relay-credential.ts`). It takes new asks for
- * `ROTATE_AFTER`, then the next ask opens another, and the old one is closed
+ * The first ask opens a socket in the background, under the account's
+ * credential as the terminals open theirs (`relay-credential.ts`), and goes
+ * over HTTP itself, as does every ask until the socket stands, so no read
+ * waits on an open: not at launch, and not on a cold function. A socket
+ * takes asks for `ROTATE_AFTER`; the next ask after that goes over HTTP
+ * while the next socket opens the same way, and the old one is closed
  * `DRAIN` later, once the asks it holds have been answered, all inside the
- * service function's 800 s bound, so a rotation fails no poll. Where no
- * socket answers, the polls go over HTTP:
+ * service function's 800 s bound, so a rotation fails no poll and holds
+ * none. Where no socket answers, the polls go over HTTP:
  *
  * - an open refused, reaching nothing, or not done within `OPEN_WITHIN`
  *   sends every ask over HTTP for `HTTP_AFTER_FAILED_OPEN`, as a deployment
@@ -35,18 +38,7 @@ import {
   liveSocketAnswerSchema,
 } from "@repo/features/live-wire";
 import { unparsedWire } from "@repo/wire";
-import {
-  Clock,
-  Deferred,
-  Duration,
-  Effect,
-  Exit,
-  Result,
-  Schema,
-  Scope,
-  Semaphore,
-  Stream,
-} from "effect";
+import { Clock, Deferred, Duration, Effect, Exit, Result, Schema, Scope, Stream } from "effect";
 import {
   HttpClient,
   HttpClientError,
@@ -62,7 +54,7 @@ const LIVE_SOCKET_BOUNDS = {
   ROTATE_AFTER: Duration.minutes(12),
   /** How long a socket no longer taking asks stays open for the ones it holds: past the service's 25 s hold. */
   DRAIN: Duration.seconds(40),
-  /** How long an open may take before it is taken as reaching nothing, so a handshake that hangs holds no read for long. */
+  /** How long an open may take before it is taken as reaching nothing, so a handshake that hangs holds the next open off for no longer. */
   OPEN_WITHIN: Duration.seconds(10),
   /** How long asks go over HTTP after an open was refused or reached nothing. */
   HTTP_AFTER_FAILED_OPEN: Duration.seconds(30),
@@ -148,8 +140,8 @@ export function liveSocketClient(
     const serviceOrigin = new URL(options.serviceBaseUrl).origin;
     const address = `${socketOrigin}${LIVE_SOCKET.PATH}`;
     const scope = yield* Effect.scope;
-    const opening = yield* Semaphore.make(1);
     let current: StandingSocket | undefined;
+    let opening = false;
     let httpUntil = 0;
     let nextId = 0;
 
@@ -177,56 +169,73 @@ export function liveSocketClient(
         return waiting === undefined ? Effect.void : Deferred.succeed(waiting, answer.success);
       }).pipe(Effect.ensuring(end(standing)));
 
-    /** A socket opened now, with its reader standing; none where the open was refused or reached nothing. */
-    const open = (now: number) =>
-      Effect.gen(function* () {
-        const socketScope = yield* Scope.fork(scope);
-        const opened = yield* Scope.provide(
-          openedUnderCredential(options.credential, options.openSocket, address).pipe(
-            Effect.timeoutOrElse({
-              duration: LIVE_SOCKET_BOUNDS.OPEN_WITHIN,
-              orElse: () => Effect.succeed({ unreachable: true } as const),
-            }),
-          ),
-          socketScope,
-        );
-        if (!("socket" in opened)) {
-          yield* Scope.close(socketScope, Exit.void);
-          return undefined;
-        }
-        const standing: StandingSocket = {
-          socket: opened.socket,
-          scope: socketScope,
-          openedAt: now,
-          waiting: new Map(),
-          ended: false,
-        };
-        yield* Effect.forkIn(read(standing), scope);
-        return standing;
-      });
-
-    /**
-     * The socket an ask goes over: the current one while it takes asks,
-     * otherwise a new one, the old one closed once it has drained; none
-     * while asks go over HTTP.
-     */
-    const socketFor = Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis;
-      if (now < httpUntil) return undefined;
-      const standing = current;
-      if (standing !== undefined) {
-        if (now - standing.openedAt < Duration.toMillis(LIVE_SOCKET_BOUNDS.ROTATE_AFTER)) {
-          return standing;
-        }
-        current = undefined;
-        yield* Effect.forkIn(Effect.delay(end(standing), LIVE_SOCKET_BOUNDS.DRAIN), scope);
+    /** A socket opened, with its reader standing; none where the open was refused or reached nothing. */
+    const open = Effect.gen(function* () {
+      const socketScope = yield* Scope.fork(scope);
+      const opened = yield* Scope.provide(
+        openedUnderCredential(options.credential, options.openSocket, address).pipe(
+          Effect.timeoutOrElse({
+            duration: LIVE_SOCKET_BOUNDS.OPEN_WITHIN,
+            orElse: () => Effect.succeed({ unreachable: true } as const),
+          }),
+        ),
+        socketScope,
+      );
+      if (!("socket" in opened)) {
+        yield* Scope.close(socketScope, Exit.void);
+        return undefined;
       }
-      const opened = yield* open(now);
+      const standing: StandingSocket = {
+        socket: opened.socket,
+        scope: socketScope,
+        openedAt: yield* Clock.currentTimeMillis,
+        waiting: new Map(),
+        ended: false,
+      };
+      yield* Effect.forkIn(read(standing), scope);
+      return standing;
+    });
+
+    /** The next socket, taking asks once it stands; where its open failed, asks go over HTTP for a while. */
+    const openNext = Effect.gen(function* () {
+      const opened = yield* open;
       if (opened === undefined) {
+        const now = yield* Clock.currentTimeMillis;
         httpUntil = now + Duration.toMillis(LIVE_SOCKET_BOUNDS.HTTP_AFTER_FAILED_OPEN);
       }
       current = opened;
-      return opened;
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          opening = false;
+        }),
+      ),
+    );
+
+    /**
+     * The socket an ask goes over: the current one while it takes asks.
+     * Otherwise none, so the ask goes over HTTP, while the old one, past its
+     * time, drains, and the next one opens in the background.
+     */
+    const socketFor = Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const standing = current;
+      if (
+        standing !== undefined &&
+        !standing.ended &&
+        now - standing.openedAt < Duration.toMillis(LIVE_SOCKET_BOUNDS.ROTATE_AFTER)
+      ) {
+        return standing;
+      }
+      if (standing !== undefined) {
+        current = undefined;
+        yield* Effect.forkIn(Effect.delay(end(standing), LIVE_SOCKET_BOUNDS.DRAIN), scope);
+      }
+      if (!opening && now >= httpUntil) {
+        opening = true;
+        yield* Effect.forkIn(openNext, scope);
+      }
+      return undefined;
     });
 
     /** One ask over the socket, answered, or failed where the socket ended or stalled first. */
@@ -250,7 +259,7 @@ export function liveSocketClient(
     /** A live read asked over the socket where one answers, and over HTTP where none does or it was refused. */
     const live = (request: HttpClientRequest.HttpClientRequest, url: URL) =>
       Effect.gen(function* () {
-        const standing = yield* opening.withPermits(1)(socketFor);
+        const standing = yield* socketFor;
         if (standing === undefined) return yield* http.execute(request);
         const answer = yield* Effect.mapError(ask(standing, `${url.pathname}${url.search}`), () =>
           unanswered(request),
