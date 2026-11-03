@@ -28,8 +28,14 @@ import { LANDING_SCENE, type LandingScene, LandingSceneView } from "./landing-sc
 
 export { LANDING_SCENE, type LandingScene };
 
-/** How far the reader scrolls before the bar floats, in CSS pixels. */
-const FLOAT_AFTER = 24;
+/**
+ * How far the reader scrolls before the bar floats, and how near the top
+ * they come back before it spans the page again, in CSS pixels. Note that
+ * the two differ, because a phone's scroll bounces past the top and its
+ * toolbar's collapse nudges the offset, which would flip one threshold back
+ * and forth mid-animation.
+ */
+const FLOAT = { AFTER: 24, BEFORE: 4 } as const;
 
 /** The field behind each scene's stage. */
 const SCENE_FIELD: Readonly<Record<LandingScene, LandingFieldPattern>> = {
@@ -44,7 +50,8 @@ const SCENE_FIELD: Readonly<Record<LandingScene, LandingFieldPattern>> = {
 function useFloating(): boolean {
   const [floating, setFloating] = useState(false);
   useEffect(() => {
-    const read = (): void => setFloating(window.scrollY > FLOAT_AFTER);
+    const read = (): void =>
+      setFloating((was) => (was ? window.scrollY > FLOAT.BEFORE : window.scrollY > FLOAT.AFTER));
     read();
     window.addEventListener("scroll", read, { passive: true });
     return () => window.removeEventListener("scroll", read);
