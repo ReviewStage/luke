@@ -232,15 +232,21 @@ open. GitHub signs every delivery with the App's webhook secret,
 against the HMAC-SHA256 of the body's own bytes in constant time before it
 reads anything; a deployment without the secret answers every delivery
 `unavailable` (503), and a signature that does not hold is `invalid-token`
-(401). Only `pull_request` (opened, reopened, closed, edited, synchronize,
-ready_for_review, converted_to_draft), `check_suite`, a completed
-`check_run`, and `status` are read, for the repository's full name and the branches they
-name, and nothing of a delivery is kept or logged: the branch finds the agents
+(401). For what an agent published, only `pull_request` (opened, reopened,
+closed, edited, synchronize, ready_for_review, converted_to_draft, enqueued,
+dequeued), `check_suite`, a completed `check_run`, and `status` are read, for
+the repository's full name and the branches they name, and nothing of a
+delivery is kept or logged: the branch finds the agents
 whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
 task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
-A redelivery reads the same again. Before any of that, the repository a
+A redelivery reads the same again. Every delivery is also read as an
+automation's trigger (`src/automations/automation-github.ts`, "Automations"
+below), and a submitted review, a new comment on a pull request, or a check
+suite or status that failed on an agent's branch is told to the agents on
+that pull request as a message from GitHub, as is every check on an agent's
+head finished, to the agent at work waiting on them (`src/github/agent-wakes.ts`). Before any of that, the repository a
 delivery names is recorded by GitHub's id under the name it carries
 (`github_repository`, `@repo/database/models/github-repositories`); where
 GitHub gives the id another name than it was last seen under, every stored
@@ -257,8 +263,9 @@ before the service ever saw it is relabeled too. The App must subscribe to
 the Repository event for those, a setting of the App on GitHub; without it,
 the next reach of the old name, which GitHub answers with a redirect to the
 new one on whichever of the workspace's installations reaches it now
-(`github-app.ts`), does the same. GitHub's `ping` and any other event are answered and
-ignored. An `installation` delivery, which GitHub sends every
+(`github-app.ts`), does the same. GitHub's `ping` and
+`installation_repositories` are answered and ignored, as is any other event
+neither an automation nor an agent reads. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,

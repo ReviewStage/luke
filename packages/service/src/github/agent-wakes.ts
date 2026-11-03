@@ -973,8 +973,8 @@ function agentsOf(wake: AgentWake) {
 
 /**
  * Tells every agent the delivery is about that `agentIsWoken` admits, each
- * through eve as the deployment acting for its owner, under the delivery's
- * id; answers how many were told. Every check finished is told only where
+ * through the sessions `sessionsFor` answers for its owner, under the
+ * delivery's id; answers how many were told. Every check finished is told only where
  * they all did, to the agents standing on that head, under its own key
  * (`checksCompletedKey`). A check line's checks are read with `readChecks`,
  * on the token of the first agent told unless a caller that tells several
