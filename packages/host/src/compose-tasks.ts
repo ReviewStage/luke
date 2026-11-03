@@ -18,6 +18,7 @@ import {
 import { type BrowserTabsPlace, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import {
   browserTabsOfLiveRows,
+  type LIVE_READ,
   LIVE_SIGNED_OUT,
   nextBrowserTabLapse,
   pagesOfLiveRows,
@@ -26,7 +27,12 @@ import {
   taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
 } from "@repo/features/live-wire";
-import { PAGE_OWNER, type PageOwner, type PagePlace } from "@repo/features/page-wire";
+import {
+  PAGE_OWNER,
+  type PageLine,
+  type PageOwner,
+  type PagePlace,
+} from "@repo/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSkillsAnswer } from "@repo/features/task-wire";
 import {
   HOST_LIVE,
@@ -154,12 +160,12 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { type AppHolderPages, type AppPages, NO_PAGES } from "./app-state.js";
+import { NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostKernel } from "./host-kernel.js";
-import { heldReads, ROW_GONE, type RowWrite } from "./live-collection.js";
+import { type HeldAnswers, heldSlice, ROW_GONE, type RowWrite } from "./live-collection.js";
 import {
   confirmWrite,
   LIVE_GONE,
@@ -713,25 +719,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
   }
 
-  /**
-   * The pages each window holds, a task's or an agent's on no task, and the
-   * few let go latest, each as its read stands, told whole on the app state
-   * every window draws (`LIVE_READ.PAGES`).
-   */
-  let heldPages: AppPages = NO_PAGES;
   const decodePages = Schema.decodeUnknownOption(taskPagesLiveRowsSchema);
 
-  /** Lays `read` as where `owner`'s pages stand, or lets them go where it is none, and tells every window. */
-  function layPages(owner: PageOwnerKey, read: AppHolderPages | undefined) {
-    const ofKind = { ...heldPages[owner.kind] };
-    if (read === undefined) Reflect.deleteProperty(ofKind, owner.id);
-    else ofKind[owner.id] = read;
-    heldPages = { ...heldPages, [owner.kind]: ofKind };
-    kernel.emit(GATEWAY_EVENT.PAGES_CHANGED, carried(heldPages));
-  }
-
-  /** Follows the pages of `owner`, a task or an agent on no task, live until let go, each change laid on the held pages. */
-  function followPages(owner: PageOwnerKey) {
+  /** Follows the pages of `owner`, a task or an agent on no task, live until let go, each change told through `answers`. */
+  function followPages(owner: PageOwnerKey, answers: HeldAnswers<readonly PageLine[]>) {
     const place = pagePlaceOf(owner);
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
@@ -750,31 +741,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
-      publish: (pages) => {
-        if (pages !== undefined) return layPages(owner, { rows: pages });
-        // Note that a read that stops answering keeps its pages, since its next answer brings them up to date.
-        if (heldPages[owner.kind][owner.id]?.rows === undefined) layPages(owner, { failed: true });
-      },
+      publish: (pages) => (pages === undefined ? answers.unanswered() : answers.answered(pages)),
     });
   }
 
   /**
-   * The held lifetime over every owner's pages (`heldReads`): followed from
-   * the first window's hold, and kept among the few let go latest after the
-   * last lets go, so a window opening a task again draws its pages from
-   * where they stand. Behind a closed gate a held owner is followed only
-   * once the gate opens (`open`). An owner the service refuses is followed
-   * no longer (`pushLive`), until every window lets it go and one holds it
-   * anew.
+   * The pages each window holds, a task's or an agent's on no task, and the
+   * few let go latest, each as its read stands, told whole on the app state
+   * every window draws (`LIVE_READ.PAGES`): followed from the first window's
+   * hold (`heldSlice`), so a window opening a task again draws its pages
+   * from where they stand. Behind a closed gate a held owner is followed
+   * only once the gate opens (`open`). An owner the service refuses is
+   * followed no longer (`pushLive`), until every window lets it go and one
+   * holds it anew.
    */
-  const heldPageReads = yield* heldReads<PageOwnerKey>(
-    (owner) => Effect.suspend(() => (gate() ? followPages(owner) : Effect.void)),
-    (owner) => Effect.sync(() => layPages(owner, undefined)),
-    Effect.sync(() => {
-      heldPages = NO_PAGES;
-      kernel.emit(GATEWAY_EVENT.PAGES_CHANGED, carried(heldPages));
-    }),
-  );
+  const heldPageReads = yield* heldSlice<typeof LIVE_READ.PAGES, PageOwnerKey>({
+    empty: NO_PAGES,
+    path: (owner) => [owner.kind, owner.id],
+    gate,
+    follow: followPages,
+    tell: (pages) => kernel.emit(GATEWAY_EVENT.PAGES_CHANGED, carried(pages)),
+  });
   /** The windows' hold on each owner's pages, one fiber standing until let go. */
   const pageHolds = yield* FiberMap.make<PageOwnerKey>();
 
@@ -3060,7 +3047,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // sidebar, so the list loads after a launch or a sign-in with no window
     // asking; GitHub's connection is read beside them where the last read is stale.
     open: Effect.gen(function* () {
-      yield* heldPageReads.reopenHeld;
+      yield* heldPageReads.open;
       if (!gate()) return;
       yield* followAccount;
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });

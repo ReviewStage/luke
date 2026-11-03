@@ -24,9 +24,12 @@
  * How long a read's scope stands is its lifetime class, declared here once
  * rather than by each read: an account read (`accountReads`) stands for the
  * signed-in session, and a read a window holds (`heldReads`) stands while
- * any window holds it and among the few let go latest after.
+ * any window holds it and among the few let go latest after. A read a
+ * window holds by key is laid on its app-state slice by `heldSlice`, at
+ * the path its slice declares (`HOST_READ_SLICE`).
  */
 
+import type { LiveRead } from "@repo/features/live-wire";
 import {
   type Collection,
   createCollection,
@@ -52,6 +55,16 @@ import {
   type Scope,
   Stream,
 } from "effect";
+import {
+  type AppHostRead,
+  type AppHostReads,
+  type AppState,
+  type HOST_READ_SLICE,
+  type HostReadKeyPath,
+  type HostReadSlice,
+  type KEYS_ON,
+  UNREAD,
+} from "./app-state.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** TanStack's own garbage collection turned off, so a collection, or a live query, lives as long as the scope that made it. */
@@ -509,7 +522,7 @@ export const RECENT_READS = 8;
  * last lets go it stays open among the `RECENT_READS` let go latest, until
  * later ones push it out, or the session ends.
  */
-export interface HeldReads<Key> {
+interface HeldReads<Key> {
   /** Holds `key`'s read for the caller's scope, opening it unless it stands. */
   readonly hold: (key: Key) => Effect.Effect<void, never, Scope.Scope>;
   /** Opens `key`'s read again at once, as Try again asks, where a window holds it or let it go lately; nothing otherwise. */
@@ -525,7 +538,7 @@ export interface HeldReads<Key> {
  * it is closed; `closed` runs as one key's read is closed for good, and
  * `ended` once every read is, so what each told is let go.
  */
-export function heldReads<Key>(
+function heldReads<Key>(
   read: (key: Key) => Effect.Effect<void>,
   closed: (key: Key) => Effect.Effect<void>,
   ended: Effect.Effect<void>,
@@ -579,6 +592,117 @@ export function heldReads<Key>(
         recent = [];
         return Effect.andThen(FiberMap.clear(fibers), ended);
       }),
+    };
+  });
+}
+
+/** A held read whose keys stand in its slice itself, as every read on `heldSlice` does; the feed's stand under its rows. */
+type SliceKeyed = {
+  [Slice in HostReadSlice &
+    LiveRead]: (typeof HOST_READ_SLICE)[Slice]["on"] extends typeof KEYS_ON.SLICE ? Slice : never;
+}[HostReadSlice & LiveRead];
+
+/** What a held read's follow tells of its key as its read moves. */
+export interface HeldAnswers<Rows> {
+  /** The rows its read answered, which stand as where it is until the next answer. */
+  readonly answered: (rows: Rows) => void;
+  /** That its read did not answer: failed where it never has, and kept as it stood otherwise, since its next answer brings it up to date. */
+  readonly unanswered: () => void;
+}
+
+/** The keys the windows hold of one held read, and what the host does for them. */
+export interface HeldSlice<Key> {
+  /** Holds `key`'s read for the caller's scope, following it unless it stands. */
+  readonly hold: HeldReads<Key>["hold"];
+  /** Reads `key` again at once, as Try again asks, telling it unread meanwhile where it had failed. */
+  readonly retry: (key: Key) => Effect.Effect<void>;
+  /** Follows every held key anew, as the account gate opening asks. */
+  readonly open: Effect.Effect<void>;
+  /** Lets every follow go and tells no key held: the session ended. */
+  readonly end: Effect.Effect<void>;
+}
+
+/** `keyed` with `read` laid at `path`, or the key there dropped where it is none, every other key and level the very one held. */
+function withKeyLaid(keyed: object, path: readonly string[], read: object | undefined): object {
+  const [id, ...below] = path;
+  if (id === undefined) return keyed;
+  const next: Record<string, unknown> = { ...keyed };
+  if (below.length > 0) {
+    const level: unknown = Object.hasOwn(keyed, id) ? Reflect.get(keyed, id) : undefined;
+    next[id] = withKeyLaid(typeof level === "object" && level !== null ? level : {}, below, read);
+  } else if (read === undefined) Reflect.deleteProperty(next, id);
+  else next[id] = read;
+  return next;
+}
+
+/** The read `keyed` holds at `path`; none where it holds none. */
+function readAt(keyed: object, path: readonly string[]): AppHostRead<unknown> | undefined {
+  let level: unknown = keyed;
+  for (const id of path) {
+    level =
+      typeof level === "object" && level !== null && Object.hasOwn(level, id)
+        ? Reflect.get(level, id)
+        : undefined;
+  }
+  // SAFETY: what a held slice holds at a key's whole path is that key's read (`HostReadKeyPath`).
+  return level as AppHostRead<unknown> | undefined;
+}
+
+/**
+ * The held lifetime over one read the windows hold by key (`heldReads`),
+ * told whole on its slice as each key's read moves: laid at the key's path
+ * as its follow last answered it, kept where a later read does not answer,
+ * and failed where it never answered; one let go for good is dropped, and
+ * every one once the session ends. Behind a closed gate a held key is
+ * followed only once the gate opens (`open`). Note that the slice is told
+ * as a statement, the moment it moves, so a follow that answers from a
+ * callback tells it as one that answers from a fiber does.
+ */
+export function heldSlice<Slice extends SliceKeyed, Key>(options: {
+  /** The slice with no key held, as the host stands before any window holds one and after the session ends. */
+  readonly empty: AppState[Slice];
+  readonly path: (key: Key) => HostReadKeyPath<Slice>;
+  /** Whether the account gate stands open, so a follow may read. */
+  readonly gate: () => boolean;
+  /** `key`'s read followed until let go, each answer and each failure to answer told through `answers`. */
+  readonly follow: (key: Key, answers: HeldAnswers<AppHostReads[Slice]>) => Effect.Effect<void>;
+  readonly tell: (slice: AppState[Slice]) => void;
+}): Effect.Effect<HeldSlice<Key>, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    let held = options.empty;
+    const lay = (key: Key, read: AppHostRead<AppHostReads[Slice]> | undefined) => {
+      // SAFETY: a read laid at a key's path keeps the slice's own shape, which that path is declared by.
+      held = withKeyLaid(held, options.path(key), read) as AppState[Slice];
+      options.tell(held);
+    };
+    const readOf = (key: Key) => readAt(held, options.path(key));
+    const answers = (key: Key): HeldAnswers<AppHostReads[Slice]> => ({
+      answered: (rows) => lay(key, { rows }),
+      // Note that a read that stops answering keeps its rows, since its next answer brings them up to date.
+      unanswered: () => {
+        if (readOf(key)?.rows === undefined) lay(key, { failed: true });
+      },
+    });
+    const reads = yield* heldReads<Key>(
+      (key) =>
+        Effect.suspend(() => (options.gate() ? options.follow(key, answers(key)) : Effect.void)),
+      (key) => Effect.sync(() => lay(key, undefined)),
+      Effect.sync(() => {
+        held = options.empty;
+        options.tell(held);
+      }),
+    );
+    return {
+      hold: reads.hold,
+      retry: (key) =>
+        Effect.andThen(
+          Effect.sync(() => {
+            if (readOf(key)?.failed === true) lay(key, UNREAD);
+          }),
+          reads.reopen(key),
+        ),
+      open: reads.reopenHeld,
+      end: reads.end,
     };
   });
 }
