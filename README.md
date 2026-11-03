@@ -16,7 +16,7 @@
   <a href="https://vespin.dev">Website</a> - <a href="https://github.com/ReviewStage/vespin/releases/latest">Download</a> - <a href="https://vespin.dev/app">Web app</a> - <a href="CHANGELOG.md">Changelog</a>
 </p>
 <p align="center">
-  <img src=".github/assets/inbox.png" alt="The Vespin Inbox: threads from coding agents, one open with an agent asking you to approve its direction">
+  <img src=".github/assets/inbox.png" alt="Vespin: a task with its sub-tasks in the sidebar, an agent asking a design question in the conversation, and the task's plan beside it">
 </p>
 
 ## What's Vespin?
