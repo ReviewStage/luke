@@ -18,16 +18,16 @@ export const APPLE_EVENTS_USAGE_DESCRIPTION =
 // tile — space black reads on either desktop. The running app swaps the Dock
 // image between the light and dark tiles itself; see src/main/window/dock-icon.ts.
 export const ICONSET_SOURCES = Object.freeze({
-  "icon_16x16.png": "luke-icon-dark-16.png",
-  "icon_16x16@2x.png": "luke-icon-dark-32.png",
-  "icon_32x32.png": "luke-icon-dark-32.png",
-  "icon_32x32@2x.png": "luke-icon-dark-64.png",
-  "icon_128x128.png": "luke-icon-dark-128.png",
-  "icon_128x128@2x.png": "luke-icon-dark-256.png",
-  "icon_256x256.png": "luke-icon-dark-256.png",
-  "icon_256x256@2x.png": "luke-icon-dark-512.png",
-  "icon_512x512.png": "luke-icon-dark-512.png",
-  "icon_512x512@2x.png": "luke-icon-dark-1024.png",
+  "icon_16x16.png": "icon-dark-16.png",
+  "icon_16x16@2x.png": "icon-dark-32.png",
+  "icon_32x32.png": "icon-dark-32.png",
+  "icon_32x32@2x.png": "icon-dark-64.png",
+  "icon_128x128.png": "icon-dark-128.png",
+  "icon_128x128@2x.png": "icon-dark-256.png",
+  "icon_256x256.png": "icon-dark-256.png",
+  "icon_256x256@2x.png": "icon-dark-512.png",
+  "icon_512x512.png": "icon-dark-512.png",
+  "icon_512x512@2x.png": "icon-dark-1024.png",
 });
 export const SIGNING_MODE = {
   AD_HOC: "ad-hoc",

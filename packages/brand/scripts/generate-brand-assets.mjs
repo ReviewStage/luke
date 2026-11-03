@@ -128,13 +128,13 @@ const PAD = 6;
 for (const [mode, ink] of Object.entries(INKS)) {
   const { INK } = WORDMARK;
   emit(
-    `luke-wordmark-${mode}.svg`,
+    `wordmark-${mode}.svg`,
     `${svgOpenAt(INK.LEFT - PAD, INK.TOP - PAD, INK.RIGHT - INK.LEFT + 2 * PAD, INK.BOTTOM - INK.TOP + 2 * PAD)}<path d="${WORDMARK.PATH}" fill="${ink}"/></svg>`,
     PRODUCT_NAME,
   );
   const { body, box } = lockup(ink);
   emit(
-    `logo/luke-logo-${mode}.svg`,
+    `logo/logo-${mode}.svg`,
     `${svgOpenAt(box.left - PAD, box.top - PAD, box.right - box.left + 2 * PAD, box.bottom - box.top + 2 * PAD)}${body}</svg>`,
     PRODUCT_NAME,
   );
@@ -160,7 +160,7 @@ const ICON_GRID = { canvas: 1024, tile: 824, radius: 185.4 };
   const at = (ICON_GRID.canvas - disc) / 2;
   for (const [mode, { tile, ink }] of Object.entries(TILES)) {
     emit(
-      `icon/luke-icon-${mode}.svg`,
+      `icon/icon-${mode}.svg`,
       `${svgOpen(ICON_GRID.canvas, ICON_GRID.canvas)}<rect x="${origin}" y="${origin}" width="${ICON_GRID.tile}" height="${ICON_GRID.tile}" rx="${ICON_GRID.radius}" fill="${tile}"/>${markAt(at, at, disc, ink)}</svg>`,
       `${PRODUCT_NAME} app icon`,
     );
@@ -177,7 +177,7 @@ const WEB_ICON = { side: 100 };
   const disc = WEB_ICON.side * ICON_MARK;
   const at = (WEB_ICON.side - disc) / 2;
   emit(
-    "icon/luke-web-icon.svg",
+    "icon/web-icon.svg",
     `${svgOpen(WEB_ICON.side, WEB_ICON.side)}<rect width="${WEB_ICON.side}" height="${WEB_ICON.side}" fill="${tile}"/>${markAt(at, at, disc, ink)}</svg>`,
     `${PRODUCT_NAME} app icon`,
   );
@@ -194,7 +194,7 @@ const FAVICON = { side: 240, inset: 8, radius: 52 };
   const disc = tile * ICON_MARK;
   const at = (FAVICON.side - disc) / 2;
   emit(
-    "icon/luke-favicon.svg",
+    "icon/favicon.svg",
     `${svgOpen(FAVICON.side, FAVICON.side)}<rect x="${FAVICON.inset}" y="${FAVICON.inset}" width="${tile}" height="${tile}" rx="${FAVICON.radius}" fill="${TILES.dark.tile}"/>${markAt(at, at, disc, TILES.dark.ink, MARK.SMALL_PATH)}</svg>`,
     PRODUCT_NAME,
   );
@@ -211,19 +211,19 @@ const SQUARE = { side: 120, disc: 100 };
   const ground = (fill) => `<rect width="${SQUARE.side}" height="${SQUARE.side}" fill="${fill}"/>`;
   for (const [mode, { tile, ink }] of Object.entries(TILES)) {
     emit(
-      `mark/luke-mark-square-${mode}.svg`,
+      `mark/mark-square-${mode}.svg`,
       `${open}${ground(tile)}${markAt(at, at, SQUARE.disc, ink)}</svg>`,
       PRODUCT_NAME,
     );
     emit(
-      `mark/luke-mark-square-transparent-${mode}.svg`,
+      `mark/mark-square-transparent-${mode}.svg`,
       `${open}${markAt(at, at, SQUARE.disc, INKS[mode])}</svg>`,
       PRODUCT_NAME,
     );
   }
   // On true black, for surfaces that want the mark on black.
   emit(
-    "mark/luke-mark-square-black.svg",
+    "mark/mark-square-black.svg",
     `${open}${ground("#000000")}${markAt(at, at, SQUARE.disc, "#ffffff")}</svg>`,
     PRODUCT_NAME,
   );
@@ -231,7 +231,7 @@ const SQUARE = { side: 120, disc: 100 };
   // for its own theme, such as an integration's icon on Sentry, which takes
   // no colour but black.
   emit(
-    "mark/luke-mark-square-monochrome.svg",
+    "mark/mark-square-monochrome.svg",
     `${open}${markAt(at, at, SQUARE.disc, "#000000")}</svg>`,
     PRODUCT_NAME,
   );
@@ -246,13 +246,13 @@ const AVATAR = { side: 100, disc: 56 };
   const open = svgOpen(AVATAR.side, AVATAR.side);
   for (const [mode, { tile, ink }] of Object.entries(TILES)) {
     emit(
-      `avatar/luke-avatar-${mode}.svg`,
+      `avatar/avatar-${mode}.svg`,
       `${open}<rect width="${AVATAR.side}" height="${AVATAR.side}" fill="${tile}"/>${markAt(at, at, AVATAR.disc, ink)}</svg>`,
       PRODUCT_NAME,
     );
   }
   emit(
-    "avatar/luke-avatar-black.svg",
+    "avatar/avatar-black.svg",
     `${open}<rect width="${AVATAR.side}" height="${AVATAR.side}" fill="#000000"/>${markAt(at, at, AVATAR.disc, "#ffffff")}</svg>`,
     PRODUCT_NAME,
   );
@@ -270,7 +270,7 @@ const CARD = { WIDTH: 1200, HEIGHT: 630, FILL: 0.56 };
   const tx = CARD.WIDTH / 2 - (k * (box.left + box.right)) / 2;
   const ty = CARD.HEIGHT / 2 - (k * (box.top + box.bottom)) / 2;
   emit(
-    "social/luke-og-card.svg",
+    "social/og-card.svg",
     `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${BRAND.DARK.GROUND}"/><g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(k)})">${body}</g></svg>`,
     PRODUCT_NAME,
   );
@@ -314,7 +314,7 @@ for (const { name, label, advance, title } of CTA_BUTTONS) {
     const open =
       `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${CTA.HEIGHT}" ` +
       `viewBox="0 0 ${width} ${CTA.HEIGHT}" fill="none">`;
-    emit(`button/luke-cta-${name}-${mode}.svg`, `${open}${ground}${text}</svg>`, title);
+    emit(`button/cta-${name}-${mode}.svg`, `${open}${ground}${text}</svg>`, title);
   }
 }
 
@@ -326,7 +326,7 @@ const arrowStart = DMG_WINDOW.POSITIONS.APP.X + DMG_WINDOW.ICON_SIZE;
 const arrowEnd = DMG_WINDOW.POSITIONS.APPLICATIONS.X - DMG_WINDOW.ICON_SIZE;
 const arrowHead = 28;
 emit(
-  "dmg/luke-dmg-background.svg",
+  "dmg/dmg-background.svg",
   `${svgOpen(dmgBackground.WIDTH, dmgBackground.HEIGHT)}` +
     `<rect width="${dmgBackground.WIDTH}" height="${dmgBackground.HEIGHT}" fill="${BRAND.LIGHT.SIDEBAR}"/>` +
     `<path d="M ${arrowStart} ${arrowY} H ${arrowEnd} M ${arrowEnd - arrowHead} ${arrowY - arrowHead} L ${arrowEnd} ${arrowY} L ${arrowEnd - arrowHead} ${arrowY + arrowHead}" ` +

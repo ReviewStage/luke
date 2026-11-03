@@ -13,8 +13,8 @@ import { useEffect, useRef } from "react";
  */
 
 const DEMO = {
-  SOURCE: "/luke-demo.mp4",
-  POSTER: "/luke-demo-poster.jpg",
+  SOURCE: "/demo.mp4",
+  POSTER: "/demo-poster.jpg",
   WIDTH: 1240,
   HEIGHT: 864,
 } as const;

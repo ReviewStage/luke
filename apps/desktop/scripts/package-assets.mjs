@@ -54,8 +54,8 @@ export function prepareElectronBuilderDmgAssets({ paths }) {
     "tiffutil",
     [
       "-cathidpicheck",
-      path.join(dmgBackgroundDirectory, "luke-dmg-background.png"),
-      path.join(dmgBackgroundDirectory, "luke-dmg-background@2x.png"),
+      path.join(dmgBackgroundDirectory, "dmg-background.png"),
+      path.join(dmgBackgroundDirectory, "dmg-background@2x.png"),
       "-out",
       paths.dmgBackgroundPath,
     ],
