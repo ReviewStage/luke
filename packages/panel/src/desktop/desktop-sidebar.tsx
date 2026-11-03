@@ -1681,7 +1681,8 @@ interface DesktopSidebarProps {
  * New task, heading the list: a press opens the New task dialog at once, as
  * the menu bar's and the chord's New task do, whose name field also
  * searches the workspace's Linear issues where Linear is connected
- * (`new-task-dialog.tsx`). While words left in its card wait as the
+ * (`new-task-dialog.tsx`); on Home it hands Home's own composer the caret
+ * instead (`desktop-home.tsx`). While words left in its card wait as the
  * workspace's draft, it wears the Draft pencil at its end, which its chord
  * takes the place of while it is hovered; none while the card or Home,
  * whose composer shows those words, is open, as a task open wears none.

@@ -507,6 +507,18 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
 });
 
+test("New task on Home opens no dialog over Home's own composer, asking it for the caret instead, and opens the dialog over a page standing in Home's place", () => {
+  const home = mount({ shown: true, tasks: listRead([]) });
+  act(() => home.control().onNewTask());
+  assert.equal(home.control().newTask.open, false, "no dialog over Home");
+  assert.equal(home.control().newTask.homeAsks, 1, "Home's composer is asked for the caret");
+
+  act(() => home.control().inboxView.onOpen());
+  act(() => home.control().onNewTask());
+  assert.equal(home.control().newTask.open, true, "the Inbox gets the dialog");
+  assert.equal(home.control().newTask.homeAsks, 1);
+});
+
 /** A start's payload, read back for whether it asked to open nothing. */
 const readQuiet = Schema.decodeUnknownOption(
   Schema.Struct({ quiet: Schema.optionalKey(Schema.Boolean) }),

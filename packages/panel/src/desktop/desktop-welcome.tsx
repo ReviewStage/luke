@@ -1,4 +1,6 @@
 import { FILL_ELEMENT, Fill, ProductMark, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
+import { type RefObject, useEffect, useRef } from "react";
+import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { freshAccount } from "../tasks/fresh-account.js";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
@@ -15,8 +17,10 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  *
  * The composer starts the task in the listed workspace, as the dialog
  * would: in Agent mode a task with a coding agent on the words, opened on
- * its tab, and in Plan mode the plan and a call with the app. The dialog stays
- * for ⌘N and every other New task press; only the welcome holds the card
+ * its tab, and in Plan mode the plan and a call with the app. A New task press
+ * while it stands, ⌘N's among them, hands its words the caret rather than
+ * opening the dialog over it; the dialog stays for every other place, and
+ * only the welcome holds the card
  * inline. Its words take the caret as the page shows, unless the developer
  * is typing in a field elsewhere, as an agent's box decides, and Escape there
  * with nothing in it to close takes the caret out of the words. Its words and
@@ -31,6 +35,20 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 export function letGoOfFocus(): void {
   const active = document.activeElement;
   if (active instanceof HTMLElement) active.blur();
+}
+
+/**
+ * Hands the words of the composer under `box` the caret each time New task
+ * is pressed while it stands (`newTask.homeAsks`); its first draw is
+ * `takesFocus`'s to decide, so a count raised before it showed asks nothing.
+ */
+export function useHomeNewTask(box: RefObject<HTMLElement | null>, asks: number): void {
+  const seen = useRef(asks);
+  useEffect(() => {
+    if (asks === seen.current) return;
+    seen.current = asks;
+    box.current?.querySelector<HTMLElement>(EDITOR_ROOT_SELECTOR)?.focus();
+  }, [box, asks]);
 }
 
 /** Whether the welcome stands: an account signed in whose task list landed holding nothing of its own. */
@@ -55,6 +73,8 @@ export function DesktopWelcome({
   /** Whether the composer's words take the caret as the welcome shows; none on a phone, whose places bar steps aside while a field is typed in. */
   takesFocus?: boolean;
 }): React.JSX.Element | null {
+  const box = useRef<HTMLDivElement>(null);
+  useHomeNewTask(box, tasks.newTask.homeAsks);
   if (!welcomed(tasks)) return null;
   return (
     <Fill
@@ -71,7 +91,10 @@ export function DesktopWelcome({
       <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
         Start your first task
       </Text>
-      <div className="home-composer ph-no-capture mt-control-gap w-welcome-composer text-start">
+      <div
+        className="home-composer ph-no-capture mt-control-gap w-welcome-composer text-start"
+        ref={box}
+      >
         <NewTaskComposer
           newTask={{ ...tasks.newTask, preset: undefined }}
           workspaceId={tasks.newTask.workspaceId}

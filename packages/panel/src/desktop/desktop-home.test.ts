@@ -159,7 +159,7 @@ function mount(
       ),
     ),
   );
-  return { page: container, opened };
+  return { page: container, opened, tasks };
 }
 
 async function settle(): Promise<void> {
@@ -257,4 +257,25 @@ test("the composer's words take the caret as Home shows, but on a phone, whose p
   await settle();
   assert.ok(composerEditor(phone.page), "the composer stands");
   assert.ok(document.activeElement !== composerEditor(phone.page), "on a phone they leave it");
+});
+
+test("New task pressed while Home stands hands the composer's words the caret, on a phone too", async () => {
+  const { page, tasks } = mount({}, [RETRY_429], SHELL_ROOM.NARROW);
+  await settle();
+  assert.ok(document.activeElement !== composerEditor(page));
+  const pressed = { ...tasks, newTask: { ...tasks.newTask, homeAsks: 1 } };
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopHome, {
+          tasks: pressed,
+          room: SHELL_ROOM.NARROW,
+          accountName: DEAN.name,
+          staged: true,
+        }),
+      ),
+    ),
+  );
+  assert.ok(document.activeElement === composerEditor(page), "the words take the caret");
 });

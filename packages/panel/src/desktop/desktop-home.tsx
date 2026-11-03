@@ -14,6 +14,7 @@ import {
 } from "@repo/ui";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
+import { useRef } from "react";
 import { useInboxRowDrafts } from "../composer-drafts.js";
 import { unreadShown } from "../failure-report.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -26,7 +27,7 @@ import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
-import { DesktopWelcome, letGoOfFocus, welcomed } from "./desktop-welcome.js";
+import { DesktopWelcome, letGoOfFocus, useHomeNewTask, welcomed } from "./desktop-welcome.js";
 import { PersonSectionFrame, RowsSkeleton, SectionSkeleton } from "./person-frame.js";
 import { RecentRow } from "./recent-row.js";
 
@@ -48,8 +49,10 @@ import { RecentRow } from "./recent-row.js";
  * here names the sidebar, which may be folded away.
  *
  * The composer starts the task in the listed workspace, as the dialog
- * would. The dialog stays for ⌘N and every other New task press; only Home
- * and the welcome hold the card inline. Its words take the caret as the page
+ * would. Home is New task's page: a New task press while it stands, ⌘N's
+ * and the sidebar's among them, hands the composer's words the caret
+ * rather than opening the dialog over the same card; the dialog stays for
+ * every other place, and only Home and the welcome hold the card inline. Its words take the caret as the page
  * shows, unless the developer is typing in a field elsewhere or the room is a
  * phone's, whose places bar a field typed in puts away, and Escape
  * there with nothing in it to close takes the caret out of the words. Its
@@ -218,9 +221,11 @@ function HomeComposer({
   tasks: TasksControl;
   takesFocus: boolean;
 }): React.JSX.Element | null {
+  const box = useRef<HTMLDivElement>(null);
+  useHomeNewTask(box, tasks.newTask.homeAsks);
   if (!tasks.signedIn) return null;
   return (
-    <div className="home-composer ph-no-capture mb-page-section-gap">
+    <div className="home-composer ph-no-capture mb-page-section-gap" ref={box}>
       <NewTaskComposer
         newTask={{ ...tasks.newTask, preset: undefined }}
         workspaceId={tasks.newTask.workspaceId}
