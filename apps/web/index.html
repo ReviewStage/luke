@@ -61,6 +61,37 @@
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- What Google reads for its result: the WebSite's name is the site name
+         it shows above the link in place of the bare domain, and the
+         Organization names Vespin's logo and what Vespin is, so a search
+         for the name finds this product rather than one spelled like it.
+         The logo is the app icon the manifest already serves, at 512 pixels,
+         past Google's 112-pixel floor. A data block runs nothing, so the
+         site's script-src policy leaves it alone. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://vespin.dev/#website",
+            "name": "Vespin",
+            "url": "https://vespin.dev/",
+            "publisher": { "@id": "https://vespin.dev/#organization" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://vespin.dev/#organization",
+            "name": "Vespin",
+            "url": "https://vespin.dev/",
+            "logo": "https://vespin.dev/app-icon-512.png",
+            "description": "Vespin is an inbox for all your coding agents. They post to it when they need you, and you answer them there.",
+            "sameAs": ["https://github.com/ReviewStage/vespin"]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
