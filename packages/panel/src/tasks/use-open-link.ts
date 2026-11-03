@@ -121,6 +121,30 @@ export function OpenHereFirst({
   return createElement(OpenHereContext.Provider, { value: first }, children);
 }
 
+/**
+ * Under it, an address the place around opens nothing of, so the window
+ * goes to it, is told to `leaving` first, as a link pressed in the side
+ * panel to an agent elsewhere carries the panel along.
+ */
+export function OnLeavingHere({
+  leaving,
+  children,
+}: {
+  leaving: (address: Address) => void;
+  children: ReactNode;
+}): ReactNode {
+  const around = useContext(OpenHereContext);
+  const open = useCallback<OpenAddressHere>(
+    (address) => {
+      if (around?.(address) === true) return true;
+      leaving(address);
+      return false;
+    },
+    [around, leaving],
+  );
+  return createElement(OpenHereContext.Provider, { value: open }, children);
+}
+
 /** Reads the tasks and the agents on no task the window lists as they stand now. */
 type ListedTasksReader = () => Listed;
 
