@@ -297,6 +297,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
             yield* hydrateAccountPreferences(accountKey).pipe(
               Effect.ensuring(
                 Effect.gen(function* () {
+                  // Note that a read the account left during is over for nobody now signed in, so it marks nothing.
+                  if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return;
                   if (yield* store.markAccountRead(accountKey)) {
                     emitSettingsSnapshot(yield* Effect.orDie(store.snapshot()));
                   }
@@ -601,6 +603,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       reconcileAccountPreferences,
       forgetAccountPreferenceHydration: () => {
         accountPreferencesHydratedAccount = undefined;
+        store.forgetAccountRead();
       },
       flushProductEvents: productEvents.flush,
       link: (next) => Effect.asVoid(late.set(next)),

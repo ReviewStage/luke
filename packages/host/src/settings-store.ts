@@ -684,6 +684,11 @@ export class SettingsStore {
     });
   }
 
+  /** That no account's preferences stand read, as when its session leaves this host. */
+  forgetAccountRead(): void {
+    this.#accountRead = undefined;
+  }
+
   /** That the service answered `accountEmail`'s preferences, or failed to; answers whether that is news. */
   markAccountRead(accountEmail: string): Effect.Effect<boolean> {
     return Effect.sync(() => {
@@ -846,10 +851,10 @@ export class SettingsStore {
    */
   clearAccount(): Effect.Effect<AccountSnapshot, PlatformError> {
     const keepsOwnAccount = this.#cipher !== undefined;
-    // Note that the account's preferences go below, so a sign-in again reads them again before they stand.
-    this.#accountRead = undefined;
     return Effect.as(
       this.#mutate((persisted) => {
+        // Note that the account's preferences go below, so a sign-in again reads them again before they stand.
+        this.forgetAccountRead();
         if (keepsOwnAccount && !persisted.account) return undefined;
         const { account: _account, ...withoutAccount } = persisted;
         const next: PersistedSettings = { ...withoutAccount };
