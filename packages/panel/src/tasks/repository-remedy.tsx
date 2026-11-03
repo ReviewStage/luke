@@ -7,8 +7,8 @@ import { useOpenSettings } from "../open-settings.js";
  * repository-remedy.tsx -- what the press under a refused start or message does when the task's repository is out of reach.
  *
  * Each reason's remedy is one door of the window's (`App`'s, over the
- * Tasks tab), handed down on a context so the composer and the Start button
- * mend the task's repository without every surface between threading the
+ * Tasks tab), handed down on a context so the composer and the terminal
+ * picker mend the task's repository without every surface between threading the
  * doors on: Settings › Workspace's GitHub for the task's workspace, the
  * installation's settings page on GitHub, the task's repository chip, or
  * the task moved to the workspace whose GitHub reaches it, after which the

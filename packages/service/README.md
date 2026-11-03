@@ -1195,7 +1195,8 @@ own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
 transcript, as many entries as asked, to a bound; `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
-`taskId` that `list_tasks` answers, by the Start button's own path, telling
+`taskId` that `list_tasks` answers, by the one path every start takes
+(`src/agents/coder-host/start.ts`), telling
 it which agent started it; `stop_agent`, which stops the turn
 under way of an agent of the workspace, never itself or an archived one, by
 the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent

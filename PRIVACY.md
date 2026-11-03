@@ -39,8 +39,8 @@ Mac once you allow it, and what it prints leaves your Mac (see "Commands
 agents run on your Mac"). Apart from that, nothing in Vespin reads an agent session, message history, file contents, or command output from your
 Mac's disk or from any other app, except a file you hand it to attach to a
 agent's message (see "Files you attach to an agent"). The only
-agents it lists are the ones started on a task from Vespin — its Start
-button, New agent, or another agent — which
+agents it lists are the ones started on a task from Vespin — from New task,
+New agent, or the terminal picker, or by another agent — which
 our service runs in sandboxes of their own (see "Who we send it to"), and
 the transcripts it shows, each an agent's or one of its workers', are
 read from our service. Each agent reads a task's repository in its
