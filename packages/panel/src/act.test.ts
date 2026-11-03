@@ -65,7 +65,7 @@ it("a kind the port refuses rejects the caller with the sentence its row draws",
   await assert.rejects(
     askAct(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
     (error) =>
-      error instanceof Error && error.message === "Could not remove your API key on this system.",
+      error instanceof Error && error.message === "Couldn't remove your API key on this system.",
   );
 });
 
@@ -118,8 +118,8 @@ it("a row reading an act's answer is told the fixed sentence for a transport fai
 
   assert.equal(await reasonFor(new Error("socket hang up")), ACT_UNREACHED_WORDS);
   assert.equal(
-    await reasonFor(refusedOnPort("Could not read your API keys on this system.")),
-    "Could not read your API keys on this system.",
+    await reasonFor(refusedOnPort("Couldn't read your API keys on this system.")),
+    "Couldn't read your API keys on this system.",
   );
   uninstall();
   assert.deepEqual(kinds, [FAILURE_KIND.UNEXPECTED, FAILURE_KIND.REFUSED]);

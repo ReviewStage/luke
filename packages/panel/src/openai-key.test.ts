@@ -31,7 +31,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
  * focus reads the keys again. Synthetic account and keys.
  */
 
-const HINT = "Add an OpenAI key in settings";
+const HINT = "Add an OpenAI key in Settings";
 const NO_EDITOR = { current: undefined };
 const NO_KEYWORDS: readonly string[] = [];
 const ignore = () => undefined;

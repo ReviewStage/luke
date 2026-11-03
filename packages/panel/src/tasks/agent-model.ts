@@ -461,6 +461,9 @@ export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task
 /** What a message no answer came back for says, which may have reached the agent all the same. */
 const NOT_HEARD_BACK = "No answer came back.";
 
+/** What a plan's reached limit says where no reset is known; with one, `limitResetsWords`. */
+const LIMIT_REACHED_WORDS = "Usage limit reached";
+
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: REPOSITORY_UNREACHED_NOTE,
@@ -473,13 +476,12 @@ const SHARED_FAILURE_NOTE = {
     "The agent's image is taking too long to prepare. Try again in a few minutes.",
   [AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
-    "The subscription paying for this agent is signed out. Its starter signs in again in Settings.",
+    "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
-    "The subscription's provider didn't answer. Try again in a moment.",
-  [AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
-    "The subscription paying for this agent has reached its usage limit. It waits until the limit resets.",
+    "The plan's provider didn't answer. Try again in a moment.",
+  [AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]: LIMIT_REACHED_WORDS,
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "The subscription paying for this agent isn't eligible to run it.",
+    "The plan paying for this agent isn't eligible to run it.",
 } as const;
 
 /** What a Start from an agent whose session has ended says. */
@@ -743,9 +745,15 @@ export interface ConnectFailure {
   readonly provider: ModelProvider;
 }
 
+/** What would run a provider's models, as the connect note names it: the harness's plan or the provider's API key. */
+const CONNECT_CREDENTIALS = {
+  [MODEL_PROVIDER.ANTHROPIC]: "a Claude plan or an Anthropic API key",
+  [MODEL_PROVIDER.OPENAI]: "a ChatGPT plan or an OpenAI API key",
+} as const satisfies Record<ModelProvider, string>;
+
 /**
  * The press a model menu's row holds for a model whose provider no
- * subscription or API key of the account's pays for: "Connect Claude" at
+ * plan or API key of the account's pays for: "Connect Claude" at
  * the row's end (`remedyLabel`), landing on its harness's row in Settings ›
  * Agents (`useRepositoryRemedy`); none for a model something pays for.
  */
@@ -753,7 +761,7 @@ export function modelConnectFailure(model: CatalogModel): ConnectFailure | undef
   if (model.credentialMissing !== true) return undefined;
   return {
     reason: FAILURE_REASON.CONNECT_AGENTS,
-    text: `${modelLabel(model.id, [model])} cannot run until you connect ${harnessNameOf(model.provider)} with a subscription or an API key.`,
+    text: `${modelLabel(model.id, [model])} cannot run until you connect ${CONNECT_CREDENTIALS[model.provider]}.`,
     provider: model.provider,
   };
 }
@@ -767,7 +775,7 @@ export function modelConnectWords(model: CatalogModel): string | undefined {
 /**
  * Why a choice cannot run, and the press that connects what would run it:
  * the note a model menu and Settings' Default model stand under the choice
- * where no subscription or API key of the account's pays for its model, as
+ * where no plan or API key of the account's pays for its model, as
  * an account finds the Claude default it stored once its Claude credential
  * is gone; none for a choice something pays for, or one the catalog no
  * longer lists.
@@ -792,17 +800,17 @@ function credentialMissingWords(
 
 /** What a Start refused by the plan that would pay says, to its own member, beside the press that opens Settings. */
 const START_PLAN_REFUSAL = {
-  [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]: "Your subscription is signed out. Sign in again.",
+  [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]: "Your plan is signed out. Connect it again.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "Your subscription isn't eligible to run this agent. Choose your API key.",
+    "Your plan isn't eligible to run this agent. Choose your API key.",
 } as const;
 
 /** The same refusals where no press beside them opens Settings, so the words name it. */
 const START_PLAN_REFUSAL_ALONE = {
   [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
-    "Your subscription is signed out. Sign in again in Settings to start an agent.",
+    "Your plan is signed out. Connect it again in Settings to start an agent.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
-    "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
+    "Your plan isn't eligible to run this agent. Choose your API key in Settings to start one.",
 } as const;
 
 /** What an unreadable API key says beside the press that opens Settings. */
@@ -863,18 +871,12 @@ export function planPayerOf(runtime: AgentRuntime | undefined): AgentPayer | und
 
 /** What a message refused by the Claude plan that pays for its agent says. */
 const CLAUDE_PLAN_REFUSAL = {
-  SIGNED_OUT: "Your Claude subscription needs reconnecting in Settings.",
-  LIMIT_REACHED:
-    "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
+  SIGNED_OUT: "Signed out of Claude. Connect your Claude plan again in Settings.",
 } as const;
 
 /** The plan's reached limit said with when it resets, in place of waiting for a reset no one named. */
-function limitResetsWords(payer: AgentPayer | undefined, resetsAt: number): string {
-  const whose =
-    payer === AGENT_PAYER.CLAUDE_SUBSCRIPTION
-      ? "Your Claude subscription has"
-      : "The subscription paying for this agent has";
-  return `${whose} reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`;
+function limitResetsWords(resetsAt: number): string {
+  return `${LIMIT_REACHED_WORDS} · Resets ${dayAndTimeText(resetsAt)}`;
 }
 
 /**
@@ -885,10 +887,7 @@ function limitResetsWords(payer: AgentPayer | undefined, resetsAt: number): stri
  */
 function planRefusalWords(refused: RefusedCall, payer: AgentPayer | undefined): string | undefined {
   if (refused.failure === AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
-    if (refused.resetsAt !== undefined) return limitResetsWords(payer, refused.resetsAt);
-    return payer === AGENT_PAYER.CLAUDE_SUBSCRIPTION
-      ? CLAUDE_PLAN_REFUSAL.LIMIT_REACHED
-      : undefined;
+    return refused.resetsAt === undefined ? undefined : limitResetsWords(refused.resetsAt);
   }
   if (
     refused.failure === AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT &&
@@ -1082,7 +1081,7 @@ function starterKeyWords(failure: AgentCallFailure, starter: string): string | u
     return `${starter}'s saved API key can't be read. They save it again in Settings to unblock this agent.`;
   }
   if (failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    return `${starter} has no API key or subscription connected for this agent. They connect one in Settings to unblock it.`;
+    return `${starter} has no plan or API key connected for this agent. They connect one in Settings to unblock it.`;
   }
   return undefined;
 }

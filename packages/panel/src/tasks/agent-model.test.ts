@@ -670,10 +670,10 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
       messageFailureNote({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null).text,
     ],
     [
-      "Your Claude subscription needs reconnecting in Settings.",
-      `Your Claude subscription has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
-      "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
-      `The subscription paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
+      "Signed out of Claude. Connect your Claude plan again in Settings.",
+      `Usage limit reached · Resets ${dayAndTimeText(resetsAt)}`,
+      "Usage limit reached",
+      `Usage limit reached · Resets ${dayAndTimeText(resetsAt)}`,
       messageFailureWords(AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
     ],
   );
@@ -805,11 +805,11 @@ test("a Start or a message refused for an API key saved but unreadable says so a
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your subscription is signed out. Sign in again.",
+        text: "Your plan is signed out. Connect it again.",
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Your subscription isn't eligible to run this agent. Choose your API key.",
+        text: "Your plan isn't eligible to run this agent. Choose your API key.",
       },
       FAILURE_REASON.OTHER,
     ],
@@ -823,7 +823,7 @@ test("a Continue refused for what Settings mends names Settings, since no press 
     ),
     [
       "Your saved API key can't be read. Save it again in Settings to start an agent.",
-      "Your subscription is signed out. Sign in again in Settings to start an agent.",
+      "Your plan is signed out. Connect it again in Settings to start an agent.",
     ],
   );
 });
@@ -844,7 +844,7 @@ test("a message to a teammate's agent its starter's own key refused names the st
       },
       {
         reason: FAILURE_REASON.OTHER,
-        text: "Ada has no API key or subscription connected for this agent. They connect one in Settings to unblock it.",
+        text: "Ada has no plan or API key connected for this agent. They connect one in Settings to unblock it.",
       },
     ],
   );
