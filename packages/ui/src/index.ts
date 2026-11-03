@@ -109,6 +109,7 @@ export * from "./components/progress-ring/progress-ring.js";
 export * from "./components/prose/prose.js";
 export * from "./components/provider-button/provider-button.js";
 export * from "./components/landing/landing-page.js";
+export * from "./components/landing/lost-page.js";
 export * from "./components/public-page/public-page.js";
 export * from "./components/readable-controls/readable-controls.js";
 export * from "./components/rect-float/rect-float.js";
