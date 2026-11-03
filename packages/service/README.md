@@ -90,22 +90,36 @@ reads `GET /app/installations/{id}` with, so an id GitHub hands the Setup URL
 is confirmed as this App's own or answered as none, and what every
 installation token is minted under (`POST
 /app/installations/{id}/access_tokens`). `userToken(userId)` is the signed-in
-user's token off the row, unsealed, read for one caller alone, GitHub's MCP
-server (`src/integrations/github-integration.ts`); a token within a minute of its expiry
-is refreshed first at GitHub's token endpoint on the App's client, and the
+user's token off the row, unsealed, read wherever Vespin acts on GitHub as
+the developer: GitHub's MCP server (`src/integrations/github-integration.ts`),
+the check that the developer may push and the co-author line on their agent's
+commits (`src/agents/coder-host/checkout.ts`), the pull request an agent opens
+as them (`src/agents/coder-host/pull-request.ts`), and the pull-request
+changes a member presses (`src/agents/pull-request-write.ts`); a token
+within a minute of its expiry is refreshed first at GitHub's token endpoint on the App's client, and the
 fresh pair is re-sealed in place, inside one transaction under `FOR UPDATE`
 on the row, because GitHub retires a refresh token the moment it is used.
 GitHub answers a refused refresh with status 200 and an `error` body, which
 is read as `GitHubSignInRequired`, as is a row with no GitHub account, a row
 from before the App, an expired refresh token, or a token that will not open
-under this deployment's secret. No repository read takes that token.
+under this deployment's secret. No checkout, listing, or task's reach of a
+repository takes that token: those are an installation's, or a member's own
+personal access token's, below.
 
 A workspace's repositories are those of the installations of the App
 connected to it (`src/github/github-installations.ts`), one per GitHub
-account, and nothing else: nobody's own GitHub account is asked what it
+account, and those its members added on their own GitHub personal access
+token (`github_personal_token`). No member's sign-in is asked what it
 reaches, so a member who never signed in with GitHub reads, plans, and starts
-agents on the workspace's repositories all the same, and a workspace with
-nothing connected has none. `workspaceRepositories(organizationId)` reads
+agents on the installations' repositories all the same. Where no
+installation reaches a repository, the acting member's own token may
+(`src/github/workspace-repository.ts`): an agent acts as its starter only
+where it recorded the token's access (`GITHUB_ACCESS.TOKEN`), so one on the
+App never falls back to anyone's token, and an automation acts as no member.
+`/api/github/token-repositories` (`src/github/github-procedures.ts`) lists
+the repositories added that way, adds one only where the member's token may
+push to it, and removes one for whoever added it or a workspace owner or
+admin. A workspace with nothing connected and nothing added has none. `workspaceRepositories(organizationId)` reads
 every installation the workspace holds from GitHub, mending each stored
 status, skips one GitHub no longer knows or its account suspended, mints a
 token for each listing alone (`metadata: read`), and pages `GET
@@ -115,23 +129,34 @@ repository once however GitHub cases its name. One listing GitHub does not
 answer, or is still answering full pages of at the bound (`PAGING`, fifty
 pages), fails the whole read as unavailable or unreadable rather than
 answering the rest; none where no installation is running.
-`workspaceRepository(organizationId, "owner/name")` is the check a task's
-repository passes before it is kept: only the workspace's own installation
-on the owner can reach it, found by its stored login first and then by
+`workspaceRepository(organizationId, "owner/name", member)` is the check a
+task's repository passes before it is kept: the workspace's own installation
+on the owner reaches it first, found by its stored login first and then by
 GitHub's own reading of the rest, so the listing is paged only
 for that one and only as far as the page the repository is on, the name is
 matched the way GitHub folds case, and what is answered is the full name as
-GitHub spells it. `repositoryReadToken(organizationId, "owner/name")` is the
-same check followed by the one token the App mints for that repository:
-naming it alone and `contents: read`, answered sealed beside the repository
-as GitHub spells it, or none where the installation does not reach it. It is
+GitHub spells it, with the access that reached it, the App's or the token's.
+Only where no installation reaches it is the member's own token read
+(`GET /repos/{owner}/{name}`), which reaches a repository that token may push
+to, and a refusal then says whether GitHub refused the token, wants it
+authorized for SSO, does not show it the repository, or does not let it push.
+`repositoryReadToken(organizationId, "owner/name", member)` is the
+same check followed by one token for that repository: the App's, naming it
+alone and `contents: read`, or the member's own where only their token
+reaches it, answered sealed beside the repository as GitHub spells it, or
+none where neither does. It is
 what the checkout in Vespin's sandbox reads through
 (`src/agents/repository-shell.ts`), and the File tab, the tree, and the skills
 beside it. `repositoryPullRequestToken` adds `pull_requests: read` and
 `repositoryWriteToken` cuts contents and pull requests write, each with CI
 read beside it where the installation grants it; `appBot(token)` reads the
-App's bot user (`GET /users/<slug>[bot]`) on a token already minted, which
-is who an agent's commits are by. A task's repository is reached
+App's bot user (`GET /users/<slug>[bot]`) on a token, which is who an
+agent's commits are by where the App is their author. An agent whose author
+is `AGENT_AUTHOR.DEVELOPER` (the developer's sign-in may push) or
+`AGENT_AUTHOR.TOKEN` (their own token reached the repository)
+(`@repo/features/agent-wire`) commits as the developer, and the bot is
+only its `Co-authored-by` line (`agentCoAuthor` in
+`src/agents/coder-host/checkout.ts`). A task's repository is reached
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
@@ -140,8 +165,12 @@ hosted oRPC router) is that
 listing under the account bearer, answered as
 `packages/features/src/github-repositories-wire.ts` declares it: `installed`,
 whether the workspace has an installation connected, `repositories` (owner,
-name, full name, default branch, private, and when GitHub last saw it
-change), and `installationUrl`. Nothing is stored. A `workspaceId` query
+name, full name, default branch, private, when GitHub last saw it change,
+and `access`, `app` or `token`: the installations' listing, then the
+repositories added on a token that the member's own token also lists),
+`addable` (the repositories the member's own token may push to that the
+workspace lists nowhere yet, which Settings › Workspace's Add repository
+offers), and `installationUrl`. Nothing is stored. A `workspaceId` query
 names the workspace the listing is for, to a member of it; none named is the
 account's first workspace. One the account is not in is `not-found`
 (404), and the query given twice is `invalid-request`. A GitHub or a store
