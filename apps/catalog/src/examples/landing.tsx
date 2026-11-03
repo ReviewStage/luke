@@ -47,13 +47,13 @@ function Landing(): React.JSX.Element {
       footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
     >
       <LandingSection
-        title="Answer from the Inbox."
-        lead="Pick an option or reply, and the agent carries on."
+        title="Monitor all your agents with one inbox."
+        lead="Agents only post to your inbox when something needs your attention."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
-        title="Your plan or your API key."
-        lead="Claude Code on your Claude plan, or Codex on your ChatGPT plan."
+        title="Bring your own keys."
+        lead="Use your Claude Code/Codex subscriptions or bring your own API keys."
         scene={LANDING_SCENE.MODELS}
         aside={
           <LandingFacts

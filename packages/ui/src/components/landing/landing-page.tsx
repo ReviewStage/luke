@@ -108,7 +108,8 @@ export function LandingPage({
   barCall?: ReactNode;
   /** The page's one line, its `h1`. */
   title: ReactNode;
-  lead: ReactNode;
+  /** The sentence under the line; none sets the calls under the line itself. */
+  lead?: ReactNode;
   /** The hero's calls, under its lead. */
   actions: ReactNode;
   /** The page's `LandingSection`s. */
@@ -125,7 +126,7 @@ export function LandingPage({
         <div className="ui-landing-hero">
           <div className="ui-landing-hero-words">
             <h1 className="ui-landing-title">{title}</h1>
-            <p className="ui-landing-hero-lead">{lead}</p>
+            {lead === undefined ? null : <p className="ui-landing-hero-lead">{lead}</p>}
             <div className="ui-landing-actions">{actions}</div>
           </div>
           <div className="ui-landing-hero-art">

@@ -30,7 +30,6 @@ export function App(): React.JSX.Element {
       bar={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
       barCall={<SiteDownload />}
       title="An inbox for all your coding agents."
-      lead="Agents work in cloud sandboxes, open pull requests, and post to your Inbox when they need you."
       actions={
         <>
           <SiteDownload />
@@ -57,28 +56,23 @@ export function App(): React.JSX.Element {
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
     >
       <LandingSection
-        title="Answer from the Inbox."
-        lead="Pick an option or reply, and the agent carries on."
+        title="Monitor all your agents with one inbox."
+        lead="Agents only post to your inbox when something needs your attention."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
-        title="Agents start other agents."
+        title="Agents work together."
         lead="They hand off work, message each other, and split tasks into sub-tasks."
         scene={LANDING_SCENE.AGENTS}
       />
       <LandingSection
-        title="Automations start agents."
-        lead="On a schedule, a GitHub event, a Sentry issue, or a webhook."
-        scene={LANDING_SCENE.AUTOMATIONS}
-      />
-      <LandingSection
-        title="On your Mac and your phone."
+        title="On every device."
         lead="The Mac app and the web app show the same tasks and threads."
         scene={LANDING_SCENE.DEVICES}
       />
       <LandingSection
-        title="Your plan or your API key."
-        lead="Claude Code on your Claude plan, or Codex on your ChatGPT plan."
+        title="Bring your own keys."
+        lead="Use your Claude Code/Codex subscriptions or bring your own API keys."
         scene={LANDING_SCENE.MODELS}
       />
     </LandingPage>
