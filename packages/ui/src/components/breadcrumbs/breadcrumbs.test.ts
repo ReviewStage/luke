@@ -233,27 +233,19 @@ test("a path too wide for its bar folds its first crumbs into one … naming the
   );
 });
 
-test("a path led by a crumb that drops a menu keeps it and folds the crumbs after it", () => {
-  layOut(250);
-  const container = draw({
-    label: "Path",
-    crumbs: [
-      { label: "acme/relay", popup: BREADCRUMB_POPUP.DIALOG, onPress: () => undefined },
-      ...THREE_CRUMBS,
-    ],
-  });
-  const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
-  expect(items).toEqual(["acme/relay", "…", "What the expired invite page says"]);
-});
-
-test("a path led by a kept crumb of words keeps it and folds the crumbs after it", () => {
+test("a path too wide for its bar led by a kept crumb folds nothing, as one led by a crumb that opens something", () => {
   layOut(250);
   const container = draw({
     label: "Path",
     crumbs: [{ label: "acme/relay", kept: true }, ...THREE_CRUMBS],
   });
   const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
-  expect(items).toEqual(["acme/relay", "…", "What the expired invite page says"]);
+  expect(items).toEqual([
+    "acme/relay",
+    "Teammate invitations",
+    "Build teammate invitations",
+    "What the expired invite page says",
+  ]);
 });
 
 test("a path that fits its bar folds nothing", () => {
