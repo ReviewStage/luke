@@ -25,7 +25,8 @@ function useFit(width: number) {
   const [scale, setScale] = useState(1);
   useEffect(() => {
     const box = ref.current;
-    if (!box) return undefined;
+    // Note that a document with no layout, as jsdom's is, keeps the screen unscaled, because it has no box to measure.
+    if (!box || typeof ResizeObserver === "undefined") return undefined;
     const watch = new ResizeObserver(([entry]) => {
       const room = entry?.contentRect.width ?? width;
       setScale(room > 0 ? room / width : 1);

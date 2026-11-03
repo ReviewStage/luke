@@ -171,8 +171,6 @@ export function LandingPage({
           </div>
         </div>
         {children}
-      </main>
-      <footer className="ui-landing-foot">
         <Rule />
         <section className="ui-landing-close" aria-labelledby={closeId}>
           <div>
@@ -183,6 +181,8 @@ export function LandingPage({
           </div>
           <div className="ui-landing-actions">{close.actions}</div>
         </section>
+      </main>
+      <footer className="ui-landing-foot">
         <div className="ui-landing-foot-links">{footer}</div>
         <div className="ui-landing-foot-art">
           <LandingWordmark />

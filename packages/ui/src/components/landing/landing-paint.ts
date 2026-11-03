@@ -32,7 +32,11 @@ export function roleChannels(near: HTMLElement, role: string): readonly [number,
 
 /** Whether the reader asked for less motion. */
 export function prefersStill(): boolean {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Note that a document with no media queries, as jsdom's is, is drawn still, because it lays out no frames to play either.
+  return (
+    typeof window.matchMedia !== "function" ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 /**
