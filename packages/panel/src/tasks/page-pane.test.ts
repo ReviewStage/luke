@@ -559,9 +559,8 @@ test("Comment asks the frame for an element, an element holding threads is pinne
 
   // A press in the page, selecting nothing, is a press away, which lets go of a comment holding no words of its own.
   postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, pressed: true });
-  assert.equal(
-    container.querySelector(".luke-rect-float:not([data-leaving]) .page-comment-float"),
-    null,
-    "the comment being started goes",
+  const standing = container.querySelector(
+    ".luke-rect-float:not([data-leaving]) .page-comment-float",
   );
+  assert.ok(standing === null, "the comment being started goes");
 });
