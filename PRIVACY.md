@@ -1014,7 +1014,12 @@ for each, and pressing one answers the ask as you, as picking it in Vespin
 would: Slack sends the press through Vercel Connect to our service, which
 reads only the Slack user and Slack workspace who pressed it and the
 thread, message, and option the button names, finds you by the Slack user
-id it kept, and keeps nothing else of the press.
+id it kept, and keeps nothing else of the press. A reply you write in the
+Slack thread under such a message reaches our service the same way and is
+posted on the Vespin thread as your reply, as one typed in Vespin would be,
+and handed to its agent, so it reaches the agent's prompt, the model, its
+transcript, and its traces; one from anyone but the member the message went
+to is not posted.
 
 When you mention @Vespin in a Slack channel the bot is in, or write to the
 bot directly, Slack sends that message through Vercel Connect to our

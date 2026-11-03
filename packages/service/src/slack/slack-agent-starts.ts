@@ -16,6 +16,13 @@
  * Where no workspace is connected, or none holds them as a member, the bot
  * says so in the thread and starts nothing.
  *
+ * A reply in the Slack thread of a DM the bot wrote a member about an inbox
+ * thread (`threadDmAt`) is posted on that thread as the member's own reply,
+ * as one in the app is (`messageAsMember`), keyed by Slack's event id, and
+ * the agent hears it as a thread message; the bot reacts with 👀. Only the
+ * member the DM went to, found as a press finds them (`SlackBot.memberOf`),
+ * may reply there; anyone else is told so and nothing is posted.
+ *
  * A message in a thread an agent was started from (`slack_agent_thread`) is
  * sent to that agent as the writer's own message (`steer.ts`), the agent
  * brought back first where it stands archived, as a chat tool reopens a
@@ -102,8 +109,10 @@ import { HostedEnvironment } from "../environment.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { afterResponse } from "../http/after-response.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
+import { messageAsMember } from "../inbox/inbox-procedures.js";
 import { SlackBot, type SlackBotService, type SlackMessageContent } from "./slack-bot.js";
 import { slackClipped, slackEscaped, slackMarkdownBlock } from "./slack-markdown.js";
+import { threadDmAt } from "./thread-dms.js";
 
 /** The events read: a mention of the bot in a channel, and a message in a conversation with it. */
 const SLACK_EVENT = { APP_MENTION: "app_mention", MESSAGE: "message" } as const;
@@ -139,6 +148,7 @@ const HEARD_EMOJI = "eyes";
 const SLACK_REPLY = {
   NOT_CONNECTED: `This Slack workspace isn't connected to ${PRODUCT_NAME}. A workspace owner or admin can connect the Slack bot in ${PRODUCT_NAME}'s workspace settings.`,
   NO_MEMBER: `I couldn't find you in a ${PRODUCT_NAME} workspace connected to this Slack. Connect your Slack account in ${PRODUCT_NAME}'s Settings › Integrations, then write to me again.`,
+  NOT_RECIPIENT: `This thread was sent to another ${PRODUCT_NAME} member, so I didn't post your reply.`,
 } as const;
 
 /** The event callback as far as it is read: the team, Slack's id for the event, the bot's own user, and the message. */
@@ -588,7 +598,43 @@ const startFromSlack = Effect.fnUntraced(function* (
 });
 
 /**
- * The message acted on, as the header says: sent to the agent its thread
+ * A reply in the Slack thread of a DM the bot wrote about an inbox thread,
+ * posted on that thread as the member's own reply, as one in the app is,
+ * under Slack's event id, and marked heard; from anyone but the member the
+ * DM went to, or a refusal, it is said in the thread instead.
+ */
+const replyToThreadDm = Effect.fnUntraced(function* (
+  bot: SlackBotService,
+  addressed: SlackAddressed,
+  dm: { readonly itemId: string; readonly organizationId: string; readonly to: string | undefined },
+) {
+  const thread = threadOf(addressed);
+  const member = yield* bot.memberOf(dm.organizationId, addressed.teamId, addressed.slackUserId);
+  if (Option.isNone(member)) {
+    yield* bot.reply(addressed.channel, thread, plainReply(SLACK_REPLY.NO_MEMBER));
+    return;
+  }
+  if (member.value !== dm.to) {
+    yield* bot.reply(addressed.channel, thread, plainReply(SLACK_REPLY.NOT_RECIPIENT));
+    return;
+  }
+  const posted = yield* Effect.result(
+    messageAsMember(storeWriter({ tools: CODER_TOOL_SET }), member.value, dm.itemId, {
+      text: addressed.text,
+      clientKey: addressed.eventId,
+      attachments: [],
+    }),
+  );
+  if (Result.isFailure(posted)) {
+    yield* bot.reply(addressed.channel, thread, refusalReply("post your reply", posted.failure));
+    return;
+  }
+  yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
+});
+
+/**
+ * The message acted on, as the header says: posted on the inbox thread
+ * whose DM it replies to, sent to the agent its thread
  * was started from, or starting one, as the member who wrote it; the bot
  * says in the thread why it did neither.
  */
@@ -600,6 +646,14 @@ const actOnAddressed = Effect.fnUntraced(function* (addressed: SlackAddressed) {
   if (workspaces.length === 0) {
     yield* bot.reply(addressed.channel, thread, plainReply(SLACK_REPLY.NOT_CONNECTED));
     return;
+  }
+  // A reply under a DM the bot wrote about an inbox thread goes to that thread, never to an agent of its own.
+  if (addressed.threadTs !== undefined) {
+    const dm = yield* threadDmAt(addressed.channel, addressed.threadTs);
+    if (Option.isSome(dm)) {
+      yield* replyToThreadDm(bot, addressed, dm.value);
+      return;
+    }
   }
   const email = yield* Effect.cached(bot.userEmail(addressed.slackUserId));
   // A message in a thread an agent was started from goes to that agent, in that agent's workspace.

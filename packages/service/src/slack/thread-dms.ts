@@ -9,7 +9,9 @@
  * thread has a DM, every later post of the agent's on it that waits on the
  * same member is a reply in that DM's Slack thread, whether it asks or not;
  * before then, a follow-up that asks nothing new on a thread still open
- * writes nothing. Nothing written back in Slack reaches the thread.
+ * writes nothing. A member's reply in a DM's Slack thread is found back to
+ * its thread by that DM (`threadDmAt`) and posted there as their own reply
+ * (`slack-agent-starts.ts`).
  * The DM says the thread's title, the post's words as Slack draws
  * Markdown (`slackMarkdownBlock`), and an
  * open button to the thread; a decide ask that takes one option offers each
@@ -273,6 +275,36 @@ const findThreadDm = SqlSchema.findOneOption({
     ),
 });
 
+/** The DM that opened a Slack thread, by its conversation and timestamp: its item, that item's workspace, and the DM as kept. */
+const findDmAt = SqlSchema.findOneOption({
+  Request: Schema.Struct({ channel: Schema.String, ts: Schema.String }),
+  Result: Schema.Struct({
+    itemId: Schema.String,
+    organizationId: Schema.String,
+    dm: SlackDmSchema,
+  }),
+  execute: ({ channel, ts }) =>
+    Database.use((db) =>
+      db
+        .select({
+          itemId: inboxMessage.itemId,
+          organizationId: inboxItem.organizationId,
+          dm: inboxMessage.slackDm,
+        })
+        .from(inboxMessage)
+        .innerJoin(inboxItem, eq(inboxItem.id, inboxMessage.itemId))
+        .where(
+          and(
+            sql`${inboxMessage.slackDm} ->> 'channel' = ${channel}`,
+            sql`${inboxMessage.slackDm} ->> 'ts' = ${ts}`,
+            sql`${inboxMessage.slackDm} ->> 'thread' is null`,
+          ),
+        )
+        .orderBy(desc(inboxMessage.createdAt))
+        .limit(1),
+    ),
+});
+
 /**
  * The DMs of the item's messages whose ask has settled, each marked settled
  * as it is read, with the message's words and where its ask stands. Note
@@ -335,6 +367,29 @@ export function itemWorkspace(
   return Effect.map(
     findItemPlace(itemId),
     Option.map((place) => place.organizationId),
+  );
+}
+
+/**
+ * The thread a Slack thread stands under where its first message is a DM
+ * the bot wrote about one: the item, its workspace, and the member the DM
+ * went to, where it was kept; nothing for any other Slack thread.
+ */
+export function threadDmAt(
+  channel: string,
+  threadTs: string,
+): Effect.Effect<
+  Option.Option<{
+    readonly itemId: string;
+    readonly organizationId: string;
+    readonly to: string | undefined;
+  }>,
+  StoreFailure,
+  DatabaseServices
+> {
+  return Effect.map(
+    findDmAt({ channel, ts: threadTs }),
+    Option.map(({ itemId, organizationId, dm }) => ({ itemId, organizationId, to: dm.to })),
   );
 }
 
