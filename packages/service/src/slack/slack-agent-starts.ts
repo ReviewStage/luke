@@ -25,7 +25,10 @@
  * both as an owner or admin named them in Settings, else in the repository
  * of the writer's latest agent in the workspace, else in none. Its prompt is the writer's words, the thread's earlier
  * messages fenced as data, since anyone in the channel wrote them, and the
- * message's link; only the writer's own words hand it MCP servers. The bot
+ * message's link; only the writer's own words hand it MCP servers. Its
+ * first line, and each message sent on, says Slack carried it, with the
+ * writer's words and the message's link (`slackLine`), which a window draws
+ * in place of the prompt the agent reads. The bot
  * reacts to the message with 👀 at once, as other bots do, rather than
  * replying, and the thread is kept as the agent's; a message sent on to an
  * agent is marked the same way.
@@ -57,7 +60,14 @@ import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { causeKind } from "@repo/runtime/effect";
-import { EXCESS_KEYS, TURN_STATUS, type UnparsedWireValue } from "@repo/wire";
+import {
+  EXCESS_KEYS,
+  MESSAGE_CHANNEL,
+  SLACK_LINE_BOUNDS,
+  type SlackLineMetadata,
+  TURN_STATUS,
+  type UnparsedWireValue,
+} from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
@@ -312,6 +322,19 @@ function startPrompt(
   ].join("\n\n");
 }
 
+/**
+ * What the line says carried it, which a window draws in place of the prompt
+ * the agent reads: the member's own words and the message's link, never the
+ * thread's other messages or what the agent is told to do with them.
+ */
+function slackLine(addressed: SlackAddressed, permalink: Option.Option<string>): SlackLineMetadata {
+  const words = addressed.text.slice(0, SLACK_LINE_BOUNDS.WORDS_CHARS);
+  const url = Option.getOrUndefined(
+    Option.filter(permalink, (link) => link.length <= SLACK_LINE_BOUNDS.URL_CHARS),
+  );
+  return { channel: MESSAGE_CHANNEL.SLACK, words, ...(url === undefined ? undefined : { url }) };
+}
+
 /** The agent's link in the workspace, as the member's other links name it. */
 const agentLink = (userId: string, organizationId: string, agentId: string) =>
   Effect.map(workspaceStepOf(userId, organizationId), (step) =>
@@ -330,6 +353,7 @@ const sendToAgent = Effect.fnUntraced(function* (
     yield* bot.reply(addressed.channel, threadOf(addressed), plainReply("That agent is gone."));
     return;
   }
+  const permalink = yield* bot.permalink(addressed.channel, addressed.ts);
   const sent = yield* Effect.result(
     steerAgent(
       yield* routedSessions(userId),
@@ -340,6 +364,7 @@ const sendToAgent = Effect.fnUntraced(function* (
         text: addressed.text,
         clientKey: addressed.eventId,
         sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+        metadata: slackLine(addressed, permalink),
       },
     ),
   );
@@ -375,6 +400,7 @@ const startFromSlack = Effect.fnUntraced(function* (
       idempotencyKey: addressed.eventId,
       choice: undefined,
       prompt: startPrompt(addressed, earlier, permalink),
+      carried: slackLine(addressed, permalink),
       // Only the member's own words hand the agent servers, never the thread's other messages.
       serverWords: addressed.text,
     }),

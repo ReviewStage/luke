@@ -69,7 +69,7 @@ import { planMarkdown } from "@repo/features/plan-markdown";
 import { TASK_MODE, type Task } from "@repo/features/task-wire";
 import { bothInOrder, causeKind, failureKind } from "@repo/runtime/effect";
 import { EXPERIMENT } from "@repo/settings";
-import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
+import { MESSAGE_CHANNEL, type SlackLineMetadata, START_LINE_BRIEF } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { Cause, Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -286,6 +286,8 @@ export type StartAsk = StartPlace & {
   readonly startedBy?: Agent | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
+  /** What carried the prompt where something other than the Start did, which the first line says in place of its brief: a member's message to the Slack bot; none for every other Start. */
+  readonly carried?: SlackLineMetadata | undefined;
   /** How the summary of the steps a replay cannot keep is written, for a Start from another agent; none leaves those steps out unsummarized. */
   readonly summaryModel?: SummaryModelOf | undefined;
   /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise, a source's brief standing for the prompt and its replay never read. */
@@ -952,22 +954,26 @@ function startMachineOf(
 /**
  * Who a Start's first line names as its sender and what it says it is: an
  * automation's run says its prompt as the automation, as its later lines do
- * (`automation-runs.ts`); any other Start's is its brief, sent by the agent
- * whose `start_agent` asked, or else by the member who started it.
+ * (`automation-runs.ts`); a member's message to the Slack bot says what
+ * carried it, sent by that member; any other Start's is its brief, sent by
+ * the agent whose `start_agent` asked, or else by the member who started it.
  */
 function openingOf(
   agent: Agent,
-  ask: Pick<StartAsk, "automationOrigin" | "startedBy">,
+  ask: Pick<StartAsk, "automationOrigin" | "startedBy" | "carried">,
   brief: { readonly prompt: string | null },
   /** The agent it takes over from, continued or forked; none for a fresh Start. */
   taken: { readonly source: Agent; readonly continued: boolean } | undefined,
 ): { readonly sender: LineSender; readonly metadata: AwaitingLineMetadata } {
-  const { automationOrigin, startedBy } = ask;
+  const { automationOrigin, startedBy, carried } = ask;
   if (automationOrigin !== undefined) {
     return {
       sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automationOrigin.name },
       metadata: automationLineMetadata(automationOrigin.firing),
     };
+  }
+  if (carried !== undefined) {
+    return { sender: { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId }, metadata: carried };
   }
   const sender: LineSender =
     startedBy === undefined

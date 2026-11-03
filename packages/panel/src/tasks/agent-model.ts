@@ -100,6 +100,7 @@ import {
   isWireString,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  type SlackLineMetadata,
   type ThreadLineMetadata,
   type UnparsedWireValue,
   USER_MESSAGE_METADATA,
@@ -1728,6 +1729,12 @@ export function commentLineWords(line: CommentLineMetadata): string {
     { kind: MESSAGE_BLOCK.QUOTE, words: line.quote },
     { kind: MESSAGE_BLOCK.WORDS, lines: words.split("\n") },
   ]);
+}
+
+/** What a member's message to the Slack bot carries for a window to draw it by, their own words and the message's link; nothing for any other line. */
+export function slackLineOf(message: AgentTranscriptMessage): SlackLineMetadata | undefined {
+  const read = userMetadataOf(message);
+  return read?.channel === MESSAGE_CHANNEL.SLACK ? read : undefined;
 }
 
 /** What GitHub said on the agent's pull request that a line steered into the agent carries; nothing for any other line. */
