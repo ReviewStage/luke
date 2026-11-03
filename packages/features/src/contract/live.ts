@@ -22,8 +22,8 @@
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
- * list asked with `&sync=` is answered what moved past that sync id alone,
- * held until something does. Each
+ * list and the inbox items asked with `&sync=` are answered what moved past
+ * that sync id alone, held until something does. Each
  * names the account it was started for under `?userId=`, and a session of
  * any other is answered as signed out. Each output is the wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
@@ -69,6 +69,9 @@ const pollField = EffectSchema.optionalKey(EffectSchema.Literal(LIVE_POLL.ON));
 /** Where the rows stood when the reader last polled (`liveDigestOf`); the poll is held until they move past it. */
 const afterField = EffectSchema.optionalKey(EffectSchema.String);
 
+/** The sync id the reader holds every row at, as text, past which it is answered what moved alone; empty where it holds none yet (`LIVE_POLL.SYNC`). */
+const syncField = EffectSchema.optionalKey(EffectSchema.String);
+
 /** The account the reader started following for, which the session must be (`LIVE_USER_QUERY`). */
 const userField = EffectSchema.optionalKey(EffectSchema.String);
 
@@ -79,11 +82,11 @@ const liveReadSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The task list as a live read follows it: the sync id the reader holds every row at, as text, past which it is answered what moved alone (`LIVE_POLL.SYNC`). */
+/** The task list as a live read follows it: the sync id the reader holds every row at (`syncField`). */
 const liveTasksSchema = EffectSchema.Struct({
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
-  [LIVE_POLL.SYNC]: EffectSchema.optionalKey(EffectSchema.String),
+  [LIVE_POLL.SYNC]: syncField,
   [LIVE_USER_QUERY]: userField,
 });
 
@@ -97,11 +100,12 @@ const liveAccountInboxSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The account's inbox items as a live read follows them: the instant the reader holds every item changed since, in epoch milliseconds, as text; none for every item. */
+/** The account's inbox items as a live read follows them: the instant the reader holds every item changed since, in epoch milliseconds, as text, none for every item; and the sync id it holds every item at, past which it is answered what moved alone (`LIVE_POLL.SYNC`). */
 const liveAccountInboxItemsSchema = EffectSchema.Struct({
   [ACCOUNT_INBOX_ITEMS.SINCE]: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_POLL.SYNC]: syncField,
   [LIVE_USER_QUERY]: userField,
 });
 

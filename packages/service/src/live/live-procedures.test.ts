@@ -65,7 +65,12 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { markInboxItemRead, postInboxThread } from "../inbox/inbox-store.js";
+import {
+  markInboxItemRead,
+  postInboxMessage,
+  postInboxThread,
+  withdrawInboxMessage,
+} from "../inbox/inbox-store.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
@@ -1254,8 +1259,8 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
   );
 });
 
-/** The task list asked as `bearer`, in delta mode past `sync` where it names one ("" for none yet), its answer decoded. */
-const askTasks = (bearer: string, sync?: string) =>
+/** A live read at `path` asked as `bearer`, polled, in delta mode past `sync` where it names one ("" for none yet), on the test's clock; its answer's body. */
+const askLive = (bearer: string, path: string, sync?: string) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -1264,7 +1269,7 @@ const askTasks = (bearer: string, sync?: string) =>
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({ resolveUserId: () => Effect.succeed(Option.some(bearer)) });
-    const url = readOf("/api/live/tasks", bearer);
+    const url = readOf(path, bearer);
     url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
     if (sync !== undefined) url.searchParams.set(LIVE_POLL.SYNC, sync);
     const response = yield* hostedAnswer(
@@ -1274,8 +1279,15 @@ const askTasks = (bearer: string, sync?: string) =>
     );
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
     const body: unknown = JSON.parse(yield* Effect.promise(() => response.text()));
-    return Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries;
+    return body;
   });
+
+/** The task list asked as `bearer`, in delta mode past `sync` where it names one, its parts decoded. */
+const askTasks = (bearer: string, sync?: string) =>
+  Effect.map(
+    askLive(bearer, "/api/live/tasks", sync),
+    (body) => Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries,
+  );
 
 /** Each part's row ids, as a delta answers its rows. */
 const idsOf = (part: { readonly rows?: readonly unknown[] }) =>
@@ -1420,5 +1432,67 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
       assert.equal(answered.plans.sync?.past, undefined);
       assert.ok(answered.plans.sync?.next !== undefined);
     }),
+  );
+});
+
+/** The account's inbox items asked as `bearer` in delta mode past `sync` ("" for none yet), its parts decoded. */
+const askItems = (bearer: string, sync: string) =>
+  Effect.map(
+    askLive(bearer, "/api/live/inbox-items", sync),
+    (body) => Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(body).queries,
+  );
+
+/** An item of an agent of the member's on a task of theirs, the agent's message opening its thread; the item's id. */
+const openItem = (userId: string) =>
+  Effect.gen(function* () {
+    const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const agentId = yield* openTaskAgent(userId, task.workspaceId, task.id);
+    const posted = yield* postInboxThread(
+      { userId, taskId: task.id, agentId },
+      {
+        key: "review",
+        title: "Review the invite flow",
+        body: "It is up.",
+        ask: { type: INBOX_ASK.DO, steps: [] },
+      },
+    );
+    return Result.getOrThrow(posted).id;
+  });
+
+/** The client keys of a messages part's rows, as the reader's own messages carry them. */
+const clientKeysOf = (part: { readonly rows?: readonly unknown[] }) =>
+  (part.rows ?? []).map((row) => (row as { readonly clientKey: string | null }).clientKey);
+
+it.layer(getTestDB())("the account's inbox items' live read in delta mode", (it) => {
+  it.effect(
+    "a message withdrawn moves its item, answered whole without it in every part, and nothing of another workspace's",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const erin = yield* openUser;
+        const itemId = yield* openItem(dana);
+        const erinsItem = yield* openItem(erin);
+        const clientKey = randomUUID();
+        assert.ok(
+          Option.isSome(yield* postInboxMessage(dana, itemId, { text: "On it", clientKey })),
+        );
+        const whole = yield* askItems(dana, "");
+        const past = whole.stamps.sync?.next;
+        assert.ok(past !== undefined);
+        assert.ok(clientKeysOf(whole.messages).includes(clientKey), "the message stands");
+
+        yield* withdrawInboxMessage(dana, itemId, clientKey);
+        yield* markInboxItemRead(erin, erinsItem);
+        // Note that the hold is let run to its end, so a withdrawal no row the read takes records answers nothing moved rather than holding the test.
+        const asked = yield* Effect.forkChild(askItems(dana, past));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const moved = yield* Fiber.join(asked);
+
+        assert.deepEqual(idsOf(moved.stamps), [itemId]);
+        assert.deepEqual(idsOf(moved.items), [itemId]);
+        assert.ok(!clientKeysOf(moved.messages).includes(clientKey), "the message is withdrawn");
+        assert.ok(clientKeysOf(moved.messages).length > 0, "the item's thread comes whole");
+        assert.equal(moved.items.sync?.past, past);
+      }),
   );
 });
