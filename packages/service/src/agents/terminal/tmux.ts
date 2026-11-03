@@ -34,10 +34,10 @@ import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const TMUX = {
-  /** What a Terminal tab's session names start with; the rest is the shell's id. Note that it and `SOCKET` keep their old names, because a running sandbox's shells are found again by them. */
-  SESSION_PREFIX: "luke-",
+  /** What a Terminal tab's session names start with; the rest is the shell's id. */
+  SESSION_PREFIX: "terminal-",
   /** The session option a developer-given name rides in. */
-  TITLE_OPTION: "@luke_title",
+  TITLE_OPTION: "@terminal_title",
   /** Where a new shell stands: the agent's checkout. */
   START_DIRECTORY: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /**
@@ -47,8 +47,25 @@ export const TMUX = {
    * would start each new shell with them; this one is only ever started
    * without, and the old one ends as its sandbox next stops.
    */
+  SOCKET: "terminal",
+} as const;
+
+/**
+ * The server, session prefix, and title option a sandbox running since
+ * before the product's rename started its shells under, which are still
+ * listed and reached there and never started on. Note that a stop ends
+ * tmux's server and every shell it holds, so this goes once every sandbox
+ * running when the rename deployed has stopped: an hour on, at the
+ * sandbox's own timeout (`CODER.SANDBOX_TIMEOUT_MS`).
+ */
+const TMUX_BEFORE_RENAME = {
+  SESSION_PREFIX: "luke-",
+  TITLE_OPTION: "@luke_title",
   SOCKET: "luke-unprivileged",
 } as const;
+
+/** Each server a shell may stand on, today's first. */
+const TMUX_SERVERS = [TMUX, TMUX_BEFORE_RENAME] as const;
 
 /**
  * The sandbox's own tmux settings, written to `/etc/tmux.conf` as its image
@@ -100,16 +117,36 @@ const SHELLS: ReadonlySet<string> = new Set(["bash", "zsh", "sh", "dash", "fish"
  * failure exits nonzero.
  */
 const LIST_SCRIPT = [
-  "listed=$(tmux list-sessions -F '#{session_name} #{session_created}' 2>&1) || {",
-  '  case "$listed" in *"no server running"*|*"rror connecting to"*) exit 0 ;; esac',
-  `  printf '%s\\n' "$listed" >&2`,
-  "  exit 1",
+  "list() {",
+  `  listed=$(command tmux -L "$1" list-sessions -F '#{session_name} #{session_created}' 2>&1) || {`,
+  '    case "$listed" in *"no server running"*|*"rror connecting to"*) return 0 ;; esac',
+  `    printf '%s\\n' "$listed" >&2`,
+  "    exit 1",
+  "  }",
+  `  printf '%s\\n' "$listed" | while read -r name created; do`,
+  `    case "$name" in "$2"*) ;; *) continue ;; esac`,
+  `    printf '%s %s %s %s %s\\n' "$name" "$created" "$(field "$1" "$name" "#{$3}")" "$(field "$1" "$name" '#{pane_current_command}')" "$(field "$1" "$name" '#{pane_current_path}')"`,
+  "  done",
   "}",
-  `field() { tmux display-message -p -t "=$1:" "$2" | base64 | tr -d '\\n'; }`,
-  `printf '%s\\n' "$listed" | while read -r name created; do`,
-  `  case "$name" in ${TMUX.SESSION_PREFIX}*) ;; *) continue ;; esac`,
-  `  printf '%s %s %s %s %s\\n' "$name" "$created" "$(field "$name" '#{${TMUX.TITLE_OPTION}}')" "$(field "$name" '#{pane_current_command}')" "$(field "$name" '#{pane_current_path}')"`,
-  "done",
+  `field() { command tmux -L "$1" display-message -p -t "=$2:" "$3" | base64 | tr -d '\\n'; }`,
+  ...TMUX_SERVERS.map(
+    (server) => `list ${server.SOCKET} ${server.SESSION_PREFIX} ${server.TITLE_OPTION}`,
+  ),
+].join("\n");
+
+/**
+ * Finds the server holding the shell whose id is `$1`, setting `sock`,
+ * `session`, and `title` to its socket, the shell's session, and the
+ * option its name rides in: today's server's, unless only the server from
+ * before the rename holds the shell.
+ */
+const FIND_SHELL = [
+  "found() {",
+  `  sock=${TMUX.SOCKET} session="${TMUX.SESSION_PREFIX}$1" title=${TMUX.TITLE_OPTION}`,
+  `  if ! command tmux -L ${TMUX.SOCKET} has-session -t "=${TMUX.SESSION_PREFIX}$1" 2>/dev/null && command tmux -L ${TMUX_BEFORE_RENAME.SOCKET} has-session -t "=${TMUX_BEFORE_RENAME.SESSION_PREFIX}$1" 2>/dev/null; then`,
+  `    sock=${TMUX_BEFORE_RENAME.SOCKET} session="${TMUX_BEFORE_RENAME.SESSION_PREFIX}$1" title=${TMUX_BEFORE_RENAME.TITLE_OPTION}`,
+  "  fi",
+  "}",
 ].join("\n");
 
 /** One listed field read back from base64, less the newline tmux printed after it. */
@@ -174,9 +211,14 @@ export function startTerminal(terminalId: string, title: string | undefined): Co
   );
 }
 
+/** One command on the shell whose id is the script's first argument, on whichever server holds it (`FIND_SHELL`). */
+function onShell(text: string, terminalId: string, args: readonly string[] = []): CommandAsk {
+  return script(`${FIND_SHELL}\nfound "$1"\n${text}`, [terminalId, ...args]);
+}
+
 /** Attaches a terminal's PTY to a shell that stands; one that does not is never started here, which only the shell route does. */
 export function attachTerminal(terminalId: string): CommandAsk {
-  return tmux(["attach-session", "-t", targetOf(terminalId)]);
+  return onShell('exec tmux -L "$sock" attach-session -t "=$session"', terminalId);
 }
 
 /** How the shell check exits where tmux ran and holds no such session: apart from tmux's own 1, and the 127 of a `setpriv` that could not drop the capabilities or a tmux missing. */
@@ -184,19 +226,22 @@ export const TMUX_EXIT = { NO_SESSION: 3 } as const;
 
 /** Whether a shell stands: exit 0 where its session does, `TMUX_EXIT.NO_SESSION` where tmux holds none by that name, and anything else where tmux could not be asked. */
 export function holdsTerminal(terminalId: string): CommandAsk {
-  return script(`tmux has-session -t "$1" 2>/dev/null || exit ${TMUX_EXIT.NO_SESSION}`, [
-    targetOf(terminalId),
-  ]);
+  return onShell(
+    `command tmux -L "$sock" has-session -t "=$session" 2>/dev/null || exit ${TMUX_EXIT.NO_SESSION}`,
+    terminalId,
+  );
 }
 
 /** Names a shell anew. */
 export function renameTerminal(terminalId: string, title: string): CommandAsk {
-  return tmux(["set-option", "-t", optionTargetOf(terminalId), TMUX.TITLE_OPTION, title]);
+  return onShell('exec tmux -L "$sock" set-option -t "=$session:" "$title" "$2"', terminalId, [
+    title,
+  ]);
 }
 
 /** Ends a shell, and whatever it was running. */
 export function killTerminal(terminalId: string): CommandAsk {
-  return tmux(["kill-session", "-t", targetOf(terminalId)]);
+  return onShell('exec tmux -L "$sock" kill-session -t "=$session"', terminalId);
 }
 
 /**
@@ -209,8 +254,11 @@ export function terminalsOf(run: CommandRun): readonly TerminalSummary[] | undef
   if (run.exitCode !== 0) return undefined;
   const listed = run.stdout.split("\n").flatMap((line) => {
     const [name, created, title, command, cwd] = line.split(" ");
-    if (name === undefined || !name.startsWith(TMUX.SESSION_PREFIX)) return [];
-    const id = readId(unparsedWire(name.slice(TMUX.SESSION_PREFIX.length)));
+    const prefix = TMUX_SERVERS.find((server) =>
+      name?.startsWith(server.SESSION_PREFIX),
+    )?.SESSION_PREFIX;
+    if (name === undefined || prefix === undefined) return [];
+    const id = readId(unparsedWire(name.slice(prefix.length)));
     if (Result.isFailure(id)) return [];
     const foreground = fieldOf(command);
     const named = fieldOf(title);

@@ -289,12 +289,10 @@ it.effect(
       const [start, resize] = texts(pty.sent);
       assert.equal(start.type, "start");
       assert.equal(start.command, "setpriv", "the shell attaches with every capability dropped");
+      assert.ok(start.args.includes(SHELL), "the start names the shell by its id");
       assert.ok(
-        start.args.includes(`=luke-${SHELL}`),
-        "the start names the shell's session exactly",
-      );
-      assert.ok(
-        start.args.includes("attach-session"),
+        start.args.some((arg: string) => arg.includes("attach-session")) &&
+          !start.args.some((arg: string) => arg.includes("new-session")),
         "a standing shell is attached, never started here",
       );
       assert.deepEqual([start.cols, start.rows], [ASK.cols, ASK.rows]);
