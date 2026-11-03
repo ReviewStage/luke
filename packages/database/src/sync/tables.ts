@@ -15,6 +15,12 @@
  * that member's token and what GitHub last answered it of a repository. A
  * write to them notifies the account it moves, so a read the account loses
  * is woken and answers without it.
+ *
+ * A table a delta read reads is logged too (`log`), its every write, or,
+ * for one rewritten in place more often than any delta read reads it, its
+ * rows' arrival and removal alone (`LOG.ROWS`): the task list's tables
+ * (`@repo/service`'s `tasksLive`), each declared logged once for every
+ * read that follows it by deltas.
  */
 
 import { agentDelegationTable, agentTable } from "../schemas/agent.js";
@@ -47,7 +53,7 @@ import { taskPin } from "../schemas/task-pin.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { workspaceFormerSlug } from "../schemas/workspace-former-slug.js";
 import { TOPIC } from "./notification.js";
-import { defineSyncTable, type SyncTable } from "./sync-table.js";
+import { defineSyncTable, LOG, type SyncTable } from "./sync-table.js";
 
 /**
  * A task, on its own topic and its workspace's. Note that the plan's text
@@ -63,6 +69,7 @@ export const taskSync = defineSyncTable(task, {
     { kind: TOPIC.WORKSPACE, column: task.organizationId },
   ],
   ignore: [task.document, task.agentEdits, task.doneBy],
+  log: LOG.EVERY,
 });
 
 /**
@@ -88,6 +95,7 @@ export const taskBlockSync = defineSyncTable(taskBlock, {
       topics: [{ kind: TOPIC.WORKSPACE, column: task.organizationId }],
     },
   ],
+  log: LOG.EVERY,
 });
 
 /**
@@ -103,6 +111,7 @@ export const agentSync = defineSyncTable(agentTable, {
     { kind: TOPIC.WORKSPACE, column: agentTable.organizationId },
   ],
   ignore: [agentTable.lastStep, agentTable.publishedRead],
+  log: LOG.EVERY,
 });
 
 /** An account's membership of a workspace, on the workspace's topic and the account's. */
@@ -111,6 +120,7 @@ export const memberSync = defineSyncTable(member, {
     { kind: TOPIC.WORKSPACE, column: member.organizationId },
     { kind: TOPIC.ACCOUNT, column: member.userId },
   ],
+  log: LOG.EVERY,
 });
 
 /**
@@ -130,6 +140,7 @@ export const userSync = defineSyncTable(user, {
     },
   ],
   ignore: [user.updatedAt, user.lastLoginMethod],
+  log: LOG.EVERY,
 });
 
 /**
@@ -173,6 +184,7 @@ export const deviceSync = defineSyncTable(device, {
     device.createdAt,
     device.lastSeenAt,
   ],
+  log: LOG.EVERY,
 });
 
 /** An invitation to a workspace, pending or settled, on the workspace's topic. */
@@ -206,6 +218,7 @@ export const githubInstallationSync = defineSyncTable(githubInstallation, {
 /** A member's own GitHub token, on the member's topic. */
 export const githubPersonalTokenSync = defineSyncTable(githubPersonalToken, {
   topics: [{ kind: TOPIC.ACCOUNT, column: githubPersonalToken.userId }],
+  log: LOG.EVERY,
 });
 
 /**
@@ -217,6 +230,7 @@ export const githubPersonalTokenSync = defineSyncTable(githubPersonalToken, {
 export const githubRepositoryReadSync = defineSyncTable(githubRepositoryRead, {
   topics: [{ kind: TOPIC.ACCOUNT, column: githubRepositoryRead.userId }],
   ignore: [githubRepositoryRead.checkedAt],
+  log: LOG.EVERY,
 });
 
 /** One of an account's sidebar sections, on the account's topic. */
@@ -242,11 +256,13 @@ export const repositoryPinSync = defineSyncTable(repositoryPin, {
 /** A task an account pinned, on the account's topic. */
 export const taskPinSync = defineSyncTable(taskPin, {
   topics: [{ kind: TOPIC.ACCOUNT, column: taskPin.userId }],
+  log: LOG.EVERY,
 });
 
 /** An agent with no task an account pinned, on the account's topic. */
 export const agentPinSync = defineSyncTable(agentPin, {
   topics: [{ kind: TOPIC.ACCOUNT, column: agentPin.userId }],
+  log: LOG.EVERY,
 });
 
 /**
@@ -398,7 +414,12 @@ export const automationSync = defineSyncTable(automation, {
   ],
 });
 
-/** One run of an automation, on its account's topic and, through the automation, its workspace's. */
+/**
+ * One run of an automation, on its account's topic and, through the
+ * automation, its workspace's. Its rows' arrival and removal alone are
+ * logged, since the task list reads only which automation a run is of,
+ * which never changes.
+ */
 export const automationRunSync = defineSyncTable(automationRun, {
   topics: [
     { kind: TOPIC.ACCOUNT, column: automationRun.userId },
@@ -409,6 +430,7 @@ export const automationRunSync = defineSyncTable(automationRun, {
       topics: [{ kind: TOPIC.WORKSPACE, column: automation.organizationId }],
     },
   ],
+  log: LOG.ROWS,
 });
 
 /**
@@ -463,10 +485,13 @@ export const pullRequestChaptersSync = defineSyncTable(pullRequestChapters, {
  * column is ignored and no wider topic is taken, because a journal is
  * rewritten in place on every streamed step: each write transaction
  * notifies the one topic once, its rows' notifications folding into one,
- * and only the transcript's own readers wake on it.
+ * and only the transcript's own readers wake on it. Its rows' arrival and
+ * removal alone are logged, for the same reason: the task list reads when a
+ * line awaiting its turn arrived, never a rewrite.
  */
 export const messagesSync = defineSyncTable(messages, {
   topics: [{ kind: TOPIC.CONVERSATION, column: messages.conversationId }],
+  log: LOG.ROWS,
 });
 
 /**
@@ -476,7 +501,9 @@ export const messagesSync = defineSyncTable(messages, {
  * harness's projection and its event count, the last activity, and the
  * dispatch claim are ignored, because each is rewritten by every message or
  * hand-over and no view reads them; a message written beside them notifies
- * the conversation's topic itself.
+ * the conversation's topic itself. Its rows' arrival and removal alone are
+ * logged, because every streamed step moves its journal's revision, and the
+ * task list reads only the harness it opened on.
  */
 export const conversationsSync = defineSyncTable(conversations, {
   topics: [
@@ -492,6 +519,7 @@ export const conversationsSync = defineSyncTable(conversations, {
     conversations.dispatchClaimedAt,
     conversations.dispatchLine,
   ],
+  log: LOG.ROWS,
 });
 
 /**
@@ -517,6 +545,7 @@ export const turnsSync = defineSyncTable(turns, {
     },
   ],
   ignore: [turns.planNotesTaken],
+  log: LOG.EVERY,
 });
 
 /**

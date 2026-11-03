@@ -16,7 +16,7 @@ import { announcingClock, driven } from "../testing/clock-driven.js";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { syncHub } from "./hub.js";
 import { LIVE_QUERIES } from "./live-queries.js";
-import { defineLiveQuery, LIVE_MODE, type LiveQuery } from "./live-query.js";
+import { defineLiveQuery, LIVE_MODE, type LiveQuery, type SyncMoved } from "./live-query.js";
 import { Sync } from "./watch.js";
 
 /**
@@ -153,6 +153,9 @@ function emitsWholeRow(scan: Scan, table: SyncTable): boolean {
   );
 }
 
+/** What moved for a delta read's plan: one key of every table, column, and topic kind, so every way it narrows is planned. */
+const MOVED_EVERYTHING: SyncMoved = { keys: () => [randomUUID()], topics: () => [randomUUID()] };
+
 /** The name a statement is prepared under while it is explained. */
 const PLANNED = "live_query_planned";
 
@@ -194,7 +197,8 @@ const genericPlanOf = (statement: string) =>
  * and that a column is read wherever any node of the plan names it, bar a
  * scan's whole row emitted for the node above to pick from (`emitsWholeRow`).
  * A read in cursor mode is planned past a cursor too, as a reader that names
- * one is answered.
+ * one is answered, and a read in delta mode narrowed to a key of every kind
+ * it narrows by, as a reader past a sync id is.
  */
 const faultsOf = (query: LiveQuery) =>
   Effect.gen(function* () {
@@ -203,6 +207,7 @@ const faultsOf = (query: LiveQuery) =>
     const built = [
       query.statements(params),
       ...past.map((cursor) => query.statements(params, cursor)),
+      ...(query.delta === undefined ? [] : [query.delta.statements(params, MOVED_EVERYTHING)]),
     ];
     const declared = new Map(query.reads.map((table) => [table.name, table]));
     const faults = new Set<string>();

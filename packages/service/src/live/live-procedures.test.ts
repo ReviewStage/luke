@@ -7,10 +7,18 @@ import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { writePage } from "@repo/database/models/plan-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
-import { createTaskCommitted } from "@repo/database/models/task-store";
+import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
+import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
+import { turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import {
+  getTestDB,
+  joinWorkspace,
+  openTaskAgent,
+  openWorkspace,
+  startTask,
+} from "@repo/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
@@ -50,8 +58,8 @@ import {
   workspacesLiveAnswerSchema,
   workspacesLiveRowsSchema,
 } from "@repo/features/workspace-live";
-import type { WireBoundaryInput } from "@repo/wire";
-import { sql } from "drizzle-orm";
+import { TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@repo/wire";
+import { eq, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -1243,5 +1251,115 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
       }),
+  );
+});
+
+/** The task list asked as `bearer`, in delta mode past `sync` where it names one ("" for none yet), its answer decoded. */
+const askTasks = (bearer: string, sync?: string) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    );
+    const procedures = liveProcedures({ resolveUserId: () => Effect.succeed(Option.some(bearer)) });
+    const url = readOf("/api/live/tasks", bearer);
+    url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
+    if (sync !== undefined) url.searchParams.set(LIVE_POLL.SYNC, sync);
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      services,
+      new Request(url, { headers: { authorization: `Bearer ${bearer}` } }),
+    );
+    assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
+    const body: unknown = JSON.parse(yield* Effect.promise(() => response.text()));
+    return Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries;
+  });
+
+/** Each part's row ids, as a delta answers its rows. */
+const idsOf = (part: { readonly rows?: readonly unknown[] }) =>
+  (part.rows ?? []).map((row) => (row as { readonly id: string }).id).toSorted();
+
+/** A turn of the agent's starting, as the writer opens one. */
+const startTurn = (userId: string, agentId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const [agent] = yield* db
+      .select({ conversationId: agentTable.conversationId })
+      .from(agentTable)
+      .where(eq(agentTable.id, agentId));
+    assert.ok(agent !== undefined);
+    yield* db.insert(turns).values({
+      userId,
+      conversationId: agent.conversationId,
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.RUNNING,
+      startedAt: new Date(yield* Clock.currentTimeMillis),
+    });
+  });
+
+it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
+  it.effect(
+    "a reader past its sync id is answered what moved alone: a task added, one deleted gone, an agent whose turn started, and nothing of another workspace's",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const erin = yield* openUser;
+        const deleted = yield* startTask(dana, { name: "Old invitations" });
+        const kept = yield* startTask(dana, { name: "Teammate invitations" });
+        const agentId = yield* openTaskAgent(dana, kept.workspaceId, kept.id);
+        const erinsGone = yield* startTask(erin, { name: "Billing" });
+        const whole = yield* askTasks(dana, "");
+        const past = whole.plans.sync?.next;
+        assert.ok(past !== undefined && whole.plans.sync?.past === undefined);
+
+        const added = yield* startTask(dana, { name: "Onboarding" });
+        yield* deleteTask(dana, deleted.id);
+        yield* startTurn(dana, agentId);
+        const erinsAdded = yield* startTask(erin, { name: "Payroll" });
+        yield* deleteTask(erin, erinsGone.id);
+        const moved = yield* askTasks(dana, past);
+
+        assert.deepEqual(idsOf(moved.plans), [added.id]);
+        assert.deepEqual(moved.plans.gone, [deleted.id]);
+        assert.deepEqual(idsOf(moved.agents), [agentId]);
+        assert.equal(moved.plans.sync?.past, past);
+        const erins = new Set([erinsGone.id, erinsAdded.id]);
+        for (const part of Object.values(moved)) {
+          assert.ok(![...idsOf(part), ...(part.gone ?? [])].some((id) => erins.has(id)));
+        }
+
+        const next = moved.plans.sync?.next;
+        assert.ok(next !== undefined);
+        const quiet = yield* Effect.forkChild(askTasks(dana, next));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = yield* Fiber.join(quiet);
+        assert.deepEqual(
+          Object.values(held).flatMap((part) => idsOf(part)),
+          [],
+          "a hold nothing moved ends with nothing",
+        );
+        assert.equal(held.plans.sync?.past, next);
+      }),
+  );
+
+  it.effect.each([
+    { case: "past an id below the oldest the log kept", joins: false },
+    { case: "whose membership moved", joins: true },
+  ])("a reader $case is answered whole, with the sync id to ask past next", ({ joins }) =>
+    Effect.gen(function* () {
+      const dana = yield* openUser;
+      const started = yield* startTask(dana, { name: "Teammate invitations" });
+      const past = (yield* askTasks(dana, "")).plans.sync?.next;
+      assert.ok(past !== undefined);
+      if (joins) yield* joinWorkspace(yield* openWorkspace(yield* openUser), dana);
+
+      const answered = yield* askTasks(dana, joins ? past : "1");
+
+      assert.deepEqual(idsOf(answered.plans), [started.id]);
+      assert.equal(answered.plans.sync?.past, undefined);
+      assert.ok(answered.plans.sync?.next !== undefined);
+    }),
   );
 });
