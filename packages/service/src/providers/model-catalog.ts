@@ -73,11 +73,15 @@ const FAST_SLUG_SUFFIX = "-fast";
 
 /**
  * The providers whose own API is confirmed to run what a fast slug stands
- * for: Anthropic's fast mode, the base model asked for `speed: "fast"`.
- * AI Gateway's docs never say what OpenAI's fast slugs are at OpenAI's own
- * API, so those are not offered rather than guessed at.
+ * for: Anthropic's fast mode, the base model asked for `speed: "fast"`, and
+ * OpenAI's priority processing, the base model on Codex's documented `fast`
+ * service tier, which it sends as the API's `priority` and which the catalog
+ * prices a GPT fast slug at (its base model's `service_tiers.priority`).
  */
-export const FAST_PROVIDERS: ReadonlySet<ModelProvider> = new Set([MODEL_PROVIDER.ANTHROPIC]);
+export const FAST_PROVIDERS: ReadonlySet<ModelProvider> = new Set([
+  MODEL_PROVIDER.ANTHROPIC,
+  MODEL_PROVIDER.OPENAI,
+]);
 
 const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER));
 

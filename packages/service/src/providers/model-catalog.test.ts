@@ -78,6 +78,9 @@ const CATALOG: JsonValue = {
       reasoning: [{ type: "toggle" }, { type: "effort", values: ["none", "low", "high"] }],
       pricing: { input: "varies", output: "0.00001" },
     }),
+    entry("openai/gpt-6.1-sol-fast", "GPT-6.1 Sol (Fast)", {
+      reasoning: [{ type: "toggle" }, { type: "effort", values: ["none", "low", "high"] }],
+    }),
     entry("openai/gpt-4.1", "GPT-4.1", { tags: ["tool-use"], reasoning: null }),
     entry("openai/gpt-image-2", "GPT Image 2", {
       tags: ["reasoning", "tool-use"],
@@ -103,6 +106,17 @@ it.effect("the default choice is one the catalog as published accepts", () =>
     assert.deepEqual(
       validateModelChoice(offered, AGENT_DEFAULT_CHOICE),
       Result.succeed(AGENT_DEFAULT_CHOICE),
+    );
+  }),
+);
+
+it.effect("a GPT model's fast version is offered beside it, which Codex runs on its fast tier", () =>
+  Effect.gen(function* () {
+    const { layer } = gateway(() => jsonResponse(CATALOG));
+    const offered = yield* readCatalog.pipe(Effect.provide(layer));
+    assert.deepEqual(
+      offered.map((model) => model.id).filter((id) => id.startsWith("openai/")),
+      ["openai/gpt-6.1-sol", "openai/gpt-6.1-sol-fast"],
     );
   }),
 );

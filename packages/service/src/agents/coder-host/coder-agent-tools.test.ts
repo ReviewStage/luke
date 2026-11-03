@@ -3590,7 +3590,7 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
   assert.equal((await stored(onEve)).model, SOL);
 });
 
-test("a Codex agent lists its GPT models alone with no fast version, and update_agent refuses it a Claude model, a fast version, and a context window in words and takes a GPT one", async () => {
+test("a Codex agent lists its GPT models alone with no fast version, and update_agent refuses it a Claude model, a fast version, and a context window in words and takes a GPT one, while one its OpenAI API key pays for lists and takes the fast version", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const onCodex = await claimed(agents.teammates.userId, {
@@ -3632,7 +3632,7 @@ test("a Codex agent lists its GPT models alone with no fast version, and update_
     {
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
-        "Not changed: that agent runs on Codex, which runs no fast version of a model; choose the model itself.",
+        "Not changed: that agent runs on Codex, which runs a fast version on an OpenAI API key alone; choose the model itself.",
     },
     {
       status: ACTION_RESULT_STATUS.REJECTED,
@@ -3648,6 +3648,34 @@ test("a Codex agent lists its GPT models alone with no fast version, and update_
   assert.equal(moved.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(moved));
   const after = Option.getOrThrow(await database.run(readAgent(onCodex.userId, onCodex.id)));
   assert.deepEqual([after.model, after.effort], [SOL, "low"]);
+
+  const onApiKey = await claimed(agents.teammates.userId, {
+    ...AGENT_CHOICE,
+    model: SOL,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.billing,
+    planSnapshot: "# Billing",
+    prompt: null,
+    runtime: AGENT_RUNTIME.CODEX,
+    payer: AGENT_PAYER.API_KEY,
+  });
+  const listedOnApiKey = await call(CODER_TOOL.LIST_MODELS, { agentId: onApiKey.id });
+  assert.deepEqual(
+    Array.isArray(listedOnApiKey.models)
+      ? listedOnApiKey.models.map((model) => isRecord(model) && model.id)
+      : [],
+    [SOL, SOL_FAST],
+  );
+  const fast = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: onApiKey.id,
+    model: SOL_FAST,
+    effort: "high",
+  });
+  assert.equal(fast.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(fast));
+  assert.equal(
+    Option.getOrThrow(await database.run(readAgent(onApiKey.userId, onApiKey.id))).model,
+    SOL_FAST,
+  );
 });
 
 test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, and reads no task of another workspace", async () => {
