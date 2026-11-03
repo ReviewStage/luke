@@ -1295,7 +1295,7 @@ test("a Vespin link to a review thread opens its agent's Pull request tab on the
   assert.equal(tab.control().threadReveal, undefined);
 });
 
-test("a Vespin link to an Inbox item opens it in the window's Inbox narrowed to its task, in the task's workspace, under the task or under its agent, whose task is read, never in the side panel, and one to an automation in the workspace its slug names", async () => {
+test("a Vespin link to an Inbox item opens it in the window's Inbox as it stands, never narrowed to its task, leaving another task it was narrowed to, in the task's workspace, under the task or under its agent, whose task is read, never in the side panel, and one to an automation in the workspace its slug names", async () => {
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const agentItemId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
@@ -1332,6 +1332,7 @@ test("a Vespin link to an Inbox item opens it in the window's Inbox narrowed to 
   );
   const underTask = opened();
   const listed = tab.control().workspace?.id;
+  act(() => tab.control().onShowInbox({ taskId: "notes" }));
   act(() =>
     tab.control().onOpenLink({
       workspace: "renamed-since",
@@ -1350,14 +1351,14 @@ test("a Vespin link to an Inbox item opens it in the window's Inbox narrowed to 
   assert.deepEqual(underTask, {
     open: true,
     chosen: { taskId: alerts, itemId, opened: true },
-    taskId: alerts,
+    taskId: undefined,
     panel: undefined,
   });
   assert.equal(listed, ACME.id);
   assert.deepEqual(underAgent, {
     open: true,
     chosen: { taskId: alerts, itemAgentId: AGENT_ID, itemId: agentItemId, opened: true },
-    taskId: alerts,
+    taskId: undefined,
     panel: undefined,
   });
   assert.equal(tab.control().inboxView.open, false);

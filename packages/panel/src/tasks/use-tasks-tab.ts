@@ -3087,20 +3087,19 @@ export function useTasksTab(input: {
   };
 
   /**
-   * An Inbox item opened in the window's Inbox where its task, found
-   * already, holds it: narrowed to the task where the account lists it, as
-   * the task's "needs you" count narrows it, else among every item.
+   * An Inbox item opened in the window's Inbox as it stands, its search,
+   * view, and narrowing kept, where its task, found already, holds it. Note
+   * that only a task the Inbox is narrowed to other than the item's is left,
+   * so the list it opens in holds it; a link never narrows the Inbox to its
+   * task, which only the task's own "needs you" count does (`onShowInbox`).
    */
   const openInboxItemOn = (workspace: string, place: InboxItemPlace, planId: string | null) => {
     // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
     const holder = planId === null ? undefined : viewed.tasks.find((task) => task.id === planId);
     listLinked(holder?.workspaceId ?? workspace);
-    if (holder !== undefined) chooseInboxTask(holder.id);
-    else {
-      // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
-      if (channelsOn) openChannelThread(place.itemId);
-      openTaskThread("planId" in place ? place.planId : undefined);
-    }
+    // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
+    if (channelsOn) openChannelThread(place.itemId);
+    openTaskThread(holder?.id ?? ("planId" in place ? place.planId : undefined));
     standInFor({
       kind: STAND_IN.INBOX,
       chosen:
