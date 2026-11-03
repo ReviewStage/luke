@@ -176,11 +176,10 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     return agent;
   });
 
-/** How a native sandbox was named and tagged: as a launch tags one now, as one made before the rename was, or under the tags' next names. */
+/** How a native sandbox was named and tagged: as a launch tags one now, or as one made before the rename was. */
 const NAMING = {
-  TODAY: { name: "agent-sandbox-", agent: "lukeAgent", runner: "lukeRunner" },
+  TODAY: { name: "agent-sandbox-", agent: "agentId", runner: "agentRunner" },
   BEFORE_RENAME: { name: "luke-agent-", agent: "lukeAgent", runner: "lukeRunner" },
-  NEXT: { name: "agent-sandbox-", agent: "agentId", runner: "agentRunner" },
 } as const;
 
 /** A running sandbox as we name a native agent's, tagged with its agent, and with the runner named where one was launched. */
@@ -353,7 +352,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           }),
         );
         // eve's sandbox, even tagged as an ended native agent's would be, is not ours to stop.
-        const eve = { ...eveSandbox(), tags: { sessionId: "wrun_eve", lukeAgent: ended.id } };
+        const eve = { ...eveSandbox(), tags: { sessionId: "wrun_eve", agentId: ended.id } };
         const eveOwn = eveSandbox();
         // A sandbox named as ours whose agent runs on eve is left to eve's own lifecycle.
         const misnamed = nativeSandbox(onEve.id);
@@ -551,7 +550,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
     }),
   );
   it.effect(
-    "a sandbox whose old runner exited or is gone is stopped, one made before the rename or tagged under the next names alike",
+    "a sandbox whose old runner exited or is gone is stopped, one made and tagged before the rename alike",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -570,7 +569,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         });
         // Vercel has not recorded this exit yet, as no read waited for it: a plain read names none.
         api.commands.set("cmd_exited", { id: "cmd_exited", exitCode: 0 });
-        const done = nativeSandbox(exited.id, "cmd_exited", NAMING.NEXT);
+        const done = nativeSandbox(exited.id, "cmd_exited");
         const gone = nativeSandbox(vanished.id, "cmd_unknown");
         const beforeRename = nativeSandbox(older.id, "cmd_unknown", NAMING.BEFORE_RENAME);
         api.sandboxes.push(done, gone, beforeRename);

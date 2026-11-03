@@ -128,15 +128,12 @@ import {
  * The tags a sandbox we open carries beside its session's: its agent, and
  * the runner it runs, so a later call finds both. Note that Vercel refuses a
  * sandbox more than five tags, the session's among them, so a launch's
- * fingerprint rides in its launch tag rather than a tag of its own. And
- * note that these are the names written before the product's rename, which
- * every deployment from before reads: each is read after its name in
- * `RUNNER_TAG_NEXT`, and the next deployment writes those instead.
+ * fingerprint rides in its launch tag rather than a tag of its own.
  */
 export const RUNNER_TAG = {
-  AGENT: "lukeAgent",
-  SANDBOX_SESSION: "lukeRunnerSession",
-  COMMAND: "lukeRunnerCommand",
+  AGENT: "agentId",
+  SANDBOX_SESSION: "agentRunnerSession",
+  COMMAND: "agentRunnerCommand",
   /**
    * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
    * the launch was started with that a warm runner cannot take up later
@@ -146,29 +143,30 @@ export const RUNNER_TAG = {
    * without it as one whose stdin it writes, and is read here by no one:
    * no launch from before the read still ran as this deployment went out.
    */
-  LAUNCH: "lukeRunnerLaunch",
+  LAUNCH: "agentRunnerLaunch",
 } as const;
 
 /**
- * The names the tags move to, read before `RUNNER_TAG`'s. Note that a
- * deployment reads them before any writes them, because one from before
- * would read a sandbox tagged by them alone as no agent's and retire it;
- * and that each write replaces a sandbox's whole set of tags, so a sandbox
- * never carries both names of one tag.
+ * The tags' names before the product's rename, read after `RUNNER_TAG`'s and
+ * never written. Note that each write replaces a sandbox's whole set of
+ * tags, so a sandbox carries one name of a tag or the other, and one made
+ * before carries the old names until its next launch or halt writes the
+ * new; they can go once Vercel lists no sandbox named
+ * `SANDBOX_NAME_BEFORE_RENAME`, since only such a sandbox can carry them.
  */
-const RUNNER_TAG_NEXT = {
-  AGENT: "agentId",
-  SANDBOX_SESSION: "agentRunnerSession",
-  COMMAND: "agentRunnerCommand",
-  LAUNCH: "agentRunnerLaunch",
+const RUNNER_TAG_BEFORE_RENAME = {
+  AGENT: "lukeAgent",
+  SANDBOX_SESSION: "lukeRunnerSession",
+  COMMAND: "lukeRunnerCommand",
+  LAUNCH: "lukeRunnerLaunch",
 } as const satisfies Record<keyof typeof RUNNER_TAG, string>;
 
-/** A runner tag of a sandbox, under its next name or the name it is written under. */
+/** A runner tag of a sandbox, under its name or the one it had before the rename. */
 export function runnerTag(
   tags: Readonly<Record<string, string>> | undefined,
   tag: keyof typeof RUNNER_TAG,
 ): string | undefined {
-  return tags?.[RUNNER_TAG_NEXT[tag]] ?? tags?.[RUNNER_TAG[tag]];
+  return tags?.[RUNNER_TAG[tag]] ?? tags?.[RUNNER_TAG_BEFORE_RENAME[tag]];
 }
 
 /** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
