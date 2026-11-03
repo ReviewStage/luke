@@ -1154,7 +1154,7 @@ for it. Disconnect and deleting the account still revoke its grant.
 Every agent runs on Claude Code or Codex, the harness its model's provider
 names, chosen once at its Start and kept on its row
 (`src/agents/coder-host/agent-runtime-choice.ts`). An agent is one harness
-session over a `coding_agent` conversation
+session over an `agent` conversation
 (`packages/database/src/models/agent-store.ts`), and every call on it, a
 Start, a message, a Stop, a retune, or a delete's retire, is answered by the
 harness the conversation runs on (`sessionsRouter` in
@@ -1427,7 +1427,7 @@ read from the service's record of the agent (`callerWorkspace`,
 `callerUserId`), never from the model. `packages/database/src/models/memory-store.ts`
 keeps a memory or corrects one in place under a lock on the workspace's row,
 so the same words kept twice stand once, a correction leaves no older version
-beside the new one, and the bound of 200 memories of 400 characters a
+beside the new one, and the bound of 1,000 memories of 400 characters a
 workspace is counted once. Recall ranks the workspace's memories by how many
 of the query's words each holds; no index or embedding stands behind it.
 Credential-shaped words are refused before the store is reached, and a store
@@ -1829,9 +1829,10 @@ teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its agents go with it, its number in the
 workspace it left kept for the links written with it, and
-`DELETE /api/plans/{id}` deletes it, its agents' rows going with it
-and their conversations stamped deleted, with the one the task's own Vespin
-kept where the row still names it (`deleteTask`),
+`DELETE /api/plans/{id}` stops each of its agents for good, then deletes
+it, its agents' rows going with it and their conversations stamped deleted
+(`deleteTask`), or answers `agent-not-ready` where an agent started
+meanwhile,
 the id read from the path by the hosted oRPC router.
 Each row of the list carries `agents` where the task has an agent
 (`src/agents/task-agents.ts`): how many it has and how many are starting
@@ -2045,9 +2046,11 @@ The conversation tables have no `prompts` table and no `tool_sets` table
 (`20260921141320_dead_tool_sets` dropped the second): a turn keeps the
 composed prompt's hash and the tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
-conversation row names its kind (`coding_agent`, which
+conversation row names its kind (`CONVERSATION_KIND` in
+`packages/database/src/storage-vocabulary.ts`: `agent`, which
 `packages/database/src/models/agent-store.ts` opens, is the one any
-code still opens; `plan`, a task's own Vespin's, is opened no more), the
+code still opens, and `child` a subagent's or worker's; `main` and
+`observed` are older rows' kinds), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
 metadata as plain `jsonb`, unique on `(conversation_id, client_id)` as its
@@ -2181,22 +2184,46 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 `src/maintenance/maintenance-app.ts`, hands it the deployment's seams. Vercel crons run
 only on production deployments.
 
-The sweep ends what no request will, and it reads no word of any account.
-It runs two things in turn and answers what each did: the purge of
-conversations stamped deleted more than seven days ago, which is what a
-deleted task's agents' conversations come to, counted as `purged`; the
-sweep over turns still running past their kind's bound, an hour for a turn
-of any other conversation and a day and an hour for an agent's
-(`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
-`TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end
-the service never heard and which are settled as failed for `abandoned`
-through the same write a turn's own end takes, at most fifty a sweep and
-counted as `abandoned`.
+The sweep ends what no request will. `MaintenanceSweeps`
+(`src/maintenance/maintenance-sweep.ts`) runs eighteen sweeps in turn and
+answers what each did; one that fails is logged and answered as failed while
+the rest still run, and any failure fails the cron's check-in. In order:
 
-It then fires the automations whose schedule is due ("Automations" below),
-at most twenty-five a sweep, counted as `automations.fired`, and acts on
-the runs still queued from the last hour, at most twelve a sweep and four
-at once, counted as `automations.started`, `skipped`, and `failed`.
+- `purged`: conversations stamped deleted more than seven days ago, which
+  is what a deleted task's agents' conversations come to, with their
+  sessions' sandboxes queued for deletion.
+- `abandoned`: turns still running past their kind's bound, an hour for a
+  turn of any other conversation and a day and an hour for an agent's
+  (`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
+  `TURN_ABANDON.AGENT_AFTER_MS`), whose end the service never heard, settled
+  as failed for `abandoned` through the same write a turn's own end takes,
+  or as cancelled where a Stop went unconfirmed, at most fifty a sweep.
+- `deviceLeases` and `deviceWarmRunners`: launches taken back from Macs
+  that stopped beating within their lease, and local runners left warm past
+  their device's window.
+- `sandboxes`, `terminals`, `nativeSandboxes`, `eveSandboxes`, and
+  `sandboxRetention`: the Vercel Sandboxes queued for deletion deleted, and
+  agents' sandboxes stopped once no run and no terminal holds them, their
+  snapshot retention bounded.
+- `nativeWakeups`: native agents' due wakeups delivered, each as a message
+  from the service.
+- `withdrawnLines`: withdrawn lines no turn took within an agent's turn
+  bound deleted.
+- `automations`: the automations whose schedule is due fired
+  ("Automations" below), at most twenty-five a sweep, and the runs still
+  queued from the last hour acted on, at most twelve a sweep and four at
+  once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
+- `purgedPictures`: plan pictures uploaded a day ago that no save named.
+- `tokenPullRequests`: the open pull requests of agents on a member's own
+  GitHub token, which no webhook reaches, read on that token, their reviews,
+  comments, and checks among them, and the agent woken with what changed
+  (`src/github/token-pull-request-sweep.ts`).
+- `imageTemplates` and `repositorySnapshots`: the native agents' image
+  template moved on, and workspaces' repository snapshots past their age
+  deleted.
+- `agentQueues`: unpaused queues of idle agents handed on.
+- `hostPairings`: lapsed host pairings, and approved hosts that never
+  collected their secret, deleted.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance
