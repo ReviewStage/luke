@@ -52,7 +52,7 @@ it.effect.each([MIGRATION, STRAGGLERS])(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersWhere((name) => name.localeCompare(migration) < 0));
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         for (const [order, action] of BEFORE.entries()) {

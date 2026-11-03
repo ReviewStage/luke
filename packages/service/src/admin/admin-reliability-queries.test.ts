@@ -64,7 +64,7 @@ const openAccount = (role: "user" | "admin" = "user") =>
   Effect.gen(function* () {
     const id = `user-${randomUUID()}`;
     yield* Database.use((db) =>
-      db.insert(user).values({ id, name: `Account ${role}`, email: `${id}@luke.test`, role }),
+      db.insert(user).values({ id, name: `Account ${role}`, email: `${id}@app.test`, role }),
     );
     return id;
   });

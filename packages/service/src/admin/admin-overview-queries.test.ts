@@ -62,7 +62,7 @@ const openAccount = (name: string, createdAt: string, role: string = USER_ROLE.U
     const id = `user-${name}-${randomUUID()}`;
     yield* db
       .insert(user)
-      .values({ id, name, email: `${id}@luke.test`, role, createdAt: at(createdAt) });
+      .values({ id, name, email: `${id}@app.test`, role, createdAt: at(createdAt) });
     return id;
   });
 

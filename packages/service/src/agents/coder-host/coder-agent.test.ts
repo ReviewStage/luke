@@ -523,8 +523,8 @@ function briefInstructions(): Record<string, { onTask: string; taskless: string 
   );
 }
 
-// Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
-if (process.env.LUKE_UPDATE_FIXTURES === "1") {
+// Note that the golden is written again only under APP_UPDATE_FIXTURES=1, and the diff explained in the PR.
+if (process.env.APP_UPDATE_FIXTURES === "1") {
   writeFileSync(CODER_PATH, `${JSON.stringify(briefInstructions(), null, 2)}\n`);
 }
 
@@ -586,8 +586,8 @@ function pilotInstructions(): string {
   );
 }
 
-// Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
-if (process.env.LUKE_UPDATE_FIXTURES === "1") {
+// Note that the golden is written again only under APP_UPDATE_FIXTURES=1, and the diff explained in the PR.
+if (process.env.APP_UPDATE_FIXTURES === "1") {
   writeFileSync(PILOT_PATH, `${JSON.stringify({ pilot: pilotInstructions() }, null, 2)}\n`);
 }
 

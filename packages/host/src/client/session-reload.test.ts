@@ -26,7 +26,7 @@ const signedIn = (id: string) =>
   ({
     status: ACCOUNT_STATUS.SIGNED_IN,
     id,
-    email: `${id}@luke.test`,
+    email: `${id}@app.test`,
     provider: ACCOUNT_PROVIDER.GITHUB,
   }) as const;
 

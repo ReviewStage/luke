@@ -32,7 +32,7 @@ import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js
 import type { WebServices } from "../runtime.js";
 import { modelsProcedures } from "./models-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const MODELS = "/api/models";
 const USER_ID = "user-1";
 
@@ -61,7 +61,7 @@ const FAST_CATALOG: readonly CatalogModel[] = [OPUS, OPUS_FAST, SOL];
 const accountWithAnthropicKey = (userId: string, fastAccess: FastAccess | null) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const sealed = {
       keyVersion: 1,
       sealedDataKey: "sealed-data-key",

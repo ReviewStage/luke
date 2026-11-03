@@ -923,7 +923,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
       {
         environment: "Preview – luke-web",
         state: DEPLOYMENT_STATE.READY,
-        url: "https://luke-web-git-expiry.vercel.app",
+        url: "https://web-git-expiry.vercel.app",
         avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
       },
       { environment: "staging", state: DEPLOYMENT_STATE.FAILED, url: null },
@@ -961,7 +961,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
   assert.equal(buttons.length, 1, "a deployment naming no address opens nothing");
   act(() => buttons[0]?.click());
   await settle();
-  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+  assert.deepEqual(opened, ["https://web-git-expiry.vercel.app"]);
 
   act(() => root?.unmount());
   const none = await draw(controlAnswering());
@@ -986,7 +986,7 @@ test("the header offers Preview once the checks land, before their tab is shown:
           pullRequest: {
             ...CHECKS,
             deployments: [
-              ready("Preview – luke-web", "https://luke-web-git-expiry.vercel.app"),
+              ready("Preview – luke-web", "https://web-git-expiry.vercel.app"),
               { environment: "docs", state: DEPLOYMENT_STATE.PENDING, url: null },
               { environment: "staging", state: DEPLOYMENT_STATE.FAILED, url: null },
             ],
@@ -996,10 +996,10 @@ test("the header offers Preview once the checks land, before their tab is shown:
   );
   const single = preview(one) ?? assert.fail("the header offers Preview");
   assert.equal(single.tagName, "A", "one deployment is a link to the address it serves");
-  assert.equal(single.getAttribute("href"), "https://luke-web-git-expiry.vercel.app");
+  assert.equal(single.getAttribute("href"), "https://web-git-expiry.vercel.app");
   act(() => single.click());
   await settle();
-  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+  assert.deepEqual(opened, ["https://web-git-expiry.vercel.app"]);
 
   act(() => root?.unmount());
   opened = [];
@@ -1010,7 +1010,7 @@ test("the header offers Preview once the checks land, before their tab is shown:
           pullRequest: {
             ...CHECKS,
             deployments: [
-              ready("Preview – luke-web", "https://luke-web-git-expiry.vercel.app"),
+              ready("Preview – luke-web", "https://web-git-expiry.vercel.app"),
               ready("Preview – docs", "https://docs-git-expiry.vercel.app"),
             ],
           },
@@ -6209,7 +6209,7 @@ test("on a phone no Preview stands beside the title, and Files changed draws no 
               {
                 environment: "Preview – luke-web",
                 state: DEPLOYMENT_STATE.READY,
-                url: "https://luke-web-git-expiry.vercel.app",
+                url: "https://web-git-expiry.vercel.app",
               },
             ],
           },
@@ -6241,7 +6241,7 @@ test("on a phone no Preview stands beside the title, and Files changed draws no 
     "Preview – luke-web",
   ]);
   await pressToolbar(tab, "Preview – luke-web");
-  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+  assert.deepEqual(opened, ["https://web-git-expiry.vercel.app"]);
 
   await choose(tab, "Files changed");
   assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");

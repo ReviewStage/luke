@@ -8,6 +8,7 @@ import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { lapsedSandboxLeases, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask } from "@luke/database/models/task-store";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
@@ -47,7 +48,7 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * tasks, and sessions throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SHELL: TerminalSummary = {
   id: "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d",
   title: "zsh",
@@ -101,6 +102,7 @@ const openAgentWith = (options: { readonly claimed: boolean }) =>
       planSnapshot: null,
       prompt: null,
       repository: "acme/relay",
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -146,6 +148,7 @@ const openTokenAgent = Effect.gen(function* () {
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   const { agent } = started.value;

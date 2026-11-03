@@ -54,7 +54,7 @@ import { accountProcedures } from "./account-procedures.js";
  * Synthetic accounts and bearers throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const PREFERENCES_PATH = "/api/account/preferences";
 
 const OPUS: CatalogModel = {
@@ -95,7 +95,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   const bearers = new Map([
     [`Bearer ${owner}`, owner],

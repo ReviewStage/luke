@@ -19,7 +19,7 @@ afterEach(() => {
 /** The endpoint configured, its mail service answering every send and keeping what it was sent. */
 function mailService() {
   vi.stubEnv("RESEND_API_KEY", "re_test");
-  vi.stubEnv("FEEDBACK_TO", "founders@luke.test");
+  vi.stubEnv("FEEDBACK_TO", "founders@app.test");
   const mailed: { subject?: unknown }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
     mailed.push(JSON.parse(String(init?.body)));
@@ -29,7 +29,7 @@ function mailService() {
 }
 
 function note(body: { readonly experiment: string }): Request {
-  return new Request("https://luke.test/api/feedback", {
+  return new Request("https://app.test/api/feedback", {
     method: "POST",
     headers: { "content-type": "application/json", "x-real-ip": "198.51.100.7" },
     body: JSON.stringify({

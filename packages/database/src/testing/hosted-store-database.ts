@@ -11,7 +11,7 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-
 /**
  * The store's tests run against the real generated migrations on a real
  * Postgres dialect: PGlite in process by default, so `check.sh` needs no
- * service, or the Postgres named by `LUKE_STORE_TEST_DATABASE_URL`, which the
+ * service, or the Postgres named by `APP_STORE_TEST_DATABASE_URL`, which the
  * CI job points at its service container after `db:migrate` has run there. A
  * PGlite is opened through `openMigratedPglite`, migrated by the same
  * `runWebMigrations` the production runner applies; a Postgres is not, because
@@ -71,7 +71,7 @@ export async function openHostedStoreTestDatabase({
       return run(
         Effect.asVoid(
           Database.use((db) =>
-            db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@luke.test` }),
+            db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@app.test` }),
           ),
         ),
       ).then(() => id);

@@ -45,7 +45,7 @@ const openStarted = () =>
   Effect.gen(function* () {
     const db = yield* Database;
     const member = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: member, name: "Test User", email: `${member}@luke.test` });
+    yield* db.insert(user).values({ id: member, name: "Test User", email: `${member}@app.test` });
     yield* connectAgentApiKeys(member);
     const organizationId = yield* openWorkspace(member);
     const start = { taskId: null, organizationId, planSnapshot: null, repository: null };

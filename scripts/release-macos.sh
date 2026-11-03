@@ -6,8 +6,8 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 luke_require_macos
-if [[ -z "${LUKE_CODESIGN_IDENTITY:-}" ]]; then
-    printf 'error: LUKE_CODESIGN_IDENTITY must name a Developer ID Application identity\n' >&2
+if [[ -z "${APP_CODESIGN_IDENTITY:-}" ]]; then
+    printf 'error: APP_CODESIGN_IDENTITY must name a Developer ID Application identity\n' >&2
     exit 1
 fi
 # Baked into the renderer at packaging; without it the recorder never starts,
@@ -31,5 +31,5 @@ fi
 "$SCRIPT_DIRECTORY/bootstrap.sh"
 "$SCRIPT_DIRECTORY/check.sh"
 
-cd "$LUKE_REPO_ROOT"
+cd "$APP_REPO_ROOT"
 pnpm --filter @luke/desktop release "$@"

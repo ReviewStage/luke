@@ -40,6 +40,7 @@ import {
   GLYPH_INK,
   GlyphSlot,
   LIST_DENSITY,
+  LIST_ROW_CHEVRON,
   LIST_ROW_CURRENT,
   List,
   ListMotion,
@@ -203,9 +204,6 @@ const SERVER_COUNT_CLASS =
 /** What stands at a server's row's end: its switch, or Connect, as Settings › Integrations draws them. */
 const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
 
-/** A connected server's end: how many tools it offers, then its switch, the words a glyph's step off it. */
-const SERVER_SWITCH_END_CLASS = "ml-auto flex flex-none items-center gap-icon-gap";
-
 /**
  * A page's head in the popover's place: back, folded to its glyph, its mark
  * and name, its count, and its switch at the end, over a hairline, at the
@@ -318,7 +316,7 @@ function problemHint(problem: string, said: string | undefined): OneLineHint {
  * name, the account's beside it in the muted ink where the row names one,
  * and where its sign-in or its server stands, as the card a mention of the
  * server hangs says them too (`server-card.tsx`). How many tools it offers
- * stands at the row's end, beside its switch.
+ * is the row's metadata, at its end beside its switch.
  */
 function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
@@ -846,15 +844,7 @@ function ServersPopover({
   const end = (row: ServerRow): React.JSX.Element | null => {
     switch (row.kind) {
       case SERVER_ROW.SWITCH:
-        // Note that the count stands beside the switch, a glyph's step off it, so every row's counts form one column close to their switches.
-        return (
-          <span className={SERVER_SWITCH_END_CLASS}>
-            {row.tools !== undefined ? (
-              <span className={SERVER_COUNT_CLASS}>{toolsCount(row.tools.length)}</span>
-            ) : null}
-            <ServerSwitch row={row} servers={servers} />
-          </span>
-        );
+        return <ServerSwitch row={row} servers={servers} />;
       case SERVER_ROW.CONNECT:
       case SERVER_ROW.RECONNECT:
         return (
@@ -966,6 +956,8 @@ function ServersPopover({
             actions={input.actions}
             current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
             chevron={input.opens}
+            // Note that the chevron takes the metadata's place while the row is in hand, as a sidebar row's ⋯ takes its count's, so a server's account fades to its count rather than short of room kept for the chevron.
+            chevronAt={LIST_ROW_CHEVRON.META}
             keepFocus
             tabbable={false}
             onPress={input.onPress}
@@ -992,6 +984,8 @@ function ServersPopover({
       index: pickIndex(row),
       row,
       title: <ServerRowWords row={row} />,
+      // Note that the count is the row's metadata, beside its switch, so every row's counts form one column, and the chevron takes its place while the row is in hand.
+      meta: row.tools !== undefined ? toolsCount(row.tools.length) : undefined,
       card: <ServerCard provider={row.provider} connection={row.connection} />,
       actions: end(row),
       opens: opensTools(row),

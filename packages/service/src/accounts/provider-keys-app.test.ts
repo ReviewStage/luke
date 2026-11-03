@@ -49,7 +49,7 @@ const rewrap = (cronSecret: string | undefined, bearer: string) =>
       providerKeyRewrapApp().pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const request = new Request(`https://luke.test${MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH}`, {
+    const request = new Request(`https://app.test${MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH}`, {
       method: "POST",
       headers: { authorization: `Bearer ${bearer}` },
     });

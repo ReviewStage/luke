@@ -6,6 +6,7 @@ import { SqlClient } from "effect/sql";
 import { Database, type DatabaseServices } from "../../core/query.js";
 import { sqlClientOverUrl } from "../../core/sql-client.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, STORE_TEST_DATABASE_ENVIRONMENT, startTask } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
 import { queueRunnerLine, runnerLinesPast } from "../runner-line-store.js";
@@ -17,7 +18,7 @@ import { queueRunnerLine, runnerLinesPast } from "../runner-line-store.js";
  * while another's queue for the same agent is uncommitted waits for it, so
  * the agent's lines commit in the order of their places and a runner reading
  * past its cursor never passes over one. This file runs in CI's Postgres job,
- * where `LUKE_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
+ * where `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
 /** The launch both lines are written for. */
@@ -40,7 +41,7 @@ const anotherConnection = Effect.gen(function* () {
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Invitations" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -50,6 +51,7 @@ const openAccount = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return { userId, agentId: Option.getOrThrow(started).agent.id };
 });

@@ -49,7 +49,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const deviceId = randomUUID();
     yield* registerDevice(userId, {
       id: deviceId,
@@ -77,7 +77,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
       repository,
       machine: AGENT_MACHINE.DEVICE,
       deviceId,
-      ...(options.runtime === undefined ? undefined : { runtime: options.runtime }),
+      runtime: options.runtime ?? CONVERSATION_RUNTIME.CLAUDE_CODE,
       ...(options.onMacLogin === true ? { payer: AGENT_PAYER.MAC_SIGN_IN } : undefined),
     });
     const { agent } = Option.getOrThrow(started);
@@ -109,9 +109,9 @@ const LOCAL_AGENT_SERVICES = Layer.mergeAll(
 export const localAgentSessions = (userId: string) =>
   claudeCodeSessions({
     userId,
-    eventsUrl: "https://luke.test/api/agents/runner/events",
-    linesUrl: "https://luke.test/api/agents/runner-lines",
-    mcpUrl: "https://luke.test/api/agents/mcp",
+    eventsUrl: "https://app.test/api/agents/runner/events",
+    linesUrl: "https://app.test/api/agents/runner-lines",
+    mcpUrl: "https://app.test/api/agents/mcp",
     integrations: () => Effect.succeed([]),
     instructions: () => Effect.succeed("You are a Vespin coding agent."),
     nextSequence: () => Effect.succeed(0),

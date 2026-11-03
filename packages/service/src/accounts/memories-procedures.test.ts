@@ -32,7 +32,7 @@ import { memoriesProcedures } from "./memories-procedures.js";
  * Synthetic accounts, workspaces, bearers, and words throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const MEMORIES_PATH = "/api/account/memories";
 
 /** What the procedures counted, across the file; a test reads its own account's. */
@@ -65,7 +65,7 @@ const openTeam = Effect.gen(function* () {
     [teammate, "Tom Teammate"],
     [outsider, "Ola Outsider"],
   ] as const) {
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
   }
   const workspaceId = yield* openWorkspace(owner);
   yield* joinWorkspace(workspaceId, teammate);
@@ -202,7 +202,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         const third = `user-${randomUUID()}`;
         yield* db
           .insert(user)
-          .values({ id: third, name: "Thea Third", email: `${third}@luke.test` });
+          .values({ id: third, name: "Thea Third", email: `${third}@app.test` });
         yield* joinWorkspace(workspaceId, third);
         yield* keep(third, DEPLOYS);
         yield* db.delete(user).where(eq(user.id, third));

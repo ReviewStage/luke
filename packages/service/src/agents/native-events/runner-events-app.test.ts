@@ -82,7 +82,7 @@ import {
  * runner posts it. Synthetic accounts, words, and ids throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
@@ -152,7 +152,7 @@ const agentOn = (
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
     const started = yield* createAgent(userId, {
       taskId: task.id,
@@ -1170,7 +1170,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             "output-available",
             {
               output:
-                'LUKE_PROBE_SCAN {"uid":1001,"user":"vercel-sandbox","capEff":"0000000000000000","ownEnvHasAccessToken":false,"environsReadable":2,"environsDenied":14,"processesWithAccessToken":[],"filesScanned":0,"filesDenied":0,"jwtSha256":[]}\n',
+                'APP_PROBE_SCAN {"uid":1001,"user":"vercel-sandbox","capEff":"0000000000000000","ownEnvHasAccessToken":false,"environsReadable":2,"environsDenied":14,"processesWithAccessToken":[],"filesScanned":0,"filesDenied":0,"jwtSha256":[]}\n',
               exitCode: 0,
             },
           ],

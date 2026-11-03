@@ -152,7 +152,7 @@ const INTEGRATION_STARTUP_TIMEOUT_SECONDS = 20;
 const CLIENT_INFO = {
   name: "Vespin",
   title: "Vespin",
-  version: process.env.LUKE_RUNNER_VERSION ?? "dev",
+  version: process.env.APP_RUNNER_VERSION ?? "dev",
 } as const;
 
 /** The JSON-RPC methods the runner sends, and the notifications it acts on. */

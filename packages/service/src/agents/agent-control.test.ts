@@ -61,6 +61,7 @@ const openTokenAgent = Effect.gen(function* () {
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return { owner, reader, tokenless, workspace, task, agent: Option.getOrThrow(started).agent };
 });
@@ -72,7 +73,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
       Effect.gen(function* () {
         const { reader, tokenless, task, agent } = yield* openTokenAgent;
         const eve = yield* eveSessions<EveTypedTurn>({
-          origin: "https://luke.test",
+          origin: "https://app.test",
           caller: { secret: Redacted.make("fixture-deployment-secret"), account: reader },
           mount: EVE_MOUNT.CODER,
         });
@@ -123,7 +124,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
         });
         const agent = Option.getOrThrow(started).agent;
         const eve = yield* eveSessions<EveTypedTurn>({
-          origin: "https://luke.test",
+          origin: "https://app.test",
           caller: { secret: Redacted.make("fixture-deployment-secret"), account: tokenless },
           mount: EVE_MOUNT.CODER,
         });

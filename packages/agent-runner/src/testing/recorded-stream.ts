@@ -157,7 +157,7 @@ export const WORKFLOW_TURN: readonly Step[] = [
   { emit: toolUse("Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }) },
   { emit: toolResult("toolu_Write", "File created") },
   { emit: toolUse("Bash", { command: "bash /opt/luke-probe/leak-check.sh" }) },
-  { emit: toolResult("toolu_Bash", 'LUKE_PROBE_LEAK_CHECK {"user":"agent","sudo":false}\n') },
+  { emit: toolResult("toolu_Bash", 'APP_PROBE_LEAK_CHECK {"user":"agent","sudo":false}\n') },
   {
     emit: toolUse("Bash", {
       command: `sleep 45 && echo luke-probe-background-${NONCE}`,

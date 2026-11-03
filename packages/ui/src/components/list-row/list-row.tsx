@@ -240,6 +240,20 @@ export const LIST_ROW_TITLE_LINES = {
 
 export type ListRowTitleLines = (typeof LIST_ROW_TITLE_LINES)[keyof typeof LIST_ROW_TITLE_LINES];
 
+/**
+ * Where a row's chevron stands: in room of its own beside its metadata, kept
+ * so nothing moves as it shows, or in its metadata's place, the metadata
+ * giving way while the row is in hand, as a sidebar row's count gives way to
+ * its ⋯ (`nav-item.css`). The second keeps no room for an unseen glyph, so
+ * words that run to the metadata fade there rather than short of it.
+ */
+export const LIST_ROW_CHEVRON = {
+  ROOM: "room",
+  META: "meta",
+} as const;
+
+export type ListRowChevron = (typeof LIST_ROW_CHEVRON)[keyof typeof LIST_ROW_CHEVRON];
+
 /** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
   ALWAYS: "always",
@@ -550,6 +564,7 @@ export function ListRow({
   currentLook = LIST_ROW_CURRENT_LOOK.SHEET,
   menuOpen = false,
   chevron = false,
+  chevronAt = LIST_ROW_CHEVRON.ROOM,
   keepFocus = false,
   disabled = false,
   tabbable,
@@ -613,6 +628,8 @@ export function ListRow({
   menuOpen?: boolean | undefined;
   /** Whether a chevron at its end says the press goes somewhere deeper. */
   chevron?: boolean | undefined;
+  /** Where the chevron stands: in room of its own, or in its metadata's place while the row is in hand. */
+  chevronAt?: ListRowChevron | undefined;
   /** Whether a pointer's press leaves the focus where it is, as on a field beside the list that holds the keys. */
   keepFocus?: boolean | undefined;
   /** Whether its press is unavailable: refused and out of the tab order. */
@@ -718,7 +735,7 @@ export function ListRow({
   // the place a hover row's acts step into.
   const end =
     said(meta) || chevron ? (
-      <span className={END_CLASS}>
+      <span className={END_CLASS} data-chevron={chevron ? chevronAt : undefined}>
         {said(meta) ? (
           <span id={metaId} className="luke-list-row-meta">
             {meta}

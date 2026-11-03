@@ -45,7 +45,7 @@ import { fixedAccountSource } from "./testing/fixed-account-source.js";
  * since the cookie is the browser's and rides the request on its own.
  */
 
-const ORIGIN = "https://luke.example.test";
+const ORIGIN = "https://app.example.test";
 const ACCOUNT_BASE_URL = `${ORIGIN}/api/auth`;
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
 /** A hosted route the account reaches, which refuses a request with no session behind it. */

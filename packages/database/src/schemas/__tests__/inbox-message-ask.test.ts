@@ -7,6 +7,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import { createAgent } from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
   getTestDB,
   migrationStatements,
@@ -41,7 +42,7 @@ const UNDO = [
 const openAgent = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Dean", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Dean", email: `${userId}@app.test` });
   const organizationId = yield* openWorkspace(userId);
   const task = yield* createTask(userId, { organizationId, name: "Teammate invitations" });
   const started = Option.getOrThrow(
@@ -53,6 +54,7 @@ const openAgent = Effect.gen(function* () {
       repository: "acme/relay",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
   );
   return { userId, taskId: task.id, organizationId, agentId: started.agent.id };

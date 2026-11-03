@@ -99,7 +99,7 @@ import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integr
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 
-export const ORIGIN = "https://luke.test";
+export const ORIGIN = "https://app.test";
 export const TASK_AGENTS = "/api/plans/agents";
 export const AGENT_MESSAGES = "/api/agents/messages";
 export const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
@@ -689,7 +689,7 @@ const otherAccount = (token: string | null | undefined) =>
     }
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     return userId;
   });
 

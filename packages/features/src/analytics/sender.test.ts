@@ -12,7 +12,7 @@ import {
   type RecordedDayStore,
 } from "./sender.js";
 
-const BASE_URL = "https://luke.test";
+const BASE_URL = "https://app.test";
 const APP_VERSION = "0.2.0";
 const NOON = Date.parse("2026-08-19T12:00:00.000Z");
 
@@ -63,7 +63,7 @@ function sharingSender(
 
 it.effect("a batch queued under one account is never posted under another's bearer", () =>
   Effect.gen(function* () {
-    let account = "ada@luke.test";
+    let account = "ada@app.test";
     let token = "stale";
     const { sender, requests } = yield* sharingSender(
       {
@@ -73,7 +73,7 @@ it.effect("a batch queued under one account is never posted under another's bear
         // the retry would carry answers for somebody else.
         refreshAccount: () =>
           Effect.sync(() => {
-            account = "grace@luke.test";
+            account = "grace@app.test";
             token = "fresh";
           }),
       },
@@ -143,7 +143,7 @@ it.effect("the day is counted once across launches, and again on the next UTC da
     let now = NOON;
     const options = {
       recordedDays: keptDays(),
-      readAccountKey: () => Effect.succeed("ada@luke.test"),
+      readAccountKey: () => Effect.succeed("ada@app.test"),
       now: () => now,
     };
 
@@ -158,16 +158,16 @@ it.effect("the day is counted once across launches, and again on the next UTC da
 
 it.effect("another account signing in the same day has its own day counted, once", () =>
   Effect.gen(function* () {
-    let account = "ada@luke.test";
+    let account = "ada@app.test";
     const options = {
       recordedDays: keptDays(),
       readAccountKey: () => Effect.succeed(account),
     };
 
     assert.equal(yield* launch(options), 1);
-    account = "grace@luke.test";
+    account = "grace@app.test";
     assert.equal(yield* launch(options), 1);
-    account = "ada@luke.test";
+    account = "ada@app.test";
     assert.equal(yield* launch(options), 0);
   }),
 );
@@ -183,7 +183,7 @@ it.effect("a day marked while nobody is signed in is marked once an account sign
     yield* sender.flush;
     assert.equal(dayMarkers(requests), 0);
 
-    account = "ada@luke.test";
+    account = "ada@app.test";
     yield* sender.markDayActive();
     yield* sender.flush;
     assert.equal(dayMarkers(requests), 1);
@@ -194,7 +194,7 @@ it.effect("a day whose batch never reached the service is counted on the next la
   Effect.gen(function* () {
     const options = {
       recordedDays: keptDays(),
-      readAccountKey: () => Effect.succeed("ada@luke.test"),
+      readAccountKey: () => Effect.succeed("ada@app.test"),
     };
 
     yield* launch(options, () => {
@@ -206,7 +206,7 @@ it.effect("a day whose batch never reached the service is counted on the next la
 
 it.effect("a day marked for one account is never sent under the next account's bearer", () =>
   Effect.gen(function* () {
-    let account = "ada@luke.test";
+    let account = "ada@app.test";
     const options = {
       recordedDays: keptDays(),
       readAccountKey: () => Effect.succeed(account),
@@ -214,7 +214,7 @@ it.effect("a day marked for one account is never sent under the next account's b
     const { sender, requests } = yield* sharingSender(options);
     yield* sender.markDayActive();
     // Ada signs out and Grace signs in before the minute's flush.
-    account = "grace@luke.test";
+    account = "grace@app.test";
     yield* sender.flush;
     assert.equal(dayMarkers(requests), 0);
 
@@ -224,7 +224,7 @@ it.effect("a day marked for one account is never sent under the next account's b
     yield* sender.markDayActive();
     yield* sender.flush;
     assert.equal(dayMarkers(requests), 1);
-    account = "ada@luke.test";
+    account = "ada@app.test";
     assert.equal(yield* launch(options), 1);
   }),
 );
@@ -234,7 +234,7 @@ it.effect("a clock that was wrong hides no real day, and costs one count at most
     let now = Date.parse("2027-08-20T12:00:00.000Z");
     const options = {
       recordedDays: keptDays(),
-      readAccountKey: () => Effect.succeed("ada@luke.test"),
+      readAccountKey: () => Effect.succeed("ada@app.test"),
       now: () => now,
     };
 

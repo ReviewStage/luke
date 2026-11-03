@@ -48,7 +48,7 @@ test("the install script fetched from a Preview names that Preview as the origin
   writeFileSync(file, script);
   // The script stops once it has defined what it carries, under the variable its own tests set.
   const origin = spawnSync("sh", ["-c", '. "$1"; printf %s "$ORIGIN"', "sh", file], {
-    env: { PATH: process.env.PATH, LUKE_HOST_INSTALL_LIBRARY: "1" },
+    env: { PATH: process.env.PATH, APP_HOST_INSTALL_LIBRARY: "1" },
     encoding: "utf8",
   });
   assert.equal(origin.stdout, PREVIEW_ORIGIN, origin.stderr);

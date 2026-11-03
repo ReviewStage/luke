@@ -10,6 +10,7 @@ import {
 } from "@luke/database/models/agent-store";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import {
@@ -40,9 +41,10 @@ import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-
 import { credentialPolicy } from "../terminal/agent-sandbox.js";
 import {
   agentCoAuthor,
-  checkOutAgentRepository,
-  deepenAgentCheckout,
-  fetchAgentHistory,
+  agentDeepenPlan,
+  agentRepositoryRead,
+  cloneAgentRepository,
+  deepenCheckoutWith,
 } from "./checkout.js";
 
 /**
@@ -142,6 +144,7 @@ const openTokenAgent = Effect.gen(function* () {
     prompt: null,
     repository: RELAY_FULL_NAME,
     githubAccess: GITHUB_ACCESS.TOKEN,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   const { agent } = started.value;
@@ -153,7 +156,7 @@ const openTokenAgent = Effect.gen(function* () {
 const openGoogleUser = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });
@@ -218,6 +221,7 @@ const openAgent = (
               },
               prompt: automation.action.prompt,
             },
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -232,15 +236,25 @@ const authorOf = (userId: string, agent: Agent) =>
     (read): AgentAuthor | null => Option.getOrThrow(read).author,
   );
 
-/** The sandbox's checkout as an agent's first write leaves it: opened shallow, then deepened; answers the policy standing at the firewall after. */
+/** The sandbox's checkout as a launch opens it: the repository read, then cloned shallow. */
+const checkOut = (
+  target: { readonly userId: string; readonly conversationId: string },
+  agent: Parameters<typeof agentRepositoryRead>[1],
+  sandbox: ReturnType<typeof sandboxDouble>,
+) =>
+  Effect.flatMap(agentRepositoryRead(target, agent), (read) =>
+    cloneAgentRepository(agent, sandbox, read),
+  );
+
+/** The sandbox's checkout as a launch leaves it: opened shallow, then deepened on the plan read for it; answers the policy standing at the firewall after. */
 const checkOutAndDeepen = (
   target: { readonly userId: string; readonly conversationId: string },
-  agent: Parameters<typeof checkOutAgentRepository>[1],
+  agent: Parameters<typeof agentRepositoryRead>[1],
   sandbox: ReturnType<typeof sandboxDouble>,
 ) =>
   Effect.gen(function* () {
-    yield* checkOutAgentRepository(target, agent, sandbox);
-    yield* deepenAgentCheckout(target, agent, sandbox);
+    yield* checkOut(target, agent, sandbox);
+    yield* deepenCheckoutWith(sandbox, yield* agentDeepenPlan(target, agent));
     return sandbox.policies.at(-1);
   });
 
@@ -267,7 +281,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const github = githubReaching([installation], undefined, {}, developerReach(false));
         const sandbox = sandboxDouble(() => undefined);
 
-        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+        yield* checkOut(target, agent, sandbox).pipe(Effect.provide(github.layer));
 
         assert.deepEqual(sandbox.clones, [
           {
@@ -329,95 +343,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           repositories: [RELAY.name],
           permissions: { contents: "write", pull_requests: "write" },
         });
-      }),
-  );
-
-  it.effect(
-    "a deepen cut short after its fetch records nothing, so the next write runs it again whole, its identity and credential among it",
-    () =>
-      Effect.gen(function* () {
-        const installation = installationOf(14);
-        const { agent, target } = yield* openAgent(installation);
-        const github = githubReaching([installation], undefined, {}, developerReach(false));
-        const sandbox = sandboxDouble(() => undefined);
-        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
-        sandbox.identityAnswers.push({ exitCode: 1, stderr: "error: could not lock config file" });
-
-        const cut = yield* deepenAgentCheckout(target, agent, sandbox).pipe(
-          Effect.provide(github.layer),
-          Effect.flip,
-        );
-        assert.equal(cut._tag, "CheckoutRefused");
-        assert.equal(sandbox.shallow, false);
-        assert.equal(sandbox.deepenMarked, false);
-        // Whatever stands at the firewall meanwhile, the next deepen sets the credential again.
-        yield* Effect.promise(async () => sandbox.setNetworkPolicy?.("allow-all"));
-
-        yield* deepenAgentCheckout(target, agent, sandbox).pipe(Effect.provide(github.layer));
-
-        assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
-        assert.deepEqual(sandbox.policies.at(-1), APP_CREDENTIAL);
-        assert.equal(sandbox.deepenMarked, true);
-        assert.equal(sandbox.deepened, 1);
-      }),
-  );
-
-  it.effect(
-    "a worker's read of the history fetches the rest of a shallow checkout on a write token at the firewall, with no identity set and no deepen recorded, so the agent's first write still deepens on a token of its own; a checkout already whole fetches and mints nothing",
-    () =>
-      Effect.gen(function* () {
-        const installation = installationOf(15);
-        const { agent, target } = yield* openAgent(installation);
-        const github = githubReaching([installation], undefined, {}, developerReach(false));
-        const sandbox = sandboxDouble(() => undefined);
-        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
-
-        yield* fetchAgentHistory(target, agent, sandbox).pipe(Effect.provide(github.layer));
-
-        assert.equal(sandbox.shallow, false);
-        assert.deepEqual(sandbox.policiesDuringFetch, [APP_CREDENTIAL]);
-        assert.deepEqual(sandbox.policies.at(-1), APP_CREDENTIAL);
-        assert.deepEqual(sandbox.identities, []);
-        assert.equal(sandbox.deepenMarked, false);
-        for (const run of sandbox.runs) {
-          assert.equal(carriesToken(JSON.stringify(run)), false);
-        }
-        assert.deepEqual(repositoryMints(github.sent).at(-1), {
-          repositories: [RELAY.name],
-          permissions: { contents: "write", pull_requests: "write" },
-        });
-        const mintsAfterFetch = repositoryMints(github.sent).length;
-
-        yield* fetchAgentHistory(target, agent, sandbox).pipe(Effect.provide(github.layer));
-        assert.equal(repositoryMints(github.sent).length, mintsAfterFetch);
-        assert.equal(sandbox.policies.length, 3);
-
-        yield* deepenAgentCheckout(target, agent, sandbox).pipe(Effect.provide(github.layer));
-        assert.equal(repositoryMints(github.sent).length, mintsAfterFetch + 1);
-        assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
-        assert.equal(sandbox.deepenMarked, true);
-        assert.equal(sandbox.deepened, 1);
-      }),
-  );
-
-  it.effect(
-    "a deepen that finished is not run again: no token is minted and nothing is set at the firewall",
-    () =>
-      Effect.gen(function* () {
-        const installation = installationOf(13);
-        const { agent, target } = yield* openAgent(installation);
-        const github = githubReaching([installation], undefined, {}, developerReach(false));
-        const sandbox = sandboxDouble(() => undefined);
-        yield* checkOutAndDeepen(target, agent, sandbox).pipe(Effect.provide(github.layer));
-        const mintsBefore = repositoryMints(github.sent).length;
-        const policiesBefore = sandbox.policies.length;
-
-        yield* deepenAgentCheckout(target, agent, sandbox).pipe(Effect.provide(github.layer));
-
-        assert.equal(sandbox.policies.length, policiesBefore);
-        assert.equal(sandbox.deepened, 1);
-        assert.equal(repositoryMints(github.sent).length, mintsBefore);
-        assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
       }),
   );
 
@@ -540,7 +465,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
       const github = githubReaching([installation], undefined, {}, developerReach(false));
       const sandbox = sandboxDouble(() => undefined, { firewall: false });
 
-      const refused = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
+      const refused = yield* checkOut(target, agent, sandbox).pipe(
         Effect.provide(github.layer),
         Effect.flip,
       );

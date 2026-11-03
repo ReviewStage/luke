@@ -157,7 +157,7 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_KEY_P8_BASE64` | Base64-encoded App Store Connect API private key | The downloaded `.p8` file from App Store Connect |
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
-| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `LUKE_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
+| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `APP_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
 | `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
 | `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Vespin@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 
@@ -199,7 +199,7 @@ stored `luke-notary` notarytool profile
 (`xcrun notarytool store-credentials luke-notary`), plus a `gh` login with write access.
 
 ```sh
-export LUKE_CODESIGN_IDENTITY='Your Name (TEAMID)'
+export APP_CODESIGN_IDENTITY='Your Name (TEAMID)'
 export POSTHOG_PROJECT_API_KEY='phc_…'                  # from PostHog project settings
 export SENTRY_DSN='https://…'                            # from the luke-desktop project
 export SENTRY_AUTH_TOKEN='sntrys_…'                     # source-map upload token
@@ -208,7 +208,7 @@ git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
 ```
 
-`LUKE_CODESIGN_IDENTITY` goes to electron-builder's `mac.identity` unchanged, which
+`APP_CODESIGN_IDENTITY` goes to electron-builder's `mac.identity` unchanged, which
 expects the identity's name **without** the `Developer ID Application:` prefix — the
 common name and team identifier alone, as in `Your Name (TEAMID)`. Run
 `security find-identity -v -p codesigning` to read the exact name off the certificate.

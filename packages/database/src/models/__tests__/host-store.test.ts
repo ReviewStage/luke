@@ -14,6 +14,7 @@ import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { task } from "../../schemas/task.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import {
   createAgent,
@@ -47,7 +48,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   return { owner, other };
 });
@@ -193,6 +194,7 @@ it.layer(getTestDB())("the host store", (it) => {
             planSnapshot: "# Invitations\n",
             prompt: null,
             repository: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             ...runsOn,
           }),
         );

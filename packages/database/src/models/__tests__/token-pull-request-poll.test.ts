@@ -10,6 +10,7 @@ import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-reposito
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, plansOf, startTask } from "../../testing/index.js";
 import { archiveAgent, createAgent, recordAgentPublished } from "../agent-store.js";
 import {
@@ -43,7 +44,7 @@ const EVERY = 100;
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -64,6 +65,7 @@ const openAgent = (
       prompt: null,
       repository: "acme/relay",
       githubAccess,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const { agent } = Option.getOrThrow(started);
     if (pullRequest !== undefined) {

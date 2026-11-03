@@ -56,10 +56,10 @@ function beginningAt(url: string) {
 
 it.effect("beginning a sign-in answers the address the browser opens, and only an https one", () =>
   Effect.gen(function* () {
-    const begun = yield* beginningAt(SIGN_IN_URL).authorize("user-1", "https://luke.test/callback");
+    const begun = yield* beginningAt(SIGN_IN_URL).authorize("user-1", "https://app.test/callback");
     assert.deepEqual(begun, { url: SIGN_IN_URL });
     const refused = yield* Effect.result(
-      beginningAt("javascript:alert(1)").authorize("user-1", "https://luke.test/callback"),
+      beginningAt("javascript:alert(1)").authorize("user-1", "https://app.test/callback"),
     );
     assert.ok(Result.isFailure(refused));
     assert.equal(refused.failure.reason, INTEGRATION_CONNECT_FAILURE.UNAVAILABLE);

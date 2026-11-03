@@ -27,7 +27,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { eventsProcedures } from "./events-procedures.js";
 
-const EVENTS = "https://luke.test/api/events";
+const EVENTS = "https://app.test/api/events";
 const JSON_TYPE = "application/json";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {

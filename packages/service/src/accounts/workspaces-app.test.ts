@@ -15,9 +15,10 @@ import {
   type WorkspaceSeams,
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { invitation, member, organization, user } from "@luke/database/schemas/auth";
+import { account, invitation, member, organization, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { task } from "@luke/database/schemas/task";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import {
@@ -60,6 +61,7 @@ import {
   Effect,
   Layer,
   Option,
+  Redacted,
   Result,
   Schema,
 } from "effect";
@@ -71,6 +73,7 @@ import {
   SERVER_EVENT,
   SERVER_WORKSPACE_MEMBER_ACTION,
 } from "../events/server-events.js";
+import { GITHUB_PROVIDER_ID, GitHubApp } from "../github/github-app.js";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
@@ -79,6 +82,8 @@ import type { WebServices } from "../runtime.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   type FakeGitHub,
+  GITHUB_FIXTURE_AUTHORIZED_TOKEN,
+  GITHUB_FIXTURE_MEMBER,
   GITHUB_FIXTURE_REFUSED_CODE,
   githubReaching,
   openGithubUser,
@@ -118,7 +123,7 @@ const countedProperties = (userId: string, name: string) =>
 const RESEND = recordingHttpClient(() => jsonResponse({ id: "email-1" }));
 
 /** The sender invitations are emailed from in these tests. */
-const INVITE_FROM = "Invites <invites@luke.test>";
+const INVITE_FROM = "Invites <invites@app.test>";
 
 /** The invitation mailer over the recorded Resend, as a deployment naming a key and a sender builds it. */
 const INVITATION_MAIL = invitationMailFromEnvironment.pipe(
@@ -149,7 +154,7 @@ const emailsTo = (address: string) =>
     )
     .filter((email) => email.to.includes(address));
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const INSTALL_ADDRESS = "https://github.com/apps/luke/installations/new";
 const LANDING = "/github-installed.html?status=";
 
@@ -174,6 +179,24 @@ const openGithubAccount = (name: string) =>
     yield* Database.use((db) => db.update(user).set({ name }).where(eq(user.id, userId)));
     return userId;
   });
+
+/** An account under the name given, signed in with Google alone: it holds no GitHub row. */
+const openGoogleAccount = (name: string) =>
+  Effect.gen(function* () {
+    const userId = `user-${randomUUID()}`;
+    yield* Database.use((db) =>
+      db.insert(user).values({ id: userId, name, email: `${userId}@app.test` }),
+    );
+    return userId;
+  });
+
+/** Every account's GitHub row, as whose it is and which GitHub user it stands for. */
+const githubRows = Database.use((db) =>
+  db
+    .select({ userId: account.userId, accountId: account.accountId })
+    .from(account)
+    .where(eq(account.providerId, GITHUB_PROVIDER_ID)),
+);
 
 /** The plugin's member writes and the session they are made under, for the paths that write through the plugin. */
 interface SessionSeams {
@@ -261,7 +284,7 @@ const answered = <A>(
     }
     const routes = Layer.mergeAll(
       workspacesApp({ resolveUserId: bearerUserId }),
-      githubInstallApp(),
+      githubInstallApp({ resolveSessionUserId: session.resolveSessionUserId }),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       routes.pipe(HttpRouter.provideRequest(services)),
@@ -355,17 +378,25 @@ const connectState = (
 /** GitHub's web flow, which hands every authorization this code unless a test says otherwise. */
 const ONE_TIME_CODE = "one-time-code";
 
+/** A browser signed in to an account: the session cookie it sends, and the session read that names its account. */
+interface SignedInBrowser {
+  readonly cookie: string;
+  readonly session: SessionSeams;
+}
+
 /**
  * Where GitHub's return through the Setup URL lands the browser, as its
  * status word: at once, or once GitHub's one-time authorization returns to
  * the callback the Setup URL sent it on to, with the code given, or with
- * none where the user declined.
+ * none where the user declined, from the browser given, or one signed in to
+ * nothing.
  */
 const landedAt = (
   seams: WorkspaceSeams,
   github: FakeGitHub,
   query: Record<string, string>,
   code: string | null = ONE_TIME_CODE,
+  browser?: SignedInBrowser,
 ) =>
   Effect.gen(function* () {
     const setup = yield* send(seams, github, setupRequest(query));
@@ -384,7 +415,14 @@ const landedAt = (
     );
     if (code !== null) callback.searchParams.set("code", code);
     callback.searchParams.set("state", authorize.searchParams.get("state") ?? "");
-    const returned = yield* send(seams, github, new Request(callback, { redirect: "manual" }));
+    const headers = new Headers();
+    if (browser !== undefined) headers.set("cookie", browser.cookie);
+    const returned = yield* send(
+      seams,
+      github,
+      new Request(callback, { redirect: "manual", headers }),
+      browser?.session,
+    );
     assert.equal(returned.status, 303);
     return returned.location?.replace(LANDING, "");
   });
@@ -601,6 +639,54 @@ it.effect(
         const connected = { login: "acme", active: true };
         assert.deepEqual(githubOf(yield* workspacesOf(seams, github, ada), acme.id), connected);
         assert.deepEqual(githubOf(yield* workspacesOf(seams, github, linus), acme.id), connected);
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "an install from a browser signed in to the installer links their GitHub to their account once, and never from a browser signed in to another or a GitHub another account holds",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, seams, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGoogleAccount("Ada Lovelace");
+        const grace = yield* openGoogleAccount("Grace Hopper");
+        const github = githubReaching([ACME]);
+        const acme = yield* createAs(seams, github, ada, "Acme");
+        yield* Effect.promise(() =>
+          api.addMember({
+            body: { userId: grace, organizationId: acme.id, role: WORKSPACE_ROLE.ADMIN },
+          }),
+        );
+        const session = { ...NO_SESSION, resolveSessionUserId: plugin.resolveSessionUserId };
+        const browserOf = (userId: string) =>
+          Effect.map(plugin.sessionCookieOf(userId), (cookie) => ({ cookie, session }));
+        const install = (installer: string, browser: SignedInBrowser) =>
+          Effect.flatMap(connectState(seams, github, installer, acme.id), (state) =>
+            landedAt(
+              seams,
+              github,
+              { installation_id: String(ACME.id), setup_action: "install", state },
+              ONE_TIME_CODE,
+              browser,
+            ),
+          );
+
+        const elsewhere = yield* install(ada, yield* browserOf(grace));
+        yield* install(ada, yield* browserOf(ada));
+        yield* install(ada, yield* browserOf(ada));
+        // The GitHub user GitHub's flow authorizes is Ada's now, so Grace's own install keeps nothing.
+        yield* install(grace, yield* browserOf(grace));
+
+        assert.equal(elsewhere, GITHUB_INSTALL_STATUS.CONNECTED);
+        assert.deepEqual(yield* githubRows, [{ userId: ada, accountId: GITHUB_FIXTURE_MEMBER.ID }]);
+        const kept = yield* Effect.gen(function* () {
+          const app = yield* GitHubApp;
+          return yield* app.userToken(ada);
+        }).pipe(Effect.provide(github.layer));
+        assert.equal(Redacted.value(kept), GITHUB_FIXTURE_AUTHORIZED_TOKEN);
+        assert.equal(github.sent.filter((sent) => sent.method === "DELETE").length, 2);
       }).pipe(Effect.provide(database));
     }),
 );
@@ -1035,9 +1121,9 @@ it.effect("a member reads the workspace's members, owners first, then admins, th
         status: HOSTED_HTTP_STATUS.OK,
         body: {
           members: [
-            { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
-            { userId: alan, name: "Alan Turing", email: `${alan}@luke.test`, role: "admin" },
-            { userId: grace, name: "Grace Hopper", email: `${grace}@luke.test`, role: "member" },
+            { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
+            { userId: alan, name: "Alan Turing", email: `${alan}@app.test`, role: "admin" },
+            { userId: grace, name: "Grace Hopper", email: `${grace}@app.test`, role: "member" },
           ],
         },
       });
@@ -1077,22 +1163,22 @@ it.effect(
               {
                 userId: ada,
                 name: "Ada Lovelace",
-                email: `${ada}@luke.test`,
+                email: `${ada}@app.test`,
                 role: "owner",
                 pictureUrl: "https://lh3.googleusercontent.com/a/ada=s96-c",
               },
-              { userId: alan, name: "Alan Turing", email: `${alan}@luke.test`, role: "member" },
+              { userId: alan, name: "Alan Turing", email: `${alan}@app.test`, role: "member" },
               {
                 userId: grace,
                 name: "Grace Hopper",
-                email: `${grace}@luke.test`,
+                email: `${grace}@app.test`,
                 role: "member",
                 pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
               },
               {
                 userId: linus,
                 name: "Linus Torvalds",
-                email: `${linus}@luke.test`,
+                email: `${linus}@app.test`,
                 role: "member",
               },
             ],
@@ -1230,7 +1316,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
             former: [
               {
@@ -1264,6 +1350,7 @@ it.effect(
           repository: "acme/relay",
           planSnapshot: null,
           prompt: "Sweep the flaky tests.",
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agent = { userId: ada, taskId: null, agentId: Option.getOrThrow(started).agent.id };
         const posted = yield* postInboxThread(agent, {
@@ -1292,7 +1379,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
             former: [{ userId: lin, name: "Lin Chen" }],
           },
@@ -1338,7 +1425,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
             former: [{ userId: lin, name: "Lin Chen" }],
           },
@@ -1376,8 +1463,8 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
-              { userId: grace, name: "Grace Hopper", email: `${grace}@luke.test`, role: "admin" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
+              { userId: grace, name: "Grace Hopper", email: `${grace}@app.test`, role: "admin" },
             ],
           },
         });
@@ -2260,7 +2347,7 @@ const verified = (userId: string) =>
     yield* Database.use((db) =>
       db.update(user).set({ emailVerified: true }).where(eq(user.id, userId)),
     );
-    return `${userId}@luke.test`;
+    return `${userId}@app.test`;
   });
 
 /** The invitation accepted through the plugin's own call, under the account's session, as the accept page accepts it. */
@@ -2310,7 +2397,7 @@ it.effect(
               id: made.id,
               workspaceName: "Acme",
               role: "member",
-              inviter: { name: "Grace Hopper", email: `${grace}@luke.test` },
+              inviter: { name: "Grace Hopper", email: `${grace}@app.test` },
             },
           },
         });
@@ -2357,7 +2444,7 @@ it.effect(
             id: made.id,
             workspaceName: "Dr Ada Lovelace",
             role: "member",
-            inviter: { name: "Dr Ada Lovelace", email: `${ada}@luke.test` },
+            inviter: { name: "Dr Ada Lovelace", email: `${ada}@app.test` },
           },
         });
       }).pipe(Effect.provide(plugin.database));
@@ -2390,7 +2477,7 @@ it.effect(
           invitationId: canceled.id,
         });
         const forAlan = yield* invited(alanAddress);
-        const forUna = yield* invited(`${una}@luke.test`);
+        const forUna = yield* invited(`${una}@app.test`);
 
         const spentWhenCanceled = yield* readInSession(plugin, alan, offerAt(canceled.id));
         const otherAddress = yield* readInSession(plugin, kim, offerAt(forAlan.id));
@@ -2470,7 +2557,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
           },
         });
@@ -2490,7 +2577,7 @@ it.effect(
 
         yield* inviting(plugin, ada, acme, "lin@example.com", "admin");
         const again = yield* inviting(plugin, ada, acme, "lin@example.com");
-        const member = yield* inviting(plugin, ada, acme, `${grace}@luke.test`);
+        const member = yield* inviting(plugin, ada, acme, `${grace}@app.test`);
 
         const alreadyInvited = refusedAs(
           HOSTED_HTTP_STATUS.CONFLICT,
@@ -2520,7 +2607,7 @@ it.effect(
         });
         assert.ok(emails[0]?.text.includes(`Expires ${expiryDay}.`));
         assert.ok(!emails[0]?.html.includes("<img"), "no picture stands in for the initials");
-        assert.deepEqual(emailsTo(`${grace}@luke.test`), []);
+        assert.deepEqual(emailsTo(`${grace}@app.test`), []);
 
         const linkedAt = new Date(yield* Clock.currentTimeMillis);
         yield* Database.use((db) =>

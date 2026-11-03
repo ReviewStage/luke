@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm";
 import { Clock, DateTime, Deferred, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import { agentTable, type StoredStartedFrom } from "../../schemas/agent.js";
+import { agentDelegationTable, agentTable, type StoredStartedFrom } from "../../schemas/agent.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
@@ -91,7 +91,6 @@ import {
   taskNamesOf,
   turnUsagesOf,
   unarchiveAgentFrom,
-  writeDelegation,
 } from "../agent-store.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
@@ -124,7 +123,7 @@ import { type LineSender, storeWriter } from "../writer.js";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -167,11 +166,22 @@ it.layer(getTestDB())("the coding-agent store's delegations", (it) => {
           agent,
           new Date("2026-10-13T12:00:01Z"),
         );
-        yield* writeDelegation(later, "call-2", { model: "openai/gpt-6.1-sol", effort: "low" });
-        yield* writeDelegation(first, "call-1", {
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-        });
+        // Note that only an eve agent's workers recorded delegations, so they stand as such an agent left them.
+        const db = yield* Database;
+        yield* db.insert(agentDelegationTable).values([
+          {
+            childConversationId: later,
+            callId: "call-2",
+            model: "openai/gpt-6.1-sol",
+            effort: "low",
+          },
+          {
+            childConversationId: first,
+            callId: "call-1",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+          },
+        ]);
 
         const listed = yield* delegationsOf({ userId: owner, conversationId: agent });
         assert.deepEqual(
@@ -744,6 +754,7 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
           effort: "high",
           repository: "acme/relay",
           githubAccess: GITHUB_ACCESS.APP,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agentId = Option.getOrThrow(started).agent.id;
 
@@ -1226,6 +1237,7 @@ it.layer(getTestDB())("the coding-agent store's merged pull request on a task", 
               effort: "high",
               repository: "acme/relay",
               ...(githubAccess === undefined ? undefined : { githubAccess }),
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             }),
             (started) => Option.getOrThrow(started).agent.id,
           );
@@ -1475,6 +1487,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
             idempotencyKey: randomUUID(),
             ...choice,
             repository: "acme/api",
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const startedFrom = {
@@ -1492,6 +1505,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
             ...choice,
             repository: "acme/api",
             startedFrom,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
 
@@ -1523,6 +1537,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           effort: "high",
           repository: "acme/api",
           ...(startedByAgentId === undefined ? undefined : { startedByAgentId }),
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const orchestrator = Option.getOrThrow(yield* createAgent(owner, start())).agent;
         const worker = Option.getOrThrow(yield* createAgent(owner, start(orchestrator.id))).agent;
@@ -1559,6 +1574,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           effort: "high",
           repository: "acme/api",
           ...more,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const pilot = Option.getOrThrow(yield* createAgent(owner, start({}))).agent;
         const working = Option.getOrThrow(
@@ -1627,6 +1643,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
                 ...(startedFrom === undefined
                   ? undefined
                   : { startedFrom: { ...startedFrom, steps: 3, totalSteps: 3 } }),
+                runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
               }),
             );
             yield* Database.use((db) =>
@@ -1686,6 +1703,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
                 ...(agentId === undefined
                   ? undefined
                   : { startedFrom: { agentId, steps: 1, totalSteps: 1 } }),
+                runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
               }),
             );
             yield* Database.use((db) =>
@@ -1740,6 +1758,7 @@ it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => 
             effort: "high",
             repository: "octo-member/side",
             ...(githubAccess === undefined ? undefined : { githubAccess }),
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           });
         const tokenAgent = Option.getOrThrow(yield* start(onToken.id, GITHUB_ACCESS.TOKEN)).agent;
         const appAgent = Option.getOrThrow(yield* start(onApp.id)).agent;
@@ -1799,6 +1818,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
             prompt: null,
             title: "Invite emails",
             idempotencyKey: randomUUID(),
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
         yield* TestClock.adjust("1 minute");
@@ -1811,6 +1831,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
             prompt: largeText,
             startedFrom: source,
             idempotencyKey: randomUUID(),
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
         yield* TestClock.adjust("1 minute");
@@ -1828,6 +1849,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
               body: largeText,
             },
             idempotencyKey: randomUUID(),
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
         const lines = {
@@ -1917,6 +1939,7 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
 
@@ -1939,7 +1962,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   const startIn = (
     starter: string,
     organizationId: string,
-    routing: Pick<NewAgent, "runtime" | "payer"> = {},
+    routing: Pick<NewAgent, "runtime" | "payer"> = { runtime: CONVERSATION_RUNTIME.EVE },
   ) =>
     Effect.map(
       createAgent(starter, {
@@ -2072,7 +2095,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           runtime: CONVERSATION_RUNTIME.CODEX,
           payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
-        const eve = yield* startIn(starter, workspace, {});
+        const eve = yield* startIn(starter, workspace);
         const deleted = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
@@ -2141,13 +2164,13 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const db = yield* Database;
         const starter = yield* openAccount;
         const workspace = yield* openWorkspace(starter);
-        const eve = yield* startIn(starter, workspace, {});
+        const eve = yield* startIn(starter, workspace);
         const native = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
-        const twinA = yield* startIn(starter, workspace, {});
-        const twinB = yield* startIn(starter, workspace, {});
+        const twinA = yield* startIn(starter, workspace);
+        const twinB = yield* startIn(starter, workspace);
         const sessionOf = (conversationId: string, runtimeSessionId: string) =>
           db
             .update(conversations)
@@ -2268,6 +2291,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
         effort: "high",
         repository: "acme/api",
         title: "Flaky tests",
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
       (started) => Option.getOrThrow(started).agent,
     );
@@ -2498,6 +2522,7 @@ it.layer(getTestDB())("the coding-agent store's pilots", (it) => {
           effort: "high",
           repository: "acme/relay",
           startedFrom,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
 
         const first = Option.getOrThrow(yield* createAgent(owner, pilotOn()));

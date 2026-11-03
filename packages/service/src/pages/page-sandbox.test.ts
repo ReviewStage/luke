@@ -5,6 +5,7 @@ import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { createAgent } from "@luke/database/models/agent-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import {
   PAGE_FRAME_STATUS,
@@ -64,7 +65,7 @@ const loadHeaders = (load: Load): Record<string, string> =>
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });
@@ -176,6 +177,7 @@ it.layer(getTestDB())("a page framed on the web", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const owner = { kind: PAGE_OWNER.AGENT, agentId: agent.id } as const;

@@ -77,10 +77,9 @@ import type { ModelChoiceRefused } from "../providers/model-catalog.js";
  * owner's membership of the workspace, the reach of the automation's
  * repository through the workspace's installation, and the model are
  * checked exactly as they are for the developer's own Start, and the agent
- * runs as the owner on the owner's keys, naming the automation it ran for. eve is reached as the deployment acting for the
- * owner, the opening the coder channel already admits for the voice
- * brain (`coder-host/channel.ts`), since no request of the owner's is in
- * hand. The run's own id is the Start's key, so a run acted on twice, by two
+ * runs as the owner on the owner's keys, naming the automation it ran for. The agent is reached as the deployment acting for the
+ * owner, since no request of the owner's is in hand. The run's own id is
+ * the Start's key, so a run acted on twice, by two
  * sweeps or a sweep and its trigger, starts one agent. A run about one pull
  * request or issue starts its agent named by it, and any other run's agent
  * is named by the title model from the automation's prompt.

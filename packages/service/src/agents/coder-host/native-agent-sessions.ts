@@ -51,10 +51,10 @@ export interface NativeAgentSessionsOptions {
 
 /**
  * Our coder instructions for an agent on the harness given, composed on
- * what its row names as an eve session's are (`host.ts`'s `prompt`): whether
+ * what its row names (`instructions.ts`'s `agentCoderInstructions`): whether
  * its token reads the repository's CI, the co-author trailer where it writes
  * as its developer, the workspace its links are written under, and whether
- * its starter turned Memory on; each read that fails reads as eve's does.
+ * its starter turned Memory on.
  */
 const nativeCoderInstructions = (
   userId: string,

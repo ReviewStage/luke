@@ -24,7 +24,7 @@ declare global {
 
 beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  fakeAppPlatform({ assetBase: () => "https://luke.test/" });
+  fakeAppPlatform({ assetBase: () => "https://app.test/" });
 });
 
 const roots: Root[] = [];

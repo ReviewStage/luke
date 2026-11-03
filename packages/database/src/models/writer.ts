@@ -1176,7 +1176,7 @@ function landJournals(context: WriterContext): Write<void> {
               parts: held.row.parts,
             }),
             Effect.andThen(
-              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation is only ever opened for a worker (`openChildConversation`).
+              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation was only ever opened for an eve agent's worker.
               TRANSCRIPT_KINDS.has(context.kind)
                 ? Metric.update(
                     JOURNAL_METRIC.REWRITE_BYTES,

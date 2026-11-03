@@ -36,7 +36,7 @@ import { LAUNCH_NOTE } from "./local-agent-first-lines.js";
 import { fakeClis } from "./testing/fake-clis.js";
 import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
 const DEVICE_ID = "2b7e1d4c-8a3f-4e95-b061-5c2d7f8e9a10";
 
@@ -83,7 +83,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
     readonly env: Readonly<Record<string, string>>;
   }) => ({
     command: node,
-    args: [env.LUKE_RUNNER_TOKEN ?? ""],
+    args: [env.APP_RUNNER_TOKEN ?? ""],
     env: {},
   }),
   tools: {
@@ -306,7 +306,7 @@ const launching = (workStands: boolean) =>
                 firstSequence: 0,
               },
             },
-            secrets: { env: { LUKE_RUNNER_TOKEN: "runner-secret" }, stdin: RESUMING_LINES },
+            secrets: { env: { APP_RUNNER_TOKEN: "runner-secret" }, stdin: RESUMING_LINES },
           });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES:
           if (init?.method === "POST") {

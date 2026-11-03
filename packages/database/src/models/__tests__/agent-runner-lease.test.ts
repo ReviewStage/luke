@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { claimAgentRunnerLease, releaseAgentRunnerLease } from "../agent-runner-lease.js";
 import { createAgent } from "../agent-store.js";
@@ -23,7 +24,7 @@ const LATER_UNTIL = new Date("2026-10-22T02:10:01Z");
 const openAgent = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
   const task = yield* startTask(userId, { name: "Invitations" });
   const started = yield* createAgent(userId, {
@@ -34,6 +35,7 @@ const openAgent = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   return Option.getOrThrow(started).agent.id;
 });

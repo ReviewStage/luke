@@ -22,6 +22,7 @@ import { savePlanText } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentTable } from "@luke/database/schemas/agent";
 import { messages } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
@@ -329,6 +330,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             effort: "low",
             repository: stored.repository,
             startedByAgentId: source.id,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const startFrom = (from: { agentId: string; messageId?: string }) =>
@@ -373,6 +375,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             effort: "low",
             repository: stored.repository,
             kind: AGENT_KIND.PILOT,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         // The source is made a sub-pilot in place, as the parent's `start_agent` would have started it.
@@ -990,6 +993,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             model: SOL,
             effort: "low",
             repository: RELAY_FULL_NAME,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const opened = eve.opened.length;
@@ -1035,6 +1039,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           model: SOL,
           effort: "low",
           repository: RELAY_FULL_NAME,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const source = Option.getOrThrow(made).agent;
         yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, [text(BRIEF)]);
@@ -1132,6 +1137,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           model: SOL,
           effort: "low",
           repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const bareId = Option.getOrThrow(bare).agent.id;
         assert.deepEqual(
@@ -1249,6 +1255,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             model: SOL,
             effort: "low",
             repository: RELAY_FULL_NAME,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
         const shots = Array.from(
@@ -1350,6 +1357,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
               firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 40 },
               prompt,
             },
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
 
@@ -1450,6 +1458,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
                 model: SOL,
                 effort: "low",
                 repository: RELAY_FULL_NAME,
+                runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
               }),
             ).agent;
             yield* transcriptRow(made, 1, MESSAGE_ROLE.USER, [text(handed)]);

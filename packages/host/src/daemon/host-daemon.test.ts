@@ -27,7 +27,7 @@ import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js"
 import { connectHostDevice, HOST_CONNECT_OUTCOME, type HostPairingCode } from "./host-pairing.js";
 import { hostPlatform } from "./host-platform.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const VERSION = "0.1.0";
 const DEVICE_ID = "6bbcb1b9-6706-4c97-9197-374756ceee07";
 const AGENT_ID = "0b6f9a4e-1c1d-4d2e-9f3a-5b7c8d9e0f12";
@@ -236,7 +236,7 @@ describe("a host's daemon", () => {
         expect(runner?.extendEnv).toBe(false);
         expect(runner?.env).toMatchObject({
           CLAUDE_CODE_OAUTH_TOKEN: RUNNER_TOKEN,
-          LUKE_RUNNER_PLACE: "host",
+          APP_RUNNER_PLACE: "host",
           HOME: `${folder}/home`,
           XDG_CACHE_HOME: `${folder}/cache`,
           PNPM_HOME: `${folder}/home/.local/share/pnpm`,

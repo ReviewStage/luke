@@ -40,7 +40,7 @@ import { dictationProcedures } from "./dictation-procedures.js";
 /** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const DICTATION_PATH = "/api/dictation";
 const TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const OPENAI_KEY = "sk-proj-account-test-key-0000000000000dict";
@@ -117,7 +117,7 @@ const openAccount = (
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const model = recordingHttpClient(() => modelResponse(options.model ?? { text: SAID }));
     const logged: string[] = [];
     const procedures = dictationProcedures({

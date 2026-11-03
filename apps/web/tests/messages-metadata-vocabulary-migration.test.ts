@@ -153,7 +153,7 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBefore);
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         const agentId = yield* openEarlierAgent(workspaceId);
@@ -280,7 +280,7 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersUpTo(STRAGGLERS));
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         const agentId = yield* openEarlierAgent(workspaceId);

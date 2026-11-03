@@ -9,6 +9,7 @@ import {
   claimChapterGeneration,
 } from "@luke/database/models/pull-request-chapters-store";
 import { accountPreference } from "@luke/database/schemas/preferences";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
@@ -63,7 +64,7 @@ import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedure
 // SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
 const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const BRANCH = "luke/expire-invitations";
@@ -233,6 +234,7 @@ const standing = (
         model: AGENT_DEFAULT_CHOICE.model,
         effort: "low",
         repository: RELAY_FULL_NAME,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
     ).agent;
     yield* updateAgentBranch(owner, agent.id, BRANCH);

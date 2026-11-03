@@ -19,7 +19,7 @@ import { HostedMacCommandClient, MAC_COMMAND_NOT_CLAIMED } from "./mac-command-c
 import { MAC_COMMAND_KIND, type MacCommand, type MacCommandResult } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-const BASE_URL = "https://luke.test";
+const BASE_URL = "https://app.test";
 const COMMAND_ID = "11111111-1111-4111-8111-111111111111";
 
 const COMMAND: MacCommand = {

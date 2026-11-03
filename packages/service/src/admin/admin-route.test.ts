@@ -38,7 +38,7 @@ import { USER_ROLE } from "./admin-access.js";
 import { adminProcedures } from "./admin-procedures.js";
 import { type AdminSessionApi, hostedAdminSeams } from "./admin-route.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const METRICS_PATH = "/api/admin/metrics";
 
 // SAFETY: the resource writes the metrics read's answer as it came, so a marker object stands in for the whole answer.
@@ -52,7 +52,7 @@ const openAdmin = Effect.gen(function* () {
     db.insert(user).values({
       id: admin,
       name: "Test Admin",
-      email: `${admin}@luke.test`,
+      email: `${admin}@app.test`,
       role: USER_ROLE.ADMIN,
     }),
   ).pipe(Effect.provide(plugin.database));

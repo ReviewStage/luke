@@ -322,8 +322,8 @@ export type NewAgent = AgentPlace & {
   readonly mentionedServers?: readonly string[] | undefined;
   /** How the repository was reached for the Start; the App's where none is named. */
   readonly githubAccess?: GitHubAccess | undefined;
-  /** What answers the agent's conversation; eve where none is named. */
-  readonly runtime?: ConversationRuntime | undefined;
+  /** What answers the agent's conversation. */
+  readonly runtime: ConversationRuntime;
   /** Who pays for the agent's model calls; none recorded where none is named. */
   readonly payer?: AgentPayer | undefined;
   /** Where its runner runs; a Vercel Sandbox where none is named. */
@@ -2118,7 +2118,7 @@ export function createAgent(
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({
           userId,
-          runtime: started.runtime ?? CONVERSATION_RUNTIME.EVE,
+          runtime: started.runtime,
           now,
         }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -3423,22 +3423,6 @@ export interface AgentDelegation extends ModelChoice {
   readonly createdAt: Date;
 }
 
-const insertDelegation = SqlSchema.void({
-  Request: Schema.Struct({
-    childConversationId: Schema.String,
-    callId: Schema.String,
-    model: Schema.String,
-    effort: Schema.String,
-  }),
-  execute: ({ childConversationId, callId, model, effort }) =>
-    Database.use((db) =>
-      db
-        .insert(agentDelegationTable)
-        .values({ childConversationId, callId, model, effort })
-        .onConflictDoNothing({ target: agentDelegationTable.childConversationId }),
-    ),
-});
-
 const findDelegation = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -3470,20 +3454,6 @@ const findDelegation = SqlSchema.findOneOption({
         ),
     ),
 });
-
-/** Writes the pair a worker runs on under its child conversation, which must already stand, with the call that delegated it; a pair written twice under one child stands as first written, since the worker may already be reading it. */
-export function writeDelegation(
-  childConversationId: string,
-  callId: string,
-  choice: ModelChoice,
-): AgentStoreEffect<void> {
-  return insertDelegation({
-    childConversationId,
-    callId,
-    model: choice.model,
-    effort: choice.effort,
-  });
-}
 
 /** The delegation recorded under this child of the account's conversation, or nothing where none stands: another account's, another agent's, or no delegation at all. */
 export function readDelegation(

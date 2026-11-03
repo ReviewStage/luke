@@ -31,7 +31,7 @@ import { githubReaching, openGithubUser, standingGithubRow } from "../testing/gi
 import type { GitHubApp } from "./github-app.js";
 import { repositoryPullRequestProcedures } from "./repository-pull-request-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** A change any pull request takes: a label put on it. */
 const LABEL = JSON.stringify({ action: PULL_REQUEST_ACTION.ADD_LABEL, label: "ready" });
@@ -101,7 +101,7 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
         const outsider = `user-${randomUUID()}`;
         yield* (yield* Database)
           .insert(user)
-          .values({ id: outsider, name: "Test User", email: `${outsider}@luke.test` });
+          .values({ id: outsider, name: "Test User", email: `${outsider}@app.test` });
         const workspace = yield* openInstallationWorkspace(member, {
           installationId: 7802,
           accountId: 9802,

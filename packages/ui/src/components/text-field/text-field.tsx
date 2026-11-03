@@ -30,6 +30,12 @@ import type { FieldControl } from "../form-field/form-field.js";
  * start a line itself, as on a phone's keyboard, ⌘Return (Ctrl+Enter off
  * the Mac).
  *
+ * Neither ever asks the browser to check it: a field to be filled says so
+ * through its `FormField` (`aria-required`), never the native `required`,
+ * and the form it stands in is never checked by the browser, so its owner
+ * checks what it holds and says what is wrong in the field's error, never
+ * the browser's own bubble.
+ *
  * A number field holds a number, or nothing while it is empty or holds what
  * is not yet one (a lone minus sign), as the browser reads it; a busy text
  * area, its words on their way somewhere, takes no typing and answers
@@ -198,8 +204,6 @@ type TextEntryProps = Named & {
   placeholder?: string | undefined;
   disabled?: boolean | undefined;
   readOnly?: boolean | undefined;
-  /** Whether the form it stands in refuses to submit while it is empty, or, for an address, malformed. */
-  required?: boolean | undefined;
   autoFocus?: boolean | undefined;
   name?: string | undefined;
   maxLength?: number | undefined;
@@ -247,7 +251,6 @@ function entryAttributes(props: TextEntryProps) {
     placeholder: props.placeholder,
     disabled: props.disabled,
     readOnly: props.readOnly,
-    required: props.required,
     autoFocus: props.autoFocus,
     name: props.name,
     maxLength: props.maxLength,

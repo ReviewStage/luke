@@ -55,7 +55,7 @@ import { SqlClient } from "effect/sql";
  * Synthetic accounts, bearers, and pictures throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const ATTACHMENT = "/api/plans/attachment";
 
 /** A PNG's signature and a few bytes more: all the service reads of a picture. */
@@ -74,7 +74,7 @@ interface Answered {
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 

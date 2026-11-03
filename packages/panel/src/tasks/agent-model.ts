@@ -96,6 +96,7 @@ import {
   type GitHubLineMetadata,
   isFailingConclusion,
   isRecord,
+  isWireNumber,
   isWireString,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -1657,6 +1658,31 @@ const readUserMetadata = Schema.decodeUnknownOption(USER_MESSAGE_METADATA);
 export function agentMessageOf(message: AgentTranscriptMessage): AgentMessageMetadata | undefined {
   const read = userMetadataOf(message);
   return read?.channel === MESSAGE_CHANNEL.AGENT_MESSAGE ? read : undefined;
+}
+
+/**
+ * Whether a line is one of the agent's own wakeups: the prompt a
+ * `ScheduleWakeup` set, which the scheduled sweep hands back to the agent,
+ * sent by the agent itself, once it comes due (`native-wakeup-sweep.ts`), so
+ * its head says the agent woke up.
+ */
+export function isWakeupLine(message: AgentTranscriptMessage): boolean {
+  return userMetadataOf(message)?.channel === MESSAGE_CHANNEL.LUKE;
+}
+
+/** A second, in the milliseconds a wakeup's wait is told in. */
+const SECOND_MS = 1_000;
+
+/** How long the last wakeup a turn set waited, in milliseconds, read off its `ScheduleWakeup` call; none where the turn set none. */
+export function wakeupDelayOf(turn: AgentTranscriptMessage | undefined): number | undefined {
+  if (turn === undefined) return undefined;
+  const call = agentParts(turn).findLast(
+    (part) => part.kind === AGENT_PART.TOOL && part.tool === CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP,
+  );
+  const input = call?.kind === AGENT_PART.TOOL ? call.input : undefined;
+  return isRecord(input) && isWireNumber(input.delaySeconds)
+    ? input.delaySeconds * SECOND_MS
+    : undefined;
 }
 
 /** What a member did on a thread that a line steered into the agent carries, and the item it is on; nothing for any other line. */

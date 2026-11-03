@@ -53,7 +53,7 @@ beforeEach(() => {
   fakeAppPlatform({
     ...QUIET_PANEL,
     applySessionReplay: () => undefined,
-    adminDashboard: () => ({ href: "https://luke.test/admin" }),
+    adminDashboard: () => ({ href: "https://app.test/admin" }),
   });
   installWindowHistory(memoryHistory());
   // Every act main would answer is refused, as a fixture run's service reads go empty-handed.

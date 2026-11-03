@@ -10,6 +10,7 @@ import {
   listChannelLooks,
 } from "@luke/database/models/channel-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import type { WireBoundaryInput } from "@luke/wire";
 import { type Context, Effect, Option, Result } from "effect";
@@ -34,7 +35,7 @@ import { channelsProcedures } from "./channels-procedures.js";
  * Synthetic accounts, bearers, workspaces, and channels throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
@@ -43,7 +44,7 @@ const ANALYTICS = recordingProductAnalytics();
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -118,6 +119,7 @@ it.layer(getTestDB())("the channels route", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(started));
         const thread = Result.getOrThrow(

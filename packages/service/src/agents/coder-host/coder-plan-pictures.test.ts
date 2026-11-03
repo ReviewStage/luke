@@ -11,6 +11,7 @@ import {
 } from "@luke/database/models/plan-attachments";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   PICTURE_BOUNDS,
@@ -82,7 +83,7 @@ function sandboxWith(files: Readonly<Record<string, Uint8Array>>): InboxSandboxD
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -102,6 +103,7 @@ const openAgentTask = Effect.gen(function* () {
     repository: "acme/relay",
     planSnapshot: "# Invites\n",
     prompt: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   const agentId = Option.getOrThrow(started).agent.id;
   return { owner, teammate, outsider, taskId: task.id, agentId };

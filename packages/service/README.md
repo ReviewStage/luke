@@ -2080,7 +2080,7 @@ major production runs: Neon serves 18.x, PGlite 0.5.8 embeds PostgreSQL
 18.3, and the CI image is `postgres:18`, so a local `check.sh` is a
 reproduction on 18 already. On either dialect an opening of the test
 database is a database of that opening's own: a fresh PGlite, or a clone of
-the database `LUKE_STORE_TEST_DATABASE_URL` names, made with
+the database `APP_STORE_TEST_DATABASE_URL` names, made with
 `create database ... template ...` on the cluster's `postgres` maintenance
 database and dropped when the file closes it (`@luke/database/testing`, the
 one door that reads the variable). Nothing writes to the named database
@@ -2092,7 +2092,7 @@ runner which records what it applied and the tests copy what it recorded:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
-LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
+APP_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
 
 ## Reaching eve as the deployment
@@ -2109,7 +2109,7 @@ answered by the harness its conversation runs on
 service and door are gone, and an agent that ran on eve is refused as ended.
 The composition still asks for the deployment's `EVE_DEPLOYMENT_SECRET` and
 an eve origin (`deploymentEveOrigin` in `src/agents/eve-host/eve-origin.ts`:
-`LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
+`APP_EVE_ORIGIN` where it is set, otherwise the project's production domain
 in production and the deployment's own host on any other deployment), and
 answers unavailable where either is missing, although neither is sent
 anywhere that checks it now. Production and Preview each hold a secret of

@@ -57,7 +57,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 /** The grouped function as it is deployed: the oRPC route under its key, which the fallback lands every other path on. */
 const ORPC_ROUTES = new Map([[ORPC_ROUTE_KEY, orpcRoute]]);
 

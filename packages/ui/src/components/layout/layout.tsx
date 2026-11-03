@@ -158,6 +158,16 @@ function listRole(element: LayoutElement): "list" | undefined {
   return element === LAYOUT_ELEMENT.UL || element === LAYOUT_ELEMENT.OL ? "list" : undefined;
 }
 
+/**
+ * Whether the browser is kept from checking a form's fields, which it always
+ * is: its own bubble is drawn outside the design system, so the form's owner
+ * checks what it holds on submit and says what is wrong in the field's
+ * `ErrorLine` (`FormField`'s `error`).
+ */
+function browserUnchecked(element: LayoutElement): true | undefined {
+  return element === LAYOUT_ELEMENT.FORM ? true : undefined;
+}
+
 interface LayoutProps {
   gap?: Gap;
   align?: Align;
@@ -224,6 +234,7 @@ export function Stack({
       ...named,
       className: layoutClass("luke-stack flex-col", gap, align, justify, inset, className),
       role: listRole(Element),
+      noValidate: browserUnchecked(Element),
       ...(moves ? motionRows() : {}),
       "data-gap": gap,
       "data-align": align,
@@ -269,6 +280,7 @@ export function Inline({
         className,
       ),
       role: listRole(Element),
+      noValidate: browserUnchecked(Element),
       ...(moves ? motionRows() : {}),
       "data-gap": gap,
       "data-align": align,

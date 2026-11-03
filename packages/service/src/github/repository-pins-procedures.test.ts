@@ -24,7 +24,7 @@ import { repositoryPinsProcedures } from "./repository-pins-procedures.js";
  * Synthetic accounts, bearers, and repositories throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const PINS = "/api/repository-pins";
 
 /** What the route counted, across the file; a test reads its own account's. */
@@ -40,7 +40,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   const bearers = new Map([
     [`Bearer ${owner}`, owner],

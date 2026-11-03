@@ -12,6 +12,7 @@ import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
 import { member, organization, user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
 import { createAutomation, recordAutomationRun } from "../automation-store.js";
@@ -28,7 +29,7 @@ import { readRunAgents } from "../run-agents.js";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -94,6 +95,7 @@ it.layer(getTestDB())("a run's agents", (it) => {
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               repository: "acme/api",
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             }),
             (started) => Option.getOrThrow(started).agent.id,
           );

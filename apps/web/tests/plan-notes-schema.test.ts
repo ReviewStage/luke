@@ -8,7 +8,7 @@ import { test } from "vitest";
  * heading, correcting a phrase, or striking a line. The brain's `edit_plan`
  * tool takes the same schema as its input, so a model is shown these bytes as
  * a tool definition; they are recorded and move only under
- * `LUKE_UPDATE_FIXTURES=1`.
+ * `APP_UPDATE_FIXTURES=1`.
  */
 
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);

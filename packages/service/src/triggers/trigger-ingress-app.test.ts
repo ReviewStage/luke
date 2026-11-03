@@ -44,7 +44,7 @@ import { triggerIngressApp } from "./trigger-ingress-app.js";
  * Synthetic accounts, organizations, and words throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const PATH = "/api/triggers/sentry";
 const SECRET = "synthetic-client-secret";
 const FIXTURE_INSTALLATION = "a8e5d37a-696c-4c54-adb5-b3f28d64c7de";

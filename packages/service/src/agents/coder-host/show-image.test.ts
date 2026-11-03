@@ -58,7 +58,7 @@ function sandboxWith(files: Readonly<Record<string, Uint8Array>>): ShowImageBind
 const openConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const [row] = yield* db
     .insert(conversations)
     .values({ userId, kind: CONVERSATION_KIND.AGENT })

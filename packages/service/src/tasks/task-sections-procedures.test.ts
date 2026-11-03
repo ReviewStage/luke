@@ -28,7 +28,7 @@ import { taskSectionsProcedures } from "./task-sections-procedures.js";
  * Synthetic accounts, bearers, workspaces, and sections throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SECTIONS = "/api/task-sections";
 
 interface Answer {
@@ -41,7 +41,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   const bearers = new Map([
     [`Bearer ${owner}`, owner],

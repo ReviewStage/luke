@@ -17,7 +17,7 @@ source "$SCRIPT_DIRECTORY/../../scripts/lib/workspace.sh"
 
 luke_require_node
 luke_ensure_dependencies
-cd "$LUKE_REPO_ROOT"
+cd "$APP_REPO_ROOT"
 
 # The clients named by --client; the desktop is driven where none is named or one is it.
 clients=()
@@ -51,8 +51,8 @@ if [[ $(uname -s) == Darwin ]]; then
 fi
 pnpm --filter @luke/desktop build
 # A Linux install skips Electron's binary (scripts/bootstrap.sh), so it is fetched here.
-(cd "$LUKE_DESKTOP_APP_ROOT" && node node_modules/electron/install.js)
-ELECTRON=$(cd "$LUKE_DESKTOP_APP_ROOT" && node -p 'require("electron")')
+(cd "$APP_DESKTOP_APP_ROOT" && node node_modules/electron/install.js)
+ELECTRON=$(cd "$APP_DESKTOP_APP_ROOT" && node -p 'require("electron")')
 
 if [[ $(uname -s) == Darwin ]]; then
     exec "${runner[@]}" --electron "$ELECTRON" "$@"

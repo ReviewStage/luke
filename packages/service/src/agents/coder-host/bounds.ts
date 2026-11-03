@@ -22,8 +22,7 @@ export const CODER = {
    * How long a Vercel Sandbox session lives past its last sign of use: the
    * timeout it opens with, and how far ahead of now each keep-alive puts its
    * end (`sandbox-lifetime.ts`). An idle sandbox is stopped by what knows it
-   * idle rather than by this: an eve turn's end stops it at once, and so
-   * does a pause from `SLEEP_STOPS_AT` on; a native runner keeps its sandbox
+   * idle rather than by this: a native runner keeps its sandbox
    * alive by its heartbeat for as long as it runs, and its end stops it,
    * which comes the sandbox's `RUNNER_WARM` after the agent's turn is over,
    * or two minutes into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
@@ -32,9 +31,7 @@ export const CODER = {
    * only the backstop for one nothing stopped, which bills its memory until
    * then: at the default size, 4 GB for an hour, where the
    * platform's 24-hour maximum billed 96 GB-hours. An hour, because a live
-   * turn shows use far more often than that: an eve step starts at least
-   * every few minutes
-   * (`SLEEP_MAX` and the credential's renewal already lean on it), a native
+   * turn shows use far more often than that: a native
    * runner posts its events as its harness emits them, and a terminal or a
    * watched browser closes after five idle minutes. Each of them keeps it
    * alive at most every `SANDBOX_KEEP_ALIVE_EVERY`, which leaves fifty
@@ -106,32 +103,12 @@ export const CODER = {
   SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(3), deleteEvicted: true },
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@luke/features/host-wire`). */
   GITHUB_TOKEN_REFRESH,
-  /**
-   * The longest one pause (`sleep.ts`) may be. The credential at the
-   * firewall is renewed only as a step starts, so a step may start on one
-   * nearly fifty minutes old; a pause past the ten minutes it has left would
-   * leave a background command reaching GitHub signed out before the next
-   * step renews it. Eight leaves room for
-   * the step's own model call ahead of the pause; a longer wait is two.
-   */
-  SLEEP_MAX: Duration.minutes(8),
-  /**
-   * The shortest pause (`sleep.ts`) the sandbox is stopped for, where no
-   * process the agent started still runs (`../agent-runtime/sandbox-idle.ts`),
-   * and resumed from its snapshot at the next step. Vercel bills provisioned
-   * memory by the minute a session runs, idle or not, and a stop writes a
-   * snapshot and the next step waits on a resume, so a pause shorter than
-   * two billed minutes saves too little to be worth the resume
-   * (https://vercel.com/kb/guide/vercel-sandbox-duration-and-persistence).
-   */
-  SLEEP_STOPS_AT: Duration.minutes(2),
   /** The context window the session is told where the catalog names none for the model. */
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
   /**
-   * The share of the context window past which eve compacts the session,
-   * told to eve as the agent's own setting (`apps/dev/agent.ts`) and read by
-   * the agent's tab as the line its context ring turns red at. It is eve's
-   * own default, written down so the two cannot drift apart.
+   * The share of the context window past which eve compacted a session,
+   * read by the agent's tab as the line its context ring turns red at. It
+   * was eve's own default; no harness is told it now.
    */
   COMPACTION_THRESHOLD_SHARE: 0.9,
   /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */

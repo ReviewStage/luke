@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent } from "@luke/database/models/agent-store";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
   PAGE_OWNER,
@@ -52,6 +53,7 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     }),
     (started) => Option.getOrThrow(started).agent.id,
   );
@@ -59,7 +61,7 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const agentId = yield* openAgent(userId, { taskId: task.id });
   return {

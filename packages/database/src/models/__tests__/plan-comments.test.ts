@@ -17,6 +17,7 @@ import {
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
 import { readPlanAttachment } from "../plan-attachments.js";
@@ -54,7 +55,7 @@ const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
     return id;
   });
 
@@ -441,6 +442,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
             planSnapshot: PLAN_TEXT,
             prompt: null,
             repository: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent.id;
         const deleteWhole = (writer: PlanCommentWriterRef, threadId: string) =>

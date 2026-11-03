@@ -137,9 +137,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  */
 
 const SNAPSHOT = "snap_fixture_image";
-const EVENTS_URL = "https://luke.test/api/agents/runner/events";
-const LINES_URL = "https://luke.test/api/agents/runner-lines";
-const MCP_URL = "https://luke.test/api/agents/mcp";
+const EVENTS_URL = "https://app.test/api/agents/runner/events";
+const LINES_URL = "https://app.test/api/agents/runner-lines";
+const MCP_URL = "https://app.test/api/agents/mcp";
 
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
@@ -201,7 +201,7 @@ function services(
 const openAgentWithoutPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createAgent(userId, {
@@ -212,6 +212,7 @@ const openAgentWithoutPlan = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
   assert.ok(Option.isSome(started));
   return { userId, agent: started.value.agent };
@@ -388,7 +389,7 @@ const repositoryAgent = (
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
     yield* Effect.flatMap(Database, (db) =>
-      db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+      db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
     );
     yield* savePlan(userId);
     const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
@@ -401,6 +402,7 @@ const repositoryAgent = (
       planSnapshot: "# Relay\n",
       prompt: null,
       repository: RELAY_FULL_NAME,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     const agent = Option.getOrThrow(started).agent;
     const github = githubReaching([installation], undefined, {}, (sent) => {
@@ -474,6 +476,7 @@ const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
       prompt: null,
       repository: RELAY_FULL_NAME,
       ...(startBranch === undefined ? undefined : { startBranch }),
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
     return Option.getOrThrow(started).agent;
   });
@@ -795,7 +798,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const deviceId = randomUUID();
         yield* registerDevice(userId, {
@@ -881,7 +884,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
@@ -967,7 +970,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
@@ -2411,6 +2414,23 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const [sandbox] = api.sandboxes;
         assert.ok(sandbox !== undefined);
+        // The first turn took the opening line and settled, as its IDLE's batch writes it, so its runner is warm.
+        const db = yield* Database;
+        const [settled] = yield* db
+          .insert(turns)
+          .values({
+            userId,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.SETTLED,
+            queuedAt: new Date(0),
+            settledAt: new Date(0),
+          })
+          .returning({ id: turns.id });
+        yield* db
+          .update(messages)
+          .set({ turnId: settled?.id })
+          .where(eq(messages.conversationId, agent.conversationId));
         const retired = yield* retireWarmRunner({
           sessionId: opened.sessionId,
           userId,
@@ -2526,7 +2546,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const userId = `user-${randomUUID()}`;
         yield* db
           .insert(user)
-          .values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+          .values({ id: userId, name: "Test User", email: `${userId}@app.test` });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
           taskId: task.id,

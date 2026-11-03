@@ -7,6 +7,7 @@ import { createAgent } from "@luke/database/models/agent-store";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { planRevision } from "@luke/database/schemas/plan-revision";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { revisionsOfLiveRows, taskHistoryLiveRowsSchema } from "@luke/features/live-wire";
 import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS } from "@luke/features/task-wire";
@@ -33,7 +34,7 @@ import { taskHistoryLiveStatements } from "./task-history-live.js";
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -81,6 +82,7 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
           planSnapshot: "# Teammate invitations",
           prompt: null,
           repository: "acme/relay",
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         yield* later;
         yield* saveNotes(binding, [added("Open questions", "- Who may withdraw an invite?")], {

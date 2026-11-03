@@ -70,7 +70,7 @@ import { providerKeysProcedures } from "./provider-keys-procedures.js";
  * are fixed bytes written for this file.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const KEYS_PATH = "/api/account/provider-keys";
 
 const KEK = {
@@ -194,7 +194,7 @@ const openAccounts = (
     const db = yield* Database;
     const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
     for (const id of [owner, other]) {
-      yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+      yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
     }
     const bearers = new Map([
       [`Bearer ${owner}`, owner],

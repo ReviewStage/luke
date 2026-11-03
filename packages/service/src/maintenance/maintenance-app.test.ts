@@ -53,8 +53,8 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 const CRON_SECRET = "cron-secret-1";
 /** The deployment's own secret at eve's door, which every deployment here holds beside the cron's. */
 const EVE_DEPLOYMENT_SECRET = "eve-deployment-secret-1";
-/** The origin eve answers on, as `LUKE_EVE_ORIGIN` names it to the sweep. */
-const EVE_ORIGIN = "https://luke.test";
+/** The origin eve answers on, as `APP_EVE_ORIGIN` names it to the sweep. */
+const EVE_ORIGIN = "https://app.test";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -112,7 +112,7 @@ const sweep = (
       maintenanceApp().pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const request = new Request(`https://luke.test${MAINTENANCE_SWEEP_PATH}`, {
+    const request = new Request(`https://app.test${MAINTENANCE_SWEEP_PATH}`, {
       headers: { authorization: `Bearer ${bearer}` },
     });
     const response = yield* Effect.promise(() => handler(request));

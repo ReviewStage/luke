@@ -1,7 +1,7 @@
 /**
  * local-demo.ts -- whether the service runs as the local demo: the flag the local server sets, honoured only where the local server's own guard passes over the same environment.
  *
- * The local server sets `LUKE_LOCAL_DEMO` for the routes it mounts
+ * The local server sets `APP_LOCAL_DEMO` for the routes it mounts
  * (`apps/web/scripts/local-server.ts`), and the demo is the one place what it
  * turns on may stand: a Start on a task that names no repository, where its
  * agents run on a host (`agents/coder-host/start.ts`), and the account's
@@ -18,7 +18,7 @@ import { Config, Context, Effect, Layer } from "effect";
 import { localServerRefusalRead } from "./local-server-guard.js";
 
 /** The variable the local server turns the demo on with, the one name it goes by. */
-export const LOCAL_DEMO_ENVIRONMENT = { FLAG: "LUKE_LOCAL_DEMO" } as const;
+export const LOCAL_DEMO_ENVIRONMENT = { FLAG: "APP_LOCAL_DEMO" } as const;
 
 /** What the local server sets the flag to. */
 export const LOCAL_DEMO_ON = "1";

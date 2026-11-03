@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent } from "@luke/database/models/agent-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   PAGE_OWNER,
@@ -31,7 +32,7 @@ import { agentPagesProcedures } from "./agent-pages-procedures.js";
  * Synthetic accounts, bearers, workspaces, agents, and pages throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 interface Answer {
   readonly status: number;
@@ -41,7 +42,7 @@ interface Answer {
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });
@@ -99,6 +100,7 @@ it.layer(getTestDB())("an agent's own pages over HTTP", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agentId = Option.getOrThrow(started).agent.id;
         const shower = { kind: PAGE_SHOWER.AGENT, agentId } as const;

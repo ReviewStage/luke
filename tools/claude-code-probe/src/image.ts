@@ -1,8 +1,9 @@
 /**
  * image.ts -- what the probe adds to today's image, as root, and the root commands it reads the sandbox with.
  *
- * Today's image is `PREPARE_SCRIPT` (`agent-runtime/sandbox.ts`), run as the
- * sandbox's default user exactly as eve's `prepare` runs it. On top of it the
+ * Today's image is `PREPARE_SCRIPT` (`agent-runtime/sandbox-image.ts`), run
+ * as the sandbox's default user exactly as our template's build runs it
+ * (`native-sandbox-template.ts`). On top of it the
  * probe installs what P03 would: bubblewrap and socat for Claude Code's
  * command sandbox, the pinned Agent SDK with its `claude` binary in a
  * root-owned directory, and the `agent` user with a private home. The

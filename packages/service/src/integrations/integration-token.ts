@@ -1,10 +1,10 @@
 /**
  * integration-token.ts -- one account's token at an integration, read for the member acting in a conversation, and the fixed sentences that say why there is none.
  *
- * Every runtime reads an integration's credential here: eve's connection
- * (`integration-connection.ts`) and the door a native harness reaches over
- * our MCP server (`connection-door.ts`) alike, so nothing here imports
- * eve. The credential is the account's, read from Vercel Connect under the
+ * The door a native harness reaches over our MCP server
+ * (`connection-door.ts`) reads an integration's credential here, and
+ * nothing here imports eve. The credential is the account's, read from
+ * Vercel Connect under the
  * user id the admission names as the caller, never a session's principal.
  *
  * A connection that cannot be used fails only the call that tried it: the

@@ -114,6 +114,7 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         repository: "acme/relay",
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
     );
     return yield* openedOn(owner, started.agent, prompt);
@@ -284,6 +285,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
               },
               prompt: PROMPT,
             },
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
         // The session opened on the handed prompt, as eve records an agent's first message.
@@ -346,6 +348,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: "acme/relay",
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
         yield* Database.use((db) =>

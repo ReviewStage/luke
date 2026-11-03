@@ -40,7 +40,7 @@ const foldersBefore = Effect.gen(function* () {
 });
 
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
+  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
 
 it.effect(
   "an item that stood before unread was kept reads as read for every member, and one posted after it as unread",

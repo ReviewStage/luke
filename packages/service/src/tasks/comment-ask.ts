@@ -31,9 +31,7 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * (`coder-host/steer.ts`), reaching eve as the request's own caller
  * (`coder-host/stop.ts`'s `eveFor`), never as the plan's owner: over the
  * member's own bearer from the desktop, and from a browser's session cookie
- * as the deployment acting for the member, which the channel admits for a
- * typed message and mints as the member's own principal
- * (`eve-host/auth.ts`'s `DEPLOYMENT_PRESENCE`). It is sent under a key
+ * as the deployment acting for the member. It is sent under a key
  * drawn from the one the member's client made for the comment, so a comment
  * sent again is handed over once. A comment in a thread no agent is in
  * that mentions none hands nothing to anyone, an \`@\` of the app's own name

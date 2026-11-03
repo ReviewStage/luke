@@ -48,7 +48,7 @@ const foldersUpTo = (through: boolean) =>
   });
 
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
+  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
 
 it.effect(
   "an item from before version 5 reads as a thread its agent's message opens, its ask and answer on its messages",

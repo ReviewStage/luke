@@ -23,7 +23,7 @@ test("a preview's address hands over the link it stands for on Vespin's home", (
     linkOpenTarget(
       LINK_OPEN.MAC_APP,
       LINK_PLATFORM.MAC,
-      `https://luke-git-branch.vercel.app/acme/agent/${TASK_ID}?utm=slack`,
+      `https://git-branch.vercel.app/acme/agent/${TASK_ID}?utm=slack`,
     ),
     `vespin://vespin.dev/acme/agent/${TASK_ID}`,
   );

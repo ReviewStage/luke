@@ -71,11 +71,11 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
   // derives a path.
   // A named development instance (`run.sh --instance`) answers to a name of
   // its own, so its state, lock, and Keychain entry are its own too.
-  const requested = environment.LUKE_INSTANCE || undefined;
+  const requested = environment.APP_INSTANCE || undefined;
   const instance = resolveInstance({ packaged: app.isPackaged, requested });
   if (!app.isPackaged && requested !== undefined && instance === undefined) {
     dependencies.report(
-      `LUKE_INSTANCE "${requested}" is not an instance name; running as the plain one`,
+      `APP_INSTANCE "${requested}" is not an instance name; running as the plain one`,
     );
   }
   const identity = {
@@ -100,7 +100,7 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
 
   // The account service's one development override stops at packaging.
   const accountBaseUrl =
-    (app.isPackaged ? undefined : environment.LUKE_ACCOUNT_BASE_URL) ?? `${LINK_ORIGIN}/api/auth`;
+    (app.isPackaged ? undefined : environment.APP_ACCOUNT_BASE_URL) ?? `${LINK_ORIGIN}/api/auth`;
 
   return {
     stateRoot,

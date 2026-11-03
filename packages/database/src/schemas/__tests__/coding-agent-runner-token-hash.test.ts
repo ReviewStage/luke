@@ -10,6 +10,7 @@ import {
   readRunnerTokenConversation,
 } from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
+import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
   agentTablesRename,
   getTestDB,
@@ -45,7 +46,7 @@ const agentHolding = () =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Dean", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Dean", email: `${userId}@app.test` });
     const organizationId = yield* openWorkspace(userId);
     const task = yield* createTask(userId, { organizationId, name: "Teammate invitations" });
     const agent = Option.getOrThrow(
@@ -57,6 +58,7 @@ const agentHolding = () =>
         repository: null,
         planSnapshot: "# Teammate invitations\n",
         prompt: null,
+        runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
     ).agent;
     return { userId, agentId: agent.id, conversationId: agent.conversationId };
