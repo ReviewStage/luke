@@ -350,7 +350,7 @@ When a result reads better as something to look at or click through than as word
  */
 const TASK_PLACE_WORDS = {
   onTask: {
-    link: ` A \`${LINK_ORIGIN}/<workspace>/plan/<id>\` link names a task, or with \`#\` one of its plan's sections: what its plan said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
+    link: ` A \`${LINK_ORIGIN}/<workspace>/task/<id>\` link, or an older \`${LINK_ORIGIN}/<workspace>/plan/<id>\` one, names a task, or with \`#\` one of its plan's sections: what its plan said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
     olderLinks: ", `<scheme>://folder/<path>/`, and `<scheme>://plan/<id>#<heading>`",
     startAgent:
       " Start it on your own task, which is where a piece of this task's work belongs; start one on another task, or on a new task of its own, only for work unrelated to your task, or where the developer asked for that",
@@ -457,10 +457,7 @@ function namingWords(repository: string | null, taskLink: string | null): string
       ? ""
       : `
 - A file of your repository: \`[@session-store.ts](https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts)\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5)\`.`;
-  const inboxItem =
-    taskLink === null
-      ? `${LINK_ORIGIN}/acme/agent/<agent-id>/inbox/<item-id>`
-      : `${taskLink}/inbox/<item-id>`;
+  const inboxItem = `${LINK_ORIGIN}/acme/agent/<agent-id>/inbox/<item-id>`;
   const ownTask =
     taskLink === null
       ? `
@@ -470,7 +467,7 @@ function namingWords(repository: string | null, taskLink: string | null): string
 - A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;
   return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. ${PRODUCT_NAME} draws it as the thing's chip, which opens it, wherever you write it: in a message, a thread, or the plan. Keep a mention in the plan exactly as it stands when you edit around it. Copy a target a tool answered rather than spelling one:${files}
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository ?? EXAMPLE_REPOSITORY}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`. Write one so every time you name it, in passing and in a report to another agent among them, never as a bare \`#42\`, which draws as no chip; where no tool answered a pull request's address, spell it from its number, its repository's address with \`/pull/\` and the number.${ownTask}
-- Another agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](${LINK_ORIGIN}/acme/plan/<task-id>/agent/<agent-id>)\`.
+- Another agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](${LINK_ORIGIN}/acme/agent/<agent-id>)\`, \`[@Teammate invitations](${LINK_ORIGIN}/acme/task/<task-id>)\`.
 - One of your threads, by the \`mention\` each of your thread tools answered for it: \`[@Review the invite flow](${inboxItem})\`.
 - A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](mention://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](mention://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](mention://date/2026-10-20/2026-10-24)\`.
 - An MCP server, by its connection's name as your tools list it: \`[@Linear](mention://mcp/linear)\`, or \`[@Notion](mention://mcp/notion-2)\` for a second Notion account.

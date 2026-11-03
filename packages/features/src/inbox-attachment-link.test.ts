@@ -27,7 +27,7 @@ test("a picture's address is its item's link with its id after it, under the tas
   const onTask = inboxAttachmentAddress(ON_TASK, PICTURE, "acme");
   const onAgent = inboxAttachmentAddress(ON_AGENT, PICTURE, "acme");
 
-  assert.equal(onTask, `https://vespin.dev/acme/plan/${TASK_ID}/inbox/${ITEM_ID}/files/${PICTURE}`);
+  assert.equal(onTask, `https://vespin.dev/acme/task/${TASK_ID}/inbox/${ITEM_ID}/files/${PICTURE}`);
   assert.equal(
     onAgent,
     `https://vespin.dev/acme/agent/${AGENT_ID}/inbox/${ITEM_ID}/files/${PICTURE}`,

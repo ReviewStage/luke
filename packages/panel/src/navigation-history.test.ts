@@ -747,7 +747,7 @@ test("the Admin place stands at its workspace's /admin though a task stands unde
   await settle();
 
   assert.deepEqual(window.addresses(), [
-    `/acme/plan/${DOCUMENT_TASK.id}`,
+    `/acme/task/${DOCUMENT_TASK.id}`,
     "/acme/admin/cost",
     "/acme/admin/user/user-ada",
   ]);
@@ -799,8 +799,8 @@ test("a workspace's slug read after the visit moves the standing step to its add
   const before = window.addresses();
   window.stand(onTask([ACME]));
 
-  assert.deepEqual(before, [`/workspace-acme/plan/${DOCUMENT_TASK.id}`]);
-  assert.deepEqual(window.addresses(), [`/acme/plan/${DOCUMENT_TASK.id}`]);
+  assert.deepEqual(before, [`/workspace-acme/task/${DOCUMENT_TASK.id}`]);
+  assert.deepEqual(window.addresses(), [`/acme/task/${DOCUMENT_TASK.id}`]);
   assert.equal(window.history().canGoBack, false);
 });
 

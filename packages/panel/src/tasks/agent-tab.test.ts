@@ -122,7 +122,7 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
     verb: "Showed",
     made: "Pricing explorer",
-    opens: "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
+    opens: "https://vespin.dev/acme/task/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
   },
   {
     name: "a read of an agent opens its tab",

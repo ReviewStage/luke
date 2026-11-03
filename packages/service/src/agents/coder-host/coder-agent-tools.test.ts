@@ -1749,7 +1749,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
       ? [{ id: task.id, name: task.name, isYourTask: task.isYourTask, mention: task.mention }]
       : [],
   );
-  const home = `https://vespin.dev/workspace-${workspaceId}/plan`;
+  const home = `https://vespin.dev/workspace-${workspaceId}/task`;
   assert.deepEqual(
     [...tasks].sort((a, b) => String(a.name).localeCompare(String(b.name))),
     [
@@ -1923,7 +1923,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
     assignee: null,
     name,
     repository: RELAY_FULL_NAME,
-    mention: `[@${name}](https://vespin.dev/workspace-${workspaceId}/plan/${taskId})`,
+    mention: `[@${name}](https://vespin.dev/workspace-${workspaceId}/task/${taskId})`,
   });
   assert.deepEqual(
     [stored.ownerId, stored.task.workspaceId, stored.task.repository, stored.text, stored.brief],
@@ -2352,7 +2352,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       name: "Billing",
       repository: RELAY_FULL_NAME,
       pinned: false,
-      mention: `[@Billing](https://vespin.dev/workspace-${workspaceId}/plan/${tasks.billing})`,
+      mention: `[@Billing](https://vespin.dev/workspace-${workspaceId}/task/${tasks.billing})`,
     },
     already,
   });
@@ -3131,7 +3131,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   assert.ok(
     isWireString(read.mention) &&
       read.mention.startsWith("[@Seats by month](") &&
-      read.mention.endsWith(`/plan/${tasks.billing}/page/${shown.id})`),
+      read.mention.endsWith(`/task/${tasks.billing}/page/${shown.id})`),
     String(read.mention),
   );
   assert.ok(isWireString(read.html) && read.html.length <= 40_000 && read.html.endsWith("</p>"));
@@ -3192,7 +3192,7 @@ test("read_page reads a page an agent on no task of the caller's workspace showe
   assert.ok(
     isWireString(read.mention) &&
       read.mention.endsWith(`/agent/${sweeper.id}/page/${shown.id})`) &&
-      !read.mention.includes("/plan/"),
+      !read.mention.includes("/task/"),
     String(read.mention),
   );
   assert.equal(own.isYours, true);
@@ -3658,7 +3658,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     Option.isSome(await database.run(savePlanText(teammates.userId, taskIds.billing, plan))),
   );
 
-  const home = `https://vespin.dev/workspace-${workspaceId}/plan`;
+  const home = `https://vespin.dev/workspace-${workspaceId}/task`;
   const read = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
   assert.ok(isRecord(read.task) && isRecord(read.plan));

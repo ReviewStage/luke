@@ -31,7 +31,7 @@ const FILLED: ReadonlyMap<string, string> = new Map([
 ]);
 
 /** The task the coding agent works on, whose link its instructions are handed. */
-const TASK_ADDRESS = "https://vespin.dev/acme/plan/pl_1";
+const TASK_ADDRESS = "https://vespin.dev/acme/task/pl_1";
 
 /** Every Markdown link to a web page the words show, its label and its target, the placeholders filled in as an author would. */
 function linksIn(words: string): { label: string; target: string }[] {
@@ -69,6 +69,7 @@ test("a coding agent is shown to name each kind as a mention Vespin draws as its
           ...shared,
           ...(onTask ? own : [MENTION_KIND.PAGE]),
           MENTION_KIND.AGENT,
+          MENTION_KIND.TASK,
           LINK_PLACE.INBOX_ITEM,
         ],
         `${brief} ${onTask}`,

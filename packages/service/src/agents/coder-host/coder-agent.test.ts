@@ -16,7 +16,7 @@ import { CODER_HARNESS, coderInstructions } from "./instructions.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
-const TASK_ADDRESS = "https://vespin.dev/acme/plan/pl_1";
+const TASK_ADDRESS = "https://vespin.dev/acme/task/pl_1";
 
 test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered", () => {
   // The tools Claude Code owns in place of ours, as eve's instructions name ours.
@@ -276,7 +276,7 @@ test("a Codex agent is told of Codex's own tools and never of Vespin's it is not
 });
 
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of its own pages alone", () => {
-  const TASK_LINK = "`https://vespin.dev/<workspace>/plan/<id>` link names a task";
+  const TASK_LINK = "`https://vespin.dev/<workspace>/task/<id>` link, or an older";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(AGENT_BRIEF)) {

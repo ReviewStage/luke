@@ -239,7 +239,7 @@ test("over the source, View settings offers the settings its lines follow, and t
 });
 
 test.each([
-  { holder: "a task's page", place: { taskId: TASK }, path: `plan/${TASK}` },
+  { holder: "a task's page", place: { taskId: TASK }, path: `task/${TASK}` },
   { holder: "a page of an agent on no task", place: { agentId: AGENT }, path: `agent/${AGENT}` },
 ])(
   "Open in browser on $holder opens its own Vespin link, flagged to stay on the web, never the address it is framed from",

@@ -44,7 +44,7 @@ import { workspaceIdSchema } from "./task-wire.js";
  * name alone: the slug stays the one the workspace was made under.
  *
  * A workspace's slug is the first step of our links' paths
- * (`https://vespin.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
+ * (`https://vespin.dev/<slug>/task/<id>`, `mention-link.ts`), so no workspace
  * takes one our own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
  * slug only reads well; a link is found by the task's id alone, so a slug
  * spelled differently later breaks no link written under the old one.

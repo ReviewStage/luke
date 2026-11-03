@@ -40,8 +40,8 @@ const TASK: Mention = { kind: MENTION_KIND.TASK, taskId: TASK_ID };
 const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" };
 
 test("a plan and its section are written as their address on vespin.dev, under the plan's workspace", () => {
-  assert.equal(encodeMention(TASK, PLACE), `https://vespin.dev/acme/plan/${TASK_ID}`);
-  assert.equal(encodeMention(ROLLOUT, PLACE), `https://vespin.dev/acme/plan/${TASK_ID}#rollout`);
+  assert.equal(encodeMention(TASK, PLACE), `https://vespin.dev/acme/task/${TASK_ID}`);
+  assert.equal(encodeMention(ROLLOUT, PLACE), `https://vespin.dev/acme/task/${TASK_ID}#rollout`);
   assert.deepEqual(decodeMention(encodeMention(TASK, PLACE), null), TASK);
   assert.deepEqual(decodeMention(encodeMention(ROLLOUT, PLACE), null), ROLLOUT);
 });
@@ -273,7 +273,7 @@ test("a link that names no mention reads as none", () => {
 test("a mention is written as a link whose label starts with @, its brackets escaped", () => {
   const written = mentionMarkdown(ROLLOUT, "Rollout [draft]", PLACE);
 
-  assert.equal(written, `[@Rollout \\[draft\\]](https://vespin.dev/acme/plan/${TASK_ID}#rollout)`);
+  assert.equal(written, `[@Rollout \\[draft\\]](https://vespin.dev/acme/task/${TASK_ID}#rollout)`);
 });
 
 test("only a label that starts with @ and says more is a mention's, which its chip names without the @", () => {
@@ -782,7 +782,7 @@ test("a server or tool of an account past a provider's first names it by its con
 test("a page of a plan is its Vespin link, an agent of one is the agent's own, an older link under its task read back as it, by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
   const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
   const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-1" };
-  const taskLink = `https://vespin.dev/acme/plan/${TASK_ID}`;
+  const taskLink = `https://vespin.dev/acme/task/${TASK_ID}`;
 
   assert.equal(encodeMention(page, PLACE), `${taskLink}/page/page-1`);
   assert.equal(encodeMention(agent, PLACE), "https://vespin.dev/acme/agent/agent-1");
@@ -969,7 +969,7 @@ test("the links written in words are every inline link whatever its label, an au
 test("Vespin on a task is mentioned by the task's link and `/app`, read back by either scheme or the `/luke` an earlier build wrote, and on no task names nothing", () => {
   const app: Mention = { kind: MENTION_KIND.APP, taskId: "plan-1" };
 
-  assert.equal(encodeMention(app, PLACE), "https://vespin.dev/acme/plan/plan-1/app");
+  assert.equal(encodeMention(app, PLACE), "https://vespin.dev/acme/task/plan-1/app");
   assert.deepEqual(decodeMention("https://vespin.dev/acme/plan/plan-1/app", null), app);
   assert.deepEqual(decodeMention("vespin://vespin.dev/acme/plan/plan-1/app", null), app);
   assert.deepEqual(decodeMention("https://vespin.dev/acme/plan/plan-1/luke", null), app);
