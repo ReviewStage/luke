@@ -20,7 +20,7 @@ import { RECORDING_CURSOR_FONT } from "./recording-cursor-font.js";
 // The pointer's copper over a light page and a dark one, the brand's accent in either theme.
 const POINTER = { LIGHT: BRAND_PALETTE.LIGHT.ACCENT, DARK: BRAND_PALETTE.DARK.ACCENT } as const;
 
-/** A `#rrggbb` colour as `rgba()` at an opacity written as the source writes it (`.42`), for the glow round the pointer. */
+/** A `#rrggbb` color as `rgba()` at an opacity written as the source writes it (`.42`), for the glow round the pointer. */
 function rgba(hex: string, alpha: string): string {
   const value = Number.parseInt(hex.slice(1), 16);
   return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
