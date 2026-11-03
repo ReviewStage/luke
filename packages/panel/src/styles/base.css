@@ -122,11 +122,15 @@
   --comment-mark-active-edge: light-dark(rgba(176, 112, 0, 1), rgba(255, 200, 87, 0.95));
   /* The agent's pointer over a cloud Browser tab (`tasks/cloud-browser-cursor.tsx`),
      drawn over someone else's page rather than the window, so it follows the
-     page under it rather than the theme: a flat neutral grey, a lighter one over
-     a dark page, and the soft neutral halo that holds it apart from any page. */
-  --agent-pointer: rgba(107, 111, 118, 0.9);
-  --agent-pointer-on-dark: rgba(206, 209, 214, 0.92);
-  --agent-pointer-halo: rgba(0, 0, 0, 0.2);
+     page under it rather than the theme: the light mode's accent, the dark
+     mode's brighter one over a dark page, a white edge and a small shadow that
+     hold it apart from any page, and a glow of its own amber while it types. */
+  --agent-pointer: #a7611b;
+  --agent-pointer-on-dark: #cf7b26;
+  --agent-pointer-edge: #ffffff;
+  --agent-pointer-shadow: rgba(0, 0, 0, 0.35);
+  --agent-pointer-glow: rgba(167, 97, 27, 0.42);
+  --agent-pointer-glow-on-dark: rgba(207, 123, 38, 0.5);
 }
 
 /* Pierre's diff and file tree each ask for `color-scheme: light dark` in

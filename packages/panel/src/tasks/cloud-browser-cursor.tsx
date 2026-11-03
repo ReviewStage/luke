@@ -7,11 +7,11 @@
  * one (`AgentBrowserTab.cursor`). The arrow stands at that point scaled onto
  * the drawn page, and glides there over `--ui-duration-fast` on
  * `--ui-spring-fast`, about the beat, so it arrives as the action lands. It is
- * drawn as a compact neutral arrowhead on a soft halo, as Codex draws its
- * agent's, in a lighter grey over a dark page (`onDarkPage`). While
+ * drawn as a compact arrowhead in the brand's amber with a white edge, in the
+ * dark mode's brighter amber over a dark page (`onDarkPage`). While
  * the agent is active on the tab it rocks gently about its tip, a loop
- * `--ui-loop-motion` holds still; a click presses it, with a soft ripple at
- * the point, and typing bobs it. It fades once the agent has done nothing
+ * `--ui-loop-motion` holds still; a click presses it, with an amber ripple at
+ * the point, and typing bobs it over an amber glow. It fades once the agent has done nothing
  * for `CLOUD_BROWSER_CURSOR_IDLE`, timed on the renderer's runtime, and back
  * in on its next move. Near the page's right or bottom edge it is mirrored
  * about its tip, so its body stays on the page rather than clipped past it.
