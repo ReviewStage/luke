@@ -7,7 +7,8 @@
  * workspace's bot is connected, the member's email matches someone in its
  * team, and the member's own switch is on (`slackNotificationsOn`). A
  * follow-up that asks nothing new on a thread still open writes nothing.
- * The DM says the thread's title, the post's words as plain text, and an
+ * The DM says the thread's title, the post's words as Slack draws
+ * Markdown (`slackMarkdownBlock`), and an
  * open button to the thread; a decide ask that takes one option offers each
  * as a button beside it (`SlackChoice`), which our Slack route answers the
  * ask with (`slack-events-app.ts`), and every other ask is the link alone.
@@ -38,7 +39,6 @@ import {
   knownAsk,
 } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
-import { linkLabels } from "@repo/features/mention-link";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
@@ -49,9 +49,10 @@ import {
   type SlackMessage,
   type SlackMessageContent,
 } from "./slack-bot.js";
+import { slackClipped, slackMarkdownBlock } from "./slack-markdown.js";
 
-/** Slack's own limits a DM's parts are clipped to: a header's text, a section's, and a button's. */
-const SLACK_TEXT_BOUND = { HEADER: 150, SECTION: 3_000, BUTTON: 75 } as const;
+/** Slack's own limits a DM's parts are clipped to: a header's text and a button's. */
+const SLACK_TEXT_BOUND = { HEADER: 150, BUTTON: 75 } as const;
 
 /** What a settled DM says in its button's place, by where its ask now stands. */
 const SETTLED_LINE = {
@@ -113,11 +114,6 @@ function openingMessage(item: InboxItem): InboxMessage | undefined {
   return asking ?? thread.findLast((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT);
 }
 
-/** The words clipped to the bound, an ellipsis where they ran past it. */
-function clipped(words: string, bound: number): string {
-  return words.length <= bound ? words : `${words.slice(0, bound - 1)}…`;
-}
-
 /**
  * A button per option of an open decide ask that takes one, the recommended
  * ones primary, each under an action id of its own, which the route answers
@@ -134,7 +130,7 @@ function choiceButtons(itemId: string, message: InboxMessage): SlackBlock[] {
   ]);
   return ask.options.map(({ label }) => ({
     type: "button",
-    text: { type: "plain_text", text: clipped(label, SLACK_TEXT_BOUND.BUTTON) },
+    text: { type: "plain_text", text: slackClipped(label, SLACK_TEXT_BOUND.BUTTON) },
     action_id: randomUUID(),
     value: Schema.encodeSync(SlackChoiceSchema)({ item: itemId, ask: message.id, choice: label }),
     ...(recommended.has(label) ? { style: "primary" } : undefined),
@@ -143,7 +139,7 @@ function choiceButtons(itemId: string, message: InboxMessage): SlackBlock[] {
 
 /**
  * The DM a thread is written as: its title as the header, the agent's words
- * as plain text with each link written as its name, and the open
+ * in a `markdown` block, and the open
  * button after any option's; a settled one says where its ask stands, in
  * the line given, above the button.
  */
@@ -152,11 +148,11 @@ function threadDmContent(
   line?: string,
   choices: readonly SlackBlock[] = [],
 ): SlackMessageContent {
-  const title = clipped(view.title, SLACK_TEXT_BOUND.HEADER);
-  const words = clipped(linkLabels(view.text).trim(), SLACK_TEXT_BOUND.SECTION);
+  const title = slackClipped(view.title, SLACK_TEXT_BOUND.HEADER);
+  const words = view.text.trim();
   const blocks: SlackBlock[] = [
     { type: "header", text: { type: "plain_text", text: title } },
-    ...(words === "" ? [] : [{ type: "section", text: { type: "plain_text", text: words } }]),
+    ...(words === "" ? [] : [slackMarkdownBlock(words)]),
     ...(line === undefined
       ? []
       : [{ type: "context", elements: [{ type: "plain_text", text: line }] }]),

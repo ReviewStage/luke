@@ -30,7 +30,8 @@
  * agent's.
  *
  * Every turn of such an agent that settles is posted in its thread once
- * (`claimSlackThreadTurn`): its final message as mrkdwn, or that it failed
+ * (`claimSlackThreadTurn`): its final message in a `markdown` block, which
+ * Slack draws as standard Markdown, or that it failed
  * or was stopped, each with the agent's link. Slack's words reach the
  * agent's prompt, transcript, and traces, never a log line: a failure is
  * logged by its kind alone.
@@ -68,7 +69,7 @@ import { workspaceStepOf } from "../agents/written-mentions.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { afterResponse } from "../http/after-response.js";
 import { SlackBot, type SlackBotService, type SlackMessageContent } from "./slack-bot.js";
-import { slackEscaped, slackMrkdwn } from "./slack-mrkdwn.js";
+import { slackClipped, slackEscaped, slackMarkdownBlock } from "./slack-markdown.js";
 
 /** The events read: a mention of the bot in a channel, and a message in a conversation with it. */
 const SLACK_EVENT = { APP_MENTION: "app_mention", MESSAGE: "message" } as const;
@@ -94,11 +95,8 @@ const THREAD_FRAME_CHARS = 512;
 /** What the thread's messages end with where they were cut to fit. */
 const CUT_MARK = "\n… (cut to fit; read the rest in Slack)";
 
-/** The most of a final message one section holds, inside Slack's own bound of 3000 with room for the escapes. */
-const RESULT_CHARS = 2500;
-
-/** What the cut end of a long final message says; the link reads the rest. */
-const RESULT_CUT_MARK = "…";
+/** The most characters of a final message the notification's plain text says; the blocks hold more. */
+const NOTIFICATION_CHARS = 2500;
 
 /** What the bot says in a thread where it starts nothing. */
 const SLACK_REPLY = {
@@ -485,14 +483,7 @@ function turnOutcome(turn: SettledAgentTurn, words: string | undefined): SlackMe
   }
   if (turn.status === TURN_STATUS.CANCELLED) return plainReply("The agent was stopped.");
   if (words === undefined) return plainReply("The agent finished.");
-  const cut =
-    words.length > RESULT_CHARS
-      ? `${words.slice(0, RESULT_CHARS - RESULT_CUT_MARK.length)}${RESULT_CUT_MARK}`
-      : words;
-  return {
-    text: cut,
-    blocks: [{ type: "section", text: { type: "mrkdwn", text: slackMrkdwn(cut) } }],
-  };
+  return { text: slackClipped(words, NOTIFICATION_CHARS), blocks: [slackMarkdownBlock(words)] };
 }
 
 /**

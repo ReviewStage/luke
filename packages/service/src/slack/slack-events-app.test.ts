@@ -19,6 +19,7 @@ import { Clock, DateTime, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { type AfterResponse, keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
@@ -37,7 +38,8 @@ import { dmThreadPost } from "./thread-dms.js";
 /**
  * Our Slack route, answered by its group the way a function answers it,
  * over a real store, a fake Slack, and a verifier standing in for Vercel's
- * keys: a press of a decide ask's option in the DM the bot wrote answers
+ * keys: a press of a decide ask's option in the DM the bot wrote is
+ * acknowledged before anything is done, then answers
  * the ask as the member it was written to, hands the agent its answer, and
  * rewrites the DM to say the option chosen, and a request Connect did not
  * sign is refused before anything of it is read; and a mention of the bot
@@ -155,8 +157,12 @@ const RELAY_INSTALLATION: InstallationFixture = {
   repositories: [{ owner: "Acme", name: "Relay" }],
 };
 
-/** The group over the test's store, the bot, and the verifier, answering one request. */
-const answer = (bot: Layer.Layer<SlackBot>, request: Request) =>
+/** The group over the test's store, the bot, and the verifier, answering one request; its after-response work runs in place unless kept. */
+const answer = (
+  bot: Layer.Layer<SlackBot>,
+  request: Request,
+  after: Layer.Layer<AfterResponse> | Layer.Layer<never> = Layer.empty,
+) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -174,6 +180,7 @@ const answer = (bot: Layer.Layer<SlackBot>, request: Request) =>
       ]),
       HARNESS.layer,
       bot,
+      after,
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       slackEventsApp(verify).pipe(HttpRouter.provideRequest(services)),
@@ -232,7 +239,7 @@ function mention(slackUserId: string, eventId: string): Request {
 
 it.layer(getTestDB())("our Slack route", (it) => {
   it.effect(
-    "a press Connect signed answers the ask as the member it was written to, tells the agent, and says the choice in the DM; one unsigned is refused",
+    "a press Connect signed is acknowledged first, then answers the ask as the member it was written to, tells the agent, and says the choice in the DM; one unsigned is refused",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -253,14 +260,20 @@ it.layer(getTestDB())("our Slack route", (it) => {
 
         const unsigned = yield* answer(bot, press(month, slackUserId, undefined));
         const stillOpen = yield* askStatus;
-        const signed = yield* answer(bot, press(month, slackUserId, CONNECT_TOKEN));
+        const kept = keptAfterResponse();
+        const signed = yield* answer(bot, press(month, slackUserId, CONNECT_TOKEN), kept.layer);
+        const atAnswer = yield* askStatus;
+        // The press's work, then the settle of the DM it hands on once the answer is taken.
+        yield* kept.run;
+        yield* kept.run;
 
         assert.deepEqual(unsigned, {
           status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
           body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
         });
         assert.equal(stillOpen, INBOX_ASK_STATUS.OPEN);
-        assert.equal(signed.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(signed, { status: HOSTED_HTTP_STATUS.OK, body: {} });
+        assert.equal(atAnswer, INBOX_ASK_STATUS.OPEN);
         assert.equal(yield* askStatus, INBOX_ASK_STATUS.ANSWERED);
         assert.deepEqual(
           HARNESS.heard.filter((heard) => heard.account === owner),
