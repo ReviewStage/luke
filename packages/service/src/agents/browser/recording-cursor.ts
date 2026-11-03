@@ -27,13 +27,13 @@ export const RECORDING_CURSOR_FILE = {
 
 /**
  * The agent's pointer, drawn into each page while it is recorded: the
- * panel's arrow on its soft halo, in a closed shadow root on the document's
+ * panel's amber arrow with its white edge, in a closed shadow root on the document's
  * root, hidden from the accessibility tree and taking no pointer events. It
  * follows the input the agent sends, which a page hears as a person's
  * (`@repo/features/browser-agent-cdp`), gliding to each point on the panel's
  * spring (`--ui-spring-fast` over `--ui-duration-fast`), and once it arrives a
- * press presses it, with a ripple at the point, and typing bobs it; over a
- * dark page it is drawn in the panel's lighter grey, and near the page's
+ * press presses it, with a ripple at the point, and typing bobs it over an
+ * amber glow; over a dark page it is drawn in the dark mode's brighter amber, and near the page's
  * right or bottom edge it is mirrored about its tip. A key a viewer could
  * not otherwise see, such as Enter, Tab, Escape, an arrow, or a shortcut,
  * shows at the foot of the page on the window's tooltip surface, set as
@@ -47,7 +47,8 @@ export const RECORDING_CURSOR_FILE = {
  * its fallback faces set each glyph in a weight of its own. The panel's
  * tokens are
  * no part of the page, so their values are written out here: hold them to
- * `--agent-pointer`, `--agent-pointer-on-dark`, and `--agent-pointer-halo`,
+ * `--agent-pointer`, its `-on-dark`, `-edge`, `-shadow`, `-glow`, and
+ * `-glow-on-dark` siblings,
  * to the `.cloud-browser-cursor` rules, and to `--ui-color-tooltip`, its edge,
  * text, and chord inks, `--ui-tooltip-radius`, and `--ui-tooltip-shadow`; the
  * caps stand larger than a tooltip's words, which a compressed video blurs. Note that it does not rock while
@@ -84,7 +85,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });
-  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.2),transparent)}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:rgba(107,111,118,.9);stroke:rgba(107,111,118,.9);stroke-width:.6;stroke-linejoin:round;transform-origin:0 0}.c.dark .a{fill:rgba(206,209,214,.92);stroke:rgba(206,209,214,.92)}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1px solid rgba(107,111,118,.9);border-radius:50%;opacity:0}.r.dark{border-color:rgba(206,209,214,.92)}.k{position:absolute;left:50%;bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:#0b0b0c;box-shadow:0 4px 14px rgba(0,0,0,.12);color:rgba(255,255,255,.5);font:500 17px/1 " + FAMILY + ",-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}.k span:last-child{color:rgba(255,255,255,.95)}.k svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}";
+  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,rgba(167,97,27,.42),transparent);opacity:0;transition:opacity " + GLIDE + "ms " + EXIT + "}.c.dark .h{background:radial-gradient(closest-side,rgba(207,123,38,.5),transparent)}.c.t .h{opacity:1}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:#a7611b;stroke:#fff;stroke-width:2.4;stroke-linejoin:round;paint-order:stroke;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35));transform-origin:0 0}.c.dark .a{fill:#cf7b26}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1.5px solid #a7611b;border-radius:50%;opacity:0}.r.dark{border-color:#cf7b26}.k{position:absolute;left:50%;bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:#0b0b0c;box-shadow:0 4px 14px rgba(0,0,0,.12);color:rgba(255,255,255,.5);font:500 17px/1 " + FAMILY + ",-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}.k span:last-child{color:rgba(255,255,255,.95)}.k svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}";
   // A constructed sheet, since a page's own style-src may refuse a style element.
   if ("adoptedStyleSheets" in shadow && typeof CSSStyleSheet.prototype.replaceSync === "function") {
     const sheet = new CSSStyleSheet();
@@ -105,7 +106,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   icon.setAttribute("class", "a");
   icon.setAttribute("viewBox", "1 1 16 16");
   const path = document.createElementNS(svg, "path");
-  path.setAttribute("d", "M1 1 11.94 6.29Q13.87 7.22 12.56 7.58L8.64 8.64 7.58 12.56Q7.22 13.87 6.29 11.94Z");
+  path.setAttribute("d", "M1 1 13.07 5.16Q15.2 5.89 13.56 6.58L8.64 8.64 6.58 13.56Q5.89 15.2 5.16 13.07Z");
   icon.append(path);
   flip.append(icon);
   arrow.append(halo, flip);
@@ -176,12 +177,13 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
     const ripple = ring.animate([{ opacity: 0, transform: "scale(.3)" }, { opacity: 0.6, offset: 0.15 }, { opacity: 0, transform: "scale(1.6)" }], { duration: 460, delay, easing: EXIT });
     ripple.onfinish = () => ring.remove();
   };
-  // Typing bobs the arrow until the keys have stopped for a beat.
+  // Typing bobs the arrow over its glow until the keys have stopped for a beat.
   const bobOnce = () => {
-    if (!animates) return;
-    if (!bob) bob = icon.animate([{ translate: "0 0" }, { translate: "0 -2px" }, { translate: "0 0" }], { duration: 600, iterations: Infinity, easing: "ease-in-out" });
+    arrow.classList.add("t");
+    if (animates && !bob) bob = icon.animate([{ translate: "0 0" }, { translate: "0 -2px" }, { translate: "0 0" }], { duration: 600, iterations: Infinity, easing: "ease-in-out" });
     clearTimeout(bobEnd);
     bobEnd = setTimeout(() => {
+      arrow.classList.remove("t");
       bob?.cancel();
       bob = undefined;
     }, 700);
