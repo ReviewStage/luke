@@ -409,6 +409,13 @@ reads it: `packages/host/src/acts.ts`,
 
 The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
 
+- `[check: scripts/repository-checks.sh]` Write American English: prose,
+  comments, identifiers, user-facing words, and file names (`color`,
+  `canceled`, `labeled`, `center`, `gray`, `-ize`). A value already stored or
+  on the wire keeps the spelling it shipped with (`AGENT_STATUS.CANCELED` is
+  `"cancelled"`), as does a name an outside spec or API owns
+  (`aria-labelledby`, `AnalyserNode`, GitHub's `cancelled`).
+
 - Fight complexity by not creating it. Every dependency, layer, and
   abstraction earns its lines or is refused.
 - Order a file: header, imports, constants, private helpers, public API,
@@ -420,7 +427,7 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
   comments.
 - UI draws with `@repo/ui` (`packages/ui/README.md`): its components, page
   patterns and `--ui-*` tokens; no raw controls where a component exists,
-  no literal colours or sizes, no `className` on its controls. A missing
+  no literal colors or sizes, no `className` on its controls. A missing
   variant is added to `@repo/ui` as an `as const` option. Third-party engines
   are the exception. `@repo/ui` is built on shadcn/ui over Base UI: its
   controls vendor shadcn's source

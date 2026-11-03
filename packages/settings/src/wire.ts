@@ -20,6 +20,12 @@ export interface AppSettings {
    * the main process read them off the one document the settings ride.
    */
   experiments: ExperimentChoices;
+  /**
+   * Whether the service has answered the signed-in account's preferences, or
+   * failed to, since it signed in to this host; until then `stored` may hold
+   * none of the account's own, as on a device it never used.
+   */
+  accountRead: boolean;
 }
 
 /** A renderer-local view over the two disjoint halves of the settings wire. */
@@ -37,12 +43,13 @@ type ResolvedSettingField =
   | "linkOpen";
 export type AppSettingsView = Omit<StoredAppSettings, ResolvedSettingField> & {
   [Field in ResolvedSettingField]-?: NonNullable<StoredAppSettings[Field]>;
-} & { experiments: ExperimentChoices };
+} & { experiments: ExperimentChoices; accountRead: boolean };
 
 export function appSettingsView(settings: AppSettings): AppSettingsView {
   return {
     ...settings.stored,
     experiments: settings.experiments,
+    accountRead: settings.accountRead,
     theme: settings.stored.theme ?? APP_SETTING_DEFAULTS.theme,
     zoom: settings.stored.zoom ?? APP_SETTING_DEFAULTS.zoom,
     diffLayout: settings.stored.diffLayout ?? APP_SETTING_DEFAULTS.diffLayout,

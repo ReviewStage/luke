@@ -34,7 +34,7 @@ import { PagePane, type ReadPageSource } from "./page-pane.js";
  * newest version until they step back through the earlier ones, or its
  * HTML drawn as a File tab draws a file. Synthetic tasks and pages
  * throughout; main's read of a version's source is a door answering each
- * version's HTML as coloured lines.
+ * version's HTML as colored lines.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -55,7 +55,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** One version's HTML as main colours it: its tag in a colour of its own, its words plain. */
+/** One version's HTML as main colors it: its tag in a color of its own, its words plain. */
 function sourceOf(version: number): CodeLines {
   return [
     [{ text: "<h1>", color: "#7ee787", lightColor: "#116329" }, { text: `Funnel v${version}` }],
@@ -177,7 +177,7 @@ test("stepping to another version says Reading again until that version's frame 
   assert.equal(container.querySelector('[role="status"]'), null);
 });
 
-test("View source draws the version's HTML as a File tab's numbered, coloured lines in the frame's place, and View page draws the frame again", async () => {
+test("View source draws the version's HTML as a File tab's numbered, colored lines in the frame's place, and View page draws the frame again", async () => {
   const { container, press, frame, sourceLines } = mount(FUNNEL);
 
   await press("View source");

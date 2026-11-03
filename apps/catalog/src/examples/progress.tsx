@@ -25,7 +25,7 @@ function ProgressBars(): React.JSX.Element {
           ))}
         </Stack>
       </CatalogSection>
-      <CatalogSection id="progress-labelled" title="Named by its label">
+      <CatalogSection id="progress-labeled" title="Named by its label">
         <Progress value={64} label="Uploading the recording" />
       </CatalogSection>
     </>

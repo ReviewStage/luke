@@ -106,7 +106,8 @@ export const GITHUB_CHECK_CONCLUSION = {
   SUCCESS: "success",
   FAILURE: "failure",
   NEUTRAL: "neutral",
-  CANCELLED: "cancelled",
+  /** GitHub's own spelling. */
+  CANCELED: "cancelled",
   SKIPPED: "skipped",
   TIMED_OUT: "timed_out",
   ACTION_REQUIRED: "action_required",
@@ -121,7 +122,7 @@ export type GitHubCheckConclusion =
 const FAILING_CHECK_CONCLUSIONS: ReadonlySet<string> = new Set([
   GITHUB_CHECK_CONCLUSION.FAILURE,
   GITHUB_CHECK_CONCLUSION.TIMED_OUT,
-  GITHUB_CHECK_CONCLUSION.CANCELLED,
+  GITHUB_CHECK_CONCLUSION.CANCELED,
   GITHUB_CHECK_CONCLUSION.ACTION_REQUIRED,
   GITHUB_CHECK_CONCLUSION.STARTUP_FAILURE,
 ]);

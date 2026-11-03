@@ -386,7 +386,7 @@ export function endLineParts(
   ranDirectly?: { readonly folder: string },
 ): EndLineParts | undefined {
   switch (status) {
-    case AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.CANCELED:
       return { words: "Stopped", failed: false };
     case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
@@ -446,7 +446,7 @@ export function agentGlyphState(status: AgentStatus): GlyphState {
 
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: AgentStatus): string | undefined {
-  return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELLED);
+  return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELED);
 }
 
 /** Why a Start cannot run, said on the "+" menu's New agent: the task names no repository yet. */
@@ -1570,7 +1570,7 @@ export function effortFor(
   return below?.effort ?? ranked[0]?.effort ?? efforts[0];
 }
 
-/** The catalog's effort names a sentence-case label does not spell by capitalising. */
+/** The catalog's effort names a sentence-case label does not spell by capitalizing. */
 const EFFORT_LABEL: ReadonlyMap<string, string> = new Map([["xhigh", "Extra high"]]);
 
 /** The catalog's effort names are lowercase words; a menu and a segment read them in sentence case. */
@@ -1763,7 +1763,7 @@ export const CONCLUSION_WORDS = {
   [GITHUB_CHECK_CONCLUSION.SUCCESS]: "Passed",
   [GITHUB_CHECK_CONCLUSION.FAILURE]: "Failed",
   [GITHUB_CHECK_CONCLUSION.NEUTRAL]: "Neutral",
-  [GITHUB_CHECK_CONCLUSION.CANCELLED]: "Cancelled",
+  [GITHUB_CHECK_CONCLUSION.CANCELED]: "Canceled",
   [GITHUB_CHECK_CONCLUSION.SKIPPED]: "Skipped",
   [GITHUB_CHECK_CONCLUSION.TIMED_OUT]: "Timed out",
   [GITHUB_CHECK_CONCLUSION.ACTION_REQUIRED]: "Needs action",
@@ -2054,7 +2054,7 @@ export function isTodos(
   );
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures, a page, or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => {
     if (part.kind === AGENT_PART.TOOL) return part.callId;
@@ -2067,7 +2067,7 @@ const AGENT_READING: RowReading<AgentPart> = {
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.AGENT;
     // Note that what the agent showed is never grouped, because a group folds closed once the agent moves on and would fold the pictures with it.
-    return isTodos(part) || isShownSet(part) || keptRecording(part)
+    return isTodos(part) || isShownSet(part) || isShownPage(part) || keptRecording(part)
       ? ROW_PART.LONE_CALL
       : ROW_PART.CALL;
   },
@@ -2111,6 +2111,16 @@ function isShownSet(part: AgentPart): part is ToolPart {
     isRecord(part.output) &&
     part.output.status === ACTION_RESULT_STATUS.ACCEPTED
   );
+}
+
+/**
+ * Whether a part is a `show_page` call, whose page is drawn under its row
+ * and, as a set of pictures is, never folds away. Note that the call stands
+ * on a row of its own from the moment it starts, not only once it showed
+ * its page, so a row opened while it runs stays open as the page lands.
+ */
+function isShownPage(part: AgentPart): boolean {
+  return part.kind === AGENT_PART.TOOL && part.tool === AGENT_TOOL.SHOW_PAGE;
 }
 
 /** Whether a part is a browser call that kept a recording, which a reader watches as a shown set and never folds away. */
@@ -2223,8 +2233,8 @@ function afterStepOf(line: AgentTranscriptMessage): number {
  * its agent's does, since a run of calls reads the same whoever made it.
  * The agent's newest to-do list, named by the call that wrote it
  * (`newestTodos`), stays out of a finished turn's fold, so the list
- * standing is never folded away, and so does every set of pictures the
- * agent showed, which is its answer as much as its words are. A line that
+ * standing is never folded away, and so does every set of pictures and
+ * every page the agent showed, which is its answer as much as its words are. A line that
  * reached the turn while it ran (`arrived`) stands among its parts where it
  * arrived, splitting the fold of a finished turn around it.
  */
@@ -2242,6 +2252,7 @@ export function agentRows(
     kept: (part) =>
       (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) ||
       isShownSet(part) ||
+      isShownPage(part) ||
       keptRecording(part),
   };
   return turnRows(parts, reading, { key: message.id, moving, done: !moving });
@@ -2472,7 +2483,7 @@ export function workerToolState(status: AgentStatus): ToolState {
     case AGENT_STATUS.FAILED:
       return TOOL_STATE.OUTPUT_ERROR;
     case AGENT_STATUS.COMPLETED:
-    case AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.CANCELED:
       return TOOL_STATE.OUTPUT_AVAILABLE;
   }
 }
@@ -2707,7 +2718,7 @@ export const AGENT_STATUS_TONE = {
   [AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
   [AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
   [AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
-  [AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
+  [AGENT_STATUS.CANCELED]: STATUS_TONE.NEUTRAL,
 } as const satisfies Record<AgentStatus, StatusTone>;
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */

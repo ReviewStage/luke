@@ -83,11 +83,11 @@ export function lucideWholeModule(file) {
 // The worker is handed every grammar and theme it highlights with by the
 // window's thread, which loads each on its own as a language or a theme is
 // first drawn; Pierre's own loaders of Shiki's grammars and of the theme
-// catalogues throw before they load anything in a worker, so the sets they
+// catalogs throw before they load anything in a worker, so the sets they
 // import are answered with a module that throws, rather than carried: some
 // 9.7 MB of the worker's text, which every window parsed with the diff
 // bundle. Shiki's WebAssembly engine is answered the same way, since the
-// bundle colours with Pierre's Highlights, or with Shiki's JavaScript engine
+// bundle colors with Pierre's Highlights, or with Shiki's JavaScript engine
 // where WebAssembly is refused, and never with Shiki's own WebAssembly.
 const HIGHLIGHT_WORKER_LEFT_OUT =
   /^(?:shiki\/langs|shiki\/wasm|@pierre\/highlights\/themes\/loader|@pierre\/theming\/themes)$/;

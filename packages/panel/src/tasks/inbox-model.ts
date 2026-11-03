@@ -401,7 +401,7 @@ function decidedOf(response: InboxDecided, draft: InboxDraft): InboxReplyKind | 
 }
 
 /**
- * The draft after the option labelled is picked by its number: the one
+ * The draft after the option labeled is picked by its number: the one
  * pick of a choice of one, which picking again keeps, or one more of a
  * choice of several, which picking again lets go, as a press on its row
  * would.
@@ -700,7 +700,7 @@ export function inboxThreadSend(
   return refusal === undefined ? { text, attachments, answers } : undefined;
 }
 
-/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in grey, since holding back failed nothing. */
+/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in gray, since holding back failed nothing. */
 export const ANSWER_TONE = {
   AHEAD: "ahead",
   BACK: "back",
@@ -1533,7 +1533,7 @@ function needsReader(item: InboxItem, readerId: string | undefined): boolean {
 /**
  * Whether opening the item acknowledges it, as Got it did: a notice that
  * offers Got it (`awaitsNod`), the reader's own (`needsReader`) by an id already
- * known, since an acknowledgement settles it for every member, and one
+ * known, since an acknowledgment settles it for every member, and one
  * whose agent does not wait to hear back (`needsReply`), since a notice
  * that asks to be heard back would reach its agent on a mere open. A box
  * holding no words or files for it offers no Got it.

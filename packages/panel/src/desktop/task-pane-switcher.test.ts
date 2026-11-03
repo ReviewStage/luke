@@ -235,7 +235,7 @@ function mount(
     assert.ok(found, "the row leads with its way back");
     act(() => found.click());
   };
-  const labelled = (label: string) =>
+  const labeled = (label: string) =>
     [...container.querySelectorAll("button")].some(
       (each) => each.getAttribute("aria-label") === label,
     );
@@ -252,7 +252,7 @@ function mount(
     head,
     back,
     draw,
-    labelled,
+    labeled,
     renameFromPalette,
   };
 }
@@ -262,8 +262,8 @@ test("on a phone Overview is headed by the way out of the task and one ⋯ of th
   assert.deepEqual(page.head(), { buttons: ["Inbox", "Task actions"], title: undefined });
   const menu = page.menu();
   assert.ok(menu.includes("Rename") && menu.includes("Permanently delete"), "the task's own");
-  assert.equal(page.labelled("Title actions"), false, "the plan's title draws no second ⋯");
-  assert.equal(page.labelled(`${TASK.name} actions`), false, "the column draws no ⋯ of Overview's");
+  assert.equal(page.labeled("Title actions"), false, "the plan's title draws no second ⋯");
+  assert.equal(page.labeled(`${TASK.name} actions`), false, "the column draws no ⋯ of Overview's");
 
   page.back();
   assert.deepEqual(page.told, ["away"], "the way back goes where the shell says, pushing nothing");
@@ -364,8 +364,8 @@ test("a wide window keeps the panel's strip and the column's toolbar, the task's
   const page = mount(SHELL_ROOM.WIDE, true);
   assert.equal(page.container.querySelector(".task-head"), null);
   assert.ok(page.container.querySelector(".side-panel-tabs"), "the panel keeps its strip");
-  assert.ok(page.labelled(`${TASK.name} actions`), "the task's first tab keeps the task's ⋯");
-  assert.equal(page.labelled("Task actions"), false, "the column's toolbar draws none");
+  assert.ok(page.labeled(`${TASK.name} actions`), "the task's first tab keeps the task's ⋯");
+  assert.equal(page.labeled("Task actions"), false, "the column's toolbar draws none");
 });
 
 test("on a phone a task still read, or one that cannot be, is headed by its way back alone, as the task's own head will lead", () => {

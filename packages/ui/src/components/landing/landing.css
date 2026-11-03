@@ -18,7 +18,7 @@
 
   /* The page's two insets: where the rails stand, and where words start
      inside them. The rails stand at most 1280px apart, so a window wider
-     than that centres the frame, the room outside it its margin, and the
+     than that centers the frame, the room outside it its margin, and the
      bar's links, the hero, every section, and the foot keep to it. */
   .ui-landing-page > * {
     /* off-scale: 1376px, the rails' 1280px and an inset either side */
@@ -104,7 +104,9 @@
      page's flow, so floating never moves the page under it nor lays out
      more than the bar; the bar drops into place by a transform, and its
      corners round to half its height, a radius the transition can ease
-     toward rather than one it reaches in a frame. */
+     toward rather than one it reaches in a frame. The call at its end is a
+     pill the control's height, inset from the floating bar's end as far as
+     from its top and bottom, so the two curves are concentric. */
   .ui-landing-bar {
     position: sticky;
     top: 0;
@@ -122,7 +124,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 20px;
     max-width: 100%;
     height: 64px;
     margin: 0 auto;
@@ -144,13 +146,28 @@
   }
 
   .ui-landing-bar[data-floating="true"] .ui-landing-bar-in {
-    max-width: 760px;
-    height: 52px;
-    padding: 0 8px 0 18px;
+    max-width: 720px;
+    height: 56px;
+    padding: 0 6px 0 20px;
     border-color: var(--ui-color-border-strong);
     border-radius: var(--ui-display-bar-radius);
     background: var(--ui-color-surface);
     transform: translateY(12px);
+  }
+
+  /* The bar's links to the site's pages, a hairline after them setting them
+     apart from the actions that end the bar. */
+  .ui-landing-bar-pages {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .ui-landing-bar-pages::after {
+    content: "";
+    width: 1px;
+    height: 18px;
+    background: var(--ui-color-border-strong);
   }
 
   /* The hero: the one line and its calls to the left, the ball to the right. */
@@ -311,15 +328,16 @@
   }
 
   /* The wordmark's foot keeps one shape at every width, so a phone draws
-     the word as densely as a desktop, only smaller. */
+     the word as densely as a desktop, only smaller. It stands between the
+     rails, as every section does, so the word never runs past them. */
   .ui-landing-foot-art {
     position: relative;
-    margin-inline: var(--ui-landing-margin);
+    margin-inline: var(--ui-landing-inset);
     aspect-ratio: 24 / 5;
     overflow: hidden;
   }
 
-  /* The 404: the numerals in dots over the line, centred in the rails, the
+  /* The 404: the numerals in dots over the line, centered in the rails, the
      page's room under the bar and over the foot's rule. */
   .ui-landing-lost {
     display: flex;
@@ -990,7 +1008,8 @@
       --ui-landing-gutter: calc(var(--ui-landing-inset) + 12px);
     }
 
-    .ui-landing-bar-call {
+    .ui-landing-bar-call,
+    .ui-landing-bar-pages {
       display: none;
     }
 

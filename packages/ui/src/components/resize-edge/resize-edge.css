@@ -13,7 +13,7 @@
     bottom: 0;
     width: 6px;
     cursor: col-resize;
-    outline: none; /* no ring: the edge fills in the focus colour */
+    outline: none; /* no ring: the edge fills in the focus color */
     transition: background-color var(--ui-duration-hover) var(--ui-motion-exit);
   }
 

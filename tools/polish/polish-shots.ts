@@ -25,7 +25,7 @@
  * it, since Playwright's own screenshot clips to the page's CSS-px viewport
  * and so cuts a zoomed window's right side off. It is taken only once the
  * page lays out at the window's new size (`viewport.ts`), and flattened onto
- * the theme's sidebar colour (`png.ts`), as the app's own capture mode paints
+ * the theme's sidebar color (`png.ts`), as the app's own capture mode paints
  * its frame, because the Mac's sidebar material frosts through a frame the
  * page draws part clear and no page capture holds the material. A launch that
  * fails outright is launched once more, and a renderer or helper that dies
@@ -126,19 +126,19 @@ const RESIZE_TIMEOUT_MS = 5_000;
 const RESIZE_TRIES = 2;
 // How long an app told to exit has before it is killed.
 const EXIT_TIMEOUT_MS = 10_000;
-// A desktop picture is flattened onto the panel's frame colour, as the app's capture mode paints the frame (`shell.css`), or the page's ground where neither is set.
+// A desktop picture is flattened onto the panel's frame color, as the app's capture mode paints the frame (`shell.css`), or the page's ground where neither is set.
 const GROUND_SCRIPT = `(() => {
   const probe = document.createElement("div");
   probe.style.cssText = "position:fixed;width:1px;height:1px;background-color:var(--ui-color-sidebar, var(--ui-color-ground, #fff))";
   document.body.append(probe);
-  const colour = getComputedStyle(probe).backgroundColor;
+  const color = getComputedStyle(probe).backgroundColor;
   probe.remove();
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1;
   const paint = canvas.getContext("2d");
   paint.fillStyle = "#fff";
   paint.fillRect(0, 0, 1, 1);
-  paint.fillStyle = colour;
+  paint.fillStyle = color;
   paint.fillRect(0, 0, 1, 1);
   const [red, green, blue] = paint.getImageData(0, 0, 1, 1).data;
   return { red, green, blue };
@@ -834,7 +834,7 @@ function contactSheet(results: readonly ShotResult[], skipped: readonly Scene[])
       ? ""
       : `<p class="note">Mac-only, not shot here: ${skipped.map((scene) => escapeHtml(scene.title)).join(", ")}.</p>`;
   const flattenedNote = results.some((result) => result.shot.target === TARGET.DESKTOP)
-    ? `<p class="note">Desktop pictures are the whole window, flattened onto the theme's sidebar colour (<code>--ui-color-sidebar</code>) as the app's own capture mode paints its frame: the Mac's frosted sidebar material is not in them.</p>`
+    ? `<p class="note">Desktop pictures are the whole window, flattened onto the theme's sidebar color (<code>--ui-color-sidebar</code>) as the app's own capture mode paints its frame: the Mac's frosted sidebar material is not in them.</p>`
     : "";
   const flagged = results.filter((result) => result.problems.length > 0).length;
   return `<!doctype html><meta charset="utf-8"><title>Polish capture</title>

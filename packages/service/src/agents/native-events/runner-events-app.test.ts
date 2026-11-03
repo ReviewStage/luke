@@ -286,14 +286,14 @@ const transcriptOf = (conversationId: string) =>
     return { rows, turns: turnRows };
   });
 
-/** What the record settles a call with that its turn ended, or was cancelled, before it answered. */
+/** What the record settles a call with that its turn ended, or was canceled, before it answered. */
 const UNANSWERED = {
   ENDED: {
     reason: "The turn ended before the call answered; it may have run.",
     status: "unknown",
   },
-  CANCELLED: {
-    reason: "The turn was cancelled before the call answered; it may have run.",
+  CANCELED: {
+    reason: "The turn was canceled before the call answered; it may have run.",
     status: "unknown",
   },
 } as const;
@@ -543,7 +543,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a subagent's work folds under its Agent call, and a stopped launch ends its turn cancelled and is told once",
+    "a subagent's work folds under its Agent call, and a stopped launch ends its turn canceled and is told once",
     () =>
       Effect.gen(function* () {
         const told: RunnerEnded[] = [];
@@ -624,11 +624,11 @@ it.layer(getTestDB())("the runner events route", (it) => {
           ["text", "Asking a helper."],
           ["tool-Agent", "output-available", "It is in queue.ts."],
           ["step-start"],
-          ["tool-Bash", "output-available", UNANSWERED.CANCELLED],
+          ["tool-Bash", "output-available", UNANSWERED.CANCELED],
         ]);
         assert.deepEqual(
           ended.map((turn) => turn.status),
-          [TURN_STATUS.CANCELLED],
+          [TURN_STATUS.CANCELED],
         );
       }),
   );
@@ -1236,7 +1236,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         ]);
         assert.deepEqual(rows[5]?.parts.map(drawn), [
           ["step-start"],
-          ["tool-commandExecution", "output-available", UNANSWERED.CANCELLED],
+          ["tool-commandExecution", "output-available", UNANSWERED.CANCELED],
         ]);
         assert.deepEqual(rows[6]?.parts.map(drawn), [
           ["step-start"],
@@ -1248,7 +1248,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             .map((turn) => [turn.status, turn.usage, turn.failureDetail])
             .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
           [
-            [TURN_STATUS.CANCELLED, codexUsage(100, 20), null],
+            [TURN_STATUS.CANCELED, codexUsage(100, 20), null],
             [TURN_STATUS.SETTLED, codexUsage(100, 20), null],
             [TURN_STATUS.SETTLED, codexUsage(800, 160), null],
           ],

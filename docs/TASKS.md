@@ -146,7 +146,7 @@ on any Settings page leaves Settings.
   developer wants, each drop drawn at once and put back with a toast when
   the service refuses it; a pin not yet dragged stands on top, newest pinned
   first. The order is fractional indexing (`@repo/features/pin-order`): a
-  dropped pin takes a key between its new neighbours', so one drop writes one
+  dropped pin takes a key between its new neighbors', so one drop writes one
   pin. A task's or an agent's place is the account's own, beside its pin, and
   follows it to every Mac; a pinned tab's is this Mac's, as the tab's pin is.
   A folded Pinned is not dragged. ⌘K offers Pin task or
@@ -580,7 +580,7 @@ the way Settings does (`desktop/desktop-version-history.tsx`): a column as
 wide as the sidebar, with Back at its head, "Version history", and the
 revisions newest first, fifty a page
 (`GET /api/plans/{id}/revisions`), each as who wrote it ("You" or an agent by its row), how many changes it
-made, and how long ago; the newest is labelled "Current", and the plan from before
+made, and how long ago; the newest is labeled "Current", and the plan from before
 history reads "Earlier". The list is read while the view stands and again
 whenever the plan is edited meanwhile. The chosen revision, the newest when
 the view opens, or, opened from a section's line, the revision that made the

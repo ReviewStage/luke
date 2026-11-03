@@ -14,7 +14,8 @@ export const RUN_STATUS = {
   RUNNING: "running",
   SUCCEEDED: "succeeded",
   FAILED: "failed",
-  CANCELLED: "cancelled",
+  /** Its value keeps the British spelling rows and clients already hold. */
+  CANCELED: "cancelled",
   TIMED_OUT: "timed_out",
   INTERRUPTED: "interrupted",
 } as const;

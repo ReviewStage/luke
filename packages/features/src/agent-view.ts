@@ -648,7 +648,7 @@ const agentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed
 
 export type AgentInboxAnswerView = typeof agentInboxAnswerViewSchema.Type;
 
-/** A nod on one notice of the inbox, Got it, as the window asks it: the item, and the acknowledgement the service takes, its key the window's own. */
+/** A nod on one notice of the inbox, Got it, as the window asks it: the item, and the acknowledgment the service takes, its key the window's own. */
 export const agentInboxAnswerParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
   ...inboxAcknowledgeRequestSchema.fields,
@@ -772,7 +772,7 @@ export type AgentPartView = typeof agentPartViewSchema.Type;
 /**
  * The image, or the file an inbox answer carried, as the window hears it:
  * its bytes in base64 under the media type the service sniffed and kept, or
- * the type the file travelled as, which the window draws or opens from a
+ * the type the file traveled as, which the window draws or opens from a
  * `data:` URL of its own making, or why there is none. The host fetched it under
  * the account, so the window holds no bearer and no address.
  */

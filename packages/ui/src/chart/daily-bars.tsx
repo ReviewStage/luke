@@ -9,7 +9,7 @@ import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } f
  *
  * The plot owns its axes (each day's tick along the bottom, the measure up
  * the side), the grid under it, a tooltip naming the day, and today's fade;
- * a series is a key of each day's row and the colour it is drawn in, the
+ * a series is a key of each day's row and the color it is drawn in, the
  * last stacked one rounded at its top by `radius`. A day with a page of its
  * own opens it on a click anywhere in its column, read from the chart's own
  * axis datum, so the bar and the hover band around it land on the same day.
@@ -17,7 +17,7 @@ import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } f
  * stands in for a window with nothing in it) is the caller's.
  */
 
-/** One series: the key each day's row holds it under, and the colour its bars are drawn in. */
+/** One series: the key each day's row holds it under, and the color its bars are drawn in. */
 export interface DailySeries {
   readonly key: string;
   readonly fill: string;

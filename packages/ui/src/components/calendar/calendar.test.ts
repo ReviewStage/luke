@@ -8,11 +8,11 @@ import { Announcer } from "../announcer/announcer.js";
 import { Calendar } from "./calendar.js";
 
 /**
- * calendar.test.ts -- the month reads as a labelled grid of named days with
+ * calendar.test.ts -- the month reads as a labeled grid of named days with
  * today marked and the selection selected; the arrows, Home, End, PageUp,
  * and PageDown move the keyboard, across a month's edge and the shown month
  * with it; Enter, Space, and a press pick a day, alone or as a range's end,
- * and a neighbouring month's day is picked like any other; the keyboard
+ * and a neighboring month's day is picked like any other; the keyboard
  * waits for a caller slow to show the month it stepped into, unless it left
  * the grid meanwhile; and paging stops at the four-digit years, its keys still
  * the grid's there. Synthetic days, with today handed in.
@@ -171,7 +171,7 @@ test("a single day is selected alone, and a press picks the day pressed", () => 
   expect(heard.picks).toEqual(["2026-10-23"]);
 });
 
-test("a range selects its ends and every day between, and a neighbouring month's day is picked", () => {
+test("a range selects its ends and every day between, and a neighboring month's day is picked", () => {
   const { container, heard } = draw("2026-10", { start: "2026-10-29", end: "2026-11-02" });
 
   expect(container.querySelector('[role="grid"]')?.getAttribute("aria-multiselectable")).toBe(

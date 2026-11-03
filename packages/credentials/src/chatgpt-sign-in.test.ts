@@ -7,7 +7,7 @@ import { it } from "@effect/vitest";
 import type { ChatGptCredentialsSaveRequest } from "@repo/features/provider-key-wire";
 import { Deferred, Effect, Exit, Fiber } from "effect";
 import { CHATGPT_SIGN_IN, CHATGPT_SIGN_IN_REASON, chatGptSignIn } from "./chatgpt-sign-in.js";
-import { LOOPBACK_CONSENT_CANCELLED } from "./consent.js";
+import { LOOPBACK_CONSENT_CANCELED } from "./consent.js";
 import { loopbackConsent } from "./loopback-consent.js";
 import {
   CHATGPT_FAKE,
@@ -160,7 +160,7 @@ it.effect("a Cancel pressed while OpenAI's endpoints are still being read opens 
     setup.signIn.cancel();
     yield* Deferred.succeed(gate, undefined);
 
-    assert.deepEqual(yield* Fiber.join(running), { reason: LOOPBACK_CONSENT_CANCELLED });
+    assert.deepEqual(yield* Fiber.join(running), { reason: LOOPBACK_CONSENT_CANCELED });
     assert.equal(yield* Deferred.isDone(setup.opened), false, "no browser was opened");
     assert.deepEqual(setup.saves, []);
   }),

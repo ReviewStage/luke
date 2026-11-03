@@ -13,6 +13,7 @@ import {
 import {
   REPOSITORY_URL,
   SITE_PAGE,
+  SiteBarDownload,
   SiteDownload,
   SiteFooterLinks,
   SiteNavigation,
@@ -29,7 +30,7 @@ export function App(): React.JSX.Element {
   return (
     <LandingPage
       bar={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
-      barCall={<SiteDownload />}
+      barCall={<SiteBarDownload />}
       title="An inbox for all your coding agents."
       actions={
         <>

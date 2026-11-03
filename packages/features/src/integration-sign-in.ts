@@ -17,7 +17,7 @@ import {
  * browser, and the window learns how it went only by reading where the
  * provider stands again, so this is what each read says of it. A read that
  * finds it connected ends it. A read that names it among the service's
- * sign-in failures ends it as failed with that reason: cancelled on Vercel
+ * sign-in failures ends it as failed with that reason: canceled on Vercel
  * Connect's own page, or refused with Connect's own line where the service
  * kept one, which the service learns from Connect even of a sign-in that
  * never came back. A read that finds it no longer pending otherwise ends it
@@ -156,7 +156,7 @@ export interface SignInLine {
  */
 function failedLine(name: string, failure: SignInFailure | undefined): SignInLine {
   if (failure?.reason === INTEGRATION_SIGN_IN_FAILURE.CANCELED) {
-    return { text: `You cancelled connecting ${name}.`, problem: false };
+    return { text: `You canceled connecting ${name}.`, problem: false };
   }
   if (failure?.message !== undefined) {
     return {

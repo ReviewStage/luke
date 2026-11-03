@@ -146,8 +146,8 @@ export interface TasksProceduresDependencies {
     tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
     tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   };
-  /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
-  colourCode: (language: string, code: string) => Effect.Effect<CodeLines>;
+  /** A transcript's fenced block colored as its fence's language, by the highlighter the File tab's lines are colored with. */
+  colorCode: (language: string, code: string) => Effect.Effect<CodeLines>;
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
@@ -161,7 +161,7 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 
 /**
  * A page's HTML as its tab's source reads it: line by line, plain, since the
- * panel draws it as every code is, through Pierre's diffs, which colours it
+ * panel draws it as every code is, through Pierre's diffs, which colors it
  * (`@repo/panel`'s `whole-file.tsx`).
  */
 function pageSourceLines(html: string): CodeLines {
@@ -484,10 +484,10 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       );
       return streamed(yield* Stream.toAsyncIterableEffect(tabs));
     }),
-    [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOUR_CODE].effect(
+    [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOR_CODE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* dependencies.colourCode(input.language, input.code);
+        return yield* dependencies.colorCode(input.language, input.code);
       },
     ),
     [TASKS_ACT_KIND.TASKS_FIND]: actPort[TASKS_ACT_KIND.TASKS_FIND].effect(function* ({

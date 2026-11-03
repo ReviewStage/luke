@@ -32,7 +32,7 @@ interface StageLines {
   readonly compact: boolean;
 }
 
-/** The attribute the document's root wears the room in, for what is portalled out of the stage. */
+/** The attribute the document's root wears the room in, for what is portaled out of the stage. */
 const ROOM_ATTRIBUTE = "data-ui-room";
 
 /** A stage not yet measured: wide, with the sidebar pinned as its choice says. */

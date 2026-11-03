@@ -111,7 +111,7 @@ import type { ConversationTarget } from "./writer.js";
  * names nothing. The one read keyed by the account alone is a Start's retry
  * key, which is the starter's own. Starting an agent is one transaction
  * under the task's own row lock: the lock is the membership check and what
- * serialises two Starts of one task, so a retry carrying the key of a Start
+ * serializes two Starts of one task, so a retry carrying the key of a Start
  * already made finds that agent rather than opening a second conversation
  * beside it, and says which it did, since only a Start that made the agent
  * opens its eve session. The agent's conversation is a `coding_agent`
@@ -571,7 +571,7 @@ const lockReachableTask = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspace, locked, where the account is a member of it: the lock serialises two Starts in it under one key, as the task's own lock does for a task. */
+/** The workspace, locked, where the account is a member of it: the lock serializes two Starts in it under one key, as the task's own lock does for a task. */
 const lockReachableWorkspace = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -1330,7 +1330,7 @@ const NATIVE_RUNTIMES = [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.
 /** The turn statuses a turn ends in; a queued or running one has not ended. */
 export const ENDED_TURN_STATUSES = [
   TURN_STATUS.SETTLED,
-  TURN_STATUS.CANCELLED,
+  TURN_STATUS.CANCELED,
   TURN_STATUS.FAILED,
 ] as const;
 
@@ -1411,6 +1411,28 @@ const findNativeRuntimes = SqlSchema.findAll({
             inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
           ),
         ),
+    ),
+});
+
+const findNativeRoute = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({
+    runtime: Schema.Literals(NATIVE_RUNTIMES),
+    payer: Schema.NullOr(PayerColumnSchema),
+  }),
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ runtime: conversations.runtime, payer: agentTable.payer })
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
+          ),
+        )
+        .limit(1),
     ),
 });
 
@@ -3110,7 +3132,7 @@ const findSettledTurnAgent = SqlSchema.findOneOption({
         .where(
           and(
             eq(turns.id, turnId),
-            inArray(turns.status, [TURN_STATUS.SETTLED, TURN_STATUS.CANCELLED, TURN_STATUS.FAILED]),
+            inArray(turns.status, [TURN_STATUS.SETTLED, TURN_STATUS.CANCELED, TURN_STATUS.FAILED]),
           ),
         ),
     ),
@@ -3262,6 +3284,24 @@ export function nativeRuntimesOfReached(
     findNativeRuntimes({ conversationIds }),
     (rows) => new Map(rows.map((row) => [row.conversationId, row.runtime])),
   );
+}
+
+/** A native agent's runtime and who pays for it, which together decide the models it may move to (`runtimeModelRule`). */
+export interface NativeRoute {
+  readonly runtime: (typeof NATIVE_RUNTIMES)[number];
+  /** Null for an agent from before the column. */
+  readonly payer: AgentPayer | null;
+}
+
+/**
+ * The native runtime of the agent of the conversation named and its payer;
+ * none on eve, or from before the column. Only for an id a gate already
+ * read, as above.
+ */
+export function nativeRouteOfReached(
+  conversationId: string,
+): AgentStoreEffect<Option.Option<NativeRoute>> {
+  return findNativeRoute({ conversationId });
 }
 
 /** The harness's own session or thread id recorded on the agent's conversation, over whatever stood; answers whether the account reached the agent. */

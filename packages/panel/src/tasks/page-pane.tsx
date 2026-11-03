@@ -105,14 +105,14 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * the recording could not see into the frame in any case.
  *
  * The bar's code toggle shows the version's HTML in the frame's place, as a
- * File tab draws a file (`file-tab.tsx`): the same numbered, coloured lines
+ * File tab draws a file (`file-tab.tsx`): the same numbered, colored lines
  * under the same settings, and ⌘F over them. The tab's one ⋯, the strip's,
  * offers its Copy link, then Open in browser, then Copy source while the
  * source is shown, then Reload page, which the page hands up on every
  * screen (`useTabActions`). Open in browser opens the page's own app
  * link, never the address the frame is drawn from (`open-in-browser-item.tsx`).
  * The frame's own read is the frame's alone, so the source is read again,
- * once a version, through main, which colours it as HTML
+ * once a version, through main, which colors it as HTML
  * (`ACT_KIND.TASKS_PAGE_SOURCE`), and is held by the tab until Reload.
  * The tab stays on the source or the page while its versions are stepped.
  *
@@ -254,7 +254,7 @@ function useFrameFind(frame: RefObject<HTMLIFrameElement | null>) {
  * press of the developer's, which a press in the frame hands it, because the
  * page's own scripts can post the same message without one.
  */
-function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
+export function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
   const open = useOpenLink();
   useEffect(() => {
     const hear = (event: MessageEvent) => {
@@ -524,7 +524,7 @@ function usePageSources(readSource: ReadPageSource) {
   return { held, ask, forget };
 }
 
-/** The name a page's source is coloured under: an HTML document's. */
+/** The name a page's source is colored under: an HTML document's. */
 const PAGE_SOURCE_NAME = "page.html";
 
 /** No notes on a page's source. */
@@ -538,7 +538,7 @@ function PageSource({
   onRetry,
 }: {
   title: string;
-  /** The page and the version whose source this is, which its colours are kept under. */
+  /** The page and the version whose source this is, which its colors are kept under. */
   version: string;
   read: SourceRead;
   onRetry: () => void;
@@ -554,7 +554,7 @@ function PageSource({
       <ErrorState
         failure={unreadShown(FAILURE_SURFACE.PAGE_READ)}
         onRetry={onRetry}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         The page's source could not be read.
       </ErrorState>

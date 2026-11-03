@@ -1384,7 +1384,7 @@ it.effect(
           status: "failed",
           tab,
           error:
-            'e7 has no option labelled or valued "Option 3"; its options are ' +
+            'e7 has no option labeled or valued "Option 3"; its options are ' +
             '"Please select an option", "Option 1", "Option 2"',
         },
       ]);
@@ -1395,7 +1395,7 @@ it.effect(
       assert.equal(listed.length, BROWSER_AGENT_LIMITS.ERROR_MAX_CHARS);
       assert.ok(
         listed.startsWith(
-          'e7 has no option labelled or valued "Atlantis"; its options are "Country number 0"',
+          'e7 has no option labeled or valued "Atlantis"; its options are "Country number 0"',
         ),
       );
       assert.ok(listed.endsWith("…"));

@@ -31,7 +31,7 @@ import {
 import {
   REPOSITORY_URL,
   SITE_PAGE,
-  SiteDownload,
+  SiteBarDownload,
   SiteFooterLinks,
   SiteNavigation,
 } from "./SiteChrome";
@@ -99,7 +99,7 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
   );
 }
 
-/* The navs stand under the notes' column, not centred on the page, so they
+/* The navs stand under the notes' column, not centered on the page, so they
    line up with what they page through: clear of the entry's 8.5rem rail and
    its `gap-10`, 176px in all; on one column there is no rail to clear. */
 const UNDER_NOTES = "ml-44 pt-4 max-[640px]:ml-0";
@@ -175,7 +175,7 @@ export function ChangelogPage({ view }: { readonly view: ChangelogView }): React
   return (
     <PublicPage
       banner={<SiteNavigation current={place} />}
-      bannerCall={<SiteDownload />}
+      bannerCall={<SiteBarDownload />}
       footer={<SiteFooterLinks current={place} />}
       back={page ? undefined : { href: CHANGELOG_PATH, label: "Changelog" }}
       title={page ? "Changelog" : `${PRODUCT_NAME} ${view.release.version}`}

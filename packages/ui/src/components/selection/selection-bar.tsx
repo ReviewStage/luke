@@ -14,7 +14,7 @@ import { focusChoosable } from "./list-selection.js";
  * leads it and is said politely through the window's `Announcer` as it
  * changes, the first row chosen included, so a reader choosing rows by the
  * keys hears how many they hold. The acts follow in the order handed, each
- * a labelled button that does its act on every chosen row, or drops a menu
+ * a labeled button that does its act on every chosen row, or drops a menu
  * of choices where the act is one of several (a status, a section); Clear,
  * last, chooses none, as Esc does in the list and in the bar alike.
  *

@@ -60,7 +60,7 @@ export interface FailureFacts {
   readonly errorName?: string;
   /** The host's own sentence for why a follow stopped. */
   readonly reason?: string;
-  /** The trace the call travelled under, which the service's log lines for it carry. */
+  /** The trace the call traveled under, which the service's log lines for it carry. */
   readonly traceId?: string;
   /** The failure beneath, read as these facts are. */
   readonly cause?: FailureFacts;

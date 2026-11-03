@@ -466,7 +466,7 @@ export function TabSwitcher({
     });
   });
 
-  // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave cancelled moves nothing, the stops' order included.
+  // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave canceled moves nothing, the stops' order included.
   const go = (stop: Stop) => {
     const { tasks: control, tab: shownTab, onTabChange: changeTab } = doors.current;
     control.leaveGuard.guard(() => {
@@ -641,7 +641,7 @@ export function TabSwitcher({
  * panel's, through the doors that show a tab on a task, opening it first
  * where it is another; the panel shut where the stop had it shut, and
  * filling the window where it did. It is run whole past the leave guard's
- * ask (`go`), so a cancelled leave changes neither pane.
+ * ask (`go`), so a canceled leave changes neither pane.
  */
 function showTask(tasks: TasksControl, stop: Extract<Stop, { kind: typeof STOP_KIND.TASK }>): void {
   const { taskId, column, panel, fullScreen } = stop;

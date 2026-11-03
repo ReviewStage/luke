@@ -10,7 +10,7 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * note-lines.tsx -- the centred line a combobox says where its rows would
+ * note-lines.tsx -- the centered line a combobox says where its rows would
  * stand, the same line as a status, and the quiet list line at the start of
  * a room, and the line that stands at a sidebar's rows' inset; a
  * transcript's quiet line, selectable, and its trail led by a glyph and
@@ -23,12 +23,12 @@ function press(): void {}
 function NoteLines(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="note-line-centred" title="Centred">
+      <CatalogSection id="note-line-centered" title="Centered">
         <div className="catalog-frame">
           <NoteLine>Nothing matches.</NoteLine>
         </div>
       </CatalogSection>
-      <CatalogSection id="note-line-status" title="Centred, announced">
+      <CatalogSection id="note-line-status" title="Centered, announced">
         <div className="catalog-frame">
           <NoteLine status>Reading the task’s agents…</NoteLine>
         </div>

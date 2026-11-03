@@ -97,7 +97,7 @@ import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { ADDRESS, type Address } from "../route.js";
-import { centreWithin } from "../scroll-within.js";
+import { centerWithin } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import {
   agentGlyphState,
@@ -1167,7 +1167,7 @@ export interface TranscriptDoors {
   readonly onOpenTerminal: ((agentId: string) => void) | undefined;
 }
 
-/** The ids the chosen tab and the panel it shows stand under: the tab controls the panel, and the panel is labelled by the tab. */
+/** The ids the chosen tab and the panel it shows stand under: the tab controls the panel, and the panel is labeled by the tab. */
 interface PanelWiring {
   readonly tab: string;
   readonly panel: string;
@@ -1741,7 +1741,7 @@ function seekCall(callId: string): void {
     ready: drawnVisibly,
     act: (row) => {
       const log = row.closest<HTMLElement>('[role="log"]');
-      if (log !== null) centreWithin(log, row);
+      if (log !== null) centerWithin(log, row);
     },
   });
 }
@@ -2449,7 +2449,7 @@ export function SidePanel({
    * Where the panel stands over a phone's page other than a task's, an
    * Inbox item's or an agent's, which has no header of its own to name the
    * tab: the panel heads itself (`phone-head.tsx`), its way back shutting it
-   * to the page named, the tab shown or the list of its tabs centred, and a
+   * to the page named, the tab shown or the list of its tabs centered, and a
    * ⋯ holding the list, the tab's own actions, and Close; none elsewhere.
    */
   phone?: { readonly back: string; readonly onBack: () => void } | undefined;
@@ -2935,7 +2935,7 @@ const PANEL_LABEL = "Panel";
 /**
  * A phone's panel's header over a page other than a task's (`SidePanel`'s
  * `phone`): the way back's glyph, shutting the panel to the page it names,
- * the tab shown, or the list of tabs, centred, and a ⋯ holding the list and
+ * the tab shown, or the list of tabs, centered, and a ⋯ holding the list and
  * Close, the tab's keeping, which prints ⌘W as the tab's own Close does,
  * then the tab's own actions, each naming the tab under it, its Permanently
  * delete last.

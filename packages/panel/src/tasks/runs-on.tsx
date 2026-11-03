@@ -41,7 +41,7 @@ import { keptKey, useKept } from "../use-kept.js";
  * whether it is online, held against the window's own clock, or, online,
  * that it is still getting ready for local agents or couldn't set them up.
  * Every device's glyph wears one dot at its corner rather than words, whose
- * hint says them: green online, grey away, amber where its standing can't
+ * hint says them: green online, gray away, amber where its standing can't
  * be checked, the working tone while it gets ready and red where it
  * couldn't set up; one that takes no agent is dimmed and unpicked too. The
  * dot stands on the glyph rather than at the row's end, which the check of
@@ -110,7 +110,7 @@ const STANDING_WORDS = {
   [DEVICE_STANDING.CHECKING]: RUNS_ON_WORDS.CHECKING,
 } as const;
 
-/** The tone of each standing's dot: green online, grey away or still being checked, the attention tone where it cannot be checked. */
+/** The tone of each standing's dot: green online, gray away or still being checked, the attention tone where it cannot be checked. */
 const STANDING_TONE = {
   [DEVICE_STANDING.ONLINE]: STATUS_TONE.COMPLETE,
   [DEVICE_STANDING.OFFLINE]: STATUS_TONE.NEUTRAL,

@@ -25,7 +25,7 @@ import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
-import { centreWithin, scrollerOf } from "../scroll-within.js";
+import { centerWithin, scrollerOf } from "../scroll-within.js";
 
 /**
  * The Inbox's two columns, the list as wide as it was last dragged and the
@@ -242,7 +242,7 @@ export function useInboxColumns(chosen: string | undefined, choosing: InboxChoos
     }
     const row = rows.find(chosen);
     if (row !== undefined && standsWithin(list, row)) return;
-    if (!rows.bringIn(chosen, () => undefined) && row !== undefined) centreWithin(list, row);
+    if (!rows.bringIn(chosen, () => undefined) && row !== undefined) centerWithin(list, row);
   }, [chosen, shown, rows]);
 
   useLayoutEffect(() => {

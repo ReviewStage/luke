@@ -99,7 +99,7 @@
   /* A bar folding together, once its options' names no longer fit
      (`data-folded`, measured by `choice-bar.tsx`), shows every option by
      its glyph alone, the chosen one too, so no option is named while its
-     neighbours are not; a reader still has every name. */
+     neighbors are not; a reader still has every name. */
   .ui-choice-bar[data-fold="together"][data-folded="true"]
     .ui-choice-bar-icon
     + .ui-choice-bar-label,

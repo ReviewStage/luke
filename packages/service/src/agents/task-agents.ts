@@ -203,7 +203,7 @@ export function withTaskAgents(
     const byTask = new Map<string, ReadAgent[]>();
     for (const agent of held) {
       const { conversationId, taskId } = agent.agent;
-      // An agent with no task is no task's to summarise.
+      // An agent with no task is no task's to summarize.
       if (taskId === null) continue;
       const line = agentLine(
         agent,

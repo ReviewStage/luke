@@ -66,7 +66,7 @@ export function accountProcedures(dependencies: AccountProceduresDependencies) {
     ].effect(function* () {
       yield* host.cancelSignIn();
     }),
-    // A sign-out the developer cancelled answers the account as it still
+    // A sign-out the developer canceled answers the account as it still
     // stands and stops nothing; where none stands, nobody is signed in and
     // the sign-out loses nothing.
     [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT].effect(

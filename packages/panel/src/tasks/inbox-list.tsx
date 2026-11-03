@@ -1114,7 +1114,7 @@ export interface InboxListHead {
   readonly search?: InboxSearchHead | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
-   * phone's places: its one start control, New task, the title centred, and
+   * phone's places: its one start control, New task, the title centered, and
    * the ⋯ holding View options and Mark all as read, which a phone has no
    * right-click to reach, the search standing under it; none elsewhere.
    */

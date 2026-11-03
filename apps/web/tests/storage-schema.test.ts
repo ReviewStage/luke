@@ -19,7 +19,7 @@ import { afterAll, test } from "vitest";
 /**
  * What these tests hold to is the shape the migrations built: every row
  * cascades with its account, a child goes with its parent, the idempotency
- * key refuses the duplicate and admits the neighbour, a fresh conversation
+ * key refuses the duplicate and admits the neighbor, a fresh conversation
  * numbers its messages from one, a tool set is one row however often it is
  * written, the v1 conversation tables and the briefing table are gone, the
  * per-conversation latest-turn laterals have the indexes they read through,

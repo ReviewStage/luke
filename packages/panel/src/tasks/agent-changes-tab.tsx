@@ -190,7 +190,7 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * (`changes-list.tsx`), and `?` opens a sheet listing them
  * (`files-changed-keys.tsx`). The diffs are
  * drawn by Pierre's diffs in a bundle of its own (`../diff-view/`), on the
- * File tab's ground, in its type and colours, unified or split, numbered
+ * File tab's ground, in its type and colors, unified or split, numbered
  * and wrapped as the File tabs' settings say, their numbers left out of the
  * find and of a copy as a File tab's are; what is a diff's alone is the
  * tint of a line added or removed, the words a changed line changed, and
@@ -1941,7 +1941,7 @@ export function AgentChangesTab({
           cause: "failure" in answer ? answer : FAILURE_CONDITION.UNREAD,
         })}
         onRetry={refresh}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         {CHANGES_WORDS.FAILED}
       </ErrorState>

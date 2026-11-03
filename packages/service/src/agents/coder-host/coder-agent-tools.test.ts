@@ -195,7 +195,7 @@ import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
  * brings it back; a working agent, the caller itself, and an agent of
  * another workspace are not archived. A stop takes a teammate's running
  * agent's turn by the Stop button's own cancel, once, and the list then reads
- * it cancelled; an idle agent is answered as idle, and the caller itself, an
+ * it canceled; an idle agent is answered as idle, and the caller itself, an
  * archived agent, and an agent of another workspace are not stopped.
  * Synthetic accounts, plans, and words throughout.
  */
@@ -564,8 +564,8 @@ async function turnOn(agent: StartedAgent, ended: boolean): Promise<string> {
   return turnId;
 }
 
-/** The agent's turn ended as eve ends one it cancelled. */
-async function cancelledTurnEnds(agent: StartedAgent, turnId: string): Promise<void> {
+/** The agent's turn ended as eve ends one it canceled. */
+async function canceledTurnEnds(agent: StartedAgent, turnId: string): Promise<void> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   await database.run(
     writer.consume(target, {
@@ -573,7 +573,7 @@ async function cancelledTurnEnds(agent: StartedAgent, turnId: string): Promise<v
       turnId,
       kind: RUN_EVENT.TURN_ENDED,
       sequence: 2,
-      status: RUN_STATUS.CANCELLED,
+      status: RUN_STATUS.CANCELED,
       responseIds: [],
       at: NOW,
     }),
@@ -783,7 +783,7 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
-  // The teammate's final report runs past the short entry the app summarises aloud.
+  // The teammate's final report runs past the short entry the app summarizes aloud.
   const report = Array.from(
     { length: 10 },
     () => "The invitations backfill stalls on rows whose inviter left the workspace.",
@@ -1674,11 +1674,11 @@ test("start_agent refuses to continue an agent whose session died while it still
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: START_AGENT_REFUSAL.SOURCE_RUNNING,
   });
-  // eve runs no turn on the dead session, so the Stop stops nothing there, yet the turn reads cancelled.
+  // eve runs no turn on the dead session, so the Stop stops nothing there, yet the turn reads canceled.
   const stopped = await call(CODER_TOOL.STOP_AGENT, from, "call-2");
   assert.equal(stopped.stopped, false, JSON.stringify(stopped));
   assert.ok(isRecord(stopped.agent));
-  assert.equal(stopped.agent.status, AGENT_STATUS.CANCELLED);
+  assert.equal(stopped.agent.status, AGENT_STATUS.CANCELED);
 
   const continued = await call(CODER_TOOL.START_AGENT, { from }, "call-3");
   const stored = await storedStart(caller.userId, continued);
@@ -2960,7 +2960,7 @@ test("an agent whose starter has left the workspace archives no agent of it", as
   assert.equal(Option.getOrThrow(read).archivedAt, null);
 });
 
-test("stop_agent stops a teammate's running agent on another task by eve's cancel of its turn, which the list then reads as cancelled, and answers a call run again as stopped with no second cancel", async () => {
+test("stop_agent stops a teammate's running agent on another task by eve's cancel of its turn, which the list then reads as canceled, and answers a call run again as stopped with no second cancel", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
@@ -2972,7 +2972,7 @@ test("stop_agent stops a teammate's running agent on another task by eve's cance
       title: OPUS,
       task: { id: tasks.billing, name: "Billing" },
       onYourTask: false,
-      status: AGENT_STATUS.CANCELLED,
+      status: AGENT_STATUS.CANCELED,
     },
     stopped: true,
   };
@@ -2987,7 +2987,7 @@ test("stop_agent stops a teammate's running agent on another task by eve's cance
   const agentsListed = Array.isArray(listed.agents) ? listed.agents : [];
   assert.deepEqual(
     agentsListed.map((agent) => (isRecord(agent) ? [agent.id, agent.status] : [])),
-    [[agents.teammates.id, AGENT_STATUS.CANCELLED]],
+    [[agents.teammates.id, AGENT_STATUS.CANCELED]],
   );
   assert.deepEqual(
     await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-2"),
@@ -3031,7 +3031,7 @@ test("stop_agent answers an idle agent as idle and changes nothing, refuses one 
   assert.deepEqual(
     eve.sent.filter((sent) => sent.path.endsWith("/cancel")),
     [],
-    "nothing was cancelled",
+    "nothing was canceled",
   );
 });
 
@@ -3044,7 +3044,7 @@ test("stop_agent run again under its key after the turn it stopped ended answers
 
   const stopped = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-1");
   assert.equal(stopped.stopped, true, JSON.stringify(stopped));
-  await cancelledTurnEnds(agents.teammates, first);
+  await canceledTurnEnds(agents.teammates, first);
   await turnOn(agents.teammates, false);
 
   const again = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-1");
@@ -3590,7 +3590,7 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
   assert.equal((await stored(onEve)).model, SOL);
 });
 
-test("a Codex agent lists its GPT models alone with no fast version, and update_agent refuses it a Claude model, a fast version, and a context window in words and takes a GPT one", async () => {
+test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no fast version, and update_agent refuses it a Claude model, a fast version, and a context window in words and takes a GPT one, while one its ChatGPT plan pays for lists and takes the fast version", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const onCodex = await claimed(agents.teammates.userId, {
@@ -3601,7 +3601,7 @@ test("a Codex agent lists its GPT models alone with no fast version, and update_
     planSnapshot: "# Billing",
     prompt: null,
     runtime: AGENT_RUNTIME.CODEX,
-    payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+    payer: AGENT_PAYER.MAC_SIGN_IN,
   });
   const call = await peerCaller(
     hostOf(),
@@ -3632,7 +3632,7 @@ test("a Codex agent lists its GPT models alone with no fast version, and update_
     {
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
-        "Not changed: that agent runs on Codex, which runs no fast version of a model; choose the model itself.",
+        "Not changed: that agent runs on Codex, which runs a fast version on the ChatGPT plan or an OpenAI API key alone; choose the model itself.",
     },
     {
       status: ACTION_RESULT_STATUS.REJECTED,
@@ -3648,6 +3648,34 @@ test("a Codex agent lists its GPT models alone with no fast version, and update_
   assert.equal(moved.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(moved));
   const after = Option.getOrThrow(await database.run(readAgent(onCodex.userId, onCodex.id)));
   assert.deepEqual([after.model, after.effort], [SOL, "low"]);
+
+  const onPlan = await claimed(agents.teammates.userId, {
+    ...AGENT_CHOICE,
+    model: SOL,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.billing,
+    planSnapshot: "# Billing",
+    prompt: null,
+    runtime: AGENT_RUNTIME.CODEX,
+    payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  });
+  const listedOnPlan = await call(CODER_TOOL.LIST_MODELS, { agentId: onPlan.id });
+  assert.deepEqual(
+    Array.isArray(listedOnPlan.models)
+      ? listedOnPlan.models.map((model) => isRecord(model) && model.id)
+      : [],
+    [SOL, SOL_FAST],
+  );
+  const fast = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: onPlan.id,
+    model: SOL_FAST,
+    effort: "high",
+  });
+  assert.equal(fast.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(fast));
+  assert.equal(
+    Option.getOrThrow(await database.run(readAgent(onPlan.userId, onPlan.id))).model,
+    SOL_FAST,
+  );
 });
 
 test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, and reads no task of another workspace", async () => {

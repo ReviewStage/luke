@@ -93,7 +93,7 @@ export const AdminPlaceFrameProvider = AdminPlaceFrameContext.Provider;
  * folded sidebar's toggle stands over its start. On a phone it is a phone's
  * header (`phone-head.tsx`): a page under a section led by its way back to
  * the section, a section by the place's acts, the title and what it covers
- * centred, and the view's one control, its View options.
+ * centered, and the view's one control, its View options.
  */
 function AdminToolbar({
   title,

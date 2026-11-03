@@ -36,7 +36,7 @@ const LIT_BARS = {
 
 /**
  * The square a priority's mark spans within its 14 units: about the area of
- * a status's disc (0.75 to 13.25), centred on it, rather than its width,
+ * a status's disc (0.75 to 13.25), centered on it, rather than its width,
  * because a square as wide as a circle reads larger beside it. So a
  * priority stands inside the same room around it a status does.
  */

@@ -12,7 +12,7 @@ import { parseSync } from "oxc-parser";
  */
 
 export const STYLE_RULE = {
-  COLOUR: "literal-colour",
+  COLOR: "literal-color",
   TYPE: "literal-type",
   RADIUS: "literal-radius",
   ELLIPSIS: "ellipsis",
@@ -32,8 +32,8 @@ export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 export const STYLE_RULES: Readonly<
   Record<StyleRule, { readonly refuses: string; readonly backlog: boolean }>
 > = {
-  [STYLE_RULE.COLOUR]: {
-    refuses: "a colour literal (hex, rgb(), hsl(), oklch(), a palette utility) outside a token",
+  [STYLE_RULE.COLOR]: {
+    refuses: "a color literal (hex, rgb(), hsl(), oklch(), a palette utility) outside a token",
     backlog: true,
   },
   [STYLE_RULE.TYPE]: {
@@ -89,7 +89,7 @@ export const STYLE_RULES: Readonly<
   },
   [STYLE_RULE.GRID_COLUMNS]: {
     refuses:
-      "a grid that places its items (`place-items-*`, `justify-items-*`) and names no columns: its one `auto` column grows to its item's widest line, so a card or a sheet centred in it stands off the screen's edge on a phone",
+      "a grid that places its items (`place-items-*`, `justify-items-*`) and names no columns: its one `auto` column grows to its item's widest line, so a card or a sheet centered in it stands off the screen's edge on a phone",
     backlog: true,
   },
 };
@@ -122,7 +122,7 @@ const RULE_SCOPES: Readonly<Partial<Record<StyleRule, RegExp>>> = {
 
 /**
  * Custom properties that name an ink of something outside the palette: a
- * terminal's ANSI colours, a code theme's, a provider mark's brand ink.
+ * terminal's ANSI colors, a code theme's, a provider mark's brand ink.
  */
 const FOREIGN_INK_PREFIXES = ["--terminal-", "--code-", "--integration-ink-"];
 
@@ -271,7 +271,7 @@ export function scanCss(text: string): {
   return { blocks, comments };
 }
 
-/** A value with its strings and `url()`s taken out, which name no colour, size, or time. */
+/** A value with its strings and `url()`s taken out, which name no color, size, or time. */
 function bareValue(value: string): string {
   return value
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu, '""')
@@ -303,7 +303,7 @@ function withoutVars(value: string): string {
   return out;
 }
 
-const COLOUR_LITERAL =
+const COLOR_LITERAL =
   /(?<![\w&-])#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/iu;
 
 const WIDE_KEYWORDS = /\b(?:inherit|initial|unset|revert|revert-layer)\b/gu;
@@ -685,8 +685,8 @@ function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | un
   if (!loop && literalDuration(declaration)) return STYLE_RULE.DURATION;
   if (!loop && literalEasing(declaration)) return STYLE_RULE.EASING;
   const mask = /^(?:-webkit-)?mask/u.test(property);
-  if (!mask && !holdsForeignInk(block, property) && COLOUR_LITERAL.test(bare))
-    return STYLE_RULE.COLOUR;
+  if (!mask && !holdsForeignInk(block, property) && COLOR_LITERAL.test(bare))
+    return STYLE_RULE.COLOR;
   return undefined;
 }
 
@@ -719,7 +719,7 @@ export function themeNames(themeSheet: string): ThemeNames {
 
 const PALETTE =
   /^(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}$|^(?:black|white)$/u;
-const COLOUR_UTILITY =
+const COLOR_UTILITY =
   /^(?:bg|text|border(?:-[xytrblse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|placeholder|accent|caret|shadow|inset-shadow|drop-shadow)-(.+)$/u;
 const TYPE_SCALE = /^(?:xs|sm|base|lg|xl|\dxl)$/u;
 const WEIGHTS = /^(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/u;
@@ -776,10 +776,10 @@ function classRuleOf(token: string, names: ThemeNames): StyleRule | undefined {
       return kind === "ease" ? STYLE_RULE.EASING : STYLE_RULE.DURATION;
     }
   }
-  const colour = COLOUR_UTILITY.exec(utility)?.[1];
-  if (colour !== undefined && !themeHas(names, "color", colour)) {
-    if (PALETTE.test(colour) || (colour.startsWith("[") && COLOUR_LITERAL.test(colour))) {
-      return STYLE_RULE.COLOUR;
+  const color = COLOR_UTILITY.exec(utility)?.[1];
+  if (color !== undefined && !themeHas(names, "color", color)) {
+    if (PALETTE.test(color) || (color.startsWith("[") && COLOR_LITERAL.test(color))) {
+      return STYLE_RULE.COLOR;
     }
   }
   return undefined;

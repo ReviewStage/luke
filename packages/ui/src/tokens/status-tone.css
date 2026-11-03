@@ -2,8 +2,8 @@
 
    A component that says where something stands writes its tone into
    `data-tone` and draws in `--ui-tone-ink` and `--ui-tone-tint`, so the
-   colours a status is drawn in live here and in the palettes alone. The ink
-   is the tone's colour for words and marks alike: the danger tone's is the
+   colors a status is drawn in live here and in the palettes alone. The ink
+   is the tone's color for words and marks alike: the danger tone's is the
    red words read in (`--ui-color-danger-text`), which holds a mark as well.
    Only the custom properties are set, at no specificity, so a `data-tone`
    that names no status here, or that a component reads its own way, draws

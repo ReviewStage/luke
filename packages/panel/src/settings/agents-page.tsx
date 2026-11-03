@@ -291,44 +291,41 @@ function DefaultRows({
           modelWrite.run(choiceAt(choiceModelId(picked, read.fast)));
         }}
       />
-      {/* No Fast where the plan that pays for the model runs no fast mode. */}
-      {base?.model.fastWithheldByPlan === true ? null : (
-        <SwitchRow
-          label={FAST_WORD}
-          detail={
-            fastNote === undefined ? undefined : (
-              <>
-                {`${fastNote}.`}
-                {fastAskable ? (
-                  <>
-                    {" "}
-                    <TextLink
-                      look={TEXT_LINK_LOOK.UNDERLINED}
-                      href={FAST_ACCESS_URL}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        openLink(FAST_ACCESS_URL);
-                      }}
-                    >
-                      {FAST_ACCESS_WORD}
-                    </TextLink>
-                  </>
-                ) : null}
-              </>
-            )
-          }
-          checked={read.fast}
-          anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
-          disabled={busy || base?.fast === undefined}
-          onChange={(fast) => {
-            if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
-            // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
-            const missing = modelConnectFailure(base.model);
-            if (missing !== undefined) return remedy(missing)?.();
-            return onChange(choiceAt(choiceModelId(base, fast)));
-          }}
-        />
-      )}
+      <SwitchRow
+        label={FAST_WORD}
+        detail={
+          fastNote === undefined ? undefined : (
+            <>
+              {`${fastNote}.`}
+              {fastAskable ? (
+                <>
+                  {" "}
+                  <TextLink
+                    look={TEXT_LINK_LOOK.UNDERLINED}
+                    href={FAST_ACCESS_URL}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openLink(FAST_ACCESS_URL);
+                    }}
+                  >
+                    {FAST_ACCESS_WORD}
+                  </TextLink>
+                </>
+              ) : null}
+            </>
+          )
+        }
+        checked={read.fast}
+        anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
+        disabled={busy || base?.fast === undefined}
+        onChange={(fast) => {
+          if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
+          // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
+          const missing = modelConnectFailure(base.model);
+          if (missing !== undefined) return remedy(missing)?.();
+          return onChange(choiceAt(choiceModelId(base, fast)));
+        }}
+      />
       <SettingsRow
         label="Effort"
         adornment={

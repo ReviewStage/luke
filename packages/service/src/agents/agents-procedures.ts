@@ -44,6 +44,7 @@ import {
   hasRepository,
   listAgentLines,
   listWorkspaceAgentLines,
+  nativeRouteOfReached,
   nativeRuntimesOfReached,
   pinAgentCommitted,
   readVisibleAgentWorkspace,
@@ -592,10 +593,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           ),
         );
       }
-      const runtimes = yield* hostedStoreOrUnavailable(
-        nativeRuntimesOfReached([agent.conversationId]),
+      const route = Option.getOrUndefined(
+        yield* hostedStoreOrUnavailable(nativeRouteOfReached(agent.conversationId)),
       );
-      if (runtimeChoiceRefusal(runtimes.get(agent.conversationId), body) !== undefined) {
+      if (runtimeChoiceRefusal(route?.runtime, body, route?.payer) !== undefined) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));

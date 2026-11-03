@@ -11,7 +11,7 @@ import { seriesHasNoData } from "@repo/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";
 
-/** Each source's name and its series colour, in the order the bars stack them from the axis up. */
+/** Each source's name and its series color, in the order the bars stack them from the axis up. */
 const COST_CHART = {
   [COST_SOURCE.AGENTS]: { label: "Agents", color: "var(--ui-color-chart-1)" },
   [COST_SOURCE.APP]: { label: `${PRODUCT_NAME}'s own turns`, color: "var(--ui-color-chart-2)" },
@@ -25,7 +25,7 @@ const COST_TITLE = "Daily list-price equivalent by source, USD";
 /** The plot's height, which the chart and its skeleton both stand. */
 const COST_PLOT_HEIGHT = "12rem";
 
-/** The swatch beside a legend's name, in the series' own colour. */
+/** The swatch beside a legend's name, in the series' own color. */
 const SWATCH = {
   [COST_SOURCE.AGENTS]: "bg-(--ui-color-chart-1)",
   [COST_SOURCE.APP]: "bg-(--ui-color-chart-2)",

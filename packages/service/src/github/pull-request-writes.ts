@@ -345,16 +345,16 @@ export const setReviewRequested = /* @__PURE__ */ Effect.fn("web/setReviewReques
   );
 });
 
-/** One of the repository's labels put on the pull request, or taken off where `labelled` says not, on the member's token. */
-export const setLabelled = /* @__PURE__ */ Effect.fn("web/setLabelled")(function* (
+/** One of the repository's labels put on the pull request, or taken off where `labeled` says not, on the member's token. */
+export const setLabeled = /* @__PURE__ */ Effect.fn("web/setLabeled")(function* (
   token: Redacted.Redacted,
   fullName: string,
   number: number,
   label: string,
-  labelled: boolean,
+  labeled: boolean,
 ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
   const labels = `${repositoryPath(fullName)}/issues/${number}/labels`;
-  yield* labelled
+  yield* labeled
     ? githubRestWrite(token, REST_METHOD.POST, labels, { labels: [label] })
     : githubRestWrite(token, REST_METHOD.DELETE, `${labels}/${segment(label)}`);
 });

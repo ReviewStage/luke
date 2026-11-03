@@ -15,7 +15,7 @@ import type { LoopbackConnectionSource } from "./loopback-page.js";
  * What a withdrawn trip settles as. A caller that must tell a cancellation —
  * an ordinary outcome — from a failure worth reporting compares against this.
  */
-export const LOOPBACK_CONSENT_CANCELLED = "Sign-in was cancelled.";
+export const LOOPBACK_CONSENT_CANCELED = "Sign-in was canceled.";
 
 /**
  * What one finished consent trip settled on. `reason` is a sentence for a row;

@@ -47,7 +47,7 @@ function withoutMaker(name: string): string {
 /**
  * A model as a tab or a menu names it: the catalog's own name where the
  * catalog has been read, else the id's own name past its provider with its
- * words capitalised, so a tab never shows a bare id; either way without the
+ * words capitalized, so a tab never shows a bare id; either way without the
  * maker's word it leads with. This is the one name a person reads for a
  * model; the id stays the catalog's.
  */

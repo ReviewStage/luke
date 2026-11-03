@@ -82,6 +82,7 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
     settings: {
       stored: APP_SETTING_DEFAULTS,
       experiments: NO_EXPERIMENTS,
+      accountRead: true,
     },
     version: 1,
     window: { fullScreen: false },

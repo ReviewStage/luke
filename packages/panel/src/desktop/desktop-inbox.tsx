@@ -680,7 +680,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                     ) : chosenFailed ? (
                       <ErrorState
                         failure={unreadShown(FAILURE_SURFACE.INBOX_ITEM_READ)}
-                        placement={ERROR_STATE_PLACEMENT.CENTRED}
+                        placement={ERROR_STATE_PLACEMENT.CENTERED}
                         onRetry={onRetryChosen}
                       >
                         {ITEM_NOT_READ}

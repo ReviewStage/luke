@@ -958,7 +958,7 @@ test("a teammate's open item of an agent with no plan is listed, wearing the tea
   );
 });
 
-test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening View options' own menu and offering Mark all as read, and the search standing under the head", async () => {
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centered between them, the ⋯ opening View options' own menu and offering Mark all as read, and the search standing under the head", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   const head = page.querySelector<HTMLElement>(".inbox-head");
@@ -1044,7 +1044,7 @@ function heldStarts(): AgentInboxStartParams[] {
   return sent;
 }
 
-test("on a phone an item is headed by its way back's glyph, its task centred, which opens it as its crumb does, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
+test("on a phone an item is headed by its way back's glyph, its task centered, which opens it as its crumb does, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   layOut(page, 390);
@@ -1107,7 +1107,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
   assert.deepEqual(columnsShown(page), ["list"], "the way back stands the list");
 });
 
-test("on a phone the panel open over an item heads itself: the way back to the item, what it shows centred, and one ⋯ listing its tabs, in place of its bar", async () => {
+test("on a phone the panel open over an item heads itself: the way back to the item, what it shows centered, and one ⋯ listing its tabs, in place of its bar", async () => {
   let shut = 0;
   const panel: SidePanelControl = {
     ...tasksControl().sidePanel,

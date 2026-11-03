@@ -29,7 +29,7 @@ import {
   unsavedWorkHolders,
 } from "@repo/host/quit";
 import { effectServiceLayer, serviceLayer } from "@repo/host/service-layer";
-import type { ColourCode } from "@repo/host/task-code-remote";
+import type { ColorCode } from "@repo/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@repo/settings";
 import { Context, Effect, Layer } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
@@ -41,7 +41,7 @@ import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
-import { colourCodeInUtilityProcess } from "./task-code-colouring";
+import { colorCodeInUtilityProcess } from "./task-code-coloring";
 import {
   createTelemetryService,
   followAccountInReports,
@@ -73,11 +73,11 @@ export interface DesktopServices {
   /** Where every coding-agent answer is noted, for the unseen dots and the counts. */
   readonly notices: AgentNotices;
   /**
-   * A transcript's fenced block coloured in a process of its own, spawned the
+   * A transcript's fenced block colored in a process of its own, spawned the
    * first time one is asked for and killed with the launch's scope, so the
    * tokenizer never holds this process's event loop.
    */
-  readonly colourCode: ColourCode;
+  readonly colorCode: ColorCode;
   /**
    * Every act's Effect, run here rather than under a context of its own: the
    * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
@@ -238,7 +238,7 @@ export function composeDesktop(
         run,
         launchStanding: quit.launchStanding,
       });
-      const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
+      const colorCode = yield* colorCodeInUtilityProcess(config.resourceDirectory);
       // A quit, a restart to update, and a sign-out asked for while a panel
       // holds unsaved work ask first, with Cancel the default, as a Mac app
       // asks before it loses anything; while nothing would be lost none of
@@ -319,7 +319,7 @@ export function composeDesktop(
         operator,
         windows,
         notices,
-        colourCode,
+        colorCode,
         run,
         services,
         unsavedWork,

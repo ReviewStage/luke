@@ -47,7 +47,7 @@
  * `cancel` writes `stop` to a runner that runs, scoped to the launch running
  * the turn the Stop names, and nothing once that turn is no longer under way;
  * past the answer, a turn still running `CODER.STOP_CONFIRM` on has its
- * runner ended and is settled cancelled. `reset` retires the runner's
+ * runner ended and is settled canceled. `reset` retires the runner's
  * bearer and throws the place away. Nothing here streams: the runner posts its
  * events to the service itself.
  *
@@ -821,7 +821,7 @@ export const runnerSessions = <
         }
         // A released wait's wakeups go once the CLI has started again and taken its first
         // message: it restores on resume what it can (`agent-wakeups.ts`), so a copy the service
-        // still held would fire twice, or after the agent cancelled it. A launch that failed
+        // still held would fire twice, or after the agent canceled it. A launch that failed
         // before this leaves them for the sweep to deliver, and a delete that failed is logged,
         // never failing the launch that already runs.
         yield* replaceAgentWakeups(agent.id, []).pipe(
@@ -1265,7 +1265,7 @@ export const runnerSessions = <
     /**
      * A Stop's force, `CODER.STOP_CONFIRM` after its line was written: the
      * turn the Stop named, where it still runs with its Stop stamped, has the
-     * launch the line went to ended, and is settled cancelled as a turn whose
+     * launch the line went to ended, and is settled canceled as a turn whose
      * runner was lost is (`settleRunnerLostTurns`), which drops the turn the
      * native projection holds too, so nothing the runner posted late lands
      * on it. Note that a newer launch, which a message after the Stop
@@ -1706,21 +1706,21 @@ export const runnerSessions = <
             if (Option.isNone(agent)) {
               return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
             }
-            const cancelled = yield* holdingRunner(
+            const canceled = yield* holdingRunner(
               agent.value.id,
               cancelHolding(sessionId, turnId, agent.value),
             );
-            if (cancelled.outcome !== EVE_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
-              return { outcome: cancelled.outcome } as const;
+            if (canceled.outcome !== EVE_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
+              return { outcome: canceled.outcome } as const;
             }
-            const launch = "launch" in cancelled ? cancelled.launch : undefined;
+            const launch = "launch" in canceled ? canceled.launch : undefined;
             yield* afterResponse(
               `A ${harness.name} Stop's force`,
               forcedStop(sessionId, turnId, agent.value, launch).pipe(
                 Effect.annotateLogs(agentLogIds(agent.value, sessionId)),
               ),
             );
-            return { outcome: cancelled.outcome } as const;
+            return { outcome: canceled.outcome } as const;
           }).pipe(
             Effect.catch(unavailable("cancel")),
             Effect.annotateLogs(agentLogIds({}, sessionId)),

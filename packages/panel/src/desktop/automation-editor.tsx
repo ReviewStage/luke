@@ -324,9 +324,9 @@ const SENTRY_LEVELS: readonly { value: SentryLevel; label: string }[] = [
 const GITHUB_EVENTS: readonly { value: GitHubTriggerEvent; label: string }[] = [
   { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED, label: "Pull request opened or updated" },
   { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED, label: "Pull request opened" },
-  { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED, label: "Pull request labelled" },
+  { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED, label: "Pull request labeled" },
   { value: GITHUB_TRIGGER_EVENT.ISSUE_OPENED, label: "Issue opened" },
-  { value: GITHUB_TRIGGER_EVENT.ISSUE_LABELED, label: "Issue labelled" },
+  { value: GITHUB_TRIGGER_EVENT.ISSUE_LABELED, label: "Issue labeled" },
   { value: GITHUB_TRIGGER_EVENT.CHECK_FAILED, label: "Checks failed" },
   { value: GITHUB_TRIGGER_EVENT.PUSH, label: "Commits pushed" },
 ];
@@ -590,7 +590,7 @@ function switchedOffName(connection: string): string {
 
 /**
  * Which of the owner's connected MCP servers a run's new agent is handed:
- * a field chip like its neighbours', holding the marks of those left on and
+ * a field chip like its neighbors', holding the marks of those left on and
  * opening the agent box's own servers popover, whose switches, search, and
  * way to Settings › Integrations are the ones a task's Start offers, with the
  * row's words naming those switched off. Every server is on until switched

@@ -230,7 +230,7 @@ test("a press of the mouse's Back or Forward button takes one step and cancels t
   assert.equal(press(0).defaultPrevented, false, "any other button keeps its own");
 });
 
-test("a step back cancelled at the leave ask leaves the trail where the window stands, so the next step is the same step", () => {
+test("a step back canceled at the leave ask leaves the trail where the window stands, so the next step is the same step", () => {
   const asked: (() => void)[] = [];
   const ask: LeaveAsk = (leave) => asked.push(leave);
   let standing: LeaveAsk | undefined;
@@ -430,7 +430,7 @@ test("Escape on a task with no step behind it, as a launch or a link opens one o
   assert.deepEqual(left, [TASK_ID]);
 });
 
-test("Escape on a task whose step back is cancelled at the leave ask moves nothing, and Leave takes that step", () => {
+test("Escape on a task whose step back is canceled at the leave ask moves nothing, and Leave takes that step", () => {
   const asked: (() => void)[] = [];
   const ask: LeaveAskHolder = { current: undefined };
   const inboxes: string[] = [];

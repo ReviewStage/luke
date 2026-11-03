@@ -73,11 +73,22 @@ const FAST_SLUG_SUFFIX = "-fast";
 
 /**
  * The providers whose own API is confirmed to run what a fast slug stands
- * for: Anthropic's fast mode, the base model asked for `speed: "fast"`.
- * AI Gateway's docs never say what OpenAI's fast slugs are at OpenAI's own
- * API, so those are not offered rather than guessed at.
+ * for: Anthropic's fast mode, the base model asked for `speed: "fast"`, and
+ * OpenAI's priority processing, the base model on Codex's documented `fast`
+ * service tier, which it sends as the API's `priority` and which the catalog
+ * prices a GPT fast slug at (its base model's `service_tiers.priority`).
  */
-export const FAST_PROVIDERS: ReadonlySet<ModelProvider> = new Set([MODEL_PROVIDER.ANTHROPIC]);
+export const FAST_PROVIDERS: ReadonlySet<ModelProvider> = new Set([
+  MODEL_PROVIDER.ANTHROPIC,
+  MODEL_PROVIDER.OPENAI,
+]);
+
+/**
+ * The suffix AI Gateway gives a model's batch version (`openai/gpt-5.5-batch`),
+ * which stands for the provider's asynchronous Batch API: no provider's own
+ * id, and nothing an agent's turn can wait on, so it is never offered.
+ */
+const BATCH_SLUG_SUFFIX = "-batch";
 
 const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER));
 
@@ -294,10 +305,10 @@ function contextWindowsOf(
   };
 }
 
-/** The entry as an offered model, or nothing for one we do not offer: a fast slug among them where its provider's fast option is not confirmed. */
+/** The entry as an offered model, or nothing for one we do not offer: a batch slug, and a fast slug where its provider's fast option is not confirmed. */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const named = providerModelOf(entry.id);
-  if (named === undefined) return undefined;
+  if (named === undefined || entry.id.endsWith(BATCH_SLUG_SUFFIX)) return undefined;
   if (named.fast && !FAST_PROVIDERS.has(named.provider)) return undefined;
   const { provider } = named;
   const tags = entry.tags ?? [];
@@ -398,21 +409,18 @@ export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<Mod
 
 // ------------------------------------------------------------- the checks
 
-/** What decides which fast versions an account is offered: whether the Anthropic key its steps run on may run fast mode, and whether its ChatGPT plan pays for its GPT agents. */
+/** What decides which fast versions an account is offered: whether the Anthropic key its steps run on may run fast mode. */
 export interface AccountFastOffer {
   readonly anthropic: FastAccess | undefined;
-  readonly chatGptPlan: boolean;
 }
 
 /**
  * The catalog as one account is offered it. Where Anthropic said the
  * organization of the Anthropic key its steps run on may not run fast mode,
  * Anthropic's fast versions are withheld and each base model says so
- * (`fastNotEnabled`). Where its ChatGPT plan pays for its GPT agents, which
- * Codex runs with no fast mode, OpenAI's fast versions are withheld and
- * every GPT model says so (`fastWithheldByPlan`), listed fast version or
- * not, so no Fast is drawn for it at all. Everything else as the catalog
- * lists it. Note that a key no fast
+ * (`fastNotEnabled`). Everything else as the catalog lists it, OpenAI's
+ * fast versions among them, which Codex runs on the ChatGPT plan and an
+ * API key alike. Note that a key no fast
  * request has answered is offered its fast versions, because a fast step
  * Anthropic refuses runs at standard speed anyway (`coder-host/model.ts`)
  * and the refusal is the answer the key is then offered by.
@@ -421,14 +429,12 @@ export function offeredToAccount(
   offered: readonly OfferedModel[],
   fast: AccountFastOffer,
 ): readonly OfferedModel[] {
-  const anthropic = fast.anthropic === FAST_ACCESS.NOT_ENABLED;
-  if (!anthropic && !fast.chatGptPlan) return offered;
+  if (fast.anthropic !== FAST_ACCESS.NOT_ENABLED) return offered;
   const notEnabled = new Set<string>();
   const kept: OfferedModel[] = [];
   for (const model of offered) {
     const isFast = providerModelOf(model.id)?.fast ?? false;
-    if (isFast && fast.chatGptPlan && model.provider === MODEL_PROVIDER.OPENAI) continue;
-    if (isFast && anthropic && model.provider === MODEL_PROVIDER.ANTHROPIC) {
+    if (isFast && model.provider === MODEL_PROVIDER.ANTHROPIC) {
       notEnabled.add(standardModelIdOf(model.id));
     } else {
       kept.push(model);
@@ -437,10 +443,6 @@ export function offeredToAccount(
   return kept.map((model) => ({
     ...model,
     ...(notEnabled.has(model.id) ? { fastNotEnabled: true } : undefined),
-    // Every GPT model says so, whether or not the catalog lists a fast version of it.
-    ...(fast.chatGptPlan && model.provider === MODEL_PROVIDER.OPENAI
-      ? { fastWithheldByPlan: true }
-      : undefined),
   }));
 }
 

@@ -31,7 +31,7 @@
  *
  * A bar whose heading is crumbs or a title beside a way back and its
  * actions (`wrapHeading`: an Inbox item's) answers its own
- * width: under 360px the lead's labelled controls draw their glyphs alone,
+ * width: under 360px the lead's labeled controls draw their glyphs alone,
  * named still, and once one row would show less of the page's own name than
  * reads (`--ui-title-floor`, `use-wrap-when-cut.ts`), the heading takes a
  * row of its own under the lead and the actions, one pane bar high, rather
@@ -56,14 +56,14 @@
  * clear of them.
  *
  * A phone's bar (`TOOLBAR_LOOK.PHONE`) lays the same slots as one control a
- * corner, its title centred between them, and is named by the place it
+ * corner, its title centered between them, and is named by the place it
  * heads (`place`). A task's bar leads with its tab strip (`TOOLBAR_LOOK.TABS`),
  * which a narrow room wraps to a row of its own.
  *
  * What the window around the bar knows and the bar does not, it says in
  * custom properties on the room the bar stands in (`toolbar.css`): the
  * bar's row, where the window's own buttons stand over an edge, what its
- * ground is, and whether its title centres. No stylesheet of the window
+ * ground is, and whether its title centers. No stylesheet of the window
  * reaches into the bar's parts.
  *
  * A place the window cannot show keeps its bar (`NotFound`), so a link to
@@ -167,13 +167,13 @@ export interface ToolbarProps {
   readonly start?: ToolbarInset | undefined;
   /** How far in the bar's last thing stands: where its column's words end, where none is named. */
   readonly end?: ToolbarInset | undefined;
-  /** How the slots are laid: the window's, or a phone's one control a corner with the title centred; the window's where none is named. */
+  /** How the slots are laid: the window's, or a phone's one control a corner with the title centered; the window's where none is named. */
   readonly look?: ToolbarLook | undefined;
   /** What the bar heads (`task`), which names it to the page's own rules and its tests as `task-head`. */
   readonly place?: string | undefined;
   /** Whether the bar is a container its slots' rules answer the width of (`@container ui-toolbar`), so a control folds before the title or tabs beside it do. */
   readonly measure?: boolean | undefined;
-  /** Whether every labelled control of the bar draws its glyph alone, named still. */
+  /** Whether every labeled control of the bar draws its glyph alone, named still. */
   readonly folded?: boolean | undefined;
   /** Whether a bar that would cut the page's own name under the readable floor stands its heading on a row of its own under the lead and actions, and under 360px folds its lead to glyphs. */
   readonly wrapHeading?: boolean | undefined;

@@ -246,7 +246,7 @@ export const CODER = {
   /**
    * How long a native agent's turn has to end on its Stop once the stop line
    * is written (`runner-sessions.ts`'s `forcedStop`) before its runner is
-   * ended and the turn settled cancelled. A turn interrupted mid-step ends in
+   * ended and the turn settled canceled. A turn interrupted mid-step ends in
    * a second or two, and the runner ends an interrupt its CLI never answers
    * within `RUNNER_CONTROL.ANSWER_MS`, so one still running past this has a
    * runner that will not end it: ask, wait briefly, then force, rather than

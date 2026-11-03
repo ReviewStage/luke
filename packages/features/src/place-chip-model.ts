@@ -12,10 +12,10 @@ import { NOTHING_SAID, thingName, thingOfPlace } from "./thing-kind.js";
  * Nothing is read for it, so a place the window holds no name for, an agent
  * past the few a task's row names say, is called by its kind until it does.
  * A plan, a page, an agent, an Inbox item, or a person is called by the name
- * the window holds for it now even where its link was labelled, since the
+ * the window holds for it now even where its link was labeled, since the
  * label is the name it had when it was written and the card beside the chip
  * says the name now; the label stands in only where the window holds none,
- * or holds the plan Untitled. Any other place someone labelled keeps the
+ * or holds the plan Untitled. Any other place someone labeled keeps the
  * words they gave it. The card under it says the task the place stands
  * under, where the window knows the task.
  */
@@ -74,7 +74,7 @@ function taskOf(place: LinkPlace): string | undefined {
 /**
  * What a chip says of the place a link of ours opens: for a thing named live
  * (`THING_NAME`), the name the window holds for it, else the words it was
- * labelled with; for any other, the words first, then the name held; else
+ * labeled with; for any other, the words first, then the name held; else
  * its kind; and the task it stands under, by the name the window holds for it.
  */
 export function placeChipLook(

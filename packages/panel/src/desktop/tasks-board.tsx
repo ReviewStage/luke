@@ -873,7 +873,7 @@ export function TasksBoard({
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
           onRetry={tasks.onRetryList}
-          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {UNREAD_LINE}
         </ErrorState>

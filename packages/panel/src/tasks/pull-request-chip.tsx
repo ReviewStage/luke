@@ -4,7 +4,7 @@ import { pullRequestNumberLabel } from "./agent-model.js";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
 
 /**
- * pull-request-chip.tsx -- a pull request as a compact chip: GitHub's mark in GitHub's colour for where it stands, and its number.
+ * pull-request-chip.tsx -- a pull request as a compact chip: GitHub's mark in GitHub's color for where it stands, and its number.
  *
  * The plan's Agents list ends an agent's row with it (`plan-agents.tsx`),
  * and a related task's row ends with one for each of the task's open pull

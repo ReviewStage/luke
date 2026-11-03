@@ -59,7 +59,7 @@ test("the first page lives at the changelog itself, not at page 1", () => {
   assert.equal(versionsOf(changelogViewForPath(releases, "/changelog/page/2.html"))[0], "1.1.0");
 });
 
-test("every release has its own address, which names its neighbours", () => {
+test("every release has its own address, which names its neighbors", () => {
   const releases = parseReleases(changelogOf(3));
   const middle = changelogViewForPath(releases, "/changelog/1.1.0");
   assert.ok(middle !== undefined && middle.kind === CHANGELOG_VIEW.RELEASE);

@@ -568,7 +568,7 @@ test("words laid in with quotes set apart hold them as blocks, and hand the same
   assert.equal(box.drafts.at(-1), "> A or B?\n>\n> Pick one.\n\nB.\n\n> Ship today?\n\nYes!");
 
   box.handle.replace("Above\n> runs into the line\nBelow");
-  assert.deepEqual(quotesIn(box.host), [], "a > line run into its neighbours stays words");
+  assert.deepEqual(quotesIn(box.host), [], "a > line run into its neighbors stays words");
 });
 
 test("one Backspace at the start of the line under a quote takes the quote out whole, and Delete at the end of the line above it too", () => {

@@ -182,7 +182,7 @@ function panelTab(tab: FixedSidePanelTab): HTMLElement {
   return page;
 }
 
-test("the panel's tab panel is labelled by its chosen tab, which controls it", () => {
+test("the panel's tab panel is labeled by its chosen tab, which controls it", () => {
   const side = panelTab(SIDE_PANEL_TAB.COMMENTS).querySelector("aside[aria-label='Panel']");
   const panel = side?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])");
   const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");

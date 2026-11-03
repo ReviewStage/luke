@@ -18,7 +18,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun or cancelled, a connection ended, an account named.
+ * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun or canceled, a connection ended, an account named.
  *
  * Nothing is held here. A Connect asks the service to begin a sign-in to
  * one provider and opens the address it answered in the browser through the

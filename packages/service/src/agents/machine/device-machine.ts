@@ -40,7 +40,7 @@
  * Whether a runner runs is read off the agent's newest launch line, which
  * stands for the record a sandbox keeps in its tags: it runs while that
  * line is unsettled and no stop line was queued after it, so a Stop is
- * honoured the moment it is queued, whenever the Mac gets to it. A record
+ * honored the moment it is queued, whenever the Mac gets to it. A record
  * that no longer tells of a runner still running, as a retire's, queues a
  * stop line after it for the same reason, so a message sent next relaunches
  * rather than landing behind a line the runner ends on.
@@ -529,7 +529,7 @@ function deviceMachineOver(
           return yield* new SandboxUnavailable({ status: NOT_FOUND_STATUS });
         }
         // Note that a line that only stops or retires the runner still goes, because a Stop on an
-        // away Mac is honoured when it is back, and its lease's own stop stands for it if it never is.
+        // away Mac is honored when it is back, and its lease's own stop stands for it if it never is.
         if (!onlyEnds(text)) yield* refuseAway(pin);
         yield* queued(pin, stdinLine(text));
       }),

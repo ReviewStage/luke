@@ -51,7 +51,7 @@ function drawArchived(): HTMLElement {
         effort: "high",
         title: "Retry audit",
         createdAt: 1,
-        status: AGENT_STATUS.CANCELLED,
+        status: AGENT_STATUS.CANCELED,
         turnId: null,
         archivedAt: 2,
       },

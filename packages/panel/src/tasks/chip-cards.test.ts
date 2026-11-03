@@ -661,7 +661,7 @@ test("an Inbox item's chip hangs its Inbox row's own card, whether the item wait
   assert.equal(sweep.name, "Quarantine the flaky test?");
 });
 
-test("an Inbox item's labelled chip is called by the item's title, whether it waits or was answered", async () => {
+test("an Inbox item's labeled chip is called by the item's title, whether it waits or was answered", async () => {
   const container = await drawn(
     [
       `[@Inbox item](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,

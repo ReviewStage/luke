@@ -39,7 +39,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * and an agent started since opens its tab. A draft's tab is kept nowhere,
  * and closing it lets the draft go, which is its owner's to do. Closing the
  * chosen tab chooses the one viewed before it on that task that still
- * stands, and only where none does its neighbour (`replacementOf`), so a
+ * stands, and only where none does its neighbor (`replacementOf`), so a
  * column whose last tab closes is back on a draft.
  *
  * The tab chosen is each task's own: the latest it viewed that still
@@ -133,7 +133,7 @@ const CLOSED_AGENTS_KEPT = 500;
 /**
  * How many tabs a task keeps as viewed, the latest viewed. Note that a tab
  * closed leaves the list as it closes, so the bound only lets go of tabs
- * long unviewed, which a close then passes over for its neighbour.
+ * long unviewed, which a close then passes over for its neighbor.
  */
 const RECENT_KEPT = 20;
 
@@ -481,7 +481,7 @@ function withShown(held: HeldState, on: string, tab: MainTab, drawn: DrawnTabs):
 
 /**
  * The state with the tab closed, gone from those viewed on the task, and
- * the tab viewed before it, or its neighbour, viewed in its place where it
+ * the tab viewed before it, or its neighbor, viewed in its place where it
  * was the one shown, Overview where no other stands. Overview never closes. Closing an
  * agent's tab closes nothing of the agent's own, and closing a draft's leaves
  * the draft its owner's to let go. An agent's tab closed `dozing`, for being

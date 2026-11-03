@@ -127,7 +127,7 @@ export const SESSION_BEARER = { requireSignature: true } as const;
  * (https://www.better-auth.com/docs/concepts/session-management#cookie-cache),
  * a `session_data` cookie beside the session's own, encrypted under the
  * deployment's secret (`jwe`: neither readable nor alterable by whoever holds
- * it) and honoured only beside the signed session cookie it was minted for.
+ * it) and honored only beside the signed session cookie it was minted for.
  * Note that a session revoked elsewhere, or a role changed in the store,
  * still reads as it was on a browser holding that cookie for up to
  * `maxAge`, which Better Auth's docs name as the cost, so `maxAge` is the

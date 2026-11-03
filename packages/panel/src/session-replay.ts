@@ -108,9 +108,9 @@ const LAYOUT_DATA = `
  * control is drawn in, which the panel's styles select on, and what the
  * recorder writes for itself: the rules of a stylesheet it copied in, and
  * where a box left out of the recording stands. Each is a keyword, a number,
- * a colour, or a path, and never a person's words. Note that an element's own
+ * a color, or a path, and never a person's words. Note that an element's own
  * style leaves whole, so nothing may write a person's words into one: the one
- * style built from a config, a chart's series colours (`@repo/ui/chart`), is
+ * style built from a config, a chart's series colors (`@repo/ui/chart`), is
  * drawn from a module's constants, and only on the admin page, which the
  * recording leaves out. Names are lowercase, since the recorder hands an SVG
  * attribute over in the case it was written.

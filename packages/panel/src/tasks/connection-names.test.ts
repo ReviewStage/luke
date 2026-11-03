@@ -20,7 +20,7 @@ import { toolCallView } from "./tool-call-model.js";
 /**
  * connection-names.test.ts -- a call of an MCP server's tool says the server
  * by the name its card gives: "Notion · Work" where the provider holds two
- * labelled accounts or one alone that carries a label, the provider's name
+ * labeled accounts or one alone that carries a label, the provider's name
  * where its one account carries none, and the name its
  * connection's id gives where the accounts were not read. Synthetic accounts.
  */
@@ -83,7 +83,7 @@ async function serverSaid(
   return container.textContent ?? undefined;
 }
 
-test("a call on one of two labelled accounts says the account's name as its card does", async () => {
+test("a call on one of two labeled accounts says the account's name as its card does", async () => {
   const accounts = [
     { connection: "notion", label: "Personal" },
     { connection: "notion-2", label: "Work" },

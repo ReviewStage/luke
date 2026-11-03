@@ -41,7 +41,7 @@ export const SKELETON_SHAPE = {
 export type SkeletonShape = (typeof SKELETON_SHAPE)[keyof typeof SKELETON_SHAPE];
 
 /**
- * Each shape's box: a line the words' height centred in their line, so a
+ * Each shape's box: a line the words' height centered in their line, so a
  * column of blocks sits where the lines will, as wide as the share it is
  * given; a control's box; a circle as wide as it is given, a control's
  * height where it is not; or the whole box its container gives it.

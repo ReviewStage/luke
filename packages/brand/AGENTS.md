@@ -7,7 +7,7 @@ committed copy from them, and what those copies are.
   logo, wordmark, avatar, banner, DMG background, social card, download
   button. `README.md` is the asset sheet.
 - `scripts/` holds the two generators (`pnpm --filter @repo/brand generate`),
-  the brand's colour table both read (`brand-palette.mjs`), and the DMG window
+  the brand's color table both read (`brand-palette.mjs`), and the DMG window
   layout the desktop's packaging reads.
 - `src/` holds geometry and the generated mark art, brand palette, motion
   tokens, and provider-mark paths the apps draw from.

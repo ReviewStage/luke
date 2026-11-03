@@ -108,7 +108,7 @@ export interface ToolCallView {
   readonly connection?: string;
 }
 
-/** The escape every terminal colour and cursor sequence starts with. */
+/** The escape every terminal color and cursor sequence starts with. */
 const ESCAPE = String.fromCharCode(27);
 
 /** A control sequence (`ESC [ … m`) or an operating-system command (`ESC ] … BEL`), which a terminal would have eaten. */
@@ -1383,6 +1383,19 @@ function shownPage(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.page : undefined;
   const page = stringAt(answer, "id");
   return page === undefined ? undefined : { kind: TOOL_TARGET.PAGE, page };
+}
+
+/** The page and version a `show_page` call showed, which its answer names once it has; nothing for any other call, one refused, or one still running. */
+export function shownPageVersion(
+  call: TargetedCall,
+): { readonly page: string; readonly version: number } | undefined {
+  if (call.tool !== AGENT_TOOL.SHOW_PAGE || call.output === undefined || refused(call.output)) {
+    return undefined;
+  }
+  const answer = isRecord(call.output) ? call.output.page : undefined;
+  const page = stringAt(answer, "id");
+  const version = isRecord(answer) ? answer.version : undefined;
+  return page === undefined || typeof version !== "number" ? undefined : { page, version };
 }
 
 /** The page a read answered, which opens its tab where it is on the call's own task, or the calling agent's own on no task; one of another task or agent opens nothing here. */

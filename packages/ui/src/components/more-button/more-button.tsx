@@ -44,7 +44,7 @@ export function MoreButton({
   lights?: ButtonLight | undefined;
   /** Whether its menu is unavailable now, as a thing being deleted offers none. */
   disabled?: boolean | undefined;
-  /** Whether it is a Tab stop; false leaves it to the pointer, where a neighbour holds the one stop. */
+  /** Whether it is a Tab stop; false leaves it to the pointer, where a neighbor holds the one stop. */
   tabbable?: boolean | undefined;
   /** Handed the button, which a right-click's menu hands focus back to. */
   ref?: Ref<HTMLButtonElement> | undefined;

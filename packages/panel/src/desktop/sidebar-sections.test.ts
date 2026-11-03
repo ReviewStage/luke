@@ -171,7 +171,7 @@ function typeInto(field: HTMLInputElement, words: string): void {
   });
 }
 
-/** The dialog's field labelled `label`, failing where none is drawn. */
+/** The dialog's field labeled `label`, failing where none is drawn. */
 function dialogField(label: string): HTMLInputElement {
   const named = [...document.querySelectorAll<HTMLLabelElement>("label")].find(
     (candidate) => candidate.textContent === label,
@@ -274,7 +274,7 @@ function dialogButton(label: string): HTMLButtonElement {
   return found ?? assert.fail(`no ${label} button`);
 }
 
-/** The names of the tasks drawn under the region labelled `label`. */
+/** The names of the tasks drawn under the region labeled `label`. */
 function namesIn(sidebar: HTMLElement, label: string): string[] {
   const region = sidebar.querySelector(`nav[aria-label="${label}"]`);
   return [...(region?.querySelectorAll(".ui-list-row-title") ?? [])].map(
@@ -791,7 +791,7 @@ test("New section waits on a name, and Enter in it makes the section", async () 
   assert.equal(writes[0]?.kind === TASK_SECTION_WRITE.CREATE && writes[0].title, "S");
 });
 
-test("New section's field is labelled, and Enter on a blank name marks it invalid with the reason on it", async () => {
+test("New section's field is labeled, and Enter on a blank name marks it invalid with the reason on it", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 

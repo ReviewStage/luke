@@ -26,7 +26,7 @@ import type { IntegrationToken } from "./integration-connect.js";
 export const GITHUB_GRANT_REFUSAL = {
   /** The deployment holds no GitHub App, so nothing is offered. */
   NOT_CONFIGURED: "not-configured",
-  /** The account has no GitHub sign-in, or one GitHub no longer honours: signing in with GitHub mends it. */
+  /** The account has no GitHub sign-in, or one GitHub no longer honors: signing in with GitHub mends it. */
   SIGN_IN_REQUIRED: "sign-in-required",
   /** GitHub or the store could not be asked for the token just now. */
   UNREACHABLE: "unreachable",

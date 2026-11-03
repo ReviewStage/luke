@@ -12,13 +12,13 @@ import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
  * column each scroll on their own, so reading far down one leaves the other
  * where it was. The header opens the main content and scrolls with it, and
  * once it has scrolled away the bar picks up its name (`useHeadingAway`),
- * so the reader never loses it. The columns share one measure centred in
+ * so the reader never loses it. The columns share one measure centered in
  * the room, the same as a collection's page, so a title opens on the main
  * content's edge and the header's acts end on that column's. Each scroll
  * reaches the page's edge on its own side, so the wheel works anywhere
  * over the column it moves. In a pane too narrow for two columns, the
  * secondary column follows the main content in the one scroll. A main
- * content that is only an `EmptyState` (or a centred `ErrorState`, where the
+ * content that is only an `EmptyState` (or a centered `ErrorState`, where the
  * thing could not be read) stands it a little above the room's middle, as a
  * collection's page stands its empty and failed states.
  *

@@ -1,7 +1,7 @@
 /**
  * highlight-pool.ts -- the pool of workers Files changed highlights a list's files in, or none, where the list highlights on the window's own thread.
  *
- * Colouring a pull request's files is most of what a scroll through
+ * Coloring a pull request's files is most of what a scroll through
  * Files changed costs the window's thread, so the diff bundle hands it to
  * Pierre's own pool of workers (`@pierre/diffs/worker`). The pool is
  * started from a door that starts one worker, which the bundle makes from
@@ -9,11 +9,11 @@
  * carried no worker, there is no pool. A pool whose workers cannot start,
  * a door that throws or a worker that fails as it loads, is told nothing
  * is wrong with the window, and Pierre highlights on the window's own
- * thread instead, so a list is never left without its colours. What the
+ * thread instead, so a list is never left without its colors. What the
  * pool settles in, its workers or the window's own thread, is said once it
  * has started or failed to.
  *
- * Both colour with Pierre's Highlights (`@pierre/highlights`), its lexers
+ * Both color with Pierre's Highlights (`@pierre/highlights`), its lexers
  * hand-written in one WebAssembly module, where the window may compile
  * WebAssembly, and with Shiki's JavaScript engine where it may not.
  */
@@ -30,7 +30,7 @@ export const HIGHLIGHT_MODE = {
 
 type HighlightMode = (typeof HIGHLIGHT_MODE)[keyof typeof HIGHLIGHT_MODE];
 
-/** What a diff is coloured with: Pierre's Highlights, on WebAssembly, or Shiki on its JavaScript regex engine. */
+/** What a diff is colored with: Pierre's Highlights, on WebAssembly, or Shiki on its JavaScript regex engine. */
 export const HIGHLIGHTER = {
   HIGHLIGHTS: "highlights",
   SHIKI_JS: "shiki-js",
@@ -75,7 +75,7 @@ function poolRenderOptions(drawn: DiffLook, maxLineDiffLength: number) {
 }
 
 /**
- * The highlighter every diff in this window is coloured with: Highlights
+ * The highlighter every diff in this window is colored with: Highlights
  * where the window may compile WebAssembly (its policy names
  * `'wasm-unsafe-eval'`), Shiki's JavaScript engine where it may not. Note
  * that every caller asks this one door, because Pierre keeps one
@@ -87,7 +87,7 @@ export function preferredHighlighter(): HighlighterTypes {
 
 /**
  * The pool started through `startWorker`, in the look given, on the
- * highlighter the window's own thread colours with; none where there is
+ * highlighter the window's own thread colors with; none where there is
  * no door to start a worker through.
  */
 export function startHighlighting(

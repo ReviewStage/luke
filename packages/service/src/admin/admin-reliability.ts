@@ -79,7 +79,7 @@ function totalOf(counts: readonly AdminFailureCount[]): AdminFailureCount {
   };
 }
 
-/** Shapes the queried source into the answer, zero-filling the window and totalling in one place. */
+/** Shapes the queried source into the answer, zero-filling the window and totaling in one place. */
 export function buildAdminReliability(
   source: AdminReliabilitySource,
   now: number,

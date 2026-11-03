@@ -212,7 +212,7 @@ test("typing keeps the rows every word matches, and the first that may be picked
 
 const THEME_ROWS: readonly MenuRow[] = [
   { id: "dark", label: "Dark mode", terms: ["Theme"] },
-  { id: "colour", label: "Colour theme" },
+  { id: "color", label: "Color theme" },
   { id: "theme", label: "Theme" },
   { id: "tinted", label: "Themed tints" },
 ];
@@ -221,7 +221,7 @@ test("typing ranks a name typed whole or begun above a word within it, and that 
   mount({ placeholder: "Search models", rows: THEME_ROWS });
   type("theme");
 
-  assert.deepEqual(listed(), ["Theme", "Themed tints", "Colour theme", "Dark mode"]);
+  assert.deepEqual(listed(), ["Theme", "Themed tints", "Color theme", "Dark mode"]);
 });
 
 test("a row's name marks the letters the words typed found, and a row found by its terms marks none", () => {

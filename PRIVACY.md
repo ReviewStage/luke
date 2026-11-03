@@ -1222,12 +1222,13 @@ updated, shared with a workspace, or removed (never which), a workspace memory
 forgotten (never what it held), a clip you dictated (with a rough length, never
 its words), and a terminal or a browser tab you opened in an agent's sandbox, a
 browser tab you took over or handed back, or a file you added to a plan.
-What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
+What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labeled
 `platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
-sees your network address for them, and deleting your account erases them
-with the rest of your usage data.
+sees your network address for them, with your name and email attached as the
+Mac's are, and deleting your account erases them with the rest of your usage
+data.
 
 Our service's counts are also grouped by workspace, so PostHog can count
 workspaces as well as people: a count of something done in a workspace (a

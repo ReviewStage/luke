@@ -10,9 +10,9 @@
  * sanitizer, while GitHub's classes still say what each part is, and
  * reshapes the things GitHub dresses its own way that the window would
  * otherwise draw wrong: a highlighted block, or a diagram's source, which
- * GitHub writes as a `<pre>` of coloured spans with no `<code>` in it, so
+ * GitHub writes as a `<pre>` of colored spans with no `<code>` in it, so
  * that its lines would run together. Each becomes a fenced block in its
- * language, which the window draws and colours as it does any
+ * language, which the window draws and colors as it does any
  * (`transcript-markdown.tsx`). A review comment's suggested change, which
  * GitHub writes as a table of rows its own stylesheet tints, becomes a
  * fenced block of its lines (`SUGGESTED_CHANGE_LANGUAGE`), each removed one

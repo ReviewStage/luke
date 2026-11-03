@@ -13,7 +13,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
-import { SITE_PAGE, SiteDownload, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
+import { SITE_PAGE, SiteBarDownload, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 type Founder = {
   readonly name: string;
@@ -32,7 +32,7 @@ type Founder = {
  * no business publishing, GPS among it, so what ships is the same JPEG cut
  * losslessly rather than the file that came off the phone: the EXIF, XMP, and
  * MPF segments are gone, and so is the HDR gain map the phone appended after
- * the image with an XMP block of its own. Only the JFIF header, the colour
+ * the image with an XMP block of its own. Only the JFIF header, the color
  * profile, and the picture remain.
  */
 const FOUNDERS: readonly Founder[] = [
@@ -63,7 +63,7 @@ export function AboutPage(): React.JSX.Element {
   return (
     <PublicPage
       banner={<SiteNavigation current={{ page: SITE_PAGE.ABOUT }} />}
-      bannerCall={<SiteDownload />}
+      bannerCall={<SiteBarDownload />}
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.ABOUT }} />}
       title="About"
     >

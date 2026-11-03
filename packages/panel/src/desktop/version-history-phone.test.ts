@@ -137,7 +137,7 @@ const VIEWING_2: Partial<VersionHistoryControl> = {
   },
 };
 
-test("on a phone the versions are headed by the way out alone, named for the step Back goes to, and their title centred, with no Back and Forward, and the way out leaves as Back did", () => {
+test("on a phone the versions are headed by the way out alone, named for the step Back goes to, and their title centered, with no Back and Forward, and the way out leaves as Back did", () => {
   const { view, exits } = drawn(SHELL_ROOM.NARROW, { listed: true });
 
   assert.deepEqual(readPhoneHead(view, "version-log"), {

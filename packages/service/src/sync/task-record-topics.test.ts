@@ -42,7 +42,7 @@ import {
 
 /**
  * An open task's live reads on the migrated capture: its record, pages,
- * history, and Browser tabs (`taskRecordLive` and its neighbours), and an
+ * history, and Browser tabs (`taskRecordLive` and its neighbors), and an
  * agent's own pages on no task (`agentPagesLive`). Each write that moves
  * one, through its real writer, notifies a topic the read is woken on, so a
  * window holding it hears it within a coalesce window rather than at the

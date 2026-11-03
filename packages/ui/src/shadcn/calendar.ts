@@ -4,7 +4,7 @@
  * What is kept of `shadcn add calendar` is the drawing its `classNames` hand
  * react-day-picker: the month, its caption, its nav, the weekday headings,
  * a day's cell and button, a range's start, middle, and end, today, and a
- * neighbouring month's days, each a class string here, so a later `shadcn
+ * neighboring month's days, each a class string here, so a later `shadcn
  * add calendar` reads as a small diff against them. react-day-picker and
  * date-fns are left out, because `@repo/ui`'s `Calendar` is controlled on
  * `YYYY-MM-DD` days read in UTC, pages through the four-digit years alone,
@@ -14,14 +14,14 @@
  *
  * Our changes, against shadcn's own strings: the grid is a table of
  * square cells a control's height across, the caption a label's semibold
- * at the start with the two steps at the end rather than a centred label
+ * at the start with the two steps at the end rather than a centered label
  * between them; a day's face is drawn behind its number (`before:`), lit
  * under the pointer, filled in the accent where it is a single pick or a
  * range's end, while the days between wash their cells edge to edge, the
  * ends washing their inner half, a band rounding where a week ends it;
  * today is the accent's ink with a dot under its number; and a
- * neighbouring month's days are muted. The keyboard's ring, inside the
- * day since its neighbours stand against it, is `calendar.css`'s, the
+ * neighboring month's days are muted. The keyboard's ring, inside the
+ * day since its neighbors stand against it, is `calendar.css`'s, the
  * day rounding to its face while the ring stands.
  */
 
@@ -77,7 +77,7 @@ export const CALENDAR_DAY_FACE = {
   PICKED: "before:bg-accent-fill",
 } as const;
 
-/** A day's ink: on the accent where picked, then today's accent, then a neighbouring month's muted, then the text's own. */
+/** A day's ink: on the accent where picked, then today's accent, then a neighboring month's muted, then the text's own. */
 export const CALENDAR_DAY_INK = {
   PICKED: "text-on-accent",
   TODAY: "text-accent-ink",

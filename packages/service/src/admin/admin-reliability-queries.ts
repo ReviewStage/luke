@@ -84,7 +84,7 @@ const BROKEN_INSTALLATION_STATUSES = [
 ] as const;
 
 /** The turn statuses that mean the turn ended, which is what a failure rate is a share of. */
-const ENDED_TURN_STATUSES = [TURN_STATUS.SETTLED, TURN_STATUS.CANCELLED, TURN_STATUS.FAILED];
+const ENDED_TURN_STATUSES = [TURN_STATUS.SETTLED, TURN_STATUS.CANCELED, TURN_STATUS.FAILED];
 
 /** The automation-run statuses a run settles in. */
 const SETTLED_RUN_STATUSES = [

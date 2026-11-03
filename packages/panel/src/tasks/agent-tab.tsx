@@ -219,6 +219,7 @@ import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
+import { ShownPage } from "./shown-page.js";
 import { SentWords, useSkill } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
@@ -232,6 +233,7 @@ import {
   isServerCallTool,
   loadedSkill,
   sentWords,
+  shownPageVersion,
   TARGET_HINT,
   TOOL_TARGET,
   type ToolTarget,
@@ -899,8 +901,11 @@ function TargetCallView({
   );
 }
 
+/** What a page's frame is titled for tooling where its call names no title. */
+const UNTITLED_PAGE = "Page";
+
 /**
- * What the chip of what a call made is labelled with until the window
+ * What the chip of what a call made is labeled with until the window
  * holds its name: the call's own title, a page's or a thread's or a task's;
  * and the link bare for the plan and a pull request, which the chip then
  * calls by the plan's name and the pull request's number.
@@ -913,7 +918,10 @@ function madeLabel(target: ToolTarget, subject: string | undefined, href: string
 /**
  * A call's row, naming what the call made or is about, a page, the plan, a
  * thread, a task, or a pull request, after its verb by the chip and hover
- * card the window draws for its link anywhere, whose press alone opens it.
+ * card the window draws for its link anywhere, whose press alone opens it;
+ * and under the row of a `show_page`, the page itself at the version the
+ * call showed, live (`shown-page.tsx`), where the place holds the task or
+ * the agent the page is on.
  * Note that a call still running, one that made nothing, and one whose
  * place cannot link what it made draw any call's row through this same
  * view, so a row opened while it runs stays open as its answer lands.
@@ -932,24 +940,33 @@ function MadeCallView({
   const standsOn = useLiveDoors(doors)?.cards?.standsOn;
   const agentId = useContext(TranscriptAgent);
   const { kind, subject } = toolCallView(part);
+  const holder = mentions.holder ?? standsOn;
   const href =
     target === undefined
       ? undefined
-      : targetLink(target, {
-          workspace: mentions.place.workspace,
-          holder: mentions.holder ?? standsOn,
-          agentId,
-        });
+      : targetLink(target, { workspace: mentions.place.workspace, holder, agentId });
   const chip =
     target === undefined || href === undefined
       ? undefined
       : linkChip(href, madeLabel(target, subject, href), mentions);
+  const shown = target?.kind === TOOL_TARGET.PAGE ? shownPageVersion(part) : undefined;
+  // Note that the row stands first in one fragment whether or not a page follows it, so a row opened while its call runs stays open as the page lands.
   return (
-    <ToolCallView
-      part={part}
-      jobs={doors?.jobs}
-      made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
-    />
+    <>
+      <ToolCallView
+        part={part}
+        jobs={doors?.jobs}
+        made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
+      />
+      {shown === undefined || holder === undefined ? null : (
+        <ShownPage
+          place={holder}
+          pageId={shown.page}
+          version={shown.version}
+          title={subject === undefined || subject === "" ? UNTITLED_PAGE : subject}
+        />
+      )}
+    </>
   );
 }
 
@@ -1399,7 +1416,7 @@ const NO_ARRIVED: readonly ArrivedLine[] = [];
 function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
   if (workedFor === null && copy === null) return null;
   return (
-    // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centring them would push the words down.
+    // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centering them would push the words down.
     <div className="agent-turn-foot mt-tight-gap" data-turn-foot="">
       <MessageLine
         align={MESSAGE_LINE_ALIGN.START}
@@ -1753,7 +1770,7 @@ const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
 
 /**
  * The end line's row: the line, then the press it ends on (Continue in new
- * agent), on one row, centred on the line's words, which wraps the press
+ * agent), on one row, centered on the line's words, which wraps the press
  * under them only where the column is too narrow for both.
  */
 /**
@@ -1777,7 +1794,7 @@ function AgentEndRow({
   onOpenApiKeys,
   about,
   press,
-  centred = false,
+  centered = false,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
@@ -1785,13 +1802,13 @@ function AgentEndRow({
   onOpenApiKeys: (() => void) | undefined;
   about: FailureAbout;
   press: ReactNode;
-  /** Whether it stands in the empty state's own centred column, centred as its column is. */
-  centred?: boolean;
+  /** Whether it stands in the empty state's own centered column, centered as its column is. */
+  centered?: boolean;
 }): React.JSX.Element {
   // Note that the line is one flex item, so a failure too long to share the row takes it whole and the press wraps under it, never between its words.
   return (
     <div
-      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centred ? " justify-center" : ""}`}
+      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centered ? " justify-center" : ""}`}
     >
       <AgentEndLine
         ended={ended}
@@ -2533,7 +2550,7 @@ function AgentTranscriptView({
           about: { agentId },
         })}
         onRetry={onRetry}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         {TRANSCRIPT_FAILED_LINE}
       </ErrorState>
@@ -2541,7 +2558,7 @@ function AgentTranscriptView({
   }
   // The log's first page, and what stands around it, wait in the tab's own placeholder, which it opened on (`AgentTab`).
   if (holding || (reading && ended === undefined)) return <TranscriptSkeleton />;
-  // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
+  // Note that the centered column is wider than the empty state's own, so a one-line failure stays one line.
   return (
     <ConversationEmptyState wide>
       {
@@ -2556,7 +2573,7 @@ function AgentTranscriptView({
               onOpenApiKeys={onOpenApiKeys}
               about={failureAbout ?? { agentId, taskId }}
               press={endPress}
-              centred
+              centered
             />
           )}
           {endTrail}

@@ -5,7 +5,7 @@
  * already draws is Lucide's, behind `icons/lucide-glyphs.tsx`; the door to
  * both is `icons/icons.ts`. They are ours, not
  * anyone's brand mark, so they inherit `currentColor` like any other text — a
- * provider's own mark lives in `marks/provider-mark.tsx` and keeps its brand colour.
+ * provider's own mark lives in `marks/provider-mark.tsx` and keeps its brand color.
  * The one exception is the app's own mark, which is ours in both senses: it is a
  * brand mark, and it inherits `currentColor` like the rest.
  */

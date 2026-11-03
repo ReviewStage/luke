@@ -738,7 +738,7 @@ export function DesktopAgentPage({
             <ErrorState
               failure={unreadShown(FAILURE_SURFACE.AGENTS_READ)}
               onRetry={agents.onRetryList}
-              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              placement={ERROR_STATE_PLACEMENT.CENTERED}
             >
               {NOT_READ}
             </ErrorState>

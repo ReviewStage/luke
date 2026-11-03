@@ -2,7 +2,7 @@
 
    The list draws itself in Tailwind utilities (choice-list.tsx); what
    stays here is what a utility cannot hold. A row's background, box-shadow,
-   and colour, and a detail's colour, are quieted by a stepped-back region
+   and color, and a detail's color, are quieted by a stepped-back region
    (`stepped-back.css`) from this same components layer, where a utility,
    in the layer above, would outrank it and keep the row loud.
 
@@ -12,7 +12,7 @@
    back to an outline in muted words; a read-only one keeps the open look
    at full strength.
 
-   The fill is a registered colour, so it eases as the row lists it among
+   The fill is a registered color, so it eases as the row lists it among
    its transitions. */
 
 @property --ui-choice-fill {

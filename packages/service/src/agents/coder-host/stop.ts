@@ -151,7 +151,7 @@ export interface TurnStop {
   readonly by?: string;
 }
 
-/** The harness's cancel of the agent's turn under way, for the account the request resolved to, then the row's stamp, and whether the harness took it (`cancelledTurn`); nothing where no turn runs that a Stop has to stop. */
+/** The harness's cancel of the agent's turn under way, for the account the request resolved to, then the row's stamp, and whether the harness took it (`canceledTurn`); nothing where no turn runs that a Stop has to stop. */
 export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   account: string,
@@ -160,7 +160,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
-  return yield* cancelledTurn(routedSessions(account), writer, agent, stop);
+  return yield* canceledTurn(routedSessions(account), writer, agent, stop);
 });
 
 /**
@@ -175,7 +175,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * again as it first ran; who made the Stop is written beside it as `stop`
  * names it.
  */
-export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const canceledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   eveOf: Effect.Effect<
     Pick<AgentSessions, "cancel">,
     HostedRefusal,
@@ -201,7 +201,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   // turn that ended between the read above and eve's answer is answered `no_active_turn` and
   // nothing newer is stopped in its place.
   const eve = yield* eveOf;
-  const cancelled = yield* eve
+  const canceled = yield* eve
     .cancel(sessionId, turn.eveTurnId)
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>
@@ -213,10 +213,10 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
         ),
       ),
     );
-  if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-    return yield* Effect.fail(failedCallRefusal(cancelled));
+  if (canceled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
+    return yield* Effect.fail(failedCallRefusal(canceled));
   }
-  const accepted = cancelled.outcome === EVE_CANCEL_OUTCOME.ACCEPTED;
+  const accepted = canceled.outcome === EVE_CANCEL_OUTCOME.ACCEPTED;
   const at = yield* DateTime.nowAsDate;
   const stamped = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
@@ -257,7 +257,7 @@ const AGENT_STOP_CONCURRENCY = 3;
  * Every agent stopped for good, as `stoppedForGood` stops each, a few at
  * once; the first refusal answered once every Stop has settled.
  * Note that no Stop is cut off by another's refusal, because one cut off
- * between eve's cancel and the row's stamp would leave a turn cancelled
+ * between eve's cancel and the row's stamp would leave a turn canceled
  * that the row still reads as running.
  */
 export const everyStoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (

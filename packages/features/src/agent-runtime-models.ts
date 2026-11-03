@@ -7,14 +7,17 @@
  * CLI, and no choice of context window, since the CLI manages its context
  * itself: Claude Code takes Claude models, a fast version among them, which
  * it runs as the base model with its own fast mode on; Codex takes GPT
- * models, never a fast version, as eve is offered none (the catalog's
- * `FAST_PROVIDERS`). A runtime's rule is one row of
- * `NATIVE_MODEL_RULE`; a runtime with no row is eve's, which offers everything.
+ * models, a fast version among them where the account's ChatGPT plan or
+ * OpenAI API key pays, which it runs as the base model on its `fast` service
+ * tier; on a Mac's own sign-in, whatever it is signed in with, it runs none.
+ * A runtime's rule is one row of `NATIVE_MODEL_RULE`, Codex's where a payer
+ * that runs Fast pays its own (`CODEX_FAST`); a runtime with no row is eve's,
+ * which offers everything.
  * Start is not narrowed here: it offers every model, and what it starts on
  * decides the runtime (`agent-runtime-choice.ts`).
  */
 
-import type { AgentRuntime } from "./agent-wire.js";
+import { AGENT_PAYER, AGENT_RUNTIME, type AgentPayer, type AgentRuntime } from "./agent-wire.js";
 import { MODEL_PROVIDER, type ModelProvider } from "./models-wire.js";
 
 /** What a runtime lets an agent move to. */
@@ -27,6 +30,8 @@ export interface RuntimeModelRule {
   readonly contextWindow: boolean;
   /** How a refusal names it. */
   readonly name: string;
+  /** What a refusal of a fast version says of it, where a fast version runs on another payer of the same runtime. */
+  readonly fastRefusal?: string;
 }
 
 /** eve's rule: everything the catalog offers. */
@@ -50,7 +55,22 @@ const NATIVE_MODEL_RULE: Partial<Record<AgentRuntime, RuntimeModelRule>> = {
     fast: false,
     contextWindow: false,
     name: "Codex",
+    fastRefusal: "which runs a fast version on the ChatGPT plan or an OpenAI API key alone",
   },
+};
+
+/** The payers Codex runs a fast version on, as the launch hands them its credential: not a Mac's own sign-in. */
+const CODEX_FAST_PAYERS: ReadonlySet<AgentPayer> = new Set([
+  AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  AGENT_PAYER.API_KEY,
+]);
+
+/** Codex where a payer that runs Fast pays: a GPT model's fast version runs on its `fast` service tier. */
+const CODEX_FAST: RuntimeModelRule = {
+  provider: MODEL_PROVIDER.OPENAI,
+  fast: true,
+  contextWindow: false,
+  name: "Codex",
 };
 
 /** The harness Settings › Agents names the row of the provider's credentials by: Claude for Anthropic's, Codex for OpenAI's. */
@@ -76,8 +96,19 @@ const RUNTIME_CHOICE_REFUSAL = {
 export type RuntimeChoiceRefusal =
   (typeof RUNTIME_CHOICE_REFUSAL)[keyof typeof RUNTIME_CHOICE_REFUSAL];
 
-/** The rule of the runtime given; eve's for none, an agent from before the column. */
-export function runtimeModelRule(runtime: AgentRuntime | undefined): RuntimeModelRule {
+/** The rule of the runtime and payer given; eve's for no runtime, an agent from before the column. */
+export function runtimeModelRule(
+  runtime: AgentRuntime | undefined,
+  payer?: AgentPayer | null | undefined,
+): RuntimeModelRule {
+  if (
+    runtime === AGENT_RUNTIME.CODEX &&
+    payer !== null &&
+    payer !== undefined &&
+    CODEX_FAST_PAYERS.has(payer)
+  ) {
+    return CODEX_FAST;
+  }
   return (runtime === undefined ? undefined : NATIVE_MODEL_RULE[runtime]) ?? ANY_MODEL;
 }
 
@@ -105,8 +136,12 @@ export function runtimeModels<
     readonly contextWindows?: unknown;
     readonly fastNotEnabled?: boolean;
   },
->(models: readonly M[], runtime: AgentRuntime | undefined): readonly M[] {
-  const rule = runtimeModelRule(runtime);
+>(
+  models: readonly M[],
+  runtime: AgentRuntime | undefined,
+  payer?: AgentPayer | null | undefined,
+): readonly M[] {
+  const rule = runtimeModelRule(runtime, payer);
   if (rule === ANY_MODEL) return models;
   return models
     .filter((model) => rule.provider === undefined || model.provider === rule.provider)
@@ -135,8 +170,9 @@ export function runtimeModels<
 export function runtimeChoiceRefusal(
   runtime: AgentRuntime | undefined,
   choice: { readonly model: string; readonly contextWindow?: string | undefined },
+  payer?: AgentPayer | null | undefined,
 ): RuntimeChoiceRefusal | undefined {
-  const rule = runtimeModelRule(runtime);
+  const rule = runtimeModelRule(runtime, payer);
   if (rule.provider !== undefined && providerWord(choice.model) !== rule.provider) {
     return RUNTIME_CHOICE_REFUSAL.PROVIDER;
   }
@@ -157,7 +193,7 @@ export function runtimeChoiceRefusalWords(
     case RUNTIME_CHOICE_REFUSAL.PROVIDER:
       return `that agent runs on ${rule.name}, which runs ${providerName(rule.provider)} models alone; choose one of those, or start a new agent on another model.`;
     case RUNTIME_CHOICE_REFUSAL.FAST:
-      return `that agent runs on ${rule.name}, which runs no fast version of a model; choose the model itself.`;
+      return `that agent runs on ${rule.name}, ${rule.fastRefusal ?? "which runs no fast version of a model"}; choose the model itself.`;
     case RUNTIME_CHOICE_REFUSAL.CONTEXT_WINDOW:
       return `that agent runs on ${rule.name}, which manages its own context; leave contextWindow out.`;
   }

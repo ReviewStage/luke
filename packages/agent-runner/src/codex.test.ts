@@ -343,12 +343,12 @@ it.effect(
 );
 
 it.effect(
-  "starts app-server with the plan's provider, steers the running turn, and ends at its completion",
+  "starts app-server with the plan's provider, runs a fast version on the fast tier, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
       const service = fakeService("ci-watch");
       const { spawned, write, run } = yield* launch([WORKFLOW], service);
-      yield* write(CONFIG);
+      yield* write({ ...CONFIG, fast: true });
       yield* write({
         type: INPUT_LINE.MESSAGE,
         uuid: LINE.FIRST,
@@ -400,6 +400,7 @@ it.effect(
         'model_providers.openai_chatgpt_plan.wire_api="responses"',
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
+        "features.fast_mode=true",
         'mcp_servers.workspace.url="https://app.test/runner/mcp"',
         'mcp_servers.workspace.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.workspace.default_tools_approval_mode="approve"',
@@ -440,7 +441,7 @@ it.effect(
       assert.equal(start?.clientUserMessageId, LINE.FIRST);
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
-      assert.equal(start !== undefined && "serviceTier" in start, false);
+      assert.equal(start?.serviceTier, "fast");
       assert.deepEqual(start?.input, [
         { type: "text", text: "The probe's first turn.", text_elements: [] },
         { type: "image", url: "data:image/png;base64,iVBORw0K" },

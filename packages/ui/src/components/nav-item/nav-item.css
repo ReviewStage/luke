@@ -210,7 +210,7 @@
   }
 
   /* Under a finger a compact ⋯ is as wide as a finger's target, its glyph
-     centred in it, as a list row's is (`list-row.css`). */
+     centered in it, as a list row's is (`list-row.css`). */
   @media (pointer: coarse) {
     .ui-nav-item-actions .ui-button[data-size="compact"][data-icon-only="true"] {
       min-width: var(--ui-touch-target);

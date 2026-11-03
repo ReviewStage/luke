@@ -45,7 +45,7 @@ import { SentWords } from "./skill-chip.js";
  * the trash deletes it, asking first, since nothing brings its words and
  * files back. A message being edited stays in its place, muted, the queue
  * stopping at it, with Cancel on its row in every window of the agent's
- * starter, so one left standing by a window gone is cancelled from any
+ * starter, so one left standing by a window gone is canceled from any
  * other. A reader who did not start the agent finds no press.
  * A queue standing paused says why
  * over its rows, after a Stop in the quiet tone and after a refusal in the

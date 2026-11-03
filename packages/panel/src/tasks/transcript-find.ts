@@ -26,7 +26,7 @@ import {
  * step to it then counts again as drawn. Whatever stands after the rows, a
  * working line's or an end line's, is counted in the DOM as one row of its
  * own at the end. A step to a match in a row not drawn scrolls the log to
- * that row (`VirtualRowsHandle`), and the match is painted and centred once
+ * that row (`VirtualRowsHandle`), and the match is painted and centered once
  * the row is drawn, any fold around it opened, as the DOM's find opens one.
  */
 

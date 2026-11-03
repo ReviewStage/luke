@@ -61,7 +61,7 @@ function askModels(credential: CallCredential, deadline?: HostedDeadline) {
 /** A trace id as Effect's tracer mints one: 32 lowercase hex characters. */
 const TRACE_ID = /^[0-9a-f]{32}$/;
 
-/** The trace a failure travelled under, checked to be a trace id, since every ask mints its own. */
+/** The trace a failure traveled under, checked to be a trace id, since every ask mints its own. */
 function traceOf(failure: HostedFailure): string {
   const traceId = failure.traceId ?? "";
   assert.match(traceId, TRACE_ID);

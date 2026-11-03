@@ -1,6 +1,6 @@
 import { BUTTON_VARIANT, ButtonLink, LostPage, TEXT_LINK_HEIGHT, TextLink } from "@repo/ui";
 import { useEffect, useState } from "react";
-import { SITE_PAGE, SiteDownload, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
+import { SITE_PAGE, SiteBarDownload, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 /**
  * The path the reader asked for, read once the page mounts. Note that the
@@ -17,7 +17,7 @@ export function NotFoundPage(): React.JSX.Element {
   return (
     <LostPage
       bar={<SiteNavigation />}
-      barCall={<SiteDownload />}
+      barCall={<SiteBarDownload />}
       footer={<SiteFooterLinks />}
       address={useAskedPath()}
       title="No agent could find this page."

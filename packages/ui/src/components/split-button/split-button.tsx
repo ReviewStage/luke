@@ -20,7 +20,7 @@ import {
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
- * split-button.tsx -- one act and the menu of its options in one control: a labelled Button and, joined to it, a chevron that drops the menu.
+ * split-button.tsx -- one act and the menu of its options in one control: a labeled Button and, joined to it, a chevron that drops the menu.
  *
  * The main part does the act as its options stand; the chevron opens what
  * sets them, a menu or a popover the owner draws and places, as every

@@ -14,7 +14,7 @@ import { Progress as ShadcnProgress } from "../../shadcn/progress.js";
  * drawn in Tailwind utilities over the theme. Base UI's root would name
  * every bar a progress bar and read its share aloud as text of its own
  * (`aria-valuetext`, "42%") at its exact value; this hands it the reading
- * the bar has always given instead, so a reader hears the same: a labelled
+ * the bar has always given instead, so a reader hears the same: a labeled
  * bar's role, label, bounds, and share rounded to a whole percent, and no
  * role or value at all on one hidden beside its words.
  */

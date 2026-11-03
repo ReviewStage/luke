@@ -86,7 +86,7 @@
     overflow-y: auto;
   }
 
-  /* It is a mask, not a gradient in a ground colour, so its black is an
+  /* It is a mask, not a gradient in a ground color, so its black is an
      alpha and what scrolls dissolves into whatever ground the area stands
      on, in either theme. A scroll timeline stands only while the area has
      something to scroll, and is not motion, so reduced motion leaves it

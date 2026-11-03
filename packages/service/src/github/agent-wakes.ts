@@ -639,7 +639,7 @@ export function agentWakeOf(
 
 /**
  * The pull request a line names and the page of what was done on it: a
- * mention labelled by the pull request's number, `[@#41](<page>)`, as an
+ * mention labeled by the pull request's number, `[@#41](<page>)`, as an
  * agent names one in its own words, so the transcript draws GitHub's line
  * with the same chip as the agent's (`mention-chip.tsx`), where a bare
  * address would be called by its repository, key, and title; the bare

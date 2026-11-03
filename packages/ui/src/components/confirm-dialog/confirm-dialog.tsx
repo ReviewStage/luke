@@ -24,7 +24,7 @@ import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js
  *
  * The window asks the way every desktop app does: it dims, a card names what
  * the act takes with it, and the two answers sit at its foot
- * (`DialogActions`), the safe one first and the act last. The act's colour
+ * (`DialogActions`), the safe one first and the act last. The act's color
  * follows what it costs (`loss`): red only for what cannot be undone, and in
  * the accent for an act that can be undone but still asks because it reaches
  * someone else. Focus lands on Cancel, so a key already pressed changes
@@ -44,7 +44,7 @@ import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js
  */
 
 /**
- * What an act that asks first costs, which decides its colour. An act that
+ * What an act that asks first costs, which decides its color. An act that
  * can be undone and reaches no one else asks nothing: it happens at once and
  * offers Undo.
  */
@@ -69,7 +69,7 @@ export interface DialogQuestion {
   body?: string;
   verb: string;
   running: string;
-  /** What the act costs, which decides its colour: no question asks without saying it. */
+  /** What the act costs, which decides its color: no question asks without saying it. */
   loss: ConfirmLoss;
 }
 
@@ -326,7 +326,7 @@ const FOOT_WORDS = "flex min-w-0 flex-1 flex-col";
  * A question asked inside a dialog about something the dialog holds (a key
  * it shows, a sign-in it keeps), drawn at that dialog's foot in place of its
  * answers rather than as a second card over it: the question's title and
- * what goes at the foot's start, Cancel and the act at its end, coloured by
+ * what goes at the foot's start, Cancel and the act at its end, colored by
  * what it costs as `ConfirmDialog`'s are. It stands in the dialog's body
  * where the control that asks it is, and draws nothing there; it must stand
  * inside a `Dialog`.

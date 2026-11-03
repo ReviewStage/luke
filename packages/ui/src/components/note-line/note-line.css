@@ -7,7 +7,7 @@
     overflow-wrap: anywhere;
   }
 
-  .ui-note-line[data-look="centred"] {
+  .ui-note-line[data-look="centered"] {
     display: flex;
     min-height: 40px;
     align-items: center;
@@ -34,7 +34,7 @@
   }
 
   /* A trail keeps the leading of the line that holds it, so its chips stand
-     as they do in its holder's words, and is centred on its glyph's seat. */
+     as they do in its holder's words, and is centered on its glyph's seat. */
   .ui-note-line[data-look="trail"] {
     display: flex;
     flex-wrap: wrap;

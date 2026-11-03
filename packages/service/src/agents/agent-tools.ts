@@ -7,7 +7,8 @@ import {
   continuationsOf,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
-  nativeRuntimesOfReached,
+  type NativeRoute,
+  nativeRouteOfReached,
   pinAgent,
   RUNNING_TURN_STATUSES,
   readAgent,
@@ -58,7 +59,6 @@ import {
   disabledServersSchema,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
-  type NativeAgentRuntime,
   type RefusedDevice,
 } from "@repo/features/agent-wire";
 import {
@@ -135,7 +135,7 @@ import {
   startedBlank,
 } from "./coder-host/status.js";
 import {
-  cancelledTurn,
+  canceledTurn,
   idleStandingAgents,
   standingsOf as turnStandingsOf,
 } from "./coder-host/stop.js";
@@ -195,7 +195,7 @@ import {
  * transcript's turn journals, rendered as a short tail of what the agent
  * said and did; a read of one agent also asks GitHub what that branch
  * published, as the agent's tab does (`coder-host/published.ts`), and says
- * nothing of it where GitHub could not be asked. The app's voice summarises a read
+ * nothing of it where GitHub could not be asked. The app's voice summarizes a read
  * aloud, so its tail's entries are cut close and its words for the tool say
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
@@ -251,7 +251,7 @@ import {
  * a change already standing answers as done.
  * A stop takes the one path the Stop button's does (`coder-host/stop.ts`):
  * eve's cancel of the turn under way, named by eve's own id for it, then the
- * row's stamp, which `list_agents` then reads as cancelled. The agent stays
+ * row's stamp, which `list_agents` then reads as canceled. The agent stays
  * as it was, its transcript and branch kept, and a later message starts a
  * new turn. A Stop already standing on a turn still ending answers as done,
  * so a call eve runs again cancels nothing twice; an agent already idle is
@@ -780,7 +780,7 @@ export const LIST_AGENTS_TOOL = {
     "List the agents of your workspace, on any task or none and started by any member, " +
     "yourself left out: each with its id, its title (how the developer sees it named), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
-    "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
+    "completed, failed, canceled) and why where it failed, its repository and the branch its " +
     "sandbox is on if a turn " +
     "has ended, one line of what it last did, its task (id and name; null for " +
     "an agent on no task) and whether that is the task you work on, and whether the agent is " +
@@ -896,7 +896,7 @@ export const STOP_AGENT_TOOL = {
   name: AGENT_TOOL.STOP_AGENT,
   description:
     "Stop an agent of your workspace by its id, as the developer's Stop button would: " +
-    "its turn under way is cancelled and its status reads cancelled, while the agent stays " +
+    "its turn under way is canceled and its status reads canceled, while the agent stays " +
     "available, its transcript and branch kept, and a later message starts a new turn. Stop " +
     "an agent you or the developer started that is going the wrong way, or one the developer " +
     "asked you to stop; never a teammate's agent still in use unless the developer asked for " +
@@ -1269,11 +1269,9 @@ export const callerWorkspace = (caller: AgentCaller) =>
   ownAgentWorkspace(caller.agent.userId, caller.agent);
 
 /** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
-/** The provider's own harness the agent runs on; none on eve. */
-const agentRuntimeOf = (agent: Agent) =>
-  Effect.map(nativeRuntimesOfReached([agent.conversationId]), (runtimes) =>
-    runtimes.get(agent.conversationId),
-  );
+/** The agent's native runtime and payer, which decide the models it may move to; none on eve. */
+const agentRouteOf = (agent: Agent) =>
+  Effect.map(nativeRouteOfReached(agent.conversationId), Option.getOrUndefined);
 
 const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
   Effect.gen(function* () {
@@ -2304,9 +2302,9 @@ const stopOf = (
       turnStoppedUnderReached(agent.conversationId, key),
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
-    const cancelled = earlier
+    const canceled = earlier
       ? false
-      : yield* cancelledTurn(Effect.succeed(eve), writer, agent, { key, by });
+      : yield* canceledTurn(Effect.succeed(eve), writer, agent, { key, by });
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const status = agentStatusOf(after.turn, {
       createdAt: agent.createdAt,
@@ -2315,7 +2313,7 @@ const stopOf = (
       blank: startedBlank(agent),
     });
     const standing = stopStands(before.turn) && after.turn?.id === before.turn?.id;
-    return { stopped: earlier || cancelled || standing, status };
+    return { stopped: earlier || canceled || standing, status };
   });
 
 /** One call of `stop_agent`: the turn under way of an agent of the caller's workspace stopped as a Stop stops it, an idle one answered as idle, or why nothing was stopped. */
@@ -2455,8 +2453,10 @@ export function runUpdateAgent(
           ? undefined
           : { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) };
       // A provider's own harness takes only what it runs (`agent-runtime-models.ts`).
-      const runtime = asked === undefined ? undefined : yield* agentRuntimeOf(found.value.agent);
-      const refused = asked === undefined ? undefined : runtimeChoiceRefusal(runtime, asked);
+      const route = asked === undefined ? undefined : yield* agentRouteOf(found.value.agent);
+      const runtime = route?.runtime;
+      const refused =
+        asked === undefined ? undefined : runtimeChoiceRefusal(runtime, asked, route?.payer);
       if (refused !== undefined) {
         return agentToolRejected(
           `${UPDATE_CHOICE_LEAD}: ${runtimeChoiceRefusalWords(runtime, refused)}`,
@@ -2608,16 +2608,16 @@ export function runListModels(
   return orStoreRefusal(
     Effect.gen(function* () {
       // The agent named, whose runtime narrows the list to what it may move to.
-      let runtime: NativeAgentRuntime | undefined;
+      let route: NativeRoute | undefined;
       if (agentId !== undefined) {
         const found = yield* workspaceAgentOf(caller, agentId);
         if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
-        runtime = yield* agentRuntimeOf(found.value.agent);
+        route = yield* agentRouteOf(found.value.agent);
       }
       const choices = yield* Effect.result(accountModelChoices(callerUserId(caller)));
       if (Result.isFailure(choices)) return agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE);
       const { offered, defaultChoice } = choices.success;
-      const listed = runtimeModels(offered, runtime);
+      const listed = runtimeModels(offered, route?.runtime, route?.payer);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         models: listed.map((model) => ({

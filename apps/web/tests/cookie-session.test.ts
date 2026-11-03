@@ -64,7 +64,7 @@ const { OWN_ORIGIN } = vi.hoisted(() => {
 
 /**
  * The web runtime's layer names a database, so building it needs a
- * connection string; this one is never dialled, as in `route-effect.test.ts`.
+ * connection string; this one is never dialed, as in `route-effect.test.ts`.
  */
 const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/app";
 

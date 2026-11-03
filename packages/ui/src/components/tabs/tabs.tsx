@@ -122,7 +122,7 @@ const PILL = "ui-tab flex items-center rounded-control text-label font-label";
 const TAB_BUTTON =
   "ui-tab-button relative flex min-w-0 flex-[1_1_auto] items-center gap-icon-gap h-control m-0 [border:0] rounded-[inherit] bg-transparent bg-none text-inherit [font:inherit]";
 
-/** A mark at the pill's end, the × or a failed run's, centred on its line; whether it stands, a fold's, is tabs.css's. */
+/** A mark at the pill's end, the × or a failed run's, centered on its line; whether it stands, a fold's, is tabs.css's. */
 const END_SLOT =
   "absolute top-1/2 right-(--ui-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--ui-duration-hover) ease-motion-exit";
 
@@ -231,7 +231,7 @@ function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
  * pill in its own place. Note that the place is read off the tab before it,
  * because the chosen tab is pinned at the strip's edges (tabs.css) and
  * reads where it is stuck rather than where it stands; the strip's scroll
- * behaviour, whether it glides, is the stylesheet's, and a pane sliding in
+ * behavior, whether it glides, is the stylesheet's, and a pane sliding in
  * is never scrolled with it. A strip just drawn is put there at once, as a
  * page opens already scrolled.
  */
@@ -433,7 +433,7 @@ export function Tabs({
 /**
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
  * one that always stands. `detail`, while given, follows the label in the
- * muted secondary colour, parted from it by a space and no mark, as a
+ * muted secondary color, parted from it by a space and no mark, as a
  * model's effort follows its name, or in the needs-you tone
  * (`STATUS_TONE.ATTENTION`, `detailTone`) where it counts what waits on the
  * reader, as a NavItem's count does. `endMark`, while given, stands at the

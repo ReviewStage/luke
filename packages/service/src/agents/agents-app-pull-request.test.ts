@@ -1862,7 +1862,7 @@ function changeAs(bearer: string, agentId: string, body: WireBoundaryInput): Req
   return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
 }
 
-it.layer(getTestDB())("asking reviews and labelling an agent's pull request", (it) => {
+it.layer(getTestDB())("asking reviews and labeling an agent's pull request", (it) => {
   const published = (repository: RepositoryScript, otherToken = "ghu_teammate") =>
     Effect.gen(function* () {
       const opened = yield* openTask({ github: repository, otherToken });

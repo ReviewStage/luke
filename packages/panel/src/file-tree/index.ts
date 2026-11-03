@@ -35,7 +35,7 @@ import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
  * its root being read, not listed and why, drawn, a folder in it cut short,
  * or a search matching nothing, is told to the tab (`onStanding`), which
  * says it with `@repo/ui`'s lines, and its Retry lists the root again
- * (`relist`). Pierre then draws the tree in a shadow root of its own, virtualised, so a
+ * (`relist`). Pierre then draws the tree in a shadow root of its own, virtualized, so a
  * folder of thousands of entries draws only the rows in view; the panel's
  * look reaches it through the `--trees-*` properties the host element sets
  * (`styles/tasks.css`), which a shadow root inherits.
@@ -47,7 +47,7 @@ import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
  * the one file shown at once, since that file stays the tab's own, so one
  * row alone ever looks open.
  *
- * Each file is drawn with its type's coloured icon (Pierre's complete set),
+ * Each file is drawn with its type's colored icon (Pierre's complete set),
  * and a folder holding one folder alone shares its row, as `src/main` does
  * in an editor's explorer. The pane's search narrows the rows to those whose
  * path holds the query, through Pierre's own search: over the whole
@@ -78,7 +78,7 @@ const ROW = {
 } as const;
 
 /**
- * How both trees draw: compact rows, each file's type in colour, and a lone
+ * How both trees draw: compact rows, each file's type in color, and a lone
  * folder sharing its parent's row; the rest of their look is the sheet each
  * is dressed in (`row-marks.ts`).
  */

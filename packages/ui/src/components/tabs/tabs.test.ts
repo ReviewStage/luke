@@ -114,7 +114,7 @@ async function render(element: ReactNode): Promise<HTMLElement> {
   return container;
 }
 
-/** The pill of the tab labelled `label`. */
+/** The pill of the tab labeled `label`. */
 function pill(container: HTMLElement, label: string): HTMLElement {
   const tab = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === label,
@@ -122,7 +122,7 @@ function pill(container: HTMLElement, label: string): HTMLElement {
   return tab?.closest<HTMLElement>(".ui-tab") ?? assert.fail(`${label}'s tab stands`);
 }
 
-/** The tab labelled `label` itself, the press inside its pill. */
+/** The tab labeled `label` itself, the press inside its pill. */
 function tabOf(container: HTMLElement, label: string): HTMLElement {
   return pill(container, label).querySelector<HTMLElement>('[role="tab"]') ?? assert.fail("a tab");
 }
@@ -376,7 +376,7 @@ function restOn(target: Element): void {
   }
 }
 
-/** The × of the tab labelled `label`. */
+/** The × of the tab labeled `label`. */
 function closeOf(container: HTMLElement, label: string): HTMLElement {
   return (
     pill(container, label).querySelector<HTMLElement>(`button[aria-label="Close ${label}"]`) ??

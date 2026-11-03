@@ -46,7 +46,7 @@ export type { ListSelection } from "../selection/list-selection.js";
  *
  * A row is one line of the list: a leading mark, its title over its
  * description, and its metadata ("2h ago", "Owner") standing at the end, all
- * centred on the row's middle, and the row's own acts centred there beside
+ * centered on the row's middle, and the row's own acts centered there beside
  * them, so a column of rows lines its metadata and its acts up whatever each
  * one says. A long title gives way rather than pushing either out of the row.
  *
@@ -173,7 +173,7 @@ export type { ListSelection } from "../selection/list-selection.js";
  * is cut anew before them as they come, and the row's ⋯ comes with them, in
  * the metadata's place, keeping no room of its own. A row with a ⋯ and no
  * acts offers its ⋯ the same way, so its metadata ends where its
- * neighbours' does.
+ * neighbors' does.
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn
@@ -362,7 +362,7 @@ export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
 const LIST_CLASS =
   "ui-list flex list-none flex-col gap-list-gap p-0 data-[variant=card]:gap-0 data-[variant=card]:overflow-hidden data-[variant=card]:rounded-control data-[variant=card]:border data-[variant=card]:border-border data-[variant=card]:bg-surface";
 
-/** The row: a grid of five tracks, its parts centred on its middle, in the text's ink, in by a nest for each level it stands nested at. */
+/** The row: a grid of five tracks, its parts centered on its middle, in the text's ink, in by a nest for each level it stands nested at. */
 const ROW_CLASS =
   "ui-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
@@ -388,7 +388,7 @@ const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-press disabled:cursor-default`;
 
 /**
  * The leading mark, muted, a glyph at a control's glyph size and an avatar
- * at its own; a provider's mark keeps the text's colour, a brand mark being
+ * at its own; a provider's mark keeps the text's color, a brand mark being
  * the provider's identity, not a muted glyph.
  */
 const LEADING_CLASS =
@@ -462,7 +462,7 @@ function said(words: ReactNode): boolean {
 /**
  * A list of `ListRow`s, named by `label` for a reader moving between lists.
  * One whose rows a finger opens (`fingerTall`) stands each a finger's press
- * tall on a coarse pointer, its words centred in it, as a call's line does
+ * tall on a coarse pointer, its words centered in it, as a call's line does
  * of its own; a mouse keeps the row's own height.
  *
  * The list is one Tab stop (`useRovingKeys`): Tab enters it at the row last

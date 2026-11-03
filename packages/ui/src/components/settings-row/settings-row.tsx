@@ -37,7 +37,7 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * section's.
  *
  * A row that stands for someone or something of its own, an account or a
- * provider, leads with its face or mark (`leading`), centred before its
+ * provider, leads with its face or mark (`leading`), centered before its
  * words. The mark stays beside the words when the controls drop below them,
  * and names nothing: the label alone names the row's control.
  *
@@ -106,7 +106,7 @@ export const SETTINGS_ROW_INDENT = {
 
 export type SettingsRowIndent = (typeof SETTINGS_ROW_INDENT)[keyof typeof SETTINGS_ROW_INDENT];
 
-/** How wide the row's lead stands: a provider's mark at its own width, or a face's, in which a mark standing in a card beside a face's row is centred so both rows' words start together. */
+/** How wide the row's lead stands: a provider's mark at its own width, or a face's, in which a mark standing in a card beside a face's row is centered so both rows' words start together. */
 export const SETTINGS_ROW_LEAD = {
   MARK: "mark",
   FACE: "face",
@@ -114,7 +114,7 @@ export const SETTINGS_ROW_LEAD = {
 
 export type SettingsRowLead = (typeof SETTINGS_ROW_LEAD)[keyof typeof SETTINGS_ROW_LEAD];
 
-/** A face's width, in which a mark in the card beside it stands centred. */
+/** A face's width, in which a mark in the card beside it stands centered. */
 const FACE_LEAD = "w-avatar-card justify-center";
 
 /** What a row hands the controls it holds. */

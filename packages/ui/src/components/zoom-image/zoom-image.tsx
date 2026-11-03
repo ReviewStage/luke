@@ -104,7 +104,7 @@ export interface ImageZoom {
     "data-zoom": string;
     "data-glide": string;
   };
-  /** Zooms one step in (`1`) or out (`-1`) about the frame's centre. */
+  /** Zooms one step in (`1`) or out (`-1`) about the frame's center. */
   readonly step: (direction: 1 | -1) => void;
   /** Zooms on a bare `=`, `+`, `-`, or `0`, and answers whether the key was one. */
   readonly keyDown: (event: React.KeyboardEvent) => boolean;
@@ -143,7 +143,7 @@ function between(first: Spot, second: Spot): Spot {
  * `view` as two fingers moved it: one finger from `was` to `now` while the
  * other held at `held`, scaled by how far apart they moved about the point
  * between them, and moved as that point moved, so what was under each finger
- * stays under it. Points are the frame's, from its centre.
+ * stays under it. Points are the frame's, from its center.
  */
 function pinched(
   view: ImageView,
@@ -167,7 +167,7 @@ function ownPixels(view: ImageView, sizes: ImageFrame, natural: ImageSize): Imag
   return zoomedTo(view, sizes, natural.width / sizes.fitted.width, corner);
 }
 
-/** Where a pointer at `clientX`, `clientY` stands from the frame's centre. */
+/** Where a pointer at `clientX`, `clientY` stands from the frame's center. */
 function pointIn(frame: HTMLElement, clientX: number, clientY: number): FramePoint {
   const box = frame.getBoundingClientRect();
   return { x: clientX - box.left - box.width / 2, y: clientY - box.top - box.height / 2 };

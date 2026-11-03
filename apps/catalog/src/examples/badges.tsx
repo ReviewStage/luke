@@ -4,8 +4,8 @@ import { CatalogSection } from "../section";
 
 /**
  * badges.tsx -- every tone with its words, one with a glyph, a provider's
- * labels each wearing its colour as a dot, a dark one and one with no colour
- * it can paint among them, the same labels filled with their colour, a
+ * labels each wearing its color as a dot, a dark one and one with no color
+ * it can paint among them, the same labels filled with their color, a
  * badge lit as the reader's own, badges standing on a line of body words,
  * words given up to a glyph or a tone's dot in a narrow room, and a long
  * label in a narrow column.
@@ -20,12 +20,12 @@ const SAYS = {
   [STATUS_TONE.DANGER]: "Failed",
 } as const;
 
-/** GitHub labels as GitHub answers them: six hex digits, or a colour the badge cannot paint. */
+/** GitHub labels as GitHub answers them: six hex digits, or a color the badge cannot paint. */
 const LABELS = [
   { name: "bug", color: "d73a4a" },
   { name: "enhancement", color: "a2eeef" },
   { name: "needs design", color: "1d1d1f" },
-  { name: "imported", color: "not-a-colour" },
+  { name: "imported", color: "not-a-color" },
 ] as const;
 
 function Badges(): React.JSX.Element {
@@ -44,7 +44,7 @@ function Badges(): React.JSX.Element {
           <Badge dot>Waiting on a teammate</Badge>
         </Inline>
       </CatalogSection>
-      <CatalogSection id="badge-swatch" title="A provider's colours">
+      <CatalogSection id="badge-swatch" title="A provider's colors">
         <Inline gap={GAP.ICON}>
           {LABELS.map((label) => (
             <Badge key={label.name} swatch={label.color}>
@@ -54,7 +54,7 @@ function Badges(): React.JSX.Element {
           <Badge>+3</Badge>
         </Inline>
       </CatalogSection>
-      <CatalogSection id="badge-fill" title="Filled with a provider's colour">
+      <CatalogSection id="badge-fill" title="Filled with a provider's color">
         <Inline gap={GAP.ICON}>
           {LABELS.map((label) => (
             <Badge key={label.name} fill={label.color}>

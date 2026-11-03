@@ -11,7 +11,7 @@
  * a test can read, and every network call takes the `fetch` it is handed.
  *
  * Note that OpenAI's devkit (`@siwc/local`) is not used, because it ships
- * under a noncommercial licence and is not published to npm; the flow is
+ * under a noncommercial license and is not published to npm; the flow is
  * small enough to write against the documentation directly.
  */
 

@@ -501,7 +501,7 @@ export interface HostOperator {
   tasksChangeRelation(params: TasksChangeRelationParams): Effect.Effect<TasksChangeRelationAnswer>;
   /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
-  /** A window of a file of a task's repository, coloured; or why it is not shown. */
+  /** A window of a file of a task's repository, colored; or why it is not shown. */
   tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
   tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
   /** The skills a developer may choose of a task's repository; or why they are not read. */

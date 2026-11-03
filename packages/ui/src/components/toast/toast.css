@@ -24,7 +24,7 @@
 
   /* On a phone the stack keeps off the notch and the home indicator, since
      it is fixed to the page rather than the stage. The room is the document
-     root's, because the stack is portalled out of the shell. */
+     root's, because the stack is portaled out of the shell. */
   :root[data-ui-room="narrow"] .ui-toast-stack {
     right: calc(var(--ui-space-8) + env(safe-area-inset-right, 0px));
     bottom: calc(

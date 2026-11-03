@@ -34,7 +34,7 @@ import { PhoneHead } from "./phone-head.js";
  * The row is a phone's standard header and holds nothing else: the way
  * back, its glyph alone, leads out of the task on Overview, to the list the
  * task was opened from, and back a screen anywhere else, named for where it
- * goes ("Back to Overview"); the title, one line centred between the two
+ * goes ("Back to Overview"); the title, one line centered between the two
  * equal corners and fading where it is cut, names what is on screen, or
  * nothing on Overview until the plan's own heading scrolls away; and the ⋯
  * holds the menu of what is on screen: the task's own on Overview
@@ -101,7 +101,7 @@ interface TaskHeadRename {
 /**
  * The row heading a task on a phone; see the module's head. It is a phone's
  * header (`phone-head.tsx`): the way back at its start, the ⋯ at its end,
- * and the title centred between them, in every phone header's title type,
+ * and the title centered between them, in every phone header's title type,
  * on one line that fades where it is cut (`OneLine`), or the task's name as
  * a field while it is renamed.
  */

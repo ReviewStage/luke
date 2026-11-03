@@ -1942,7 +1942,7 @@ test("a delete the service refused for an agent still starting says why in the d
   assert.equal(closed, 0);
 });
 
-test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
+test("on a phone the page is headed by its way back's glyph, the agent's name centered, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
   const left: string[] = [];
   const page = mount(tasksControl({}), undefined, {
     label: "Inbox",

@@ -154,6 +154,10 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     const nextAccountKey = signedIn ? next.email : undefined;
     previousAccount = next;
     if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
+    // An account that stays signed in under a new address had its preferences dropped with the old one, and no sign-in reads them again.
+    if (wasSignedIn && signedIn && previousAccountKey !== nextAccountKey) {
+      yield* settings.reconcileAccountPreferences();
+    }
     // A deletion stands recording down until the next sign-in, which starts it again.
     if (signedIn && !wasSignedIn) sessionReplayEndedByDeletion = false;
     kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));

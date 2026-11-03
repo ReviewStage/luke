@@ -83,7 +83,7 @@ function BreadcrumbsExample(): React.JSX.Element {
             <Breadcrumbs
               label="Path"
               crumbs={[
-                { label: "an-organisation-with-a-long-name/a-repository-named-at-length" },
+                { label: "an-organization-with-a-long-name/a-repository-named-at-length" },
                 { label: "a-folder-whose-name-runs-on", fixed: true },
                 { label: "a-file-whose-name-runs-on-past-its-bar.ts", current: true },
               ]}
