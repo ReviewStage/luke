@@ -1,5 +1,5 @@
 /**
- * page-html.ts -- shot H's pages: the plan's two page lines and the "Invite flow" mockup's HTML at each version, read by the renderer's staging and by main's `luke-page:` hook alike.
+ * page-html.ts -- shot H's pages: the plan's two page lines and the "Invite flow" mockup's HTML at each version, read by the renderer's staging and by main's `app-page:` hook alike.
  *
  * Throwaway (`README.md`). Imports nothing, so `main` can import it without
  * pulling a renderer module in: in a fixture run under `--profile shot-pages`,

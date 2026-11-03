@@ -19,6 +19,7 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
   PATH: {
     WORKSPACE: "/workspace",
     CHECKOUT: "/workspace/repository",
+    // Note that the record keeps its old folder, because a persistent sandbox and a repository snapshot made before still hold it there, and a checkout whose record does not match is cloned again.
     CHECKOUT_RECORD: ".luke/repository",
   },
   VARIABLE: {

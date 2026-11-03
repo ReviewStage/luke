@@ -167,7 +167,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
 /** The state folder with the record given written, as the install's host would have left it. */
 const recorded = (record: HostDevice) =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+    const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
     yield* writeHostDevice(stateRoot, record);
     return stateRoot;
   });
@@ -177,7 +177,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot);
         yield* until(() => mac.asked.length >= 2);
 
@@ -242,7 +242,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot, { failedInstalls: 1 });
         yield* until(() => mac.asked.length >= 2);
         yield* nudged(Duration.seconds(5));

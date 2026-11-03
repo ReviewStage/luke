@@ -44,7 +44,7 @@ import { PANEL_PATH } from "./web-address";
 export const PRELOAD_ERROR = "vite:preloadError";
 
 /** Where the tab's session keeps the build it last reloaded away from. */
-const RELOADED_FROM_KEY = "luke.staleBuild.reloadedFrom";
+const RELOADED_FROM_KEY = "app.staleBuild.reloadedFrom";
 
 /** What the toast says where the tab holds work a reload would lose. */
 const NEW_VERSION_READY = `A new version of ${PRODUCT_NAME} is ready`;

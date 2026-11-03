@@ -395,7 +395,7 @@ test("an agent's row offers Mark as unread beside Rename, after Copy link, and t
 
   assert.ok(heard(row).includes("(unread)"), "the row reads unread");
   assert.deepEqual(seen, [], "nothing is cleared in main for a mark unread");
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.taskLooks") ?? "null"), {
     [AGENT_ID]: { unread: true },
   });
   assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as read"));
@@ -409,7 +409,7 @@ test("Mark as read on an agent marked unread by hand reads it again, in the stor
   await choose(row, "Mark as read");
 
   assert.ok(!heard(row).includes("(unread)"), "the row reads again");
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.taskLooks") ?? "null"), {
     [AGENT_ID]: RUN.activityAt,
   });
   assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as unread"));
@@ -423,7 +423,7 @@ test("an agent whose turn ended unseen offers Mark as read, which clears main's 
   await settle();
 
   assert.deepEqual(seen, [AGENT_ID]);
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.taskLooks") ?? "null"), {
     [AGENT_ID]: RUN.activityAt,
   });
 });

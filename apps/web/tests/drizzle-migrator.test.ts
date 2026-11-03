@@ -137,7 +137,7 @@ it.effect("a fresh database takes every folder, in name order", () =>
 const syntheticMigrationsFolder = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-migrations-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "migrations-" });
   const write = (name: string) =>
     Effect.gen(function* () {
       yield* fileSystem.makeDirectory(path.join(folder, name));

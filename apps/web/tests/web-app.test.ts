@@ -47,8 +47,8 @@ afterEach(async () => {
 test("signed out, the panel draws its sign-in; a return after another tab signed in opens the account's tasks", async () => {
   const service = fakeService({ signedIn: false });
   // An earlier load read someone signed in here, the sidebar open.
-  localStorage.setItem("luke.signed-in-here", "true");
-  localStorage.setItem("luke.sidebar-collapsed", "false");
+  localStorage.setItem("app.signed-in-here", "true");
+  localStorage.setItem("app.sidebar-collapsed", "false");
   const root = document.createElement("div");
   document.body.append(root);
 

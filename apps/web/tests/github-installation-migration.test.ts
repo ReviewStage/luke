@@ -26,7 +26,7 @@ const foldersBeforeMigration = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
   const folder = yield* fileSystem.makeTempDirectoryScoped({
-    prefix: "luke-before-installations-",
+    prefix: "before-installations-",
   });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(MIGRATION) < 0,

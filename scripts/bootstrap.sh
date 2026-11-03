@@ -5,9 +5,9 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-luke_require_node
+app_require_node
 if [[ $(uname -s) == Darwin ]]; then
-    luke_require_command xcrun
+    app_require_command xcrun
 fi
 
 mkdir -p "$APP_BUILD_ROOT" "$APP_ARTIFACT_ROOT/evidence"

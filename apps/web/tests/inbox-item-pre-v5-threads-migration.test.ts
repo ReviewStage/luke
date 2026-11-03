@@ -37,7 +37,7 @@ const foldersUpTo = (through: boolean) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-pre-v5-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-pre-v5-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter((name) =>
       through ? name.localeCompare(MIGRATION) <= 0 : name.localeCompare(MIGRATION) < 0,
     );

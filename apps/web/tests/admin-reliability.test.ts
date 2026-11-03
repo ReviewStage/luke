@@ -135,7 +135,7 @@ async function openReliability(body: AdminReliability | undefined): Promise<Open
           }),
         ),
   );
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const heard: string[] = [];
   const page = document.createElement("div");
   document.body.replaceChildren(page);

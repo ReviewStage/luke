@@ -30,7 +30,7 @@ const foldersBefore = (migration: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-kind-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-kind-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
       (name) => name.localeCompare(migration) < 0,
     );

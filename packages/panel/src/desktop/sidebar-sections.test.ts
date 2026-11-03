@@ -357,7 +357,7 @@ test("a section folds on its title, aria-expanded following, counts its tasks fo
 test("a filter by person leaves out a section's task it would leave out of the list", async () => {
   const shared = { ...WORKSPACE, memberCount: 2 };
   window.localStorage.setItem(
-    "luke.sidebarTaskViews",
+    "app.sidebarTaskViews",
     JSON.stringify({
       [WORKSPACE.id]: { grouping: "repository", order: "updated", assignedTo: "user-ada" },
     }),

@@ -55,7 +55,7 @@ interface SkillFileDoors {
 
 /** The element a chip is written into the words as, and the one attribute it carries. */
 const SKILL_ELEMENT = {
-  TAG: "luke-skill",
+  TAG: "app-skill",
   NAME: "name",
 } as const;
 

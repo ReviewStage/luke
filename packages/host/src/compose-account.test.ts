@@ -137,7 +137,7 @@ const desktopAccount = (input: {
 
 it.effect("a sign-in after a deletion in the same run lets session replay record again", () =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-replay-");
+    const stateRoot = yield* temporaryDirectoryScoped("account-replay-");
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const kernel = hostKernelOver({
       stateRoot,
@@ -206,7 +206,7 @@ it.effect(
   "a sign-in that ends without landing answers why as its key, and none of the consent's own words",
   () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-account-failure-");
+      const stateRoot = yield* temporaryDirectoryScoped("account-failure-");
       const reported: string[] = [];
       const kernel = hostKernelOver({
         stateRoot,
@@ -255,7 +255,7 @@ it.effect(
 
 it.effect("an admin's access reaches the windows once read, and a sign-out takes it away", () =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-access-");
+    const stateRoot = yield* temporaryDirectoryScoped("account-access-");
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const kernel = hostKernelOver({
       stateRoot,
@@ -377,7 +377,7 @@ const tabFetch =
  */
 const browserAccount = (service: TabService) =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-browser-");
+    const stateRoot = yield* temporaryDirectoryScoped("account-browser-");
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
     /** The counts' batches already sent each time the tab left, by the address it left for. */
     const departures: { url: string; countsSent: string[] }[] = [];

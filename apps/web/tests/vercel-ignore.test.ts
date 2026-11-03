@@ -62,7 +62,7 @@ function git(root: string, ...args: string[]): string {
       "-c",
       "user.name=Vespin",
       "-c",
-      "user.email=luke@example.com",
+      "user.email=agent@example.com",
       "-c",
       "commit.gpgsign=false",
       ...args,
@@ -79,7 +79,7 @@ function git(root: string, ...args: string[]): string {
 
 /** A repository holding the ignore step and the workspace, so its first commit has the step to run. */
 async function repository(t: TestContext, withScript = true): Promise<string> {
-  const root = await temporaryDirectory(t, "luke-vercel-ignore-");
+  const root = await temporaryDirectory(t, "vercel-ignore-");
   if (withScript) {
     mkdirSync(join(root, "scripts"));
     for (const script of SCRIPTS) copyFileSync(join(ROOT, script), join(root, script));
@@ -104,7 +104,7 @@ async function cloneOf(
   branch?: string,
   depth?: number,
 ): Promise<string> {
-  const root = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  const root = await temporaryDirectory(t, "vercel-ignore-clone-");
   git(
     root,
     "clone",
@@ -311,7 +311,7 @@ test("production with no last deployment to compare with is built, whatever it c
 test("a rebased branch whose deployed tree is the one already deployed is skipped, its last deployment fetched by sha", async (t) => {
   const origin = await repository(t);
   commit(origin, "README.md");
-  const clone = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  const clone = await temporaryDirectory(t, "vercel-ignore-clone-");
   git(clone, "clone", "-q", `file://${origin}`, ".");
   // Note that the deployment is pushed to the origin after the clone, so the clone does not hold it.
   const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
@@ -325,13 +325,13 @@ test("a rebased branch whose deployed tree is the one already deployed is skippe
 test("a host whose `timeout` is missing still fetches the last deployment by sha, as a Mac does", async (t) => {
   const origin = await repository(t);
   commit(origin, "README.md");
-  const clone = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  const clone = await temporaryDirectory(t, "vercel-ignore-clone-");
   git(clone, "clone", "-q", `file://${origin}`, ".");
   const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
   commit(clone, "apps/desktop/src/main/main.ts");
   commit(clone, "apps/web/src/main.tsx", "web v1\n");
   // Note that a `timeout` answering 127 first on the PATH is the shell's own "command not found".
-  const bin = await temporaryDirectory(t, "luke-vercel-ignore-bin-");
+  const bin = await temporaryDirectory(t, "vercel-ignore-bin-");
   writeFileSync(join(bin, "timeout"), "#!/bin/sh\nexit 127\n");
   chmodSync(join(bin, "timeout"), 0o755);
   assert.equal(decide(clone, deployed, `${bin}${delimiter}${process.env.PATH}`), VERDICT.SKIP);
@@ -340,7 +340,7 @@ test("a host whose `timeout` is missing still fetches the last deployment by sha
 test("a checkout with no usable origin fetches the last deployment from the repository Vercel names, as Vercel's own does", async (t) => {
   const origin = await repository(t);
   commit(origin, "README.md");
-  const clone = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  const clone = await temporaryDirectory(t, "vercel-ignore-clone-");
   git(clone, "clone", "-q", `file://${origin}`, ".");
   git(clone, "remote", "remove", "origin");
   const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
@@ -351,10 +351,10 @@ test("a checkout with no usable origin fetches the last deployment from the repo
   const vercel = {
     VERCEL_GIT_PROVIDER: "github",
     VERCEL_GIT_REPO_OWNER: "ReviewStage",
-    VERCEL_GIT_REPO_SLUG: "luke",
+    VERCEL_GIT_REPO_SLUG: "web",
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: `url.file://${origin}.insteadOf`,
-    GIT_CONFIG_VALUE_0: "https://github.com/ReviewStage/luke.git",
+    GIT_CONFIG_VALUE_0: "https://github.com/ReviewStage/web.git",
   };
   assert.equal(decide(clone, deployed, process.env.PATH, vercel), VERDICT.SKIP);
   commit(clone, "apps/web/src/main.tsx", "web v2\n");

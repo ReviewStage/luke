@@ -604,7 +604,7 @@ export type PlatformPortActKind =
  * `REQUEST`, and the preload forwards it to main on `CHANNEL`.
  */
 export const ACT_PORT = {
-  REQUEST: "luke:act-port",
+  REQUEST: "app:act-port",
   CHANNEL: "app:act-port",
 } as const;
 

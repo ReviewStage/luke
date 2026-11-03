@@ -1,5 +1,5 @@
 /**
- * page-frame.ts -- where a page is drawn from: one version of one page, at its own `luke-page:` address on the Mac, and on the sandbox's own site on the web.
+ * page-frame.ts -- where a page is drawn from: one version of one page, at its own `app-page:` address on the Mac, and on the sandbox's own site on the web.
  *
  * The window's process serves the scheme, reading the version from the
  * service on the account's own bearer, so the frame that draws a page holds
@@ -20,7 +20,7 @@
 
 import { Schema as EffectSchema } from "effect";
 
-export const PAGE_SCHEME = "luke-page";
+export const PAGE_SCHEME = "app-page";
 
 /**
  * The sandbox's own site, where the web draws a page: a registrable domain

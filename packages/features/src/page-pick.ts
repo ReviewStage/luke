@@ -36,7 +36,7 @@ import { PLAN_COMMENT_BOUNDS } from "./plan-comment-wire.js";
  */
 
 /** The mark every message of the pick wears, setting it apart from whatever else the page posts. */
-export const PAGE_PICK_TYPE = "luke-page-pick";
+export const PAGE_PICK_TYPE = "app-page-pick";
 
 /** What the panel asks of the frame. */
 export const PAGE_PICK_ACT = {

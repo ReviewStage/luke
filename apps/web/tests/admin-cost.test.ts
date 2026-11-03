@@ -96,7 +96,7 @@ async function openCost(
       }),
     );
   });
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);

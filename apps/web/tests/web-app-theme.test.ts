@@ -81,7 +81,7 @@ function worn() {
   return {
     theme: document.documentElement.getAttribute("data-ui-theme"),
     chrome: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
-    kept: localStorage.getItem("luke.theme"),
+    kept: localStorage.getItem("app.theme"),
   };
 }
 

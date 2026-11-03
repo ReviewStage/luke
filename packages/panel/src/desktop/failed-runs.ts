@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { readKept, writeKept } from "../kept-storage.js";
 
 /** Where the failures seen are kept in the renderer's storage. */
-const STORAGE_KEY = "luke.seenFailedRuns";
+const STORAGE_KEY = "app.seenFailedRuns";
 
 /** The newest failed run seen of each automation, by the automation's id. */
 const storedSeen = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));

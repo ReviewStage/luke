@@ -22,7 +22,7 @@ const tellUnsavedWork = (): void =>
  * and the browser are main's, reached over the act channel, and so is a
  * cloud Browser tab's live view, which arrives on a port of its own; the menu bar,
  * the shortcut recording, and the counted events over the bridge's own
- * entries; a page is drawn from the `luke-page:` scheme main serves; the
+ * entries; a page is drawn from the `app-page:` scheme main serves; the
  * static files are the build's copies beside the document; and the session
  * recording is the desktop's own (`session-replay.ts`).
  * Each reads the bridge as it is called, so this is built before the bridge

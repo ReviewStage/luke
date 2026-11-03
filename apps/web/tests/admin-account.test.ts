@@ -195,7 +195,7 @@ async function openAccount(response: Response | undefined): Promise<Opened> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     response === undefined ? new Promise(() => undefined) : Promise.resolve(response),
   );
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const backs: number[] = [];
   const page = document.createElement("div");
   document.body.replaceChildren(page);

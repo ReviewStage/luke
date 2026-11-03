@@ -99,7 +99,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** Where the window's Inbox kept its Needs you button's press before the tabs that stood before its scopes. */
-const EARLIER_SHOW_KEY = "luke.inboxWaitingOnly";
+const EARLIER_SHOW_KEY = "app.inboxWaitingOnly";
 
 /** What the row of the item so titled says of its task's status; none where it wears no status. */
 function rowStatus(page: HTMLElement, title: string): string | undefined {

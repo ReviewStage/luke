@@ -93,7 +93,7 @@ async function openWorkspaces(body: AdminWorkspaceList) {
       headers: { "content-type": "application/json" },
     });
   });
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);
@@ -176,7 +176,7 @@ test("View options offer Shared only, on, beside Include admins, and clearing it
   await act(async () => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
 
   expect(asked.at(-1)).toBe("/api/admin/workspaces?kind=all");
-  expect(window.localStorage.getItem("luke-admin-workspaces-shared-only")).toBe("false");
+  expect(window.localStorage.getItem("app-admin-workspaces-shared-only")).toBe("false");
 });
 
 test("a row opens its owner's account, and a row with no owner opens nothing", async () => {

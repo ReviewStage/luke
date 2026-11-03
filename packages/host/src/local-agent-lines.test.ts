@@ -88,8 +88,8 @@ const directMac = (unsavedWork: Script | undefined) => ({
   }),
   tools: {
     node: RUNNER,
-    claude: "/opt/luke/agent-tools/claude",
-    codex: "/opt/luke/agent-tools/codex",
+    claude: "/opt/agent/agent-tools/claude",
+    codex: "/opt/agent/agent-tools/codex",
   },
   clis: fakeClis(),
   formerlyDirect: true,
@@ -115,7 +115,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
  */
 const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
+    const root = yield* temporaryDirectoryScoped("agent-lines-");
     const home = path.join(root, "home");
     const fileSystem = yield* FileSystem.FileSystem;
     const folder = deviceAgentLayout(home, AGENT_ID).folder;
@@ -276,7 +276,7 @@ const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
  */
 const launching = (workStands: boolean) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-launch-");
+    const root = yield* temporaryDirectoryScoped("agent-launch-");
     const home = path.join(root, "home");
     const layout = deviceAgentLayout(home, AGENT_ID);
     if (workStands) mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });

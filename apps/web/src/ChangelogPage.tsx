@@ -1,4 +1,4 @@
-import releases from "virtual:luke/changelog-releases";
+import releases from "virtual:site/changelog-releases";
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import { formatDayHeading } from "@luke/features/time-format";
 import {

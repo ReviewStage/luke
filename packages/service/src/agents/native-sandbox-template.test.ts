@@ -285,7 +285,7 @@ it.effect(
       );
       // Every stage of the preparation's own script is among the steps the entry runs.
       for (const stage of PREPARE_STAGES) assert.ok([...uploaded.values()].includes(stage));
-      assert.ok(uploaded.get(build.entry)?.includes("bash /tmp/luke-template/step-"));
+      assert.ok(uploaded.get(build.entry)?.includes("bash /tmp/agent-template/step-"));
       assert.equal((yield* advanceTemplate(api, build)).state, TEMPLATE_STATE.PREPARING);
 
       fake.finishBuild(0);

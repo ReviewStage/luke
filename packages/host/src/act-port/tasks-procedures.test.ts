@@ -687,7 +687,7 @@ it("the admin dashboard opens the service's own page in the browser, and an addr
 });
 
 it("the admin dashboard is refused, and nothing opens, where the service's origin is no web address", async () => {
-  for (const serviceBaseUrl of ["file:///srv/luke", "luke-evil://service", "not an address"]) {
+  for (const serviceBaseUrl of ["file:///srv/app", "evil://service", "not an address"]) {
     const { client, browsed } = windowPort(PANEL, { serviceBaseUrl });
 
     assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, undefined), {
@@ -743,7 +743,7 @@ it("a GitHub page the host names off the service's own origin is refused and not
 
   for (const page of [
     "file:///etc/passwd",
-    "luke-evil://connect",
+    "evil://connect",
     "https://evil.test/connect-github.html",
   ]) {
     script.connectPage = page;

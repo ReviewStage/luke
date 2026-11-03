@@ -178,7 +178,7 @@ let tasksPageOpened = 0;
 /** Keeps Assigned to › Anyone for `workspace`, as a reader who chose it on an earlier launch has, for a test of what the list draws whoever's it is. */
 function keepAnyone(workspace: Workspace = ACME): void {
   window.localStorage.setItem(
-    "luke.sidebarTaskViews",
+    "app.sidebarTaskViews",
     JSON.stringify({ [workspace.id]: { grouping: "repository", assignee: { kind: "anyone" } } }),
   );
 }

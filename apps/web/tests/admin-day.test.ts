@@ -78,7 +78,7 @@ async function openDay(body: AdminDayDetail | undefined): Promise<Opened> {
           }),
         ),
   );
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const opened: string[] = [];
   const backs: number[] = [];
   const page = document.createElement("div");

@@ -21,7 +21,7 @@ import { useEffect, useState } from "react";
 import { readKeptOption, writeKept } from "./kept-storage.js";
 
 /** Where the provider is kept in the renderer's storage. */
-const STORAGE_KEY = "luke.lastSignInProvider";
+const STORAGE_KEY = "app.lastSignInProvider";
 
 /** The provider as kept: its own name, nothing more. */
 const storedProvider = Schema.Literals(Object.values(ACCOUNT_PROVIDER));

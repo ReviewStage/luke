@@ -3,6 +3,7 @@
   "git": {
     "deploymentEnabled": {
       "gh-readonly-queue/**": false,
+      "agent/**": false,
       "luke/**": false,
       "pr-assets": false,
       "pr-assets-*": false,

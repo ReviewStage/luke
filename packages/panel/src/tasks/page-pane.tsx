@@ -88,7 +88,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  *
  * The page is HTML an agent wrote, so it is drawn in a frame from an address
  * the shell names (`appPlatform().pageFrameUrl`: on the desktop, the
- * `luke-page:` scheme main serves under a policy of its own; on the web, the
+ * `app-page:` scheme main serves under a policy of its own; on the web, the
  * service's frame of the version, which sends it on to the sandbox's own
  * site) and sandboxed to its scripts alone: no same origin, so it holds an opaque
  * origin with no storage and no reach into this window; no popups, forms,

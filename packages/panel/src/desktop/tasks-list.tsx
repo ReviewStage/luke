@@ -233,7 +233,7 @@ type ListFolds = typeof storedFolds.Type;
 
 /** The List's folded groups, kept on this Mac. */
 const KEPT = {
-  FOLDS: keptKey("luke.tasksListFolds", storedFolds),
+  FOLDS: keptKey("app.tasksListFolds", storedFolds),
 } as const;
 
 /** A set of folded values with one folded or opened. */
