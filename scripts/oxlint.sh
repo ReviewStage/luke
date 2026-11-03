@@ -13,7 +13,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 # with "Version '24' not found" in files nobody touched.
 luke_require_node
 
-cd "$LUKE_REPO_ROOT"
+cd "$APP_REPO_ROOT"
 # A disable directive that silences nothing is an error, so one left behind by
 # a deleted rule, or by the code it once excused, never sits waiting to hide
 # the next problem on its line.

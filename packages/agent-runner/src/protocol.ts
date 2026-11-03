@@ -33,7 +33,7 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * in it: app-server asks the service for it through the runner's token command.
  */
 export const RUNNER_ENV = {
-  BEARER: "LUKE_RUNNER_TOKEN",
+  BEARER: "APP_RUNNER_TOKEN",
   CLAUDE_TOKEN: "CLAUDE_CODE_OAUTH_TOKEN",
   /**
    * The account's Anthropic API key, in the plan token's place for an agent
@@ -53,7 +53,7 @@ export const RUNNER_ENV = {
    * host's daemon alone, on a Linux box and a Mac alike, This Mac's among
    * them, and unset in the cloud's sandbox.
    */
-  PLACE: "LUKE_RUNNER_PLACE",
+  PLACE: "APP_RUNNER_PLACE",
 } as const;
 
 /** The places a runner's starter names in `RUNNER_ENV.PLACE`. */

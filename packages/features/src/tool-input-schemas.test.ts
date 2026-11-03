@@ -16,7 +16,7 @@ import {
  * The schemas this package declares that a model is shown whole as a tool's
  * input: the coder's thread and channel tools. A model
  * provider keys its prompt cache on the text of a request, so these bytes are
- * recorded and move only under `LUKE_UPDATE_FIXTURES=1`. A schema no model is
+ * recorded and move only under `APP_UPDATE_FIXTURES=1`. A schema no model is
  * shown as a tool's input is not recorded.
  */
 

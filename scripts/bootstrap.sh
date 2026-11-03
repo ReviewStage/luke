@@ -10,8 +10,8 @@ if [[ $(uname -s) == Darwin ]]; then
     luke_require_command xcrun
 fi
 
-mkdir -p "$LUKE_BUILD_ROOT" "$LUKE_ARTIFACT_ROOT/evidence"
-cd "$LUKE_REPO_ROOT"
+mkdir -p "$APP_BUILD_ROOT" "$APP_ARTIFACT_ROOT/evidence"
+cd "$APP_REPO_ROOT"
 
 if [[ $(uname -s) == Darwin ]]; then
     pnpm install --frozen-lockfile
@@ -19,4 +19,4 @@ else
     ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 fi
 
-printf 'Vespin workspace bootstrapped at %s\n' "$LUKE_REPO_ROOT"
+printf 'Vespin workspace bootstrapped at %s\n' "$APP_REPO_ROOT"

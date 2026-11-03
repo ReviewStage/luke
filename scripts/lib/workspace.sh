@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-LUKE_SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-LUKE_REPO_ROOT=$(CDPATH= cd -- "$LUKE_SCRIPT_DIRECTORY/../.." && pwd)
-LUKE_DESKTOP_APP_ROOT="$LUKE_REPO_ROOT/apps/desktop"
-LUKE_BUILD_ROOT="$LUKE_REPO_ROOT/.build"
-LUKE_ARTIFACT_ROOT="$LUKE_REPO_ROOT/artifacts"
+APP_SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+APP_REPO_ROOT=$(CDPATH= cd -- "$APP_SCRIPT_DIRECTORY/../.." && pwd)
+APP_DESKTOP_APP_ROOT="$APP_REPO_ROOT/apps/desktop"
+APP_BUILD_ROOT="$APP_REPO_ROOT/.build"
+APP_ARTIFACT_ROOT="$APP_REPO_ROOT/artifacts"
 
 luke_require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -38,7 +38,7 @@ luke_wait_for_exit() {
 # name is still derived the way Electron derives its default, from the manifest:
 # `productName` when it sets one, the package name otherwise.
 luke_product_name() {
-    if ! (cd "$LUKE_DESKTOP_APP_ROOT" &&
+    if ! (cd "$APP_DESKTOP_APP_ROOT" &&
         node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
         printf 'error: could not read the desktop app name\n' >&2
         return 1
@@ -56,11 +56,11 @@ luke_app_names() {
 # Keychain entry of its own and runs beside the plain development instance.
 # The app refuses a name outside this pattern and runs as the plain instance
 # instead, so the script holds names to it first.
-LUKE_INSTANCE_NAME_PATTERN='^[a-z0-9]+(-[a-z0-9]+)*$'
-LUKE_INSTANCE_NAME_MAX_LENGTH=48
+APP_INSTANCE_NAME_PATTERN='^[a-z0-9]+(-[a-z0-9]+)*$'
+APP_INSTANCE_NAME_MAX_LENGTH=48
 
 luke_is_instance_name() {
-    ((${#1} <= LUKE_INSTANCE_NAME_MAX_LENGTH)) && [[ $1 =~ $LUKE_INSTANCE_NAME_PATTERN ]]
+    ((${#1} <= APP_INSTANCE_NAME_MAX_LENGTH)) && [[ $1 =~ $APP_INSTANCE_NAME_PATTERN ]]
 }
 
 luke_instance_app_name() {
@@ -74,7 +74,7 @@ luke_instance_app_name() {
 luke_instance_slug() {
     local slug
     slug=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
-    slug=${slug:0:LUKE_INSTANCE_NAME_MAX_LENGTH}
+    slug=${slug:0:APP_INSTANCE_NAME_MAX_LENGTH}
     printf '%s\n' "${slug%-}"
 }
 
@@ -182,5 +182,5 @@ luke_require_node() {
 # changes the lockfile and the launch then runs on stale dependencies; a
 # frozen install with nothing to change is quick.
 luke_ensure_dependencies() {
-    "$LUKE_REPO_ROOT/scripts/bootstrap.sh"
+    "$APP_REPO_ROOT/scripts/bootstrap.sh"
 }

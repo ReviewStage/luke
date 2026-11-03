@@ -16,7 +16,7 @@ keychain_path="$RUNNER_TEMP/luke-release-${GITHUB_RUN_ID:-local}.keychain-db"
 certificate_path="$RUNNER_TEMP/luke-release-${GITHUB_RUN_ID:-local}.p12"
 keychain_password=$(openssl rand -hex 24)
 
-printf 'LUKE_RELEASE_KEYCHAIN=%s\n' "$keychain_path" >> "$GITHUB_ENV"
+printf 'APP_RELEASE_KEYCHAIN=%s\n' "$keychain_path" >> "$GITHUB_ENV"
 
 cleanup_certificate() {
     rm -f "$certificate_path"
@@ -67,7 +67,7 @@ if [[ "$identity_count" -ne 1 ]]; then
 fi
 
 {
-    printf 'LUKE_CODESIGN_IDENTITY=%s\n' "$identity_hashes"
+    printf 'APP_CODESIGN_IDENTITY=%s\n' "$identity_hashes"
 } >> "$GITHUB_ENV"
 
 printf 'Imported one Developer ID Application identity into the temporary keychain.\n'

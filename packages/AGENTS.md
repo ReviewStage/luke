@@ -23,7 +23,7 @@ and built-in filter.
 
 What a schema emits is pinned as a byte golden under `fixtures/json-schema/`
 only where a model is shown it as a tool's input, re-recorded only with
-`LUKE_UPDATE_FIXTURES=1`. **The bytes are the point** — a model provider keys its
+`APP_UPDATE_FIXTURES=1`. **The bytes are the point** — a model provider keys its
 prompt cache on the text of a request, so a reordered key, a widened bound, or a
 reworded description costs every standing conversation its prefix. If a golden
 fails, that is what it is telling you. Biome is kept off those fixture trees for

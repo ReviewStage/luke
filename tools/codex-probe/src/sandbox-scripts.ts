@@ -23,7 +23,7 @@ export const PROBE_FILES = {
 } as const;
 
 /** The marker a scanner's report line starts with, so it is found inside a command's output. */
-export const SCAN_MARKER = "LUKE_PROBE_SCAN ";
+export const SCAN_MARKER = "APP_PROBE_SCAN ";
 
 /** The scanner, run with `node`; arguments are the directories to walk, `--no-proc` skips processes. */
 const SCANNER_SOURCE = String.raw`

@@ -222,5 +222,5 @@ jobs:
       - name: Remove release keychain
         if: ${{ always() }}
         env:
-          LUKE_RELEASE_KEYCHAIN: ${{ env.LUKE_RELEASE_KEYCHAIN }}
+          APP_RELEASE_KEYCHAIN: ${{ env.APP_RELEASE_KEYCHAIN }}
         run: ./scripts/release/cleanup-keychain.sh

@@ -14,7 +14,7 @@ set -euo pipefail
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/../lib/workspace.sh"
-cd "$LUKE_REPO_ROOT"
+cd "$APP_REPO_ROOT"
 
 if [[ "$#" -ne 0 ]]; then
     printf 'usage: %s\n' "$0" >&2

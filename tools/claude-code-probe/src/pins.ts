@@ -61,11 +61,11 @@ export const PROBE_FILES = {
 
 /** The environment variables the probe reads on the developer's machine; none is ever printed. */
 export const PROBE_ENV = {
-  CLAUDE_TOKEN: "LUKE_PROBE_CLAUDE_OAUTH_TOKEN",
-  GITHUB_TOKEN: "LUKE_PROBE_GITHUB_TOKEN",
-  REPOSITORY: "LUKE_PROBE_REPOSITORY",
-  KEEP_SANDBOX: "LUKE_PROBE_KEEP_SANDBOX",
-  MODEL: "LUKE_PROBE_MODEL",
+  CLAUDE_TOKEN: "APP_PROBE_CLAUDE_OAUTH_TOKEN",
+  GITHUB_TOKEN: "APP_PROBE_GITHUB_TOKEN",
+  REPOSITORY: "APP_PROBE_REPOSITORY",
+  KEEP_SANDBOX: "APP_PROBE_KEEP_SANDBOX",
+  MODEL: "APP_PROBE_MODEL",
 } as const;
 
 /** GitHub's own spelling of `owner/name`: an owner of letters, digits and hyphens, a name of letters, digits, `.`, `_` and `-`. */
@@ -120,7 +120,7 @@ export const QUERY_OPTIONS = {
 } as const;
 
 /** The marker a leak check's one line of JSON follows, in a command's output or a tool's result. */
-export const LEAK_CHECK_MARKER = "LUKE_PROBE_LEAK_CHECK";
+export const LEAK_CHECK_MARKER = "APP_PROBE_LEAK_CHECK";
 
 /** What the driver prints of its own beside the SDK's messages, each a `type` the SDK never uses. */
 export const DRIVER_EVENT = {

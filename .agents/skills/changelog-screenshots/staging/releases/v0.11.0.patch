@@ -724,7 +724,7 @@ index 000000000..c77e41ae3
 + * coding-agents-shot.ts -- "Coding agents work alongside you": the side panel close up, its strip of agent tabs with their generated titles, over the agent's transcript opened onto its work, where it updated the plan.
 + *
 + * Throwaway (`shot-spec.ts`). A close-up of the panel alone, captured at
-+ * `LUKE_SHOT_ZOOM=2`. The sidebar stays open and the panel is staged 704
++ * `APP_SHOT_ZOOM=2`. The sidebar stays open and the panel is staged 704
 + * points wide, so it starts at x 896 and a crop of x 892..1592 takes it
 + * whole short of the window's corner. The panel is on the finished agent,
 + * "Add teammate invitations", beside "Invite emails" at work. Once its
@@ -1206,7 +1206,7 @@ index 000000000..2d7637cb6
 +/**
 + * subagents-shot.ts -- "Subagents": the whole window, the plan narrow at the left, and the side panel wide on the finished agent, whose transcript shows its two workers' rows with the model and effort each ran on, the first worker's own tab open beside it.
 + *
-+ * Throwaway (`shot-spec.ts`). Whole window, `LUKE_SHOT_ZOOM=1`. The sidebar
++ * Throwaway (`shot-spec.ts`). Whole window, `APP_SHOT_ZOOM=1`. The sidebar
 + * is folded and the panel staged 900 points wide on "Add teammate
 + * invitations", finished, its #214 open with checks passing. A finished
 + * turn folds everything ahead of its last words under one line, so the

@@ -320,7 +320,7 @@ if [ "${1:-}" = "uninstall" ]; then
 fi
 # Note that the account install's state root is named here, so a command run by hand, a connect among them, reads and writes the record its service runs on.
 if home="$(account_home)"; then
-  LUKE_HOST_STATE_ROOT="${LUKE_HOST_STATE_ROOT:-$home/$ACCOUNT_STATE}"
-  export LUKE_HOST_STATE_ROOT
+  APP_HOST_STATE_ROOT="${APP_HOST_STATE_ROOT:-$home/$ACCOUNT_STATE}"
+  export APP_HOST_STATE_ROOT
 fi
 exec "$root/node/bin/node" "$root/lib/vespin-host.mjs" "$@"

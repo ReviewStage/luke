@@ -92,7 +92,7 @@ it.effect(
       );
       assert.ok(
         overrides.includes(
-          'shell_environment_policy.exclude=["LUKE_RUNNER_TOKEN", "OPENAI_API_KEY"]',
+          'shell_environment_policy.exclude=["APP_RUNNER_TOKEN", "OPENAI_API_KEY"]',
         ),
       );
       // A fast version runs on Codex's documented fast tier, turned on for the provider.
@@ -401,11 +401,11 @@ it.effect(
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
         'mcp_servers.luke.url="https://luke.test/runner/mcp"',
-        'mcp_servers.luke.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
+        'mcp_servers.luke.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.luke.default_tools_approval_mode="approve"',
         "mcp_servers.luke.tool_timeout_sec=600.0",
         'mcp_servers.linear.url="https://luke.test/runner/mcp/integrations/linear"',
-        'mcp_servers.linear.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
+        'mcp_servers.linear.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.linear.default_tools_approval_mode="approve"',
         "mcp_servers.linear.startup_timeout_sec=20.0",
         "mcp_servers.linear.tool_timeout_sec=600.0",
@@ -415,7 +415,7 @@ it.effect(
         `sandbox_workspace_write.writable_roots=["${CONFIG.cwd}/.git"]`,
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
-        'shell_environment_policy.exclude=["LUKE_RUNNER_TOKEN"]',
+        'shell_environment_policy.exclude=["APP_RUNNER_TOKEN"]',
         'shell_environment_policy.set={ PLAYWRIGHT_BROWSERS_PATH = "0" }',
       ]);
       // The bearer reaches app-server in its environment alone, never argv.
@@ -837,7 +837,7 @@ it.effect(
       ]);
       // The command inherits the bearer; no command the agent runs does.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
-      assert.equal(override(process, "shell_environment_policy.exclude"), '["LUKE_RUNNER_TOKEN"]');
+      assert.equal(override(process, "shell_environment_policy.exclude"), '["APP_RUNNER_TOKEN"]');
       assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
 
       // What the command printed went to app-server alone: never argv, an event, or a log.
@@ -859,7 +859,7 @@ it.effect(
       assert.equal(refused.detail, "The service refused the token: 409");
 
       const unset = yield* askCodexToken(TOKEN_URL, {}).pipe(Effect.provide(http), Effect.flip);
-      assert.equal(unset.detail, "LUKE_RUNNER_TOKEN is not set");
+      assert.equal(unset.detail, "APP_RUNNER_TOKEN is not set");
 
       const unreachable = fakeHttpClientLayer(async () => {
         throw new Error(`connection reset for ${BEARER}`);

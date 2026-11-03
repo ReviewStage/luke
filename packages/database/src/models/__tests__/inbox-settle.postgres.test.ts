@@ -30,7 +30,7 @@ import { createTask, updateTask } from "../task-store.js";
  * that row rather than reading past it, and hands the item to the act once
  * it commits, so the item never stands open under an archived agent or a
  * task Done. This file runs in CI's Postgres job, where
- * `LUKE_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
+ * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
 /** Runs an effect on a connection of its own to the test's database, beside the test's one, as `dispatch-claim.postgres.test.ts` does. */

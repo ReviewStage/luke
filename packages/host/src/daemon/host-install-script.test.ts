@@ -1,9 +1,9 @@
 /**
  * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without systemd or whose user manager cannot be reached is refused with how to fix it, a run under sudo from another account and an install that came before are refused, lingering is turned on with sudo only where the account may not turn it on itself, a download whose SHA-256 is not the one carried is refused, a Mac's LaunchAgent is written and started only where its user is logged in, and a whole run installs the release into the account, starts its service only once the box is connected, in the layout `vespin-host uninstall` removes, and keeps the pairing when run again, moving an install of a release before 0.7.0 over to `vespin-host` in place. Beside it, the host's own `vespin-host uninstall` (`apps/host/scripts/vespin-host.sh`) as an account install, under either name, and a Mac's earlier install run it.
  *
- * The script is run by `sh` in a temporary folder; `LUKE_HOST_INSTALL_LIBRARY`
+ * The script is run by `sh` in a temporary folder; `APP_HOST_INSTALL_LIBRARY`
  * has it stop after it defines what it carries and its functions, which the
- * tests call, and `LUKE_HOST_SYSTEMD_RUN_DIR` points its systemd check at a
+ * tests call, and `APP_HOST_SYSTEMD_RUN_DIR` points its systemd check at a
  * folder the test made. A fake `uname`, `sysctl`, `sw_vers`, `systemctl`,
  * `loginctl`, `sudo`, `launchctl` or `curl` put first on its PATH answers as
  * the computer a test means, and writes down what it was asked. A whole run is
@@ -76,10 +76,10 @@ const FAKE_NODE = [
   "shift",
   `printf 'vespin-host %s\\n' "$*" >>"$FAKE_ASKED"`,
   '[ "$1" = connect ] || exit 0',
-  'if [ -f "$LUKE_HOST_STATE_ROOT/device.json" ]; then echo "This box is already connected."; exit 0; fi',
+  'if [ -f "$APP_HOST_STATE_ROOT/device.json" ]; then echo "This box is already connected."; exit 0; fi',
   'if [ -n "$FAKE_CONNECT_EXIT" ]; then echo "The code was denied in Vespin, so this box was not connected." >&2; exit "$FAKE_CONNECT_EXIT"; fi',
-  'mkdir -p "$LUKE_HOST_STATE_ROOT"',
-  `printf '%s' "$FAKE_PAIRING" >"$LUKE_HOST_STATE_ROOT/device.json"`,
+  'mkdir -p "$APP_HOST_STATE_ROOT"',
+  `printf '%s' "$FAKE_PAIRING" >"$APP_HOST_STATE_ROOT/device.json"`,
   "echo 'Connected as box.'",
   "",
 ].join("\n");
@@ -137,7 +137,7 @@ const onBox = (
   env: Readonly<Record<string, string>> = {},
 ) =>
   sh(["-c", `. "${SCRIPT}"; require_supported_os Linux x86_64 "${procVersion}"; ${statements}`], {
-    LUKE_HOST_INSTALL_LIBRARY: "1",
+    APP_HOST_INSTALL_LIBRARY: "1",
     ...env,
   });
 
@@ -249,7 +249,7 @@ const box = (
   const env: Record<string, string> = {
     PATH: `${fakes}:${join(home, ".local/bin")}:${process.env.PATH}`,
     HOME: home,
-    LUKE_HOST_SYSTEMD_RUN_DIR: root,
+    APP_HOST_SYSTEMD_RUN_DIR: root,
     FAKE_ASKED: asked,
     FAKE_ROOT: root,
     FAKE_SERVED: served,
@@ -290,7 +290,7 @@ describe("the host's install script", () => {
     it(`refuses ${computer} by name`, () => {
       const answer = sh(
         ["-c", `. "${SCRIPT}"; require_supported_os "${kernel}" "${machine}" "${procVersion}"`],
-        { LUKE_HOST_INSTALL_LIBRARY: "1" },
+        { APP_HOST_INSTALL_LIBRARY: "1" },
       );
       expect(answer.status).toBe(1);
       expect(answer.stderr).toContain(words);
@@ -306,7 +306,7 @@ describe("the host's install script", () => {
       const machine = shell.startsWith("a native") ? "arm64" : "x86_64";
       const fakes = bin({ uname: uname(OS.DARWIN, machine), sysctl: `echo ${arm64}` });
       const answer = sh(["-c", `. "${SCRIPT}"; hardware_machine`], {
-        LUKE_HOST_INSTALL_LIBRARY: "1",
+        APP_HOST_INSTALL_LIBRARY: "1",
         PATH: `${fakes}:${process.env.PATH}`,
       });
       expect(answer.status).toBe(0);
@@ -367,7 +367,7 @@ describe("the host's install script", () => {
       const answer = sh(
         ["-c", `. "${SCRIPT}"; EARLIER_INSTALL_DIR="$1"; require_no_earlier_install`, "sh", made],
         {
-          LUKE_HOST_INSTALL_LIBRARY: "1",
+          APP_HOST_INSTALL_LIBRARY: "1",
           HOME: home,
           PATH: `${bin({ uname: uname(os, "arm64") })}:${process.env.PATH}`,
         },
@@ -394,7 +394,7 @@ describe("the host's install script", () => {
   }
 
   it("says how to turn systemd on under WSL, and only there", () => {
-    const env = { LUKE_HOST_SYSTEMD_RUN_DIR: join(folder(), "missing") };
+    const env = { APP_HOST_SYSTEMD_RUN_DIR: join(folder(), "missing") };
     const wsl = onBox(WSL2_PROC_VERSION, "require_user_manager", env);
     const linux = onBox(LINUX_PROC_VERSION, "require_user_manager", env);
 
@@ -408,7 +408,7 @@ describe("the host's install script", () => {
 
   it("refuses a box whose systemd user manager for the account cannot be reached, saying to run it from a login of that account", () => {
     const answer = onBox(LINUX_PROC_VERSION, "require_user_manager", {
-      LUKE_HOST_SYSTEMD_RUN_DIR: folder(),
+      APP_HOST_SYSTEMD_RUN_DIR: folder(),
       PATH: `${bin({ systemctl: "exit 1" })}:${process.env.PATH}`,
     });
 
@@ -562,7 +562,7 @@ describe("the host's install script", () => {
   it("writes a unit that runs the release through current with the user manager, again a minute after any exit, a clean one among them", () => {
     const home = folder();
     const answer = sh(["-c", `. "${SCRIPT}"; account_paths; write_unit; cat "$UNIT_FILE"`], {
-      LUKE_HOST_INSTALL_LIBRARY: "1",
+      APP_HOST_INSTALL_LIBRARY: "1",
       HOME: home,
     });
 
@@ -583,7 +583,7 @@ describe("the host's install script", () => {
     const log = join(home, "Library/Logs/Vespin Host/vespin-host.log");
     const answer = sh(
       ["-c", `. "${SCRIPT}"; account_paths; write_launch_agent "$1" "$2"`, "sh", plist, log],
-      { LUKE_HOST_INSTALL_LIBRARY: "1", HOME: home },
+      { APP_HOST_INSTALL_LIBRARY: "1", HOME: home },
     );
     expect(answer.status).toBe(0);
 
@@ -603,8 +603,8 @@ describe("the host's install script", () => {
 
   it("refuses a Mac's install, before it swaps anything, while the running LaunchAgent will not stop", () => {
     const answer = sh(["-c", `. "${SCRIPT}"; stop_launch_agent 501`], {
-      LUKE_HOST_INSTALL_LIBRARY: "1",
-      LUKE_HOST_MAC_STOP_WAIT_SECONDS: "0",
+      APP_HOST_INSTALL_LIBRARY: "1",
+      APP_HOST_MAC_STOP_WAIT_SECONDS: "0",
       PATH: `${bin({ launchctl: "exit 0" })}:${process.env.PATH}`,
     });
 
@@ -628,7 +628,7 @@ describe("the host's install script", () => {
         { mode: 0o755 },
       );
       const answer = sh(["-c", `. "${SCRIPT}"; start_launch_agent 501 /fixture/agent.plist`], {
-        LUKE_HOST_INSTALL_LIBRARY: "1",
+        APP_HOST_INSTALL_LIBRARY: "1",
         PATH: `${fakes}:${process.env.PATH}`,
       });
 
@@ -797,7 +797,7 @@ describe("the host's install script", () => {
     writeFileSync(download, "abc");
     const check = (expected: string) =>
       sh(["-c", `. "${SCRIPT}"; check_sha256 "${download}" "${expected}"`], {
-        LUKE_HOST_INSTALL_LIBRARY: "1",
+        APP_HOST_INSTALL_LIBRARY: "1",
       });
 
     expect(check(ABC_SHA256).status).toBe(0);

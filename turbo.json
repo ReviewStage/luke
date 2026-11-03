@@ -12,7 +12,7 @@
   // its flags, never the OS, CPU architecture, or Node version. A test whose
   // result depends on those would replay a Linux pass on a Mac, so
   // `scripts/lib/turbo.mjs` names the platform here, in every task's hash.
-  "globalEnv": ["LUKE_TURBO_PLATFORM"],
+  "globalEnv": ["APP_TURBO_PLATFORM"],
   // Files outside every workspace that every workspace reads. The changelog
   // and the privacy notice only the web app reads, so they are inputs of its
   // own tasks (apps/web/turbo.json). The brand artwork the web app and the

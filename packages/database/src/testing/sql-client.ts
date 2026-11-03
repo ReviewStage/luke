@@ -16,7 +16,7 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-
  * The `SqlClient` and Drizzle `Database` the store's own tests read, standing
  * over the same two dialects `hosted-store-database.ts` already chooses
  * between: PGlite in process by default, so `check.sh` needs no service, and
- * the Postgres named by `LUKE_STORE_TEST_DATABASE_URL` in the CI job that has
+ * the Postgres named by `APP_STORE_TEST_DATABASE_URL` in the CI job that has
  * one. Either way a build of the layer is a database of its own: a fresh
  * PGlite, or a clone of the migrated Postgres dropped when the layer's scope
  * closes (`test-postgres.ts`), so a file's unscoped statement reaches no other
@@ -48,7 +48,7 @@ export const sqlClientOverPglite = (
  * PGlite to (`migrated-pglite-setup.ts`), read by every test file of the run.
  */
 export const MIGRATED_PGLITE_ENVIRONMENT = {
-  DUMP: "LUKE_MIGRATED_PGLITE_DUMP",
+  DUMP: "APP_MIGRATED_PGLITE_DUMP",
 } as const;
 
 /**

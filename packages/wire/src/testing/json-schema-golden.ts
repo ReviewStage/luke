@@ -14,7 +14,7 @@ import { emitJsonSchema } from "../effect/json-schema.js";
  */
 
 /** Records the schemas instead of asserting them. `check.sh` never sets it. */
-const UPDATE_FIXTURES = process.env.LUKE_UPDATE_FIXTURES === "1";
+const UPDATE_FIXTURES = process.env.APP_UPDATE_FIXTURES === "1";
 
 /** The `fixtures/json-schema` directory of the package a test file sits in. */
 export function jsonSchemaGoldenRoot(moduleUrl: string): string {

@@ -72,7 +72,7 @@ import { githubWebhookApp } from "./github-webhook-app.js";
 const ORIGIN = "https://luke.test";
 const WEBHOOK = "/api/github/webhook";
 const SECRET = "whsec-fixture-luke";
-/** The origin eve answers on, as `LUKE_EVE_ORIGIN` names it to the delivery's wakes. */
+/** The origin eve answers on, as `APP_EVE_ORIGIN` names it to the delivery's wakes. */
 const EVE_ORIGIN = "https://eve.test";
 
 afterEach(() => {
