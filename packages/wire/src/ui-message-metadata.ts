@@ -92,6 +92,8 @@ export const GITHUB_LINE_EVENT = {
   COMMENT: "comment",
   CHECK_FAILED: "check_failed",
   CHECKS_COMPLETED: "checks_completed",
+  /** The merge queue took the pull request out without merging it. */
+  DEQUEUED: "dequeued",
 } as const;
 
 /**
@@ -350,7 +352,8 @@ const GITHUB_LINE_CHECK = EffectSchema.Struct({
 /**
  * A GitHub line is what GitHub said on an agent's pull request, steered into
  * the agent: a review with its verdict, words and inline comments, a comment
- * with its words, a failed check, or every check finished on a commit; the
+ * with its words, a failed check, every check finished on a commit, or the
+ * merge queue taking the pull request out without merging it; the
  * repository, the pull request where GitHub named it, the page, and who
  * caused it, by their login and, where GitHub named one, the avatar its own
  * avatar host serves for them (`by_avatar`), since an App's bot's picture

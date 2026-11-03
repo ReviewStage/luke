@@ -127,6 +127,14 @@ import {
  * delivery's id: two suites that finish together read the same checks and
  * tell once, and a check run again, or one more check finished, tells again.
  *
+ * The fifth is the merge queue taking an agent's pull request out while it
+ * stays open (`pull_request` `dequeued`): the agent queued it and ended its
+ * turn, and a check the queue ran fails on the queue's own branch, which no
+ * agent stands on, so nothing else would tell it. A pull request merged or
+ * closed, or taken out by hand (GitHub's reason `MANUAL`, as the agent's own
+ * `gh pr merge --disable-auto` takes it out), tells nobody. It is admitted as
+ * a review is, so one by our own App reaches only an agent not at work.
+ *
  * A failed check names what failed from the same read of the head's checks,
  * made only where an agent is told, on its token, and waited on for
  * `FAILED_CHECKS_GRACE` alone, so the delivery still answers inside GitHub's
@@ -141,6 +149,8 @@ export const AGENT_WAKE = {
   CHECK_FAILED: "check-failed",
   /** Every check on the pull request's head finished, told to an agent at work, which waits on it. */
   CHECKS_COMPLETED: "checks-completed",
+  /** The merge queue took the pull request out without merging it, told to its agent, which queued it. */
+  DEQUEUED: "dequeued",
 } as const;
 
 type AgentWakeKind = (typeof AGENT_WAKE)[keyof typeof AGENT_WAKE];
@@ -170,10 +180,13 @@ export interface AgentWake {
   readonly reviewId?: number | undefined;
   /** The commit whose checks failed, or whose checks all finished, which the agent's pull request's head must then still be. */
   readonly sha?: string | undefined;
+  /** Why the merge queue took the pull request out, in GitHub's own word for it. */
+  readonly reason?: string | undefined;
 }
 
 /** The events read, by GitHub's own names, and the one action of each that tells an agent anything. */
 const WAKE_EVENT = {
+  PULL_REQUEST: "pull_request",
   PULL_REQUEST_REVIEW: "pull_request_review",
   ISSUE_COMMENT: "issue_comment",
   CHECK_SUITE: "check_suite",
@@ -186,7 +199,18 @@ const WAKE_ACTION = {
   SUBMITTED: "submitted",
   CREATED: "created",
   COMPLETED: "completed",
+  DEQUEUED: "dequeued",
 } as const;
+
+/** The one pull request state the merge queue can take a pull request out of and leave it to queue again. */
+const OPEN_STATE = "open";
+
+/**
+ * The merge queue's reason for a removal a person or the agent itself asked
+ * for, such as `gh pr merge --disable-auto`, which tells nobody: whoever
+ * took it out meant to.
+ */
+const MANUAL_REMOVAL = "manual";
 
 /** The conclusions of a check suite that read as failed. */
 const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set(["failure", "timed_out"]);
@@ -314,6 +338,20 @@ const CheckRunDeliverySchema = Schema.Struct({
   }),
 });
 
+const DequeuedDeliverySchema = Schema.Struct({
+  action: Schema.String,
+  reason: Schema.optionalKey(Schema.String),
+  repository: RepositorySchema,
+  sender: SenderSchema,
+  pull_request: Schema.Struct({
+    number: Schema.Int,
+    html_url: Schema.String,
+    state: Schema.String,
+    merged: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+    head: Schema.Struct({ ref: Schema.String }),
+  }),
+});
+
 const StatusDeliverySchema = Schema.Struct({
   state: Schema.String,
   sha: Schema.String,
@@ -400,6 +438,41 @@ function commentWake(payload: UnparsedWireValue, now: number): AgentWake | undef
     ...githubAvatarOf(sender),
     at: instantOf(comment.created_at, now),
     words: comment.body,
+  };
+}
+
+/**
+ * The merge queue taking an agent's pull request out while it stays open,
+ * as the agent on its branch is told of it: a failed check on the queue's
+ * own branch, a conflict, or a timeout, which no check delivery on the
+ * agent's branch says. One merged, closed, or taken out by hand tells
+ * nobody. GitHub's delivery names no instant, so it is told as of when it
+ * arrived.
+ */
+function dequeuedWake(payload: UnparsedWireValue, now: number): AgentWake | undefined {
+  const read = readDelivery(DequeuedDeliverySchema, payload);
+  if (Result.isFailure(read)) return undefined;
+  const { action, reason, repository, sender, pull_request: pullRequest } = read.success;
+  if (
+    action !== WAKE_ACTION.DEQUEUED ||
+    pullRequest.state !== OPEN_STATE ||
+    pullRequest.merged === true ||
+    reason?.toLowerCase() === MANUAL_REMOVAL ||
+    !isAgentBranch(pullRequest.head.ref)
+  ) {
+    return undefined;
+  }
+  return {
+    kind: AGENT_WAKE.DEQUEUED,
+    repository: repository.full_name,
+    branches: [pullRequest.head.ref],
+    pullRequest: pullRequest.number,
+    url: pullRequest.html_url,
+    by: sender.login,
+    ...githubIdOf(sender),
+    ...githubAvatarOf(sender),
+    at: now,
+    ...(reason === undefined || reason === "" ? {} : { reason }),
   };
 }
 
@@ -549,6 +622,8 @@ export function agentWakeOf(
   now: number,
 ): AgentWake | undefined {
   switch (event) {
+    case WAKE_EVENT.PULL_REQUEST:
+      return dequeuedWake(payload, now);
     case WAKE_EVENT.PULL_REQUEST_REVIEW:
       return reviewWake(payload, now);
     case WAKE_EVENT.ISSUE_COMMENT:
@@ -686,6 +761,13 @@ function agentWakeText(
         ? `${head}\n\nAt least one failed: read why with ${reader}, fix the cause, and push.`
         : `${head}\n\n${named}\n\n${close}`;
     }
+    case AGENT_WAKE.DEQUEUED: {
+      const why = wake.reason === undefined ? "" : `GitHub's reason: \`${wake.reason}\`. `;
+      return [
+        `The merge queue took out ${pullRequestWords(wake)} ${why}It is still open, and no longer queued.`,
+        `Read why with ${reader}: where a check the queue ran failed, it ran on the queue's own \`gh-readonly-queue/\` branch, under the \`merge_group\` event, rather than on yours. Fix the cause and push, bringing your branch up to date with its base only where the cause is a change there, then queue it again with \`gh pr merge --auto\`. Where it needs the developer instead, leave it unqueued and say so.`,
+      ].join("\n\n");
+    }
   }
 }
 
@@ -695,6 +777,7 @@ const LINE_EVENT_OF_WAKE = {
   [AGENT_WAKE.COMMENT]: GITHUB_LINE_EVENT.COMMENT,
   [AGENT_WAKE.CHECK_FAILED]: GITHUB_LINE_EVENT.CHECK_FAILED,
   [AGENT_WAKE.CHECKS_COMPLETED]: GITHUB_LINE_EVENT.CHECKS_COMPLETED,
+  [AGENT_WAKE.DEQUEUED]: GITHUB_LINE_EVENT.DEQUEUED,
 } as const;
 
 /** What GitHub's author wrote, trimmed as the line reads it, and cut to the metadata's bound. */
@@ -849,10 +932,11 @@ function inlineCommentsOf(
 
 /**
  * Whether an agent is told of a delivery, from its newest turn and the
- * login of our own App: never an archived agent; a review or a comment
- * by anyone but our App always; and a failed check, or a review or a
- * comment by our App, only where the agent is not at work and its newest
- * turn ended before GitHub says it was made: the agent did not make that
+ * login of our own App: never an archived agent; a review, a comment, or
+ * the merge queue taking the pull request out, by anyone but our App
+ * always; and a failed check, or one of those by our App, only where the
+ * agent is not at work and its newest turn ended before GitHub says it was
+ * made: the agent did not make that
  * comment, and was not watching when that check failed, so a delivery that
  * arrives after the turn that watched it does not start another. Every
  * check finished reaches only an agent at work, which waits on it; one idle
