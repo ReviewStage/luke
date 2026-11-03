@@ -23,7 +23,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  *
  * The plans themselves, and each one's edit, history, transcript, work,
  * and Stop, are the router's (`tasks-procedures.ts`), and so are its
- * code, its repository's files, its pages, and a picture kept on it
+ * repository's files, its pages, and a picture kept on it
  * (`task-files-procedures.ts`). The read here resolves the bearer before it
  * touches a row, and every row it touches is one the bearer's account
  * reaches: a plan id another account owns answers exactly as one that names
