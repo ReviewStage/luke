@@ -20,9 +20,9 @@ import { parsedUrl } from "./parsed-url.js";
  * and a list is plural where a thing is singular, as GitHub's `/pulls` and
  * `/pull/1` are:
  *
- * - a task, `/plan/<id>`, and its section, `#<anchor>`, its version,
- *   `/plan/<id>/version/<seq>`, and a page an agent wrote for it,
- *   `/plan/<id>/page/<pageId>`;
+ * - a task, `/task/<id>`, and its section, `#<anchor>`, its version,
+ *   `/task/<id>/version/<seq>`, and a page an agent wrote for it,
+ *   `/task/<id>/page/<pageId>`;
  * - an agent, `/agent/<agentId>`, whether or not it works on a task, and
  *   under it what is its own: a worker, `/worker/<callId>`, its Changes,
  *   `/changes`, one review thread of its pull request in one of that tab's
@@ -57,14 +57,15 @@ import { parsedUrl } from "./parsed-url.js";
  * gone, so an old link to either reads as a link it does not know.
  *
  * An agent's place was once written under its task too,
- * `/plan/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
- * `/plan/<id>/inbox/<itemId>`, each still read, the task kept, and still
+ * `/task/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
+ * `/task/<id>/inbox/<itemId>`, each still read, the task kept, and still
  * written while a writer names the task. A turn of our own work,
  * `/plan/<id>/work/<at>`, and a worker of our own,
  * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
  * its task and written no more.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
+ * still written under `/plan/` for the builds that read a picture there alone,
  * is read as its task, and a picture in an Inbox item's words, the item's
  * link with `/files/<picture>` after it (`inbox-attachment-link.ts`), as
  * the item, since nothing of a picture is opened by its link.
@@ -76,8 +77,9 @@ import { parsedUrl } from "./parsed-url.js";
  * checked against it there, so a link says no more than its address does.
  * A pairing's code is no credential either: the box prints it for anyone at
  * its terminal to read, it approves nothing until a signed-in member presses
- * Connect, and it lapses in minutes. A task is written `/plan/` and read
- * under `/task/` too, the name the unit of work is taking; a reader takes a
+ * Connect, and it lapses in minutes. A task is written `/task/`, the name
+ * the unit of work took, and read under `/plan/` forever, the step every link
+ * written before it holds, whatever follows the task's id; a reader takes a
  * trailing slash, a query, and a fragment a kind has no use for, and refuses
  * anything else. A section's anchor is its heading as GitHub spells a
  * Markdown heading's (`mention-link.ts`'s `sectionAnchors`), read in lower
@@ -179,7 +181,7 @@ const STEP = {
 /** The query a task's link names one of its comment threads under. */
 const COMMENT_QUERY = "comment";
 
-/** The steps a task is read under: the one written, and the name the unit of work is taking. */
+/** The steps a task is read under: the one written, and the one every older link holds. */
 const TASK_STEPS: ReadonlySet<string> = new Set([STEP.PLAN, STEP.TASK]);
 
 const LINK_BOUNDS = {
@@ -602,12 +604,12 @@ function placePath(place: LinkPlace): readonly string[] {
     case LINK_PLACE.TASK:
     case LINK_PLACE.SECTION:
     case LINK_PLACE.COMMENT:
-      return [STEP.PLAN, place.planId];
+      return [STEP.TASK, place.planId];
     case LINK_PLACE.VERSION:
-      return [STEP.PLAN, place.planId, STEP.VERSION, String(place.revision)];
+      return [STEP.TASK, place.planId, STEP.VERSION, String(place.revision)];
     case LINK_PLACE.PAGE:
       return "planId" in place
-        ? [STEP.PLAN, place.planId, STEP.PAGE, place.pageId]
+        ? [STEP.TASK, place.planId, STEP.PAGE, place.pageId]
         : [STEP.AGENT, place.agentId, STEP.PAGE, place.pageId];
     case LINK_PLACE.AGENT:
       return agentPath(place.planId, place.agentId);
@@ -629,7 +631,7 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.INBOX];
     case LINK_PLACE.INBOX_ITEM:
       return "planId" in place
-        ? [STEP.PLAN, place.planId, STEP.INBOX, place.itemId]
+        ? [STEP.TASK, place.planId, STEP.INBOX, place.itemId]
         : [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId];
     case LINK_PLACE.CHANNEL:
       return [STEP.CHANNEL, place.channelId];
@@ -652,7 +654,7 @@ function placePath(place: LinkPlace): readonly string[] {
 
 /** An agent's path: under the workspace, or under the task a writer still names it under. */
 function agentPath(taskId: string | undefined, agentId: string): readonly string[] {
-  return taskId === undefined ? [STEP.AGENT, agentId] : [STEP.PLAN, taskId, STEP.AGENT, agentId];
+  return taskId === undefined ? [STEP.AGENT, agentId] : [STEP.TASK, taskId, STEP.AGENT, agentId];
 }
 
 /**

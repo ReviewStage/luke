@@ -14,7 +14,7 @@ const TASK_ADDRESS = `https://vespin.dev/acme/plan/${TASK_ID}#rollout`;
 test("an account that chose the app, on a Mac, hands the link over in the desktop's scheme", () => {
   assert.equal(
     linkOpenTarget(LINK_OPEN.MAC_APP, LINK_PLATFORM.MAC, TASK_ADDRESS),
-    `vespin://vespin.dev/acme/plan/${TASK_ID}#rollout`,
+    `vespin://vespin.dev/acme/task/${TASK_ID}#rollout`,
   );
 });
 

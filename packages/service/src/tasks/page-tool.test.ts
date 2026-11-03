@@ -147,7 +147,7 @@ it.layer(getTestDB())("show_page", (it) => {
           page: {
             id: page.id,
             version: 1,
-            mention: `[@Invite funnel](https://vespin.dev/workspace-${task.workspaceId}/plan/${task.taskId}/page/${page.id})`,
+            mention: `[@Invite funnel](https://vespin.dev/workspace-${task.workspaceId}/task/${task.taskId}/page/${page.id})`,
           },
         });
         assert.deepEqual(second, { id: page.id, version: 2 });

@@ -10,7 +10,7 @@ import { parsedUrl } from "./parsed-url.js";
  * as a plan does, `![alt](<address> "caption")`, its address the item's own
  * link (`link-grammar.ts`) with `/files/<attachment>` after it, as a plan's
  * picture stands under its plan's (`plan-attachment-link.ts`):
- * `https://vespin.dev/<workspace>/plan/<task>/inbox/<item>/files/<attachment>`,
+ * `https://vespin.dev/<workspace>/task/<task>/inbox/<item>/files/<attachment>`,
  * or `/agent/<agent>/inbox/<item>/files/<attachment>` for an item of an
  * agent with no task. The address is a real one on purpose: opened in a
  * browser it lands on the item, which opens to its readers alone, and

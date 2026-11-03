@@ -54,7 +54,7 @@ const ACME = {
   github: null,
 };
 
-const TASK_PATH = `/acme/plan/${DOCUMENT_TASK.id}`;
+const TASK_PATH = `/acme/task/${DOCUMENT_TASK.id}`;
 
 /** A page an agent wrote for the task, as its side panel tab names it. */
 const PAGE_TAB: SidePanelTab = { page: "page-1" };

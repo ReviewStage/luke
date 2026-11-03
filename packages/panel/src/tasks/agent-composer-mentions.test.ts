@@ -877,7 +877,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   const pageMention: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id };
   assert.deepEqual(chips.map(chipName), ["Invites by week"]);
   assert.deepEqual(sent, [`Build ${mentionMarkdown(pageMention, "Invites by week", PLACE)}`]);
-  assert.equal(sent[0], "Build [@Invites by week](https://vespin.dev/acme/plan/pl_1/page/page-1)");
+  assert.equal(sent[0], "Build [@Invites by week](https://vespin.dev/acme/task/pl_1/page/page-1)");
 });
 
 test("on the page of an agent no plan holds an @ offers the pages it showed, a pick sent as the agent's page's link", async () => {

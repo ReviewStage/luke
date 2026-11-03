@@ -64,7 +64,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * The target is the address the thing has on the web, so a mention copied
  * out of the app, into Slack, a pull request or a mail, still leads somewhere:
  *
- * - A task is `https://vespin.dev/<workspace>/plan/<id>`, and one of its
+ * - A task is `https://vespin.dev/<workspace>/task/<id>`, and one of its
  *   sections that with `#<anchor>` after it. Only the id finds the task: the
  *   workspace's slug reads well and is never trusted, so a slug spelled
  *   another way later breaks no link. The desktop's own scheme is the same

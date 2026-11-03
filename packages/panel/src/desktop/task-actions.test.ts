@@ -651,7 +651,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
     workspaces: [{ ...PERSONAL, slug: "dean" }],
     sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   };
-  const link = `https://vespin.dev/dean/plan/${TASK.id}`;
+  const link = `https://vespin.dev/dean/task/${TASK.id}`;
   const copyFromMenu = async () => {
     const item = menuItems().find((candidate) => itemLabel(candidate) === "Copy link");
     assert.ok(item, "the menu offers Copy link");

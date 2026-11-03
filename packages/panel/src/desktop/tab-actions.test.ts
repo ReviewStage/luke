@@ -401,7 +401,7 @@ function installClipboard(): string[] {
 
 test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
   const copied = installClipboard();
-  const task = `https://vespin.dev/workspace-personal/plan/${TASK.id}`;
+  const task = `https://vespin.dev/workspace-personal/task/${TASK.id}`;
   const agent = `https://vespin.dev/workspace-personal/agent/${AGENT.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
     [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
