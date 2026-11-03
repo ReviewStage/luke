@@ -20,8 +20,10 @@
  *
  * Each DM, a reply among them, is kept on the agent's message it said
  * (`inbox_message.slack_dm`), with the member it went to and, for a reply,
- * the DM whose thread it stands in. Once the message's ask is answered,
- * withdrawn, or replaced, `settleThreadDms` rewrites the DM to say so and
+ * the DM whose thread it stands in. The pictures and recordings the post
+ * carried follow it as files shared under that DM's Slack thread
+ * (`SlackBot.upload`), each read as the member it went to reads it. Once
+ * the message's ask is answered, withdrawn, or replaced, `settleThreadDms` rewrites the DM to say so and
  * marks it settled, so it is rewritten once and still found as the thread's.
  *
  * Every call here waits on Slack, so each is handed to `afterResponse` by
@@ -50,11 +52,13 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+import { readInboxAttachment } from "../inbox/inbox-store.js";
 import {
   type SlackBlock,
   SlackBot,
   type SlackMessage,
   type SlackMessageContent,
+  type SlackUpload,
 } from "./slack-bot.js";
 import { slackClipped, slackMarkdownBlock } from "./slack-markdown.js";
 
@@ -347,6 +351,23 @@ const claimSettledDms = SqlSchema.findAll({
     }),
 });
 
+/** The files the agent's message carried, its pictures and recordings, read as the member it went to reads them, in the order they were attached; one gone since is left out. */
+function messageUploads(
+  userId: string,
+  itemId: string,
+  message: InboxMessage,
+): Effect.Effect<readonly SlackUpload[], StoreFailure, DatabaseServices> {
+  return Effect.map(
+    Effect.forEach(message.files ?? [], (file) =>
+      Effect.map(
+        readInboxAttachment(userId, itemId, file.attachmentId),
+        Option.map((read): SlackUpload => ({ name: file.name, bytes: read.bytes })),
+      ),
+    ),
+    (read) => read.flatMap((one) => (Option.isSome(one) ? [one.value] : [])),
+  );
+}
+
 /** The item's link by its id alone, whose agent and task a reader asks the service for. */
 function threadLink(itemId: string, place: { readonly step: string }) {
   return linkOf({ kind: LINK_PLACE.INBOX_ITEM, itemId }, place.step);
@@ -499,5 +520,7 @@ export function dmThreadPost(
       ...(thread === undefined ? {} : { thread: thread.ts }),
     };
     yield* recordDm({ messageId: message.id, dm });
+    const uploads = yield* messageUploads(recipient, item.id, message);
+    yield* bot.value.upload(sent.value.channel, thread?.ts ?? sent.value.ts, uploads);
   });
 }

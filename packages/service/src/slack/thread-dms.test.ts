@@ -12,16 +12,16 @@ import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { answerInboxAsk, postInboxThread } from "../inbox/inbox-store.js";
-import { SlackBot, type SlackWebApi, slackBotOver } from "./slack-bot.js";
+import { SlackBot, type SlackFileTransfer, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js";
 
 /**
  * A thread an agent posts, written by our Slack bot to the member it waits
  * on, over a real store and a fake Slack: the DM goes to that member's
  * Slack user, says the thread's title and the agent's Markdown in a
- * `markdown` block, a mention chip as a plain link, and links to the thread; a
- * follow-up lands in that DM's Slack thread; and an answer rewrites the
- * first DM to say it was answered.
+ * `markdown` block, a mention chip as a plain link, and links to the thread,
+ * the post's picture shared under it; a follow-up lands in that DM's Slack
+ * thread; and an answer rewrites the first DM to say it was answered.
  *
  * Synthetic accounts, workspaces, and Slack ids throughout.
  */
@@ -41,11 +41,33 @@ function fakeSlack(calls: SlackCall[]): SlackWebApi {
         return Effect.succeed({ ok: true, user: { id: `U-${args.email}` } });
       case "chat.postMessage":
         return Effect.succeed({ ok: true, channel: "D0001", ts: "1700000000.000100" });
+      case "files.getUploadURLExternal":
+        return Effect.succeed({
+          ok: true,
+          upload_url: `https://files.slack.com/upload/v1/${args.filename}`,
+          file_id: "F0001",
+        });
       default:
         return Effect.succeed({ ok: true });
     }
   };
 }
+
+/** Slack's upload addresses, writing down each file's bytes as sent to its address. */
+function fakeFiles(sent: { url: string; bytes: Uint8Array }[]): SlackFileTransfer {
+  return {
+    send: (url, bytes) => Effect.sync(() => void sent.push({ url, bytes })),
+    read: () => Effect.die("no file is read"),
+  };
+}
+
+/** The picture the agent's post carries, a screenshot from its sandbox. */
+const SCREENSHOT = {
+  path: "shots/settings.png",
+  name: "settings.png",
+  contentType: "image/png",
+  bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
+} as const;
 
 /** An account, with one agent on a task nobody is assigned, in a workspace whose bot is connected. */
 const openConnectedAgent = Effect.gen(function* () {
@@ -84,6 +106,7 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
     "writes the member it waits on, replies with a follow-up in that DM's thread, and says it was answered once they answer",
     () => {
       const calls: SlackCall[] = [];
+      const sent: { url: string; bytes: Uint8Array }[] = [];
       return Effect.gen(function* () {
         const { agent, organizationId, email, slug } = yield* openConnectedAgent;
         const ask = {
@@ -93,7 +116,7 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           ask: { type: INBOX_ASK.DO, steps: [] },
           needsReply: true,
         };
-        const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
+        const item = Result.getOrThrow(yield* postInboxThread(agent, ask, [SCREENSHOT]));
         yield* dmThreadPost({ organizationId, item, asked: true, wasOpen: false });
         const wasOpen = yield* threadStandsOpen(agent, ask.key);
         // The follow-up comes later than the ask, as an agent's next post does.
@@ -112,6 +135,20 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         assert.equal(posted[1]?.args.thread_ts, "1700000000.000100");
         assert.deepEqual(blocksOf(posted[1])[1], { type: "markdown", text: "Still needed." });
         assert.equal(posted[0]?.args.text, "Require a review on main");
+        assert.deepEqual(sent, [
+          { url: "https://files.slack.com/upload/v1/settings.png", bytes: SCREENSHOT.bytes },
+        ]);
+        const shared = calls.filter((call) => call.method === "files.completeUploadExternal");
+        assert.deepEqual(
+          shared.map((call) => call.args),
+          [
+            {
+              files: JSON.stringify([{ id: "F0001", title: "settings.png" }]),
+              channel_id: "D0001",
+              thread_ts: "1700000000.000100",
+            },
+          ],
+        );
         assert.deepEqual(blocksOf(posted[0]), [
           { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
           {
@@ -149,7 +186,7 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           type: "context",
           elements: [{ type: "plain_text", text: "Answered in Vespin" }],
         });
-      }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls))));
+      }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles(sent))));
     },
   );
 });

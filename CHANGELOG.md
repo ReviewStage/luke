@@ -104,6 +104,10 @@ Finish setting up, over New task, until it's done.
   its work in a new agent once it has stopped, and an agent whose Slack turn
   finished archives itself as a finished automation run does
   ([#6518](https://github.com/ReviewStage/vespin/pull/6518))
+- Pictures travel both ways through Vespin's Slack bot: the ones you send
+  an agent from Slack reach it, and the pictures an agent shows or a thread
+  carries come back under its Slack message
+  ([#6511](https://github.com/ReviewStage/vespin/pull/6511))
 - An agent started from Slack stops offering to run commands on your Mac
   once anyone else's words in the Slack thread reach it
   ([#6512](https://github.com/ReviewStage/vespin/pull/6512))
@@ -116,6 +120,8 @@ Finish setting up, over New task, until it's done.
 - A window or page that fails to draw shows the Vespin mark, what failed,
   and Reload, and nothing else
   ([#6496](https://github.com/ReviewStage/vespin/pull/6496))
+- An agent's recordings show the same pointer the live view draws over its
+  browser ([#6532](https://github.com/ReviewStage/vespin/pull/6532))
 
 ### Fixes
 
@@ -132,6 +138,11 @@ Finish setting up, over New task, until it's done.
   [#6510](https://github.com/ReviewStage/vespin/pull/6510))
 - Fixed a Settings page or version history that failed to draw standing off
   centre ([#6491](https://github.com/ReviewStage/vespin/pull/6491))
+- Fixed a reply under one of Vespin's Slack DMs starting a stray agent rather
+  than answering that Inbox thread
+  ([#6550](https://github.com/ReviewStage/vespin/pull/6550))
+- Fixed another task's sub-tasks staying on a plan's head after you switched
+  tasks ([#6548](https://github.com/ReviewStage/vespin/pull/6548))
 
 ### Misc
 
