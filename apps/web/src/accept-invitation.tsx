@@ -305,7 +305,6 @@ function AcceptInvitation(): React.JSX.Element {
         signIn(
           "Sign in to accept your invitation",
           `Use the Google or GitHub account at ${query.email ?? "the address you were invited at"}.`,
-          "You'll come back to this page to join.",
         ),
       );
       return;
