@@ -1,6 +1,8 @@
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   type BuildCommit,
   type RunningBuild,
+  UPDATE_FAILURE,
   UPDATE_STATUS,
   type UpdateSnapshot,
 } from "./update.js";
@@ -17,6 +19,8 @@ export const UPDATE_ROW_ACTION = {
   RESTART: "restart",
   /** Open the latest release's page in the browser. */
   GET: "get",
+  /** Move the app into Applications, where an install it could not land in place can, or open the release's page instead. */
+  MOVE: "move",
   /** Ask the release manifest again, after a check that answered nothing. */
   RETRY: "retry",
   /** Nothing to press: a development build is newer than any release. */
@@ -176,8 +180,17 @@ function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
         failed: false,
       };
     case UPDATE_STATUS.ERROR:
-      // Note that an install that failed is fetched by hand, while a check
-      // that failed is most likely answered by asking again.
+      // Note that an install a read-only volume refused is mended by the
+      // move, an install that failed otherwise is fetched by hand, and a
+      // check that failed is most likely answered by asking again.
+      if (update.failure === UPDATE_FAILURE.READ_ONLY_VOLUME) {
+        return {
+          detail: `Move ${PRODUCT_NAME} to Applications to install ${update.latestVersion ?? "updates"}`,
+          action: UPDATE_ROW_ACTION.MOVE,
+          current: false,
+          failed: true,
+        };
+      }
       return update.latestVersion
         ? {
             detail: `Couldn't install ${update.latestVersion}`,
@@ -200,7 +213,8 @@ function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
  * Reads the row from the last learned answer. The row only ever says where
  * the build stands and offers the next honest step: check again, wait for
  * the check or download already out, restart into a build already fetched,
- * try a check that failed again — or, where installing in place is
+ * try a check that failed again, move a copy that cannot be replaced where
+ * it stands into Applications — or, where installing in place is
  * impossible or has failed, go get it in the browser instead. A build that cannot install itself never offers a
  * check it could do nothing with. A development build — run from source,
  * so newer than any release — names its commit and offers nothing, since a

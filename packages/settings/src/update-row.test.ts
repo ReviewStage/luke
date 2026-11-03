@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { type RunningBuild, UPDATE_STATUS, type UpdateSnapshot } from "./update.js";
+import { type RunningBuild, UPDATE_FAILURE, UPDATE_STATUS, type UpdateSnapshot } from "./update.js";
 import { UPDATE_ROW_ACTION, updateInSidebar, updateRow } from "./update-row.js";
 
 const RELEASE: RunningBuild = { packaged: true };
@@ -61,6 +61,16 @@ test("each state says where the build stands in a few words and offers its one n
       supported({ status: UPDATE_STATUS.ERROR, latestVersion: "0.2.0" }),
       "Couldn't install 0.2.0",
       UPDATE_ROW_ACTION.GET,
+      true,
+    ],
+    [
+      supported({
+        status: UPDATE_STATUS.ERROR,
+        latestVersion: "0.2.0",
+        failure: UPDATE_FAILURE.READ_ONLY_VOLUME,
+      }),
+      "Move Vespin to Applications to install 0.2.0",
+      UPDATE_ROW_ACTION.MOVE,
       true,
     ],
     [

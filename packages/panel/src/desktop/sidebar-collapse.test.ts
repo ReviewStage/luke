@@ -61,6 +61,7 @@ const SETTINGS: SettingsPanelProps = {
     build: { packaged: false },
     onCheck: () => Promise.resolve(),
     onInstall: ignore,
+    onMoveToApplications: ignore,
     onOpenLatest: ignore,
   },
 };

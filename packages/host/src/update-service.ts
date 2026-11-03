@@ -1,7 +1,9 @@
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { scheduleOnce } from "@repo/runtime/effect";
 import {
+  UPDATE_FAILURE,
   UPDATE_STATUS,
+  type UpdateFailure,
   type UpdateProgress,
   type UpdateSnapshot,
   type UpdateStatus,
@@ -59,6 +61,20 @@ const SILENT_NETWORK_ERROR_PATTERNS = [
 
 function isNetworkErrorMessage(message: string): boolean {
   return SILENT_NETWORK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+}
+
+/**
+ * What Squirrel.Mac says when the app runs from a read-only volume (its disk
+ * image, or a copy macOS translocated): an install that can only succeed
+ * once the app is moved, which the row names rather than reports.
+ */
+const READ_ONLY_VOLUME_ERROR_PATTERN = "read-only volume";
+
+/** The failure an error's words name a remedy for, or none. */
+function updateFailureOf(message: string): UpdateFailure | undefined {
+  return message.includes(READ_ONLY_VOLUME_ERROR_PATTERN)
+    ? UPDATE_FAILURE.READ_ONLY_VOLUME
+    : undefined;
 }
 
 /** The updater lifecycle, as electron-updater announces it. */
@@ -225,7 +241,7 @@ export class UpdateService {
         }
         this.#report(`Update failed: ${message}`);
         void this.#engine?.clearCachedUpdate().catch(() => undefined);
-        this.#move(this.#errorSnapshot());
+        this.#move(this.#errorSnapshot(updateFailureOf(message)));
       },
     });
   }
@@ -270,7 +286,7 @@ export class UpdateService {
         this.#move(this.#idle(false, this.#asked));
       } else {
         this.#report(`Update check failed: ${message}`);
-        this.#move(this.#errorSnapshot());
+        this.#move(this.#errorSnapshot(updateFailureOf(message)));
       }
     }
     return this.#snapshot;
@@ -353,11 +369,12 @@ export class UpdateService {
     };
   }
 
-  #errorSnapshot(): UpdateSnapshot {
-    const base = { ...this.#base(UPDATE_STATUS.ERROR) };
-    return this.#latestVersion === undefined
-      ? base
-      : { ...base, latestVersion: this.#latestVersion };
+  #errorSnapshot(failure?: UpdateFailure): UpdateSnapshot {
+    return {
+      ...this.#base(UPDATE_STATUS.ERROR),
+      ...(this.#latestVersion === undefined ? undefined : { latestVersion: this.#latestVersion }),
+      ...(failure === undefined ? undefined : { failure }),
+    };
   }
 
   #idle(upToDate: boolean, unreachable = false): UpdateSnapshot {

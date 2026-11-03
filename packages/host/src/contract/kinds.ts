@@ -441,11 +441,13 @@ export const THIS_MAC_HOST_ACT_KIND = {
 /**
  * The updater as Settings' row and the sidebar's foot reach it: a check
  * asked for, answered with where the updater then stands; the ready build
- * installed; and the releases page and the changelog opened.
+ * installed; the app moved to Applications, where an install needs it; and
+ * the releases page and the changelog opened.
  */
 export const UPDATE_ACT_KIND = {
   UPDATE_CHECK: "update.check",
   UPDATE_INSTALL: "update.install",
+  UPDATE_MOVE_TO_APPLICATIONS: "update.moveToApplications",
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
 } as const;

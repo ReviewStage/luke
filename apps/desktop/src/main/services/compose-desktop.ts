@@ -34,6 +34,7 @@ import { NO_EXPERIMENTS } from "@repo/settings";
 import { Context, Effect, Layer } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
+import { moveToApplications } from "../move-to-applications";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
 import { askBeforeLeaving } from "../window/quit-dialog";
@@ -308,6 +309,7 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showSettings();
         },
+        moveToApplications,
       });
 
       return {
