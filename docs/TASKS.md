@@ -240,8 +240,8 @@ Dictate, and Start.
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
   Dismiss") until Dismiss or leaving the task (`tasks/use-task-looks.ts`),
   each section known by its heading.
-  A look is the task held open three seconds: from then on every save while
-  it stays open counts as seen, so an agent's save landing while the task
+  A look is the plan opened, whichever of its column's tabs it opens on:
+  from then on every save while it stays open counts as seen, so an agent's save landing while the task
   is open never lights anything. What is kept is the newest save's instant,
   on the
   service's clock, by task id in the renderer's own storage; a task never
@@ -513,9 +513,13 @@ The service lays each save over what others wrote meanwhile
   it. Where it does not, the developer's change is laid over what it holds
   now as a patch, line by line, so a point an agent added meanwhile stays. A
   change to a line someone else also changed is a conflict: nothing is
-  saved, and under the editor it says "Vespin changed this section while you
-  were editing." with **Keep mine**, which saves the developer's words over
-  theirs, and **Use Vespin's**, which closes the editor on theirs. Each save
+  saved, and under the editor it says who wrote it (`tasks/edit-ref.tsx`),
+  "<writer> changed this section while you were editing." with **Keep
+  mine**, which saves the developer's words over theirs, and **Use
+  <writer>'s**, which closes the editor on theirs; with no name, "This
+  section changed while you were editing." with **Use theirs**; and for the
+  developer's own edit from elsewhere, "You changed this section elsewhere
+  while you were editing." with **Use the other**. Each save
   that lands answers with the text merged with what was written since its
   base; the editor takes that part block by block, in place of only the
   blocks it changed where the developer has not changed them since, so the
@@ -524,8 +528,7 @@ The service lays each save over what others wrote meanwhile
   place on each save that lands.
 - **Failures.** A save that fails keeps the words and says why under the
   editor ("Not saved: the service did not answer.", "Not saved: this task no
-  longer exists.", "Not saved: this task is archived.", or "Not saved: the
-  plan would be longer than a plan may be."), with Retry; it is tried again
+  longer exists.", or "Not saved: the plan is too long."), with Retry; it is tried again
   when the developer asks or types on, and the editor stays open until it
   saves. Words not yet saved are sent to their task when the developer
   leaves it or opens another. Unsaved words live in the window's memory
