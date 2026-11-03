@@ -90,6 +90,14 @@
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 }
 
+/* A whole-window place whose drawing failed (Settings, a version history)
+   leaves its boundary's one failure (`@repo/ui`'s `ReloadState`) where its
+   columns stood, so it spans them both and stands in the window's middle
+   rather than in the sidebar's column. */
+.desktop-shell > .ui-empty-state {
+  grid-column: 1 / -1;
+}
+
 /* Sidebar ----------------------------------------------------------------- */
 
 /* Folding the sidebar away moves it rather than narrowing it: the work column
