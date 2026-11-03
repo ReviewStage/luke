@@ -53,9 +53,11 @@ import {
   AGENT_BOUNDS,
   AGENT_KIND,
   AGENT_MACHINE,
+  AGENT_SOURCE,
   type AgentAttachment,
   type AgentKind,
   type AgentMachineKind,
+  type AgentSource,
   type AgentStartFrom,
   type AgentStartRequest,
   type AgentSummary,
@@ -951,6 +953,15 @@ function startMachineOf(
   );
 }
 
+/** What outside the app a Start comes from, which the agent's row keeps for a list to mark it by: the Slack message that carried its prompt; none for a Start in the app. */
+function sourceOf(carried: SlackLineMetadata | undefined): AgentSource | undefined {
+  if (carried === undefined) return undefined;
+  return {
+    kind: AGENT_SOURCE.SLACK,
+    ...(carried.url === undefined ? undefined : { url: carried.url }),
+  };
+}
+
 /**
  * Who a Start's first line names as its sender and what it says it is: an
  * automation's run says its prompt as the automation, as its later lines do
@@ -1239,6 +1250,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       automationOrigin: ask.automationOrigin,
       automationRunId: ask.automationRunId,
       startedFrom: landing.startedFrom,
+      source: sourceOf(ask.carried),
       startedByAgentId: ask.startedBy?.id ?? pilotStarter,
       takesOverFrom: takesOver?.id,
       title,

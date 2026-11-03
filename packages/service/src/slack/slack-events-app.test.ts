@@ -335,12 +335,21 @@ it.layer(getTestDB())("our Slack route", (it) => {
           [{ channel: "C0001", timestamp: "1700000002.000300", name: "eyes" }],
         );
         const [startedAgent] = yield* (yield* Database)
-          .select({ repository: agentTable.repository, metadata: messages.metadata })
+          .select({
+            repository: agentTable.repository,
+            source: agentTable.source,
+            metadata: messages.metadata,
+          })
           .from(slackAgentThread)
           .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
           .innerJoin(messages, eq(messages.conversationId, agentTable.conversationId))
           .where(eq(slackAgentThread.channelId, "C0001"));
         assert.equal(startedAgent?.repository, "Acme/Relay");
+        // The agent keeps where it came from, which the lists mark it by.
+        assert.deepEqual(startedAgent?.source, {
+          kind: "slack",
+          url: "https://team.slack.com/archives/C0001/p1",
+        });
         // The first line says Slack carried it, with the member's own words alone, for a window to draw.
         assert.deepEqual(startedAgent?.metadata, {
           channel: "slack",

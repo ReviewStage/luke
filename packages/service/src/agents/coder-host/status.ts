@@ -356,6 +356,7 @@ function summaryFields(
     ...(starter === undefined ? undefined : { startedBy: { userId: agent.userId, name: starter } }),
     ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
     ...(agent.automationName === null ? undefined : { automationName: agent.automationName }),
+    ...(agent.source == null ? undefined : { source: agent.source }),
     ...(owner === undefined ? undefined : { owner }),
     ...(agent.startedFrom === null ? undefined : { from: agent.startedFrom }),
     ...(continuedBy.length === 0
