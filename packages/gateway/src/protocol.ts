@@ -309,6 +309,8 @@ export const GATEWAY_METHOD = {
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
+  /** `AGENTS_WORKSPACE_TOOLS` under the name an operator built before the rename still calls; goes once the releases after it are out. */
+  AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, as its overview draws them. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */

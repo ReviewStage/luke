@@ -229,6 +229,11 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/workspace-tools` }))
     .input(idParams)
     .output(EffectSchema.flip(workspaceToolsAnswerSchema)),
+  /** `workspaceTools` under the path a desktop or host built before the rename still calls; goes once the releases after it are out. */
+  lukeTools: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/luke-tools` }))
+    .input(idParams)
+    .output(EffectSchema.flip(workspaceToolsAnswerSchema)),
   /** One agent's stopped sandbox resumed, on the developer's click. */
   sandboxResume: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/sandbox/resume` }))

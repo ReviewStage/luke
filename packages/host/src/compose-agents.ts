@@ -106,6 +106,7 @@ import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
+  type GatewayMethodHandler,
   type GatewayMethodTable,
   invalid,
   readParams,
@@ -495,6 +496,18 @@ function composed(
         transcript,
         key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
       };
+    });
+
+  // Read under two names, since an operator built before the rename still asks `AGENTS_LUKE_TOOLS`.
+  const readWorkspaceTools: GatewayMethodHandler = (params) =>
+    Effect.gen(function* () {
+      const { agentId } = yield* readParams(
+        agentPullRequestParamsSchema,
+        params,
+        `reading an agent's ${PRODUCT_NAME} tools names one agent`,
+      );
+      const answer = yield* asked(client.workspaceTools(agentId));
+      return carried<AgentWorkspaceToolsAnswerView>(answer);
     });
 
   const methods: GatewayMethodTable = {
@@ -955,16 +968,8 @@ function composed(
         const answer = yield* asked(client.reviewOptions(agentId));
         return carried<AgentReviewOptionsAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPullRequestParamsSchema,
-          params,
-          `reading an agent's ${PRODUCT_NAME} tools names one agent`,
-        );
-        const answer = yield* asked(client.workspaceTools(agentId));
-        return carried<AgentWorkspaceToolsAnswerView>(answer);
-      }),
+    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS]: readWorkspaceTools,
+    [GATEWAY_METHOD.AGENTS_LUKE_TOOLS]: readWorkspaceTools,
     [GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
