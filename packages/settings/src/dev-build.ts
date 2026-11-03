@@ -40,7 +40,8 @@ export interface DevBuildBadge {
  * a `^0`, and cut to the band's length.
  */
 function shortLabel(name: string): string {
-  const bare = name.replace(/[~^].*$/u, "");
+  const distance = name.search(/[~^]/u);
+  const bare = distance === -1 ? name : name.slice(0, distance);
   if (bare.length <= LABEL_LENGTH) return bare;
   const word = bare.slice(Math.max(bare.lastIndexOf("/"), bare.lastIndexOf("-")) + 1);
   return word.slice(0, LABEL_LENGTH);
