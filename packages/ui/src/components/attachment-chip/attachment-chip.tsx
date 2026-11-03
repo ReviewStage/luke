@@ -11,7 +11,10 @@ import { Tooltip } from "../tooltip/hint.js";
 /**
  * attachment-chip.tsx -- a file coming along with a message or a note, as a chip: its thumbnail, or its type's glyph, its name, and its size.
  *
- * A picture is its thumbnail alone; any other file is the glyph its caller
+ * A picture is its thumbnail alone, at the chip's height and its own shape,
+ * held between a narrow and a wide bound past which it is cropped, so a tall
+ * phone capture stands narrow beside a wide one, as a filmstrip draws them;
+ * any other file is the glyph its caller
  * draws for its type, its name fading out at the chip's end, and what more
  * the caller says of it (its size). The chip's face is the press that opens
  * the file where `onOpen` is given, named "Open <name>"; a file with nothing
@@ -66,10 +69,10 @@ export type AttachmentChipState =
 /**
  * The chip: as tall as a thumbnail, at most its longest, in a hairline that
  * strengthens while the pointer is on its face, a press; a thumbnail's width
- * where it holds one.
+ * where it holds a wait or a failure, and its picture's where it holds one.
  */
 const CHIP =
-  "luke-attachment-chip group/attachment-chip relative flex h-attachment-chip max-w-attachment-chip-max rounded-luke-8 border border-border bg-surface transition-[border-color] duration-(--luke-duration-hover) ease-motion-exit has-[button.luke-attachment-chip-face:hover]:border-border-strong data-[image=true]:w-attachment-chip-thumb";
+  "luke-attachment-chip group/attachment-chip relative flex h-attachment-chip max-w-attachment-chip-max rounded-luke-8 border border-border bg-surface transition-[border-color] duration-(--luke-duration-hover) ease-motion-exit has-[button.luke-attachment-chip-face:hover]:border-border-strong data-[image=true]:not-data-[picture=true]:w-attachment-chip-thumb";
 
 /**
  * The face, the press that opens the file where it is one, washed under the
@@ -132,7 +135,7 @@ function ChipFace({
   if (drawn && image !== undefined) {
     return (
       <img
-        className="block size-full rounded-attachment-chip-face object-cover transition-[filter] duration-(--luke-duration-hover) ease-motion-exit group-hover/attachment-face:brightness-112"
+        className="block h-full w-auto min-w-attachment-chip-picture-min max-w-attachment-chip-picture-max rounded-attachment-chip-face object-cover transition-[filter] duration-(--luke-duration-hover) ease-motion-exit group-hover/attachment-face:brightness-112"
         src={image}
         alt={name}
       />
@@ -260,8 +263,9 @@ export function AttachmentChip({
     />
   );
   // A thumbnail's place: a picture, a wait, or a failure with no words.
+  const picture = (ready || uploading) && image !== undefined;
   const thumbnail =
-    ((ready || uploading) && image !== undefined) ||
+    picture ||
     state === ATTACHMENT_CHIP_STATE.LOADING ||
     (state === ATTACHMENT_CHIP_STATE.FAILED && failure === undefined && detail === undefined);
   // The card wears what the chip does: the thumbnail of a picture, else the file's glyph.
@@ -277,6 +281,7 @@ export function AttachmentChip({
       <li
         className={CHIP}
         data-image={thumbnail ? "true" : undefined}
+        data-picture={picture ? "true" : undefined}
         data-removable={onRemove === undefined ? undefined : "true"}
         {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
         data-state={state}
