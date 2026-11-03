@@ -1876,7 +1876,7 @@ const AGENT_DETAIL =
 const FIRST_RUN_LABEL = "Started by its first run";
 const FIRST_RUN_ROW = "first-run";
 const FIRST_RUN_DETAIL =
-  "Its first run starts an agent, and every run after is sent to it. If that agent is archived or deleted, the next run starts another. Or choose an agent already at work.";
+  "Every later run is sent to it. If it is archived or deleted, the next run starts another.";
 
 /**
  * The agent each run goes to, chosen from the workspace's agents on the
@@ -2050,11 +2050,10 @@ function RunsGroup({
         description={
           taskBacked
             ? "Its task's repository."
-            : draft.repository === null && draft.triggerKind !== AUTOMATION_TRIGGER.GITHUB
-              ? "Runs work in no repository, for work that touches no code."
-              : also.length === 0
-                ? undefined
-                : `Runs start here, and also work in ${andList(also)}.`
+            : also.length === 0 ||
+                (draft.repository === null && draft.triggerKind !== AUTOMATION_TRIGGER.GITHUB)
+              ? undefined
+              : `Runs start here, and also work in ${andList(also)}.`
         }
         error={inputProblem(problems[DRAFT_FIELD.REPOSITORY])}
       >

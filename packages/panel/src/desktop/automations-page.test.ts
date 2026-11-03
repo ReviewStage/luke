@@ -2220,9 +2220,9 @@ test("Same agent saves with none chosen, its first run starting one, or with one
   assert.deepEqual(agentsAsked, [{ workspaceId: WORKSPACE.id, repository: "acme/ledger" }]);
   assert.ok(
     pickerDescription(page, "Agent").some((words) =>
-      words?.includes("Its first run starts an agent"),
+      words?.includes("Every later run is sent to it"),
     ),
-    "the Agent picker says its first run starts one",
+    "the Agent picker says later runs go to the first run's agent",
   );
   act(() => button("Save").click());
   await settle();
