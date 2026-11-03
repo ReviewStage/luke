@@ -17,8 +17,8 @@ import { polledLive } from "./testing/polled-live.js";
  * rows, then polls past where they stood, handing on each answer that moved;
  * a poll that fails is asked again on a jittered backoff and says the rows
  * may be behind; a read refused as signed out ends. Once an answer carries
- * the txids of the writes that woke it, the read hands a wait a write is
- * confirmed on.
+ * the snapshots its parts were read at, or the txids of the writes that
+ * woke it, the read hands a wait a write is confirmed on.
  */
 
 /** Every step the read has to take, taken. */
@@ -37,17 +37,19 @@ function sealed(part: Part): SealedLiveQueryWire {
   return { capability: LIVE_POLL_URL, queryFingerprint: `fingerprint-${part}`, expiresAt: 0 };
 }
 
-/** A read as the service answers it polled: each part's rows inline under a digest of them, or the digest alone where nothing moved, and the txids of the writes that woke it where any did. */
+/** A read as the service answers it polled: each part's rows inline under a digest of them, or the digest alone where nothing moved, the txids of the writes that woke it where any did, and the snapshot each part was read at where given. */
 function polledRead(
   left: readonly unknown[] | undefined,
   digest: string,
   txids?: readonly string[],
+  snapshots?: Readonly<Record<Part, string>>,
 ): SealedRead<Part> {
   const part = (name: Part, rows: readonly unknown[] | undefined) => ({
     ...sealed(name),
     digest: `${name}-${digest}`,
     ...(rows === undefined ? undefined : { rows }),
     ...(txids === undefined ? undefined : { txids }),
+    ...(snapshots === undefined ? undefined : { snapshot: snapshots[name] }),
   });
   return {
     url: LIVE_POLL_URL,
@@ -363,4 +365,51 @@ it.effect("a write whose txid no answer carries is confirmed still once ten seco
     yield* TestClock.adjust(Duration.seconds(1));
     assert.ok(succeeded(committed), "confirmed, since it committed");
   }),
+);
+
+it.effect(
+  "a write waits from the first answer on for one every part of which was read at a snapshot showing its transaction, and one an answer already showed confirms at once",
+  () =>
+    Effect.gen(function* () {
+      // Snapshots as Postgres spells them, `xmin:xmax:xip,…`, and no txids, as an answer its clock woke carries.
+      let standing = polledRead([], "1", undefined, { left: "990:990:", right: "990:990:" });
+      let handed: TxWait | undefined;
+      const following = yield* Effect.forkChild(
+        Stream.runDrain(
+          liveRows<Part>(
+            {
+              poll: () => Effect.sync(() => standing),
+              onTxWait: (wait) => {
+                handed = wait;
+              },
+            },
+            standing,
+          ),
+        ),
+      );
+      yield* settled;
+      assert.ok(handed !== undefined, "the first answer carried snapshots, so a wait is handed");
+
+      const committed = yield* Effect.forkChild(confirmWrite(handed, "1001"));
+      standing = polledRead([{ id: "a" }], "2", undefined, {
+        left: "1002:1002:",
+        right: "999:1002:1001",
+      });
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.equal(committed.pollUnsafe(), undefined, "one part read it still running");
+
+      standing = polledRead([{ id: "a" }], "2", undefined, {
+        left: "1002:1002:",
+        right: "1000:1003:1000",
+      });
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.ok(succeeded(committed), "confirmed on the answer every part of which shows it");
+
+      const earlier = yield* Effect.forkChild(confirmWrite(handed, "997"));
+      yield* settled;
+      assert.ok(succeeded(earlier), "an answer already showed it");
+      yield* Fiber.interrupt(following);
+    }),
 );

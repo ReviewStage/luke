@@ -6,6 +6,7 @@ import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-b
 import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { writePage } from "@repo/database/models/plan-pages";
+import { createTaskCommitted } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
@@ -115,6 +116,17 @@ const ask = (options: {
     return { status: response.status, body };
   });
 
+/** Whether the transaction `txid` is visible in `snapshot`, as Postgres reads the two. */
+const visibleIn = (txid: string, snapshot: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const [read] = yield* sql.unsafe<{ readonly visible: boolean }>(
+      "select pg_visible_in_snapshot($1::xid8, $2::pg_snapshot) as visible",
+      [txid, snapshot],
+    );
+    return read?.visible === true;
+  });
+
 /** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
@@ -187,6 +199,13 @@ it.layer(getTestDB())("the account's live reads", (it) => {
   it.effect("every part of the account inbox is answered polled, each with its rows inline", () =>
     Effect.gen(function* () {
       const dana = yield* openUser;
+      // A task started in a workspace Dana is not in, so every part of hers stays empty.
+      const eli = yield* openUser;
+      const { txid } = yield* createTaskCommitted(eli, {
+        organizationId: yield* openWorkspace(eli),
+        name: "Teammate invitations",
+      });
+      assert.ok(txid !== undefined, "a task started answers the transaction it was written in");
       const polled = yield* ask({ bearer: dana });
       assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
       const answer = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(polled.body);
@@ -201,6 +220,10 @@ it.layer(getTestDB())("the account's live reads", (it) => {
       ]);
       for (const [part, sealed] of Object.entries(answer.queries)) {
         assert.deepEqual(sealed.rows, [], `${part} holds nothing yet`);
+        assert.ok(
+          sealed.snapshot !== undefined && (yield* visibleIn(txid, sealed.snapshot)),
+          `${part} was read at a snapshot that shows the task's transaction`,
+        );
       }
     }),
   );
@@ -461,9 +484,12 @@ function keepingRows(sql: SqlClient.SqlClient, kept: KeptRow[]): SqlClient.SqlCl
   });
 }
 
-/** The rows kept that carry a column of the read's own, rather than a look's digest alone. */
+/** The columns a look at a read's digest answers, none of them the read's own. */
+const LOOK_COLUMNS: ReadonlySet<string> = new Set(["digest", "snapshot"]);
+
+/** The rows kept that carry a column of the read's own, rather than a look's digest and snapshot alone. */
 const rowsOfTheRead = (kept: readonly KeptRow[]) =>
-  kept.filter((row) => Object.keys(row).some((column) => column !== "digest"));
+  kept.filter((row) => Object.keys(row).some((column) => !LOOK_COLUMNS.has(column)));
 
 it.layer(getTestDB())("a held live read's looks", (it) => {
   const path = "/api/live/task-pages";
@@ -506,6 +532,10 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         );
         assert.equal(held.queries.pages.rows, undefined, "unchanged carries no rows");
         assert.equal(liveDigestOf(held.queries), digest);
+        assert.ok(
+          held.queries.pages.snapshot !== undefined,
+          "unchanged carries its look's snapshot",
+        );
         const hold = kept.slice(looked);
         assert.ok(hold.length > 0, "the hold looked at the rows' digests");
         assert.deepEqual(rowsOfTheRead(hold), [], "no row of the read left the database");

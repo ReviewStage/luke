@@ -33,12 +33,15 @@ import {
  * after a wait drawn at random up to a second and then up to five, the
  * caller told it may be behind meanwhile.
  *
- * A held poll Sync woke answers with the txids of the writes that woke
- * it. From the first such answer on, the read hands the caller a wait for a
+ * Each part of an answer carries the snapshot it was read at, and a held
+ * poll Sync woke carries the txids of the writes that woke it too. From the
+ * first answer carrying either on, the read hands the caller a wait for a
  * write's transaction (`onTxWait`), which a writer confirms its write on
- * (`confirmWrite`), and it asks again after the service's coalesce window
- * rather than the floor, since a write that lands meanwhile is answered at
- * once.
+ * (`confirmWrite`) once an answer every part of which was read at a
+ * snapshot that shows it, or one carrying its txid, is handed on, whatever
+ * woke the poll. After an answer carrying txids it asks again after the
+ * service's coalesce window rather than the floor, since a write that
+ * lands meanwhile is answered at once.
  *
  * A read whose parts the caller follows by cursor (the transcript's newest
  * messages) is answered those parts only past the cursor it was last
@@ -96,10 +99,35 @@ export class LiveBroken extends Data.TaggedError("LiveBroken")<{
 /** How long a write waits for its transaction to reach the read that shows it, so a write is never held unbounded, and how long an answer's txids are kept for a write whose own answer lands after it. */
 const TX_WAIT_TIMEOUT = Duration.seconds(10);
 
+/** A snapshot as Postgres spells one (`pg_current_snapshot()::text`): `xmin:xmax:xip,…`, the transactions it lists as running, if any, joined by commas. */
+const SNAPSHOT_SPELLING = /^(\d+):(\d+):((?:\d+(?:,\d+)*)?)$/;
+/** A transaction id as a writer answers one (`pg_current_xact_id()::text`). */
+const TXID_SPELLING = /^\d+$/;
+
+/**
+ * Whether the transaction `txid` is visible in `snapshot`, as
+ * `pg_visible_in_snapshot` reads it: it ended before every transaction the
+ * snapshot saw running (below `xmin`), or below the snapshot's horizon
+ * (`xmax`) and is not among those it lists as running. A writer hands a
+ * transaction that committed, so one that ended is one that committed. Note
+ * that the ids are compared as `BigInt`, since both are 64-bit, and that a
+ * snapshot or txid that does not read as one shows nothing, so the write
+ * waits on its txid instead.
+ */
+function shows(snapshot: string, txid: string): boolean {
+  const spelled = SNAPSHOT_SPELLING.exec(snapshot);
+  if (spelled === null || !TXID_SPELLING.test(txid)) return false;
+  const [, xmin = "", xmax = "", running = ""] = spelled;
+  const id = BigInt(txid);
+  if (id < BigInt(xmin)) return true;
+  if (id >= BigInt(xmax)) return false;
+  return running === "" || !running.split(",").some((each) => BigInt(each) === id);
+}
+
 /**
  * A wait for a write's transaction to arrive on a followed read: it settles
- * once an answer carrying it has been handed on, and fails once the timeout
- * passes.
+ * once an answer carrying it, or read at snapshots that all show it, has
+ * been handed on, and fails once the timeout passes.
  */
 export type TxWait = (txid: string, timeout: Duration.Duration) => Effect.Effect<void, LiveBroken>;
 
@@ -124,8 +152,9 @@ export interface LiveFollowDependencies<Part extends string> {
   ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }>;
   /**
    * Hears the read's wait for a write's transaction once an answer carried
-   * txids, which only one Sync woke does, and none once it is let go.
-   * A read no answer of which carried any hands none.
+   * a snapshot on every part, or the txids only an answer Sync woke
+   * carries, and none once it is let go. A read no answer of which carried
+   * either, as one of a service before snapshots may be, hands none.
    */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
   /**
@@ -145,9 +174,10 @@ export interface LiveFollowDependencies<Part extends string> {
 
 /**
  * Confirms a write once its transaction reaches the read that shows it: at
- * once where the write changed no row (no txid) or no wait is handed, as for
- * a read Sync does not wake, since a poll shows the write on its next
- * answer anyway. A transaction that does not arrive within `TX_WAIT_TIMEOUT`
+ * once where the write changed no row (no txid) or no wait is handed, as
+ * before the read's first answer, or for one of a service before snapshots
+ * that Sync does not wake, since a poll shows the write on its next answer
+ * anyway. A transaction that does not arrive within `TX_WAIT_TIMEOUT`
  * is said in the log and the write confirmed still, since it committed.
  */
 export function confirmWrite(
@@ -164,15 +194,27 @@ export function confirmWrite(
 
 /**
  * A followed read's confirmations: the txids its answers carried, each kept
- * `TX_WAIT_TIMEOUT` from when its answer was handed on, and the writes
- * waiting for one not carried yet. A wait settles on the first answer
- * carrying its txid, or at once where one already did within that time,
- * since the follow's answer often lands before the write's own.
+ * `TX_WAIT_TIMEOUT` from when its answer was handed on, the snapshots the
+ * last answer that carried one on every part was read at, and the writes
+ * waiting for one not shown yet. A wait settles on the first answer
+ * carrying its txid, or every part of which shows it, or at once where one
+ * already did, since the follow's answer often lands before the write's
+ * own. Note that only the last answer's snapshots are kept, because each
+ * answer of a read is read after the one before, so it shows at least as
+ * much.
  */
 function txConfirmations() {
   /** Each txid carried, by when its answer was handed on, oldest first. */
   const carried = new Map<string, number>();
+  /** The snapshot each part of the last answer was read at; none before an answer carried one on every part. */
+  let snapshots: readonly string[] = [];
   const waiting = new Map<string, Set<Deferred.Deferred<void>>>();
+  /** Whether every part of the last answer read at snapshots shows the transaction. */
+  const shown = (txid: string) =>
+    snapshots.length > 0 && snapshots.every((snapshot) => shows(snapshot, txid));
+  const settle = (txid: string) => {
+    for (const arrived of waiting.get(txid) ?? []) Deferred.doneUnsafe(arrived, Effect.void);
+  };
   const forget = (now: number) => {
     for (const [txid, at] of carried) {
       if (now - at < Duration.toMillis(TX_WAIT_TIMEOUT)) return;
@@ -182,7 +224,7 @@ function txConfirmations() {
   const wait: TxWait = (txid, timeout) =>
     Effect.gen(function* () {
       forget(yield* Clock.currentTimeMillis);
-      if (carried.has(txid)) return;
+      if (carried.has(txid) || shown(txid)) return;
       const arrived = Deferred.makeUnsafe<void>();
       const ofTxid = waiting.get(txid) ?? new Set();
       waiting.set(txid, ofTxid.add(arrived));
@@ -209,8 +251,13 @@ function txConfirmations() {
         // Note that a txid carried again is moved to the end, so the map stays oldest first.
         carried.delete(txid);
         carried.set(txid, now);
-        for (const arrived of waiting.get(txid) ?? []) Deferred.doneUnsafe(arrived, Effect.void);
+        settle(txid);
       }
+    },
+    /** An answer every part of which carried the snapshot it was read at was handed on: every wait on a transaction they all show settles. */
+    see: (next: readonly string[]) => {
+      snapshots = next;
+      for (const txid of waiting.keys()) if (shown(txid)) settle(txid);
     },
   };
 }
@@ -222,6 +269,15 @@ function txidsOf<Part extends string>(read: SealedRead<Part>): readonly string[]
       Object.values<SealedLiveQueryWire>(read.queries).flatMap((query) => query.txids ?? []),
     ),
   ];
+}
+
+/** The snapshot each part of an answer was read at; none where a part carries none, as from a service before snapshots. */
+function snapshotsOf<Part extends string>(
+  parts: readonly Part[],
+  read: SealedRead<Part>,
+): readonly string[] | undefined {
+  const snapshots = parts.map((part) => read.queries[part].snapshot);
+  return snapshots.every((snapshot) => snapshot !== undefined) ? snapshots : undefined;
 }
 
 /** The cursor an answer's cursor parts name to read past next; none for a read with no cursor parts. */
@@ -258,7 +314,8 @@ interface LiveAnswer<Part extends string> {
  * Every answer's rows, undecoded, each time they change, for as long as the
  * caller reads: the first answer's, then each poll's that moved (see the
  * module's note). A write's wait settles once the rows of the answer
- * carrying its txid are handed on. It fails only where the read is gone.
+ * carrying its txid, or read at snapshots that all show it, are handed on.
+ * It fails only where the read is gone.
  */
 function liveAnswers<Part extends string>(
   dependencies: LiveFollowDependencies<Part>,
@@ -281,19 +338,20 @@ function liveAnswers<Part extends string>(
           if (handed) dependencies.onTxWait?.(undefined);
         }),
       );
-      /** Hands the answer's rows on, then its txids, answering whether a write woke it. */
+      /** Hands the answer's rows on, then its snapshots and its txids, answering whether a write woke it. */
       const answered = (read: SealedRead<Part>) =>
         Effect.gen(function* () {
           const rows = rowsOf(parts, read);
           if (rows !== undefined) emit({ rows, past: pastOf(read) });
+          const snapshots = snapshotsOf(parts, read);
+          if (snapshots !== undefined) confirmations.see(snapshots);
           const txids = txidsOf(read);
-          if (txids.length === 0) return false;
-          confirmations.carry(txids, yield* Clock.currentTimeMillis);
-          if (!handed) {
+          if (txids.length > 0) confirmations.carry(txids, yield* Clock.currentTimeMillis);
+          if (!handed && (snapshots !== undefined || txids.length > 0)) {
             handed = true;
             dependencies.onTxWait?.(confirmations.wait);
           }
-          return true;
+          return txids.length > 0;
         });
       const standing = (queries: SealedRead<Part>["queries"]) =>
         dependencies.heldOn === undefined
@@ -383,9 +441,9 @@ export function decodedLiveRows<Part extends string, Rows>(
 /**
  * A read followed until it is gone, each answer's rows, every part's,
  * decoded under `schema` and handed to `take` the moment its poll answers,
- * before the follow carries the answer's txids on to a write waiting for
- * them. So a write confirmed on the read finds its rows already taken,
- * where a reader of `decodedLiveRows` may not have taken them yet. An
+ * before the follow carries the answer's snapshots and txids on to a write
+ * waiting for them. So a write confirmed on the read finds its rows already
+ * taken, where a reader of `decodedLiveRows` may not have taken them yet. An
  * answer carrying no rows inline hands none; one whose rows do not decode
  * is a failed poll, asked again, and a first one fails the follow, which
  * the caller seals again.

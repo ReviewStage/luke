@@ -140,6 +140,14 @@ export const sealedLiveQuerySchema = EffectSchema.Struct({
    */
   txids: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
   /**
+   * The snapshot the statement's rows, or its digest, were read at, as
+   * Postgres spells one (`xmin:xmax:xip,…`), answered only at
+   * `LIVE_POLL_URL`: a writer confirms a write once every part of an answer
+   * was read at a snapshot its transaction is visible in, whatever woke the
+   * poll. Absent from a service before it.
+   */
+  snapshot: EffectSchema.optionalKey(EffectSchema.String),
+  /**
    * Where a part the reader follows by cursor (`LIVE_POLL.CURSOR`) stands,
    * answered only to a reader that named one: its rows are then only those
    * written or amended past `past`, which the reader joins onto the rows it
