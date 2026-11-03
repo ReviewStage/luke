@@ -12,6 +12,30 @@
   --ui-display-hero-weight: 600;
   --ui-display-hero-tracking: -0.02em;
 
+  /* The landing's own scale, larger than a page's: its one line beside the
+     ball, each feature's heading, and the sentence under either, each
+     stepping down once on a phone. */
+  --ui-display-landing-size: 3.75rem;
+  --ui-display-landing-size-narrow: 2.375rem;
+  --ui-display-landing-leading: 1.03;
+  --ui-display-landing-weight: 700;
+  --ui-display-landing-tracking: -0.01em;
+  --ui-display-feature-size: 2.75rem;
+  --ui-display-feature-size-narrow: 1.875rem;
+  --ui-display-feature-leading: 1.06;
+  --ui-display-lead-size: 1.125rem;
+  --ui-display-lead-size-narrow: 1rem;
+  --ui-display-lead-leading: 1.55;
+
+  /* The landing's devices: a Mac window's corners, and a phone's outer
+     corners and its screen's, which follow them inside the bezel. */
+  --ui-display-window-radius: 0.625rem;
+  --ui-display-phone-radius: 3rem;
+  --ui-display-phone-screen-radius: 2.5rem;
+  --ui-display-island-radius: 0.75rem;
+  --ui-display-phone-radius-narrow: 1.75rem;
+  --ui-display-phone-screen-radius-narrow: 1.4rem;
+
   /* The product's name beside the mark, in the wordmark's face. */
   --ui-display-wordmark-size: 1rem;
   --ui-display-wordmark-weight: 700;
