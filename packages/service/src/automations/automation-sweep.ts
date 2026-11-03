@@ -27,7 +27,11 @@ import { Effect } from "effect";
 import type { StartServices } from "../agents/coder-host/start.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { discardedOrLogged } from "../agents/device-discard.js";
-import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
+import {
+  executeAutomationRun,
+  recoverStrandedRun,
+  type SessionsForAccount,
+} from "./automation-runs.js";
 
 /**
  * automation-sweep.ts -- the minute sweep's share of automations: claim the schedules due, once each, as queued runs, then act on the runs queued.
@@ -169,7 +173,7 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
 
 /** The sweep's share at `now`: the schedules due claimed and queued, then the runs queued acted on, then the finished runs' agents archived where asked. */
 export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations")(function* (
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   now: number,
 ): Effect.fn.Return<AutomationSweepOutcome, unknown, StartServices> {
   const claimed = yield* claimDueSchedules(now);
@@ -190,7 +194,7 @@ export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations"
   );
   const outcomes = (yield* Effect.forEach(
     byAutomation(queued),
-    (runs) => Effect.forEach(runs, (run) => executeAutomationRun(eveFor, run)),
+    (runs) => Effect.forEach(runs, (run) => executeAutomationRun(sessionsFor, run)),
     { concurrency: AUTOMATION_SWEEP.CONCURRENCY },
   )).flat();
   const counted = (status: AutomationRunStatus) =>

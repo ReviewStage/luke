@@ -33,6 +33,8 @@
  * first and reads back only as far as it is scrolled.
  */
 
+import { middlewareGen } from "@orpc/experimental-effect";
+import { ORPCError } from "@orpc/server";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
   claimQueuedMessage,
@@ -74,8 +76,6 @@ import { TRANSCRIPT_NOW_QUERY } from "@repo/features/live-wire";
 import { PROVIDER_KEY_KIND } from "@repo/features/provider-key-wire";
 import { isRecord } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { middlewareGen } from "@orpc/experimental-effect";
-import { ORPCError } from "@orpc/server";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { unparsedWire } from "../core.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
@@ -90,7 +90,7 @@ import {
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import {
   claimNext,
-  type QueueEve,
+  type QueueSessions,
   sendClaimed,
   sendQueued,
   wireQueue,
@@ -430,7 +430,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const { userId } = context;
       // The queue is its starter's own messages to come, so the starter alone changes it; a teammate reads it.
       if (agent.userId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      const eve: QueueEve = routedSessions;
+      const eve: QueueSessions = routedSessions;
       const body = input.body;
       /** A store's answer for the account's agent, its absence answered as no such agent. */
       const found = <A>(effect: Effect.Effect<Option.Option<A>, StoreFailure, DatabaseServices>) =>

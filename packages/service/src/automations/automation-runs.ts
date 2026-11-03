@@ -132,8 +132,8 @@ const CUT_MARK = "\n… (cut to fit; the full body is the caller's to send again
 /** The statuses under which an agent counts against the concurrency guard. */
 const WORKING: ReadonlySet<AgentStatus> = new Set([AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING]);
 
-/** eve's coding-agent service as the deployment acting for one account, or the refusal where this deployment cannot reach it. */
-export type EveForAccount = (
+/** The agents' sessions as the deployment reaches them acting for one account, or the refusal where it cannot. */
+export type SessionsForAccount = (
   userId: string,
 ) => Effect.Effect<
   AgentSessions<EveTypedTurn>,
@@ -430,7 +430,7 @@ const failedRun = Effect.fnUntraced(function* (run: ActedRun, reason: Automation
  * refused send having withdrawn its line, so the run starts one in its place.
  */
 const steerClaimed = Effect.fnUntraced(function* (
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   automation: Automation,
   run: ActedRun,
   agentId: string,
@@ -438,7 +438,7 @@ const steerClaimed = Effect.fnUntraced(function* (
   const found = yield* readVisibleAgent(automation.userId, agentId);
   if (Option.isNone(found) || found.value.archivedAt !== null)
     return Option.none<AutomationRunOutcome>();
-  const eve = yield* Effect.result(eveFor(automation.userId));
+  const eve = yield* Effect.result(sessionsFor(automation.userId));
   if (Result.isFailure(eve)) {
     return Option.some<AutomationRunOutcome>(
       yield* failedRun(run, reasonOfSteerRefusal(eve.failure)),
@@ -641,7 +641,7 @@ const decide = (automationId: string, run: ActedRun) =>
  * than by the run's subject, since every later run goes to it too.
  */
 const startRunAgent = Effect.fnUntraced(function* (
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   automation: Automation,
   run: ActedRun,
   adopting: Option.Option<string | null>,
@@ -658,7 +658,7 @@ const startRunAgent = Effect.fnUntraced(function* (
       ? { taskId: null, organizationId, repository: null }
       : { taskId: null, organizationId, repository };
   const start = yield* Effect.result(
-    startAgent(eveFor(automation.userId), automation.userId, {
+    startAgent(sessionsFor(automation.userId), automation.userId, {
       ...where,
       idempotencyKey: run.id,
       choice: automation.action.choice,
@@ -691,19 +691,19 @@ const startRunAgent = Effect.fnUntraced(function* (
  * automation's start kept as its agent (`startRunAgent`).
  */
 const startClaimed = Effect.fnUntraced(function* (
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   automation: Automation,
   run: ActedRun,
 ) {
   if (automation.targetKind !== AUTOMATION_TARGET.SAME_AGENT) {
-    return yield* startRunAgent(eveFor, automation, run, Option.none());
+    return yield* startRunAgent(sessionsFor, automation, run, Option.none());
   }
   const held = automation.targetAgentId;
   if (held !== null) {
-    const steered = yield* steerClaimed(eveFor, automation, run, held);
+    const steered = yield* steerClaimed(sessionsFor, automation, run, held);
     if (Option.isSome(steered)) return steered.value;
   }
-  return yield* startRunAgent(eveFor, automation, run, Option.some(held));
+  return yield* startRunAgent(sessionsFor, automation, run, Option.some(held));
 });
 
 /**
@@ -714,7 +714,7 @@ const startClaimed = Effect.fnUntraced(function* (
  * that its own act will yet let go of; a claim whose act died is the
  * stranded sweep's to settle.
  */
-const outcomeOf = Effect.fnUntraced(function* (eveFor: EveForAccount, run: ActedRun) {
+const outcomeOf = Effect.fnUntraced(function* (sessionsFor: SessionsForAccount, run: ActedRun) {
   const decision = yield* decide(run.automationId, run);
   switch (decision.kind) {
     case DECISION.HELD:
@@ -736,7 +736,7 @@ const outcomeOf = Effect.fnUntraced(function* (eveFor: EveForAccount, run: Acted
     case DECISION.TAKEN:
       return undefined;
     case DECISION.CLAIMED: {
-      const outcome = yield* startClaimed(eveFor, decision.automation, run);
+      const outcome = yield* startClaimed(sessionsFor, decision.automation, run);
       // Counted for the owner once the run has an agent, whoever or whatever fired it.
       if (outcome.status === AUTOMATION_RUN_STATUS.STARTED) {
         yield* recordServerEvent(
@@ -760,11 +760,11 @@ const outcomeOf = Effect.fnUntraced(function* (eveFor: EveForAccount, run: Acted
  */
 export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutomationRun")(
   function* (
-    eveFor: EveForAccount,
+    sessionsFor: SessionsForAccount,
     run: ActedRun,
   ): Effect.fn.Return<AutomationRunOutcome | undefined, never, StartServices> {
     return yield* Effect.gen(function* () {
-      const acted = yield* outcomeOf(eveFor, run);
+      const acted = yield* outcomeOf(sessionsFor, run);
       return acted?.outcome;
     }).pipe(
       Effect.catch((failure) =>

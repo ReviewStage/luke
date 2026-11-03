@@ -31,7 +31,7 @@ import type { StoredUIMessage } from "@repo/wire/ui-messages";
 import { isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
-import type { EveForAccount } from "../../automations/automation-runs.js";
+import type { SessionsForAccount } from "../../automations/automation-runs.js";
 import { MESSAGE_CHANNEL } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
@@ -108,7 +108,7 @@ const starterOf = (agent: Agent) =>
  * or its member rides the log line.
  */
 export function reportToStarter(
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
   turn: SettledAgentTurn,
 ): Effect.Effect<void, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   return Effect.gen(function* () {
@@ -130,7 +130,7 @@ export function reportToStarter(
       agentName(agent.value),
       step,
     );
-    const eve = yield* eveFor(turn.userId);
+    const eve = yield* sessionsFor(turn.userId);
     yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), turn.userId, starter.value, {
       text: reportLine(agent.value, mention, turn, words),
       clientKey: turn.turnId,

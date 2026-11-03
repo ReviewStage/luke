@@ -415,12 +415,12 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         at: 0,
       });
       const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-      const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
+      const sessionsFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
       const reach = Layer.mergeAll(github.layer, noNetwork);
-      const turnEnded = queueAtTurnEnd(eveFor, stored).pipe(Effect.provide(reach));
+      const turnEnded = queueAtTurnEnd(sessionsFor, stored).pipe(Effect.provide(reach));
       /** One queued message handed on, as a hand-off does once it read the queue's head. */
       const handedOn = (message: QueuedMessageRow) =>
-        sendQueued(eveFor, stored, message).pipe(Effect.provide(reach));
+        sendQueued(sessionsFor, stored, message).pipe(Effect.provide(reach));
       // Note that the read at once says whether it would have held, and when the clock alone moves it, which the page itself does not carry.
       const queued = Effect.map(
         ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" })),
@@ -439,7 +439,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       );
       /** One queued message sent as a hand-off sends it, the hand-off cut off before the message left the queue. */
       const sentAlone = (message: QueuedMessageRow) =>
-        Effect.flatMap(eveFor(message.userId), (eveAs) =>
+        Effect.flatMap(sessionsFor(message.userId), (eveAs) =>
           steerAgentWritten(eveAs, storeWriter({ tools: CODER_TOOL_SET }), message.userId, stored, {
             text: message.text,
             clientKey: message.id,
@@ -447,7 +447,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           }),
         ).pipe(Effect.provide(reach));
       /** The maintenance sweep's pass over the queues standing unpaused. */
-      const swept = sweepAgentQueues(eveFor).pipe(Effect.provide(reach));
+      const swept = sweepAgentQueues(sessionsFor).pipe(Effect.provide(reach));
       return { agent, ask, owner, turnEnded, handedOn, sentAlone, swept, queued, stored };
     });
 
@@ -645,8 +645,8 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           at: 0,
         });
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-        yield* queueAtTurnEnd(eveFor, stored).pipe(
+        const sessionsFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
+        yield* queueAtTurnEnd(sessionsFor, stored).pipe(
           Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
         );
 
@@ -720,8 +720,8 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           at: 0,
         });
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-        yield* queueAtTurnEnd(eveFor, stored).pipe(
+        const sessionsFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
+        yield* queueAtTurnEnd(sessionsFor, stored).pipe(
           Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
         );
 
@@ -853,7 +853,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           id: randomUUID(),
         });
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
+        const sessionsFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
         // The runner ends the turn as stopped, and its events hand on the queue, before eve answers the cancel.
         const database = yield* Effect.context<DatabaseServices>();
         racing = Effect.andThen(
@@ -866,7 +866,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
             responseIds: [],
             at: 0,
           }),
-          queueAtTurnEnd(eveFor, stored).pipe(
+          queueAtTurnEnd(sessionsFor, stored).pipe(
             Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
           ),
         ).pipe(Effect.provideContext(database), Effect.orDie);

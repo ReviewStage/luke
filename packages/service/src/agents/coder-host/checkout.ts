@@ -27,7 +27,6 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   cloneRepository,
   deepenRepository,
-  markDeepened,
   REPOSITORY_REFUSAL,
   type RepositoryRefusal,
   type RepositorySandbox,
@@ -487,8 +486,8 @@ export const agentCommitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIde
 
 /**
  * The deepen's steps in the sandbox, on a plan already read: the write
- * token at the firewall, the rest of the history fetched through it, the
- * identity set, and the record written last.
+ * token at the firewall, the rest of the history fetched through it, and
+ * the identity set.
  */
 export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutWith")(function* (
   sandbox: RepositorySandbox,
@@ -505,5 +504,4 @@ export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutW
   });
   yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
   yield* setCheckoutIdentity(sandbox, plan.identity).pipe(Effect.mapError(refusedWith));
-  yield* markDeepened(sandbox).pipe(Effect.mapError(refusedWith));
 });
