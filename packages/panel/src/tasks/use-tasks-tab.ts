@@ -709,8 +709,8 @@ export interface TasksControl {
     | undefined;
   /** The task's page took the ask, so a later visit to the task neither opens the thread nor its Comments tab again. */
   onCommentRevealed: (ask: number) => void;
-  /** Opens the window's Inbox narrowed to one task's items, on nothing chosen: what a task's "needs you" count asks. */
-  onShowInbox: (narrowed: { readonly taskId: string }) => void;
+  /** Opens the window's Inbox narrowed to one task's items, on the item named, or on nothing chosen: what a task's "needs you" count, or an agent's waiting threads, ask. */
+  onShowInbox: (narrowed: { readonly taskId: string; readonly itemId?: string }) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
   inbox: readonly AppInboxTask[];
   /** The task whose Inbox is on screen, or the agent whose own page's Inbox tab is, or none. */
@@ -3742,12 +3742,15 @@ export function useTasksTab(input: {
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
-    onShowInbox: guard(({ taskId }: { readonly taskId: string }) => {
-      timeInboxOpen();
-      setHistoryFor(undefined);
-      chooseInboxTask(taskId);
-      setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
-    }),
+    onShowInbox: guard(
+      ({ taskId, itemId }: { readonly taskId: string; readonly itemId?: string }) => {
+        timeInboxOpen();
+        setHistoryFor(undefined);
+        chooseInboxTask(taskId);
+        const chosen = itemId === undefined ? undefined : { taskId, itemId, opened: true as const };
+        setStandIn({ kind: STAND_IN.INBOX, chosen });
+      },
+    ),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: SidebarPin) => {
       const { tab } = pin;

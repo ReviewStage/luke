@@ -13,7 +13,7 @@ import { GLYPH } from "@repo/ui/icons";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
-import { NEEDS_YOU } from "../tasks/inbox-model.js";
+import { NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { RunsOnPlace } from "../tasks/runs-on.js";
@@ -73,13 +73,6 @@ const AGENTS_LIST = "Agents";
 
 /** What the group's count counts, said to a reader beside the figure. */
 const AGENTS_NOUN = { one: "agent", many: "agents" } as const;
-
-/** What the task's Inbox row says while threads wait on the developer: "1 thread needs you", "3 threads need you". */
-function threadsWaitingWords(waiting: number): string {
-  return waiting === 1
-    ? `1 thread ${NEEDS_YOU.COUNT.one}`
-    : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
-}
 
 /** The agents in the order the list draws them: those still writing first, then the newest started, each group's order otherwise kept. */
 function listedOrder(entries: readonly AddEntry[]): readonly AddEntry[] {

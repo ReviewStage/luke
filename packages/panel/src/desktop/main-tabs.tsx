@@ -35,6 +35,7 @@ import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import type { AgentThreads } from "../tasks/threads-dock.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
@@ -290,8 +291,10 @@ function agentTabs(input: {
   views: TabViews;
   /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
   drafted: readonly string[];
+  /** The threads waiting on the developer, by the agent that posted them, which an agent's tab counts. */
+  waiting: ReadonlyMap<string, readonly unknown[]> | undefined;
 }): DrawnTab[] {
-  const { task, main, agents, unread, views, drafted } = input;
+  const { task, main, agents, unread, views, drafted, waiting } = input;
   const chosen = (tab: MainTab) => main.tab !== undefined && sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -328,7 +331,11 @@ function agentTabs(input: {
       agent,
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-        endMark: agentEndMark(agent, false) ?? draftMark,
+        // A count of threads waiting on the developer leads, as the task's Inbox row counts them.
+        endMark:
+          waitingMark(waiting?.get(agent.id)?.length ?? 0) ??
+          agentEndMark(agent, false) ??
+          draftMark,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -426,17 +433,17 @@ export function agentEntries(
  */
 export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
   const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
-  const endMark =
-    waiting === 0 ? undefined : (
-      <span className={ROW_COUNT} data-tone={STATUS_TONE.ATTENTION}>
-        {waiting}
-        <VisuallyHidden>
-          {" "}
-          {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
-        </VisuallyHidden>
-      </span>
-    );
-  return { row, endMark, onPick };
+  return { row, endMark: waitingMark(waiting), onPick };
+}
+
+/** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
+function waitingMark(waiting: number): React.JSX.Element | undefined {
+  return waiting === 0 ? undefined : (
+    <span className={ROW_COUNT} data-tone={STATUS_TONE.ATTENTION}>
+      {waiting}
+      <VisuallyHidden> {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}</VisuallyHidden>
+    </span>
+  );
 }
 
 /**
@@ -547,6 +554,7 @@ export function MainTabStrip({
   slot,
   onShown,
   planMenu,
+  waiting,
 }: {
   /** The task as the list names it now, its name and status first there, which its first tab wears. */
   task: TaskSummary;
@@ -574,12 +582,14 @@ export function MainTabStrip({
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
   /** The task's own menu, which Overview's right-click and ⋯ draw. */
   planMenu?: DocumentMenu | undefined;
+  /** The threads waiting on the developer, by the agent that posted them (`waitingByAgent`), which each agent's tab counts. */
+  waiting?: ReadonlyMap<string, readonly unknown[]> | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   // Overview, then the agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    agentTabs({ task, main, agents, unread, views, drafted }),
+    agentTabs({ task, main, agents, unread, views, drafted, waiting }),
     main.tabs,
     (entry) => entry.tab,
   );
@@ -716,6 +726,7 @@ export function MainTabContent({
   cards,
   onFork,
   onContinue,
+  threads,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.OVERVIEW>;
   agents: AgentsControl;
@@ -735,6 +746,8 @@ export function MainTabContent({
   onContinue?:
     | ((agentId: string, words: string, attachments: readonly AgentAttachment[]) => void)
     | undefined;
+  /** The threads the agent posted that wait on the developer, docked over its box; none where nothing waits. */
+  threads?: AgentThreads | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the task no longer holds only until the
@@ -783,6 +796,7 @@ export function MainTabContent({
         cards={cards.agent(agentId)}
         onHeld={views.onAgentHeld}
         run={agents.origin}
+        threads={threads}
       />
     </ForkProvider>
   );
