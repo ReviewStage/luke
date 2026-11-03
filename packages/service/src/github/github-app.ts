@@ -713,7 +713,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
   /**
    * The user's GitHub App token off their sign-in, refreshed and re-sealed on
-   * its row when it is about to expire; read for GitHub's MCP server alone.
+   * its row when it is about to expire; read where we act as the developer.
    * The read and the refresh run under a lock on the row, because GitHub
    * retires a refresh token the moment it is used: two requests refreshing at
    * once would leave the second holding a token GitHub no longer knows.
