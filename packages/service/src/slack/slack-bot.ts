@@ -83,6 +83,7 @@ const SLACK_METHOD = {
   CONVERSATIONS_LIST: "conversations.list",
   CONVERSATIONS_JOIN: "conversations.join",
   CONVERSATIONS_LEAVE: "conversations.leave",
+  REACTIONS_ADD: "reactions.add",
 } as const;
 
 type SlackMethod = (typeof SLACK_METHOD)[keyof typeof SLACK_METHOD];
@@ -200,6 +201,8 @@ export interface SlackBotService {
   readonly join: (channel: string) => Effect.Effect<boolean>;
   /** Takes the bot out of a channel; false where Slack refused. */
   readonly leave: (channel: string) => Effect.Effect<boolean>;
+  /** Reacts to a message with the emoji Slack names `emoji`; a failure is logged and answers nothing. */
+  readonly react: (channel: string, ts: string, emoji: string) => Effect.Effect<void>;
 }
 
 export class SlackBot extends Context.Service<SlackBot, SlackBotService>()("SlackBot") {}
@@ -425,6 +428,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       channels: Effect.succeedNone,
       join: () => Effect.succeed(false),
       leave: () => Effect.succeed(false),
+      react: () => Effect.void,
     };
   }
   return {
@@ -554,6 +558,12 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
             false,
           ),
         ),
+      ),
+    react: (channel, ts, emoji) =>
+      api(SLACK_METHOD.REACTIONS_ADD, { channel, timestamp: ts, name: emoji }).pipe(
+        Effect.asVoid,
+        Effect.catch(swallowed<void>("react to a message")),
+        Effect.asVoid,
       ),
   };
 }

@@ -8,7 +8,9 @@ import {
   linkSlackInstallation,
   writeSlackChannelRepository,
 } from "@repo/database/models/slack-installation-store";
+import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
+import { slackAgentThread } from "@repo/database/schemas/slack-installation";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
@@ -290,7 +292,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a mention starts an agent as the member Slack's email names, in its channel's repository, and replies with its link; one from no member starts nothing",
+    "a mention starts an agent as the member Slack's email names, in its channel's repository, and reacts to it with 👀; one from no member starts nothing",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -323,10 +325,20 @@ it.layer(getTestDB())("our Slack route", (it) => {
         assert.equal(afterStranger, before);
         assert.equal(started.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
-        const [refused, onIt] = replies();
+        const [refused, ...others] = replies();
         assert.match(refused?.args.text ?? "", /couldn't find you/u);
-        assert.equal(onIt?.args.thread_ts, "1700000002.000300");
-        assert.match(onIt?.args.text ?? "", /^On it in Acme\/Relay: https:\/\/.+\/agent\//u);
+        assert.deepEqual(others, []);
+        const reactions = calls.filter((call) => call.method === "reactions.add");
+        assert.deepEqual(
+          reactions.map((call) => call.args),
+          [{ channel: "C0001", timestamp: "1700000002.000300", name: "eyes" }],
+        );
+        const [startedAgent] = yield* (yield* Database)
+          .select({ repository: agentTable.repository })
+          .from(slackAgentThread)
+          .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
+          .where(eq(slackAgentThread.channelId, "C0001"));
+        assert.equal(startedAgent?.repository, "Acme/Relay");
       });
     },
   );

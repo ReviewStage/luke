@@ -26,8 +26,9 @@
  * of the writer's latest agent in the workspace, else in none. Its prompt is the writer's words, the thread's earlier
  * messages fenced as data, since anyone in the channel wrote them, and the
  * message's link; only the writer's own words hand it MCP servers. The bot
- * replies at once with a link to the agent, and the thread is kept as the
- * agent's.
+ * reacts to the message with 👀 at once, as other bots do, rather than
+ * replying, and the thread is kept as the agent's; a message sent on to an
+ * agent is marked the same way.
  *
  * Every turn of such an agent that settles is posted in its thread once
  * (`claimSlackThreadTurn`): its final message in a `markdown` block, which
@@ -97,6 +98,9 @@ const CUT_MARK = "\n… (cut to fit; read the rest in Slack)";
 
 /** The most characters of a final message the notification's plain text says; the blocks hold more. */
 const NOTIFICATION_CHARS = 2500;
+
+/** The emoji the bot reacts with to a message it acted on: 👀, as Slack names it. */
+const HEARD_EMOJI = "eyes";
 
 /** What the bot says in a thread where it starts nothing. */
 const SLACK_REPLY = {
@@ -218,23 +222,6 @@ function plainReply(text: string): SlackMessageContent {
   return {
     text,
     blocks: [{ type: "section", text: { type: "mrkdwn", text: slackEscaped(text) } }],
-  };
-}
-
-/** The reply that says the agent started, with its link and where it works. */
-function startedReply(link: string, repository: string | null): SlackMessageContent {
-  const where = repository === null ? "" : ` in ${repository}`;
-  return {
-    text: `On it${where}: ${link}`,
-    blocks: [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `On it${slackEscaped(where)}. <${link}|Open the agent in ${PRODUCT_NAME}>`,
-        },
-      },
-    ],
   };
 }
 
@@ -362,10 +349,12 @@ const sendToAgent = Effect.fnUntraced(function* (
       threadOf(addressed),
       refusalReply("send that to the agent", sent.failure),
     );
+    return;
   }
+  yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
 });
 
-/** An agent started as the member from the message, the thread kept as its own, and its link said in the thread; a refusal is said instead. */
+/** An agent started as the member from the message, the thread kept as its own, and the message marked heard; a refusal is said instead. */
 const startFromSlack = Effect.fnUntraced(function* (
   bot: SlackBotService,
   addressed: SlackAddressed,
@@ -402,8 +391,8 @@ const startFromSlack = Effect.fnUntraced(function* (
     agentId,
     userId,
   });
-  const link = yield* agentLink(userId, organizationId, agentId);
-  yield* bot.reply(addressed.channel, thread, startedReply(link, repository));
+  // Note that a reaction says the message was heard, as other bots do; the agent's link comes with its reply.
+  yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
 });
 
 /**
