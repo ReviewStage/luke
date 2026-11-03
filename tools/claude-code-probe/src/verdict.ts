@@ -39,8 +39,8 @@ type Check = (typeof CHECK)[keyof typeof CHECK];
 
 /** The words each turn ends on, which the probe's prompts ask for. */
 export const TURN_DONE = {
-  FIRST: "LUKE-PROBE-TURN-1-DONE",
-  RESUMED: "LUKE-PROBE-TURN-3-DONE",
+  FIRST: "AGENT-PROBE-TURN-1-DONE",
+  RESUMED: "AGENT-PROBE-TURN-3-DONE",
 } as const;
 
 /** What the probe saw, gathered by the run; every field is what a step observed, or none where the step never got there. */
@@ -147,7 +147,7 @@ function sandboxRunConditions(seen: ProbeObservations): readonly Condition[] {
   const account = accountReading(seen.firstLaunch);
   const calls = toolCalls(seen.firstLaunch);
   const resumedInit = sessionInit(seen.resumedLaunch);
-  const fileName = `luke-probe/${seen.nonce}.txt`;
+  const fileName = `agent-probe/${seen.nonce}.txt`;
   const billedToPlan =
     init?.apiKeySource === "none" &&
     (account?.subscriptionType ?? "") !== "" &&
@@ -197,7 +197,7 @@ function sandboxRunConditions(seen: ProbeObservations): readonly Condition[] {
       CHECK.PLAN,
       "the turn pushed its branch",
       seen.branchPushed && endedWell(seen.firstLaunch, TURN_DONE.FIRST),
-      `branch luke-probe/${seen.nonce} ${seen.branchPushed ? "is" : "is not"} on GitHub`,
+      `branch agent-probe/${seen.nonce} ${seen.branchPushed ? "is" : "is not"} on GitHub`,
     ),
     condition(
       CHECK.PLAN,

@@ -18,7 +18,7 @@ export const PROBE_SANDBOX = {
   /** The unprivileged user Claude Code runs as. */
   AGENT_USER: "agent",
   /** Root-owned, world-readable: the SDK, the driver, and the leak check. */
-  ROOT: "/opt/luke-probe",
+  ROOT: "/opt/agent-probe",
   /** Where today's coding agent checks its repository out (`REPOSITORY_SANDBOX_CONTRACT`). */
   CHECKOUT: "/workspace/repository",
   /** Long enough for the image, three launches, and a stop and resume between them. */
@@ -124,9 +124,9 @@ export const LEAK_CHECK_MARKER = "APP_PROBE_LEAK_CHECK";
 
 /** What the driver prints of its own beside the SDK's messages, each a `type` the SDK never uses. */
 export const DRIVER_EVENT = {
-  ACCOUNT: "luke_probe_account",
-  ERROR: "luke_probe_error",
-  EXIT: "luke_probe_exit",
+  ACCOUNT: "agent_probe_account",
+  ERROR: "agent_probe_error",
+  EXIT: "agent_probe_exit",
 } as const;
 
 /** What the probe writes to the driver's stdin after its config line. */

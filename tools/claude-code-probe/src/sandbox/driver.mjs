@@ -59,7 +59,7 @@ async function readCommands() {
 }
 
 readCommands().catch((error) => {
-  emit({ type: "luke_probe_error", message: String(error?.message ?? error) });
+  emit({ type: "agent_probe_error", message: String(error?.message ?? error) });
 });
 
 try {
@@ -68,10 +68,10 @@ try {
     emit(message);
     if (!askedAccount && message.type === "system" && message.subtype === "init") {
       askedAccount = true;
-      emit({ type: "luke_probe_account", ...(await session.accountInfo()) });
+      emit({ type: "agent_probe_account", ...(await session.accountInfo()) });
     }
   }
 } catch (error) {
-  emit({ type: "luke_probe_error", message: String(error?.message ?? error) });
+  emit({ type: "agent_probe_error", message: String(error?.message ?? error) });
 }
-emit({ type: "luke_probe_exit" });
+emit({ type: "agent_probe_exit" });

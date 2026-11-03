@@ -21,7 +21,7 @@ import {
 // restart and thread/resume), with the model scripted by a local Responses server instead of
 // the ChatGPT plan, and paths moved to where the live probe puts them. See the PR description.
 const FIXTURES = path.join(import.meta.dirname, "../../../packages/agent-runner/src/testing");
-const NONCE = "luke-probe-hermetic";
+const NONCE = "agent-probe-hermetic";
 
 /** A fixture file's lines read back as recorded messages. */
 function recording(file: string): readonly RecordedMessage[] {

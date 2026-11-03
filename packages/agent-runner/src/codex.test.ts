@@ -62,17 +62,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const apiKey = "openai-api-key-for-tests";
-      const luke = fakeService("sleep 600");
+      const service = fakeService("sleep 600");
       // The launch knows no bundle: on its API key it asks no token.
       const { spawned, write, run } = yield* launch(
         [STOPPED],
-        luke,
+        service,
         { ...ENV, [RUNNER_ENV.OPENAI_API_KEY]: apiKey },
         {},
       );
       yield* write({ ...CONFIG, fast: true });
       yield* write(message("Run sleep 600.", LINE.FIRST));
-      yield* luke.seen;
+      yield* service.seen;
       yield* write({ type: INPUT_LINE.STOP });
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
@@ -100,14 +100,14 @@ it.effect(
       assert.equal(received(process, "turn/start")[0]?.serviceTier, "fast");
       assert.equal(process?.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
       assert.ok(!(process?.args ?? []).join(" ").includes(apiKey));
-      assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
+      assert.ok(!JSON.stringify(service.applied).includes(apiKey));
     }),
 );
 
 const TOKEN_URL = "https://app.test/api/agents/runner-token";
 const SELF: RunnerSelf = {
   executable: "/usr/local/bin/node",
-  script: "/opt/luke/agent-runner.mjs",
+  script: "/opt/agent/agent-runner/agent-runner.mjs",
 };
 
 const ENV = {
@@ -118,8 +118,8 @@ const ENV = {
 
 const CONFIG: CodexConfig = {
   harness: RUNNER_HARNESS.CODEX,
-  cwd: "/srv/luke-probe-repo",
-  executable: "/opt/luke-codex/bin/codex",
+  cwd: "/srv/agent-probe-repo",
+  executable: "/opt/agent-codex/bin/codex",
   model: "gpt-5.5",
   effort: CODEX_EFFORT.HIGH,
   developerInstructions: "You are a Vespin coding agent.",
@@ -186,7 +186,7 @@ function kinds(events: readonly RunnerEvent[]): string[] {
 /** One Codex launch over stdin lines the test writes, against scripted app-servers and a fake service. */
 function launch(
   scripts: readonly Script[],
-  luke: ReturnType<typeof makeFakeService>,
+  service: ReturnType<typeof makeFakeService>,
   env: Record<string, string> = ENV,
   extra: { readonly self?: RunnerSelf; readonly http?: Layer.Layer<HttpClient.HttpClient> } = {
     self: SELF,
@@ -206,7 +206,7 @@ function launch(
       Effect.provide(
         Layer.mergeAll(
           server.layer,
-          extra.http ?? luke.layer,
+          extra.http ?? service.layer,
           claude.layer,
           // Codex never waits on a wakeup, so no wait of its is released whatever runs.
           processTable(UNREAD_PROC, 1),
@@ -231,7 +231,7 @@ it.effect(
   "sets the member's installed skills as an extra skills root before the thread opens, and none where Vespin wrote none",
   () =>
     Effect.gen(function* () {
-      const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
+      const folder = mkdtempSync(join(tmpdir(), "installed-skills-"));
       yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
       const skills = join(folder, INSTALLED_SKILLS.SKILLS);
       mkdirSync(join(skills, "pr-style"), { recursive: true });
@@ -250,11 +250,11 @@ it.effect(
 
       const turn = (script: Script, installedSkills: string) =>
         Effect.gen(function* () {
-          const luke = fakeService("ci-watch");
-          const { spawned, write, run } = yield* launch([script], luke);
+          const service = fakeService("ci-watch");
+          const { spawned, write, run } = yield* launch([script], service);
           yield* write({ ...CONFIG, installedSkills });
           yield* write(message("The probe's first turn.", LINE.FIRST));
-          yield* luke.seen;
+          yield* service.seen;
           yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
           assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
           return spawned[0];
@@ -307,15 +307,15 @@ it.effect(
   "every turn's sandbox is workspace-write, approval never, over the checkout's Git directory and the folders the machine grants",
   () =>
     Effect.gen(function* () {
-      const folder = mkdtempSync(join(tmpdir(), "luke-agent-folder-"));
+      const folder = mkdtempSync(join(tmpdir(), "agent-folder-"));
       yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
       const checkout = join(folder, "repository");
       mkdirSync(checkout, { recursive: true });
-      const luke = fakeService("sleep 600");
-      const { spawned, write, run } = yield* launch([STOPPED], luke);
+      const service = fakeService("sleep 600");
+      const { spawned, write, run } = yield* launch([STOPPED], service);
       yield* write({ ...CONFIG, cwd: checkout, writableRoots: [folder] });
       yield* write(message("Run sleep 600.", LINE.FIRST));
-      yield* luke.seen;
+      yield* service.seen;
       yield* write({ type: INPUT_LINE.STOP });
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
@@ -346,8 +346,8 @@ it.effect(
   "starts app-server with the plan's provider, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService("ci-watch");
-      const { spawned, write, run } = yield* launch([WORKFLOW], luke);
+      const service = fakeService("ci-watch");
+      const { spawned, write, run } = yield* launch([WORKFLOW], service);
       yield* write(CONFIG);
       yield* write({
         type: INPUT_LINE.MESSAGE,
@@ -360,27 +360,27 @@ it.effect(
           },
         ],
       });
-      yield* luke.seen;
+      yield* service.seen;
       yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
       assert.deepEqual(
-        kinds(luke.applied).filter((kind) => kind !== RUNNER_EVENT.ACCEPTED),
+        kinds(service.applied).filter((kind) => kind !== RUNNER_EVENT.ACCEPTED),
         [...notified(WORKFLOW.exchanges), RUNNER_EVENT.END],
       );
       // Each line is said taken once, under the service's own id, which Codex is handed to echo.
-      assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
+      assert.deepEqual(acceptedLines(service.applied), [LINE.FIRST, LINE.STEERED]);
       assert.deepEqual(
-        luke.applied.map(({ sequence }) => sequence),
-        luke.applied.map((_, index) => FIRST_SEQUENCE + index),
+        service.applied.map(({ sequence }) => sequence),
+        service.applied.map((_, index) => FIRST_SEQUENCE + index),
       );
-      assert.deepEqual(luke.applied.at(-1)?.message, {
+      assert.deepEqual(service.applied.at(-1)?.message, {
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.TURN_ENDED,
       });
       assert.deepEqual(
-        luke.bearers,
-        luke.bearers.map(() => `Bearer ${BEARER}`),
+        service.bearers,
+        service.bearers.map(() => `Bearer ${BEARER}`),
       );
 
       const [process] = spawned;
@@ -463,13 +463,13 @@ it.effect(
   "keeps a warm launch up past its completed turn, posting IDLE, and ends it as idled on Vespin's retire",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService();
-      const { spawned, write, run } = yield* launch([WORKFLOW], luke);
+      const service = fakeService();
+      const { spawned, write, run } = yield* launch([WORKFLOW], service);
       yield* write({ ...CONFIG, warm: true });
       yield* write(message("The probe's first turn.", LINE.FIRST));
       yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
       for (let step = 0; step < 5_000; step += 1) {
-        if (kinds(luke.applied).includes(RUNNER_EVENT.IDLE)) break;
+        if (kinds(service.applied).includes(RUNNER_EVENT.IDLE)) break;
         yield* Effect.yieldNow;
       }
       assert.equal(run.pollUnsafe(), undefined, "the launch stays up past its turn");
@@ -478,12 +478,12 @@ it.effect(
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
       assert.deepEqual(spawned[0]?.unexpected, []);
-      assert.deepEqual(kinds(luke.applied).slice(-3), [
+      assert.deepEqual(kinds(service.applied).slice(-3), [
         "turn/completed",
         RUNNER_EVENT.IDLE,
         RUNNER_EVENT.END,
       ]);
-      assert.deepEqual(luke.applied.at(-1)?.message, {
+      assert.deepEqual(service.applied.at(-1)?.message, {
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.IDLED,
       });
@@ -492,12 +492,12 @@ it.effect(
 
 it.effect("interrupts the running turn on a stop and ends the launch as stopped", () =>
   Effect.gen(function* () {
-    const luke = fakeService("sleep 600");
-    const { spawned, write, run } = yield* launch([STOPPED], luke);
+    const service = fakeService("sleep 600");
+    const { spawned, write, run } = yield* launch([STOPPED], service);
     yield* write(CONFIG);
     yield* write({ type: INPUT_LINE.MODEL, model: "gpt-5.5-codex", effort: CODEX_EFFORT.LOW });
     yield* write(message("Run `sleep 600` and wait for it to finish."));
-    yield* luke.seen;
+    yield* service.seen;
     yield* write({ type: INPUT_LINE.STOP });
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
@@ -509,8 +509,8 @@ it.effect("interrupts the running turn on a stop and ends the launch as stopped"
     assert.deepEqual(received(process, "turn/interrupt"), [
       { threadId: THREAD, turnId: "00000000-0000-4000-8000-000000000006" },
     ]);
-    assert.deepEqual(kinds(luke.applied).slice(-2), ["turn/completed", RUNNER_EVENT.END]);
-    assert.deepEqual(luke.applied.at(-1)?.message, {
+    assert.deepEqual(kinds(service.applied).slice(-2), ["turn/completed", RUNNER_EVENT.END]);
+    assert.deepEqual(service.applied.at(-1)?.message, {
       type: RUNNER_EVENT.END,
       reason: RUNNER_END.STOPPED,
     });
@@ -521,7 +521,7 @@ it.effect(
   "resumes the thread it is given and sends a message the ended turn refused as the next turn",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService("What exact line");
+      const service = fakeService("What exact line");
       const script: Script = {
         exchanges: [
           ...RESUME,
@@ -536,10 +536,10 @@ it.effect(
           RESUMED_TURN,
         ],
       };
-      const { spawned, write, run } = yield* launch([script], luke);
+      const { spawned, write, run } = yield* launch([script], service);
       yield* write({ ...CONFIG, threadId: THREAD });
       yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
-      yield* luke.seen;
+      yield* service.seen;
       yield* write(message("And the second line?", LINE.STEERED));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
@@ -566,14 +566,17 @@ it.effect(
         starts[1]?.clientUserMessageId,
         received(process, "turn/steer")[0]?.clientUserMessageId,
       );
-      assert.deepEqual(kinds(luke.applied).filter((kind) => kind === "turn/completed").length, 2);
+      assert.deepEqual(
+        kinds(service.applied).filter((kind) => kind === "turn/completed").length,
+        2,
+      );
       // The refused steer's line is said taken when the next turn takes it, not before.
-      assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
-      const steeredAt = luke.applied.findIndex(
+      assert.deepEqual(acceptedLines(service.applied), [LINE.FIRST, LINE.STEERED]);
+      const steeredAt = service.applied.findIndex(
         ({ message: posted }) =>
           "type" in posted && posted.type === RUNNER_EVENT.ACCEPTED && posted.uuid === LINE.STEERED,
       );
-      const firstCompletedAt = kinds(luke.applied).indexOf("turn/completed");
+      const firstCompletedAt = kinds(service.applied).indexOf("turn/completed");
       assert.ok(steeredAt > firstCompletedAt);
     }),
 );
@@ -593,7 +596,7 @@ function refusedSteer(error: NonNullable<RecordedMessage["error"]>, waits: boole
 
 it.effect("sends a steer refused by a turn that cannot be steered as the next turn", () =>
   Effect.gen(function* () {
-    const luke = fakeService("What exact line");
+    const service = fakeService("What exact line");
     const script = refusedSteer(
       {
         code: -32600,
@@ -606,10 +609,10 @@ it.effect("sends a steer refused by a turn that cannot be steered as the next tu
       },
       true,
     );
-    const { spawned, write, run } = yield* launch([script], luke);
+    const { spawned, write, run } = yield* launch([script], service);
     yield* write({ ...CONFIG, threadId: THREAD });
     yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
-    yield* luke.seen;
+    yield* service.seen;
     yield* write(message("And the second line?", LINE.STEERED));
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
@@ -618,41 +621,41 @@ it.effect("sends a steer refused by a turn that cannot be steered as the next tu
     assert.deepEqual(received(process, "turn/start")[1]?.input, [
       { type: "text", text: "And the second line?", text_elements: [] },
     ]);
-    assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
+    assert.deepEqual(acceptedLines(service.applied), [LINE.FIRST, LINE.STEERED]);
   }),
 );
 
 it.effect("ends the launch as failed when app-server refuses a steer for any other reason", () =>
   Effect.gen(function* () {
-    const luke = fakeService("What exact line");
+    const service = fakeService("What exact line");
     const script = refusedSteer({ code: -32603, message: "failed to steer turn: boom" }, false);
-    const { spawned, write, run } = yield* launch([script], luke);
+    const { spawned, write, run } = yield* launch([script], service);
     yield* write({ ...CONFIG, threadId: THREAD });
     yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
-    yield* luke.seen;
+    yield* service.seen;
     yield* write(message("And the second line?", LINE.STEERED));
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
-    assert.deepEqual(luke.applied.at(-1)?.message, {
+    assert.deepEqual(service.applied.at(-1)?.message, {
       type: RUNNER_EVENT.END,
       reason: RUNNER_END.FAILED,
       detail: "turn/steer: failed to steer turn: boom",
     });
     assert.deepEqual(received(spawned[0], "turn/start").length, 1);
-    assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST]);
+    assert.deepEqual(acceptedLines(service.applied), [LINE.FIRST]);
   }),
 );
 
 it.effect("ends the launch as stopped when app-server never answers the stop's interrupt", () =>
   Effect.gen(function* () {
-    const luke = fakeService("sleep 600");
+    const service = fakeService("sleep 600");
     const hung: Script = {
       exchanges: [...OPEN, exchange(FIRST, 5), { method: "turn/interrupt", reply: [] }],
     };
-    const { spawned, write, run } = yield* launch([hung], luke);
+    const { spawned, write, run } = yield* launch([hung], service);
     yield* write(CONFIG);
     yield* write(message("Run `sleep 600` and wait for it to finish."));
-    yield* luke.seen;
+    yield* service.seen;
     yield* write({ type: INPUT_LINE.STOP });
     while (received(spawned[0], "turn/interrupt").length === 0) yield* Effect.yieldNow;
     yield* Effect.yieldNow.pipe(Effect.repeat({ times: 50 }));
@@ -660,7 +663,7 @@ it.effect("ends the launch as stopped when app-server never answers the stop's i
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
     assert.ok(spawned[0]?.ended);
-    assert.deepEqual(luke.applied.at(-1)?.message, {
+    assert.deepEqual(service.applied.at(-1)?.message, {
       type: RUNNER_EVENT.END,
       reason: RUNNER_END.STOPPED,
     });
@@ -669,16 +672,16 @@ it.effect("ends the launch as stopped when app-server never answers the stop's i
 
 it.effect("ends the launch as failed when app-server exits, its secrets taken out of why", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
+    const service = fakeService();
     const { write, run } = yield* launch(
       [{ exchanges: [...OPEN, exchange(FIRST, 3)], exitWith: `panic: bad token ${BEARER}` }],
-      luke,
+      service,
     );
     yield* write(CONFIG);
     yield* write(message("The probe's first turn."));
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
-    assert.deepEqual(luke.applied.at(-1)?.message, {
+    assert.deepEqual(service.applied.at(-1)?.message, {
       type: RUNNER_EVENT.END,
       reason: RUNNER_END.FAILED,
       detail: "app-server exited: panic: bad token [redacted]",
@@ -706,7 +709,7 @@ it.effect("ends an idle launch at once on a stop, and on stdin closing, with no 
 
 it.effect("starts the next turn for a message Vespin sent just before the turn completed", () =>
   Effect.gen(function* () {
-    const luke = fakeService("turn/completed");
+    const service = fakeService("turn/completed");
     const release = yield* Deferred.make<void>();
     const userMessage = RESUMED_TURN.reply.find((line) => line.method === "item/started");
     if (userMessage === undefined) throw new Error("the resumed turn has no user message");
@@ -727,11 +730,11 @@ it.effect("starts the next turn for a message Vespin sent just before the turn c
         RESUMED_TURN,
       ],
     };
-    const { spawned, write, run } = yield* launch([script], luke);
+    const { spawned, write, run } = yield* launch([script], service);
     yield* write({ ...CONFIG, threadId: THREAD });
     yield* write(message("What exact line did you first write to PROBE.md?"));
     yield* write(message("And the second line?"));
-    yield* luke.seen;
+    yield* service.seen;
     // The follow-up is queued behind the completion before the steer is answered.
     yield* write(message("Also check the tests."));
     yield* Effect.yieldNow.pipe(Effect.repeat({ times: 50 }));
@@ -789,10 +792,10 @@ it.effect(
   "on the plan, app-server takes its token from the runner's command, which a 401 mid-turn runs again, and the turn goes on to complete",
   () =>
     Effect.gen(function* () {
-      const luke = fakeService();
+      const service = fakeService();
       const route = fakeTokenRoute();
       const http = fakeHttpClientLayer((url, init) =>
-        url === TOKEN_URL ? route.respond(url, init) : luke.respond(url, init),
+        url === TOKEN_URL ? route.respond(url, init) : service.respond(url, init),
       );
       // What app-server sent OpenAI as its bearer, request by request.
       const sentToOpenAi: string[] = [];
@@ -808,7 +811,7 @@ it.effect(
       };
       const { spawned, write, run, logged } = yield* launch(
         [{ exchanges: [...RESUME, turn] }],
-        luke,
+        service,
         ENV,
         { self: SELF, http },
       );
@@ -821,8 +824,8 @@ it.effect(
       assert.deepEqual(process?.unexpected, []);
       assert.deepEqual(sentToOpenAi, ["plan-token-1", "plan-token-2"]);
       assert.deepEqual(route.bearers, [`Bearer ${BEARER}`, `Bearer ${BEARER}`]);
-      assert.deepEqual(kinds(luke.applied).slice(-2), ["turn/completed", RUNNER_EVENT.END]);
-      assert.deepEqual(luke.applied.at(-1)?.message, {
+      assert.deepEqual(kinds(service.applied).slice(-2), ["turn/completed", RUNNER_EVENT.END]);
+      assert.deepEqual(service.applied.at(-1)?.message, {
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.TURN_ENDED,
       });
@@ -841,7 +844,7 @@ it.effect(
       assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
 
       // What the command printed went to app-server alone: never argv, an event, or a log.
-      const posted = luke.bodies.join("\n");
+      const posted = service.bodies.join("\n");
       for (const secret of ["plan-token-1", "plan-token-2", BEARER]) {
         assert.ok(!posted.includes(secret));
         assert.ok(!logged.some((line) => line.includes(secret)));
@@ -874,8 +877,8 @@ it.effect(
 
 it.effect("never starts app-server on the plan when it does not know its own bundle", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
-    const { spawned, write, run } = yield* launch([WORKFLOW], luke, ENV, {});
+    const service = fakeService();
+    const { spawned, write, run } = yield* launch([WORKFLOW], service, ENV, {});
     yield* write(CONFIG);
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
@@ -910,14 +913,14 @@ const REVERTED: Exchange = {
 
 it.effect("reverts a rewound thread to before the turn that took the line the rewind dropped", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
+    const service = fakeService();
     const page = turnsPage([
       { id: "turn-3", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e09" },
       { id: "turn-2", line: LINE.STEERED },
       { id: "turn-1", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e08" },
     ]);
     const script: Script = { exchanges: [...RESUME, page, REVERTED, RESUMED_TURN] };
-    const { spawned, write, run } = yield* launch([script], luke);
+    const { spawned, write, run } = yield* launch([script], service);
     yield* write({ ...CONFIG, threadId: THREAD, rewindBefore: LINE.STEERED });
     yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
 
@@ -932,10 +935,10 @@ it.effect("reverts a rewound thread to before the turn that took the line the re
 
 it.effect("resumes a thread whole where no turn took the line the rewind dropped", () =>
   Effect.gen(function* () {
-    const luke = fakeService();
+    const service = fakeService();
     const page = turnsPage([{ id: "turn-1", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e08" }]);
     const script: Script = { exchanges: [...RESUME, page, RESUMED_TURN] };
-    const { spawned, write, run } = yield* launch([script], luke);
+    const { spawned, write, run } = yield* launch([script], service);
     yield* write({ ...CONFIG, threadId: THREAD, rewindBefore: LINE.STEERED });
     yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
 

@@ -13,18 +13,18 @@ set -euo pipefail
 
 out=${1:?usage: window.sh <out.png> [electron args...]}
 shift
-worktree=${SHOTS_WORKTREE:-$HOME/Developer/luke-changelog-shots}
+worktree=${SHOTS_WORKTREE:-$HOME/Developer/changelog-shots}
 here=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-build=${TMPDIR:-/tmp}/luke-changelog-window-id
+build=${TMPDIR:-/tmp}/changelog-window-id
 if [[ ! -x $build || $here/window-id.swift -nt $build ]]; then
     xcrun swiftc -O -o "$build" "$here/window-id.swift"
 fi
-park=${TMPDIR:-/tmp}/luke-changelog-park-cursor
+park=${TMPDIR:-/tmp}/changelog-park-cursor
 if [[ ! -x $park || $here/park-cursor.swift -nt $park ]]; then
     xcrun swiftc -O -o "$park" "$here/park-cursor.swift"
 fi
 export APP_SHOT_SIZE=${APP_SHOT_SIZE:-1600x1000}
-profile=$(mktemp -d /tmp/luke-shot.XXXX)
+profile=$(mktemp -d /tmp/release-shot.XXXX)
 # Note that we quit the build and remove its profile on every exit, because a failed capture must not leave either behind.
 # Note that we wait for the build to quit before removing its profile, because it is still writing there as it goes.
 cleanup() {
@@ -37,7 +37,7 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir -p "$(dirname -- "$out")"
-(cd "$worktree/apps/desktop" && ./node_modules/.bin/electron . --user-data-dir="$profile" --fixture smoke "$@" >/tmp/luke-shot-window.log 2>&1 &)
+(cd "$worktree/apps/desktop" && ./node_modules/.bin/electron . --user-data-dir="$profile" --fixture smoke "$@" >/tmp/release-shot-window.log 2>&1 &)
 # Note that APP_SHOT_SETTLE gives a shot that stages late (a menu reopened after the activation) longer to draw.
 sleep "${APP_SHOT_SETTLE:-8}"
 id=0
@@ -47,7 +47,7 @@ for pid in $(pgrep -f "user-data-dir=$profile"); do
     if [[ $candidate != 0 ]]; then id=$candidate; owner=$pid; fi
 done
 if [[ $id == 0 ]]; then
-    printf 'error: no window; see /tmp/luke-shot-window.log\n' >&2
+    printf 'error: no window; see /tmp/release-shot-window.log\n' >&2
     exit 1
 fi
 export APP_SHOT_ZOOM=${APP_SHOT_ZOOM:-1}

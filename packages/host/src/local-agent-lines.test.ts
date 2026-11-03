@@ -94,7 +94,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
   clis: fakeClis(),
   formerlyDirect: true,
   storesOwned: false,
-  runnerBundle: "/opt/luke/agent-runner.mjs",
+  runnerBundle: "/opt/agent/agent-runner/agent-runner.mjs",
   runnerEnv: {},
   deviceName: "Studio",
   deviceMachine: {},

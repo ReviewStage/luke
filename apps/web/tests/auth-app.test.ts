@@ -45,8 +45,8 @@ function stubbedHandler(answer: () => Response): StubbedHandler {
 
 function signedInAnswer(): Response {
   const headers = new Headers({ "content-type": "application/json", "x-better-auth": "1" });
-  headers.append("set-cookie", "luke.session_token=abc; Path=/; HttpOnly; SameSite=Lax");
-  headers.append("set-cookie", "luke.session_data=def; Path=/; HttpOnly");
+  headers.append("set-cookie", "app.session_token=abc; Path=/; HttpOnly; SameSite=Lax");
+  headers.append("set-cookie", "app.session_data=def; Path=/; HttpOnly");
   return new Response(JSON.stringify({ redirect: false, token: "abc" }), {
     status: HOSTED_HTTP_STATUS.OK,
     headers,

@@ -14,7 +14,7 @@ it.effect("refuses a request made after app-server has exited", () =>
     const server = fakeAppServer([{ exchanges: [], exitWith: "gone" }]);
     const exited = yield* Deferred.make<string>();
     const appServer = yield* spawnAppServer(
-      { executable: "/opt/luke-codex/bin/codex", args: [], cwd: "/srv/repo", env: {} },
+      { executable: "/opt/agent-codex/bin/codex", args: [], cwd: "/srv/repo", env: {} },
       {
         onNotification: () => Effect.void,
         onExit: (stderrTail) => Deferred.succeed(exited, stderrTail).pipe(Effect.asVoid),
@@ -32,7 +32,7 @@ it.effect("refuses a request made after app-server has exited", () =>
 /** A running app-server playing one script, with a listener that hears nothing. */
 const running = (exchanges: Script["exchanges"]) =>
   spawnAppServer(
-    { executable: "/opt/luke-codex/bin/codex", args: [], cwd: "/srv/repo", env: {} },
+    { executable: "/opt/agent-codex/bin/codex", args: [], cwd: "/srv/repo", env: {} },
     { onNotification: () => Effect.void, onExit: () => Effect.void },
   ).pipe(Effect.provide(fakeAppServer([{ exchanges }]).layer));
 
