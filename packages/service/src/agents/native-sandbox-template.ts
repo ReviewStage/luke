@@ -95,7 +95,7 @@ export const NATIVE_TEMPLATE = {
   SWEEP_PERIOD: Duration.minutes(1),
 } as const;
 
-/** The template's tags beside its key: where its build runs, and how the build ended. */
+/** The template's tags beside its key: where its build runs, and how the build ended. Note that they and `NATIVE_TEMPLATE.NAME_PREFIX` keep their old names, because the sweep finds the templates made before by them. */
 const TEMPLATE_TAG = {
   KEY: "lukeTemplate",
   SESSION: "lukeTemplateSession",
@@ -106,7 +106,7 @@ const TEMPLATE_TAG = {
 } as const;
 
 /** Where the recorded preparation is uploaded and run from: the default user's own `/tmp`. */
-const BUILD_DIRECTORY = "/tmp/luke-template";
+const BUILD_DIRECTORY = "/tmp/agent-template";
 
 /** Where eve's session resolves a relative path, as its template's preparation saw it. */
 const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;

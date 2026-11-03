@@ -85,7 +85,7 @@ export const SUMMARY_GLYPH =
 
 /** Whether the reader left Archived open, one choice for every task's summary, kept on this Mac. */
 const KEPT = {
-  UNFOLDED: keptKey("luke.taskArchivedUnfolded", Schema.fromJsonString(Schema.Boolean)),
+  UNFOLDED: keptKey("app.taskArchivedUnfolded", Schema.fromJsonString(Schema.Boolean)),
 } as const;
 
 /** What the archived agents' fold says. */

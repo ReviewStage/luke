@@ -103,7 +103,7 @@ const REFRESH_SCRIPT = [
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
 
-/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. */
+/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. Note that it and the deepen's lock keep the old folder `CHECKOUT_RECORD` keeps, which a persistent sandbox made before still holds. */
 const DEEPENED_RECORD = ".luke/deepened";
 
 /** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */

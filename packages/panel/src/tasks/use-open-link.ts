@@ -215,7 +215,7 @@ export function opensAsLink(href: string): boolean {
 }
 
 /** The place an app link names, or the plan a link written before the link was settled names; nothing for any other address. */
-function lukeLinkOf(href: string): ReadLink | undefined {
+function appLinkOf(href: string): ReadLink | undefined {
   const read = readLink(href);
   if (read !== undefined) return read;
   // Note that no repository is handed, so a GitHub page is never read as a file here: it opens on GitHub.
@@ -250,7 +250,7 @@ export function useOpenLink(): (href: string) => void {
       const link =
         openPlace === undefined
           ? undefined
-          : (lukeLinkOf(href) ?? listedPullRequestLink(href, listed));
+          : (appLinkOf(href) ?? listedPullRequestLink(href, listed));
       if (openPlace !== undefined && link !== undefined) {
         openPlace(link);
       } else if (isGitHubAddress(href)) {

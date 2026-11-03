@@ -122,7 +122,9 @@ import {
  * The tags a sandbox we open carries beside its session's: its agent, and
  * the runner it runs, so a later call finds both. Note that Vercel refuses a
  * sandbox more than five tags, the session's among them, so a launch's
- * fingerprint rides in its launch tag rather than a tag of its own.
+ * fingerprint rides in its launch tag rather than a tag of its own. And
+ * note that the tags, and `SANDBOX_NAME`, keep their old names, because the
+ * launch and the sweep find a persistent sandbox made before by them.
  */
 export const RUNNER_TAG = {
   AGENT: "lukeAgent",
@@ -152,7 +154,7 @@ const LINES_READ_MARK = "lines";
  * commit picks them up, and readable by `agent`, since the API writes them
  * as its default user with the mode the caller names.
  */
-const ATTACHMENT_DIRECTORY = "/tmp/luke-attachments";
+const ATTACHMENT_DIRECTORY = "/tmp/agent-attachments";
 
 /** Where a sandbox keeps an agent's things: the same for every agent, since each has a sandbox of its own. */
 const SANDBOX_LAYOUT: MachineLayout = {
@@ -179,7 +181,7 @@ export const SANDBOX_NAME = "luke-agent-";
  * what runs as `agent`.
  */
 const RUNNER_PATH = {
-  UPLOAD: "/tmp/luke-agent-runner.mjs",
+  UPLOAD: "/tmp/agent-runner.mjs",
   INSTALLED: `${RUNNER_DIRECTORY}/agent-runner.mjs`,
 } as const;
 
@@ -216,7 +218,7 @@ const LAUNCH_SCRIPT = [
 ].join("\n");
 
 /** What `$0` reads as in the launch's shell. */
-const LAUNCH_NAME = "luke-agent-runner";
+const LAUNCH_NAME = "agent-runner";
 
 /** How the read exits where the path is no regular file the sandbox's user may read. */
 const READ_EXIT = { NO_FILE: 3 } as const;
@@ -448,7 +450,7 @@ function readFileCommand(path: string, maxBytes: number) {
       "bash",
       "-c",
       READ_SCRIPT,
-      "luke-read-file",
+      "read-file",
       path,
       String(maxBytes),
     ],

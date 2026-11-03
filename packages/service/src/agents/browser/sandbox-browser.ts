@@ -37,7 +37,7 @@ export const SANDBOX_BROWSER = {
   /** The display's and the browser window's size. */
   WIDTH: 1280,
   HEIGHT: 800,
-  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. */
+  /** Where the browser keeps its state under the sandbox user's home: its profile, its logs, and the start's lock. Note that it keeps its old folder, because a persistent sandbox made before still holds its profile there. */
   STATE_DIRECTORY: ".luke/browser",
   /** How long the start waits on Xvfb's socket and on the browser's DevTools, in tenths of a second. */
   DISPLAY_WAIT_TENTHS: 50,
@@ -170,7 +170,7 @@ export function startBrowser(): CommandAsk {
       "bash",
       "-c",
       START_SCRIPT,
-      "luke-browser",
+      "agent-browser",
       String(SANDBOX_BROWSER.DEVTOOLS_PORT),
       String(SANDBOX_BROWSER.DISPLAY),
       String(SANDBOX_BROWSER.WIDTH),

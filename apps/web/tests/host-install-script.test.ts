@@ -21,10 +21,10 @@ import { dispatched } from "./support/platform-landing.js";
  * nothing here dials.
  */
 
-const PLACEHOLDER_DATABASE_URL = "postgresql://install:script@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://install:script@127.0.0.1:5432/app";
 
 /** An address a Preview answers on, apart from production's and its other ones. */
-const PREVIEW_ORIGIN = "https://luke-git-feature-install-reviewstage.vercel.app";
+const PREVIEW_ORIGIN = "https://vespin-git-feature-install-stage-review.vercel.app";
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
@@ -44,7 +44,7 @@ test("the install script fetched from a Preview names that Preview as the origin
   assert.equal(answer.status, 200);
   assert.doesNotMatch(script, /@@[A-Z0-9_]+@@/u);
 
-  const file = join(await temporaryDirectory(t, "luke-install-script-"), "install.sh");
+  const file = join(await temporaryDirectory(t, "install-script-"), "install.sh");
   writeFileSync(file, script);
   // The script stops once it has defined what it carries, under the variable its own tests set.
   const origin = spawnSync("sh", ["-c", '. "$1"; printf %s "$ORIGIN"', "sh", file], {

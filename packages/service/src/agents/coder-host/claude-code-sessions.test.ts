@@ -546,10 +546,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(command.args.at(-1), createHash("sha256").update(BUNDLE).digest("hex"));
         // The bundle is uploaded as the default user and installed by root where only root writes.
         assert.equal(
-          api.uploads[0]?.get("/tmp/luke-agent-runner.mjs"),
+          api.uploads[0]?.get("/tmp/agent-runner.mjs"),
           new TextDecoder().decode(BUNDLE),
         );
-        assert.match(script, /install -D -o root -g root -m 0444 \/tmp\/luke-agent-runner\.mjs/u);
+        assert.match(script, /install -D -o root -g root -m 0444 \/tmp\/agent-runner\.mjs/u);
 
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
@@ -674,28 +674,28 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         const skills = api.uploads.find((upload) =>
-          [...upload.keys()].some((path) => path.startsWith("/tmp/luke-installed-skills/")),
+          [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
         );
         assert.ok(skills !== undefined);
         // A Claude Code local plugin named luke, each skill a whole folder.
         assert.deepEqual([...skills.keys()].sort(), [
-          "/tmp/luke-installed-skills/.claude-plugin/plugin.json",
-          "/tmp/luke-installed-skills/skills/incident-notes/SKILL.md",
-          "/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md",
-          "/tmp/luke-installed-skills/skills/sentry-triage/scripts/triage.sh",
+          "/tmp/agent-installed-skills/.claude-plugin/plugin.json",
+          "/tmp/agent-installed-skills/skills/incident-notes/SKILL.md",
+          "/tmp/agent-installed-skills/skills/sentry-triage/SKILL.md",
+          "/tmp/agent-installed-skills/skills/sentry-triage/scripts/triage.sh",
         ]);
         assert.equal(
-          JSON.parse(skills.get("/tmp/luke-installed-skills/.claude-plugin/plugin.json") ?? "")
+          JSON.parse(skills.get("/tmp/agent-installed-skills/.claude-plugin/plugin.json") ?? "")
             .name,
           "workspace",
         );
         // Every other key and the body as installed, under the name and description we keep.
         assert.equal(
-          skills.get("/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md"),
+          skills.get("/tmp/agent-installed-skills/skills/sentry-triage/SKILL.md"),
           '---\nname: sentry-triage\ndescription: "Triage a Sentry issue."\nallowed-tools: Bash\n---\n\nRun `scripts/triage.sh`.\n',
         );
         assert.equal(
-          skills.get("/tmp/luke-installed-skills/skills/incident-notes/SKILL.md"),
+          skills.get("/tmp/agent-installed-skills/skills/incident-notes/SKILL.md"),
           '---\nname: incident-notes\ndescription: "Write incident notes."\nuser-invocable: false\n---\n\nWrite them.\n',
         );
         // Nothing lands in the checkout, so nothing can be committed.
@@ -706,7 +706,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const script = command.args[1] ?? "";
         assert.match(
           script,
-          /mv \/tmp\/luke-installed-skills \/opt\/agent\/installed-skills && chown -R root:root \/opt\/agent\/installed-skills && chmod -R u=rwX,go=rX/u,
+          /mv \/tmp\/agent-installed-skills \/opt\/agent\/installed-skills && chown -R root:root \/opt\/agent\/installed-skills && chmod -R u=rwX,go=rX/u,
         );
         const [config] = (yield* launchLines(command)) as [ClaudeCodeConfig];
         assert.equal(config.installedSkills, "/opt/agent/installed-skills");
@@ -720,7 +720,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* otherSessions.open(message(other.agent, "Triage it."));
         assert.ok(
           !bare.uploads.some((upload) =>
-            [...upload.keys()].some((path) => path.startsWith("/tmp/luke-installed-skills/")),
+            [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
           ),
         );
       }),
@@ -1054,8 +1054,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
 
-        const firstPath = `/tmp/luke-attachments/${firstId}/2-Spec-v2.pdf`;
-        const laterPath = `/tmp/luke-attachments/${laterId}/2-etc-notes.pdf`;
+        const firstPath = `/tmp/agent-attachments/${firstId}/2-Spec-v2.pdf`;
+        const laterPath = `/tmp/agent-attachments/${laterId}/2-etc-notes.pdf`;
         const written = new Map(api.uploads.flatMap((upload) => [...upload]));
         assert.equal(written.get(firstPath), pdf);
         assert.equal(written.get(laterPath), pdf);

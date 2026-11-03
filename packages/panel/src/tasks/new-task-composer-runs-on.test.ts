@@ -297,7 +297,7 @@ test.each([
 ])(
   "a last pick $standing as the card opens stays picked and says so, and the task starts on it, never in the cloud",
   async ({ studio, chip: label }) => {
-    window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+    window.localStorage.setItem("app.newTaskRunsOn", STUDIO);
     const [online, builder] = devicesWith();
     assert.ok(online !== undefined && builder !== undefined);
     const { container, starts } = await mount({ devices: [{ ...online, ...studio }, builder] });
@@ -314,7 +314,7 @@ test.each([
 );
 
 test("a device picked in another card reaches this one", async () => {
-  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+  window.localStorage.setItem("app.newTaskRunsOn", STUDIO);
   const offered = { devices: devicesWith(0, Date.now()) };
   const welcome = await mount(offered);
   const dialog = await mount(offered);
@@ -331,7 +331,7 @@ test("a device picked in another card reaches this one", async () => {
 });
 
 test("nothing starts before the card's own read of the devices lands, and one that failed says so, with a Retry that reads them again", async () => {
-  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+  window.localStorage.setItem("app.newTaskRunsOn", STUDIO);
   // A list read before the card opened, here one with no device, is no read of the card's own.
   const reading = await mount({ devices: [], reads: READS.HOLD });
   pressInComposer(reading.container, "Enter", { metaKey: true });
@@ -374,7 +374,7 @@ test("while Bring your own host is off the card reads no devices, offers Cloud a
       return Promise.resolve({ devices: [] });
     },
   });
-  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+  window.localStorage.setItem("app.newTaskRunsOn", STUDIO);
   const { container, starts, reads } = await mount({ devices: devicesWith(), reads: READS.HOLD });
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();

@@ -102,7 +102,7 @@ type DerivedAppBridge = {
 };
 
 /**
- * What the preload exposes as `window.luke`: the invokes and the sends. What
+ * What the preload exposes as `window.appBridge`: the invokes and the sends. What
  * main pushes reaches the window on its act port instead (`contract/pushes.ts`).
  */
 export type PreloadBridge = Omit<DerivedAppBridge, "recordSurfaceEvent"> & {

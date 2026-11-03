@@ -341,17 +341,17 @@ test("⌘F over the page asks its frame to find, and the bar tallies what that f
     offered = runAppCommand(APP_COMMAND.FIND);
   });
   typeFind("invites");
-  postFrom(null, { type: "luke-page-find", tally: { count: 9, at: 0 } });
+  postFrom(null, { type: "app-page-find", tally: { count: 9, at: 0 } });
   const tallyBefore = findTally();
-  postFrom(frame().contentWindow, { type: "luke-page-find", tally: { count: 3, at: 0 } });
+  postFrom(frame().contentWindow, { type: "app-page-find", tally: { count: 3, at: 0 } });
   act(() => {
     runAppCommand(APP_COMMAND.FIND_NEXT);
   });
 
   assert.equal(offered, true);
   assert.deepEqual(posted, [
-    { type: "luke-page-find", act: "search", query: "invites" },
-    { type: "luke-page-find", act: "step", query: "invites", by: 1 },
+    { type: "app-page-find", act: "search", query: "invites" },
+    { type: "app-page-find", act: "step", query: "invites", by: 1 },
   ]);
   assert.equal(tallyBefore, "No results");
   assert.equal(findTally(), "1 of 3");
@@ -360,7 +360,7 @@ test("⌘F over the page asks its frame to find, and the bar tallies what that f
 test("⌘F over the page is seeded with the words selected in its frame", () => {
   const { frame } = mount(FUNNEL);
 
-  postFrom(frame().contentWindow, { type: "luke-page-find", selection: "funnel" });
+  postFrom(frame().contentWindow, { type: "app-page-find", selection: "funnel" });
   act(() => {
     runAppCommand(APP_COMMAND.FIND);
   });
@@ -381,22 +381,22 @@ test("a frame that loads again, as a Reload or another version does, is asked ag
     frame().dispatchEvent(new Event("load"));
   });
 
-  assert.deepEqual(posted, [{ type: "luke-page-find", act: "search", query: "invites" }]);
+  assert.deepEqual(posted, [{ type: "app-page-find", act: "search", query: "invites" }]);
 });
 
 test("⌘F and ⌘G pressed in the page, which the window's keys never hear, open the find over it and step, whichever column held the keys", () => {
   const { frame } = mount(FUNNEL, readSource, false);
   const posted = framePosts(frame());
 
-  postFrom(frame().contentWindow, { type: "luke-page-find", selection: "funnel" });
-  postFrom(frame().contentWindow, { type: "luke-page-find", key: "find" });
-  postFrom(frame().contentWindow, { type: "luke-page-find", key: "next" });
+  postFrom(frame().contentWindow, { type: "app-page-find", selection: "funnel" });
+  postFrom(frame().contentWindow, { type: "app-page-find", key: "find" });
+  postFrom(frame().contentWindow, { type: "app-page-find", key: "next" });
 
   const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.equal(field?.value, "funnel");
   assert.deepEqual(posted, [
-    { type: "luke-page-find", act: "search", query: "funnel" },
-    { type: "luke-page-find", act: "step", query: "funnel", by: 1 },
+    { type: "app-page-find", act: "search", query: "funnel" },
+    { type: "app-page-find", act: "step", query: "funnel", by: 1 },
   ]);
 });
 

@@ -514,8 +514,8 @@ test("the window is called by what stands in it: the plan on screen in its own w
 
 test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
   const unreadOnOpen = (inboxOpen: boolean) => {
-    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
-    window.localStorage.setItem("luke.planLooksSeeded", "1");
+    window.localStorage.setItem("app.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
+    window.localStorage.setItem("app.planLooksSeeded", "1");
     const page = mount(
       inboxOpen,
       false,
@@ -566,8 +566,8 @@ function mountListing(
   listed: readonly Task[],
   looks: Readonly<Record<string, number>>,
 ): (open: Task | undefined) => void {
-  window.localStorage.setItem("luke.taskLooks", JSON.stringify(looks));
-  window.localStorage.setItem("luke.taskLooksSeeded", "1");
+  window.localStorage.setItem("app.taskLooks", JSON.stringify(looks));
+  window.localStorage.setItem("app.taskLooksSeeded", "1");
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);

@@ -93,7 +93,7 @@ const LOGS_SCRIPT = "/logs.js";
  * sign-in for, so a sign-in that passes more than one page that would count
  * it (consent, where it is shown, then the desktop's hand-off) is counted once.
  */
-const COUNTED_SESSION_KEY = "luke_site_sign_in_session";
+const COUNTED_SESSION_KEY = "app_site_sign_in_session";
 
 /** Whether the page now loading is one the sign-in flow's address serves. */
 function onAuthPage(): boolean {

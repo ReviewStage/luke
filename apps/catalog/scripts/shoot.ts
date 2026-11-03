@@ -286,7 +286,7 @@ async function main(): Promise<void> {
   }
   const outDir = path.resolve(values.out);
   const jobs = Math.max(1, Number(values.jobs) || DEFAULT_JOBS);
-  const buildDir = mkdtempSync(path.join(tmpdir(), "luke-catalog-"));
+  const buildDir = mkdtempSync(path.join(tmpdir(), "catalog-"));
   let served: Awaited<ReturnType<typeof serveBuild>> | undefined;
   let browser: PlaywrightBrowser | undefined;
   try {

@@ -106,10 +106,10 @@ import { agentHoldingsOf, tasksControl, waitingOf } from "./tasks-control.js";
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** Where the window's Inbox keeps the scope it shows. */
-export const SHOW_KEY = "luke.inboxShow";
+export const SHOW_KEY = "app.inboxShow";
 
 /** Where the window's Inbox keeps whom the items it lists are addressed to. */
-export const WHOSE_KEY = "luke.inboxWhose";
+export const WHOSE_KEY = "app.inboxWhose";
 
 export const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",

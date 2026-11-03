@@ -29,7 +29,7 @@ const MIGRATION = "20261025202554_inbox_item_channel";
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-channel-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-channel-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(MIGRATION) < 0,
   );

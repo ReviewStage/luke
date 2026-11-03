@@ -80,7 +80,7 @@ const PAGE_LINK_LIFETIME = Duration.minutes(1);
 const MINIMUM_SECRET_CHARACTERS = 32;
 
 /** What a link's signature is made over ahead of its claims, so no other MAC under the key could stand for one. */
-const PAGE_LINK_PURPOSE = "luke-page-link-v1";
+const PAGE_LINK_PURPOSE = "app-page-link-v1";
 
 /** The deployment's other secrets, none of whose values the link's key may hold. */
 const OTHER_SECRETS = [

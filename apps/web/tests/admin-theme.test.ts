@@ -10,7 +10,7 @@ import { followAppTheme } from "../src/admin/admin-appearance";
 /**
  * The admin dashboard draws in the theme the app keeps, not a forced dark one:
  * once its page (`admin.html`) is up, `followAppTheme` wears a change of
- * `luke.theme`, or of the machine's appearance under System, as it lands, and
+ * `app.theme`, or of the machine's appearance under System, as it lands, and
  * tints the browser's chrome in the worn theme's ground.
  */
 
@@ -81,20 +81,20 @@ test("a change of the app's theme in another tab is worn as it lands, the chrome
   const stop = followAppTheme();
   assert.equal(worn().theme, "light");
 
-  localStorage.setItem("luke.theme", "dark");
-  window.dispatchEvent(new StorageEvent("storage", { key: "luke.theme", newValue: "dark" }));
+  localStorage.setItem("app.theme", "dark");
+  window.dispatchEvent(new StorageEvent("storage", { key: "app.theme", newValue: "dark" }));
   assert.equal(worn().theme, "dark");
   assert.equal(worn().chrome, worn().ground);
 
-  localStorage.setItem("luke.theme", "light");
-  window.dispatchEvent(new StorageEvent("storage", { key: "luke.theme", newValue: "light" }));
+  localStorage.setItem("app.theme", "light");
+  window.dispatchEvent(new StorageEvent("storage", { key: "app.theme", newValue: "light" }));
   assert.equal(worn().theme, "light");
   assert.equal(worn().chrome, worn().ground);
   stop();
 });
 
 test("under System the machine's flips are worn, and a chosen theme ignores them", () => {
-  localStorage.setItem("luke.theme", "system");
+  localStorage.setItem("app.theme", "system");
   const stop = followAppTheme();
   assert.equal(worn().theme, "light");
 
@@ -102,8 +102,8 @@ test("under System the machine's flips are worn, and a chosen theme ignores them
   assert.equal(worn().theme, "dark");
   assert.equal(worn().chrome, worn().ground);
 
-  localStorage.setItem("luke.theme", "light");
-  window.dispatchEvent(new StorageEvent("storage", { key: "luke.theme" }));
+  localStorage.setItem("app.theme", "light");
+  window.dispatchEvent(new StorageEvent("storage", { key: "app.theme" }));
   assert.equal(worn().theme, "light");
   flipMachine(false);
   flipMachine(true);

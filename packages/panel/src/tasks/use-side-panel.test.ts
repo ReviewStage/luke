@@ -102,7 +102,7 @@ test("a record kept before tasks had their name holds each task's choices under 
   act(() => first.control().onPin({ task: TASK }, { changes: AGENT }, "Changes: Invite flow"));
   first.quit();
   const { tasks, pins, ...kept } = JSON.parse(
-    window.localStorage.getItem("luke.sidePanel") ?? "{}",
+    window.localStorage.getItem("app.sidePanel") ?? "{}",
   );
   assert.ok(tasks, "the record keeps the task's choices");
   const earlierPins = pins.map(({ task, ...pin }: { readonly task: string }) => ({
@@ -110,7 +110,7 @@ test("a record kept before tasks had their name holds each task's choices under 
     plan: task,
   }));
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({ ...kept, plans: tasks, pins: earlierPins }),
   );
 
@@ -198,7 +198,7 @@ test("a tab pinned on an agent's own page keeps its pin across a launch, under a
   act(() => first.control().onPin({ agent: AGENT }, { changes: AGENT }, "#88 Quarantine"));
   act(() => first.control().onPin({ task: TASK }, { changes: OTHER_AGENT }, "#42 Invites"));
   first.quit();
-  const { pins, agentPins } = JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}");
+  const { pins, agentPins } = JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}");
   assert.deepEqual(
     [
       pins.map((pin: { task?: string }) => pin.task),
@@ -458,7 +458,7 @@ test("a task that may draw no Inbox, holding no agent and nothing waiting, draws
 
 test("a record kept while the Call and Code stood in the panel reads with their tabs let go from the strip, and the Call's pin let go too", () => {
   window.localStorage.setItem(
-    "luke.sidePanel",
+    "app.sidePanel",
     JSON.stringify({
       open: true,
       tabs: ["board", "code", "call", "comments"],
@@ -517,7 +517,7 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
   // The panel stands open on a plan, and is kept open for the next launch.
   render(SHELL_ROOM.NARROW, usedTask(TASK));
   assert.equal(now().open, true);
-  assert.equal(JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").open, true);
+  assert.equal(JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}").open, true);
 
   for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
     render(room, { id: undefined, holds: {}, bare: true });

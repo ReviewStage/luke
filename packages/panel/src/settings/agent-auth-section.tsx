@@ -130,7 +130,7 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
 const NO_CAPTURE = "ph-no-capture";
 
 /** Where this Mac keeps that the ChatGPT notice was seen, in the renderer's own storage. */
-const NOTICE_SEEN_KEY = "luke.chatGptFirstSignInNoticeSeen";
+const NOTICE_SEEN_KEY = "app.chatGptFirstSignInNoticeSeen";
 
 /** Which of a harness's credentials its new agents use. */
 const CREDENTIAL = {

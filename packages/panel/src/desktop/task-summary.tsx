@@ -113,9 +113,9 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * thing to hidden the summary still has.
  */
 const KEPT = {
-  PINNED: keptKey("luke.summary-pinned", keptFlag),
+  PINNED: keptKey("app.summary-pinned", keptFlag),
   /** The headings the reader folded, one choice for every task's summary. */
-  FOLDED: keptKey("luke.summaryFoldedSections", Schema.fromJsonString(Schema.Array(Schema.String))),
+  FOLDED: keptKey("app.summaryFoldedSections", Schema.fromJsonString(Schema.Array(Schema.String))),
 } as const;
 
 /**

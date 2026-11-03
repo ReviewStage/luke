@@ -16,7 +16,7 @@
  * prefetch fall outside CSP altogether. What refuses the navigation is the
  * policy of the page that frames it: the web app's own `frame-src`, its own
  * origin and the sandbox's (the root `vercel.json`), and the desktop panel's
- * `frame-src luke-page:` (`apps/desktop/src/renderer/index.html`), which a
+ * `frame-src app-page:` (`apps/desktop/src/renderer/index.html`), which a
  * frame's navigation to any other origin is held to. A page opened alone,
  * outside that frame, has neither.
  */

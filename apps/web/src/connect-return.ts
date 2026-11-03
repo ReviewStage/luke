@@ -27,10 +27,10 @@ import { Option, Schema } from "effect";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { PANEL_PATH } from "./app/web-address";
 import { browserLinkPlatform } from "./link-platform";
-import { OPEN_LUKE, openMacApp } from "./open-luke";
+import { OPEN_APP, openMacApp } from "./open-app";
 
 /** The broadcast channel a landing page and the app's tabs speak on. */
-export const CONNECT_CHANNEL = "luke:connect";
+export const CONNECT_CHANNEL = "app:connect";
 
 /** What is said on the channel, each naming the landing it is about: a landing page that landed, and the app's tab that started its connect. */
 export const CONNECT_SAID = { LANDED: "landed", MINE: "mine" } as const;
@@ -38,10 +38,10 @@ export const CONNECT_SAID = { LANDED: "landed", MINE: "mine" } as const;
 type ConnectSaid = (typeof CONNECT_SAID)[keyof typeof CONNECT_SAID];
 
 /** Where, in a tab's session storage, a same-tab connect keeps the address it left from. */
-const RETURN_KEY = "luke:connect-return";
+const RETURN_KEY = "app:connect-return";
 
 /** Where, in the session storage of a tab the app opened for a connect, the app marks which hand-off the tab is. */
-const HANDOFF_KEY = "luke:connect-handoff";
+const HANDOFF_KEY = "app:connect-handoff";
 
 /** How long a connect stands for its landing, whether it left the app's tab or a tab of its own: one not back by then was abandoned. */
 export const CONNECT_BOUND_MS = 30 * 60 * 1000;
@@ -179,12 +179,12 @@ function closeToApp(event: MouseEvent<HTMLAnchorElement>): void {
  * or, where neither, the Mac app at its home, on a Mac; nothing on any other
  * platform, where there is no app to open and the page's words stand alone.
  */
-function openLuke(back: ConnectReturn, platform: LinkPlatform): AuthAction | undefined {
+function openApp(back: ConnectReturn, platform: LinkPlatform): AuthAction | undefined {
   switch (back.kind) {
     case CONNECT_RETURN.APP:
-      return { label: OPEN_LUKE, href: back.href, onClick: closeToApp };
+      return { label: OPEN_APP, href: back.href, onClick: closeToApp };
     case CONNECT_RETURN.ADDRESS:
-      return { label: OPEN_LUKE, href: back.href };
+      return { label: OPEN_APP, href: back.href };
     case CONNECT_RETURN.ELSEWHERE:
       return openMacApp(platform);
   }
@@ -250,5 +250,5 @@ export function useConnectReturn(state: {
   }, [answered, settled]);
   if (!landed) return { back: { kind: CONNECT_RETURN.ELSEWHERE }, open: undefined };
   const back: ConnectReturn = answered ? { kind: CONNECT_RETURN.APP, href: PANEL_PATH } : read;
-  return { back, open: openLuke(back, browserLinkPlatform()) };
+  return { back, open: openApp(back, browserLinkPlatform()) };
 }

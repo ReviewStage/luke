@@ -12,11 +12,11 @@ APP_TASKS_EVIDENCE_PATH="$APP_EVIDENCE_ROOT/app-smoke-tasks.png"
 APP_TASKS_TRANSCRIPT_EVIDENCE_PATH="$APP_EVIDENCE_ROOT/app-smoke-tasks-transcript.png"
 APP_TASKS_WORK_EVIDENCE_PATH="$APP_EVIDENCE_ROOT/app-smoke-tasks-work.png"
 
-luke_require_macos
-luke_require_node
-luke_require_command sips
-luke_require_command plutil
-luke_ensure_dependencies
+app_require_macos
+app_require_node
+app_require_command sips
+app_require_command plutil
+app_ensure_dependencies
 
 cd "$APP_REPO_ROOT"
 pnpm package:dir

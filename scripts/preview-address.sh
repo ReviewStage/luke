@@ -62,7 +62,7 @@ SSO_HOST=vercel.com
 SSO_PATH=/sso-api
 # An agent's branch builds no preview on a push (`vercel.json`'s
 # `git.deploymentEnabled`); one is built only when asked for, through Vercel.
-AGENT_BRANCH_PREFIX=luke/
+AGENT_BRANCH_PREFIX=agent/
 # The deployed tree is whatever the deployment's ignoreCommand diffs, read
 # from its script so the two cannot drift apart.
 VERCEL_IGNORE="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/vercel-ignore.sh"

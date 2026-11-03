@@ -70,7 +70,7 @@ test("the first frame wears the theme chosen here, whatever the machine says", (
     ["light", true, "light"],
   ] as const) {
     machineDark = machine;
-    localStorage.setItem("luke.theme", chosen);
+    localStorage.setItem("app.theme", chosen);
 
     const frame = firstFrame();
 
@@ -83,7 +83,7 @@ test("with System chosen, or nothing yet, the first frame follows the machine", 
   for (const chosen of ["system", undefined]) {
     for (const machine of [true, false]) {
       machineDark = machine;
-      if (chosen !== undefined) localStorage.setItem("luke.theme", chosen);
+      if (chosen !== undefined) localStorage.setItem("app.theme", chosen);
 
       const frame = firstFrame();
 
@@ -112,10 +112,10 @@ test("the frame pins the sidebar as the shell last drew it here, at the width ke
     [undefined, undefined],
     ["wide", undefined],
   ] as const) {
-    localStorage.setItem("luke.signed-in-here", "true");
-    localStorage.setItem("luke.sidebar-collapsed", "false");
-    if (kept === undefined) localStorage.removeItem("luke.sidebar-width");
-    else localStorage.setItem("luke.sidebar-width", kept);
+    localStorage.setItem("app.signed-in-here", "true");
+    localStorage.setItem("app.sidebar-collapsed", "false");
+    if (kept === undefined) localStorage.removeItem("app.sidebar-width");
+    else localStorage.setItem("app.sidebar-width", kept);
     document.documentElement.style.removeProperty("--ui-boot-sidebar-width");
 
     assert.deepEqual(frameSidebar(), { pinned: true, width }, `kept ${kept}`);
@@ -129,9 +129,9 @@ test("a sidebar kept folded or never drawn, or a browser not signed in here, sta
     [undefined, "false"],
   ] as const) {
     localStorage.clear();
-    if (signedIn !== undefined) localStorage.setItem("luke.signed-in-here", signedIn);
-    if (collapsed !== undefined) localStorage.setItem("luke.sidebar-collapsed", collapsed);
-    localStorage.setItem("luke.sidebar-width", "300");
+    if (signedIn !== undefined) localStorage.setItem("app.signed-in-here", signedIn);
+    if (collapsed !== undefined) localStorage.setItem("app.sidebar-collapsed", collapsed);
+    localStorage.setItem("app.sidebar-width", "300");
 
     assert.deepEqual(
       frameSidebar(),

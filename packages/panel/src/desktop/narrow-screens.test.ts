@@ -386,7 +386,7 @@ test("Settings on a stage wide enough for panes, but under the split's line by i
 });
 
 test("Settings' page list kept wider than its share moves from the width it is drawn at, at the first press of its edge", async () => {
-  window.localStorage.setItem("luke.sidebar-width", "400");
+  window.localStorage.setItem("app.sidebar-width", "400");
   const page = await mount(900, createElement(SettingsWindow, { link: undefined }));
   const edge = the(page, '[role="separator"][aria-label="Resize sidebar"]');
   act(() => {

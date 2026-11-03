@@ -27,9 +27,9 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-luke_require_macos
-luke_require_command xcrun
-luke_require_command screencapture
+app_require_macos
+app_require_command xcrun
+app_require_command screencapture
 
 usage() {
     printf 'usage: %s <out.png> [--from <capture.png>] [--layout window|top|bleed] [--crop <x,y,width,height>] [--zoom <factor>]\n' "$0" >&2

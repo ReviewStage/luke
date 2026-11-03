@@ -21,7 +21,7 @@ import { keptKey, useKept } from "../use-kept.js";
 const storedChoice = Schema.fromJsonString(Schema.String);
 
 /** Where the choice is kept in the renderer's storage. */
-const KEPT = { CHOICE: keptKey("luke.chosenWorkspace", storedChoice) } as const;
+const KEPT = { CHOICE: keptKey("app.chosenWorkspace", storedChoice) } as const;
 
 /**
  * The workspace `kept` names where the view lists it, else the first listed,

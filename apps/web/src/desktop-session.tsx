@@ -31,7 +31,7 @@ import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
-import { openLukeFromMac } from "./open-luke";
+import { openAppFromMac } from "./open-app";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 import { PRODUCT_NAME } from "@luke/features/product-name";
@@ -131,7 +131,7 @@ function DesktopSession(): React.JSX.Element {
           ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER }
           : undefined
       }
-      action={view.kind === VIEW.SAID ? openLukeFromMac() : undefined}
+      action={view.kind === VIEW.SAID ? openAppFromMac() : undefined}
     >
       {view.kind === VIEW.SIGN_IN ? (
         <SocialSignInChoices pending={signInChoices.pending} onPress={signInChoices.begin} />

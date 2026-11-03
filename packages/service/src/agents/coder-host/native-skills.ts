@@ -29,7 +29,7 @@ type SandboxFile = Parameters<VercelSandboxApi["writeFiles"]>[1][number];
 
 /** Where the installed skills stand: uploaded as the default user, then where root installs them, which a launch's config names. */
 export const NATIVE_SKILLS_PATH = {
-  UPLOAD: "/tmp/luke-installed-skills",
+  UPLOAD: "/tmp/agent-installed-skills",
   INSTALLED: "/opt/agent/installed-skills",
 } as const;
 

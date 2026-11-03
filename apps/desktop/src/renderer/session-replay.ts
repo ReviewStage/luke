@@ -33,7 +33,7 @@ import type { UnparsedWireValue } from "@luke/wire";
  * properties also feed the library's own URL matching, and matching against
  * nothing is its own surprise.
  */
-const RENDERER_ADDRESS = "app://luke/panel";
+const RENDERER_ADDRESS = "app://desktop/panel";
 
 /**
  * Where macOS keeps home folders, and so where the account name sits in any

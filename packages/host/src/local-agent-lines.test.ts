@@ -88,8 +88,8 @@ const directMac = (unsavedWork: Script | undefined) => ({
   }),
   tools: {
     node: RUNNER,
-    claude: "/opt/luke/agent-tools/claude",
-    codex: "/opt/luke/agent-tools/codex",
+    claude: "/opt/agent/agent-tools/claude",
+    codex: "/opt/agent/agent-tools/codex",
   },
   clis: fakeClis(),
   formerlyDirect: true,

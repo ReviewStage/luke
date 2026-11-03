@@ -597,7 +597,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
 
 /** The sidebar's views as this Mac keeps them, by workspace. */
 function keptViews(): Record<string, { assignee?: unknown }> {
-  return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
+  return JSON.parse(window.localStorage.getItem("app.sidebarTaskViews") ?? "{}");
 }
 
 test("Show their tasks in the sidebar lists the tasks assigned to them", async () => {

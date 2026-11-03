@@ -23,7 +23,7 @@ import { Schema as EffectSchema } from "effect";
  */
 
 /** The mark every message of a link wears, setting it apart from whatever else the page posts. */
-export const PAGE_LINK_TYPE = "luke-page-link";
+export const PAGE_LINK_TYPE = "app-page-link";
 
 /** A message the frame posts to the panel: the address of the link out pressed. */
 export const pageLinkPressSchema = EffectSchema.Struct({

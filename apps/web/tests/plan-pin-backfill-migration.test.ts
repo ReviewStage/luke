@@ -25,7 +25,7 @@ const PINNED_TASK = "00000000-0000-4000-8000-000000000001";
 const foldersBeforeBackfill = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-plan-pin-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-plan-pin-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(BACKFILL) < 0,
   );

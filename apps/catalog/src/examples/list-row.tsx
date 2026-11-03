@@ -430,7 +430,7 @@ function ListRows(): React.JSX.Element {
           <List label="Plans" density={LIST_DENSITY.DENSE}>
             <ListRow
               title="Ship the release"
-              description="luke"
+              description="web"
               meta="2h"
               current={LIST_ROW_CURRENT.ITEM}
               onPress={() => undefined}
@@ -439,7 +439,7 @@ function ListRows(): React.JSX.Element {
             />
             <ListRow
               title="Draw the sidebar with the shared rows"
-              description="luke"
+              description="web"
               meta="1d"
               onPress={() => undefined}
               actionsAt={LIST_ROW_ACTIONS.HOVER}

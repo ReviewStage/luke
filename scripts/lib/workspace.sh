@@ -6,14 +6,14 @@ APP_DESKTOP_APP_ROOT="$APP_REPO_ROOT/apps/desktop"
 APP_BUILD_ROOT="$APP_REPO_ROOT/.build"
 APP_ARTIFACT_ROOT="$APP_REPO_ROOT/artifacts"
 
-luke_require_command() {
+app_require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
         printf 'error: required command not found: %s\n' "$1" >&2
         return 1
     fi
 }
 
-luke_wait_for_exit() {
+app_wait_for_exit() {
     local deadline=$((SECONDS + $1))
     local pid=$2
     while ((SECONDS < deadline)); do
@@ -37,7 +37,7 @@ luke_wait_for_exit() {
 # so a caller replacing "the running instance" asks about all three. The product
 # name is still derived the way Electron derives its default, from the manifest:
 # `productName` when it sets one, the package name otherwise.
-luke_product_name() {
+app_product_name() {
     if ! (cd "$APP_DESKTOP_APP_ROOT" &&
         node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
         printf 'error: could not read the desktop app name\n' >&2
@@ -45,9 +45,9 @@ luke_product_name() {
     fi
 }
 
-luke_app_names() {
+app_app_names() {
     local app_name
-    app_name=$(luke_product_name) || return 1
+    app_name=$(app_product_name) || return 1
     printf '%s Dev\n%s Test\n%s\n' "$app_name" "$app_name" "$app_name"
 }
 
@@ -59,19 +59,19 @@ luke_app_names() {
 APP_INSTANCE_NAME_PATTERN='^[a-z0-9]+(-[a-z0-9]+)*$'
 APP_INSTANCE_NAME_MAX_LENGTH=48
 
-luke_is_instance_name() {
+app_is_instance_name() {
     ((${#1} <= APP_INSTANCE_NAME_MAX_LENGTH)) && [[ $1 =~ $APP_INSTANCE_NAME_PATTERN ]]
 }
 
-luke_instance_app_name() {
+app_instance_app_name() {
     local app_name
-    app_name=$(luke_product_name) || return 1
+    app_name=$(app_product_name) || return 1
     printf '%s Dev %s\n' "$app_name" "$1"
 }
 
 # Folds any text (a branch, a host) into an instance name: lower case, every
 # run of other characters one hyphen, cut to length.
-luke_instance_slug() {
+app_instance_slug() {
     local slug
     slug=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
     slug=${slug:0:APP_INSTANCE_NAME_MAX_LENGTH}
@@ -85,7 +85,7 @@ luke_instance_slug() {
 # second argument), which keeps one profile across that branch's pushes; an
 # address given by hand, or a lookup from a detached head, is keyed to the
 # address's host.
-luke_preview_instance() {
+app_preview_instance() {
     local address=$1 branch=${2:-}
     local key=$branch
     if [[ -z $key ]]; then
@@ -93,10 +93,10 @@ luke_preview_instance() {
         key=${key%%/*}
         key=${key%%.*}
     fi
-    luke_instance_slug "preview-$key"
+    app_instance_slug "preview-$key"
 }
 
-luke_app_lock_holder_pid() {
+app_app_lock_holder_pid() {
     local app_name=$1
 
     local lock_target
@@ -129,17 +129,17 @@ luke_app_lock_holder_pid() {
 # "this build owns the screen now", whichever build was there before. A named
 # instance, given as the one argument, stops only its own earlier run, and
 # the plain launch never stops a named one.
-luke_stop_running_app() {
+app_stop_running_app() {
     local instance=${1:-} app_names
     if [[ -n $instance ]]; then
-        app_names=$(luke_instance_app_name "$instance") || return 1
+        app_names=$(app_instance_app_name "$instance") || return 1
     else
-        app_names=$(luke_app_names) || return 1
+        app_names=$(app_app_names) || return 1
     fi
 
     local app_name pid
     while IFS= read -r app_name; do
-        pid=$(luke_app_lock_holder_pid "$app_name") || return 1
+        pid=$(app_app_lock_holder_pid "$app_name") || return 1
         if [[ -z $pid ]]; then
             continue
         fi
@@ -147,12 +147,12 @@ luke_stop_running_app() {
         # The path tells you which checkout the older instance came from.
         printf 'Stopping the running %s instance (pid %s: %s)\n' "$app_name" "$pid" "$(ps -o comm= -p "$pid")"
         kill "$pid" 2>/dev/null || true
-        if luke_wait_for_exit 5 "$pid"; then
+        if app_wait_for_exit 5 "$pid"; then
             continue
         fi
 
         kill -KILL "$pid" 2>/dev/null || true
-        if luke_wait_for_exit 3 "$pid"; then
+        if app_wait_for_exit 3 "$pid"; then
             continue
         fi
 
@@ -161,16 +161,16 @@ luke_stop_running_app() {
     done <<<"$app_names"
 }
 
-luke_require_macos() {
+app_require_macos() {
     if [[ $(uname -s) != Darwin ]]; then
         printf 'error: this command requires macOS\n' >&2
         return 1
     fi
 }
 
-luke_require_node() {
-    luke_require_command node
-    luke_require_command pnpm
+app_require_node() {
+    app_require_command node
+    app_require_command pnpm
     if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'; then
         printf 'error: Node.js 24 or newer is required (found %s)\n' "$(node --version)" >&2
         return 1
@@ -181,6 +181,6 @@ luke_require_node() {
 # we do not guard on the Electron binary, because it survives a pull that
 # changes the lockfile and the launch then runs on stale dependencies; a
 # frozen install with nothing to change is quick.
-luke_ensure_dependencies() {
+app_ensure_dependencies() {
     "$APP_REPO_ROOT/scripts/bootstrap.sh"
 }

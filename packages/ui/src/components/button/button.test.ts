@@ -56,7 +56,7 @@ function mount(element: React.ReactElement): HTMLElement {
 test("a ButtonLink is a link named by its words, going to its address", () => {
   const container = mount(
     createElement(ButtonLink, {
-      href: "https://example.com/luke.dmg",
+      href: "https://example.com/app.dmg",
       variant: BUTTON_VARIANT.PRIMARY,
       icon: createElement("svg", { "aria-hidden": true }),
       children: "Download for macOS",
@@ -65,7 +65,7 @@ test("a ButtonLink is a link named by its words, going to its address", () => {
 
   const links = Array.from(container.querySelectorAll("a"));
   expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-    ["Download for macOS", "https://example.com/luke.dmg"],
+    ["Download for macOS", "https://example.com/app.dmg"],
   ]);
   expect(container.querySelector("button")).toBeNull();
 });
@@ -275,7 +275,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       "div",
       null,
       createElement(IconButtonLink, {
-        href: "https://github.com/example/luke",
+        href: "https://github.com/example/app",
         icon: createElement("svg", { "aria-hidden": true }),
         label: "Vespin on GitHub",
       }),
@@ -296,7 +296,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       link.getAttribute("target"),
     ]),
   ).toEqual([
-    ["Vespin on GitHub", "https://github.com/example/luke", null],
+    ["Vespin on GitHub", "https://github.com/example/app", null],
     ["Example on X", "https://x.com/example", "_blank"],
   ]);
   expect(container.querySelector("button")).toBeNull();
@@ -553,7 +553,7 @@ test("a ButtonLink given a label is named by it, and an IconButtonLink's press i
         children: "Preview",
       }),
       createElement(IconButtonLink, {
-        href: "https://github.com/example/luke",
+        href: "https://github.com/example/app",
         icon: createElement("svg", { "aria-hidden": true }),
         label: "Open on GitHub",
         onClick: (event) => {

@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import type { CustomScheme } from "electron";
 
 /**
- * page-protocol.ts -- the `luke-page:` scheme: one version of one plan's page, served to the frame that draws it.
+ * page-protocol.ts -- the `app-page:` scheme: one version of one plan's page, served to the frame that draws it.
  *
  * A page is HTML an agent wrote, so it is served as nothing of our own: a
  * scheme of its own, read from the service by this process on the account's

@@ -55,7 +55,7 @@ export const RECORDING_START_EXIT = {
 } as const;
 
 /** The name both scripts run under, as `$0`. */
-export const RECORDING_SCRIPT_NAME = "luke-recording";
+export const RECORDING_SCRIPT_NAME = "agent-recording";
 
 /** What a start that succeeded prints: a recording it started, or one that already runs. */
 export const RECORDING_START_OUTPUT = { STARTED: "started", RUNNING: "running" } as const;
@@ -75,12 +75,12 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   // A new document runs this before it has a root, so the pointer is drawn once it does.
   if (!root) return document.addEventListener("DOMContentLoaded", draw, { once: true });
   // One pointer a document, however often it is added; the mark stands on the window, so a stop finds it though the page removed the host.
-  const mark = Symbol.for("luke.recordingCursor");
+  const mark = Symbol.for("agent.recordingCursor");
   if (window[mark]) return;
   window[mark] = true;
   const svg = "http://www.w3.org/2000/svg";
   const host = document.createElement("div");
-  host.setAttribute("data-luke-recording-cursor", "");
+  host.setAttribute("data-recording-cursor", "");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });
@@ -154,7 +154,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
     moveTo(middle.x, middle.y);
     ringAt(middle.x, middle.y);
   }, on);
-  window.addEventListener("luke-recording-stop", () => {
+  window.addEventListener("agent-recording-stop", () => {
     stop.abort();
     host.remove();
     delete window[mark];
@@ -162,7 +162,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
 })();`;
 
 /** Takes the pointer out of a document, its listeners with it, whether or not the page kept its host. */
-export const RECORDING_CURSOR_STOP = 'window.dispatchEvent(new Event("luke-recording-stop"));';
+export const RECORDING_CURSOR_STOP = 'window.dispatchEvent(new Event("agent-recording-stop"));';
 
 /**
  * Whether the page's document has drawn content yet: its first contentful

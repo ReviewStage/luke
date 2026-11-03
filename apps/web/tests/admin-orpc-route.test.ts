@@ -112,7 +112,7 @@ afterEach(() => {
 });
 
 async function mount(): Promise<HTMLElement> {
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);
@@ -181,7 +181,7 @@ test("an auth service that did not answer is said as the service not answering",
 });
 
 test("an answer that came through a redirect is said as something in front of the API", async () => {
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
     const login = new Response("<html>Sign in to Vercel</html>", {
       status: 200,

@@ -62,7 +62,7 @@ async function openAdmin(address = "/admin"): Promise<HTMLElement> {
     }
     return new Promise(() => undefined);
   });
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
   window.history.replaceState(null, "", address);
   const container = document.createElement("div");
   container.id = "root";
@@ -240,7 +240,7 @@ test("in a phone's narrow room the sidebar is a drawer the toggle opens over the
   expect(unreachable(sectionLink(page, "Users"))).toBe(true);
   expect(unreachable(view(page))).toBe(false);
   // The drawer is the room's: hiding it there is no choice to remember.
-  expect(window.localStorage.getItem("luke-admin-sidebar-collapsed")).toBeNull();
+  expect(window.localStorage.getItem("app-admin-sidebar-collapsed")).toBeNull();
 });
 
 /** The account's button at the sidebar's foot, once the session names it. */
@@ -306,7 +306,7 @@ test("Sign out signs out on the press, with no question, and leaves for the sign
         new URL(input instanceof Request ? input.url : String(input), window.location.href),
     );
   expect(asked.some((url) => url.pathname === SIGN_OUT_PATH)).toBe(true);
-  expect(window.localStorage.getItem("luke-admin-sign-in-chosen")).toBeNull();
+  expect(window.localStorage.getItem("app-admin-sign-in-chosen")).toBeNull();
 });
 
 test("a quarter's address opens Reliability on the month, the longest window it reads", async () => {
@@ -366,5 +366,5 @@ test("a sign-out the service refuses says so and leaves the dashboard signed in"
     ),
   );
   expect(page.querySelector('nav[aria-label="Admin sections"]')).not.toBeNull();
-  expect(window.localStorage.getItem("luke-admin-sign-in-chosen")).toBe("true");
+  expect(window.localStorage.getItem("app-admin-sign-in-chosen")).toBe("true");
 });

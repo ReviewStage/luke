@@ -11,7 +11,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 # version against nodejs.org on every run: CI's Node comes from setup-node, not
 # nvm, so each lint downloaded Node again, and a failed fetch failed the lint
 # with "Version '24' not found" in files nobody touched.
-luke_require_node
+app_require_node
 
 cd "$APP_REPO_ROOT"
 # A disable directive that silences nothing is an error, so one left behind by

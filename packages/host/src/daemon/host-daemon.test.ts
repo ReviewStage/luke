@@ -241,7 +241,7 @@ describe("a host's daemon", () => {
           XDG_CACHE_HOME: `${folder}/cache`,
           PNPM_HOME: `${folder}/home/.local/share/pnpm`,
           NPM_CONFIG_PREFIX: `${folder}/home/.npm-global`,
-          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
+          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/agent/agent-tools:/usr/bin:/bin`,
         });
         expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
         // Note that every agent's settings name the same folders under the host's state, outside any agent's folder.

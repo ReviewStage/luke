@@ -33,7 +33,7 @@ async function mask(): Promise<Mask> {
     platform: PRODUCT_PLATFORM.DESKTOP,
     projectApiKey: () => "test-project-key",
     host: { api: "https://us.i.posthog.com", ui: "https://us.posthog.com" },
-    address: "luke://panel",
+    address: "app://desktop/panel",
     namesOwnAddress: () => false,
     importRecorder: () => Promise.resolve(undefined),
   })({ permitted: true, appVersion: "0.0.0", packaged: true, accountId: "user-1" });

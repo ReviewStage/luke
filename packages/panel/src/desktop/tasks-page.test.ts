@@ -489,12 +489,12 @@ test("a field's chip scales in as it is filtered, and lifted, the list widens at
 test("a filter chosen here keeps another workspace's filter that another tab kept meanwhile", async () => {
   const page = await mountPage();
   const elsewhere = { "workspace-beta": { priority: [TASK_PRIORITY.LOW] } };
-  window.localStorage.setItem("luke.tasksFilter", JSON.stringify(elsewhere));
+  window.localStorage.setItem("app.tasksFilter", JSON.stringify(elsewhere));
   openOptions(page, "Filter");
   choose("Priority", "High");
   closeMenus();
 
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.tasksFilter") ?? "{}"), {
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.tasksFilter") ?? "{}"), {
     ...elsewhere,
     [ACME.id]: { priority: [TASK_PRIORITY.HIGH] },
   });
@@ -562,7 +562,7 @@ test("the switch beside the title shows Columns, kept on this Mac", async () => 
 });
 
 test("a board choice kept before the rename still opens Columns, named so in the switch", async () => {
-  window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
+  window.localStorage.setItem("app.tasksPageView", JSON.stringify("board"));
   const page = await mountPage();
 
   assert.ok(page.querySelector("[data-task-column]"), "the saved choice opens the columns");
@@ -1049,7 +1049,7 @@ test("a row draws its assignee and not its creator at first, and a List display 
     { properties: BEFORE_ASSIGNEE, offered: BEFORE_ASSIGNEE },
     { properties: BEFORE_ASSIGNEE },
   ]) {
-    window.localStorage.setItem("luke.tasksListDisplay", JSON.stringify(kept));
+    window.localStorage.setItem("app.tasksListDisplay", JSON.stringify(kept));
     const page = await mountPage();
     assert.ok(cells(page).includes("assignee"), "the assignee is drawn without turning it on");
     assert.ok(cells(page).includes("creator"), "the creator stays on, as kept");
@@ -1076,7 +1076,7 @@ test("a row's Assignee chip sends the member picked, and No assignee assigns it 
 
 test("grouped by assignee, the reader's group leads and No assignee's ends, a row there leaves its assignee's cell empty, and a row dragged onto a group is assigned to its person, onto No assignee's to no one", async () => {
   window.localStorage.setItem(
-    "luke.tasksListDisplay",
+    "app.tasksListDisplay",
     JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
   );
   const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
@@ -1104,7 +1104,7 @@ test("grouped by assignee, the reader's group leads and No assignee's ends, a ro
 
 test("on a phone grouped by assignee, a row keeps its Assignee chip, which moves it without a drag", async () => {
   window.localStorage.setItem(
-    "luke.tasksListDisplay",
+    "app.tasksListDisplay",
     JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
   );
   const page = await mountPage(
@@ -1123,9 +1123,9 @@ test("on a phone grouped by assignee, a row keeps its Assignee chip, which moves
 });
 
 test("a Board display kept before its cards offered Agents and Needs you draws them, the rest as kept", async () => {
-  window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
+  window.localStorage.setItem("app.tasksPageView", JSON.stringify("board"));
   window.localStorage.setItem(
-    "luke.tasksBoardDisplay",
+    "app.tasksBoardDisplay",
     JSON.stringify({ properties: ["priority", "status"] }),
   );
   const page = await mountPage();
@@ -1268,7 +1268,7 @@ test("a view that leaves no task standing says so, though an empty section still
     agentEntries: [],
   };
   window.localStorage.setItem(
-    "luke.tasksFilter",
+    "app.tasksFilter",
     JSON.stringify({ [ACME.id]: { status: [TASK_STATUS.CANCELED] } }),
   );
   const page = await mountPage();

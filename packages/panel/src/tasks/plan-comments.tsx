@@ -2690,7 +2690,7 @@ type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
 /** The Comments tab's filter, kept on this Mac, one for every plan. */
 const KEPT = {
   FILTER: keptKey<CommentsFilter>(
-    "luke.commentsFilter",
+    "app.commentsFilter",
     Schema.fromJsonString(Schema.Literals(Object.values(COMMENTS_FILTER))),
   ),
 } as const;

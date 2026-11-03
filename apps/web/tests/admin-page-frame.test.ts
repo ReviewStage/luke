@@ -129,7 +129,7 @@ class StillResizeObserver {
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StillResizeObserver);
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
 });
 
 afterEach(() => {

@@ -211,7 +211,7 @@ const storedMethods = Schema.fromJsonString(
 );
 
 /** Where the method chosen is kept, by repository. */
-const KEPT = { METHODS: keptKey("luke.pullRequestMergeMethods", storedMethods) } as const;
+const KEPT = { METHODS: keptKey("app.pullRequestMergeMethods", storedMethods) } as const;
 
 /** The method chosen for the repository, kept across launches: the one last chosen where the repository still allows it, else the first it allows. */
 function useMergeMethod(

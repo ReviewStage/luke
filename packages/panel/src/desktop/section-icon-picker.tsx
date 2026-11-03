@@ -258,7 +258,7 @@ export function sectionGlyph(icon: TaskSectionIcon | undefined): React.JSX.Eleme
 }
 
 /** Where this Mac keeps the icons it chose last, newest first. */
-const RECENT_KEY = "luke.recentSectionIcons";
+const RECENT_KEY = "app.recentSectionIcons";
 
 /** The icons kept as chosen last. */
 const keptRecent = Schema.fromJsonString(Schema.Array(taskSectionIconSchema));

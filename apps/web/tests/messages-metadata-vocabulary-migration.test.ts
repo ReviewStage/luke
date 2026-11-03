@@ -47,7 +47,7 @@ function foldersUpTo(last: string) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-vocabulary-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-vocabulary-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
       (name) => name.localeCompare(last) < 0,
     );

@@ -15,7 +15,7 @@ import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./sandbox-record
  */
 
 const hosts = () =>
-  document.documentElement.querySelectorAll(":scope > [data-luke-recording-cursor]");
+  document.documentElement.querySelectorAll(":scope > [data-recording-cursor]");
 
 const run = (source: string) => {
   // The page runs the source as the recorder hands it over, as a script of its own.

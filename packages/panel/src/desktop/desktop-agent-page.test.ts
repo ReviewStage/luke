@@ -752,7 +752,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   );
   assert.equal(
     panel.querySelector<HTMLIFrameElement>(".page-view iframe")?.getAttribute("src"),
-    `luke-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
+    `app-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
   );
 });
 

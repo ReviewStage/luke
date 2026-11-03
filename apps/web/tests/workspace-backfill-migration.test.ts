@@ -23,7 +23,7 @@ const BACKFILL = "20261013231123_personal_workspace_backfill";
 const foldersBeforeBackfill = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-backfill-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-backfill-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(BACKFILL) < 0,
   );

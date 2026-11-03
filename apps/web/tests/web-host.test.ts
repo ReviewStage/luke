@@ -155,7 +155,7 @@ it.effect(
         yield* Effect.promise(() =>
           vi.waitFor(async () => {
             window.dispatchEvent(
-              new StorageEvent("storage", { key: "luke.host.files", storageArea: localStorage }),
+              new StorageEvent("storage", { key: "app.host.files", storageArea: localStorage }),
             );
             const state = await reader.bridge.requestAppState();
             assert.equal(state.settings?.stored.theme, THEME.DARK);

@@ -19,7 +19,7 @@ import { readKeptOption, writeKept } from "./kept-storage.js";
 import { useToast } from "./toast.js";
 
 /** The storage key the version last announced is kept under. */
-const ANNOUNCED_KEY = "luke.update-announced";
+const ANNOUNCED_KEY = "app.update-announced";
 
 /** The version last announced, or none where there is none or storage refuses the read. */
 function readAnnounced(): string | null {

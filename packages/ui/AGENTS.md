@@ -13,7 +13,7 @@ and daily series).
 - A component takes its data and its callbacks as props. A shared context
   lands only when three components need the same door, because a context is a
   second way in that every app has to provide.
-- Nothing here reaches an app: no `window.luke`, no `#shared/`, `#renderer/`,
+- Nothing here reaches an app: no `window.appBridge`, no `#shared/`, `#renderer/`,
   or `#main/` import. The desktop's bridge and the site's fetches stay in the
   app that mounts the component.
 - A component draws with its own `luke-*` classes over the `--ui-*` tokens,

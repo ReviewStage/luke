@@ -272,13 +272,13 @@ function SiteChip({ href }: { href: string }): ReactNode {
 
 /** The element a mention's link is drawn as, and the one attribute that carries its target to the chip. */
 const MENTION_ELEMENT = {
-  TAG: "luke-mention",
+  TAG: "app-mention",
   TARGET: "to",
 } as const;
 
 /** The element a picture's Markdown is drawn as, and the attributes that carry its address, its words, and its caption. */
 const PICTURE_ELEMENT = {
-  TAG: "luke-picture",
+  TAG: "app-picture",
   ADDRESS: "to",
   WORDS: "words",
   CAPTION: "caption",
@@ -286,14 +286,14 @@ const PICTURE_ELEMENT = {
 
 /** The element a paragraph holding a link alone is drawn as in words drawn as a document, and the attributes that carry the link's target and its words. */
 const LONE_LINK_ELEMENT = {
-  TAG: "luke-lone-link",
+  TAG: "app-lone-link",
   TARGET: "to",
   WORDS: "words",
 } as const;
 
 /** The element a paragraph holding pictures alone is drawn as in words drawn as a document, which stands them side by side. */
 const PICTURE_ROW_ELEMENT = {
-  TAG: "luke-pictures",
+  TAG: "app-pictures",
   CLASS: "transcript-pictures",
 } as const;
 

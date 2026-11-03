@@ -27,7 +27,7 @@ import { PAGE_PICK_SCRIPT } from "./page-pick.js";
  */
 
 /** The mark every message of the find wears, setting it apart from whatever else the page posts. */
-export const PAGE_FIND_TYPE = "luke-page-find";
+export const PAGE_FIND_TYPE = "app-page-find";
 
 /** What the panel asks of the frame. */
 export const PAGE_FIND_ACT = {

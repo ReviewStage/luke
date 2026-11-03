@@ -1706,7 +1706,7 @@ test("a phone draws the filters as one chip saying what is hidden, whose menu tu
 
 test("where the filters leave nothing of the conversation, it says no comment matches", async () => {
   window.localStorage.setItem(
-    "luke.conversation-filters",
+    "app.conversation-filters",
     JSON.stringify({ hideBots: true, hideResolved: false }),
   );
   const tab = await draw(
@@ -5470,7 +5470,7 @@ test("a thread on a line no hunk shows, and one a later push outdated, land on t
 
 test("a link to a thread opens a folded Conversation to land on it, centring it in the room under the heading stuck at the top, and a card taller than that room landing with its top just under the heading", async () => {
   window.localStorage.setItem(
-    "luke.conversation-filters",
+    "app.conversation-filters",
     JSON.stringify({ hideBots: false, hideResolved: false, conversationOpen: false }),
   );
   const heard: ReadLink[] = [];

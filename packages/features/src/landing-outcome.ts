@@ -47,7 +47,7 @@ export const LANDING_OUTCOME = {
   /** The page was opened with no connect to carry out. */
   NOTHING_TO_CONNECT: "nothing-to-connect",
   /** Our own service gave no answer. */
-  LUKE_UNREACHABLE: "luke-unreachable",
+  SERVICE_UNREACHABLE: "service-unreachable",
 } as const;
 
 export type LandingOutcome = (typeof LANDING_OUTCOME)[keyof typeof LANDING_OUTCOME];
@@ -145,7 +145,7 @@ const LANDING_WORDS = {
     title: name === undefined ? "Nothing to connect" : `No ${name} connection to finish`,
     line: `Connect ${name ?? "it"} from ${PRODUCT_NAME}.`,
   }),
-  [LANDING_OUTCOME.LUKE_UNREACHABLE]: () => ({
+  [LANDING_OUTCOME.SERVICE_UNREACHABLE]: () => ({
     tone: LANDING_TONE.DANGER,
     title: `${PRODUCT_NAME} could not be reached`,
     line: "Reload this page to try again.",

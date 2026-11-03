@@ -78,7 +78,7 @@ const RUNS_ON_WORDS = {
 const CLOUD_ROW = "cloud";
 
 /** Where New task keeps the member's last pick: Cloud's id, or a device's. */
-const KEPT = { PICK: keptKey("luke.newTaskRunsOn", Schema.String) } as const;
+const KEPT = { PICK: keptKey("app.newTaskRunsOn", Schema.String) } as const;
 
 /** The cloud, as a request names it. */
 const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: AGENT_MACHINE.VERCEL };
