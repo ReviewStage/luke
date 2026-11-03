@@ -504,7 +504,8 @@ function branchWords(startBranch: string | null): BranchWords {
   if (startBranch === null) {
     return {
       checkout: "at its current default branch",
-      cut: "cut from the default branch. Never commit to or push the default branch.",
+      cut:
+        'cut from the default branch. Never commit to or push the default branch, except in a repository with no commits yet, where a pull request has nothing to merge into: there, first push an empty initial commit to the default branch (`git commit --allow-empty -m "Initial commit"`), then cut your branch from it.',
       base: "",
     };
   }
