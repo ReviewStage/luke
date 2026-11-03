@@ -38,6 +38,7 @@ import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, type MentionSource, useMentionPicker } from "./mention-picker.js";
 import { useSelectionToolbar } from "./selection-toolbar.js";
 import { useKnownNames } from "./use-known-names.js";
+import { useNumberedTaskIdOf } from "./use-link-standing.js";
 
 /**
  * markdown-editor.tsx -- a Markdown document edited in place: the editor bundle's editor on its text, the format toolbar over its selection, the `/` menu under a `/`, and what each document opts into beside them.
@@ -262,6 +263,7 @@ export function MarkdownEditor({
   const text = () => handle.current?.markdown() ?? markdown;
   // An app address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
+  const taskIdOf = useNumberedTaskIdOf();
   const picker = useMentionPicker({
     source: mentions === undefined ? undefined : { ...mentions.source, text },
     room,
@@ -330,6 +332,7 @@ export function MarkdownEditor({
             pasted: (words) =>
               pastedMentionNode(words, mentions.doors.place, {
                 known,
+                taskIdOf,
                 taskId: holderTaskId(mentions.source.holder),
                 text,
               }),

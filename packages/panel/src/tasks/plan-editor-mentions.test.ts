@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
 import { TASK_TREE_ENTRY, type Task } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
@@ -14,6 +16,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -358,6 +361,42 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
   assert.deepEqual(
     chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Goal"],
+  );
+});
+
+test("a section's address naming its task by its number, pasted whole into the plan, is laid in as the chip its id lays in, found among the window's tasks", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [
+          {
+            id: "workspace-acme",
+            name: "Acme",
+            slug: "acme",
+            role: WORKSPACE_ROLE.MEMBER,
+            github: null,
+          },
+        ],
+        tasks: [{ ...TASK, workspaceId: "workspace-acme", number: 42 }],
+      },
+    },
+  );
+  const plan = await opened();
+
+  await plan.typeAtEnd(" See ");
+  await plan.pasteAtEnd("https://vespin.dev/acme/task/42#goal");
+
+  const chips = [
+    ...plan.container.querySelectorAll<HTMLElement>(".plan-document-text [data-mention-ref]"),
+  ];
+  assert.deepEqual(
+    chips.map((chip) => [
+      chip.dataset.kind,
+      chip.querySelector(".ui-inline-ref-label")?.textContent,
+    ]),
+    [[MENTION_KIND.SECTION, "Goal"]],
   );
 });
 

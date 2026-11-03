@@ -4,6 +4,8 @@ import {
   type LinkPlace,
   linkOf,
   type ReadLink,
+  taskLinkStep,
+  withTaskId,
 } from "@repo/features/link-grammar";
 import type { PagePlace } from "@repo/features/page-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
@@ -35,7 +37,8 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  * file's, the board, the code, the Inbox, or a terminal, is passed over for
  * the task, and so is the plan's, whose link is the task's.
  * Each link is written under its workspace's slug, or its id until the
- * workspaces are read, as a task's own is; an agent's page under the
+ * workspaces are read, as a task's own is, and names a task by its number
+ * where it has one (`taskLinkStep`); an Inbox item by its id alone; an agent's page under the
  * workspace the page read its agent into, which only the page knows, so the
  * page tells the window (`usePageWorkspace`). A place whose workspace is
  * known by neither, as with no workspace listed, has no link, since a link
@@ -183,16 +186,9 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
   }
 }
 
-/** An Inbox item's place, under its agent; under its task only while an older link opened it naming no agent, and by its id alone where a link so named one the account may not read. */
+/** An Inbox item's place, by its id alone, whose agent, task, and workspace its reader asks the service for, as every Copy link of an item writes it. */
 function inboxItemPlace(chosen: InboxChoice): LinkPlace {
-  if ("agentId" in chosen) {
-    return { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
-  }
-  if (!("taskId" in chosen)) return { kind: LINK_PLACE.INBOX_ITEM, itemId: chosen.itemId };
-  const { taskId, itemAgentId, itemId } = chosen;
-  return itemAgentId === undefined
-    ? { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId }
-    : { kind: LINK_PLACE.INBOX_ITEM, agentId: itemAgentId, itemId };
+  return { kind: LINK_PLACE.INBOX_ITEM, itemId: chosen.itemId };
 }
 
 /** The links of an Inbox narrowed to a channel: its chosen thread's, a step of its own where it stands alone, and the channel's. */
@@ -218,8 +214,10 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   if (region.kind !== DOCUMENT_REGION.READY) return [];
   const { task: drawn } = region;
   const workspace = slugOf(tasks.workspaces, drawn.workspaceId);
+  // Note that the task's links name it by its number, where it has one, as every link to it is written.
+  const planId = taskLinkStep(drawn);
   const task: LinkAtHand = {
-    link: { workspace, place: { kind: LINK_PLACE.TASK, planId: drawn.id } },
+    link: { workspace, place: { kind: LINK_PLACE.TASK, planId } },
     thing: LINK_THING.TASK,
     name: drawn.name,
   };
@@ -231,7 +229,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       ? [{ ...task, step: true }]
       : [
           {
-            link: { workspace, place: { kind: LINK_PLACE.VERSION, planId: drawn.id, revision } },
+            link: { workspace, place: { kind: LINK_PLACE.VERSION, planId, revision } },
             thing: LINK_THING.VERSION,
             step: true,
           },
@@ -248,9 +246,10 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
           thing: LINK_THING.AGENT,
           name: tasks.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };
-  const held = tasks.sidePanel.open
+  const tabPlace = tasks.sidePanel.open
     ? panelTabPlace({ taskId: drawn.id }, tasks.sidePanel.tab)
     : undefined;
+  const held = tabPlace === undefined ? undefined : withTaskId(tabPlace, planId);
   const thing = held === undefined ? undefined : panelThing(held);
   const panel: LinkAtHand | undefined =
     held === undefined || thing === undefined

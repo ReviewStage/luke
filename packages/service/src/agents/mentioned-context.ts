@@ -5,7 +5,13 @@ import {
   INTEGRATION_PROVIDER,
   type IntegrationProvider,
 } from "@repo/features/integration-wire";
-import { mentionMarkdownLink } from "@repo/features/link-grammar";
+import {
+  LINK_PLACE,
+  linkOf,
+  mentionMarkdownLink,
+  readLink,
+  taskNumberOf,
+} from "@repo/features/link-grammar";
 import { LINK_SITE, type LinkSite } from "@repo/features/link-site";
 import {
   handedMentionsIn,
@@ -45,7 +51,11 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
  * more part after its words, the plan or each section it named as it stood
  * at the send, under a heading eve's receipt is read back by
  * (`attached-file-parts.ts`). Only the agent's own plan is read, the plan the
- * send already read as its sender; a mention of another task adds nothing.
+ * send already read as its sender; a mention of another task adds nothing,
+ * but where its link names it by its number, `…/task/42`, which spells
+ * none of the id the task tools take: that link is handed the task's id, as
+ * the send found it for the sender among the workspaces they are a member
+ * of (`mentioned-reads.ts`), so the agent can read the task.
  *
  * Each excerpt is cut on a line to its own bound, and the part to one bound
  * over all of them, in the order the mentions stand; an excerpt cut short
@@ -227,8 +237,27 @@ function excerptOf({ mention, name }: NamedMention, task: Task): string {
 /** A mention of a file, which the part hands a note for where it pins the file's lines. */
 type LinesMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.FILE }>;
 
+/** What the part hands beside the mentions themselves. */
+const HANDED_KIND = {
+  /** Another task a link names by its number, which spells none of the id the task tools take. */
+  NUMBERED_TASK: "numbered-task",
+} as const;
+
+/** Another task than the agent's own a link names by its number: its id, as the send found it for the sender, and its own link by that number. */
+interface NumberedTask {
+  readonly kind: typeof HANDED_KIND.NUMBERED_TASK;
+  readonly taskId: string;
+  readonly link: string;
+}
+
 /** A mention the part hands something for. */
-type Handed = PlanMention | ServerMention | LinesMention | TaskMention | PersonMention;
+type Handed =
+  | PlanMention
+  | ServerMention
+  | LinesMention
+  | TaskMention
+  | PersonMention
+  | NumberedTask;
 
 /**
  * What a mention of a page is handed as: its title, id, and version, the
@@ -317,6 +346,11 @@ function linesNoteOf({ path, lines }: LinesMention): string {
   return `The developer pointed you at ${span} of \`${path}\` as they stood at commit \`${lines.commit}\` for this message: read just those lines, as \`git show ${lines.commit}:${path}\` holds them, since your branch may have moved them.`;
 }
 
+/** What a link naming another task by its number is handed as: the task's id, which its link no longer spells and the task tools take. */
+function numberedTaskNoteOf({ taskId, link }: NumberedTask): string {
+  return `The link ${link} names the task whose id is \`${taskId}\`, which \`${AGENT_TOOL.READ_TASK}\` and the other task tools take.`;
+}
+
 /** What a mention of an MCP server or one of its tools is handed as: which the developer pointed the agent at, and how to reach it. */
 function noteOf(mention: ServerMention): string {
   const connection =
@@ -358,12 +392,34 @@ function standsOn(
     : "agentId" in mention && mention.agentId.toLowerCase() === owner.agentId.toLowerCase();
 }
 
-/** The mention as the part hands it, where it hands it anything: what stands on another plan, or on a plan where the agent has none, is handed nothing, nor a page that stands on neither its task nor, on none, itself, but for a coding agent, which is read across the workspace. */
+/**
+ * Another task than the agent's own a link names by its number, `…/task/42`,
+ * its section or a page on it among them, as the id the send found for it;
+ * none for a link naming its task by its id, which spells it already, or
+ * naming the agent's own.
+ */
+function numberedTaskOf(
+  mention: Mention,
+  target: string,
+  task: Task | undefined,
+): NumberedTask | undefined {
+  if (!("taskId" in mention) || mention.taskId === task?.id) return undefined;
+  const read = readLink(target);
+  const number = read === undefined ? undefined : taskNumberOf(read.place);
+  if (read === undefined || number === undefined) return undefined;
+  const link = linkOf({ kind: LINK_PLACE.TASK, planId: String(number) }, read.workspace);
+  return { kind: HANDED_KIND.NUMBERED_TASK, taskId: mention.taskId, link };
+}
+
+/** The mention as the part hands it, where it hands it anything: what stands on another plan, or on a plan where the agent has none, is handed nothing but the id of a task a link names by its number, nor a page that stands on neither its task nor, on none, itself, but for a coding agent, which is read across the workspace. */
 function handedMention(
   mention: Mention,
+  target: string,
   task: Task | undefined,
   owner: PageOwner | undefined,
 ): Handed | undefined {
+  const numbered = numberedTaskOf(mention, target, task);
+  if (numbered !== undefined) return numbered;
   switch (mention.kind) {
     case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
@@ -436,6 +492,8 @@ function sameMention(first: Handed, second: Handed): boolean {
       );
     case MENTION_KIND.PERSON:
       return second.kind === MENTION_KIND.PERSON && first.userId === second.userId;
+    case HANDED_KIND.NUMBERED_TASK:
+      return second.kind === HANDED_KIND.NUMBERED_TASK && first.taskId === second.taskId;
   }
 }
 
@@ -462,6 +520,8 @@ function handedAs(
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
       return noteOf(mention);
+    case HANDED_KIND.NUMBERED_TASK:
+      return numberedTaskNoteOf(mention);
   }
 }
 
@@ -528,7 +588,7 @@ export function mentionedContext(
   const repository = task?.repository ?? null;
   const taskIdOf = foundTask(reads.tasks);
   for (const { mention, label, target } of handedMentionsIn(words, repository, { taskIdOf })) {
-    const handed = handedMention(mention, task, owner);
+    const handed = handedMention(mention, target, task, owner);
     if (handed === undefined) continue;
     // A bare address is named by what it says of the thing, a section by its anchor, as its chip is.
     const name = linkMention(label, target, repository)?.name ?? mentionName(label);

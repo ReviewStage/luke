@@ -122,6 +122,18 @@ test("words that mention only files, folders, another plan, or nothing are hande
   }
 });
 
+test("another task a link names by its number, by itself or by a section, is handed its id once, and one the send did not find nothing", () => {
+  const other = "3a9e1c7b-5d2f-4b8a-9e6c-1f0d2b3c4a5e";
+  const reads = { ...READS, tasks: new Map([["acme", new Map([[7, other]])]]) };
+  const words =
+    "See [@Billing](https://vespin.dev/acme/task/7), its https://vespin.dev/acme/task/7#goal, and [@Gone](https://vespin.dev/acme/task/8).";
+
+  assert.equal(
+    mentionedContext(words, TASK, reads),
+    `${MENTIONED_HEADING}\n\nThe link https://vespin.dev/acme/task/7 names the task whose id is \`${other}\`, which \`read_task\` and the other task tools take.`,
+  );
+});
+
 test("a section mentioned twice is handed once", () => {
   const part = mentionedContext(`${section("Goal")} and again ${section("Goal")}.`, TASK);
 

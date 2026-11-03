@@ -456,7 +456,7 @@ function taskActionGroups(
   const link: MenuAction[] =
     task === undefined
       ? []
-      : [copyTaskLinkItem(doors.copy, taskId, taskLinkPlace(tasks.workspaces, task), doors.chord)];
+      : [copyTaskLinkItem(doors.copy, task, taskLinkPlace(tasks.workspaces, task), doors.chord)];
   // U and P act on the open task, and on a sidebar row's while it is focused, so both print them.
   const lettered = drawn || doors.rowKeys;
   const read: MenuAction[] = task === undefined ? [] : [markReadItem(doors.read, lettered)];

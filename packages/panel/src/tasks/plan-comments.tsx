@@ -175,6 +175,7 @@ import { ComposerQuoteView, pressPlace, ReplyPress } from "./reply-to-selection.
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
+import { useNumberedTaskIdOf } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 import {
   useWordsDatePicker,
@@ -944,6 +945,7 @@ function MentionCommentText({
   const dictating = dictation !== undefined && dictation.phase !== DICTATION_PHASE.IDLE;
   const room = useRef<HTMLDivElement>(null);
   const known = useKnownNames();
+  const taskIdOf = useNumberedTaskIdOf();
   const picker = useMentionPicker({
     source: mentions,
     room,
@@ -989,6 +991,7 @@ function MentionCommentText({
         pasted: (words) =>
           pastedMentionNode(words, mentions.doors.place, {
             known,
+            taskIdOf,
             taskId: holderTaskId(mentions.holder),
             text: mentions.text,
           }),

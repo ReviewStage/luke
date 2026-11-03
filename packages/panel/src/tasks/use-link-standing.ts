@@ -5,8 +5,15 @@ import {
 } from "@repo/features/agent-wire";
 import type { GitHubPullRequestSummary, IssueState } from "@repo/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
-import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
-import { MENTION_KIND, type Mention } from "@repo/features/mention-link";
+import {
+  issueAddressOf,
+  LINK_PLACE,
+  type LinkPlace,
+  pullRequestAddressOf,
+  taskLinkStep,
+  withTaskId,
+} from "@repo/features/link-grammar";
+import { MENTION_KIND, type Mention, type NumberedTaskIdOf } from "@repo/features/mention-link";
 import type { TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -324,10 +331,57 @@ export function useNumberedTaskId(
   number: number | undefined,
 ): string | undefined {
   const planning = useAppSlice(workspacePlacesAtom);
-  if (number === undefined || planning === undefined) return undefined;
+  return number === undefined ? undefined : numberedTaskIdIn(planning, { workspace, number });
+}
+
+/** The id of the task a link names by its number among the tasks `planning` lists (`useNumberedTaskId`); none where it lists none. */
+function numberedTaskIdIn(
+  planning: WorkspacePlaces | undefined,
+  { workspace, number }: { readonly workspace: string; readonly number: number },
+): string | undefined {
+  if (planning === undefined) return undefined;
   const named = workspaceOfSlug(planning.workspaces, workspace);
   if (named === undefined) return undefined;
   return planning.tasks.find((task) => task.workspaceId === named.id && task.number === number)?.id;
+}
+
+/** How the id of the task a link names by its number is found among the tasks the window lists (`useNumberedTaskId`), for words pasted. */
+export function useNumberedTaskIdOf(): NumberedTaskIdOf {
+  const planning = useAppSlice(workspacePlacesAtom);
+  return (task) => numberedTaskIdIn(planning, task);
+}
+
+/** The places a task's links name it in, which a link written by the task's number names it in too. */
+const NUMBERED_PLACES: ReadonlySet<LinkPlace["kind"]> = new Set([
+  LINK_PLACE.TASK,
+  LINK_PLACE.SECTION,
+  LINK_PLACE.COMMENT,
+  LINK_PLACE.VERSION,
+  LINK_PLACE.PAGE,
+]);
+
+/**
+ * A place naming its task by its id, named by the task's number
+ * (`taskLinkStep`) where the window lists the task with one in the
+ * workspace its link is written under, `workspace`, since a number names a
+ * task only in its own workspace; any other place as it is.
+ */
+function numberedPlaceIn(
+  planning: WorkspacePlaces | undefined,
+  place: LinkPlace,
+  workspace: string,
+): LinkPlace {
+  if (!NUMBERED_PLACES.has(place.kind) || !("planId" in place)) return place;
+  const task = planning?.tasks.find((each) => each.id === place.planId);
+  if (planning === undefined || task?.number === undefined) return place;
+  const home = workspaceOfSlug(planning.workspaces, workspace);
+  return home?.id === task.workspaceId ? withTaskId(place, taskLinkStep(task)) : place;
+}
+
+/** How a place's link is written by its task's number where the window lists one (`numberedPlaceIn`), as Copy link writes it. */
+export function useNumberedPlace(): (place: LinkPlace, workspace: string) => LinkPlace {
+  const planning = useAppSlice(workspacePlacesAtom);
+  return (place, workspace) => numberedPlaceIn(planning, place, workspace);
 }
 
 /** The id of the workspace the words a chip stands in are of (`wordsWorkspace`); none where they name none. */

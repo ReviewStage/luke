@@ -17,6 +17,7 @@ import { type SkillSource, useSkillPicker } from "./skill-picker.js";
 import { useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
+import { useNumberedTaskIdOf } from "./use-link-standing.js";
 
 /**
  * composer-pickers.tsx -- what a box written to an agent offers inside its field, alike in the agent's message box and the Inbox's answer box: the `@` list of mentions, the `/` list of skills, dictation, and the keys that work them.
@@ -102,6 +103,7 @@ export function useComposerPickers({
   const taskMentions = useTaskMentions();
   // An app address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
+  const taskIdOf = useNumberedTaskIdOf();
   const mentionPicker = useMentionPicker({
     source: taskMentions,
     self,
@@ -170,6 +172,7 @@ export function useComposerPickers({
                   ? undefined
                   : pastedMentionNode(words, taskMentions.doors.place, {
                       known,
+                      taskIdOf,
                       taskId: holderTaskId(taskMentions.holder),
                       text: taskMentions.text,
                     }),
