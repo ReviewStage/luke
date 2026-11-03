@@ -327,12 +327,22 @@ function startPrompt(
  * the agent reads: the member's own words and the message's link, never the
  * thread's other messages or what the agent is told to do with them.
  */
-function slackLine(addressed: SlackAddressed, permalink: Option.Option<string>): SlackLineMetadata {
+function slackLine(
+  addressed: SlackAddressed,
+  permalink: Option.Option<string>,
+  /** Whether the prompt carries the thread's earlier messages anyone but the writer wrote, which `run_on_mac` reads; none for a message sent on alone. */
+  outside = false,
+): SlackLineMetadata {
   const words = addressed.text.slice(0, SLACK_LINE_BOUNDS.WORDS_CHARS);
   const url = Option.getOrUndefined(
     Option.filter(permalink, (link) => link.length <= SLACK_LINE_BOUNDS.URL_CHARS),
   );
-  return { channel: MESSAGE_CHANNEL.SLACK, words, ...(url === undefined ? undefined : { url }) };
+  return {
+    channel: MESSAGE_CHANNEL.SLACK,
+    words,
+    ...(url === undefined ? undefined : { url }),
+    ...(outside ? { outside_words: true } : undefined),
+  };
 }
 
 /**
@@ -419,7 +429,12 @@ const startFromSlack = Effect.fnUntraced(function* (
       idempotencyKey: addressed.eventId,
       choice: undefined,
       prompt: startPrompt(addressed, earlier, permalink),
-      carried: slackLine(addressed, permalink),
+      // Note that a thread's earlier message by anyone but the writer, a bot's among them, is words they did not write.
+      carried: slackLine(
+        addressed,
+        permalink,
+        earlier.some((message) => message.bot || message.user !== addressed.slackUserId),
+      ),
       // Only the member's own words hand the agent servers, never the thread's other messages.
       serverWords: addressed.text,
     }),
