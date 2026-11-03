@@ -19,7 +19,12 @@
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
  * account reaches and every agent of them and with no task, as statements
  * built with the account's id (`task-list-live.ts`), woken by a write to
- * the account's topic or to one of its workspaces' (`tasksLive`).
+ * the account's topic or to one of its workspaces' (`tasksLive`). Asked
+ * with `&sync=`, it is answered in delta mode (`liveDeltaParts`): the rows
+ * that moved past the reader's sync id alone, with the ids of those that
+ * stand no longer for it and the sync id to ask past next, held until
+ * something moves; or whole, with that sync id, to a reader that names
+ * none, is too far behind, or whose admission to the rows moved.
  *
  * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
  * the same way, one statement a part that marks where it stands
@@ -103,15 +108,17 @@
  */
 
 import type { LiveStatement } from "@repo/database/core/live-statement";
+import type { DatabaseServices } from "@repo/database/core/query";
 import { readVisibleAgent } from "@repo/database/models/agent-store";
 import { readAutomation } from "@repo/database/models/automation-store";
 import { childConversationId } from "@repo/database/models/ids";
+import { readSyncWindow, SYNC_LOG, syncStanding } from "@repo/database/models/sync-log";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import {
   isWorkspaceMember,
   workspaceOf as workspaceOfAccount,
 } from "@repo/database/models/workspace-store";
-import type { SyncTopic } from "@repo/database/sync/notification";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
 import {
@@ -162,7 +169,7 @@ import {
   workspaceMembersLive,
   workspacesLive,
 } from "../sync/live-queries.js";
-import type { LiveParams, LiveQuery } from "../sync/live-query.js";
+import { type LiveParams, type LiveQuery, ownMovedKeys, syncMovedOf } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
@@ -477,6 +484,144 @@ export function liveCursorParts<Param extends string, Part extends string>(
   );
 }
 
+/** A sync id a reader holds every row at, as its query spells it; absent where it names none yet, and one of any other shape refused. */
+const syncIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  sync: string,
+): Effect.fn.Return<number | undefined, HostedRefusal> {
+  if (sync === "") return undefined;
+  const id = Number(sync);
+  if (!/^\d{1,16}$/.test(sync) || !Number.isSafeInteger(id)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return id;
+});
+
+/** Where a delta read stands for its reader: the settled id, the log's window past the reader's id up to it, and whether the reader is answered whole. */
+interface DeltaStanding {
+  readonly settled: number;
+  readonly window: Effect.Success<ReturnType<typeof readSyncWindow>>;
+  readonly whole: boolean;
+}
+
+/** Each part as read, carrying where it stands for a reader that follows it by sync id, and, past one, the ids gone from it, the snapshot left out. */
+function syncedParts<Part extends string>(
+  queries: Record<Part, SealedLiveQueryWire>,
+  sync: { readonly past?: string; readonly next: string },
+  gone: ReadonlyMap<Part, readonly string[]>,
+): Record<Part, SealedLiveQueryWire> {
+  // SAFETY: every part is kept, each with where it stands beside it.
+  return Object.fromEntries(
+    Object.entries<SealedLiveQueryWire>(queries).map(([part, sealed]) => {
+      if (sync.past === undefined) return [part, { ...sealed, sync }];
+      // Note that a delta's rows are read at a snapshot past the settled id, which shows writes past it that no delta carries yet, so a writer confirms by `next` and the txids instead.
+      const { snapshot: _snapshot, ...delta } = sealed;
+      const ofPart = gone.get(part as Part) ?? [];
+      return [part, { ...delta, sync, ...(ofPart.length === 0 ? {} : { gone: ofPart }) }];
+    }),
+  ) as Record<Part, SealedLiveQueryWire>;
+}
+
+/** The ids of a part's rows as read, which every delta part answers its key under. */
+function rowIds(sealed: SealedLiveQueryWire): ReadonlySet<string> {
+  return new Set(
+    (sealed.rows ?? []).flatMap((row) => {
+      const id = typeof row === "object" && row !== null ? (row as { id?: unknown }).id : undefined;
+      return id === undefined ? [] : [String(id)];
+    }),
+  );
+}
+
+/**
+ * A defined live read's parts in delta mode (`delta`), for a reader that
+ * names the sync id it holds every row at. Each look reads the settled id
+ * (`syncStanding`) and then the log's window from the reader's id up to it
+ * (`readSyncWindow`), the rows the read's topics reach or that it takes
+ * whatever they name, and the read is held, looking every second and on a
+ * watch of its topics, until the window holds a row. Note that a look
+ * reads the log alone, so it is cheap at a second, and that a wake can come
+ * before the settled id passes its write, which the next look then carries.
+ *
+ * It is answered whole, each part with the settled id to ask past next, to
+ * a reader that names no id, whose id is below the oldest the log kept or
+ * past the settled one, that is more than `SYNC_LOG.MOST` rows behind, or
+ * whose admission to the rows moved (a `whole` table's row naming its
+ * account). Otherwise each part is its statement narrowed to what moved,
+ * with the ids it was read past and is to read past next, the ids of its own
+ * rows a write the reader's topics reach moved that the narrowed read no
+ * longer finds (`gone`), and the txids of the writes it carries. At the
+ * hold's end it looks once more and answers that look, its parts empty
+ * where nothing moved. Unavailable where its statements can't be built or
+ * the log read.
+ */
+const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+  Param extends string,
+  Part extends string,
+>(query: LiveQuery<Param, Part>, params: LiveParams<Param>, sync: string) {
+  const delta = query.delta;
+  if (delta === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const past = yield* syncIdOf(sync);
+  const topics = yield* topicsOf(query, params);
+  const accounts = new Set(topics.flatMap(([kind, id]) => (kind === TOPIC.ACCOUNT ? [id] : [])));
+  const whole = new Set(delta.whole.map((table) => table.name));
+  const looked: Effect.Effect<DeltaStanding, HostedRefusal, DatabaseServices> =
+    hostedStoreOrUnavailable(
+      Effect.gen(function* () {
+        const { settled } = yield* syncStanding();
+        const window = yield* readSyncWindow({
+          past: past ?? settled,
+          settled,
+          tables: query.reads.map((table) => table.name),
+          anyTopic: delta.anyTopic.map((table) => table.name),
+          topics,
+        });
+        const admissionMoved = window.rows.some(
+          (row) =>
+            row.reached &&
+            whole.has(row.table) &&
+            row.topics.some(([kind, id]) => kind === TOPIC.ACCOUNT && accounts.has(id)),
+        );
+        const behind =
+          past === undefined ||
+          past > settled ||
+          (window.floor !== undefined && past < window.floor) ||
+          window.rows.length > SYNC_LOG.MOST;
+        return { settled, window, whole: behind || admissionMoved };
+      }),
+    );
+  const moved = (standing: DeltaStanding) => standing.whole || standing.window.rows.length > 0;
+  const held =
+    past === undefined
+      ? Option.none()
+      : yield* heldUntil(looked, moved, topics, LIVE_POLL_HOLD.WATCHED_LOOK, LIVE_POLL_HOLD.HOLD);
+  const standing = Option.isSome(held) ? held.value.read : yield* looked;
+  const next = String(standing.settled);
+  if (standing.whole) {
+    const statements = query.statements(params);
+    if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    const read = yield* readParts(statements.value, (sealer) => sealer.seal);
+    return { ...read, queries: syncedParts(read.queries, { next }, new Map()) };
+  }
+  const statements = delta.statements(params, syncMovedOf(standing.window.rows));
+  if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const read = yield* readParts(statements.value, (sealer) => sealer.seal);
+  const gone = new Map<Part, readonly string[]>();
+  for (const [part, keys] of ownMovedKeys(delta.own, standing.window.rows)) {
+    const found = rowIds(read.queries[part]);
+    gone.set(part, [...keys].filter((key) => !found.has(key)).toSorted());
+  }
+  const queries = syncedParts(read.queries, { past: String(past), next }, gone);
+  return { ...read, queries: wokenBy(queries, standing.window.txids) };
+});
+
+/** A defined live read's parts in delta mode, under the read's span as `liveQueryParts` runs one. */
+export function liveDeltaParts<Param extends string, Part extends string>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  sync: string,
+) {
+  return deltaParts(query, params, sync).pipe(Effect.withSpan(`web/live/${query.name}`));
+}
+
 /** The instant a reader holds every item changed since, as its query spells it in epoch milliseconds; none for every item, and one of any other shape refused. */
 const sinceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   since: string | undefined,
@@ -537,7 +682,10 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(tasksLive, { userId: context.userId }, input);
+      const sync = input[LIVE_POLL.SYNC];
+      return yield* sync === undefined
+        ? liveQueryParts(tasksLive, { userId: context.userId }, input)
+        : liveDeltaParts(tasksLive, { userId: context.userId }, sync);
     }),
     automations: signedIn.automations.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

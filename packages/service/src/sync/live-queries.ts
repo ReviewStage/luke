@@ -17,6 +17,8 @@ import {
   memberWorkspaceIds,
   workspacesLiveStatements,
 } from "@repo/database/models/workspace-store";
+import { agentTable } from "@repo/database/schemas/agent";
+import { task } from "@repo/database/schemas/task";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   agentBrowserTabSync,
@@ -43,7 +45,6 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
-  workspaceFormerSlugSync,
   planPageVersionSync,
   planRevisionSync,
   pullRequestChaptersSync,
@@ -55,6 +56,7 @@ import {
   taskSync,
   turnsSync,
   userSync,
+  workspaceFormerSlugSync,
 } from "@repo/database/sync/tables";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -76,7 +78,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
-import { taskListLiveStatements } from "../tasks/task-list-live.js";
+import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { defineLiveQuery, LIVE_MODE, liveQueryRegistry } from "./live-query.js";
@@ -148,6 +150,13 @@ export const sidebarLive = defineLiveQuery({
  * with no turn starting or settling shows
  * at the hold's end, as do the rename of someone the list names who has left
  * every workspace and a Mac's last beat, which wakes nothing.
+ *
+ * A reader past a sync id is answered what moved alone
+ * (`taskListDeltaStatements`); a message or a conversation names only its
+ * conversation, so its rows are taken whatever they name, and narrow the
+ * agents to the one of that conversation the reader reaches. Its plans and
+ * its agents are each part's own rows, and a write to its account's
+ * membership or GitHub access answers it whole.
  */
 export const tasksLive = defineLiveQuery({
   name: "tasks",
@@ -171,6 +180,15 @@ export const tasksLive = defineLiveQuery({
   topics: ({ userId }) => readerAndWorkspaceTopics(userId),
   statements: ({ userId }) => taskListLiveStatements(userId),
   mode: LIVE_MODE.SNAPSHOT,
+  delta: {
+    whole: [memberSync, githubPersonalTokenSync, githubRepositoryReadSync],
+    anyTopic: [messagesSync, conversationsSync],
+    own: {
+      plans: { table: taskSync, key: task.id },
+      agents: { table: agentSync, key: agentTable.id },
+    },
+    statements: ({ userId }, moved) => taskListDeltaStatements(userId, moved),
+  },
 });
 
 /**

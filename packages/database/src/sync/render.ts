@@ -31,7 +31,10 @@
  * A migration that drops or renames a column a `WHEN` names would be refused
  * by Postgres while the update trigger stands, so a migration writes a
  * table's drops before its own statements and the creates after them
- * (`syncMigration`), all in the one transaction the migrator runs.
+ * (`syncMigration`), all in the one transaction the migrator runs. One that
+ * changes only what a capture does, such as logging a table, replaces its
+ * function alone (`syncFunctionMigration`), since a trigger dropped takes
+ * its table's every lock while the deploy's transaction runs.
  */
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { syncLog } from "../schemas/sync-log.js";
@@ -149,12 +152,20 @@ function logStatements(table: SyncTable, log: SyncTableLog): readonly string[] {
   ];
 }
 
-/** The block logging the write, around its statements only an update `LOG.ROWS` skips. */
+/** Whether the write is one `LOG.ROWS` logs: not an update, or one of a column it names. */
+function rowsLogged(log: SyncTableLog): string {
+  const changed = log.updatesOf.map(
+    (column) => `OLD.${quoteIdentifier(column)} IS DISTINCT FROM NEW.${quoteIdentifier(column)}`,
+  );
+  return ["TG_OP <> 'UPDATE'", ...changed].join(" OR ");
+}
+
+/** The block logging the write, around its statements where `LOG.ROWS` skips the update. */
 function logBlock(table: SyncTable, log: SyncTableLog): string {
   const statements = logStatements(table, log);
   if (log.writes === LOG.EVERY) return statements.map((line) => `\t${line}`).join("\n");
   return [
-    "\tIF TG_OP <> 'UPDATE' THEN",
+    `\tIF ${rowsLogged(log)} THEN`,
     ...statements.map((line) => `\t\t${line}`),
     "\tEND IF;",
   ].join("\n");
@@ -243,4 +254,17 @@ export function syncMigration(tables: readonly SyncTable[], statements: string):
     ...(own.length === 0 ? [] : [own]),
     ...rendered.flatMap((capture) => capture.create),
   ].join(STATEMENT_BREAKPOINT);
+}
+
+/**
+ * A migration file replacing the tables' trigger functions after its own
+ * statements, their triggers left standing: for a change to what a capture
+ * does that leaves its columns and triggers as they are, which the drift
+ * check holds it to, and which takes no lock on the tables.
+ */
+export function syncFunctionMigration(tables: readonly SyncTable[], statements: string): string {
+  const own = statements.trim();
+  return [...(own.length === 0 ? [] : [own]), ...tables.map(functionStatement)].join(
+    STATEMENT_BREAKPOINT,
+  );
 }

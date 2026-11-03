@@ -21,14 +21,16 @@
  * with whether the reader can generate them. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
- * poll is held until the rows move past it, or answered unchanged. Each
+ * poll is held until the rows move past it, or answered unchanged. The task
+ * list asked with `&sync=` is answered what moved past that sync id alone,
+ * held until something does. Each
  * names the account it was started for under `?userId=`, and a session of
  * any other is answered as signed out. Each output is the wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
 import {
@@ -74,6 +76,14 @@ const userField = EffectSchema.optionalKey(EffectSchema.String);
 const liveReadSchema = EffectSchema.Struct({
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The task list as a live read follows it: the sync id the reader holds every row at, as text, past which it is answered what moved alone (`LIVE_POLL.SYNC`). */
+const liveTasksSchema = EffectSchema.Struct({
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_POLL.SYNC]: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_USER_QUERY]: userField,
 });
 
@@ -192,7 +202,7 @@ export const liveContract = {
     .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
   tasks: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASKS }))
-    .input(liveReadSchema)
+    .input(liveTasksSchema)
     .output(EffectSchema.flip(taskListLiveAnswerSchema)),
   automations: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AUTOMATIONS }))
