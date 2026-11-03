@@ -103,7 +103,8 @@ test("a key a viewer could not see shows as key caps, and a key that only types 
   press({ key: "Enter", code: "Enter" });
   press({ key: "k", code: "KeyK", metaKey: true });
 
+  // Enter is its icon alone and ⌘K the command icon beside its letter, so only the K is text.
   const caps = [...shadow.querySelectorAll(".k span")].map((cap) => cap.textContent);
-  assert.deepEqual(caps, ["⏎", "⌘K"]);
+  assert.deepEqual(caps, ["", "K"]);
   field.remove();
 });
