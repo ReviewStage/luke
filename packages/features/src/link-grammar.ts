@@ -22,7 +22,8 @@ import { parsedUrl } from "./parsed-url.js";
  *
  * - a task, `/task/<id>`, and its section, `#<anchor>`, its version,
  *   `/task/<id>/version/<seq>`, and a page an agent wrote for it,
- *   `/task/<id>/page/<pageId>`;
+ *   `/task/<id>/page/<pageId>`, the task named by its id or by its number
+ *   in the workspace (`taskNumberOf`);
  * - an agent, `/agent/<agentId>`, whether or not it works on a task, and
  *   under it what is its own: a worker, `/worker/<callId>`, its Changes,
  *   `/changes`, one review thread of its pull request in one of that tab's
@@ -83,9 +84,15 @@ import { parsedUrl } from "./parsed-url.js";
  * the unit of work took, and read under `/plan/` forever, the step every link
  * written before it holds, whatever follows the task's id; a reader takes a
  * trailing slash, a query, and a fragment a kind has no use for, and refuses
- * anything else. A section's anchor is its heading as GitHub spells a
- * Markdown heading's (`mention-link.ts`'s `sectionAnchors`), read in lower
- * case.
+ * anything else. A task's id is a UUID, never all digits, so a task step
+ * all digits, `/task/42`, names the task by its number in the link's
+ * workspace, which a reader asks the service to find by the slug and the
+ * number before it opens the place, wherever a task's id is read; a key
+ * spelled there, `/task/STAG-42`, is read as its number alone, since its
+ * prefix is the workspace's name and follows a rename. A number that
+ * finds no task opens as an id that names none does. A section's anchor is
+ * its heading as GitHub spells a Markdown heading's (`mention-link.ts`'s
+ * `sectionAnchors`), read in lower case.
  *
  * A page of GitHub's the app reads is a pull request's,
  * `https://github.com/<owner>/<name>/pull/<number>` or any page under it, an
@@ -207,6 +214,12 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/u;
 
 /** A number spelled whole: a version's, or a moment's in epoch milliseconds. */
 const WHOLE = /^\d{1,15}$/u;
+
+/** A task's number in its workspace as a link spells it in the task's step: whole, from one, within a Postgres integer. */
+const TASK_NUMBER = /^[1-9]\d{0,8}$/u;
+
+/** A task's key as a link may spell it in the task's step, `STAG-42`: a prefix of up to four capitals or digits, held to its case as `workspace-key.ts` holds a key, a hyphen, and its number. */
+const TASK_KEY = /^[\p{Lu}\p{N}]{1,4}-([1-9]\d{0,8})$/u;
 
 /** An anchor as a heading's is spelled: letters, marks, digits, underscores, and hyphens. */
 const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
@@ -476,6 +489,11 @@ function namesItemPicture(more: readonly string[]): boolean {
   return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
 }
 
+/** A task's step as the place holds it: a key read as its number alone, any other step as written. */
+function taskStepOf(step: string): string {
+  return TASK_KEY.exec(step)?.[1] ?? step;
+}
+
 /** The steps after a task's id: a version, a page, an agent's, or an Inbox item; a turn of ours or a worker of ours read as the task, since each is drawn nowhere now. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
@@ -709,9 +727,11 @@ export function readLink(target: string): ReadLink | undefined {
   if (workspace.length > LINK_BOUNDS.MAX_STEP_CHARS) return undefined;
   if (!after.every((step): step is string => step !== undefined && step !== "")) return undefined;
   // A task's own link, or a section's, is read by the codec that writes a mention of either.
-  const [step, taskId, ...rest] = after;
-  const taskOwn =
-    step !== undefined && TASK_STEPS.has(step) && taskId !== undefined && rest.length === 0;
+  const [step, written, ...rest] = after;
+  const taskStep = step !== undefined && TASK_STEPS.has(step);
+  const taskId = taskStep && written !== undefined ? taskStepOf(written) : written;
+  const taskOwn = taskStep && taskId !== undefined && rest.length === 0;
+  const placeSteps = taskStep && taskId !== undefined ? [step, taskId, ...rest] : after;
   // Note that a task's link naming one of its comment threads opens the thread; any other query is the address's own, which the place has no use for.
   const thread = url.searchParams.getAll(COMMENT_QUERY);
   const place =
@@ -721,8 +741,20 @@ export function readLink(target: string): ReadLink | undefined {
         )
       : taskOwn
         ? taskLink(taskId, url.hash)
-        : Option.getOrUndefined(readPlace(placeFields(after)));
+        : Option.getOrUndefined(readPlace(placeFields(placeSteps)));
   return place === undefined ? undefined : { workspace, place };
+}
+
+/** The number a place names its task by in its link's workspace, `42` from `/task/42`, which the service finds the task by; nothing for a place naming its task by its id, or no task. */
+export function taskNumberOf(place: LinkPlace): number | undefined {
+  return "planId" in place && place.planId !== undefined && TASK_NUMBER.test(place.planId)
+    ? Number(place.planId)
+    : undefined;
+}
+
+/** The place with its task named by the id the service found for its number, everything else as it was. */
+export function withTaskId(place: LinkPlace, taskId: string): LinkPlace {
+  return "planId" in place ? { ...place, planId: taskId } : place;
 }
 
 /** The places of the account's own, which no workspace holds, so their links name none. */

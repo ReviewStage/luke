@@ -108,6 +108,7 @@ const DECLARED_TABLES = [
   "task",
   "task_block",
   "task_number_counter",
+  "task_number_forward",
   "task_pin",
   "task_section",
   "task_section_entry",

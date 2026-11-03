@@ -1800,6 +1800,11 @@ chosen, in the workspace its `workspaceId` names, which the account must be
 a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
 in the account's first workspace, ensured first, where it names none,
 `GET /api/plans/{id}` opens one with its saved document,
+`GET /api/workspaces/{workspace}/tasks/{number}` answers the id of the one a
+link names by its number in its workspace, by slug or id, the number it
+held before a move still finding it (`task_number_forward`), and
+`not-found` for a workspace the account is no member of, a number naming no
+task, or a task it does not reach,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, the workspace it belongs to, or several at
 once, an archive a stamp on the row (`archived_at`) and a pin the
@@ -1809,7 +1814,8 @@ a move
 (`workspaceId`) is the task's owner's alone (`not-permitted` for a
 teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
-change would be otherwise, and its agents go with it, and
+change would be otherwise, and its agents go with it, its number in the
+workspace it left kept for the links written with it, and
 `DELETE /api/plans/{id}` deletes it, its agents' rows going with it
 and their conversations stamped deleted, with the one the task's own Vespin
 kept where the row still names it (`deleteTask`),

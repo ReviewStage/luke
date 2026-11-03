@@ -58,6 +58,7 @@ import {
   taskFileRequestSchema,
   taskFileTextSchema,
   taskFileWindowSchema,
+  taskNumberSchema,
   taskPrioritySchema,
   taskPullRequestsSchema,
   taskRelationChangeRequestSchema,
@@ -725,6 +726,22 @@ export const taskBrowserTabsFollowedSchema = EffectSchema.Union([
 ]);
 
 export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
+
+/** A task a link names by its number, as the window asks the host to find it: the link's workspace, by the slug or the id it spells, and the number. */
+export const tasksFindParamsSchema = EffectSchema.Struct({
+  workspace: EffectSchema.NonEmptyString,
+  number: taskNumberSchema,
+});
+
+export type TasksFindParams = typeof tasksFindParamsSchema.Type;
+
+/** The task a link names by its number, as the window hears it: its id, or that none was found or the service did not answer. */
+export const tasksFindAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type TasksFindAnswer = typeof tasksFindAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({

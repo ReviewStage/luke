@@ -30,6 +30,7 @@ import {
   SCHEME_LINK_HOST,
   type SchemeLink,
   schemeLinkOf,
+  taskNumberOf,
 } from "./link-grammar.js";
 import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
@@ -484,6 +485,8 @@ function schemeFields({ host, steps, hash, search }: SchemeLink) {
 
 /** The fields a place of our own spells as a mention: a task, a section, a page, an agent, a person, or a channel; nothing for a place no mention names. */
 function placeFields(place: LinkPlace, hash: string) {
+  // A task named by its number is no mention, because a mention names it by its id alone, and the number is the workspace's; its link opens it once found by the slug.
+  if (taskNumberOf(place) !== undefined) return undefined;
   // Note that only a task's address takes a fragment, its section's anchor; a fragment past any other's names nothing.
   if (hash !== "" && place.kind !== LINK_PLACE.TASK && place.kind !== LINK_PLACE.SECTION) {
     return undefined;
@@ -519,7 +522,7 @@ function appFields(url: URL) {
     task.pathname = url.pathname.slice(0, -step.length);
     task.search = "";
     const place = readLink(task.href)?.place;
-    return place?.kind === LINK_PLACE.TASK
+    return place?.kind === LINK_PLACE.TASK && taskNumberOf(place) === undefined
       ? { kind: MENTION_KIND.APP, taskId: place.planId }
       : undefined;
   }

@@ -17,6 +17,8 @@ import {
   readLinearIssue,
   readLink,
   readShownLink,
+  taskNumberOf,
+  withTaskId,
 } from "./link-grammar.js";
 import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.js";
 
@@ -209,6 +211,26 @@ test("a task's places written under /plan/, as every link before /task/ was, are
     workspace: "acme",
     place: { kind: LINK_PLACE.VERSION, planId: TASK, revision: 3 },
   });
+});
+
+test("a task named by its number in the workspace, or by its key, names it by the number in any of its places, until its id is found", () => {
+  const places = [
+    `${HOME}/task/42`,
+    `${HOME}/task/STAG-42#rollout`,
+    `${HOME}/plan/42/version/3`,
+    `${HOME}/task/42/agent/${AGENT}`,
+  ].map((target) => readLink(target)?.place);
+
+  assert.deepEqual(
+    places.map((place) => place && taskNumberOf(place)),
+    [42, 42, 42, 42],
+  );
+  assert.deepEqual(places[2] && withTaskId(places[2], TASK), {
+    kind: LINK_PLACE.VERSION,
+    planId: TASK,
+    revision: 3,
+  });
+  assert.equal(taskNumberOf({ kind: LINK_PLACE.TASK, planId: TASK }), undefined);
 });
 
 test("a turn of Vespin's work, or a worker of Vespin's, once written under its task, names the task, since neither is drawn now", () => {

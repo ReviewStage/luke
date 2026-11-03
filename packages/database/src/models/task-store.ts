@@ -78,6 +78,7 @@ import {
   readTaskBlocks,
   taskBlockedFor,
 } from "./task-block-store.js";
+import { forwardTaskNumber } from "./task-number-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -1720,6 +1721,14 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           changes.organizationId !== locked.value.organizationId;
         // A task moved to another workspace takes the next number there; its old one is never handed out again.
         const movedNumber = moved ? yield* nextTaskNumber(changes.organizationId) : undefined;
+        // The number it leaves behind still opens it, as a link written with it names it.
+        if (moved) {
+          yield* forwardTaskNumber({
+            organizationId: locked.value.organizationId,
+            number: locked.value.number,
+            taskId,
+          });
+        }
         const landsIn = moved ? changes.organizationId : locked.value.organizationId;
         yield* assigneeAdmitted(changes.assigneeId, landsIn);
         // A task moved where its assignee is no member goes unassigned rather than assigned to someone who cannot read it.

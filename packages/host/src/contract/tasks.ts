@@ -38,6 +38,8 @@ import {
   tasksEditParamsSchema,
   tasksFileAnswerSchema,
   tasksFileParamsSchema,
+  tasksFindAnswerSchema,
+  tasksFindParamsSchema,
   tasksIssueParamsSchema,
   tasksIssueSchema,
   tasksMoveAnswerSchema,
@@ -229,6 +231,9 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actProcedure("Could not colour that code on this system.")
     .input(exactInput(colourCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),
+  [TASKS_ACT_KIND.TASKS_FIND]: actProcedure("Could not find that task on this system.")
+    .input(exactInput(tasksFindParamsSchema))
+    .output(EffectSchema.flip(tasksFindAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_REVISIONS]: actProcedure(
     "Could not read that plan's history on this system.",
   )

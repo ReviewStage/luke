@@ -43,6 +43,7 @@ import {
   type TasksDocument,
   type TasksEditAnswer,
   type TasksFileAnswer,
+  type TasksFindAnswer,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
@@ -83,6 +84,7 @@ import {
   tasksCommentsParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
+  tasksFindParamsSchema,
   tasksIssueParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
@@ -342,6 +344,7 @@ export type TasksClient = Pick<
   | "readRepositoryIssue"
   | "readBrowserTabs"
   | "openBrowserTab"
+  | "find"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -1904,6 +1907,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksBrowserTabOpenAnswer>(BROWSER_TABS_UNANSWERED);
         return carried<TasksBrowserTabOpenAnswer>(yield* served(client.openBrowserTab(read)));
+      }),
+    // The task a link names by its number is found on the service and answered to the window that asked, held nowhere.
+    [GATEWAY_METHOD.TASKS_FIND]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksFindParamsSchema,
+          params,
+          "finding a task by its number names the workspace and the number",
+        );
+        if (!gate()) {
+          return carried<TasksFindAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        const taskId = yield* served(client.find(read.workspace, read.number));
+        return carried<TasksFindAnswer>(
+          taskId === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { taskId },
+        );
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps

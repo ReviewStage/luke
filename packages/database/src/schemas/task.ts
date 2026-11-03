@@ -19,6 +19,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   uniqueIndex,
   uuid,
@@ -195,3 +196,29 @@ export const taskNumberCounter = pgTable("task_number_counter", {
     .references(() => organization.id, { onDelete: "cascade" }),
   lastNumber: integer("last_number").notNull(),
 });
+
+/**
+ * A number a task held in a workspace it moved out of, so a link written
+ * with that number (`/<slug>/task/<number>`) still opens the task: a row per
+ * move, written as the task leaves (`task-store.ts`), and read only where
+ * the number names no task of the workspace now. A number is never handed
+ * out again, so the pair names one task for good. The row goes with the
+ * workspace, or with the task.
+ */
+export const taskNumberForward = pgTable(
+  "task_number_forward",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => task.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.number] }),
+    // The task's delete taking each of its rows.
+    index("task_number_forward_task").on(table.taskId),
+  ],
+);

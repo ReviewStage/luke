@@ -363,6 +363,8 @@ export const TASKS_ACT_KIND = {
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   TASKS_COLOUR_CODE: "tasks.colourCode",
+  /** The id of the task a link names by its workspace and its number, found on the service before the link opens; answered to the window, never on the document. */
+  TASKS_FIND: "tasks.find",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
   TASKS_REVISIONS: "tasks.revisions",
   /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */

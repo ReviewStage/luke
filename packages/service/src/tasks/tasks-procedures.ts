@@ -12,7 +12,9 @@
  * as it stands now where we wrote it meanwhile and the edit no longer
  * lands, with nothing saved; and a restore puts back an earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
- * nothing: the list stands newest started first whatever is opened. Its
+ * nothing: the list stands newest started first whatever is opened, and
+ * `GET /api/workspaces/{workspace}/tasks/{number}` finds the plan's id for
+ * a link naming it by its number in its workspace (`task-number-store.ts`). Its
  * `DELETE` stops every coding agent of the plan first, through the one Stop
  * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes
  * the plan.
@@ -65,6 +67,7 @@ import {
   type TaskBlockSelf,
   type TaskBlockWritten,
 } from "@repo/database/models/task-block-store";
+import { taskIdOfNumber } from "@repo/database/models/task-number-store";
 import {
   checkTreeRepository,
   deleteTaskCommitted,
@@ -687,6 +690,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         status: TASK_START_STATUS.CREATED,
         body: committed === undefined ? answer : { ...answer, txid: committed },
       };
+    }),
+
+    /** The plan a link names by its workspace and its number there, by its id; one the caller does not reach answers as none. */
+    find: plans.find.effect(function* ({ input, context }) {
+      const found = yield* hostedStoreOrUnavailable(
+        taskIdOfNumber(context.userId, input.workspace, input.number),
+      );
+      if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { taskId: found.value };
     }),
 
     /** One plan with its saved document. */

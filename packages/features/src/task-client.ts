@@ -412,6 +412,19 @@ export class HostedTaskClient {
     );
   }
 
+  /** The id of the task a link names by its workspace, by slug or id, and its number there; nothing where none the account reaches is found, or the service did not answer. */
+  find(
+    workspace: string,
+    number: number,
+  ): Effect.Effect<string | undefined, never, HttpClient.HttpClient> {
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.find, { workspace, number: String(number) }),
+        (found) => found.taskId,
+      ),
+    );
+  }
+
   /** One task with its saved document; opening it moves no row of the list. */
   open(
     taskId: string,

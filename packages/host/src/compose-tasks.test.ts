@@ -467,6 +467,7 @@ function fakeService(tasks: Task[]): FakeService {
     history: undefined,
     olderHistory: {},
     revisions: {},
+    find: () => Effect.succeed(undefined),
     readRevisions: (_taskId, before) =>
       Effect.sync(() => (before === undefined ? service.history : service.olderHistory[before])),
     readRevision: (_taskId, seq) => Effect.sync(() => service.revisions[seq]),

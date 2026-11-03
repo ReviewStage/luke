@@ -894,6 +894,41 @@ test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows
   assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
 });
 
+test("a Vespin link naming a task by its number opens the task the service finds by its workspace and number, and one it finds none for opens as an id naming none", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_FIND]: (payload) =>
+        Promise.resolve(
+          (payload as { number: number }).number === 42
+            ? { taskId: OTHER_TASK_ID }
+            : { failure: TASK_CALL_FAILURE.UNANSWERED },
+        ),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
+  );
+  const open = (planId: string) =>
+    act(() =>
+      tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.TASK, planId } }),
+    );
+
+  open("42");
+  await settle();
+  open("43");
+  await settle();
+
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_FIND)
+      .map((asked) => asked.payload),
+    [
+      { workspace: "acme", number: 42 },
+      { workspace: "acme", number: 43 },
+    ],
+  );
+  assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID, "43"]);
+});
+
 test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
