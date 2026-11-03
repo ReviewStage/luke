@@ -2482,6 +2482,31 @@ test("leaving the plan for the home page lets it go, so the next launch rests on
   assert.deepEqual(selected(tab), []);
 });
 
+test("a launch on a narrow stage rests on the home page, and a wide launch after it still reopens the plan", () => {
+  quitWithTaskOpen();
+  const phone = mount({ shown: true, tasks: LAUNCHING, room: SHELL_ROOM.NARROW });
+  const drawnAtOnce = phone.control().restoring;
+  phone.stand({ tasks: listRead([listed()]) });
+  const askedOnPhone = selected(phone);
+  closeWindow();
+
+  const wide = mount({ shown: true, tasks: LAUNCHING });
+  wide.stand({ tasks: listRead([listed()]) });
+
+  assert.equal(drawnAtOnce, false, "the home page is drawn at once");
+  assert.deepEqual(askedOnPhone, []);
+  assert.deepEqual(selected(wide), [TASK.id]);
+});
+
+test("a link opened while the list is still read stands over the reopen", () => {
+  quitWithTaskOpen();
+  const tab = mount({ shown: true, tasks: LAUNCHING });
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.INBOX } }));
+  tab.stand({ tasks: listRead([listed()]) });
+  assert.deepEqual(selected(tab), []);
+  assert.equal(tab.control().inboxView.open, true);
+});
+
 test("a window reloaded over a plan the host still holds asks for nothing", () => {
   quitWithTaskOpen();
   const tab = mount({ shown: true, tasks: { ...OPEN, tasks: [listed()] } });

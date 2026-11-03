@@ -843,7 +843,7 @@ export interface WindowHistory extends NavigationHistory {
    * Leaves the page standing for the nearest step behind it on another page,
    * passing over the page's own panes and tabs, as a phone's way back out of
    * a task goes back to the list it was opened from and pushes nothing;
-   * where none stands, as on a task a link loaded, it opens the Tasks page.
+   * where none stands, as on a task a link loaded, it opens Home.
    */
   onLeave: () => void;
 }
@@ -1200,6 +1200,7 @@ export function useWindowHistory(input: {
     | "listFailed"
     | "onRestoreTask"
     | "onLeaveTask"
+    | "onGoHome"
     | "history"
     | "inboxView"
     | "agentView"
@@ -1564,7 +1565,7 @@ export function useWindowHistory(input: {
       tasks.history.onClose();
     },
     onLeave: () => {
-      if (!stepAway()) tasks.boardView.onOpen();
+      if (!stepAway()) tasks.onGoHome();
     },
     lists,
   });

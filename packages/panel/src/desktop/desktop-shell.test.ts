@@ -1396,7 +1396,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const fromNowhere = render(undefined, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(back(fromNowhere).textContent, "Tasks", "with no page behind, the Tasks page");
+  assert.equal(back(fromNowhere).textContent, "Home", "with no page behind, Home");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 

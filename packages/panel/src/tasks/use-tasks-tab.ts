@@ -2237,6 +2237,7 @@ export function useTasksTab(input: {
     listStatus: tasks.listStatus,
     openTaskId,
     boundFor,
+    narrow: input.room === SHELL_ROOM.NARROW,
     select,
   });
 
@@ -3047,13 +3048,14 @@ export function useTasksTab(input: {
   const openPlace = ({ workspace, place }: ReadLink) => {
     // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
     navigations.current += 1;
+    // Note that every link stands over the launch's reopen of the task last open, since a fresh tab's address may name any
+    // place, and a reopen landing while a link's read is out would take the window from under the place it names.
+    forgoReopen();
     switch (place.kind) {
-      // Note that a workspace's Home, and its Board, stand over the launch's reopen of the task last open, since a fresh tab's
-      // address may name either; a step naming no workspace of the reader's, by id, slug, or former slug, is not there for
-      // them, so it stands as not found rather than opening the listed workspace or where the window rests.
+      // A step naming no workspace of the reader's, by id, slug, or former slug, is not there for them, so it stands as not
+      // found rather than opening the listed workspace or where the window rests.
       case LINK_PLACE.HOME:
       case LINK_PLACE.BOARD:
-        forgoReopen();
         if (
           viewed.workspaces.length > 0 &&
           workspaceOfSlug(viewed.workspaces, workspace) === undefined

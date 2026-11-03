@@ -49,8 +49,8 @@ export type TaskPane = (typeof TASK_PANE)[keyof typeof TASK_PANE];
 /** What the way back to the Activity list is called, on a tab chosen from it. */
 export const ACTIVITY_BACK = "Activity";
 
-/** What the way out of a task is called where no page stands behind it, and it opens the Tasks page. */
-export const TASKS_BACK = "Tasks";
+/** What the way out of a task is called where no page stands behind it, and it opens Home. */
+export const HOME_BACK = "Home";
 
 /** What the way out of a task is called where the page behind it has no name yet. */
 const BACK = "Back";
@@ -94,11 +94,11 @@ export interface TaskHeadBack {
 /**
  * The way out of a task, named for the page it goes back to, as the
  * window's history names that step (`WindowHistory`'s `away`): the Tasks
- * page, the Inbox, or another task; the Tasks page where none stands
- * behind it, which `onLeave` then opens.
+ * page, the Inbox, or another task; Home where none stands behind it,
+ * which `onLeave` then opens.
  */
 export function awayBack(away: AwayStep | undefined, onLeave: () => void): TaskHeadBack {
-  const label = away === undefined ? TASKS_BACK : (away.title?.label ?? BACK);
+  const label = away === undefined ? HOME_BACK : (away.title?.label ?? BACK);
   return { label, onPress: onLeave };
 }
 

@@ -23,10 +23,17 @@ import { keptKey, useKept } from "../use-kept.js";
  * does not flash the home page first; once the task is asked for it stays
  * restoring until the host has it open, or the ask is taken back. A list
  * read that failed leaves the home page standing, and the read its Try
- * again lands still opens the task. A link to the workspace's Home or its
- * Board opened before the reopen is decided, as a fresh tab opened at
- * either's address is, stands over it, so the reopen opens nothing. A fixture run keeps nothing and opens nothing, as it draws tasks of its
+ * again lands still opens the task. A link opened before the reopen is
+ * decided, as a fresh tab opened at any place's address is, stands over
+ * it, so the reopen opens nothing. A fixture run keeps nothing and opens nothing, as it draws tasks of its
  * own.
+ *
+ * A narrow room reopens nothing either, and opens on Home. Note that we
+ * keep the task all the same, because a phone shows one pane of it, which
+ * is the agent's transcript once its plan was left there, and landing on
+ * that at every launch reads as being dropped mid-conversation, while
+ * Home's Recent lists the tasks worked on latest, a tap away; a wide room shows the
+ * task's panes side by side, as it was left, and still reopens it.
  */
 
 /** Each account's last open task, by the account's email. */
@@ -67,9 +74,11 @@ export function useLastTask(input: {
   listStatus: TasksView["listStatus"];
   openTaskId: string | undefined;
   boundFor: string | undefined;
+  /** Whether the room is narrow, a phone's, which opens on Home rather than reopening the task. */
+  narrow: boolean;
   select: (taskId: string) => void;
 }): LastTask {
-  const { staged, account, tasks, listStatus, openTaskId, boundFor, select } = input;
+  const { staged, account, tasks, listStatus, openTaskId, boundFor, narrow, select } = input;
   const [kept, , keep] = useKept(KEPT.TASKS, NONE_KEPT);
   // The account the launch's reopen was decided for, and the task it asked for.
   const [decided, setDecided] = useState<{ account: string; asked?: string } | undefined>(
@@ -108,7 +117,7 @@ export function useLastTask(input: {
   const keptTask = account === undefined ? undefined : kept[account];
   useEffect(() => {
     if (staged || account === undefined || decided?.account === account) return;
-    if (openTaskId !== undefined || forgone) {
+    if (openTaskId !== undefined || forgone || narrow) {
       setForgone(false);
       setDecided({ account });
       return;
@@ -122,7 +131,19 @@ export function useLastTask(input: {
     }
     setDecided({ account, asked: task.id });
     select(task.id);
-  }, [staged, account, decided, forgone, openTaskId, listStatus, tasks, keptTask, select, keep]);
+  }, [
+    staged,
+    account,
+    decided,
+    forgone,
+    narrow,
+    openTaskId,
+    listStatus,
+    tasks,
+    keptTask,
+    select,
+    keep,
+  ]);
 
   // Note that a failed read leaves the home page standing, with the
   // sidebar's Try again, rather than the bare ground until the list reads.
@@ -131,7 +152,7 @@ export function useLastTask(input: {
   const restoring = settled
     ? false
     : ours === undefined
-      ? !forgone && keptTask !== undefined && listStatus !== TASKS_READ.FAILED
+      ? !forgone && !narrow && keptTask !== undefined && listStatus !== TASKS_READ.FAILED
       : ours.asked !== undefined && boundFor === ours.asked;
   return { restoring, forgo };
 }
