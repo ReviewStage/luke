@@ -9,6 +9,7 @@ import {
   HarnessMark,
   Inline,
   MARK_PROVIDER,
+  type MenuLastLine,
   type MenuRow,
   POPOVER_ALIGN,
   POPOVER_SIDE,
@@ -20,6 +21,8 @@ import {
   SEARCHABLE_MENU_LAYER,
   SearchableMenu,
   Spinner,
+  TEXT_LINK_LOOK,
+  TextLink,
 } from "@repo/ui";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
@@ -34,7 +37,8 @@ import { CatalogSection } from "../section";
  * searchable-menu.tsx -- the picker menu hung from its button at each of its
  * three widths, over synthetic repositories under their owners, the one
  * chosen checked and one that cannot be picked now saying why; a menu with
- * rows pinned under its list, one opening a submenu of efforts; and the
+ * rows pinned under its list, one opening a submenu of efforts, and the
+ * last line under them saying who pays, Manage usage at its end; and the
  * notes said in the list's place while the rows are read and once a read
  * failed, with Retry. Each closes on Escape, a pick, a second press of its
  * button, and focus leaving it, and hands the focus back to its button.
@@ -47,6 +51,16 @@ import { CatalogSection } from "../section";
  * window's foot, its field unfocused until pressed, Effort opening in the
  * sheet's place and Fast switching where it stands.
  */
+
+/** The last line a ChatGPT-paid agent's model menu ends on: who pays, Manage usage set apart at its end. */
+const PLAN_LINE: MenuLastLine = {
+  words: "Using ChatGPT plan",
+  end: (
+    <TextLink href="https://chatgpt.com/settings/usage" look={TEXT_LINK_LOOK.UNDERLINED} external>
+      Manage usage
+    </TextLink>
+  ),
+};
 
 /** Synthetic repositories, under the owners a GitHub account would list. */
 const REPOSITORIES: readonly MenuRow[] = [
@@ -157,7 +171,7 @@ function Hung({
                 ]
               : undefined
           }
-          footNote={held.pinned === true ? "$1.20 spent on this agent" : undefined}
+          lastLine={held.pinned === true ? PLAN_LINE : undefined}
           onPick={(id) => {
             setChosen(id);
             close();
@@ -329,6 +343,7 @@ function PhoneSheet(): React.JSX.Element {
             },
             { id: "fast", label: "Fast", toggle: { on: fast, onToggle: () => setFast(!fast) } },
           ]}
+          lastLine={PLAN_LINE}
           onPick={(id) => {
             close();
             setChosen(id);
