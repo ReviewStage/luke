@@ -16,7 +16,7 @@ const TASKS = [
   "Ship the spring release",
   "Move the Inbox to one list",
   "Name the workers",
-  "Remember the channel list's folds",
+  "Remember the Inbox's folds",
   "One Show more row",
   "Guard the stored choices",
 ] as const;

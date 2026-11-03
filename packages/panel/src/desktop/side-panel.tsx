@@ -277,9 +277,8 @@ const NO_PAGES: readonly PageLine[] = [];
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
  * from what it holds, the fixed three and Terminal; nor is a tab of it
- * pinned there, since the Inbox is no plan's page. Beside a channel's
- * stream it holds the thread open there as its Inbox tab
- * (`use-side-panel.ts`'s `thread`).
+ * pinned there, since the Inbox is no plan's page, and its one Inbox tab
+ * is named for the thread rather than the task's Inbox (`thread`).
  */
 export const SIDE_PANEL_HOLDER = {
   TASK: "plan",
@@ -906,7 +905,7 @@ function stripTabs(input: {
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
   inboxDrafted: boolean;
-  /** Whether the Inbox kind holds a channel's thread, as it does beside the window's Inbox, and is named Thread. */
+  /** Whether the Inbox kind holds one thread, as it does beside the window's Inbox, and is named Thread. */
   thread: boolean;
   /** The task's Inbox as its board reads, which its tab's card says; none beside anything but a task's page. */
   inbox: InboxBoardView | undefined;
@@ -1231,7 +1230,7 @@ function PanelTabs({
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     inboxWaiting: inbox?.waiting.length ?? 0,
     inboxDrafted,
-    // Note that beside the window's Inbox the one Inbox tab is a channel's thread, never a task's Inbox (`use-side-panel.ts`'s `thread`).
+    // Note that beside the window's Inbox the one Inbox tab is the chosen thread, never a task's Inbox.
     thread: holder === SIDE_PANEL_HOLDER.INBOX,
     inbox,
   });

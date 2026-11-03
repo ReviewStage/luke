@@ -32,7 +32,7 @@
  * arriving, rather than sliding in a stagger after the last.
  *
  * A commit that draws another scene (`scene`), the list narrowed to another
- * channel, plays nothing: its rows are another list's, not this one's rows
+ * scope, plays nothing: its rows are another list's, not this one's rows
  * moving, so they stand at once, as a list's first draw does, and what the
  * last scene drew goes at once.
  *

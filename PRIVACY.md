@@ -1145,7 +1145,7 @@ already changed on GitHub, and the record of it, stays.
 **Usage data.** We count how Vespin's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
 a fixed list. Among them is which kind of page or pane you opened (a task's
-plan, an agent, the Inbox, a channel, a pull request, a file, a terminal, a
+plan, an agent, the Inbox, a pull request, a file, a terminal, a
 browser, Settings, and the like, never which one) and whether Vespin's window
 was wide or narrow as you opened it. A count
 made before you sign in waits in Vespin's memory and is sent under your account
@@ -1198,8 +1198,7 @@ a member wrote on one (with whether it replied on a thread or started one), an
 automation run started (with what fired it: its schedule, GitHub, a webhook, an
 integration, or Run now), counted under the automation's owner, the GitHub App
 connected to a workspace, a Linux host or this Mac enrolled (with which), a
-box's pairing approved or denied and a host removed, a channel made, edited, or
-archived and a thread moved into one, a skill installed, turned on or off,
+box's pairing approved or denied and a host removed, a skill installed, turned on or off,
 updated, shared with a workspace, or removed (never which), a workspace memory
 forgotten (never what it held), a clip you dictated (with a rough length, never
 its words), and a terminal or a browser tab you opened in an agent's sandbox, a
@@ -1214,7 +1213,7 @@ with the rest of your usage data.
 Our service's counts are also grouped by workspace, so PostHog can count
 workspaces as well as people: a count of something done in a workspace (a
 task, an agent and its messages and turns, a pull request, a thread, a plan, an
-automation, an invitation, a member or workspace change, a channel, a memory, a
+automation, an invitation, a member or workspace change, a memory, a
 tool you opened for an agent, the GitHub App, or the workspace made) carries the
 workspace's id, and a count of your account's own setup and belongings (your
 first sign-in, a GitHub account or token, an integration, an API key, a pinned
@@ -1366,7 +1365,7 @@ report besides. Each carries where in Vespin the error was shown, its code, the
 name, code, HTTP status, and message of the error behind it, with every run
 shaped like a credential replaced and the message cut short, the ids of what
 it was about (such as the workspace, task, agent, conversation, inbox item,
-channel, automation, or pull request number), whether your Mac or browser was
+automation, or pull request number), whether your Mac or browser was
 online, whether you were signed in, and, while you were, your Vespin
 account's id, as every report described above does. It never carries what
 you typed, a

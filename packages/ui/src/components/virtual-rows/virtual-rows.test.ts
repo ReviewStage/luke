@@ -94,7 +94,7 @@ test("a run read from its top, placed by a box inside its scroller, draws the ro
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  // Note that the scroller stands before the run is drawn in it, as a list's does when it is narrowed to another channel.
+  // Note that the scroller stands before the run is drawn in it, as a list's does when it is narrowed to another scope.
   const frame = (run: boolean) =>
     createElement(
       "nav",

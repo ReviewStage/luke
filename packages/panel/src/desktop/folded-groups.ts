@@ -34,8 +34,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * scope kept as To do reads as Open. A grouping or a sort kept before the
  * list was always one run, the latest first, is left where it was and
  * read by nothing, and so is the scope a task's own Inbox kept before it
- * listed everything, and so are the folds and scopes Channels kept before it
- * was removed. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
+ * listed everything, and so are the folds and scopes kept for the Inbox's
+ * channels before they were removed. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan, and so does the tree beside every File and
  * Changes tab, one width for them all.

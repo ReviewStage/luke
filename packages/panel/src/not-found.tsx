@@ -2,7 +2,7 @@ import { EmptyState, type EmptyStateAction } from "@repo/ui";
 import { SearchXIcon } from "lucide-react";
 
 /**
- * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, an Inbox item, or a channel's thread that is not there for whoever opened it, and the admin dashboard's for an account.
+ * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, or an Inbox thread that is not there for whoever opened it, and the admin dashboard's for an account.
  *
  * A link to anything in the app may reach someone the thing is not shared
  * with, and the service answers them as it answers a thing that does not

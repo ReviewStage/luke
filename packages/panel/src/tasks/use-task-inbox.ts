@@ -359,8 +359,7 @@ export type InboxImageReads = Pick<TaskInboxControl, "images" | "onImage" | "onR
 
 /**
  * The pictures items draw, each read once as it is first drawn and held by
- * its attachment, for the task's Inbox and for a channel's stream, which
- * posts threads of many tasks. What `scope` reads is let go when it changes,
+ * its attachment, for the task's Inbox. What `scope` reads is let go when it changes,
  * a picture no item among `items` names any longer is let go too, and one
  * landing after its scope moved on, or, while `drawn`, for an attachment no
  * item names, is kept for nobody. Note that one landing while not `drawn` is

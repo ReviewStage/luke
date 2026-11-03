@@ -125,7 +125,7 @@ test("a place's ⋯ is a button of its own beside the row's press, never inside 
       onClick: () => presses.push("row"),
       actions: createElement(
         "button",
-        { type: "button", "aria-label": "Channel actions", onClick: () => presses.push("more") },
+        { type: "button", "aria-label": "Task actions", onClick: () => presses.push("more") },
         "⋯",
       ),
       children: "launch",
@@ -135,7 +135,7 @@ test("a place's ⋯ is a button of its own beside the row's press, never inside 
 
   expect(buttons.map((each) => each.getAttribute("aria-label") ?? each.textContent)).toEqual([
     "launch",
-    "Channel actions",
+    "Task actions",
   ]);
   act(() => buttons[1]?.click());
   expect(presses).toEqual(["more"]);
