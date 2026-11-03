@@ -14,6 +14,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useFittedColumns } from "./fitted-columns.js";
 import { nestsOf } from "./nested-rows.js";
+import { openedTaskOf, taskRowTab } from "./task-actions.js";
 import { openPullRequests, TaskListRow } from "./task-list-row.js";
 import { useStandingDoor } from "./task-row-parts.js";
 import { useTasksSelection } from "./tasks-selection.js";
@@ -117,6 +118,8 @@ export function RelatedTasks({
   const setStanding = useStandingDoor(tasks);
   const selection = useTasksSelection(tasks, new Set(rows.map((row) => row.task.id)));
   const workspaceName = tasks.workspace?.name ?? "";
+  const rowTab = taskRowTab(tasks);
+  const opened = openedTaskOf(tasks);
   const subTasks = useMemo(() => childTaskCounts(tasks.tasks), [tasks.tasks]);
   const [list, setList] = useState<HTMLDivElement | null>(null);
   const filled = drawnCells(rows, subTasks);
@@ -139,8 +142,9 @@ export function RelatedTasks({
         {rows.map(({ task, relation, depth, fold, settled, menu, unlisted }, at) => (
           <TaskListRow
             key={task.id}
-            tasks={tasks}
+            tasks={rowTab}
             task={task}
+            opened={opened}
             workspaceName={workspaceName}
             cells={cells}
             subTasks={subTasks.get(task.id)}

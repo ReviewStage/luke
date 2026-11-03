@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { TaskSections } from "@repo/features/task-section-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
@@ -152,8 +153,11 @@ const TASKS = [
   task(33, "Old onboarding copy", TASK_STATUS.CANCELED, TASK_PRIORITY.LOW),
 ];
 
-/** Draws the Board last mounted again under another display, as its View options would. */
-let redrawBoard: (display: TasksDisplay) => void = () => undefined;
+/** Draws the Board last mounted again under another display, as its View options would, its tab changed by `overrides` where given. */
+let redrawBoard: (
+  display: TasksDisplay,
+  overrides?: NonNullable<Parameters<typeof tasksControl>[0]>,
+) => void = () => undefined;
 
 /** The Board over `tasks`, under `display`, read by Dean, once the workspace's members have answered. */
 async function mountBoard(
@@ -185,7 +189,7 @@ async function mountBoard(
     ...overrides,
   });
   const registry = AtomRegistry.make();
-  const draw = (shown: TasksDisplay) =>
+  const draw = (shown: TasksDisplay, changed: Partial<typeof control> = {}) =>
     root.render(
       onRegistry(
         registry,
@@ -196,7 +200,7 @@ async function mountBoard(
             workspace: ACME,
             readerId: DEAN,
             children: createElement(TasksBoard, {
-              tasks: control,
+              tasks: { ...control, ...changed },
               room,
               title: "Tasks",
               frame: {
@@ -213,7 +217,7 @@ async function mountBoard(
         ),
       ),
     );
-  redrawBoard = (shown) => act(() => draw(shown));
+  redrawBoard = (shown, changed) => act(() => draw(shown, changed));
   act(() => draw(display));
   await act(async () => undefined);
   return container;
@@ -749,6 +753,27 @@ test("a right-click on a card drops the task's own menu", async () => {
   assert.ok(labels.includes("Rename"), "the menu offers Rename");
   assert.ok(labels.includes("Status"), "the menu offers Status");
   assert.deepEqual(opened, []);
+});
+
+test("a section made while the board is drawn is offered under Move to section on a card whose task did not move", async () => {
+  const board = await mountBoard();
+  const launch: TaskSections = {
+    sections: [{ id: "section-launch", workspaceId: ACME.id, title: "Launch", createdAt: 1 }],
+    entries: [],
+    agentEntries: [],
+  };
+  redrawBoard(DEFAULT_BOARD_DISPLAY, { taskSections: launch });
+
+  act(() => {
+    cardOf(board, "t-40").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+  pick("Move to section");
+  const labels = [...document.querySelectorAll('[role^="menuitem"] .ui-menu-item-label')].map(
+    (label) => label.textContent,
+  );
+  assert.ok(labels.includes("Launch"), "Move to section offers the section made");
 });
 
 test("under a finger, a card draws no ⋯, and a long press on it drops the task's own menu", async () => {

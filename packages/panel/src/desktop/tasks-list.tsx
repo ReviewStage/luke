@@ -67,13 +67,7 @@ import {
 } from "@repo/ui";
 import { actorName, creatorActor } from "@repo/ui/actor-model";
 import { FolderXIcon, GLYPH, ICON_SIZE, ListTodoIcon, PinIcon, UserXIcon } from "@repo/ui/icons";
-import {
-  type ChildTaskCount,
-  childTaskCounts,
-  repositoryLabel,
-  TASK_ORDER,
-  taskTime,
-} from "@repo/ui/task-list-model";
+import { childTaskCounts, repositoryLabel, TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
 import {
   placeWrites,
   restoreWrites,
@@ -97,7 +91,7 @@ import {
   tasksListGroups,
 } from "@repo/ui/tasks-page-model";
 import { Schema } from "effect";
-import { Fragment, type ReactNode, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -105,6 +99,7 @@ import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -120,6 +115,7 @@ import { useTasksWaiting } from "./places-waiting.js";
 import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
+import { type OpenedTask, openedTaskOf, type TaskRowTab, useTaskRowTab } from "./task-actions.js";
 import { TaskListRow } from "./task-list-row.js";
 import { CreatorFace, useStandingDoor, WaitingBadge } from "./task-row-parts.js";
 import {
@@ -576,57 +572,68 @@ function listDrops(
  * One task's row on the page (`task-list-row.tsx`), and the cells only the
  * page draws, each in its own column where the view draws it: what waits on
  * the reader, its repository led by its owner's picture, its creator's face,
- * its maker named before it, its agents' work, and when it last moved.
+ * its maker named before it, its agents' work, and when it last moved. Note
+ * that it is held while what it is handed stands (`memo`), each prop a plain
+ * value or a steady door, so a change to one task draws its row alone, and
+ * the minute moves only its time.
  */
-function TasksPageRow({
+const TasksPageRow = memo(function TasksPageRow({
   tasks,
   task,
+  opened,
   workspaceName,
   repositoryName,
   waiting,
-  now,
   properties,
   assigneeHeld,
-  subTasks,
+  subTasksFinished,
+  subTasksTotal,
   chosen,
   more,
-  onOpen,
+  onSelect,
   onStanding,
 }: {
-  tasks: TasksControl;
+  tasks: TaskRowTab;
   task: TaskSummary;
+  /** The task the window has open, where it is this one (`openedTaskOf`). */
+  opened: OpenedTask | undefined;
   workspaceName: string;
   /** The task's repository as the row says it: its name alone, unless another repository the List draws shares it. */
   repositoryName: string;
   /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
-  now: number;
   properties: readonly TaskRowCell[];
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
   assigneeHeld: boolean;
-  /** How many of its sub-tasks are finished, of all of them; none where it has none. */
-  subTasks: ChildTaskCount | undefined;
+  /** How many of its sub-tasks are finished, of all of them, `subTasksTotal`; none where it has none. */
+  subTasksFinished: number;
+  subTasksTotal: number;
   /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
   /** Whether it draws its menu's ⋯, which a finger's List leaves out. */
   more: boolean;
-  onOpen: () => void;
-  onStanding: (standing: TaskStanding) => void;
+  /** Opens a task by its id. */
+  onSelect: (taskId: string) => void;
+  onStanding: (task: TaskSummary, standing: TaskStanding) => void;
 }): React.JSX.Element {
   const maker = useTaskMaker(task);
+  const onOpen = () => onSelect(task.id);
   return (
     <TaskListRow
       tasks={tasks}
       task={task}
+      opened={opened}
       workspaceName={workspaceName}
       cells={properties}
       repositoryName={repositoryName}
       assigneeHeld={assigneeHeld}
-      subTasks={subTasks}
+      subTasks={
+        subTasksTotal === 0 ? undefined : { finished: subTasksFinished, total: subTasksTotal }
+      }
       chosen={chosen}
       more={more}
       onOpen={onOpen}
-      onStanding={onStanding}
+      onStanding={(standing) => onStanding(task, standing)}
       content={{
         [TASK_PROPERTY.WAITING]: <WaitingBadge count={waiting} />,
         [TASK_PROPERTY.REPOSITORY]: (
@@ -638,7 +645,7 @@ function TasksPageRow({
             ) : (
               <RepositoryPicture
                 repository={task.repository}
-                pictures={tasks.repositories.pictures}
+                pictures={tasks.pictures}
                 fallback={
                   <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
                     <GLYPH.REPOSITORY />
@@ -668,13 +675,11 @@ function TasksPageRow({
         [TASK_PROPERTY.AGENTS]: (
           <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
         ),
-        [TASK_PROPERTY.UPDATED]: (
-          <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
-        ),
+        [TASK_PROPERTY.UPDATED]: <Time at={taskTime(task, TASK_ORDER.UPDATED)} hint={false} />,
       }}
     />
   );
-}
+});
 
 /** The chips a quick add's draft draws in the cells of the properties the List draws, by the property each says. */
 const DRAFT_CELLS = [TASK_PROPERTY.PRIORITY, TASK_PROPERTY.STATUS, TASK_PROPERTY.ASSIGNEE] as const;
@@ -916,7 +921,11 @@ export function TasksList({
         now,
       }),
   );
-  const setStanding = useStandingDoor(tasks);
+  // Note that every door a row is handed stands across draws, so a row held while what it is handed does (`memo`) holds.
+  const setStanding = useSteadyDoor(useStandingDoor(tasks));
+  const rowTab = useTaskRowTab(tasks);
+  const { region, agents } = tasks;
+  const opened = useMemo(() => openedTaskOf({ region, agents }), [region, agents]);
   const repositories = groups.flatMap((group) =>
     group.tasks.map((task) => ({ repository: task.repository })),
   );
@@ -935,6 +944,8 @@ export function TasksList({
     new Set(groups.flatMap((group) => (folds.folded(group.head) ? [] : group.tasks.map(taskIdOf)))),
   );
   const { regionId, selected } = selection;
+  // Note that the motion is handed what lays the rows out, so a draw that moved none measures none; a fold tells it of its own (`useListMotionReplay`).
+  const laidOut = useMemo(() => ({ groups, properties }), [groups, properties]);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -973,7 +984,7 @@ export function TasksList({
         </ErrorState>
       ) : null}
       <SelectionRegion id={regionId} selection={{ selected, onChange: selection.onChange }}>
-        <ListMotion root={list}>
+        <ListMotion root={list} change={laidOut}>
           <div
             {...roving}
             ref={listRef}
@@ -1016,8 +1027,9 @@ export function TasksList({
                     row={(task) => (
                       <TasksPageRow
                         key={task.id}
-                        tasks={tasks}
+                        tasks={rowTab}
                         task={task}
+                        opened={opened?.task.id === task.id ? opened : undefined}
                         workspaceName={workspaceName}
                         repositoryName={
                           task.repository === null
@@ -1025,18 +1037,18 @@ export function TasksList({
                             : repositoryLabel(task.repository, repositories)
                         }
                         waiting={waitingOn.get(task.id) ?? 0}
-                        now={now}
                         properties={properties}
                         assigneeHeld={
                           !narrow &&
                           group.head.kind === TASKS_GROUP.ASSIGNEE &&
                           group.head.assigneeId === (task.assignee?.userId ?? null)
                         }
-                        subTasks={subTaskCounts.get(task.id)}
+                        subTasksFinished={subTaskCounts.get(task.id)?.finished ?? 0}
+                        subTasksTotal={subTaskCounts.get(task.id)?.total ?? 0}
                         chosen={selection.chosenOf(task.id)}
                         more={more}
-                        onOpen={() => tasks.onSelect(task.id)}
-                        onStanding={(standing) => setStanding(task, standing)}
+                        onSelect={tasks.onSelect}
+                        onStanding={setStanding}
                       />
                     )}
                   />

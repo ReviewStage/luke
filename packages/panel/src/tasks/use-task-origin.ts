@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react/Hooks";
 import type { AgentStatus } from "@repo/features/agent-wire";
 import { agentName } from "@repo/features/model-label";
 import type { TaskSummary } from "@repo/features/task-wire";
+import { sameShape } from "@repo/features/turn-rows";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { type Actor, type OriginAgent, originActor } from "@repo/ui/actor-model";
 import * as Atom from "effect/reactivity/Atom";
@@ -16,9 +17,11 @@ import { agentActorState, providerOf } from "./agent-model.js";
  * and the window already holds every agent it lists, each task's own and
  * those with no task, so the agent's name, harness, and standing are read
  * here rather than sent on every task. They are built once per delivery
- * that moved the task list, in an atom every row shares. An agent the
- * window does not hold, archived or gone, is drawn as a coding agent on
- * the mark of no known harness.
+ * that moved the task list, in an atom every row shares, and each row reads
+ * its own agent through an atom of that agent's alone, so a delivery that
+ * moved another redraws none of its rows. An agent the window does not
+ * hold, archived or gone, is drawn as a coding agent on the mark of no
+ * known harness.
  */
 
 /** An agent as the list carries it, wherever it stands in it. */
@@ -74,6 +77,25 @@ const originAgentsAtom: Atom.Atom<ReadonlyMap<string, OriginAgent>> = Atom.map(
   },
 );
 
+/** The key a row with no agent behind it reads, which no agent's id is. */
+const NO_AGENT = "";
+
+/** How deep two of an agent's readings are read alike (`sameShape`): each field, every one a plain value. */
+const AGENT_DEPTH = 1;
+
+/**
+ * One agent as the window holds it, by id, none where it holds none. Note
+ * that it tells its readers only where the agent reads otherwise, because
+ * every delivery that moves the task list builds every agent anew, and an
+ * atom tells its readers of any value that is not the one it held.
+ */
+const originAgentAtom = Atom.family((agentId: string) =>
+  Atom.withEquality(
+    Atom.map(originAgentsAtom, (agents) => agents.get(agentId)),
+    (held, next) => sameShape(held, next, AGENT_DEPTH),
+  ),
+);
+
 /** What names who made a task: its origin, the one field read. */
 type OriginTask = Pick<TaskSummary, "origin">;
 
@@ -100,9 +122,7 @@ interface TaskMadeBy {
 
 /** Who made the task, as `useTaskOrigin` names them, and the task it came from; none for one made by hand. */
 export function useTaskMaker(task: OriginTask): TaskMadeBy | undefined {
-  const agents = useAtomValue(originAgentsAtom);
-  const agentId = task.origin?.agentId;
-  const agent = agentId === undefined ? undefined : agents.get(agentId);
+  const agent = useAtomValue(originAgentAtom(task.origin?.agentId ?? NO_AGENT));
   const actor = originActor(task.origin, agent);
   if (actor === undefined) return undefined;
   return agent?.taskName === undefined ? { actor } : { actor, fromTask: agent.taskName };
