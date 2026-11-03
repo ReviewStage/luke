@@ -19,7 +19,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * left and right where it reads as pages. The place leads the arrows, or
  * stands between them where it says what each arrow steps through ("Run 3
  * of 5"). Each arrow is named for where it goes, its hint able to say more
- * (the neighbour's own title) and the key that reaches it. An arrow with
+ * (the neighbor's own title) and the key that reaches it. An arrow with
  * nowhere to go stands stepped back rather than gone, so the other does not
  * shift, and keeps the keyboard, because a step that reaches an end leaves
  * focus on it.

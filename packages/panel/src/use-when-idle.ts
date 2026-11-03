@@ -21,7 +21,7 @@ export const IDLE_TIMEOUT_MS = {
 
 /**
  * Calls `work` once, when the renderer is next idle or `timeoutMs` has passed,
- * whichever comes first; the call is cancelled where the component leaves
+ * whichever comes first; the call is canceled where the component leaves
  * first. A new `work` before then replaces the old one without restarting the wait.
  *
  * A browser with no `requestIdleCallback` (Safari) runs it after the first

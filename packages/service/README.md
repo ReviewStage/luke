@@ -770,7 +770,7 @@ more than one sees exactly what it saw before:
   it: Connect documents no way to read why a sign-in that never came back
   ended, so the service does not ask. A caller with only the browser's
   session cookie is answered where each row stands as stored, a sign-in
-  within its window `pending`, and nothing is settled, ended, or labelled,
+  within its window `pending`, and nothing is settled, ended, or labeled,
   and Connect is not asked: a Lax cookie rides a link another site sends
   the browser on, which must not settle the account's sign-in. The
   endpoint reads the `Authorization` header itself (`hostedCarriesBearer`
@@ -828,7 +828,7 @@ more than one sees exactly what it saw before:
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on
   `/integration-connected` with the provider and one word: `connected`,
-  `not-completed` (declined or cancelled), `expired`, or `unavailable`. A
+  `not-completed` (declined or canceled), `expired`, or `unavailable`. A
   `not-completed` ends the sign-in, so the desktop's next read finds it no
   longer pending and says it failed, unless Connect's result names it
   `canceled` or `error`: that one is left for the next statuses read, which
@@ -880,7 +880,7 @@ the same envelope, the wrapper's row left out of the tab. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
-row. A turn cancelled while a provider was answering leaves the call's
+row. A turn canceled while a provider was answering leaves the call's
 outcome unknown ("it may have run"), never a failure to retry.
 
 **Provisioning a deployment.** For each provider, from the `apps/web` Vercel
@@ -1598,7 +1598,7 @@ and `turnId`, the newest turn the status is read from
 (null before the first), so a reader keying an agent's run by agent and
 turn sees the run a message opens as its own (`src/agents/coder-host/status.ts`):
 `starting` before one, `running`, `completed`, `failed`, or `cancelled`,
-with a running turn carrying a Stop stamp reading as cancelled already, an
+with a running turn carrying a Stop stamp reading as canceled already, an
 agent still without a turn row five minutes after its Start
 (`CODER.STARTING_GRACE`) reading as failed rather than starting forever,
 and an agent with a message of the developer's still awaiting its turn
@@ -1683,7 +1683,7 @@ agents on a task as `taskAgentPins`.
 `POST /api/agents/{id}/stop` is the harness's cancel of the turn under way, a
 stop line the runner hands on as an interrupt, then the row's stamp; a turn
 still running `CODER.STOP_CONFIRM` later has its runner ended and is settled
-cancelled, the runner's end stops the sandbox, and anything the agent pushed
+canceled, the runner's end stops the sandbox, and anything the agent pushed
 stays.
 `GET /api/agents/{id}/pull-request` answers what the agent published
 (`src/agents/coder-host/published.ts`): the repository, the branch it pushed, and the
@@ -1873,10 +1873,10 @@ of the agents' sessions, a scripted GitHub, a fixed catalog, and PGlite.
 
 A GitHub trigger fires on the Vespin App's own webhook
 (`src/github/github-webhook-app.ts`, through `src/automations/automation-github.ts`): a
-pull request opened or labelled, a pull request ready for review opened,
+pull request opened or labeled, a pull request ready for review opened,
 reopened, marked ready, or pushed to (`pull-request-updated`; a draft fires
 nothing until it is marked ready, and an opened pull request is both this and
-`pull-request-opened`), an issue opened or labelled, a check suite that
+`pull-request-opened`), an issue opened or labeled, a check suite that
 completed as `failure` or `timed_out`, and a push to a branch, each in any of
 the automation's repositories (matched the way GitHub folds a name's case),
 of an owner still a member of
@@ -2187,7 +2187,7 @@ modules that name one at all are the writer and the two readers. It
 consumes the turn run event stream (`RunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
-turn's start where nothing queued it) through running to settled, cancelled,
+turn's start where nothing queued it) through running to settled, canceled,
 or failed, carrying the origin it was queued under, the runtime's own id for
 the turn where one queued it (the store's id is a digest of it that nothing
 reverses, and a Stop on the row is scoped to that turn by reading it back),
@@ -2308,7 +2308,7 @@ the rest still run, and any failure fails the cron's check-in. In order:
   (`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
   `TURN_ABANDON.AGENT_AFTER_MS`), whose end the service never heard, settled
   as failed for `abandoned` through the same write a turn's own end takes,
-  or as cancelled where a Stop went unconfirmed, at most fifty a sweep.
+  or as canceled where a Stop went unconfirmed, at most fifty a sweep.
 - `deviceLeases` and `deviceWarmRunners`: launches taken back from Macs
   that stopped beating within their lease, and local runners left warm past
   their device's window.

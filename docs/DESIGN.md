@@ -134,7 +134,7 @@ attributes (`surfaceAttributes` in `surface.ts`): `data-ui-profile`,
 roots follow the Theme setting: the desktop's stays `system` while Electron
 steers the Mac's appearance to the setting, and the web's wears the setting
 resolved, following the machine under System (`apps/web/src/app/web-appearance.tsx`).
-A sheet picks a colour of its own by `light-dark()`, which the theme decides
+A sheet picks a color of its own by `light-dark()`, which the theme decides
 through `color-scheme`, never by `prefers-color-scheme`, and script asks
 `@repo/ui/appearance`.
 
@@ -142,7 +142,7 @@ The tokens come in three layers. The base scale (`scale.css`) names a value
 by what it is, so `--ui-space-16` is sixteen pixels in either app. A role
 (`profiles.css`) names what a value is for, a control's height, a field's gap,
 a dialog's corner, a type role's size and leading, and each profile sets every
-role its own way. A palette (`palettes.css`) names each colour by its role,
+role its own way. A palette (`palettes.css`) names each color by its role,
 for each profile in each theme. A component reads roles and the palette, never
 a base value at its call site, so it moves with its profile. Both profiles set
 the same roles and every palette the same names. Both apps read the roles alone; neither keeps a name of its own for one.
@@ -161,19 +161,19 @@ synthetic data, which is where a new one is first seen.
 
 ## Readability and access
 
-Semantic colours are named once, in `@repo/ui`'s palette, and the window's own
+Semantic colors are named once, in `@repo/ui`'s palette, and the window's own
 (whose voice is live, the code's and the terminal's inks, a file icon's, the
 sidebar's and a well's grounds) in `base.css` and `desktop.css`; component
 sheets consume the token rather than inventing another error red, overlay
-black, or text gray. The desktop's palette writes each colour once as a
+black, or text gray. The desktop's palette writes each color once as a
 `light-dark()` pair, and the root's `system` theme follows the Mac's
 appearance, which Vespin's Theme setting drives through Electron's
-`nativeTheme.themeSource`. Every colour of the window's own that differs in
+`nativeTheme.themeSource`. Every color of the window's own that differs in
 the light is written the same way, as a `light-dark()` pair in its own file,
 so a change of appearance is the stylesheet's alone:
-nothing re-renders. No colour literal belongs anywhere but a token block, a
+nothing re-renders. No color literal belongs anywhere but a token block, a
 `:root` or a palette's profile; a mask's black is an alpha rather than a
-colour, so a mask may spell it.
+color, so a mask may spell it.
 Text that communicates a label, status, count, or instruction must meet WCAG
 AA contrast at its rendered size. Decorative marks and disabled controls may
 sit below that threshold only when their meaning is available elsewhere.
@@ -258,7 +258,7 @@ scroller that fades an edge scroll-pads by the fade, so the keyboard never
 leaves a row sliced at a scroller's edge or under its fade. A
 scroller whose rows run edge to edge pads by `--ui-focus-ring-reach` and gives it
 back as a negative margin, so a row's ring is never cut off at its sides, and a
-row holding the keyboard stands over its neighbours, so the next row's fill
+row holding the keyboard stands over its neighbors, so the next row's fill
 leaves its ring whole. A row that runs the scroller's width by design, a line of
 code or Pierre's tree, draws the ring inside it instead. A
 field holding the caret wears no ring, however the caret arrived: the caret

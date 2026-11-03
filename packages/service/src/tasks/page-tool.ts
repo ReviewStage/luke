@@ -124,7 +124,7 @@ const MAX_FILE_BYTES = PAGE_BOUNDS.MAX_HTML_CHARS * 4;
 
 /**
  * The stream read whole as text, or nothing where it runs past the bound.
- * The reader is cancelled however the read ends, so a stream refused, or
+ * The reader is canceled however the read ends, so a stream refused, or
  * one that failed mid-way, holds nothing open behind it.
  */
 const readBoundedText = Effect.fnUntraced(function* (stream: ReadableStream<Uint8Array>) {

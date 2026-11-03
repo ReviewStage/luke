@@ -28,11 +28,11 @@ import { ListSelectionContext } from "./list-selection.js";
 
 /** Where a row's box stands. */
 export const SELECT_BOX_PLACE = {
-  /** In the gutter a list row keeps at its start, centred on the row (`ps-select-gutter`). */
+  /** In the gutter a list row keeps at its start, centered on the row (`ps-select-gutter`). */
   GUTTER: "gutter",
   /**
    * At the start of a card's first line, inside the card's row inset,
-   * centred on the column of the compact chip its next line starts with,
+   * centered on the column of the compact chip its next line starts with,
    * which the card draws a step out past its list inset, as a board's card
    * draws its status mark under its key (`desktop.css`).
    */

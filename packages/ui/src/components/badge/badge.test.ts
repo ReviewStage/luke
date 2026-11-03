@@ -9,7 +9,7 @@ import { VISUALLY_HIDDEN_UNDER } from "../visually-hidden/visually-hidden.js";
 import { Badge } from "./badge.js";
 
 /**
- * badge.test.ts -- a badge is read by its words, and a provider's colour
+ * badge.test.ts -- a badge is read by its words, and a provider's color
  * worn as a dot before them is never read in their stead.
  */
 
@@ -34,7 +34,7 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-test("a label's colour is a dot hidden from a reader, who hears its name", () => {
+test("a label's color is a dot hidden from a reader, who hears its name", () => {
   const view = render(createElement(Badge, { swatch: "d73a4a", children: "bug" }));
   assert.equal(view.textContent, "bug");
   const hidden = view.querySelectorAll('[aria-hidden="true"]');
@@ -42,7 +42,7 @@ test("a label's colour is a dot hidden from a reader, who hears its name", () =>
   assert.equal(hidden[0]?.textContent, "");
 });
 
-test("a badge with no colour of a provider's wears no dot", () => {
+test("a badge with no color of a provider's wears no dot", () => {
   const view = render(createElement(Badge, { tone: STATUS_TONE.WORKING, children: "Working" }));
   assert.equal(view.textContent, "Working");
   assert.equal(view.querySelectorAll('[aria-hidden="true"]').length, 0);
@@ -55,7 +55,7 @@ test("a badge that gives up its words in a narrow room still holds them for a re
   assert.equal(view.textContent, "Ready");
 });
 
-test("a label filled with its colour is read by its name, its words lifted to read on the dark ground", () => {
+test("a label filled with its color is read by its name, its words lifted to read on the dark ground", () => {
   const view = render(createElement(Badge, { fill: "#1d1d1f", children: "needs design" }));
   const badge = view.querySelector<HTMLElement>(".ui-badge");
   assert.equal(view.textContent, "needs design");
@@ -65,7 +65,7 @@ test("a label filled with its colour is read by its name, its words lifted to re
 });
 
 test("a fill the badge cannot paint draws it as a neutral badge", () => {
-  const view = render(createElement(Badge, { fill: "not-a-colour", children: "imported" }));
+  const view = render(createElement(Badge, { fill: "not-a-color", children: "imported" }));
   const badge = view.querySelector<HTMLElement>(".ui-badge");
   assert.equal(badge?.getAttribute("style"), null);
 });

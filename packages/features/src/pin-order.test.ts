@@ -70,7 +70,7 @@ describe("inPinOrder", () => {
 });
 
 describe("pinPositionsForMove", () => {
-  it("writes only the dropped pin's position where its new neighbours hold theirs", () => {
+  it("writes only the dropped pin's position where its new neighbors hold theirs", () => {
     const pins = [
       { name: "a", at: 1, position: "a0" },
       { name: "b", at: 2, position: "a1" },

@@ -166,7 +166,7 @@ test("in a transcript a listed task's key is its chip saying the key, which open
   ]);
 });
 
-test("a mention labelled with one task's key that links another says the task it opens, by its name", async () => {
+test("a mention labeled with one task's key that links another says the task it opens, by its name", async () => {
   const other = task(STAGE, 422, "").id;
   const container = await drawn(
     createElement(TranscriptWords, {

@@ -1,17 +1,17 @@
 /**
  * status-tone.ts -- the six tones a status is drawn in, the one list every component that says where something stands reads.
  *
- * Each tone means one thing, and its colours are set once, beside it, in
+ * Each tone means one thing, and its colors are set once, beside it, in
  * `tokens/status-tone.css`: whatever wears `data-tone` with one of these
  * values reads that tone's ink and tint as `--ui-tone-ink` and
- * `--ui-tone-tint`, so no component keeps a list of the palette's colours
+ * `--ui-tone-tint`, so no component keeps a list of the palette's colors
  * of its own. Where the app shows GitHub's own states, a pull request's or an
- * issue's, it takes GitHub's colours (merged, a closed pull request's
+ * issue's, it takes GitHub's colors (merged, a closed pull request's
  * danger), because people already know them; nothing of ours is
  * merged.
  */
 
-/** Where something stands, as its colour says it. */
+/** Where something stands, as its color says it. */
 export const STATUS_TONE = {
   /** At rest, or ended with nothing to say: backlog, todo, draft, stopped, canceled, off. */
   NEUTRAL: "neutral",

@@ -27,7 +27,7 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  *   Ink button is; its caller holds which one is pressed.
  *
  * Beside its look a chip may say where a thing stands in the state palette
- * (`tone`), in its leading glyph's colour, or a dot of it before its words
+ * (`tone`), in its leading glyph's color, or a dot of it before its words
  * where it leads with none, its face staying the chip's own, as a pull
  * request's state is; stand at a width its place shares (`width`); and draw its mark
  * alone where its place has no room for its words (`iconOnly`), its words
@@ -510,7 +510,7 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
 /**
  * The quiet count after a chip's words, what a filter would leave out: in the
  * muted ink at fixed figures, and on a pressed filter stepped back from the
- * ground's colour its words are in, rather than the muted ink it would
+ * ground's color its words are in, rather than the muted ink it would
  * vanish into there. A reader hears the count where the chip's name or its
  * description says it, so it is hidden from them here.
  */

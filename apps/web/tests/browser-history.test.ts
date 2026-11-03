@@ -94,7 +94,7 @@ test("the browser's Back stands the entry before and tells every listener, and i
   assert.equal(history.current().entries.length, 2, "moving along the entries writes none");
 });
 
-test("a step written while a move of the panel's is still travelling lands on the entry it went to, not the one it left", async () => {
+test("a step written while a move of the panel's is still traveling lands on the entry it went to, not the one it left", async () => {
   openAt("/app");
   const history = browserHistory<string>();
   history.push({ address: "/acme/inbox", state: "inbox" });

@@ -277,7 +277,7 @@ export function UsersScreen({
           </>
         ),
         // An empty answer stands where the table stands, in the table's own
-        // frame under the filters, rather than centred in the page apart
+        // frame under the filters, rather than centered in the page apart
         // from them, so the page keeps its line whatever the search finds.
         state: COLLECTION_STATE.READY,
         children: refreshed(

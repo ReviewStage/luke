@@ -2,7 +2,7 @@
  * home-row.ts -- the parts of a row on Home, a person's page, and the Inbox, as class names each draws its row's picture and metadata with.
  *
  * A row's metadata is what the row is about, a teammate's face, the row's
- * mark, and its time, set apart by the line's own gap and centred on it.
+ * mark, and its time, set apart by the line's own gap and centered on it.
  * The context gives way before the marks and the time, because the
  * metadata's slot clips at its end and the time is what ends it, and stops
  * at a bound, so a long one never takes the row's title's room.

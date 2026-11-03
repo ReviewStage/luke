@@ -287,7 +287,7 @@ test("a name typed after a refusal keeps the card up, takes the refusal away, an
   assert.deepEqual(asked, ["Taken", "P"]);
 });
 
-test("New workspace opens on an empty name each time, so a cancelled name is not offered again", () => {
+test("New workspace opens on an empty name each time, so a canceled name is not offered again", () => {
   const page = mount({ workspaces: [PERSONAL], workspace: PERSONAL });
   nameWorkspace(page, "Platform");
   const cancel =

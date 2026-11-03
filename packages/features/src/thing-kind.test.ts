@@ -5,10 +5,10 @@ import { THING_KIND, thingWordHeard } from "./thing-kind.js";
 /**
  * thing-kind.test.ts -- a screen reader hears a thing's kind before its name,
  * unless the name already starts with it: a place named for its kind says it
- * once, and one labelled with words of its own still says what it is.
+ * once, and one labeled with words of its own still says what it is.
  */
 
-test("a place labelled with words of its own still says its kind", () => {
+test("a place labeled with words of its own still says its kind", () => {
   assert.equal(thingWordHeard(THING_KIND.INBOX, "my queue"), "Inbox");
   assert.equal(thingWordHeard(THING_KIND.AUTOMATIONS, "the nightly jobs"), "automations");
   assert.equal(thingWordHeard(THING_KIND.CHANGES, "Ada's diff"), "changes");

@@ -18,7 +18,7 @@
      which stand over it, or at a column's edge.
    - `--ui-toolbar-ground`, what the row is drawn on where it is not the
      window's own.
-   - `--ui-toolbar-centre: on`, the title centred over the bar's column
+   - `--ui-toolbar-center: on`, the title centered over the bar's column
      between what stands at each side; the bar's start is then where the
      column's own inset stands and `--ui-toolbar-start-at` is room kept
      for the window's buttons.
@@ -95,8 +95,8 @@
   }
 
   /* A phone's look: one control in each corner, one control wide, and the
-     title centred between them, cut where it meets them. Each part stands
-     in its own column, so a corner left empty leaves the title centred. */
+     title centered between them, cut where it meets them. Each part stands
+     in its own column, so a corner left empty leaves the title centered. */
   .ui-toolbar[data-look="phone"] {
     /* The corners stand at the column's own edge: a phone draws no window
        buttons over them. */
@@ -175,7 +175,7 @@
      its own width. Narrower than its lead, its crumbs, and its actions need
      beside one another, the heading takes a row of its own under them, the
      whole bar wide, each crumb cut short by its share as anywhere, and the
-     actions keep the top row's end; narrower still, the lead's labelled
+     actions keep the top row's end; narrower still, the lead's labeled
      controls draw their glyphs alone, named still. Note that it wraps only
      by that rule, because the heading's basis is nothing until then. */
   .ui-toolbar[data-wrap-heading="true"] {
@@ -197,11 +197,11 @@
     row-gap: 0;
   }
 
-  /* The top row keeps the bar's own height, its lead and actions centred in
+  /* The top row keeps the bar's own height, its lead and actions centered in
      it as in a bar of one row, so it stands level with every other bar and
      the card under it starts where it always does. The heading's row stands
      under it as a pane's bar does (`PaneBar`), one pane bar high with its
-     crumbs centred, at the top of what the bar heads rather than across its
+     crumbs centered, at the top of what the bar heads rather than across its
      edge, and reaches past any room the top row keeps for the window's
      buttons to the column's words inset; it is what the bar heads, so the
      window is not dragged by it. */
@@ -242,19 +242,19 @@
     }
   }
 
-  /* Every labelled control of the bar draws its glyph alone, named still. */
+  /* Every labeled control of the bar draws its glyph alone, named still. */
   .ui-toolbar[data-folded="true"] {
     --ui-fold: folded;
   }
 
-  /* Where the window sets the bar to centre its title over a column (a list
+  /* Where the window sets the bar to center its title over a column (a list
      whose first control stands past the window's buttons), the title stands
-     centred in the bar, each side holding at least what stands there: the
+     centered in the bar, each side holding at least what stands there: the
      room kept for the window's buttons at the start, the actions at the end.
      The title moves aside only once it would meet them, and is cut short only
      once it no longer fits between them. The bar is inset alike on both
-     sides, so centred in the bar is centred in the column. */
-  @container style(--ui-toolbar-centre: on) {
+     sides, so centered in the bar is centered in the column. */
+  @container style(--ui-toolbar-center: on) {
     .ui-toolbar {
       display: grid;
       grid-template-columns:

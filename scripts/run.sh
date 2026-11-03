@@ -121,7 +121,7 @@ if [[ $use_demo == true ]]; then
 fi
 
 # The preview stands in for production through the one development override
-# the build honours (`APP_ACCOUNT_BASE_URL`, apps/desktop/src/main/bootstrap.ts),
+# the build honors (`APP_ACCOUNT_BASE_URL`, apps/desktop/src/main/bootstrap.ts),
 # which a packaged build ignores. The preview's
 # Neon branch is its own database, so the account there starts empty, and no
 # cron tick runs on a preview.
@@ -158,7 +158,7 @@ if [[ $replace_running_app == true ]]; then
 fi
 
 # Live sessions are the default. Pass `--fixture smoke` for deterministic data;
-# the app honours it on its own, so nothing needs injecting here.
+# the app honors it on its own, so nothing needs injecting here.
 cd "$APP_REPO_ROOT"
 if [[ $use_demo == false ]]; then
     exec pnpm start -- "$@"

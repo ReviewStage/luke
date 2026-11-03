@@ -1,4 +1,4 @@
-import { chatGptSignIn, LOOPBACK_CONSENT_CANCELLED, type OpenConsent } from "@repo/credentials";
+import { chatGptSignIn, LOOPBACK_CONSENT_CANCELED, type OpenConsent } from "@repo/credentials";
 import type { HostedAgentClient } from "@repo/features";
 import { AGENT_CALL_FAILURE, type ChatGptSignInAnswerView } from "@repo/features/agent-view";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -119,7 +119,7 @@ function composed(
       save: saveFor(pressedBy),
     });
     if (!("reason" in outcome)) return outcome;
-    return outcome.reason === LOOPBACK_CONSENT_CANCELLED
+    return outcome.reason === LOOPBACK_CONSENT_CANCELED
       ? ({ cancelled: true } as const)
       : { refused: outcome.reason };
   });

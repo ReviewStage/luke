@@ -652,7 +652,7 @@ test("a replayed call whose marker names its tool is drawn as the live transcrip
   const [command, patch, read] = [...container.querySelectorAll("[data-replay-step]")];
   // A command's line says what it is for, as the live transcript's does.
   assert.match(command?.querySelector("summary")?.textContent ?? "", /Run the invite tests/u);
-  // A patch opens onto its body drawn as a patch, which wears its added and removed lines' colours.
+  // A patch opens onto its body drawn as a patch, which wears its added and removed lines' colors.
   press(patch?.querySelector("summary"));
   assert.ok(patch?.querySelector('[data-row="added"]') instanceof HTMLElement);
   assert.ok(patch?.querySelector('[data-row="removed"]') instanceof HTMLElement);

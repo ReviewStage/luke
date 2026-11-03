@@ -42,7 +42,7 @@ const GAP_OF_SIZE = {
 /**
  * The name at each size: in a line of words it sits on the line's baseline,
  * as an actor's does, standing at least the tile's height so the tile stays
- * centred on it; at the sidebar's head it takes the head's weight.
+ * centered on it; at the sidebar's head it takes the head's weight.
  */
 const NAME_OF_SIZE = {
   [WORKSPACE_REF_SIZE.INLINE]: "self-baseline py-workspace-ref-lift",

@@ -21,7 +21,7 @@ import {
  * follows it. A button that is not tabbable is left out of the tab order,
  * yet takes the focus a roving group hands it and is pressed as any other;
  * an ordinary button stays a Tab stop. A button that keeps focus leaves it
- * on the field that held it when a pointer presses it. A labelled button
+ * on the field that held it when a pointer presses it. A labeled button
  * given a label is named by it, which holds its words, and one wearing a
  * badge says the badge's words after its own. An IconButtonLink is
  * a link named by its label, and one in a new tab opens there. A compact row
@@ -192,7 +192,7 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   ).toBe(false);
 });
 
-test("a read-only labelled button records a press: it takes none and no Tab stop, is announced pressed where it was the one given, and a drag over its words selects them", () => {
+test("a read-only labeled button records a press: it takes none and no Tab stop, is announced pressed where it was the one given, and a drag over its words selects them", () => {
   const heard: string[] = [];
   const container = mount(
     createElement(
@@ -227,7 +227,7 @@ test("a read-only labelled button records a press: it takes none and no Tab stop
   expect(down.defaultPrevented).toBe(false);
 });
 
-test("a labelled button wearing a badge says the badge's words after its own, offered or recorded", () => {
+test("a labeled button wearing a badge says the badge's words after its own, offered or recorded", () => {
   const container = mount(
     createElement(
       "div",
@@ -243,7 +243,7 @@ test("a labelled button wearing a badge says the badge's words after its own, of
   ]);
 });
 
-test("a labelled button given a label is named by it, its words within it, and by its busy words while busy", () => {
+test("a labeled button given a label is named by it, its words within it, and by its busy words while busy", () => {
   const container = mount(
     createElement(
       "div",

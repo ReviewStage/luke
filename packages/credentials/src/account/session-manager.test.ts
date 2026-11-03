@@ -334,7 +334,7 @@ it.effect(
     }),
 );
 
-it.effect("a sign-in cancelled while a refused renewal's sign-out settles opens no browser", () =>
+it.effect("a sign-in canceled while a refused renewal's sign-out settles opens no browser", () =>
   Effect.gen(function* () {
     const refusing = refreshingClient(() =>
       Promise.resolve(

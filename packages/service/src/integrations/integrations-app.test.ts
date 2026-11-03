@@ -505,8 +505,8 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const declining = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
           declines: true,
         });
-        const first = yield* openAccount("kai@cancelled.example");
-        const lapsed = yield* openAccount("lee@cancelled.example");
+        const first = yield* openAccount("kai@canceled.example");
+        const lapsed = yield* openAccount("lee@canceled.example");
         yield* beginIntegrationSignIn(
           lapsed,
           firstIntegrationAccount(lapsed, SLACK),
@@ -524,7 +524,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         assert.equal(yield* declining.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
 
         const granting = yield* standing(SLACK_CONNECTOR);
-        const finished = yield* openAccount("max@cancelled.example");
+        const finished = yield* openAccount("max@canceled.example");
         assert.equal((yield* granting.connectSlack(finished)).status, HOSTED_HTTP_STATUS.OK);
         assert.equal(
           yield* granting.slackLanding(finished),
@@ -916,7 +916,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
-    "a read while an unlabelled account reconnects leaves its name to the grant the reconnect ends with",
+    "a read while an unlabeled account reconnects leaves its name to the grant the reconnect ends with",
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount("rei@reconnects.example");

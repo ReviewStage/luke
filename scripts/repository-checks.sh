@@ -392,6 +392,67 @@ fi
 # constants they compare, so they run under the tsx loader.
 (cd "$APP_REPO_ROOT" && node --import tsx tools/anti-slop/repository-guard.ts)
 
+# The repository is written in American English (AGENTS.md's "Code style"):
+# prose, comments, identifiers, user-facing words, and file names. A British
+# spelling is refused as a word or as one part of an identifier, but where the
+# name belongs to an outside spec or API (ARIA's `labelledby`, the Web Audio
+# `AnalyserNode`) or the value is already stored or on the wire (a `"cancelled"`
+# status, the `tasks.colourCode` kind), which keeps the spelling it shipped with.
+# Migrations, the generated Codex protocol, and patches against other source
+# are written as they must apply, so they are left out.
+node --input-type=module -e '
+  import { execFileSync } from "node:child_process";
+  import { readFileSync } from "node:fs";
+  const words = [
+    "colour", "colours", "coloured", "colouring", "colourings", "colourable", "uncoloured",
+    "recolour", "recolours", "recoloured", "cancelled", "cancelling", "canceller",
+    "labelled", "labelling", "unlabelled", "mislabelled", "centre", "centres", "centred",
+    "centring", "analyser", "neighbour", "neighbours", "neighbouring", "grey", "greys",
+    "greyed", "organisation", "organisations", "organise", "organised", "travelled",
+    "travelling", "signalled", "signalling", "behaviour", "behaviours", "honour", "honours",
+    "honoured", "honouring", "acknowledgement", "acknowledgements", "portalled", "dialled",
+    "panelled", "totalling", "modelled", "modelling", "summarise", "summarises",
+    "summarised", "sanitise", "sanitised", "serialise", "serialises", "serialised",
+    "recognise", "recognised", "initialise", "initialised", "parameterised", "capitalised",
+    "capitalising", "virtualised", "ageing", "catalogue", "catalogues", "favour", "favoured",
+    "licence",
+  ];
+  const cap = (word) => word[0].toUpperCase() + word.slice(1);
+  const british = new RegExp(
+    words
+      .flatMap((word) => [
+        `(?<![A-Za-z])${word}(?![a-z])`,
+        `(?<![A-Z])${cap(word)}(?![a-z])`,
+        `(?<![A-Z])${word.toUpperCase()}(?![A-Z])`,
+      ])
+      .join("|"),
+  );
+  const kept = /labelledBy|AnalyserNode|createAnalyser|tasks\.colourCode|["\x27`]cancelled["\x27`]|cancelled\??:|"cancelled" in/g;
+  const skipped = /^(pnpm-lock\.yaml|patches\/|packages\/database\/migrations\/|packages\/agent-runner\/src\/codex-protocol\/|scripts\/repository-checks\.sh$)|\.patch$/;
+  const repository = process.argv[1];
+  const files = execFileSync("git", ["-C", repository, "ls-files"], { encoding: "utf8" }).split("\n");
+  const offenders = [];
+  for (const file of files) {
+    if (file === "" || skipped.test(file)) continue;
+    if (british.test(file)) offenders.push(`${file}: its name`);
+    let text;
+    try {
+      text = readFileSync(`${repository}/${file}`, "utf8");
+    } catch {
+      continue;
+    }
+    if (text.includes("\u0000")) continue;
+    text.split("\n").forEach((line, index) => {
+      const hit = line.replace(kept, "").match(british);
+      if (hit) offenders.push(`${file}:${index + 1}: ${hit[0]}`);
+    });
+  }
+  if (offenders.length > 0) {
+    console.error(`error: write American spellings (color, canceled, labeled, center, gray, -ize):\n${offenders.join("\n")}`);
+    process.exit(1);
+  }
+' "$APP_REPO_ROOT"
+
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's
 # secret scanning raises an alert on, which history keeps open once pushed. So

@@ -45,7 +45,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * of words: its name alone sits on the words' baseline (a flex box takes its
  * baseline from the items that are, and otherwise from its glyph, whose
  * baseline is its bottom edge), and a pill stands proud of the name on
- * padding its margins take back. A wash bleeds by a ring of its own colour
+ * padding its margins take back. A wash bleeds by a ring of its own color
  * rather than padding, so the words around it keep their spacing, which a
  * box cutting the words right around it leaves room for (`inline-ref.css`)
  * rather than cutting it square, and hands the wash on
@@ -129,7 +129,7 @@ interface InlineRefFace {
 const ROOT =
   "ui-inline-ref inline-flex min-w-0 max-w-full items-center p-0 border-0 text-left align-baseline [font:inherit] no-underline whitespace-nowrap";
 
-/** Each look's own box and ink at rest, a pill's type asked on its look so it outranks the line's own font the root takes. Note that a wash's name stands at least a 16px mark's height, so a mark beside it stays centred on it. */
+/** Each look's own box and ink at rest, a pill's type asked on its look so it outranks the line's own font the root takes. Note that a wash's name stands at least a 16px mark's height, so a mark beside it stays centered on it. */
 const LOOK_ROOT = {
   [INLINE_REF_LOOK.LINK]: "gap-icon-gap bg-transparent",
   [INLINE_REF_LOOK.WASH]:
@@ -171,7 +171,7 @@ function rootClass({
   return parts.join(" ");
 }
 
-/** A token's glyph, centred in a box the line's size; a pill's in the muted ink. */
+/** A token's glyph, centered in a box the line's size; a pill's in the muted ink. */
 function glyphClass(look: InlineRefLook): string {
   const glyph =
     "ui-inline-ref-glyph inline-grid flex-none place-items-center empty:hidden [&>svg]:size-[1em]";

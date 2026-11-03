@@ -9,7 +9,7 @@ import { MARK_STRIP_LOOK, MarkStrip, STATUS_TONE, type StatusTone } from "@repo/
  * changes-strip.tsx -- the thin strip Files changed leaves in its tree's place while the tree is hidden: one mark for each changed file, in the tree's order, the pointer resting on it peeking the tree out over the list.
  *
  * As stage-cli's collapsed picker does, the strip keeps the shape of the
- * change set in sight: each file's mark is coloured by what became of it,
+ * change set in sight: each file's mark is colored by what became of it,
  * as its letter is in the tree, dimmed once the member marked it viewed,
  * and the file stood on, or at the top of the list, stands out. The marks
  * are `@repo/ui`'s strip's bars, which share the strip's height, so a large

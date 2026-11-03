@@ -9,7 +9,7 @@ import { PAGE_THUMB_SIZE, PageThumb } from "../page-thumb/page-thumb.js";
  * other file. The one shown stands at
  * full strength in a ring of the text's ink; the rest are dimmed until the
  * pointer is on them, darkened rather than faded, so nothing behind the strip
- * shows through them. The strip is centred in its room and scrolls across
+ * shows through them. The strip is centered in its room and scrolls across
  * where its files outrun it, keeping the one shown in sight as the walk
  * moves.
  *

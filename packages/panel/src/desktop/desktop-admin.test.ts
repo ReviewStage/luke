@@ -169,7 +169,7 @@ test("a section chosen in the bar opens it, Escape leaves the place, and no way 
   assert.ok(!names.includes("Back"), "no way back stands");
 });
 
-test("on a phone a section is headed by Open in browser, the place's name and range centred, and its View options at the end, the sections a bar under it", async () => {
+test("on a phone a section is headed by Open in browser, the place's name and range centered, and its View options at the end, the sections a bar under it", async () => {
   let browsed = 0;
   fakeAppPlatform({ adminDashboard: () => ({ open: () => (browsed += 1) }) });
   const { page } = await open({ kind: "users" }, { room: SHELL_ROOM.NARROW });

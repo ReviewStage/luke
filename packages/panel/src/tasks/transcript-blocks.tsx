@@ -211,7 +211,7 @@ export const INERT_LINK_CLASS =
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
  * that opens in the browser over the act channel (`use-open-link.ts`), as
- * it is in a plan, bare or labelled; any other address is drawn as words
+ * it is in a plan, bare or labeled; any other address is drawn as words
  * that go nowhere, with the address as its hint. `words` are its label's,
  * which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
@@ -1484,8 +1484,8 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
  * A to-do list's items, each behind the glyph of where it stands. The
  * glyph sits in a 16px column, as a call's icon does, with the call's 8px
  * gap after it, so a list set at a row's text column, or at its card's
- * icon, keeps its words on that row's words. The glyph is centred on its
- * item's first line, which at a 20px line centres it on the capitals, and
+ * icon, keeps its words on that row's words. The glyph is centered on its
+ * item's first line, which at a 20px line centers it on the capitals, and
  * a wrapped line hangs under the words rather than the glyph. The item in
  * progress wears the moving working mark only on a `live` list, because a
  * list the agent wrote over or stopped at is a record, and a mark frozen

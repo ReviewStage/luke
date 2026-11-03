@@ -1896,7 +1896,7 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
 
   assert.equal(
     pickerDetail(page, "Type"),
-    "When an issue by people is opened in acme/ledger labelled bug",
+    "When an issue by people is opened in acme/ledger labeled bug",
   );
   assert.equal(picked(page, "Event"), "Issue opened");
   assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
@@ -3553,7 +3553,7 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   assert.match(page.textContent ?? "", /Vespin cannot receive Sentry events here/u);
 });
 
-test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {
+test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centered between them", async () => {
   const page = mountNarrow({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   const head = page.querySelector<HTMLElement>(".automations-head");

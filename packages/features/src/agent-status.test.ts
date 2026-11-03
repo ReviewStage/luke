@@ -40,13 +40,13 @@ test("an agent with no turn reads starting through its grace and failed past it,
   assert.equal(statusClockEdge(undefined, standing(STARTING_GRACE_MILLIS + 1)), undefined);
 });
 
-test("a turn reads as its own word ended, a running one with a Stop asked reads cancelled, and the clock moves neither", () => {
+test("a turn reads as its own word ended, a running one with a Stop asked reads canceled, and the clock moves neither", () => {
   const running = turn(TURN_STATUS.RUNNING);
   assert.equal(agentStatusAt(running, standing(0)), AGENT_STATUS.RUNNING);
   assert.equal(agentStatusAt(turn(TURN_STATUS.QUEUED), standing(0)), AGENT_STATUS.RUNNING);
   assert.equal(
     agentStatusAt({ ...running, cancelRequested: true }, standing(0)),
-    AGENT_STATUS.CANCELLED,
+    AGENT_STATUS.CANCELED,
   );
   assert.equal(
     agentStatusAt(turn(TURN_STATUS.SETTLED, { cancelRequested: true }), standing(0)),
@@ -96,10 +96,10 @@ test("a Stop wins over a line written before it, while its turn runs and once it
     cancelRequested: true,
     cancelRequestedAt: stoppedAt,
   });
-  const ended = { ...stamped, status: TURN_STATUS.CANCELLED, settledAt: stoppedAt + 300_000 };
+  const ended = { ...stamped, status: TURN_STATUS.CANCELED, settledAt: stoppedAt + 300_000 };
   const before = standing(stoppedAt + 1_000 - STARTED, stoppedAt - 1_000);
   for (const stopped of [stamped, ended]) {
-    assert.equal(agentStatusAt(stopped, before), AGENT_STATUS.CANCELLED);
+    assert.equal(agentStatusAt(stopped, before), AGENT_STATUS.CANCELED);
     assert.equal(lineAwaitsTurn(stopped, before), false);
   }
   const after = standing(stoppedAt + 2_000 - STARTED, stoppedAt + 1_000);

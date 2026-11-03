@@ -847,7 +847,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
           cwd: CODER.CHECKOUT_PATH,
           // Note that the credential and the bearer ride in the environment alone, which the API's
-          // sudo keeps, as Vercel documents it does, on an image that honours that (`sandbox-image.ts`).
+          // sudo keeps, as Vercel documents it does, on an image that honors that (`sandbox-image.ts`).
           env: { ...SANDBOX_ENV, ...launch.env },
           sudo: true,
         });

@@ -1161,14 +1161,14 @@ function Invitations({
     );
 
   // Note that the question goes with its invitation, canceled or accepted meanwhile.
-  const [cancelling, setCancelling] = useState<WorkspaceInvitation>();
+  const [canceling, setCanceling] = useState<WorkspaceInvitation>();
   const cancellation = useConfirmDialog(
     {
-      subject: cancelling !== undefined && (pending ?? []).some((one) => one.id === cancelling.id),
+      subject: canceling !== undefined && (pending ?? []).some((one) => one.id === canceling.id),
       surfaceOpen: true,
     },
     () => {
-      if (cancelling !== undefined) cancel(cancelling.id);
+      if (canceling !== undefined) cancel(canceling.id);
       return Promise.resolve(ACCEPTED);
     },
     confirmFailure(FAILURE_SURFACE.WORKSPACE_INVITATION_CANCEL),
@@ -1254,7 +1254,7 @@ function Invitations({
               danger: true,
               disabled: busy,
               onSelect: () => {
-                setCancelling(one);
+                setCanceling(one);
                 cancellation.ask();
               },
             },
@@ -1280,7 +1280,7 @@ function Invitations({
         confirm={cancellation}
         question={{
           title: "Cancel invitation?",
-          body: `The link sent to ${cancelling?.email ?? ""} stops working. Inviting the address again sends a new one.`,
+          body: `The link sent to ${canceling?.email ?? ""} stops working. Inviting the address again sends a new one.`,
           verb: "Cancel invitation",
           running: "Canceling",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,

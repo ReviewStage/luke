@@ -59,7 +59,7 @@ export function pixelsOf(element: Element, length: string): number {
 /**
  * How far below the way back in `bar` the page's first line stands, where
  * `opening` is the box that opens the page under the bar: the room the bar's
- * row leaves under its way back, which it centres in the row, and the box's
+ * row leaves under its way back, which it centers in the row, and the box's
  * own top padding.
  */
 export function wayBackGap(bar: HTMLElement, opening: HTMLElement): number {

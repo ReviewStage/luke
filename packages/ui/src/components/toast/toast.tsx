@@ -81,14 +81,14 @@ const GLYPH_INK = {
 
 /**
  * The card: its glyph, its words' first line, and its action share a first
- * row as tall as a control, each centred on it; its words wrap at the card's
+ * row as tall as a control, each centered on it; its words wrap at the card's
  * own line. One with an action ends a step closer to it, and a finger's
  * sideways drag on it is the toast's while its up and down stay the page's.
  */
 const TOAST_CARD =
   "ui-toast relative flex items-start gap-icon-gap rounded-toast border border-border-strong bg-background px-list-inset py-row-inset shadow-toast data-[action=true]:touch-pan-y data-[action=true]:pr-toast-gap";
 
-/** The one cell its glyphs share, centred on its first row, so a turn of tone crossfades them with the card unmoved. */
+/** The one cell its glyphs share, centered on its first row, so a turn of tone crossfades them with the card unmoved. */
 const TOAST_GLYPH =
   "ui-toast-glyph mt-toast-glyph-inset grid size-control-icon flex-none [&_svg]:size-full";
 

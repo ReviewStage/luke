@@ -11,7 +11,7 @@ import { useStandIn } from "./video-player";
  * shown ringed, a press on another showing it.
  */
 
-/** A picture of one colour, told apart from its neighbours by it. */
+/** A picture of one color, told apart from its neighbors by it. */
 const picture = (fill: string) =>
   `data:image/svg+xml,${encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="100%" height="100%" fill="${fill}"/><rect x="12" y="12" width="70" height="10" rx="4" fill="#fff9"/></svg>`,

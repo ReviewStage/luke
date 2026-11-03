@@ -133,7 +133,7 @@ type HostedRefusalData = typeof repositoryNotReachableDataSchema.Type &
 export class HostedRefused extends Data.TaggedError("HostedRefused")<{
   readonly refusal: HostedApiError;
   readonly data?: HostedRefusalData;
-  /** The trace the call travelled under, once `askHosted` has answered it. */
+  /** The trace the call traveled under, once `askHosted` has answered it. */
   readonly traceId?: string;
 }> {}
 
@@ -161,7 +161,7 @@ export class HostedUnanswered extends Data.TaggedError("HostedUnanswered")<{
   readonly errorName?: string;
   readonly status?: number;
   readonly code?: string;
-  /** The trace the call travelled under, once `askHosted` has answered it. */
+  /** The trace the call traveled under, once `askHosted` has answered it. */
   readonly traceId?: string;
 }> {}
 
@@ -298,7 +298,7 @@ function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<
 
 /**
  * A response's body read whole within the deadline, so the link reads it
- * from memory; nothing, its stream cancelled so its connection is let go,
+ * from memory; nothing, its stream canceled so its connection is let go,
  * where it has not ended by then or could not be read.
  * Note that the account call's own deadline ends with the headers, and a
  * renewal can spend all of it before an answer that did arrive is read, so
@@ -409,7 +409,7 @@ function hostedFailureOf(error: unknown): HostedFailure {
   return new HostedUnanswered(error instanceof Error ? { errorName: error.name } : {});
 }
 
-/** A failure with the trace its call travelled under, which the service's log lines for it carry. */
+/** A failure with the trace its call traveled under, which the service's log lines for it carry. */
 function traced(failed: HostedFailure, traceId: string): HostedFailure {
   if (failed._tag === "HostedRefused") {
     const { refusal, data } = failed;
@@ -429,7 +429,7 @@ function traced(failed: HostedFailure, traceId: string): HostedFailure {
 /**
  * One procedure asked on the calling fiber's own services, under the
  * deadline named: its output, or why there was none, with the trace it
- * travelled under. The ask is a client span of its own, so every attempt it
+ * traveled under. The ask is a client span of its own, so every attempt it
  * sends carries that span's trace in `traceparent` (Effect's `HttpClient`
  * writes it), which the service continues, and is sampled at the rate the
  * service's traces are, so the flag it sends says whether to trace it.

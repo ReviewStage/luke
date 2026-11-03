@@ -18,7 +18,7 @@
  * tab opened goes to the strip's end (`openedOrder`); a move takes the tab
  * out and puts it back before the tab standing at its new place
  * (`movedOrder`); and closing the chosen tab chooses the one viewed before
- * it that still stands, and only where none does its neighbour
+ * it that still stands, and only where none does its neighbor
  * (`replacementOf`), as a browser's tabs do. Each strip also keeps when each
  * tab was last viewed (`stampedViewed`), from which a tab left unviewed long
  * enough closes itself (`idleTabs`, the panel's `tasks/use-idle-tabs.ts`).

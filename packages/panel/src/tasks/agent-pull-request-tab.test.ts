@@ -1954,7 +1954,7 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
   assert.equal(tabCount(passed, "Checks"), "3");
 });
 
-test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
+test("a check that ran for no time, skipped or canceled before it began, says no duration", async () => {
   const none: AgentOverviewChecks = {
     checks: [
       { ...check("cancelled", CHECK_STATE.FAILED), completedAt: 1_000 },
@@ -3745,17 +3745,17 @@ test("a reviewer chosen stands in the header before GitHub answers, and goes bac
   );
 });
 
-test("a label chosen stands under the title before GitHub answers, in the colour the repository gives it, and stays once the pull request's read carries it", async () => {
+test("a label chosen stands under the title before GitHub answers, in the color the repository gives it, and stays once the pull request's read carries it", async () => {
   const answer = Promise.withResolvers<void>();
   changeHeld = answer.promise;
-  let labelled = false;
+  let labeled = false;
   const tab = await draw(
     controlAnswering({
       pullRequest: () =>
         Promise.resolve({
           pullRequest: {
             ...PULL_REQUEST,
-            labels: labelled ? [{ name: "docs", color: "0075ca" }] : [],
+            labels: labeled ? [{ name: "docs", color: "0075ca" }] : [],
           },
         }),
       reviewOptions: () =>
@@ -3777,7 +3777,7 @@ test("a label chosen stands under the title before GitHub answers, in the colour
   await pressItem("docs");
   assert.deepEqual(labels(), [["docs", "#0075ca"]], "the label is drawn before GitHub answers");
 
-  labelled = true;
+  labeled = true;
   answer.resolve();
   await settle();
   assert.deepEqual(labels(), [["docs", "#0075ca"]]);
@@ -5533,7 +5533,7 @@ test("a thread on a line no hunk shows, and one a later push outdated, land on t
   assert.deepEqual(opened, [true, true], "the outdated thread is opened above the diff");
 });
 
-test("a link to a thread opens a folded Conversation to land on it, centring it in the room under the heading stuck at the top, and a card taller than that room landing with its top just under the heading", async () => {
+test("a link to a thread opens a folded Conversation to land on it, centering it in the room under the heading stuck at the top, and a card taller than that room landing with its top just under the heading", async () => {
   window.localStorage.setItem(
     "app.conversation-filters",
     JSON.stringify({ hideBots: false, hideResolved: false, conversationOpen: false }),
@@ -5589,7 +5589,7 @@ test("a link to a thread opens a folded Conversation to land on it, centring it 
   assert.equal(sectionHead(tab, "Conversation").getAttribute("aria-expanded"), "true");
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread is drawn");
   assert.equal(card.hasAttribute("data-landed"), true, "the thread is landed on");
-  assert.equal(top, 900 + 100 / 2 - (58 + (400 - 58) / 2), "centred under the heading's band");
+  assert.equal(top, 900 + 100 / 2 - (58 + (400 - 58) / 2), "centered under the heading's band");
 
   ringEnds(card);
   top = 0;
@@ -6069,7 +6069,7 @@ function draftOf(overrides: Partial<PendingReviewComment> = {}): PendingReviewCo
   };
 }
 
-/** Writes words into the field labelled as given, as the member would. */
+/** Writes words into the field labeled as given, as the member would. */
 function typeInto(within: Element, label: string, words: string): void {
   writeBox(within, words, label);
 }

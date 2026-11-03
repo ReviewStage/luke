@@ -29,7 +29,7 @@ const PHOTO_REFUSAL = {
 export type PhotoRead = { readonly photo: string } | { readonly refusal: string };
 
 /**
- * A picked file drawn as a workspace's photo on this machine: its centre
+ * A picked file drawn as a workspace's photo on this machine: its center
  * square at `PHOTO_EDGE` pixels a side, written as WebP. Note that it is
  * encoded with no bound of its own, because a photo past the service's is
  * said as too large rather than as a file that could not be read.

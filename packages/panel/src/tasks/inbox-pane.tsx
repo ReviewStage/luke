@@ -1468,7 +1468,7 @@ export function InboxPane({
   mentions?: TaskMentionsValue | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the item stands alone on a
-   * phone: the way back's glyph, what holds the item centred (`PhoneHolder`), and one ⋯
+   * phone: the way back's glyph, what holds the item centered (`PhoneHolder`), and one ⋯
    * holding the pager, what the crumbs open, the panel, and the item's own
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */

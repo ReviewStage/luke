@@ -311,7 +311,7 @@ test("the end line's words and whether it tells of a failure come apart, and nam
   const failed = endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.SANDBOX);
   assert.equal(failed?.failed, true);
   assert.match(failed?.words ?? "", /^Failed: /);
-  assert.deepEqual(endLineParts(AGENT_STATUS.CANCELLED, undefined), {
+  assert.deepEqual(endLineParts(AGENT_STATUS.CANCELED, undefined), {
     words: "Stopped",
     failed: false,
   });
@@ -375,7 +375,7 @@ test("a failed end line's row ends on Continue where the line continues the agen
   assert.equal(endLineOffersContinue({ ...failed, continued: false, boxClosed: true }), false);
   assert.equal(endLineOffersContinue({ ...failed, continued: true, boxClosed: true }), true);
   assert.equal(endLineOffersContinue({ ...key, continued: true, boxClosed: false }), false);
-  for (const status of [AGENT_STATUS.CANCELLED, AGENT_STATUS.COMPLETED]) {
+  for (const status of [AGENT_STATUS.CANCELED, AGENT_STATUS.COMPLETED]) {
     const settled = { status, endReason: endLineReason(undefined), boxClosed: false };
     assert.equal(endLineOffersContinue({ ...settled, continued: true }), false, status);
   }
@@ -439,7 +439,7 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
   assert.ok(archived.endLine(), "the turn still ends on its line");
   assert.equal(archived.buttons(archived.container).length, 0);
 
-  for (const status of [AGENT_STATUS.CANCELLED, AGENT_STATUS.COMPLETED]) {
+  for (const status of [AGENT_STATUS.CANCELED, AGENT_STATUS.COMPLETED]) {
     const settled = await drawnTab({ status });
     assert.equal(settled.buttons(settled.container).length, 0, status);
   }
@@ -636,7 +636,7 @@ test("a failed agent already continued is continued again from its end line, car
   document.body.innerHTML = "";
   window.localStorage.clear();
 
-  for (const status of [AGENT_STATUS.COMPLETED, AGENT_STATUS.CANCELLED]) {
+  for (const status of [AGENT_STATUS.COMPLETED, AGENT_STATUS.CANCELED]) {
     const settled = await drawnTab({ status, others: [agentOf(NEXT, { from: FROM_SOURCE })] });
     assert.ok(settled.continuedNote(), status);
     assert.equal(settled.buttons(settled.container).length, 0, status);
@@ -757,7 +757,7 @@ test("Continued in is named once whatever the continued agent stands as: startin
     { status: AGENT_STATUS.STARTING },
     { status: AGENT_STATUS.RUNNING },
     { status: AGENT_STATUS.COMPLETED },
-    { status: AGENT_STATUS.CANCELLED },
+    { status: AGENT_STATUS.CANCELED },
     { status: AGENT_STATUS.FAILED, failure: AGENT_FAILURE.SANDBOX },
     { status: AGENT_STATUS.FAILED, failure: AGENT_FAILURE.PROVIDER_KEY },
   ];

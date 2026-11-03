@@ -153,7 +153,7 @@ const freeLoopbackPort = Effect.tryPromise({
 });
 
 /** The data directory made under `folder`, its one role signing in by `password`. */
-function initialised(bin: PostgresBinaries, folder: string, password: Redacted.Redacted<string>) {
+function initialized(bin: PostgresBinaries, folder: string, password: Redacted.Redacted<string>) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -265,7 +265,7 @@ export const ephemeralCluster = Effect.gen(function* () {
   const bin = yield* binaries;
   const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: CLUSTER.TEMP_PREFIX });
   const password = Redacted.make(randomBytes(24).toString("hex"));
-  yield* initialised(bin, folder, password);
+  yield* initialized(bin, folder, password);
   const port = yield* freeLoopbackPort;
   yield* running(bin, folder, port);
   yield* databaseCreated(port, password);

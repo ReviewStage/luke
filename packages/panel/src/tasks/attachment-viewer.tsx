@@ -101,7 +101,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * recording (`ph-no-capture`) as a second line behind the masking.
  *
  * On a phone the header is a phone's (`phone-head.tsx`): Close alone at its
- * start, the file's name centred over its size and note, and one ⋯ at its
+ * start, the file's name centered over its size and note, and one ⋯ at its
  * end holding every other button of the header, the arrow keys still
  * walking the files. On a touch screen a finger swiping sideways across the
  * viewer walks the files too, the file shown following it until it is let
@@ -399,7 +399,7 @@ function AttachmentBody({
   }
   if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
     return (
-      // A video plays on the veil, centred, as large as the card leaves it under its header at its own shape.
+      // A video plays on the veil, centered, as large as the card leaves it under its header at its own shape.
       <div
         className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil"
         {...DIALOG_VEIL}
@@ -565,7 +565,7 @@ export function AttachmentViewer({
         data-hug={hug}
         {...DIALOG_VEIL}
       >
-        {/* The arrows stand on the dimmed window either side of the card, centred down it; a press on the room round them closes the viewer as one on the dimmed window does. */}
+        {/* The arrows stand on the dimmed window either side of the card, centered down it; a press on the room round them closes the viewer as one on the dimmed window does. */}
         <div
           className="attachment-viewer-stage flex min-h-0 flex-auto items-center gap-ui-16"
           {...DIALOG_VEIL}

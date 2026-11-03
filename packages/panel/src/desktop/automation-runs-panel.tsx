@@ -45,7 +45,7 @@ import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../ac
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
-import { centreWithin, scrollerOf } from "../scroll-within.js";
+import { centerWithin, scrollerOf } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
@@ -162,7 +162,7 @@ export function RunRow({
   useEffect(() => {
     const drawn = row.current;
     const scroller = drawn === null ? undefined : scrollerOf(drawn);
-    if (linked && drawn !== null && scroller !== undefined) centreWithin(scroller, drawn);
+    if (linked && drawn !== null && scroller !== undefined) centerWithin(scroller, drawn);
   }, [linked]);
   return (
     <ListRow
@@ -182,7 +182,7 @@ export function RunRow({
           : { icon: <GLYPH.AUTOMATION />, label: automationName }
       }
       leadAt={LIST_ROW_LEAD.INLINE}
-      // Note that a run's state and time stand on its title's line, as a mail's do, never centred across its two.
+      // Note that a run's state and time stand on its title's line, as a mail's do, never centered across its two.
       metaAt={LIST_ROW_META.TITLE}
       description={
         <Tooltip label={line}>
@@ -295,7 +295,7 @@ function RunsBody({
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.AUTOMATION_RUNS_READ, { automationId })}
             onRetry={onRetry}
-            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
             Its runs could not be read.
           </ErrorState>
@@ -403,7 +403,7 @@ export function AutomationRunsScreen({
       aria-label="Runs"
       hidden={hidden}
     >
-      {/* A narrow room's screen alone, headed as a phone's page is (`phone-head.tsx`): the way back to the setup, Runs centred. */}
+      {/* A narrow room's screen alone, headed as a phone's page is (`phone-head.tsx`): the way back to the setup, Runs centered. */}
       <PhoneHead
         place="automation-runs-page"
         start={<BackButton label={name} place={name} onBack={onBack} />}

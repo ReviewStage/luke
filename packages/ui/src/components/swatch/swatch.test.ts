@@ -7,7 +7,7 @@ import { Swatch } from "./swatch.js";
 
 /**
  * swatch.test.ts -- a swatch is a button named by its label that says
- * whether its colour is the one chosen, and a press hands the choice on.
+ * whether its color is the one chosen, and a press hands the choice on.
  */
 
 const roots: Root[] = [];

@@ -6,8 +6,8 @@ import { ANSWER_TONE, type AnswerStamp, type AnswerTone } from "./inbox-model.js
  * inbox-stamp.tsx -- an answer to an Inbox ask as a stamp: its glyph and its words, at the head of the reply that sent it or over the box it is attached to.
  *
  * A stamp is a `Badge`, or a removable `Chip` where it is attached, and the
- * only colour it spends is its glyph's: a check in green for an answer that
- * goes ahead, and a turn back in the neutral grey for one that holds back,
+ * only color it spends is its glyph's: a check in green for an answer that
+ * goes ahead, and a turn back in the neutral gray for one that holds back,
  * since holding back failed nothing, so Approved and Changes requested read
  * apart at a glance. Attached to the box, it carries a × that takes it off
  * again.

@@ -22,19 +22,19 @@ import { useSettled } from "../spinner/settle-wait.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
 /**
- * button.tsx -- the one button every app presses: a labelled Button and a glyph-alone IconButton, in one of five looks.
+ * button.tsx -- the one button every app presses: a labeled Button and a glyph-alone IconButton, in one of five looks.
  *
  * A look says what a press does, not where the button stands: `quiet` for
  * an ordinary act among others (a toolbar's), `outline` for the act a row or
  * a card offers at rest, `primary` for the act a place exists for, `danger`
  * for one that destroys, `danger-outline` for a destructive act that is
  * not the place's own, and `ink` for one that ends what the place holds, a
- * solid fill in the text's own colour apart from the quiet ones beside it,
+ * solid fill in the text's own color apart from the quiet ones beside it,
  * as a call's End call is. `subtle` is a quiet one in the muted ink, for a
  * press that stands among quiet words rather than controls, and must not
  * outweigh them (a pull request header's “+ Label”), lighting as a
  * quiet one does. Two tinted looks carry news on a wash of their
- * colour rather than a fill: `working-tint` for an act something under way
+ * color rather than a fill: `working-tint` for an act something under way
  * offers (Restart, once a release is downloaded), and `danger-tint` for the
  * one a failure offers (Download, once installing it failed). `row` is an
  * act standing as a row of a card's own, its words at the row's start and
@@ -69,7 +69,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * out `--ui-settle-delay` (180ms) it keeps its width, its words standing
  * hidden under the one ring every wait turns (`SpinnerRing`), so an act that
  * lands at once never flashes one. Every kind of button, a split one's, a
- * folding one's, a provider's, takes the same two (`BusyProps`). A labelled
+ * folding one's, a provider's, takes the same two (`BusyProps`). A labeled
  * button whose act has landed may say so, `done`: a check springs in where
  * its words stood, it refuses another press, and `onDone` hears once the
  * check has been seen, at once where no motion runs. A busy button told its
@@ -83,7 +83,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
  *
- * A labelled Button may be a record of a press rather than an offer of
+ * A labeled Button may be a record of a press rather than an offer of
  * one: `readOnly`, it takes no press and no Tab stop, as an unavailable one
  * does, yet stands at full strength, so it reads as a press given rather
  * than one waiting; `pressed` draws the one that was given as a toggle
@@ -92,7 +92,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * disabled, because a disabled button refuses the pointer too, which would
  * keep a drag over its words from selecting them.
  *
- * A labelled Button may wear a `badge` after its words, a short word
+ * A labeled Button may wear a `badge` after its words, a short word
  * saying what sets it apart from the presses beside it (the agent's
  * "Recommended"): in the attention tone while it offers its press, and the
  * neutral one once it is `readOnly`, a record rather than a call to act, as
@@ -108,7 +108,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * IconButton's look on a link, named by its `label`, which may open in a
  * `newTab`.
  *
- * A labelled button is named by its words, unless it is given a `label`
+ * A labeled button is named by its words, unless it is given a `label`
  * that says more of what it does than they have room for ("Start an
  * agent" over "Start"). The label holds the words it is drawn with, so a
  * reader who says what they see still reaches it (WCAG's label in name).
@@ -119,7 +119,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * pointer. A compact quiet one draws no ground under the pointer, because
  * the row beneath it is already lit; only its glyph brightens. One of the
  * control's size that stands in a lit row, a row's ⋯, asks for the same
- * (`lights`), so a row's ⋯ never fills at any density. A labelled
+ * (`lights`), so a row's ⋯ never fills at any density. A labeled
  * Button comes in the same two: `compact` is a row mark's height in the
  * caption's type, for a press that stands among words rather than
  * controls (a sidebar foot's Restart).
@@ -129,7 +129,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * sends, a ring while a send is out, and a square while a reply streams,
  * which its owner may make the Stop. It never changes size or place, and
  * unavailable it stands on the strong fill with a muted glyph rather than
- * fading, so its glyph stays a colour apart from its disc.
+ * fading, so its glyph stays a color apart from its disc.
  *
  * An app's hint wraps a button and hands it the pointer and focus handlers
  * it shows and goes on, and the chord it names (`HintProps`), which land on
@@ -242,7 +242,7 @@ type LinkHintProps = Pick<
   | "aria-keyshortcuts"
 >;
 
-/** What every button takes, labelled or not. */
+/** What every button takes, labeled or not. */
 type ButtonBase = LandingProps &
   HintProps & {
     variant?: ButtonVariant;
@@ -356,7 +356,7 @@ function faceClasses(size: BoxSize | undefined, ringShown: boolean, done: boolea
   );
 }
 
-/** The ring a busy button turns over its hidden face, the glyph's size, centred in its box. */
+/** The ring a busy button turns over its hidden face, the glyph's size, centered in its box. */
 function BusyRing(): React.JSX.Element {
   return (
     <span className="ui-button-ring absolute inset-0 m-auto size-control-icon" aria-hidden="true">
@@ -394,7 +394,7 @@ function pulse(pressable: HTMLElement, variant: ButtonVariant | undefined): void
   pulsePress(pressable, variant === BUTTON_VARIANT.ROW ? PRESS_PULSE.QUIET : PRESS_PULSE.FACE);
 }
 
-/** The attributes and handler a button carries for its state, shared by both kinds; `done` is a labelled one whose act has landed. */
+/** The attributes and handler a button carries for its state, shared by both kinds; `done` is a labeled one whose act has landed. */
 function stateProps(props: ButtonBase, name: string | undefined, done = false) {
   const settled = props.busy === true || done;
   const refusing = settled || (props.disabled === true && props.focusableWhenDisabled === true);
@@ -472,7 +472,7 @@ function DoneMark({
   shown.current = onShown;
   useLayoutEffect(() => {
     const motions = mark.current === null ? [] : running(mark.current);
-    // Note that a motion cancelled counts as played, since nothing is left to wait for.
+    // Note that a motion canceled counts as played, since nothing is left to wait for.
     let left = motions.length;
     let current = true;
     const played = () => {
@@ -562,7 +562,7 @@ function recordedProps(state: ReturnType<typeof stateProps>): ReturnType<typeof 
   };
 }
 
-/** A labelled button: its words, after its glyph where it has one. */
+/** A labeled button: its words, after its glyph where it has one. */
 export function Button({
   icon,
   trailing,
@@ -641,7 +641,7 @@ export function Button({
   );
 }
 
-/** A link drawn as a labelled button: its words after its glyph, going to `href` when pressed. */
+/** A link drawn as a labeled button: its words after its glyph, going to `href` when pressed. */
 export function ButtonLink({
   href,
   variant,

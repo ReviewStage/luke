@@ -52,7 +52,7 @@ export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
   useEffect(() => () => taken.current(), []);
 
   // Note that the tick is taken once every motion it runs has ended, its
-  // exit last, and one cancelled counts as ended; a tick of a later write
+  // exit last, and one canceled counts as ended; a tick of a later write
   // leaves this effect behind first, which `current` answers.
   useLayoutEffect(() => {
     if (!standing) return undefined;

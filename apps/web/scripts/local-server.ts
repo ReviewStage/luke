@@ -12,7 +12,7 @@
  * `BETTER_AUTH_URL` names no address, the server names its own there first,
  * so Better Auth's base URL and the cookie origin guard both call it by the
  * address it listens at. It turns the local demo on for the routes it mounts
- * (`@repo/service/local/local-demo`), which the service honours only behind
+ * (`@repo/service/local/local-demo`), which the service honors only behind
  * the same guard.
  *
  * Every path a rewrite of the committed table takes is the deployment's,

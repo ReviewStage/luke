@@ -517,7 +517,7 @@ const SERVER_EVENT_TIMEOUT_MS = 2_000;
 function stamped(properties: PosthogBatchItem["properties"], environment: string) {
   return {
     ...properties,
-    // Without it an event with no address resolves to the data centre's.
+    // Without it an event with no address resolves to the data center's.
     $geoip_disable: true,
     $lib: SERVER_EVENT_LIB,
     platform: PRODUCT_PLATFORM.SERVER,
@@ -791,7 +791,7 @@ export function workspaceRenamed(userId: string, workspaceId: string): Effect.Ef
 /** What a settled turn's row says of how it ended, in the count's words. */
 function turnOutcomeOf(turn: SettledAgentTurn): Values<typeof SERVER_TURN_OUTCOME> {
   if (turn.status === TURN_STATUS.SETTLED) return SERVER_TURN_OUTCOME.COMPLETED;
-  if (turn.status === TURN_STATUS.CANCELLED) return SERVER_TURN_OUTCOME.STOPPED;
+  if (turn.status === TURN_STATUS.CANCELED) return SERVER_TURN_OUTCOME.STOPPED;
   return turn.failure === TURN_FAILURE.ABANDONED
     ? SERVER_TURN_OUTCOME.ABANDONED
     : SERVER_TURN_OUTCOME.FAILED;

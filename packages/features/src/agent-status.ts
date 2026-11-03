@@ -9,7 +9,7 @@ import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
  * `starting` before the first turn is queued, `running` while eve runs a
  * turn or a line waits for the turn it will open, and how the newest turn
  * ended after. A turn still running that carries a Stop stamp reads as
- * cancelled already, since the Stop is on its way to eve and nothing the
+ * canceled already, since the Stop is on its way to eve and nothing the
  * turn still does changes where it ends. An agent with no turn row long
  * past its Start (`STARTING_GRACE_MILLIS`) reads as failed rather than
  * starting forever, as one that never started.
@@ -56,7 +56,7 @@ const STATUS_OF_TURN = {
   [TURN_STATUS.QUEUED]: AGENT_STATUS.RUNNING,
   [TURN_STATUS.RUNNING]: AGENT_STATUS.RUNNING,
   [TURN_STATUS.SETTLED]: AGENT_STATUS.COMPLETED,
-  [TURN_STATUS.CANCELLED]: AGENT_STATUS.CANCELLED,
+  [TURN_STATUS.CANCELED]: AGENT_STATUS.CANCELED,
   [TURN_STATUS.FAILED]: AGENT_STATUS.FAILED,
 } as const satisfies Record<string, AgentStatus>;
 
@@ -180,7 +180,7 @@ export function agentStatusAt(turn: StatusTurn | undefined, standing: StatusStan
   // A row outside the vocabulary is a write this build does not know, read as the one status that claims nothing.
   if (!isTurnStatusWord(turn.status)) return AGENT_STATUS.FAILED;
   const status = STATUS_OF_TURN[turn.status];
-  return status === AGENT_STATUS.RUNNING && turn.cancelRequested ? AGENT_STATUS.CANCELLED : status;
+  return status === AGENT_STATUS.RUNNING && turn.cancelRequested ? AGENT_STATUS.CANCELED : status;
 }
 
 /**

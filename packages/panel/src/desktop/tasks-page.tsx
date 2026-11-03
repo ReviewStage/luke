@@ -219,7 +219,7 @@ export function TasksPage({
   const listed = tasks.listed.tasks;
   const filterAsk = useMenuAsk();
   const optionsAsk = useMenuAsk();
-  // A phone heads the page as it heads every place (`phone-head.tsx`): New task, the title centred, and a ⋯ holding
+  // A phone heads the page as it heads every place (`phone-head.tsx`): New task, the title centered, and a ⋯ holding
   // the view's switch and opening the Filter's and View options' own menus where it stands.
   const phone = room === SHELL_ROOM.NARROW;
   const viewItem = (value: TasksView, label: string, icon: React.JSX.Element) => ({

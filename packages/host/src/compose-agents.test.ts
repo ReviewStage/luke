@@ -397,7 +397,7 @@ function fakeService() {
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
-        return { agent: { ...AGENT, status: AGENT_STATUS.CANCELLED } };
+        return { agent: { ...AGENT, status: AGENT_STATUS.CANCELED } };
       }),
     rewind: (agentId, messageId) =>
       Effect.sync(() => {
@@ -966,7 +966,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] } },
     );
     assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_STOP, { agentId: AGENT_ID }), {
-      agent: { ...AGENT, status: AGENT_STATUS.CANCELLED },
+      agent: { ...AGENT, status: AGENT_STATUS.CANCELED },
     });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
@@ -1542,7 +1542,7 @@ it.effect(
         pageNow("1:0", {
           holds: false,
           text: "Reading the invites.",
-          status: AGENT_STATUS.CANCELLED,
+          status: AGENT_STATUS.CANCELED,
         }),
       );
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
@@ -2373,7 +2373,7 @@ function deliverAccount(
 }
 
 it.effect(
-  "what waits across the account is told from its live read each time it moves, whole, and a failed run ageing out of the week tells it again",
+  "what waits across the account is told from its live read each time it moves, whole, and a failed run aging out of the week tells it again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW);

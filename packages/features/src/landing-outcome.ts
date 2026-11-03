@@ -36,7 +36,7 @@ export const LANDING_OUTCOME = {
   REQUESTED: "requested",
   /** The provider named no installation we could confirm. */
   NOT_CONFIRMED: "not-confirmed",
-  /** The sign-in gave us no grant: declined, cancelled, or refused. */
+  /** The sign-in gave us no grant: declined, canceled, or refused. */
   NOT_COMPLETED: "not-completed",
   /** We could not reach the provider, or the service between them. */
   UNAVAILABLE: "unavailable",

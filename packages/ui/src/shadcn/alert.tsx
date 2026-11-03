@@ -32,7 +32,7 @@ import { STATUS_TONE, type StatusTone } from "../status-tone.js";
  *   the sheet's narrow rules select. The words and the glyph do not go
  *   through `cn`, because
  *   tailwind-merge reads `text-body` (a size) and `text-body-foreground` (a
- *   colour) as one group and would keep only the last.
+ *   color) as one group and would keep only the last.
  *
  * `@repo/ui`'s `Banner` (`components/banner/banner.tsx`) is what an app
  * draws; this is its inside.

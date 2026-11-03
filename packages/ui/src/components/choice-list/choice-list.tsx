@@ -155,7 +155,7 @@ const ROW_ACROSS = "flex-[1_1_0] items-start";
 
 /**
  * A marked row's radio or checkbox, stood on the label's first line (in a
- * card's head, on its centre): a ring at rest, filled once checked, a dot
+ * card's head, on its center): a ring at rest, filled once checked, a dot
  * in a radio and a tick in a box.
  */
 const CONTROL =
@@ -701,7 +701,7 @@ function SettledChoices<Value extends string>({
               tone={STATUS_TONE.NEUTRAL}
               after={
                 picked ? (
-                  // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's centre.
+                  // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's center.
                   <span className="ui-choice-picked ml-2 text-muted-foreground text-caption leading-body font-caption whitespace-nowrap">
                     <PickedCheck className="mr-0.5" />
                     {pickedNote}

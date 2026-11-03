@@ -116,7 +116,7 @@ function headingOf(line: string): string | undefined {
  * The document's sections in order. Note that a fence is closed only by a
  * line of the same character at least as long as the one that opened it and
  * holding nothing after the run, as CommonMark has it, because a shorter
- * run, or one labelled like an opening, inside a fence is code.
+ * run, or one labeled like an opening, inside a fence is code.
  */
 export function planSections(text: string): readonly PlanSection[] {
   const sections: SectionLines[] = [];

@@ -11,7 +11,7 @@ import { CatalogSection } from "../section";
 
 /**
  * code-cards.tsx -- the one card for a block of code: a short block headed
- * by its language, one headed by its language's name after its glyph, one headed by its file with the host's colours on its
+ * by its language, one headed by its language's name after its glyph, one headed by its file with the host's colors on its
  * runs, a block of 60 lines cut at 40 behind Show all, a suggestion drawn
  * as rows on the added and removed grounds, a body the caller draws under
  * a header with an action of its own, and a file's lines with the file's
@@ -23,14 +23,14 @@ const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.wri
 
 const SHORT = ["pnpm install", "pnpm exec vitest run packages/ui"].join("\n");
 
-const COLOURED = [
+const COLORED = [
   'import { CODE_CARD_TITLE, CODE_ROW, CodeCard, TextButton } from "@repo/ui";',
   "",
   "export const cut = 40;",
 ].join("\n");
 
-/** The colours the host's highlighter hands for `COLOURED`, GitHub's own in each appearance. */
-const COLOURED_LINES = [
+/** The colors the host's highlighter hands for `COLORED`, GitHub's own in each appearance. */
+const COLORED_LINES = [
   [
     { text: "import", color: "#ff7b72", lightColor: "#cf222e" },
     { text: " { CodeCard } " },
@@ -72,11 +72,11 @@ function CodeCards(): React.JSX.Element {
           copy={copyToClipboard}
         />
       </CatalogSection>
-      <CatalogSection id="code-card-file" title="Headed by its file, coloured by the host">
+      <CatalogSection id="code-card-file" title="Headed by its file, colored by the host">
         <CodeCard
           title="packages/ui/src/cut.ts"
-          code={COLOURED}
-          lines={COLOURED_LINES}
+          code={COLORED}
+          lines={COLORED_LINES}
           copy={copyToClipboard}
         />
       </CatalogSection>
@@ -97,7 +97,7 @@ function CodeCards(): React.JSX.Element {
         <CodeCard
           title="packages/ui/src/cut.ts"
           body="Drawn by the caller, not cut."
-          copied={COLOURED}
+          copied={COLORED}
           actions={<TextButton onClick={() => {}}>Open file</TextButton>}
           copy={copyToClipboard}
         />

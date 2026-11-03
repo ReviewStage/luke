@@ -705,7 +705,7 @@ test("the thread names its agent as one button wherever it does, its message's c
 });
 
 test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
-  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.CANCELED, archivedAt: 4_000 }];
   let { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   let [named] = threadRefs(page);
@@ -2292,7 +2292,7 @@ function answersOf(answered: readonly AgentInboxAnswerParams[]) {
   return answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
 }
 
-test("opening the reader's own notice acknowledges it at its revision, once while it is shown, writing no message; its box offers no Got it, and opening it again after the acknowledgement was refused tries again", async () => {
+test("opening the reader's own notice acknowledges it at its revision, once while it is shown, writing no message; its box offers no Got it, and opening it again after the acknowledgment was refused tries again", async () => {
   const notice = noticeItem();
   const { answered, messaged } = noticeWrites(() => true);
   const pane = await mountThread(notice);
@@ -2318,7 +2318,7 @@ test("opening the reader's own notice acknowledges it at its revision, once whil
 
 test("a notice whose box holds a draft is left open as it is opened, and its words go as a reply naming the notice's revision, no answer beside it", async () => {
   const notice = noticeItem();
-  // The first acknowledgement is refused, so the box stands open to take the draft.
+  // The first acknowledgment is refused, so the box stands open to take the draft.
   let refusals = 1;
   const { answered, messaged } = noticeWrites(() => {
     refusals -= 1;

@@ -986,7 +986,7 @@ export function withdrawPlanCommentAsk(taskId: string, clientKey: string): TaskS
 
 /**
  * One file a comment of the plan carries, its bytes under the type it
- * travelled as, where the account reaches the plan; nothing for a plan of a
+ * traveled as, where the account reaches the plan; nothing for a plan of a
  * workspace the account is not in, and for an id that names no comment's
  * file of this plan, a plan's picture among them.
  */

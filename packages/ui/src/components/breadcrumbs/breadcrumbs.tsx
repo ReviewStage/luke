@@ -487,7 +487,7 @@ export function Breadcrumbs({
 /**
  * A bar's row holding a path among the bar's other controls, whose width is
  * what the path's crumbs fold by (`shownAt`). It fills the bar it stands in
- * and lays its children in a row, centred, spaced as the bar spaces its
+ * and lays its children in a row, centered, spaced as the bar spaces its
  * own, so the bar keeps its padding, its height, and its gap.
  */
 export function BreadcrumbBar({ children }: { children: ReactNode }): React.JSX.Element {

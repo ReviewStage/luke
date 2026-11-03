@@ -15,14 +15,14 @@ import { confirmFailure } from "../failure-report.js";
 import { useFormDialog } from "./use-form-dialog.js";
 
 /**
- * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a labelled name, Cancel, and Create workspace.
+ * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a labeled name, Cancel, and Create workspace.
  *
  * It is a dialog with a form in it, so it dims the window, keeps Tab inside,
  * hands focus back to whatever opened it, and says a refusal on the name
  * field, marked invalid, with the name left as typed for another try. The name is held to the service's
  * bound in the shared text field; Create workspace stands unavailable until
  * a name is typed, Enter creates, and Escape or a press on the dimmed window
- * cancels. Each opening starts from an empty name, so a cancelled one is
+ * cancels. Each opening starts from an empty name, so a canceled one is
  * never offered again, and the question goes with the sidebar folding away
  * or the account signing out.
  */

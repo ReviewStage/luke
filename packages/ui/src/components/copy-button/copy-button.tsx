@@ -18,9 +18,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * press hands its words to the copy act its caller passes in, the shell's
  * clipboard, so this package reaches no platform of its own. Once the act
  * answers, the glyph turns to the check, the one a landed button shows, in
- * the success colour, and the window's `Announcer` says "Copied"
+ * the success color, and the window's `Announcer` says "Copied"
  * politely; a clipboard that refused turns it to the alert, in the danger
- * colour, and the announcer says so as an alert. Either stands for the
+ * color, and the announcer says so as an alert. Either stands for the
  * toast's short hold (`TOAST_HOLD.DONE`), so a copy answered on its button
  * and one answered by a toast last the same, then the copy glyph comes back
  * and the announcer's words are taken back with it, as they are by a later

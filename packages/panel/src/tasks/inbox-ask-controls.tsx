@@ -741,7 +741,7 @@ function OpenControls({
 /**
  * The glyph a press wears for the way it goes, as the answer's stamp does:
  * a check going ahead, a turn back holding back. Only the press given spends
- * its answer's tone (`ANSWER_STATUS_TONE`), green or grey; the rest wear
+ * its answer's tone (`ANSWER_STATUS_TONE`), green or gray; the rest wear
  * their words' ink.
  */
 function ToneGlyph({ tone, pressed }: { tone: AnswerTone; pressed: boolean }): React.JSX.Element {

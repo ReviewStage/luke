@@ -7,7 +7,7 @@
  * already is (`current`); `underlined` for one inside written words, in the
  * words' own ink over a thin underline in a faint wash of it, which goes
  * full strength under the pointer or the keyboard, so it reads by its line
- * and not its colour alone; `heading` for one that is a heading's own words
+ * and not its color alone; `heading` for one that is a heading's own words
  * (a release's version over its notes), in the text's own ink and lighting
  * to the accent under the pointer.
  *

@@ -324,7 +324,7 @@ test("a call's step whose marker names its tool is drawn as the live transcript 
   assert.equal(command.view.kind, CALL_KIND.COMMAND);
   assert.equal(command.view.description, "Run the tests");
   assert.deepEqual(command.view.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm test" });
-  // A patch's body is drawn as a patch, which wears its colours.
+  // A patch's body is drawn as a patch, which wears its colors.
   const patch = stepView(
     toolStep({
       summary: "Edited: src/a.ts",

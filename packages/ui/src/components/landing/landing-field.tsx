@@ -6,7 +6,7 @@ import { bayerAt, fitCanvas, paintLoop } from "./landing-paint.js";
  *
  * It is Canvas 2D, a grid of small square dots in the accent, each cell
  * lit or not by an ordered dither over a slowly moving value, so the field
- * reads as one flat colour on the ground and never as a gradient. The
+ * reads as one flat color on the ground and never as a gradient. The
  * pattern is the stage's: a flow of soft bands, rings going out from below,
  * or waves across. Under reduced motion it is drawn once and stands still.
  * Decorative: a canvas with no words of its own, which a reader passes over.

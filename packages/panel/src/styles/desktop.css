@@ -84,10 +84,10 @@ body,
    while the pointer is over the scroller or focus is in it. Note that the
    track is named transparent rather than left to the engine, because macOS
    set to always show scroll bars (or a mouse attached) draws Chromium's
-   classic bar, whose default track is the grey band behind the thumb. Where
+   classic bar, whose default track is the gray band behind the thumb. Where
    macOS overlays its bars instead it shows them as a scroll moves and fades
    them after, as it does in any Mac app. No scroller sets its own: the
-   colour inherits, so it reaches into Pierre's tree through its shadow root
+   color inherits, so it reaches into Pierre's tree through its shadow root
    too, where it stands in for that tree's own `::-webkit-scrollbar` thumb.
    In the `base` layer with the element resets (base.css). Note that the
    thumb is not faded in, because a transition on every element starts one
@@ -259,7 +259,7 @@ body,
   scale: calc(16 / 13);
 }
 
-/* A line that names an actor: its words and the actor in one row centred on
+/* A line that names an actor: its words and the actor in one row centered on
    the disc, so the disc never rides above the words' baseline. Note that
    its spaces stand inside its words, because a row drops a run that is
    spaces alone, and that it keeps them as typed. */
@@ -641,7 +641,7 @@ body,
 }
 
 /* A teammate's call at its divider: their mark and name, then when it
-   started, centred on the mark, every space kept. */
+   started, centered on the mark, every space kept. */
 .call-caller {
   display: flex;
   min-width: 0;
@@ -761,7 +761,7 @@ body,
 
 /* The repository chip ------------------------------------------------------ */
 
-/* An integration whose brand publishes its one-colour mark in named inks
+/* An integration whose brand publishes its one-color mark in named inks
    wears them by the ground: Executor's and Notion's pure white on dark and
    pure black on light, Sentry's white on dark and its dark blurple on light,
    Neon's two greens, and Mercury's near-white on dark and near-black on
@@ -836,8 +836,8 @@ body,
 }
 
 /* While the sidebar is folded the window's Inbox's list is its first column, so its
-   name stands centred over the list, as a sidebar's title does, rather than
-   pushed past the title bar's buttons (`Toolbar`'s centred title): the room
+   name stands centered over the list, as a sidebar's title does, rather than
+   pushed past the title bar's buttons (`Toolbar`'s centered title): the room
    kept for the buttons is what the bar's start stands at. The list standing
    alone is a page rather than a column, so its name leads its bar past the
    title bar's buttons, as a page's title does. */
@@ -847,7 +847,7 @@ body,
   > .page-find
   > .inbox-view
   .inbox-tasks {
-  --ui-toolbar-centre: on;
+  --ui-toolbar-center: on;
 }
 
 .desktop-shell[data-sidebar-collapsed="true"]
@@ -856,7 +856,7 @@ body,
   > .page-find
   > .inbox-view[data-columns="list"]
   .inbox-tasks {
-  --ui-toolbar-centre: off;
+  --ui-toolbar-center: off;
 }
 
 /* A task's own Inbox draws in the side panel (`inboxBody` reaches `SidePanel`
@@ -933,7 +933,7 @@ body,
    a failure's mark leading the line as it leads an agent's end line. */
 .automation-group .ui-list-row-description > .failed-mark {
   margin-right: var(--ui-tight-gap);
-  vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
+  vertical-align: -3px; /* off-scale: centers a 14px mark on 12px words */
 }
 
 /* An automation's page's toolbar stands in a box of its own whose width the
@@ -1347,7 +1347,7 @@ body,
   cursor: inherit;
 }
 
-/* A finger takes an edge across both columns' gutters, centred on the strip
+/* A finger takes an edge across both columns' gutters, centered on the strip
    it draws, which keeps its width and its place. Note that the edge stops at
    the gutters rather than reaching a finger's full width, because past them
    it would stand over the rows and controls either column holds there, and
@@ -1416,7 +1416,7 @@ body,
   container: side-panel find-scope / inline-size;
 }
 
-/* Every tab but the Board and a File tab keeps to a column centred in the
+/* Every tab but the Board and a File tab keeps to a column centered in the
    panel, however wide it is drawn, as the document keeps to its own: words
    at the document's measure, the Code feed's cards at code's. Each scroller
    still spans the panel, so its bar stays at the panel's edge, and pads in
@@ -1588,7 +1588,7 @@ body,
 }
 
 /* The card holding the keyboard, or whose menu is open, stands over its
-   neighbours, so its ring and its menu are drawn over the next card. */
+   neighbors, so its ring and its menu are drawn over the next card. */
 .tasks-board-card:has(:focus-visible),
 .tasks-board-card[data-menu-open="true"],
 .tasks-board-card:has([aria-expanded="true"]) {
@@ -1614,7 +1614,7 @@ body,
 .tasks-board-card-title > .ui-chip {
   position: relative;
   z-index: 1;
-  /* off-scale: centres the compact chip on the name's first line */
+  /* off-scale: centers the compact chip on the name's first line */
   margin-block: calc((var(--ui-type-label-leading) - var(--ui-space-20)) / 2);
 }
 

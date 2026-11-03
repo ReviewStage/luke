@@ -1222,7 +1222,7 @@ updated, shared with a workspace, or removed (never which), a workspace memory
 forgotten (never what it held), a clip you dictated (with a rough length, never
 its words), and a terminal or a browser tab you opened in an agent's sandbox, a
 browser tab you took over or handed back, or a file you added to a plan.
-What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
+What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labeled
 `platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never

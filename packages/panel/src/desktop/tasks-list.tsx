@@ -510,7 +510,7 @@ function listDrops(
       if (fromPins) tasks.onMarkTask(task.id, TASK_MARK.UNPIN);
       if (leaving.length > 0) tasks.onWriteSections(leaving);
     };
-    // Note that a row put back is pinned anew, so it is placed as a new pin dropped at its place among every pin of the workspace, the filter's hidden ones too, any neighbour its new pin instant would cross given a position, as a row dragged into Pinned is; and kept in its section under the rows it stood under.
+    // Note that a row put back is pinned anew, so it is placed as a new pin dropped at its place among every pin of the workspace, the filter's hidden ones too, any neighbor its new pin instant would cross given a position, as a row dragged into Pinned is; and kept in its section under the rows it stood under.
     const before = tasks.taskSections;
     const allPins = inPinOrder(
       tasks.listed.tasks.filter((each) => each.pinnedAt !== undefined),
@@ -957,7 +957,7 @@ export function TasksList({
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
           onRetry={tasks.onRetryList}
-          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {UNREAD_LINE}
         </ErrorState>

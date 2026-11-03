@@ -111,7 +111,7 @@ import type { ConversationTarget } from "./writer.js";
  * names nothing. The one read keyed by the account alone is a Start's retry
  * key, which is the starter's own. Starting an agent is one transaction
  * under the task's own row lock: the lock is the membership check and what
- * serialises two Starts of one task, so a retry carrying the key of a Start
+ * serializes two Starts of one task, so a retry carrying the key of a Start
  * already made finds that agent rather than opening a second conversation
  * beside it, and says which it did, since only a Start that made the agent
  * opens its eve session. The agent's conversation is a `coding_agent`
@@ -571,7 +571,7 @@ const lockReachableTask = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspace, locked, where the account is a member of it: the lock serialises two Starts in it under one key, as the task's own lock does for a task. */
+/** The workspace, locked, where the account is a member of it: the lock serializes two Starts in it under one key, as the task's own lock does for a task. */
 const lockReachableWorkspace = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -1330,7 +1330,7 @@ const NATIVE_RUNTIMES = [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.
 /** The turn statuses a turn ends in; a queued or running one has not ended. */
 export const ENDED_TURN_STATUSES = [
   TURN_STATUS.SETTLED,
-  TURN_STATUS.CANCELLED,
+  TURN_STATUS.CANCELED,
   TURN_STATUS.FAILED,
 ] as const;
 
@@ -3132,7 +3132,7 @@ const findSettledTurnAgent = SqlSchema.findOneOption({
         .where(
           and(
             eq(turns.id, turnId),
-            inArray(turns.status, [TURN_STATUS.SETTLED, TURN_STATUS.CANCELLED, TURN_STATUS.FAILED]),
+            inArray(turns.status, [TURN_STATUS.SETTLED, TURN_STATUS.CANCELED, TURN_STATUS.FAILED]),
           ),
         ),
     ),

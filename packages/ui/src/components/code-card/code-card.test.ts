@@ -10,7 +10,7 @@ import { CODE_ROW, CodeCard, type CodeRow } from "./code-card.js";
  * Copy named "Copy code"; a block over 40 lines shows its first 40 over
  * "Show all", which shows the rest and then offers "Show less"; Copy copies
  * the whole block however it stands, and the rest, drawn hidden until
- * found, shows when a find's match lands in it; and the lines the host coloured
+ * found, shows when a find's match lands in it; and the lines the host colored
  * are cut as the block is. A block drawn as rows is cut as any block is; one
  * may copy other words than it shows; and one whose
  * body the caller draws keeps the header, the Copy of the lines it names,
@@ -124,7 +124,7 @@ test("Copy copies the whole block, even while it is cut", async () => {
   expect(copied).toEqual([code]);
 });
 
-test("the lines the host coloured are cut where the block is", () => {
+test("the lines the host colored are cut where the block is", () => {
   const code = block(45);
   const lines = code
     .split("\n")

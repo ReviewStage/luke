@@ -87,7 +87,7 @@ function connectionGraphic(source: LoopbackConnectionSource | undefined): string
   );
 }
 
-/** The page's colours: the brand's dark theme, since the page is drawn dark. */
+/** The page's colors: the brand's dark theme, since the page is drawn dark. */
 const INK = BRAND_PALETTE.DARK;
 
 const PAGE_STYLE = `
@@ -140,7 +140,7 @@ const PAGE_STYLE = `
 `;
 
 export function accountLoopbackPage(page: LoopbackPage): string {
-  // The same mark as the tab's icon, travelling inside the document like
+  // The same mark as the tab's icon, traveling inside the document like
   // everything else on it: a data URL fetches nothing from anywhere. Inked
   // outright, because `currentColor` resolves to black outside the page.
   const favicon = encodeURIComponent(markSvg(INK.TEXT));

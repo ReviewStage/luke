@@ -23,9 +23,9 @@ import { isAgentBranch } from "../agents/coder-host/bounds.js";
  * automation-github.ts -- a GitHub delivery read as an automation's trigger: which events it is, the issue, pull request, or branch it names, and the runs it queues.
  *
  * Our GitHub App's webhook (`github-webhook-app.ts`) hands every signed
- * delivery here as well. A pull request opened or labelled, a pull request
+ * delivery here as well. A pull request opened or labeled, a pull request
  * ready for review opened, reopened, marked ready, or pushed to, an issue
- * opened or labelled, a check suite that completed without passing, and a
+ * opened or labeled, a check suite that completed without passing, and a
  * push to a branch are read; nothing else is. A pull request opened is
  * both its own event and an update, so it fires the automations listening
  * for either. Only what the run's history shows is
@@ -231,7 +231,7 @@ function itemEvent(
 }
 
 /**
- * The events a pull request's delivery is: opened or labelled, as
+ * The events a pull request's delivery is: opened or labeled, as
  * `itemEvent` reads them, and an update where its action is one of the
  * moments an update fires on, each read with who sent it, whether it is a
  * draft, and whether it comes from a fork, for the trigger to choose.
@@ -419,14 +419,14 @@ function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): bool
   const labels = trigger.labels ?? [];
   const branches = trigger.branches ?? [];
   // A label is matched the way GitHub folds a label's case.
-  const labelled =
+  const labeled =
     labels.length === 0 ||
     labels.some((wanted) =>
       read.labels.some((label) => label.toLowerCase() === wanted.toLowerCase()),
     );
   const branched =
     branches.length === 0 || (read.branch !== undefined && branches.includes(read.branch));
-  return labelled && branched;
+  return labeled && branched;
 }
 
 /** Queues a run under the delivery's id for every automation listening for the one event read, answering how many it queued. */

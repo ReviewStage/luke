@@ -167,7 +167,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         for (const status of [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED, TURN_STATUS.SETTLED]) {
           yield* endTurn(developer, main, status, at(16));
         }
-        yield* endTurn(developer, main, TURN_STATUS.CANCELLED, at(16));
+        yield* endTurn(developer, main, TURN_STATUS.CANCELED, at(16));
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(16), {
           failure: TURN_FAILURE.MODEL,
         });

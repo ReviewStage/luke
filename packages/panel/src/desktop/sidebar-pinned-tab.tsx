@@ -130,7 +130,7 @@ function pinGone(pin: SidebarPin, tasks: TasksControl): boolean {
  * tab wears it, where it stands included, wherever the window last read the
  * agent (`agent`), and otherwise at rest in the harness it ran in when it
  * was pinned. A Changes pin wears its pull request's mark for where the
- * task's row last read it (`pullRequest`), and a grey icon only where the
+ * task's row last read it (`pullRequest`), and a gray icon only where the
  * row holds none.
  */
 function pinSubject(
@@ -178,7 +178,7 @@ function openPullRequestOf(pin: SidebarPin, tasks: TasksControl): AgentPullReque
  * repository. An agent's own page's pin reads the agent's row, which names
  * its newest pull request alone. Nothing for any other pin, or where the
  * window cannot tell which pull request the pin is of; the pin then keeps
- * the label and the grey icon it was pinned with.
+ * the label and the gray icon it was pinned with.
  */
 function pinPullRequest(
   pin: SidebarPin,

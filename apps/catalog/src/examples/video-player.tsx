@@ -34,7 +34,7 @@ const STAND_IN_WORDS = {
     "This browser cannot record a WebM, so there is no stand-in video to play.",
 } as const satisfies Record<(typeof STAND_IN)[keyof typeof STAND_IN], string>;
 
-/** The stand-in's colours, a page with a button sliding across it. */
+/** The stand-in's colors, a page with a button sliding across it. */
 const INK = { PAGE: "#f5f5f7", ROW: "#e3e3e8", BUTTON: "#3d5ac8" } as const;
 
 /** Draws the stand-in's frame `at` on `pen`: two rows and a button partway across. */

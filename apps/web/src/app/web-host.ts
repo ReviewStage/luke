@@ -342,7 +342,7 @@ function portDependencies(
     },
     tasks: {
       host,
-      colourCode: highlightSnippet,
+      colorCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
     },

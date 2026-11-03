@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { selectableListBehaviour } from "@repo/ui/testing/selectable-list";
+import { selectableListBehavior } from "@repo/ui/testing/selectable-list";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { vi } from "vitest";
@@ -48,5 +48,5 @@ function drawn(id: string) {
   };
 }
 
-selectableListBehaviour("CATALOG", { part: "List", mount: () => drawn("selection-tasks-list") });
-selectableListBehaviour("CATALOG", { part: "cards", mount: () => drawn("selection-cards-region") });
+selectableListBehavior("CATALOG", { part: "List", mount: () => drawn("selection-tasks-list") });
+selectableListBehavior("CATALOG", { part: "cards", mount: () => drawn("selection-cards-region") });

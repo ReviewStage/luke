@@ -92,13 +92,13 @@ const findHeld = SqlSchema.findAll({
  */
 const noTurnRuns = (now: Date) => {
   const startedSince = new Date(now.getTime() - TURN_ABANDON.AGENT_AFTER_MS);
-  const cancelledSince = new Date(now.getTime() - TURN_ABANDON.CANCEL_AFTER_MS);
+  const canceledSince = new Date(now.getTime() - TURN_ABANDON.CANCEL_AFTER_MS);
   return sql`not exists (
   select 1 from ${turns}
   where ${turns.conversationId} = ${sandboxTerminalLease.conversationId}
     and ${turns.status} = ${TURN_STATUS.RUNNING}
     and coalesce(${turns.startedAt}, ${turns.queuedAt}) >= ${startedSince}
-    and (${turns.cancelRequestedAt} is null or ${turns.cancelRequestedAt} >= ${cancelledSince})
+    and (${turns.cancelRequestedAt} is null or ${turns.cancelRequestedAt} >= ${canceledSince})
 )`;
 };
 

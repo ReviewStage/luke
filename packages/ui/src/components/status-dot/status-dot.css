@@ -2,19 +2,19 @@
    with a hole cut under the dot a hair wider than it, so the dot reads apart
    from the glyph's strokes on any ground: the menu's, a lit row's fill, a
    dimmed row's, and under a tone whose ink is translucent. A mask rather
-   than a ring in the ground's colour, which would have to know every
+   than a ring in the ground's color, which would have to know every
    ground. The dot's size is set here once, where the hole reads it too. */
 
 @layer components {
   .ui-status-glyph {
     --status-glyph-dot: var(--ui-space-6);
-    --status-glyph-centre: calc(100% - var(--status-glyph-dot) / 2);
+    --status-glyph-center: calc(100% - var(--status-glyph-dot) / 2);
     --status-glyph-hole: calc(var(--status-glyph-dot) / 2 + 1.5px);
   }
 
   .ui-status-glyph > :not(.ui-status-glyph-dot) {
     mask-image: radial-gradient(
-      circle at var(--status-glyph-centre) var(--status-glyph-centre),
+      circle at var(--status-glyph-center) var(--status-glyph-center),
       transparent var(--status-glyph-hole),
       #000 calc(var(--status-glyph-hole) + 0.5px)
     );

@@ -15,7 +15,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 /**
  * site-link-chips.test.ts -- a link to a well-known site's page in words is
  * drawn as its chip: its site's own mark, and the place, route, code, or
- * author its address spells, a labelled link keeping its label. Synthetic
+ * author its address spells, a labeled link keeping its label. Synthetic
  * places and pages.
  */
 

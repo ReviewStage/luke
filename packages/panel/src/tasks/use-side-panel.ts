@@ -113,7 +113,7 @@ plan); an item has not
  * the fixed kinds keep no place of their own. Closing the chosen tab
  * chooses the one viewed before it on that task that still stands, as an editor or a browser
  * does, kept with the task's other choices so it holds across a launch;
- * only where none does, its neighbour (`replacementOf`). Closing the last
+ * only where none does, its neighbor (`replacementOf`). Closing the last
  * shuts the panel too, as an editor's secondary side bar goes once its last
  * view closes, and leaves full screen with it. Whether the panel is open is
  * the window's, but it is drawn only while the strip beside it holds a tab,
@@ -306,7 +306,7 @@ const STORAGE_KEY = "app.sidePanel";
 /**
  * How many tabs a task keeps as viewed, the latest viewed. Note that a tab
  * closed leaves the list as it closes, so the bound only lets go of tabs
- * long unviewed, which a close then passes over for its neighbour.
+ * long unviewed, which a close then passes over for its neighbor.
  */
 const RECENT_KEPT = 20;
 
@@ -708,7 +708,7 @@ export interface SidePanelControl {
   onKeep: (tab: SidePanelTab) => void;
   /** Shows the panel on the tab of the task given, as `onChoose` does on the open task: what a pin or a notification asks, the task opened beside it. */
   onShow: (taskId: string, tab: SidePanelTab) => void;
-  /** Closes the tab, and only the view: a subagent goes on as it was, and a pin of the tab stands. Closing the one shown chooses the tab viewed before it on the task that still stands, else its neighbour, the one after it where there is one; closing the last the strip draws shuts the panel. */
+  /** Closes the tab, and only the view: a subagent goes on as it was, and a pin of the tab stands. Closing the one shown chooses the tab viewed before it on the task that still stands, else its neighbor, the one after it where there is one; closing the last the strip draws shuts the panel. */
   onClose: (tab: SidePanelTab) => void;
   /** Closes a fixed tab on the task given, open or not, as `onClose` closes one on the open task: what a task New task started with an agent asks of its plan's. */
   onCloseOn: (taskId: string, tab: FixedSidePanelTab) => void;

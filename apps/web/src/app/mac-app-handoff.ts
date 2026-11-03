@@ -52,7 +52,7 @@ export interface MacAppHandoffDoor {
   readonly open: (appLink: string) => void;
 }
 
-/** Whether the tab's address carries Open in browser's flag, which is dropped from it, the entry's state kept, so it is honoured once. */
+/** Whether the tab's address carries Open in browser's flag, which is dropped from it, the entry's state kept, so it is honored once. */
 function tookStayOnWeb(): boolean {
   const without = withoutStayOnWeb(location.href);
   if (without !== undefined) history.replaceState(history.state, "", without);

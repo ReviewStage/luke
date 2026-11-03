@@ -52,7 +52,7 @@ function choiceOf(recorded: string | null): string | undefined {
 
 /** How the turn ended where it did not simply answer; nothing for one that did or still runs. */
 function endingOf(turn: RecordedTurn): TurnEnding | undefined {
-  if (turn.status === TURN_STATUS.CANCELLED) return TURN_ENDING.STOPPED;
+  if (turn.status === TURN_STATUS.CANCELED) return TURN_ENDING.STOPPED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
   return turn.failure === TURN_FAILURE.ABANDONED ? TURN_ENDING.ABANDONED : TURN_ENDING.FAILED;
 }

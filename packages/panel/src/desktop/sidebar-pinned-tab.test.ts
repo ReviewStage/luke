@@ -197,7 +197,7 @@ test("a pinned agent's card hung again after its read failed asks again, and sho
   assert.match(card()?.textContent ?? "", /Expire invitations/u);
 });
 
-test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the grey icon and pinned label where it holds none", () => {
+test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the gray icon and pinned label where it holds none", () => {
   const pin: SidebarPin = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const held: TaskSummary = {
     ...TASK,

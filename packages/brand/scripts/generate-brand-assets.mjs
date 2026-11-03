@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Brand-asset generator -- the single source of truth for the artwork.
 // The identity is the Keel: a disc cut by a narrow V that opens through its
-// top edge and cradles an island, drawn in one colour. Edit the constants
+// top edge and cradles an island, drawn in one color. Edit the constants
 // below and re-run:
 //
 //   node packages/brand/scripts/generate-brand-assets.mjs
@@ -11,7 +11,7 @@
 //   packages/brand/assets/**.svg                 standalone assets
 //   packages/brand/src/generated/mark-art.ts     the mark's and the wordmark's geometry, for @repo/ui
 //
-// The colours are the brand's, read from brand-palette.mjs, the table
+// The colors are the brand's, read from brand-palette.mjs, the table
 // @repo/ui's palette is generated from too, so a change of brand redraws
 // the icons with the app.
 //
@@ -30,11 +30,11 @@ const OUT = join(HERE, "..", "assets");
 const SURFACE = join(HERE, "..", "src", "generated");
 
 // ---------- The mark ----------
-// Keel H, on a 100-unit disc of radius 50 centred at (50, 50), built from
+// Keel H, on a 100-unit disc of radius 50 centered at (50, 50), built from
 // straight lines and circular arcs only and booleaned into one outline: the
 // V's arms open 25 degrees off vertical and meet on a round join 70% down,
 // the channel is 10.5% of the disc, and every corner where the channel meets
-// the rim, and the island's tip, is rounded at 3%. Its one colour fills it,
+// the rim, and the island's tip, is rounded at 3%. Its one color fills it,
 // the body and the island alike. Below 32 pixels the small cut takes over,
 // its channel opened to 13.5% so the V still reads at 16, the way a typeface
 // has optical sizes.
@@ -56,11 +56,11 @@ const WORDMARK = {
   CAP_HEIGHT: 71,
   INK: { LEFT: 1.9, RIGHT: 310.2, TOP: -75, BOTTOM: 15 },
 };
-// The lockup: the disc 1.3 times the cap height, centred on it, a third of
+// The lockup: the disc 1.3 times the cap height, centered on it, a third of
 // the disc from the word.
 const LOCKUP = { DISC: 1.3, GAP: 0.34 };
 // The stacked lockup: the disc twice the cap height, under half the
-// word's width, centred over it, and 0.45 of the cap height above the i's dot.
+// word's width, centered over it, and 0.45 of the cap height above the i's dot.
 const STACKED = { DISC: 2, GAP: 0.45 };
 
 // ---------- Palette ----------
@@ -112,9 +112,9 @@ function stackedLockup(ink, markInk = ink) {
   return { body, box: { left: INK.LEFT, right: INK.RIGHT, top, bottom: INK.BOTTOM } };
 }
 
-// A lockup's body scaled to `fill` of a width-by-height canvas and centred on
+// A lockup's body scaled to `fill` of a width-by-height canvas and centered on
 // its ink box.
-function centred({ body, box }, width, height, fill) {
+function centered({ body, box }, width, height, fill) {
   const k = (width * fill) / (box.right - box.left);
   const tx = width / 2 - (k * (box.left + box.right)) / 2;
   const ty = height / 2 - (k * (box.top + box.bottom)) / 2;
@@ -150,10 +150,10 @@ function emit(relPath, svg, title) {
 // for headers and docs, and its stacked cut for a square-ish space. Each in
 // every one-ink set: each mode's ink, and pure black and pure white for a
 // partner, a printer, or a sponsor's wall that asks for exactly those. The
-// logos come in colour as well: the mark in each mode's copper beside the
+// logos come in color as well: the mark in each mode's copper beside the
 // name in that mode's ink.
 const ONE_INKS = { ...INKS, black: "#000000", white: "#ffffff" };
-const COLOUR_INKS = {
+const COLOR_INKS = {
   light: { word: INKS.light, mark: BRAND.LIGHT.ACCENT },
   dark: { word: INKS.dark, mark: BRAND.DARK.ACCENT },
 };
@@ -181,10 +181,10 @@ for (const [name, ink] of Object.entries(ONE_INKS)) {
     emit(`logo/${cutName}-${name}.svg`, `${padded(box)}${body}</svg>`, PRODUCT_NAME);
   }
 }
-for (const [mode, { word, mark }] of Object.entries(COLOUR_INKS)) {
+for (const [mode, { word, mark }] of Object.entries(COLOR_INKS)) {
   for (const [cutName, cut] of LOGO_CUTS) {
     const { body, box } = cut(word, mark);
-    emit(`logo/${cutName}-colour-${mode}.svg`, `${padded(box)}${body}</svg>`, PRODUCT_NAME);
+    emit(`logo/${cutName}-color-${mode}.svg`, `${padded(box)}${body}</svg>`, PRODUCT_NAME);
   }
 }
 
@@ -196,7 +196,7 @@ for (const [mode, { word, mark }] of Object.entries(COLOUR_INKS)) {
 const ICON_MARK = 0.78;
 
 // App icon, one per mode, on Apple's macOS icon grid: an 824-unit tile with a
-// 185.4-unit corner, centred on a 1024 canvas, the disc spanning ICON_MARK of
+// 185.4-unit corner, centered on a 1024 canvas, the disc spanning ICON_MARK of
 // the tile. The packaged `.icns` is cut from the dark set, and the running
 // app swaps the Dock image between the two as the theme changes. Note that
 // the Dock and the app switcher draw the whole canvas at one size, so a tile
@@ -249,10 +249,10 @@ const FAVICON = { side: 240, inset: 8, radius: 52 };
 }
 
 // Mark: the disc alone on transparency with a twelfth of air on each side,
-// in each mode's ink, in pure white, in each mode's copper as the colour
+// in each mode's ink, in pure white, in each mode's copper as the color
 // logos draw it, and in pure black, the one-ink glyph a partner surface tints
 // for its own theme, such as an integration's icon on Sentry, which takes no
-// colour but black. The disc on a tile is the avatar, below.
+// color but black. The disc on a tile is the avatar, below.
 const SQUARE = { side: 120, disc: 100 };
 {
   const at = (SQUARE.side - SQUARE.disc) / 2;
@@ -261,7 +261,7 @@ const SQUARE = { side: 120, disc: 100 };
     ...Object.entries(INKS),
     ["white", "#ffffff"],
     ["monochrome", "#000000"],
-    ...Object.entries(COLOUR_INKS).map(([mode, { mark }]) => [`colour-${mode}`, mark]),
+    ...Object.entries(COLOR_INKS).map(([mode, { mark }]) => [`color-${mode}`, mark]),
   ]) {
     emit(`mark/mark-${name}.svg`, `${open}${markAt(at, at, SQUARE.disc, ink)}</svg>`, PRODUCT_NAME);
   }
@@ -299,11 +299,11 @@ const AVATAR = { side: 100, disc: 100 * ICON_MARK };
 const CARD = { WIDTH: 1200, HEIGHT: 630, FILL: 0.56 };
 emit(
   "social/og-card.svg",
-  `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${BRAND.DARK.GROUND}"/>${centred(lockup(INKS.dark), CARD.WIDTH, CARD.HEIGHT, CARD.FILL)}</svg>`,
+  `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${BRAND.DARK.GROUND}"/>${centered(lockup(INKS.dark), CARD.WIDTH, CARD.HEIGHT, CARD.FILL)}</svg>`,
   PRODUCT_NAME,
 );
 
-// Banners: the lockup centred on a flat ground, for a profile's or a page's
+// Banners: the lockup centered on a flat ground, for a profile's or a page's
 // cover, drawn at least twice the size each asks for so it stays sharp on a
 // dense screen: LinkedIn's profile background (1584 by 396), X's header
 // (1500 by 500), a slide or a call's background at 16:9, LinkedIn's company
@@ -328,7 +328,7 @@ for (const [shape, { WIDTH, HEIGHT, FILL }] of Object.entries(BANNERS)) {
   for (const [name, { ground, ink }] of Object.entries(BANNER_GROUNDS)) {
     emit(
       `banner/banner-${name}-${shape}.svg`,
-      `${svgOpen(WIDTH, HEIGHT)}<rect width="${WIDTH}" height="${HEIGHT}" fill="${ground}"/>${centred(lockup(ink), WIDTH, HEIGHT, FILL)}</svg>`,
+      `${svgOpen(WIDTH, HEIGHT)}<rect width="${WIDTH}" height="${HEIGHT}" fill="${ground}"/>${centered(lockup(ink), WIDTH, HEIGHT, FILL)}</svg>`,
       PRODUCT_NAME,
     );
   }
@@ -377,7 +377,7 @@ for (const { name, label, advance, title } of CTA_BUTTONS) {
 }
 
 // DMG background: the light ground with one round-ended arrow from the app to
-// Applications, the shared window geometry keeping it centred between them.
+// Applications, the shared window geometry keeping it centered between them.
 const dmgBackground = DMG_WINDOW.BACKGROUND.PNG;
 const arrowY = DMG_WINDOW.POSITIONS.APP.Y;
 const arrowStart = DMG_WINDOW.POSITIONS.APP.X + DMG_WINDOW.ICON_SIZE;
@@ -408,7 +408,7 @@ put(
   `// Generated by packages/brand/scripts/generate-brand-assets.mjs. Do not edit by hand: change
 // the mark in that script and re-run it.
 //
-// The product's mark, drawn in one colour on a 100-unit disc: the regular cut,
+// The product's mark, drawn in one color on a 100-unit disc: the regular cut,
 // and the small one a 32-pixel mark or smaller draws.
 
 export const MARK_ART = {

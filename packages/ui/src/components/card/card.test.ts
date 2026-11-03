@@ -7,7 +7,7 @@ import { CARD_ELEMENT, Card } from "./card.js";
 
 /**
  * card.test.ts -- a card offers its hint to a pointer resting on it, hands
- * its element to what measures against it, and is named and labelled by its
+ * its element to what measures against it, and is named and labeled by its
  * owner.
  */
 
@@ -48,7 +48,7 @@ test("a card's hint is the whole card's, and its element reaches what measures i
   expect(ref.current?.contains(paragraph ?? null)).toBe(true);
 });
 
-test("a card in running words is a span inside its paragraph, named and labelled by its owner", () => {
+test("a card in running words is a span inside its paragraph, named and labeled by its owner", () => {
   const container = draw(
     createElement(
       "p",

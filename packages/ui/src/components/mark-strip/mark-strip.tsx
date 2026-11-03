@@ -15,7 +15,7 @@ import type { StatusTone } from "../../status-tone.js";
  * shortcut to that toggle and no control of its own; a strip without a
  * press is only looked at, or rested on to peek the rail. It fills the box
  * its place stands it in, which says when the strip is drawn at all and the
- * edge it keeps from the rail's neighbour.
+ * edge it keeps from the rail's neighbor.
  */
 
 /** How a strip draws its marks: a dot for each row, or a bar for each, sharing the strip's height. */

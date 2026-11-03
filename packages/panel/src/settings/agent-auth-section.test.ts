@@ -229,10 +229,10 @@ const card = (dialog: Element, label: string) =>
   radio(dialog, label).closest<HTMLElement>(".ui-choice-card") ?? assert.fail(`no ${label} card`);
 
 /** The field a visible label names, as a reader finds it. */
-function labelled(within: Element, words: string): HTMLInputElement {
+function labeled(within: Element, words: string): HTMLInputElement {
   const label = [...within.querySelectorAll("label")].find((each) => each.textContent === words);
   const control = label?.control;
-  assert.ok(control instanceof HTMLInputElement, `no field labelled ${words}`);
+  assert.ok(control instanceof HTMLInputElement, `no field labeled ${words}`);
   return control;
 }
 
@@ -370,7 +370,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   const page = await mount();
   const dialog = await open(page, "Claude");
   const keyCard = card(dialog, "API key");
-  const field = labelled(keyCard, "Anthropic API key");
+  const field = labeled(keyCard, "Anthropic API key");
   assert.equal(field.type, "password");
   assert.equal(field.autocomplete, "off");
   assert.ok(
@@ -434,7 +434,7 @@ test("editing a saved API key shows Saved where the key would be, never the key,
   const dialog = await open(page, "Claude");
   const keyCard = card(dialog, "API key");
   await press(keyCard, "Edit key");
-  const field = labelled(keyCard, "Anthropic API key");
+  const field = labeled(keyCard, "Anthropic API key");
   assert.equal(field.placeholder, "Saved");
   assert.match(keyCard.textContent ?? "", /Saving replaces the key Vespin holds\./u);
   assert.equal(field.value, "");
@@ -452,7 +452,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   refusal = PROVIDER_KEY_REJECTION.INVALID;
   const page = await mount();
   const dialog = await open(page, "Claude");
-  const field = labelled(card(dialog, "Subscription"), "Claude setup-token");
+  const field = labeled(card(dialog, "Subscription"), "Claude setup-token");
   assert.equal(field.type, "password");
   assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
   assert.ok(
@@ -500,12 +500,12 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
 test("a harness's dialog opens on the first field it draws, the setup-token's, else the API key's", async () => {
   const page = await mount();
   const claude = await open(page, "Claude");
-  assert.ok(document.activeElement === labelled(claude, "Claude setup-token"), "the setup-token");
+  assert.ok(document.activeElement === labeled(claude, "Claude setup-token"), "the setup-token");
   act(() => button(document, "Done").click());
   await settle();
 
   const codex = await open(page, "Codex");
-  assert.ok(document.activeElement === labelled(codex, "OpenAI API key"), "the API key");
+  assert.ok(document.activeElement === labeled(codex, "OpenAI API key"), "the API key");
 });
 
 test("with both credentials kept, Disconnect's question giving way to the setup-token form leaves focus on its field", async () => {
@@ -520,7 +520,7 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   await settle();
   await press(question(), "Disconnect");
   assert.ok(
-    document.activeElement === labelled(dialog, "Claude setup-token"),
+    document.activeElement === labeled(dialog, "Claude setup-token"),
     "the field has focus",
   );
 });
@@ -533,7 +533,7 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   const plan = card(dialog, "Subscription");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
   await press(plan, "Replace token");
-  const field = labelled(plan, "Claude setup-token");
+  const field = labeled(plan, "Claude setup-token");
   assert.equal(field.placeholder, "Saved", "a saved token is said, not shown");
   assert.match(plan.textContent ?? "", /Saving replaces the token Vespin holds\./u);
   assert.equal(field.value, "");
@@ -595,7 +595,7 @@ test("without the sign-in's loopback, Codex's subscription card stands disabled 
   const plan = card(dialog, "Subscription");
   assert.equal(plan.textContent, "SubscriptionDesktop app only");
   assert.equal(radio(dialog, "Subscription").disabled, true);
-  const field = labelled(card(dialog, "API key"), "OpenAI API key");
+  const field = labeled(card(dialog, "API key"), "OpenAI API key");
   await pasteAndSave(field, KEY.replace("sk-ant-api03", "sk-proj"));
   assert.deepEqual(rowState(page, "Codex"), connectedWith("Connected with an API key"));
 });

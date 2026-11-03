@@ -1,5 +1,5 @@
 /**
- * local-demo.ts -- whether the service runs as the local demo: the flag the local server sets, honoured only where the local server's own guard passes over the same environment.
+ * local-demo.ts -- whether the service runs as the local demo: the flag the local server sets, honored only where the local server's own guard passes over the same environment.
  *
  * The local server sets `APP_LOCAL_DEMO` for the routes it mounts
  * (`apps/web/scripts/local-server.ts`), and the demo is the one place what it

@@ -87,7 +87,7 @@ const DESKTOP_WINDOW = {
   MARGIN: 24,
   // The window's native ground is the Mac's own sidebar material, which
   // follows the window's appearance and the Reduce transparency setting by
-  // itself; the page draws on it in clear, so the shell's grey frame is a
+  // itself; the page draws on it in clear, so the shell's gray frame is a
   // tint over the frosted wallpaper, and the work sheet is laid over that.
   MATERIAL: "sidebar",
   CLEAR: "#00000000",
@@ -97,7 +97,7 @@ const DESKTOP_WINDOW = {
  * The sidebar material, as a window before Tahoe is created on and as one
  * whose glass could not be laid falls back to. Note that it stays frosted
  * while the window is in the background, as Finder's sidebar does, rather
- * than going flat grey.
+ * than going flat gray.
  */
 const SIDEBAR_VIBRANCY = {
   vibrancy: DESKTOP_WINDOW.MATERIAL,
@@ -119,7 +119,7 @@ function layGlassOnceLoaded(window: BrowserWindow): void {
   });
 }
 
-/** The first frame of the window, centred in the display's work area. */
+/** The first frame of the window, centered in the display's work area. */
 function desktopBounds(display: Display): Rectangle {
   const area = display.workArea;
   const width = Math.min(DESKTOP_WINDOW.WIDTH, area.width - DESKTOP_WINDOW.MARGIN * 2);

@@ -983,7 +983,7 @@ function PlanDocument({
             <ErrorState
               failure={unreadShown(FAILURE_SURFACE.TASK_DOCUMENT_READ)}
               onRetry={tasks.onRetryDocument}
-              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              placement={ERROR_STATE_PLACEMENT.CENTERED}
               exit={close}
             >
               {line}
@@ -1216,7 +1216,7 @@ function PlanDocument({
                                   onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
                                 />
                               ) : null}
-                              {/* The chosen agent's ⋯, portalled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
+                              {/* The chosen agent's ⋯, portaled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
                               <span
                                 ref={setActionsSlot}
                                 className="toolbar-tab-actions flex min-w-control flex-none items-center"

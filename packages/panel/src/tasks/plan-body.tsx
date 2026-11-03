@@ -666,7 +666,7 @@ function attributed(
   menu: React.JSX.Element | null,
 ): React.JSX.Element {
   if (byline === null && menu === null) return drawn;
-  // Note that the byline and the ⋯ share one row, because a row centres the
+  // Note that the byline and the ⋯ share one row, because a row centers the
   // line on the button's box where two separately placed boxes never quite do.
   // The row hangs past the column's edge by `--ui-space-6`, as the ⋯ always
   // has, and takes no pointer itself, only its byline and its ⋯ do.

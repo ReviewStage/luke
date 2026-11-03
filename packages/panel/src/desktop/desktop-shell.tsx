@@ -436,7 +436,7 @@ function holder(): Holder | undefined {
  * The control that held the keyboard, as it stands now: itself where it never left, else the one drawn in its place.
  * Note that a name shared by several controls, as a row's Pin is, finds none, whether it was shared as Settings opened
  * or is now, and so does one no longer borne by any, as a row's time moves on, because the keyboard is better left
- * with the window than handed to a neighbour of the same name.
+ * with the window than handed to a neighbor of the same name.
  */
 function found({ element, tag, label, alone }: Holder): HTMLElement | undefined {
   if (element.isConnected) return element;

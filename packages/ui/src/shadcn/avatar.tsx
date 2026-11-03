@@ -6,7 +6,7 @@ import { cn } from "../cn.js";
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add avatar` reads as a small diff. Its local
- * changes: the root is an inline grid that centres what stands in it, set
+ * changes: the root is an inline grid that centers what stands in it, set
  * in the emphasis weight of the window's face, with an `::after` laid over it to carry an
  * edge, and with no size, type size, line, corner, ground, ink, or edge of
  * its own, because `@repo/ui`'s `Avatar` (`components/avatar/`) picks each
@@ -15,13 +15,13 @@ import { cn } from "../cn.js";
  * size, which the merge would otherwise drop it for); no `size` prop, since
  * `Avatar` sizes the box itself; the picture fills the
  * box absolutely rather than in flow, so the stand-in under it keeps its
- * place while it loads; and the fallback is a bare centring box with no
+ * place while it loads; and the fallback is a bare centering box with no
  * ground, ink, or type of its own, since the root draws them. Its
  * `AvatarBadge`, `AvatarGroup`, and `AvatarGroupCount` are dropped, because
  * nothing draws them: a facepile is the app's own row of discs.
  */
 
-/** The disc: a box that centres its letter or glyph, clips its picture to its corner, and lays an edge over it. */
+/** The disc: a box that centers its letter or glyph, clips its picture to its corner, and lays an edge over it. */
 export const AVATAR_ROOT =
   "relative inline-grid flex-none place-items-center overflow-hidden align-middle font-body font-emphasis select-none after:pointer-events-none after:absolute after:inset-0";
 

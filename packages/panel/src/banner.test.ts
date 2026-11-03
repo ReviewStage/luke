@@ -36,7 +36,7 @@ function drawn(strip: ReactNode): HTMLElement {
   return section;
 }
 
-/** What a reader hears the strip named: the words it is labelled by. */
+/** What a reader hears the strip named: the words it is labeled by. */
 function named(section: HTMLElement): string | undefined {
   return (
     document.getElementById(section.getAttribute("aria-labelledby") ?? "")?.textContent ?? undefined

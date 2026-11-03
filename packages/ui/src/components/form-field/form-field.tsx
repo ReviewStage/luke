@@ -75,7 +75,7 @@ export function FormField({
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
     .filter((part) => part !== undefined)
     .join(" ");
-  const labelled = (
+  const labeled = (
     <FieldLabel className="ui-field-label" id={labelId} htmlFor={controlId}>
       {/* Note that the words stand in a span of their own, which a readable region lets select where the label itself may not. */}
       <span className="ui-field-words">{label}</span>
@@ -85,10 +85,10 @@ export function FormField({
   return (
     <Field data-invalid={failed}>
       {count === undefined ? (
-        labelled
+        labeled
       ) : (
         <div className="flex min-w-0 items-baseline justify-between gap-control-gap">
-          {labelled}
+          {labeled}
           <LengthCounter length={count.length} limit={count.limit} />
         </div>
       )}

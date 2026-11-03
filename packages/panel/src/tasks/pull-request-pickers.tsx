@@ -278,7 +278,7 @@ export function usePullRequestPicks(
   };
 }
 
-/** A label's colour as the dot its item leads with; a quiet dot for one GitHub spelled otherwise. */
+/** A label's color as the dot its item leads with; a quiet dot for one GitHub spelled otherwise. */
 function LabelDot({ color }: { color: string }): React.JSX.Element {
   const hex = /^[0-9a-f]{6}$/iu.test(color) ? `#${color}` : undefined;
   return (
@@ -481,7 +481,7 @@ function reviewerGroups(
 }
 
 /**
- * The label picker: a menu of the repository's labels, each by its colour
+ * The label picker: a menu of the repository's labels, each by its color
  * and name, checked while it is on the pull request; choosing one puts it
  * on, or takes it off.
  */
@@ -527,13 +527,13 @@ function labelItems(
     return [{ label: PICKER_WORDS.NO_LABELS, disabled: true, onSelect: () => undefined }];
   }
   return read.value.labels.map((label): MenuAction => {
-    const labelled = on.has(label.name);
+    const labeled = on.has(label.name);
     return {
       label: label.name,
       icon: <LabelDot color={label.color} />,
-      checked: labelled,
+      checked: labeled,
       disabled: writes.pending !== undefined,
-      onSelect: () => picks.pickLabel(label, !labelled),
+      onSelect: () => picks.pickLabel(label, !labeled),
     };
   });
 }

@@ -5,7 +5,7 @@ review round, so leave out anything that does not change what the code does.
 
 ## Report
 
-- Bugs: wrong behaviour, crashes, and broken error handling.
+- Bugs: wrong behavior, crashes, and broken error handling.
 - Data loss or corruption.
 - Races and ordering bugs.
 - Security, including auth, sessions, and token or credential handling.

@@ -13,7 +13,7 @@ import { cn } from "../cn.js";
  *   as a Mac menu prints a key equivalent, its keys in the words' own face
  *   and size; the user agent's monospace is undone (`font-family: inherit`),
  *   and the glyph's box is cut to the capitals' height (`text-box`), so a
- *   row that centres the chord centres its capitals on its own words, and
+ *   row that centers the chord centers its capitals on its own words, and
  *   every glyph stands on one baseline. None of `pointer-events-none` or
  *   `select-none`, which the window never set on a chord.
  * - `KbdGroup` is the chord: shadcn's `inline-flex items-center` with the

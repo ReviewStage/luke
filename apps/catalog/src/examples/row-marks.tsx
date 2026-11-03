@@ -12,7 +12,7 @@ import { CatalogSection } from "../section";
 
 /**
  * row-marks.tsx -- the marks a row or a tab wears beside its words: a
- * failure in the danger colour, with its hint, a waiting draft in the
+ * failure in the danger color, with its hint, a waiting draft in the
  * muted ink, a task waiting on another's work in the same ink, and the unread dot in the gutter before a row's words, which
  * stands empty once read.
  */

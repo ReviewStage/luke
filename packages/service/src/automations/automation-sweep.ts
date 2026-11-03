@@ -132,7 +132,7 @@ function byAutomation(runs: readonly AutomationRun[]): readonly (readonly Automa
 /** The statuses an agent ends on that its automation never archives: it failed, or it was stopped. */
 const ENDED_UNWELL: ReadonlySet<AgentStatus> = new Set([
   AGENT_STATUS.FAILED,
-  AGENT_STATUS.CANCELLED,
+  AGENT_STATUS.CANCELED,
 ]);
 
 /** An agent "Archive finished runs" may put away, as its reader saw it: whose it is, its id, its conversation and how far its lines had run, when it was made, and when it was put away where it already was. */

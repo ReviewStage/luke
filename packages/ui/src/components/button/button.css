@@ -9,7 +9,7 @@
    the face inside. The keyboard's ring is the app's reset's, as it is for
    every control. */
 
-/* The fill is a registered colour, so it eases (`../../shadcn/button.tsx`
+/* The fill is a registered color, so it eases (`../../shadcn/button.tsx`
    lists it among the transitions) even where it is drawn as a gradient over
    `--ui-button-ground`, which no transition reaches. Note that it must,
    because the ground under it eases in from transparent: a fill that landed
@@ -47,7 +47,7 @@
   }
 
   /* A finger's target: on a coarse pointer a button takes a press
-     `--ui-touch-target` across at least, centred on it, while it draws at
+     `--ui-touch-target` across at least, centered on it, while it draws at
      its own size, so a row's 24px mark keeps its glyph and its place. */
   @media (pointer: coarse) {
     .ui-button::before {
@@ -339,7 +339,7 @@
   }
 
   /* A submit unavailable stands on the strong fill with a muted glyph rather
-     than fading, so the glyph stays a colour apart from its disc. */
+     than fading, so the glyph stays a color apart from its disc. */
   .ui-button[data-submit]:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
     --ui-button-fill: var(--ui-color-fill-strong);
     --ui-button-ink: var(--ui-color-text-muted);

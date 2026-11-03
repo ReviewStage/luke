@@ -58,7 +58,7 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.23.0 | `v0.23.0` (`2defb777`) | `the-browser-tab.png` | `shot-browser-tab` (`APP_SHOT_SETTLE=12`) | 1 | whole window |
 | 0.24.0 | `v0.24.0` (`95ebd190`) | `sub-tasks-and-blocked-tasks.png` | `shot-sub-tasks` | 1 | whole window |
 | 0.24.0 | `v0.24.0` (`95ebd190`) | `queue-a-message-behind-a-turn.png` | `shot-queue` (`APP_SHOT_SETTLE=9`) | 2 | `380,170,780,860` |
-| 0.25.0 | `bcc75595` (version PR head) | `luke-is-now-vespin.png` | none: the landing page's hero art, captured in headless Chromium from `apps/web`'s Vite server and centred on the site's ground | — | 2400 by 1592, unframed |
+| 0.25.0 | `bcc75595` (version PR head) | `luke-is-now-vespin.png` | none: the landing page's hero art, captured in headless Chromium from `apps/web`'s Vite server and centered on the site's ground | — | 2400 by 1592, unframed |
 | 0.25.0 | `bcc75595` (version PR head) | `home-is-back.png` | `shot-home` | 1 | whole window |
 | 0.25.0 | `bcc75595` (version PR head) | `comments-on-pages.png` | `shot-page-comments` (`APP_SHOT_SETTLE=12`) | 1 | whole window |
 | 0.25.0 | `bcc75595` (version PR head) | `vespin-in-slack.png` | none: an HTML mockup of acme's Slack (Lato, acme's mark, Dean's photo, Vespin's icon) rendered by headless Chromium as a transparent window capture with its shadow, then framed by `changelog-screenshot.sh --from` | 1 | whole window |

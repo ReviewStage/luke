@@ -626,7 +626,7 @@ function IntegrationRow({
   const signIn = statuses.signInOf(connection);
   const [connecting, setConnecting] = useState(false);
   // Note that the sign-in's own Cancel is the one busy while it is called off, as Connect is while one begins.
-  const [cancelling, setCancelling] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [editing, setEditing] = useState(false);
   // The name a rename asked for, drawn in the account's place until the read after it lands, so the old name never stands between.
   const [renaming, setRenaming] = useState<string | undefined>(undefined);
@@ -659,12 +659,12 @@ function IntegrationRow({
 
   const cancel = useCallback(() => {
     setConnecting(true);
-    setCancelling(true);
+    setCanceling(true);
     setRejection(undefined);
-    void cancelSignIn(connection).then((cancelled) => {
+    void cancelSignIn(connection).then((canceled) => {
       setConnecting(false);
-      setCancelling(false);
-      if (!cancelled) setRejection(`The sign-in to ${name} could not be canceled. Try again.`);
+      setCanceling(false);
+      if (!canceled) setRejection(`The sign-in to ${name} could not be canceled. Try again.`);
     });
   }, [cancelSignIn, connection, name]);
 
@@ -792,18 +792,18 @@ function IntegrationRow({
             <>
               <Button
                 variant={BUTTON_VARIANT.QUIET}
-                busy={connecting && !cancelling}
+                busy={connecting && !canceling}
                 busyLabel="Reopening the sign-in"
-                disabled={cancelling}
+                disabled={canceling}
                 onClick={connect}
               >
                 {SIGN_IN_ACTION.REOPEN}
               </Button>
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
-                busy={cancelling}
+                busy={canceling}
                 busyLabel="Canceling the sign-in"
-                disabled={connecting && !cancelling}
+                disabled={connecting && !canceling}
                 onClick={cancel}
               >
                 {SIGN_IN_ACTION.CANCEL}
@@ -868,11 +868,11 @@ function foundRow(
 ): FoundRow | undefined {
   const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
   // An account's label finds its row too, so "personal" finds Notion · Personal.
-  const labelled =
+  const labeled =
     row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token));
   const match =
     matchIntegration(row.provider, all, tokens) ??
-    (labelled ? { named: true, tools: [] } : undefined);
+    (labeled ? { named: true, tools: [] } : undefined);
   if (match === undefined) return undefined;
   return {
     row,
