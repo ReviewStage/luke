@@ -55,7 +55,7 @@ const wordmarkShape: MaskShape = (context, width, height) => {
 function wordsShape(words: string, family: string): MaskShape {
   return (context, width, height) => {
     const probe = `${NUMERAL.WEIGHT} ${NUMERAL.PROBE}px ${family}`;
-    if (!document.fonts.check(probe, words)) return false;
+    if ("fonts" in document && !document.fonts.check(probe, words)) return false;
     // Note that the words are fitted by their ink rather than their em, so the numerals fill the box without a line's empty leading.
     context.font = probe;
     const ink = context.measureText(words);
@@ -172,8 +172,9 @@ function useDotArt(shapeFor: (canvas: HTMLCanvasElement) => MaskShape, across: n
     const paint = dotPainter(canvas, trail, shapeRef.current(canvas), across);
     if (heldStill()) {
       // Note that a still canvas paints once more when the page's faces load, because a shape set in words draws nothing before then.
+      // Note that a document with no font loading, as jsdom's is, paints that once alone.
       let live = true;
-      void document.fonts.ready.then(() => live && paint(0));
+      if ("fonts" in document) void document.fonts.ready.then(() => live && paint(0));
       const stop = paintLoop(canvas, paint);
       return () => {
         live = false;

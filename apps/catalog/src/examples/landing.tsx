@@ -6,6 +6,7 @@ import {
   LandingFacts,
   LandingPage,
   LandingSection,
+  LostPage,
   ScrollArea,
 } from "@repo/ui";
 import type { Example } from "../examples";
@@ -14,8 +15,9 @@ import { CatalogSection } from "../section";
 /**
  * landing.tsx -- the product's landing: its bar, the one line beside the
  * copper ball, a feature over its scene, a feature with facts beside its
- * stage, and the close over the wordmark in dots, in a frame that scrolls as
- * a document would. Every name and line is made up.
+ * stage, and the close over the wordmark in dots, and the page an unknown
+ * address is answered with, each in a frame that scrolls as a document would.
+ * Every name and line is made up.
  */
 
 function Bar(): React.JSX.Element {
@@ -69,15 +71,37 @@ function Landing(): React.JSX.Element {
   );
 }
 
+function Lost(): React.JSX.Element {
+  return (
+    <LostPage
+      bar={<Bar />}
+      footer={<span className="catalog-public-footer">Apache-2.0 · About · Privacy</span>}
+      address="/docs/getting-startd"
+      title="No agent could find this page."
+      lead="It searched every branch and came back empty-handed."
+      actions={<Button variant={BUTTON_VARIANT.PRIMARY}>Back to home</Button>}
+    />
+  );
+}
+
 function LandingExample(): React.JSX.Element {
   return (
-    <CatalogSection id="landing-page" title="The landing, its features, and its close">
-      <div className="catalog-screen catalog-screen-public">
-        <ScrollArea>
-          <Landing />
-        </ScrollArea>
-      </div>
-    </CatalogSection>
+    <>
+      <CatalogSection id="landing-page" title="The landing, its features, and its close">
+        <div className="catalog-screen catalog-screen-public">
+          <ScrollArea>
+            <Landing />
+          </ScrollArea>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="lost-page" title="The page an unknown address is answered with">
+        <div className="catalog-screen catalog-screen-public">
+          <ScrollArea>
+            <Lost />
+          </ScrollArea>
+        </div>
+      </CatalogSection>
+    </>
   );
 }
 
