@@ -339,6 +339,24 @@ export function lineSender(
   }
 }
 
+/**
+ * Who sent a transcript line, as `lineSender` names them, a GitHub login
+ * wearing the avatar its line carries where GitHub named one (`by_avatar`),
+ * since an App's bot's picture lives at an address its login does not name.
+ */
+export function messageSender(
+  message: AgentTranscriptMessage,
+  readerId: string | undefined,
+  members: readonly WorkspaceMember[] | undefined,
+  former?: readonly FormerMember[] | undefined,
+): Actor | undefined {
+  const sender = lineSender(message.sentBy, readerId, members, former);
+  const avatarUrl = githubLineOf(message)?.by_avatar;
+  return sender?.kind === ACTOR_KIND.GITHUB && avatarUrl !== undefined
+    ? { ...sender, avatarUrl }
+    : sender;
+}
+
 /** The parts of the line a transcript ends on: its words, and whether it tells of a failure, which is drawn as one. */
 export interface EndLineParts {
   readonly words: string;

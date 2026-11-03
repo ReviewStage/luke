@@ -146,6 +146,7 @@ import {
   isWakeupLine,
   lineSender,
   macOwnerOf,
+  messageSender,
   messageWords,
   nativeSubagent,
   offersContinue,
@@ -2113,7 +2114,7 @@ function useArrivals(
             ? NO_ARRIVED
             : arrived.map((line) => ({
                 message: line,
-                sender: lineSender(line.sentBy, readerId, members, former),
+                sender: messageSender(line, readerId, members, former),
               }));
         named.set(message, { lines: arrived, arrived: lines });
         return [message.id, lines];
@@ -2420,7 +2421,7 @@ function AgentTranscriptView({
                           sender={
                             message === task
                               ? briefSender
-                              : lineSender(message.sentBy, readerId, members, former)
+                              : messageSender(message, readerId, members, former)
                           }
                           wakeupDelay={
                             isWakeupLine(message)

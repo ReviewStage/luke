@@ -132,6 +132,23 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
     name: "devin-ai-integration[bot]",
     kind: AGENT_SENDER.GITHUB,
   }),
+  // A line GitHub's webhook told carries the avatar GitHub named for who caused it, an App's logo among them.
+  {
+    ...line("checks-bot", "Every check finished on `c0ffee`.\n\nNone failed.", {
+      name: "github-actions[bot]",
+      kind: AGENT_SENDER.GITHUB,
+    }),
+    metadata: {
+      channel: "github",
+      event: "checks_completed",
+      repository: "acme/relay",
+      number: 12,
+      url: "https://github.com/acme/relay/commit/c0ffee/checks",
+      by: "github-actions[bot]",
+      by_avatar: "https://avatars.githubusercontent.com/in/15368?v=4",
+      failing: false,
+    },
+  },
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
   line("agent", "Thanks, that's everything I need.", { name: "Add PR overview tab", agent: true }),
   // A service that keeps the sending agent answers the model it ran on, which its harness is read off, and the agent.
@@ -223,8 +240,8 @@ async function drawnFor(
   return drawn;
 }
 
-/** Where a line names its sender: over its bubble, or, for GitHub's card, on the line under it. */
-const SENDER = ":is(.ui-message-head-sender, .ui-message-line-sender)";
+/** Where a line names its sender: over its bubble, on the line under it, or in GitHub's card's head. */
+const SENDER = ":is(.ui-message-head-sender, .ui-message-line-sender, .github-line-head)";
 
 /** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
 async function sendersFor(
@@ -263,6 +280,12 @@ test("each member sees a teammate's face and name under the teammate's messages 
       "https://avatars.githubusercontent.com/octocat?v=4&s=32",
     ],
     ["review-bot", ACTOR_KIND.GITHUB, "devin-ai-integration"],
+    [
+      "checks-bot",
+      ACTOR_KIND.GITHUB,
+      "github-actions",
+      "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
+    ],
     // A member the workspace no longer lists has left it, and keeps their name.
     ["left", ACTOR_KIND.SOMEONE, "Ana Ruiz"],
     // Another coding agent of the workspace is drawn as an agent, not a person, under its name.

@@ -14,6 +14,7 @@ import { linkedGitHubUserIds } from "@repo/database/models/github-token-store";
 import type { TaskStoreEffect } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { githubAppAvatarUrl, githubAvatarUrl } from "@repo/features/account-picture";
 import { AGENT_BOUNDS, AGENT_STATUS } from "@repo/features/agent-wire";
 import { GITHUB_READER, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { mentionMarkdownLink } from "@repo/features/link-grammar";
@@ -63,7 +64,8 @@ import {
  * ignored, since its review already told it. Only what the message says is
  * read off a delivery: the repository, the pull request's number and branch,
  * the address of the review, comment, or failed commit, the login of who
- * caused it, a review's verdict, and when, and what a review or a comment
+ * caused it and their avatar (an App's logo, by its id, for a check), a
+ * review's verdict, and when, and what a review or a comment
  * says. A review's inline comments travel on no delivery, so they are read
  * from GitHub, by file and line, on the pull-request token of the first
  * agent told (`coder-host/published.ts`'s reach); a read that fails tells
@@ -156,6 +158,8 @@ export interface AgentWake {
   readonly by: string;
   /** GitHub's id of who wrote a review or a comment, as a linked account's row spells it; absent where GitHub named none. */
   readonly byId?: string | undefined;
+  /** The avatar GitHub's avatar host serves for who caused it, an App's logo for a check; absent where GitHub named none. */
+  readonly byAvatar?: string | undefined;
   /** When GitHub says it was made, in epoch milliseconds. */
   readonly at: number;
   /** A review's verdict, as GitHub spells it. */
@@ -240,7 +244,16 @@ const FENCE_PREAMBLE =
 const AT_WORK: ReadonlySet<string> = new Set([AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING]);
 
 const RepositorySchema = Schema.Struct({ full_name: Schema.String });
-const SenderSchema = Schema.Struct({ login: Schema.String, id: Schema.optionalKey(Schema.Number) });
+const SenderSchema = Schema.Struct({
+  login: Schema.String,
+  id: Schema.optionalKey(Schema.Number),
+  avatar_url: Schema.optionalKey(Schema.String),
+});
+
+/** The App a check suite or a check run belongs to, by its slug and, where GitHub sends it, its id, which its logo is served by. */
+const CheckAppSchema = Schema.optionalKey(
+  Schema.NullOr(Schema.Struct({ slug: Schema.String, id: Schema.optionalKey(Schema.Number) })),
+);
 
 const ReviewDeliverySchema = Schema.Struct({
   action: Schema.String,
@@ -277,7 +290,7 @@ const CheckSuiteDeliverySchema = Schema.Struct({
     head_sha: Schema.String,
     conclusion: Schema.NullOr(Schema.String),
     updated_at: Schema.String,
-    app: Schema.optionalKey(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
+    app: CheckAppSchema,
     pull_requests: Schema.Array(Schema.Struct({ number: Schema.Int })),
   }),
 });
@@ -288,7 +301,7 @@ const CheckRunDeliverySchema = Schema.Struct({
   check_run: Schema.Struct({
     head_sha: Schema.String,
     completed_at: Schema.NullOr(Schema.String),
-    app: Schema.optionalKey(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
+    app: CheckAppSchema,
     check_suite: Schema.optionalKey(
       Schema.Struct({ head_branch: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
     ),
@@ -329,6 +342,21 @@ export function githubIdOf(author: { readonly id?: number | undefined }): Pick<A
   return author.id === undefined ? {} : { byId: String(author.id) };
 }
 
+/** The avatar a wake keeps of who caused it, where GitHub named one on its own avatar host. */
+export function githubAvatarOf(author: {
+  readonly avatar_url?: string | undefined;
+}): Pick<AgentWake, "byAvatar"> {
+  const avatar = githubAvatarUrl(author.avatar_url);
+  return avatar === undefined ? {} : { byAvatar: avatar };
+}
+
+/** The logo of the App whose checks a wake tells of, where GitHub named its id. */
+export function appAvatarOf(
+  app: { readonly id?: number | undefined } | null | undefined,
+): Pick<AgentWake, "byAvatar"> {
+  return app?.id === undefined ? {} : { byAvatar: githubAppAvatarUrl(app.id) };
+}
+
 /** A review submitted, as the agents on its pull request's branch are told of it. */
 function reviewWake(payload: UnparsedWireValue, now: number): AgentWake | undefined {
   const read = readDelivery(ReviewDeliverySchema, payload);
@@ -342,6 +370,7 @@ function reviewWake(payload: UnparsedWireValue, now: number): AgentWake | undefi
     url: review.html_url,
     by: sender.login,
     ...githubIdOf(sender),
+    ...githubAvatarOf(sender),
     at: instantOf(review.submitted_at, now),
     verdict: review.state.toLowerCase(),
     words: review.body ?? "",
@@ -368,6 +397,7 @@ function commentWake(payload: UnparsedWireValue, now: number): AgentWake | undef
     url: comment.html_url,
     by: sender.login,
     ...githubIdOf(sender),
+    ...githubAvatarOf(sender),
     at: instantOf(comment.created_at, now),
     words: comment.body,
   };
@@ -395,6 +425,7 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
     // The failed commit's checks by its address, so the agent reads the revision that failed even after the branch moves on.
     url: `${repository.html_url}/commit/${suite.head_sha}/checks`,
     by: `${suite.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`,
+    ...appAvatarOf(suite.app),
     at: instantOf(suite.updated_at, now),
     sha: suite.head_sha,
   };
@@ -414,6 +445,7 @@ function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | 
     pullRequest: undefined,
     url: `${repository.html_url}/commit/${sha}/checks`,
     by: sender.login,
+    ...githubAvatarOf(sender),
     at: instantOf(read.success.updated_at, now),
     sha,
   };
@@ -432,7 +464,7 @@ function checksMovedWake(
   branches: readonly string[],
   sha: string,
   pullRequest: number | undefined,
-  by: string,
+  by: Pick<AgentWake, "by" | "byAvatar">,
   at: number,
 ): AgentWake | undefined {
   if (branches.length === 0) return undefined;
@@ -442,7 +474,7 @@ function checksMovedWake(
     branches,
     pullRequest,
     url: `${repository.html_url}/commit/${sha}/checks`,
-    by,
+    ...by,
     at,
     sha,
   };
@@ -469,7 +501,7 @@ export function checksCompletedWakeOf(
         agentBranchesOf([suite.head_branch]),
         suite.head_sha,
         suite.pull_requests[0]?.number,
-        `${suite.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`,
+        { by: `${suite.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`, ...appAvatarOf(suite.app) },
         instantOf(suite.updated_at, now),
       );
     }
@@ -488,7 +520,7 @@ export function checksCompletedWakeOf(
         ]),
         run.head_sha,
         run.pull_requests[0]?.number,
-        `${run.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`,
+        { by: `${run.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`, ...appAvatarOf(run.app) },
         instantOf(run.completed_at, now),
       );
     }
@@ -501,7 +533,7 @@ export function checksCompletedWakeOf(
         agentBranchesOf(branches.map((each) => each.name)),
         sha,
         undefined,
-        sender.login,
+        { by: sender.login, ...githubAvatarOf(sender) },
         instantOf(read.success.updated_at, now),
       );
     }
@@ -724,6 +756,9 @@ function githubLine(
     ...(wake.pullRequest === undefined ? {} : { number: wake.pullRequest }),
     url: wake.url,
     by: wake.by,
+    ...(wake.byAvatar === undefined || wake.byAvatar.length > GITHUB_LINE_BOUNDS.URL_CHARS
+      ? {}
+      : { by_avatar: wake.byAvatar }),
     ...(wake.verdict === undefined || wake.verdict === "" ? {} : { verdict: wake.verdict }),
     ...(words === "" ? {} : { words }),
     ...(comments.length === 0 ? {} : { comments }),

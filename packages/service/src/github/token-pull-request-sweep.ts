@@ -46,6 +46,8 @@ import type { EveForAccount } from "../automations/automation-runs.js";
 import {
   AGENT_WAKE,
   type AgentWake,
+  appAvatarOf,
+  githubAvatarOf,
   githubIdOf,
   type HeadChecksRead,
   headChecksFor,
@@ -121,7 +123,11 @@ type PollFailure = GitHubUnavailable | TokenRefused | QueryError | Schema.Schema
 type PollServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 const AuthorSchema = Schema.NullOr(
-  Schema.Struct({ login: Schema.String, id: Schema.optionalKey(Schema.Number) }),
+  Schema.Struct({
+    login: Schema.String,
+    id: Schema.optionalKey(Schema.Number),
+    avatar_url: Schema.optionalKey(Schema.String),
+  }),
 );
 
 const PullSchema = Schema.Struct({ head: Schema.Struct({ sha: Schema.String }) });
@@ -153,7 +159,11 @@ const CheckRunsSchema = Schema.Struct({
       status: Schema.String,
       conclusion: Schema.NullOr(Schema.String),
       completed_at: Schema.NullOr(Schema.String),
-      app: Schema.optionalKey(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
+      app: Schema.optionalKey(
+        Schema.NullOr(
+          Schema.Struct({ slug: Schema.String, id: Schema.optionalKey(Schema.Number) }),
+        ),
+      ),
     }),
   ),
 });
@@ -335,6 +345,7 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
       kind: AGENT_WAKE.CHECK_FAILED,
       url: checksUrl(poll, sha),
       by: `${failed.app?.slug ?? "github"}[bot]`,
+      ...appAvatarOf(failed.app),
       at: instantOf(poll, failed.completed_at),
       sha,
     },
@@ -364,6 +375,7 @@ const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
         kind: AGENT_WAKE.CHECK_FAILED,
         url: checksUrl(poll, sha),
         by: status.creator?.login ?? GHOST,
+        ...githubAvatarOf(status.creator ?? {}),
         at: instantOf(poll, status.updated_at),
         sha,
       },
@@ -431,6 +443,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
               url: review.html_url,
               by: review.user?.login ?? GHOST,
               ...githubIdOf(review.user ?? {}),
+              ...githubAvatarOf(review.user ?? {}),
               at: instantOf(poll, review.submitted_at),
               verdict: review.state.toLowerCase(),
               words: review.body ?? "",
@@ -453,6 +466,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
         url: comment.html_url,
         by: comment.user?.login ?? GHOST,
         ...githubIdOf(comment.user ?? {}),
+        ...githubAvatarOf(comment.user ?? {}),
         at: instantOf(poll, comment.created_at),
         words: comment.body ?? "",
       },
