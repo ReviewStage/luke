@@ -3,6 +3,7 @@
  */
 
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { buildCarriesDeveloperIdSigning } from "@repo/host/app-identity";
 import { jsonStateFile } from "@repo/host/node";
 import { text } from "@repo/wire";
 import { app, dialog } from "electron";
@@ -16,9 +17,15 @@ const MOVE_ANSWER = { MOVE: 0, NOT_NOW: 1 } as const;
  * copy through the ordinary quit, its teardown and its questions included,
  * and opens the moved one once this process has left, so nothing here
  * quits; a move the developer canceled at macOS's password prompt changes
- * nothing, and one that could not copy throws Electron's own words.
+ * nothing, and one that could not copy throws Electron's own words. Only a
+ * release, the Developer ID build, ever moves: any other packaged build
+ * bears the same bundle name, and Electron trashes an app of that name
+ * standing in Applications to make room, which would be the release's.
  */
 export function moveToApplications(): void {
+  if (!buildCarriesDeveloperIdSigning()) {
+    throw new Error("Only a release build moves itself into Applications.");
+  }
   app.moveToApplicationsFolder();
 }
 
@@ -32,8 +39,14 @@ export function moveToApplications(): void {
  * this copy is already quitting.
  */
 export async function offerMoveToApplications(config: DesktopConfig): Promise<boolean> {
-  // Note that only a build that could update itself is asked, as the updater's own engine is built.
-  if (!config.packaged || !config.runMode.sendsNetwork || config.platform !== "darwin") {
+  // Note that only a release that could update itself is asked: a test
+  // build's move would trash the release standing in Applications.
+  if (
+    !config.packaged ||
+    !buildCarriesDeveloperIdSigning() ||
+    !config.runMode.sendsNetwork ||
+    config.platform !== "darwin"
+  ) {
     return false;
   }
   if (app.isInApplicationsFolder()) return false;
