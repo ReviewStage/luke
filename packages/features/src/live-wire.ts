@@ -63,7 +63,7 @@ import { transcriptWindowPartRowSchema, transcriptWindowRowSchema } from "./tran
  * sealed: the reader asked to poll, or Realtime could not seal it. Each
  * statement then carries its rows, and nothing subscribes.
  */
-export const LIVE_POLL_URL = "luke-poll:";
+export const LIVE_POLL_URL = "vespin-poll:";
 
 /**
  * How a reader asks for a live read's rows inline rather than sealed, while

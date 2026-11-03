@@ -425,10 +425,10 @@ export type InputLine = typeof InputLineSchema.Type;
  * posts, with why it ended.
  */
 export const RUNNER_EVENT = {
-  ACCEPTED: "luke_runner_accepted",
-  WAITING: "luke_runner_waiting",
-  IDLE: "luke_runner_idle",
-  END: "luke_runner_end",
+  ACCEPTED: "vespin_runner_accepted",
+  WAITING: "vespin_runner_waiting",
+  IDLE: "vespin_runner_idle",
+  END: "vespin_runner_end",
 } as const;
 
 /** Why a launch ended. */
