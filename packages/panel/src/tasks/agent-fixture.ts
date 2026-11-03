@@ -40,6 +40,8 @@ import {
   REVIEW_DECISION,
   REVIEW_STATE,
 } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import { CHAPTER_KIND, CHAPTER_RISK, LINE_REF_SIDE } from "@repo/features/pull-request-chapters";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
@@ -64,7 +66,7 @@ import {
 } from "@repo/features/terminal-acts";
 import { SANDBOX_STATE, type SandboxState } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { RUN_PROFILE } from "@repo/host/app-state";
+import { type AppPages, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "@repo/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
@@ -1077,12 +1079,10 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
       },
     ],
   };
-  const { html: _html, ...pageLine } = FIXTURE_PAGE;
   return {
     ...open,
     tasks: open.tasks.map((task) => (task.id === taskId ? { ...task, agents } : task)),
     taskAgents: [agent],
-    pages: [pageLine],
   };
 }
 
@@ -1098,6 +1098,30 @@ export function agentColumnTab(profile: string): MainTab | undefined {
   const stage = AGENT_STAGES.get(profile);
   if (stage === undefined) return undefined;
   return "plan" in stage ? MAIN_TAB.OVERVIEW : FIXTURE_AGENT_TAB;
+}
+
+/** Main's held pages with the open task's holding the page its agent showed, one object for each of main's. */
+const STAGED_PAGES = new WeakMap<AppPages, AppPages>();
+
+/**
+ * Main's document as an agent profile draws it: the open task's pages held
+ * with the page its agent showed, as the window's read of them holds them
+ * (`LIVE_READ.PAGES`). The same document, the very object, under any other
+ * profile.
+ */
+export function agentAppState(state: AppStateSnapshot, taskId: string): AppStateSnapshot {
+  if (!AGENT_STAGES.has(state.run.profile)) return state;
+  const held = state[LIVE_READ.PAGES];
+  let staged = STAGED_PAGES.get(held);
+  if (staged === undefined) {
+    const { html: _html, ...pageLine } = FIXTURE_PAGE;
+    staged = {
+      ...held,
+      [PAGE_OWNER.TASK]: { ...held[PAGE_OWNER.TASK], [taskId]: { rows: [pageLine] } },
+    };
+    STAGED_PAGES.set(held, staged);
+  }
+  return { ...state, [LIVE_READ.PAGES]: staged };
 }
 
 /**

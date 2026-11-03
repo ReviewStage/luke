@@ -5,8 +5,8 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@repo/settings/microphone";
 
-/** Why a dictated clip cannot run: it runs on the account's own OpenAI key, kept under Codex in settings, and none is saved. */
-export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI key in settings";
+/** Why a dictated clip cannot run: it runs on the account's own OpenAI key, kept under Codex in Settings, and none is saved. */
+export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI key in Settings";
 
 /**
  * What the row says beneath its name, once the system has answered. Only a

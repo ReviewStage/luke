@@ -16,13 +16,7 @@ import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/feat
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
 import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import {
-  PAGE_OWNER,
-  PAGE_SHOWER,
-  type PageLine,
-  type PageVersion,
-  pagePlaceId,
-} from "@repo/features/page-wire";
+import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import {
   PLAN_COMMENT_ACTOR,
@@ -150,8 +144,6 @@ interface FakeService extends TasksClient {
   browserTabLives: Record<string, PolledLive<"tabs", typeof NOT_FOUND_LIVE>>;
   /** Each task's newest page of history's live read; none answers unanswered. */
   historyLives: Record<string, PolledLive<"revisions">>;
-  /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
-  readonly recordReads: string[];
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
   files: Record<string, TaskFileAnswer>;
   /** What the service answers for each folder's listing, by path; a path with none answers nothing, as a service that did not answer. */
@@ -185,8 +177,6 @@ interface FakeService extends TasksClient {
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
   /** Every version of every page the service holds, for any task. */
   pages: PageVersion[];
-  /** Each task's pages as the service lists them, by task id; a task with none answers nothing, as a service that did not answer. */
-  pageLines: Record<string, readonly PageLine[]>;
   /** The plans' pictures the service holds, by plan and then by picture. */
   pictures: Map<string, Map<string, { contentType: PictureType; base64: string }>>;
   /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
@@ -455,7 +445,6 @@ function fakeService(tasks: Task[]): FakeService {
     pageLives: {},
     browserTabLives: {},
     historyLives: {},
-    recordReads: [],
     files: {},
     folders: {},
     skills: {},
@@ -472,12 +461,6 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => (before === undefined ? service.history : service.olderHistory[before])),
     readRevision: (_taskId, seq) => Effect.sync(() => service.revisions[seq]),
     pages: [],
-    pageLines: {},
-    readPages: (place) =>
-      Effect.sync(() => {
-        service.recordReads.push("pages");
-        return service.pageLines[pagePlaceId(place)];
-      }),
     pictures: new Map(),
     // The service keeps a picture under the next id, and refuses one more where the plan holds two, a bound small enough to reach.
     keepPicture: (taskId, picture) =>
@@ -1227,29 +1210,6 @@ it.effect(
 );
 
 it.effect(
-  "a plan's pages are answered to the Inbox that asked, never told in the view, and a plan whose pages the service did not answer says so",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const funnel = {
-        id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
-        title: "Invite funnel",
-        version: 2,
-        at: 1_500,
-      };
-      service.pageLines[INVITES] = [funnel];
-      const { call, told } = yield* subject(service);
-
-      const read = yield* call(GATEWAY_METHOD.TASKS_PAGES, { taskId: INVITES });
-      const unread = yield* call(GATEWAY_METHOD.TASKS_PAGES, { taskId: "another-plan" });
-
-      assert.deepEqual(read, { pages: [funnel] });
-      assert.deepEqual(unread, { failure: TASK_CALL_FAILURE.UNANSWERED });
-      assert.equal(told.length, 0, "a plan's pages read for the Inbox are never told in the view");
-    }),
-);
-
-it.effect(
   "a window of a File tab's file is answered as the service read it, its lines plain, since the panel colors code itself",
   () =>
     Effect.gen(function* () {
@@ -1353,6 +1313,30 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
 );
 
 it.effect(
+  "the account gate opening follows the task list, the workspaces, and the sidebar, and reads GitHub, with no window asking",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.memberships = [PERSONAL, ACME];
+      service.pins = [{ repository: "acme/relay", pinnedAt: 3 }];
+      service.connection = { connected: true, login: "ada" };
+      const { tasks, last, listed } = yield* subject(service);
+
+      yield* tasks.open;
+      yield* listed();
+
+      assert.deepEqual(
+        last()?.tasks.map((each) => each.name),
+        ["Teammate invitations"],
+      );
+      assert.equal(last()?.listStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+      assert.deepEqual(last()?.repositoryPins, [{ repository: "acme/relay", pinnedAt: 3 }]);
+      assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+    }),
+);
+
+it.effect(
   "a quiet start opens nothing and answers its task, and its agent's start where it named one",
   () =>
     Effect.gen(function* () {
@@ -1453,112 +1437,41 @@ it.effect("a start answered after another task was opened answers its task and o
   }),
 );
 
-it.effect(
-  "opening a task tells the window it is reading, then its document and pages in one view",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const billing = task(BILLING, "Billing export", "# Billing export", 20);
-      const service = fakeService([billing, invites]);
-      const funnel = {
-        id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
-        title: "Invite funnel",
-        version: 2,
-        at: 1_500,
-      };
-      service.pageLines[BILLING] = [funnel];
-      const { told, openTask } = yield* subject(service);
-      yield* openTask(INVITES);
-
-      const before = told.length;
-      yield* openTask(BILLING);
-      const opened = told.slice(before);
-
-      assert.deepEqual(
-        opened.map((view) => [view.activeTaskId, view.document.status]),
-        [
-          [BILLING, TASKS_READ.READING],
-          [BILLING, TASKS_READ.READY],
-        ],
-      );
-      const landed = opened.at(-1);
-      assert.deepEqual(landed?.document, { status: TASKS_READ.READY, task: billing });
-      assert.deepEqual(landed?.pages, [funnel]);
-    }),
-);
-
-it.effect(
-  "a part of an open that has not answered holds back neither the document, the parts that have, nor a write",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const service = fakeService([invites]);
-      // The pages are never answered, as a read that hangs until its deadline.
-      service.readPages = () => Effect.never;
-      const { call, last, openTask } = yield* subject(service);
-
-      assert.deepEqual(yield* openTask(INVITES), {
-        opened: true,
-      });
-      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
-        { renamed: true },
-        "the lock is not held for the pages",
-      );
-    }),
-);
-
-it.effect("a part of an open that answers after its document lands on its own", () =>
+it.effect("opening a task tells the window it is reading, then its document", () =>
   Effect.gen(function* () {
     const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-    const service = fakeService([invites]);
-    const funnel = {
-      id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
-      title: "Invite funnel",
-      version: 1,
-      at: 1,
-    };
-    service.pageLines[INVITES] = [funnel];
-    const pagesHeld = yield* Deferred.make<void>();
-    const readPages = service.readPages;
-    service.readPages = (place) => Effect.andThen(Deferred.await(pagesHeld), readPages(place));
-    const { last, openTask } = yield* subject(service);
-
+    const billing = task(BILLING, "Billing export", "# Billing export", 20);
+    const service = fakeService([billing, invites]);
+    const { told, openTask } = yield* subject(service);
     yield* openTask(INVITES);
-    assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-    assert.equal(last()?.pages, undefined, "the pages are still out");
 
-    yield* Deferred.succeed(pagesHeld, undefined);
-    for (let turn = 0; turn < 8; turn += 1) yield* Effect.yieldNow;
-    assert.deepEqual(last()?.pages, [funnel]);
+    const before = told.length;
+    yield* openTask(BILLING);
+    const opened = told.slice(before);
+
+    assert.deepEqual(
+      opened.map((view) => [view.activeTaskId, view.document.status]),
+      [
+        [BILLING, TASKS_READ.READING],
+        [BILLING, TASKS_READ.READY],
+      ],
+    );
+    assert.deepEqual(opened.at(-1)?.document, { status: TASKS_READ.READY, task: billing });
   }),
 );
 
 it.effect(
-  "an open answers and draws the task as reading before any of its reads answers, then lays them in one view",
+  "an open answers and draws the task as reading before its document answers, then lays it",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
-      const funnel = {
-        id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
-        title: "Invite funnel",
-        version: 1,
-        at: 1,
-      };
-      service.pageLines[INVITES] = [funnel];
       const { call, last, settled } = yield* subject(service);
 
-      // Every read of the task is held from here, as a service that has not answered yet.
+      // The task's document is held from here, as a service that has not answered yet.
       const answered = yield* Deferred.make<void>();
-      const held =
-        <A, R>(read: (taskId: string) => Effect.Effect<A, never, R>) =>
-        (taskId: string) =>
-          Effect.andThen(Deferred.await(answered), read(taskId));
-      const { open, readPages } = service;
-      service.open = held(open);
-      service.readPages = (place) => Effect.andThen(Deferred.await(answered), readPages(place));
+      const { open } = service;
+      service.open = (taskId) => Effect.andThen(Deferred.await(answered), open(taskId));
 
       const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }));
       yield* settled;
@@ -1569,7 +1482,6 @@ it.effect(
       yield* Deferred.succeed(answered, undefined);
       yield* settled;
       assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-      assert.deepEqual(last()?.pages, [funnel]);
     }),
 );
 
@@ -1580,18 +1492,11 @@ it.effect(
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const billing = task(BILLING, "Billing export", "# Billing export", 20);
       const service = fakeService([billing, invites]);
-      // The billing task's document and pages are held, as reads still out when the next press lands.
+      // The billing task's document is held, as a read still out when the next press lands.
       const answered = yield* Deferred.make<void>();
-      const { open, readPages } = service;
+      const { open } = service;
       service.open = (taskId) =>
         taskId === BILLING ? Effect.andThen(Deferred.await(answered), open(taskId)) : open(taskId);
-      service.readPages = (place) =>
-        pagePlaceId(place) === BILLING
-          ? Effect.andThen(Deferred.await(answered), readPages(place))
-          : readPages(place);
-      service.pageLines[BILLING] = [
-        { id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b", title: "Invite funnel", version: 1, at: 1 },
-      ];
       const { call, last, settled } = yield* subject(service);
 
       yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING }));
@@ -1606,7 +1511,6 @@ it.effect(
       yield* Deferred.succeed(answered, undefined);
       yield* settled;
       assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-      assert.equal(last()?.pages, undefined, "the billing pages land nowhere");
     }),
 );
 
@@ -1826,8 +1730,9 @@ it.effect(
 it.effect("behind a closed account gate nothing is read and nothing starts", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { call, told } = yield* subject(service, { signedIn: false });
+    const { call, told, tasks } = yield* subject(service, { signedIn: false });
 
+    yield* tasks.open;
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
     const started = yield* call(GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" });
 
@@ -3586,56 +3491,6 @@ const answered = (set: () => void) =>
     ),
   );
 
-/** One call about the task as its row delivers it, ended at `closedAt` or standing. */
-function callRow(lastSegment: number, closedAt: number | null) {
-  return {
-    id: "call-1",
-    closedAt,
-    closeReason: closedAt === null ? null : "remote_hangup",
-    usage: null,
-    model: "gpt-realtime",
-    lastSegment,
-    spoken: 0,
-  };
-}
-
-it.effect("the open task's pages are read again as their mark moves, not on a call's words", () =>
-  Effect.gen(function* () {
-    const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-    const record = recordLive();
-    service.recordLives[INVITES] = record;
-    const { call, tasks, openTask } = yield* subject(service);
-    yield* tasks.lifetime;
-    yield* openTask(INVITES);
-    yield* followSettled;
-    assert.equal(record.held(), 1, "its poll is held while nothing moves");
-    const taken = () => service.recordReads.splice(0).toSorted();
-    taken();
-    const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
-      answered(() => record.set({ plan: [], pages, calls, code: [] }));
-    const page = (version: number) => ({ pageId: "page-1", version });
-
-    // The first answer with rows reads every part, since the reads the task opened with may have missed it.
-    yield* deliver([page(1)], []);
-    assert.deepEqual(taken(), ["pages"]);
-
-    yield* deliver([page(2)], []);
-    assert.deepEqual(taken(), ["pages"]);
-
-    // A call's words landing read nothing.
-    yield* deliver([page(2)], [callRow(3, null)]);
-    yield* deliver([page(2)], [callRow(3, 5_000)]);
-    yield* TestClock.adjust(Duration.seconds(5));
-    yield* followSettled;
-    assert.deepEqual(taken(), []);
-
-    // Leaving the task lets the follow go.
-    yield* call(GATEWAY_METHOD.TASKS_CLOSE);
-    yield* followSettled;
-    assert.equal(record.held(), 0);
-  }),
-);
-
 it.effect(
   "a plan saved by someone else reaches the open document as its polled mark moves, a read of it that went unanswered asked again, and the window's own save, which the mark only confirms, reads nothing",
   () =>
@@ -3772,6 +3627,42 @@ it.effect(
         GATEWAY_EVENT.PAGES_CHANGED,
         { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} },
       ]);
+    }),
+);
+
+it.effect(
+  "a plan's pages the service refuses are told as failed and asked no more while held, and held anew are asked again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const pages = polledLive<"pages", typeof NOT_FOUND_LIVE>(["pages"]);
+      pages.refuse(NOT_FOUND_LIVE);
+      service.pageLives[INVITES] = pages;
+      const { pagesLive } = service;
+      let seals = 0;
+      service.pagesLive = (...asked) =>
+        Effect.suspend(() => {
+          seals += 1;
+          return pagesLive(...asked);
+        });
+      const { call, pushed } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* followSettled;
+      assert.equal(seals, 1, "a plan the reader cannot reach is not asked again while held");
+      assert.deepEqual(pushed, [
+        [
+          GATEWAY_EVENT.PAGES_CHANGED,
+          { [PAGE_OWNER.TASK]: { [INVITES]: { failed: true } }, [PAGE_OWNER.AGENT]: {} },
+        ],
+      ]);
+
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      assert.equal(seals, 2);
     }),
 );
 

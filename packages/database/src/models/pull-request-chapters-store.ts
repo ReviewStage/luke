@@ -16,21 +16,26 @@
  * names its workspace, and a row of another reads as none; whether the
  * reader may reach that workspace is the caller's to settle. Nothing here
  * reads a word of the chapters: they pass through as JSON, and the endpoint
- * decodes them with their wire schema.
+ * decodes them with their wire schema. A live read follows the same newest
+ * claim through an agent the reader sees (`pullRequestChaptersLiveStatement`),
+ * woken by each claim, finish, and failure on the workspace's chapters topic.
  */
 
 import { and, desc, eq, sql } from "drizzle-orm";
 import { Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   PULL_REQUEST_CHAPTERS_STATUS,
   type PullRequestChaptersFailure,
   type PullRequestChaptersStatus,
 } from "../pull-request-chapters-vocabulary.js";
+import { agentTable } from "../schemas/agent.js";
 import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { InstantColumnSchema } from "./columns.js";
+import { agentVisibleTo } from "./workspace-store.js";
 
 /**
  * How long a generation may stand `generating` before another Generate takes
@@ -137,6 +142,14 @@ const CHAPTERS_COLUMNS = {
 
 const ClaimRowSchema = Schema.Struct({ id: Schema.String, claim: Schema.String });
 
+/** The newest claim first, as every read of a pull request's chapters orders them. */
+const NEWEST_CLAIM = [
+  // Note that two heads claimed in one millisecond tie on every instant; the id settles which reads, so a read never flickers between them.
+  desc(pullRequestChapters.startedAt),
+  desc(pullRequestChapters.createdAt),
+  desc(pullRequestChapters.id),
+] as const;
+
 const findLatest = SqlSchema.findOneOption({
   Request: Schema.Struct({
     organizationId: Schema.String,
@@ -156,12 +169,7 @@ const findLatest = SqlSchema.findOneOption({
             eq(pullRequestChapters.pullRequestNumber, pullRequestNumber),
           ),
         )
-        // Note that two heads claimed in one millisecond tie on every instant; the id settles which reads, so a read never flickers between them.
-        .orderBy(
-          desc(pullRequestChapters.startedAt),
-          desc(pullRequestChapters.createdAt),
-          desc(pullRequestChapters.id),
-        )
+        .orderBy(...NEWEST_CLAIM)
         .limit(1),
     ),
 });
@@ -286,6 +294,57 @@ export function latestPullRequestChapters(
   pullRequestNumber: number,
 ): PullRequestChaptersEffect<Option.Option<PullRequestChapters>> {
   return findLatest({ organizationId, repository, pullRequestNumber });
+}
+
+/**
+ * The newest claim of the pull request numbered under the agent's
+ * repository in the agent's workspace, as a live read follows it, in
+ * `latestPullRequestChapters`'s order, for an account that sees the agent
+ * (`agentVisibleTo`); no rows for an agent it does not see, one with no
+ * repository, or a pull request never generated there. Its repository is
+ * matched as the agent names it, as the agent's read matches it. Note that
+ * it never reads who pressed Generate, which the capture ignores, and
+ * cannot ask whether the workspace still reaches the repository, which the
+ * read's procedure confirms on every poll.
+ */
+export function pullRequestChaptersLiveStatement(
+  userId: string,
+  agentId: string,
+  pullRequestNumber: number,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            status: pullRequestChapters.status,
+            headSha: pullRequestChapters.headSha,
+            baseSha: pullRequestChapters.baseSha,
+            failureKind: pullRequestChapters.failureKind,
+            model: pullRequestChapters.model,
+            chapters: pullRequestChapters.chapters,
+          },
+          { startedAt: pullRequestChapters.startedAt },
+        ),
+      )
+      .from(pullRequestChapters)
+      .innerJoin(
+        agentTable,
+        and(
+          eq(agentTable.organizationId, pullRequestChapters.organizationId),
+          eq(agentTable.repository, pullRequestChapters.repository),
+        ),
+      )
+      .where(
+        and(
+          eq(agentTable.id, agentId),
+          agentVisibleTo(userId),
+          eq(pullRequestChapters.pullRequestNumber, pullRequestNumber),
+        ),
+      )
+      .orderBy(...NEWEST_CLAIM)
+      .limit(1),
+  );
 }
 
 /**

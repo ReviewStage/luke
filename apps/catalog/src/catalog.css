@@ -189,7 +189,7 @@ body {
 .catalog-mark {
   width: 96px;
   height: 96px;
-  color: var(--ui-color-working);
+  color: var(--ui-color-accent-text);
 }
 
 .catalog-mark > .ui-product-mark {
@@ -753,7 +753,7 @@ body {
   display: block;
   width: 52px;
   height: 52px;
-  color: var(--ui-color-working);
+  color: var(--ui-color-accent-text);
 }
 
 .catalog-auth-mark svg {

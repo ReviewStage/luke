@@ -9,7 +9,9 @@
  * so a column added to the table later notifies by default rather than
  * leaving a view silently stale, and the column list read here off the
  * Drizzle table is what makes the drift check fail until its triggers are
- * regenerated.
+ * regenerated. A table a delta read reads is also `log`ged: its capture
+ * writes one row of the sync log (`../schemas/sync-log.ts`) per row written,
+ * naming it by its primary key.
  */
 import { getColumnTable } from "drizzle-orm";
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core";
@@ -20,6 +22,16 @@ export const SYNC_OBJECT_PREFIX = "app_sync_";
 
 /** Postgres's longest identifier, in bytes; a longer name is cut short without a word. */
 const IDENTIFIER_BYTES = 63;
+
+/** Which of a logged table's writes its capture logs. */
+export const LOG = {
+  /** Every insert, delete, and update of a watched column. */
+  EVERY: "every",
+  /** Inserts and deletes alone: a row's arrival and removal, for a table rewritten in place more often than any delta read reads it. */
+  ROWS: "rows",
+} as const;
+
+export type SyncLogWrites = (typeof LOG)[keyof typeof LOG];
 
 type ColumnOf<T extends PgTable> = T["_"]["columns"][keyof T["_"]["columns"]];
 
@@ -47,6 +59,8 @@ export interface SyncTableOptions<T extends PgTable> {
   readonly topics: readonly SyncTopicSource<T>[];
   /** The hot columns no view reads, whose change alone notifies nothing. */
   readonly ignore?: readonly ColumnOf<T>[];
+  /** Which writes are logged; none, for a table no delta read reads. */
+  readonly log?: SyncLogWrites;
 }
 
 /** A topic as the trigger reads it: its kind, and the SQL name of the column holding its id. */
@@ -63,6 +77,13 @@ export interface SyncTableLookup {
   readonly topics: readonly SyncColumnTopic[];
 }
 
+/** How a logged table's capture logs its writes, in SQL names. */
+export interface SyncTableLog {
+  readonly writes: SyncLogWrites;
+  /** The primary-key columns a log row names the row written by. */
+  readonly key: readonly string[];
+}
+
 /** A declaration, resolved to the SQL names its capture is rendered from. */
 export interface SyncTable {
   readonly name: string;
@@ -71,6 +92,8 @@ export interface SyncTable {
   readonly ignored: readonly string[];
   readonly topics: readonly SyncColumnTopic[];
   readonly lookups: readonly SyncTableLookup[];
+  /** How its writes are logged; undefined for a table not logged. */
+  readonly log: SyncTableLog | undefined;
 }
 
 /** Fails the declaration unless the column is one of the table's. */
@@ -96,15 +119,26 @@ function lookupOf<T extends PgTable>(table: T, lookup: SyncLookup<T>): SyncTable
   };
 }
 
+/** The table's primary-key columns, its composite key's where it declares one; fails a table with none, which no log row could name a row of. */
+function primaryKeyOf(table: PgTable): readonly string[] {
+  const config = getTableConfig(table);
+  const key =
+    config.primaryKeys[0]?.columns.map((column) => column.name) ??
+    config.columns.flatMap((column) => (column.primary ? [column.name] : []));
+  if (key.length === 0) throw new Error(`${config.name} is logged but has no primary key`);
+  return key;
+}
+
 /**
  * Declares a table synced: its writes notify the topics `topics` names, of
  * the row before and after, and an update notifies only where a column
  * outside `ignore` changed. A column a topic is read from can't be ignored,
- * since a row moving between tasks must notify both.
+ * since a row moving between tasks must notify both. A table given `log`
+ * logs the writes it names too.
  */
 export function defineSyncTable<T extends PgTable>(
   table: T,
-  { topics, ignore = [] }: SyncTableOptions<T>,
+  { topics, ignore = [], log }: SyncTableOptions<T>,
 ): SyncTable {
   const config = getTableConfig(table);
   if (config.schema !== undefined) throw new Error(`${config.name} is synced outside public`);
@@ -131,5 +165,6 @@ export function defineSyncTable<T extends PgTable>(
     ignored: [...ignored],
     topics: own.map((topic) => ({ kind: topic.kind, column: topic.column.name })),
     lookups,
+    log: log === undefined ? undefined : { writes: log, key: primaryKeyOf(table) },
   };
 }

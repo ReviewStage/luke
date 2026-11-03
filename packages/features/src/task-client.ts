@@ -37,7 +37,7 @@ import {
   type TaskPagesLiveAnswer,
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
-import { type PageLine, type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
+import { type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL, planAttachmentTypeSchema } from "./plan-attachment-wire.js";
 import {
   type PlanCommentActionRequest,
@@ -905,17 +905,6 @@ export class HostedTaskClient {
               },
       },
     );
-  }
-
-  /** One plan's pages, or one coding agent's on no task, each by its newest version; nothing where the service did not answer them. */
-  readPages(
-    place: PagePlace,
-  ): Effect.Effect<readonly PageLine[] | undefined, never, HttpClient.HttpClient> {
-    const asked =
-      "taskId" in place
-        ? askHosted(this.#hosted.taskFiles.pages, { id: place.taskId })
-        : askHosted(this.#hosted.agentPages.list, { id: place.agentId });
-    return Effect.map(orNothing(asked), (answer) => answer?.pages);
   }
 
   /** One version of one page of one plan, or of one coding agent on no task, with its HTML; nothing where the service did not answer it, or holds no such version. */

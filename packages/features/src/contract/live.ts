@@ -16,7 +16,9 @@
  * installations connected to them; and one workspace's people, named by
  * `?workspaceId=`, as its members and who its work names but left, and its
  * pending invitations, to an owner or an admin of it, with the origin each
- * accept link is built on. Each
+ * accept link is built on; and one coding agent's pull request's newest
+ * chapters, the agent named by `?id=` and the pull request by `&number=`,
+ * with whether the reader can generate them. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -48,6 +50,7 @@ import {
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
+import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
@@ -127,6 +130,20 @@ const liveTranscriptSchema = EffectSchema.Struct({
 /** The kinds of command a Mac's live read follows, as its held read names them (`macCommandKindsQuery`). */
 const liveMacCommandsSchema = EffectSchema.Struct({
   kinds: EffectSchema.optionalKey(EffectSchema.String),
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/**
+ * The agent whose pull request's chapters a live read follows, and the
+ * pull request's number, as the agent's read of them names it; each read as
+ * text, an agent of no shape answered as not found and a number of none
+ * refused.
+ */
+const livePullRequestChaptersSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  number: EffectSchema.String,
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -235,4 +252,10 @@ export const liveContract = {
     )
     .input(liveWorkspaceSchema)
     .output(EffectSchema.flip(workspaceInvitationsLiveAnswerSchema)),
+  pullRequestChapters: hostedProcedure
+    .meta(
+      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_PULL_REQUEST_CHAPTERS }),
+    )
+    .input(livePullRequestChaptersSchema)
+    .output(EffectSchema.flip(pullRequestChaptersLiveAnswerSchema)),
 };

@@ -37,6 +37,7 @@ import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
+import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { runnerLine } from "../schemas/runner-line.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
@@ -444,6 +445,20 @@ export const agentBrowserTabSync = defineSyncTable(agentBrowserTab, {
 });
 
 /**
+ * A pull request's chapters for one head commit, on its workspace's
+ * chapters topic, which only the open chapter reads of the workspace are
+ * woken on: the workspace's own topic would wake every member's task list
+ * on each claim, finish, and failure. Note that who pressed Generate is
+ * ignored, because no view reads it and it moves only with a claim, which
+ * moves the status beside it, or with its account deleted, which no reader
+ * needs to hear.
+ */
+export const pullRequestChaptersSync = defineSyncTable(pullRequestChapters, {
+  topics: [{ kind: TOPIC.WORKSPACE_CHAPTERS, column: pullRequestChapters.organizationId }],
+  ignore: [pullRequestChapters.requestedBy],
+});
+
+/**
  * A transcript's message, on its conversation's topic alone. Note that no
  * column is ignored and no wider topic is taken, because a journal is
  * rewritten in place on every streamed step: each write transaction
@@ -556,6 +571,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   planRevisionSync,
   planPageVersionSync,
   agentBrowserTabSync,
+  pullRequestChaptersSync,
   messagesSync,
   conversationsSync,
   turnsSync,

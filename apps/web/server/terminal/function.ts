@@ -1,23 +1,26 @@
 import { authDeployment } from "@repo/service/auth/auth-deployment";
-import { resolveRelayUserId } from "@repo/service/auth/bearer";
+import { resolveHostedUserId, resolveRelayUserId } from "@repo/service/auth/bearer";
 import { browserLiveDependencies } from "@repo/service/browser-live/production";
 import { browserLiveServer, standBrowserLive } from "@repo/service/browser-live/service";
 import type { RelayServer } from "@repo/service/http/relay-upgrade";
+import { liveProcedures } from "@repo/service/live/live-procedures";
+import { liveSocketServer, standLiveSocket } from "@repo/service/live/live-socket";
 import { standReported } from "@repo/service/observability/sentry";
+import { hostedFetch } from "@repo/service/orpc/handler";
 import { relayDependencies } from "@repo/service/terminal/production";
 import { standTerminalRelay, terminalRelayServer } from "@repo/service/terminal/service";
 import { Effect } from "effect";
 import { runWeb } from "../runtime.js";
 
 /**
- * function.ts -- the sandbox relays' one runtime edge: the terminal relay stood on the server the `api/terminal/sessions` function exports, and the Browser tab's live view on the one `api/browser/live` exports, each once per instance of its own function.
+ * function.ts -- the WebSocket services' one runtime edge: the terminal relay stood on the server the `api/terminal/sessions` function exports, the Browser tab's live view on the one `api/browser/live` exports, and the live reads' socket on the one `api/live/socket` exports, each once per instance of its own function.
  *
  * Each scope is held open by `Effect.never`, so
  * the `ws` server and every connection's fiber belong to one scope nothing
  * but a disposed runtime closes, which is what a Vercel function gets. An
  * instance whose runtime cannot be built stands none, and its server keeps
- * refusing every upgrade with 503; either way what ended the relay is
- * reported to Sentry. The two relays share this edge because they stand on
+ * refusing every upgrade with 503; either way what ended the service is
+ * reported to Sentry. The three share this edge because they stand on
  * the same terms, each a function of its own all the same: the desktop's
  * bearer with no `Origin`, or a page of the deployment's own origins by its
  * session cookie (`http/relay-upgrade.ts`).
@@ -26,6 +29,8 @@ import { runWeb } from "../runtime.js";
 let standingTerminal: RelayServer | undefined;
 
 let standingBrowser: RelayServer | undefined;
+
+let standingLive: RelayServer | undefined;
 
 function standTerminal(relay: RelayServer): void {
   void standReported(
@@ -63,6 +68,25 @@ function standBrowser(live: RelayServer): void {
   );
 }
 
+function standLive(live: RelayServer): void {
+  const deployment = authDeployment(process.env);
+  void standReported(
+    runWeb,
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* standLiveSocket({
+          server: live,
+          ownOrigins: new Set(deployment.ownOrigins),
+          resolveUserId: resolveRelayUserId,
+          fetch: hostedFetch({ live: liveProcedures({ resolveUserId: resolveHostedUserId }) }),
+          origin: new URL(deployment.baseURL).origin,
+        });
+        return yield* Effect.never;
+      }),
+    ),
+  );
+}
+
 /** The one terminal server of this function instance, with its service stood on first use. */
 export function terminalFunctionServer() {
   if (standingTerminal === undefined) {
@@ -79,4 +103,13 @@ export function browserLiveFunctionServer() {
     standBrowser(standingBrowser);
   }
   return standingBrowser.server;
+}
+
+/** The one live-reads socket server of this function instance, with its service stood on first use. */
+export function liveSocketFunctionServer() {
+  if (standingLive === undefined) {
+    standingLive = liveSocketServer();
+    standLive(standingLive);
+  }
+  return standingLive.server;
 }

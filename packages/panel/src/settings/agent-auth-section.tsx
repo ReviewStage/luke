@@ -143,6 +143,8 @@ type Credential = (typeof CREDENTIAL)[keyof typeof CREDENTIAL];
 /** What a harness's row and dialog are drawn from. */
 interface Harness {
   readonly name: string;
+  /** What its plan is called wherever a surface names the credential: the card's label, a disconnect's title. */
+  readonly planName: string;
   readonly plan: SubscriptionKeySummary["kind"];
   readonly keyName: string;
   readonly keyUrl: string;
@@ -151,12 +153,13 @@ interface Harness {
 
 /**
  * Each harness by the provider whose models it runs: its name, its plan's
- * kind, the provider's name on its key, where a key is made, and the row a
+ * name and kind, the provider's name on its key, where a key is made, and the row a
  * search or a remedy lands on.
  */
 const HARNESS = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: {
     name: "Claude",
+    planName: "Claude plan",
     plan: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
     keyName: "Anthropic",
     keyUrl: "https://console.anthropic.com/settings/keys",
@@ -164,6 +167,7 @@ const HARNESS = {
   },
   [PROVIDER_KEY_PROVIDER.OPENAI]: {
     name: "Codex",
+    planName: "ChatGPT plan",
     plan: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
     keyName: "OpenAI",
     keyUrl: "https://platform.openai.com/api-keys",
@@ -193,7 +197,6 @@ const WORDS = {
   SIGN_IN_EXPIRED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED],
   PLAN_ATTENTION: "Subscription needs attention",
   KEY_ATTENTION: "API key needs attention",
-  SUBSCRIPTION: "Subscription",
   API_KEY: "API key",
   GET_KEY: "Get key",
   DESKTOP_ONLY: "Desktop app only",
@@ -208,31 +211,31 @@ const WORDS = {
   REPLACE_TOKEN: "Replace token",
   REPLACES_TOKEN: `Saving replaces the token ${PRODUCT_NAME} holds.`,
   REPLACES_KEY: `Saving replaces the key ${PRODUCT_NAME} holds.`,
-  SIGN_IN: "Sign in with ChatGPT",
+  SIGN_IN: "Continue with ChatGPT",
   WAITING: "Waiting for ChatGPT",
   CONNECTED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.CONNECTED],
   USAGE_LIMIT: "Usage limit reached",
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
-  TOKEN_QUOTA: "Out of usage on your Claude subscription.",
+  TOKEN_QUOTA: "Out of usage on your Claude plan.",
   TOKEN_UNREADABLE: "This token can no longer be read. Paste a new one.",
-  CHATGPT_SIGNED_OUT: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}.`,
+  CHATGPT_SIGNED_OUT: "Signed out of ChatGPT.",
   CHATGPT_UNREADABLE: "This sign-in can no longer be read.",
-  CHATGPT_SIGNED_OUT_ALONE: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Sign in with ChatGPT to reconnect.`,
+  CHATGPT_SIGNED_OUT_ALONE: "Signed out of ChatGPT. Continue with ChatGPT to sign in again.",
   CHATGPT_UNREADABLE_ALONE:
-    "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
+    "This sign-in can no longer be read. Continue with ChatGPT to connect again.",
   CHATGPT_INELIGIBLE:
-    "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
-  REVOCATION_UNCONFIRMED: `${PRODUCT_NAME} no longer holds your ChatGPT sign-in, but OpenAI didn't confirm it ended. To end it there too, remove ${PRODUCT_NAME} in your ChatGPT settings.`,
+    "OpenAI says this ChatGPT plan isn't eligible for Codex. Continue with ChatGPT to use another.",
+  REVOCATION_UNCONFIRMED: `${PRODUCT_NAME} signed out of ChatGPT, but OpenAI didn't confirm it ended. To end it there too, remove ${PRODUCT_NAME} in your ChatGPT settings.`,
   NOTICE_TITLE: "You're using your ChatGPT plan",
   NOTICE_BODY: `Eligible usage in ${PRODUCT_NAME} uses your ChatGPT plan. Manage usage in your ChatGPT settings.`,
   GOT_IT: "Got it",
-  SAVE_TOKEN_FAILED: "The token could not be saved. Try again.",
-  SAVE_KEY_FAILED: "The key could not be saved. Try again.",
-  REMOVE_KEY_FAILED: "The key could not be removed. Try again.",
-  CLAUDE_DISCONNECT_FAILED: "Your Claude subscription could not be disconnected. Try again.",
-  CHATGPT_DISCONNECT_FAILED: "ChatGPT could not be disconnected. Try again.",
-  SIGN_IN_FAILED: "ChatGPT could not be reached. Try again.",
-  DEFAULT_FAILED: "The default could not be changed. Try again.",
+  SAVE_TOKEN_FAILED: "Couldn't save the token. Try again.",
+  SAVE_KEY_FAILED: "Couldn't save the key. Try again.",
+  REMOVE_KEY_FAILED: "Couldn't remove the key. Try again.",
+  CLAUDE_DISCONNECT_FAILED: "Couldn't disconnect your Claude plan. Try again.",
+  CHATGPT_DISCONNECT_FAILED: "Couldn't disconnect your ChatGPT plan. Try again.",
+  SIGN_IN_FAILED: "Couldn't reach ChatGPT. Try again.",
+  DEFAULT_FAILED: "Couldn't change the default. Try again.",
 } as const;
 
 /* ----- Reading the credentials ----- */
@@ -332,7 +335,7 @@ function tokenWords(plan: SubscriptionKeySummary): string {
   }
 }
 
-/** What a ChatGPT sign-in's status says, naming Sign in with ChatGPT only where its button does not stand beside it (`offered`). */
+/** What a ChatGPT sign-in's status says, naming Continue with ChatGPT only where its button does not stand beside it (`offered`). */
 function signInWords(plan: SubscriptionKeySummary, offered: boolean): string {
   switch (plan.status) {
     case PROVIDER_KEY_STATUS.UNVERIFIED:
@@ -365,7 +368,7 @@ function keyStatusWords(
     // Note that a plan's limit and eligibility are a subscription's words, which no API key is answered with.
     case PROVIDER_KEY_STATUS.LIMIT_REACHED:
     case PROVIDER_KEY_STATUS.INELIGIBLE:
-      return `Out of quota or credit at ${name}.`;
+      return `Out of credit at ${name}.`;
     case PROVIDER_KEY_STATUS.UNREADABLE:
       return "This key can no longer be read.";
   }
@@ -385,18 +388,18 @@ function keyRejectionWords(provider: ProviderKeyProvider, rejection: ProviderKey
       return `This looks like an ${HARNESS[other].keyName} key. Paste it under ${HARNESS[other].name}.`;
     }
     case PROVIDER_KEY_REJECTION.UNREACHABLE:
-      return `${name} could not be reached to check this key. Try again.`;
+      return `Couldn't reach ${name} to check this key. Try again.`;
     case PROVIDER_KEY_REJECTION.TOO_MANY_TRIES:
-      return "Too many keys tried in the last hour. Try again later.";
+      return "Too many tries in the last hour. Try again later.";
     case PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN:
-      return `${name} could not confirm this sign-in. Sign in again.`;
+      return `${name} couldn't confirm this sign-in. Continue with ChatGPT to try again.`;
   }
 }
 
 /** Why a Claude token's save kept nothing. */
 function tokenRejectionWords(rejection: ProviderKeyRejection): string {
   return rejection === PROVIDER_KEY_REJECTION.TOO_MANY_TRIES
-    ? "Too many keys tried in the last hour. Try again later."
+    ? "Too many tries in the last hour. Try again later."
     : "That isn't a Claude setup-token. Run claude setup-token and paste what it prints.";
 }
 
@@ -629,8 +632,8 @@ function ClaudeTokenPanel({
       <FootQuestion
         confirm={removal}
         question={{
-          title: "Disconnect your Claude subscription?",
-          body: "Claude agents will stop running on your Claude subscription, and he deletes the token he holds.",
+          title: "Disconnect your Claude plan?",
+          body: `Claude agents stop running on your Claude plan, and ${PRODUCT_NAME} deletes its token.`,
           verb: WORDS.DISCONNECT,
           running: WORDS.DISCONNECTING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -666,7 +669,7 @@ function FirstSignInNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.
   );
 }
 
-/** The ChatGPT plan: Sign in with ChatGPT where the loopback can be listened on, its status, and Disconnect. */
+/** The ChatGPT plan: Continue with ChatGPT where the loopback can be listened on, its status, and Disconnect. */
 function ChatGptPanel({
   plan,
   offered,
@@ -794,8 +797,8 @@ function ChatGptPanel({
       <FootQuestion
         confirm={removal}
         question={{
-          title: "Disconnect your ChatGPT subscription?",
-          body: "Codex agents will stop running on your ChatGPT subscription, and he ends his sign-in with OpenAI.",
+          title: "Disconnect your ChatGPT plan?",
+          body: `Codex agents stop running on your ChatGPT plan, and ${PRODUCT_NAME} signs out of ChatGPT.`,
           verb: WORDS.DISCONNECT,
           running: WORDS.DISCONNECTING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -953,8 +956,8 @@ function ApiKeyPanel({
           title: `Remove your ${name} API key?`,
           body:
             provider === PROVIDER_KEY_PROVIDER.OPENAI
-              ? `Agents on ${name} models won't start without a subscription. Calls and dictation will be off.`
-              : `Agents on ${name} models won't start without a subscription.`,
+              ? `Agents on ${name} models won't start without a ${HARNESS[provider].planName}. Calls and dictation will be off.`
+              : `Agents on ${name} models won't start without a ${HARNESS[provider].planName}.`,
           verb: WORDS.REMOVE_KEY,
           running: WORDS.REMOVING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -1035,7 +1038,7 @@ function AgentAuthDialog({
   const cards: readonly ChoiceOption<Credential>[] = [
     {
       value: CREDENTIAL.SUBSCRIPTION,
-      label: WORDS.SUBSCRIPTION,
+      label: harness.planName,
       after: plan !== undefined && standing(plan) ? <Saved /> : undefined,
       disabled: !selectable[CREDENTIAL.SUBSCRIPTION] || planOutOfReach,
       detail: planOutOfReach ? WORDS.DESKTOP_ONLY : undefined,

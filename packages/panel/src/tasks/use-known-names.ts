@@ -1,15 +1,14 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
+import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { KnownNames } from "@repo/features/place-chip-model";
 import type { TaskStatus } from "@repo/features/task-wire";
-import { TASKS_READ } from "@repo/features/tasks-view";
 import { taskKey } from "@repo/features/workspace-key";
-import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
-import { useEffect, useMemo } from "react";
-import { tellAct } from "../act.js";
+import { useMemo } from "react";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { appStateDerivedAtom } from "../use-app-state.js";
@@ -21,36 +20,52 @@ import { appStateDerivedAtom } from "../use-app-state.js";
  * the agents each task's row names, as their tabs name them
  * (`agentName`, so an untitled agent goes by its model), and the models they run on, the agents with no task the list
  * carries, theirs, and the automations that started them, the active task's
- * pages, each task's key, the Inbox items waiting, and the agents an
- * automation started with no task; from the directories standing around
+ * pages as the window holds them (`LIVE_READ.PAGES`), each task's key, the
+ * Inbox items waiting, and the agents an automation started with no task;
+ * from the directories standing around
  * the caller, the members and the automation asked for. Nothing is fetched,
- * so a name the window does not hold is not here; a chip naming a task
- * before the list was ever read asks for it once (`useTaskNameCatchUp`), and
- * the follow that read starts brings each task's name as the service gives it.
+ * so a name the window does not hold is not here; the task list is followed
+ * from the account signing in (`compose-tasks.ts`), which brings each task's
+ * name as the service gives it.
  *
  * The document's names are built once per delivery in an atom every chip
  * shares, rather than once per chip, so a transcript of a hundred chips
  * builds them once; and not at all for a delivery that moved neither the
- * tasks nor the Inbox.
+ * tasks, the Inbox, nor the active task's pages.
  */
 
 /** No people: what a caller outside a member directory names. */
 const NO_PEOPLE: ReadonlyMap<string, string> = new Map();
 
-/** The two slices of the document the names are read from. */
+/** The slices of the document the names are read from: the tasks, the Inbox, and the active task's pages. */
 interface NamedSlices {
   readonly planning: AppStateSnapshot["tasks"] | undefined;
   readonly inbox: AppStateSnapshot["inbox"] | undefined;
+  readonly pages: readonly PageLine[] | undefined;
 }
 
-/** The slices, which tell their readers only when either is a new object, so a delivery that kept both builds nothing. */
+/** The active task's pages as the window holds them; none with no task open, or before they are read. */
+function activePagesOf(state: AppStateSnapshot | undefined): readonly PageLine[] | undefined {
+  const taskId = state?.tasks.activeTaskId;
+  return taskId === undefined ? undefined : state?.[LIVE_READ.PAGES][PAGE_OWNER.TASK][taskId]?.rows;
+}
+
+/** The slices, which tell their readers only when one is a new object, so a delivery that kept them all builds nothing. */
 const namedSlicesAtom: Atom.Atom<NamedSlices> = Atom.withEquality(
-  appStateDerivedAtom((state): NamedSlices => ({ planning: state?.tasks, inbox: state?.inbox })),
-  (held, next) => held.planning === next.planning && held.inbox === next.inbox,
+  appStateDerivedAtom(
+    (state): NamedSlices => ({
+      planning: state?.tasks,
+      inbox: state?.inbox,
+      pages: activePagesOf(state),
+    }),
+  ),
+  (held, next) =>
+    held.planning === next.planning && held.inbox === next.inbox && held.pages === next.pages,
 );
 
 /** The names the document holds, no people among them, the one value every reader of this window shares. */
-const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, ({ planning, inbox }) => {
+const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, (slices) => {
+  const { planning, inbox } = slices;
   const tasks = new Map(planning?.tasks.map((task) => [task.id, task.name]));
   const agents = new Map<string, string>();
   const agentModels = new Map<string, string>();
@@ -80,7 +95,7 @@ const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, ({ planni
       }),
     );
   }
-  const pages = new Map(planning?.pages?.map((page) => [page.id, page.title]));
+  const pages = new Map(slices.pages?.map((page) => [page.id, page.title]));
   const inboxItems = new Map(
     [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].map(
       (item) => [item.id, item.title],
@@ -98,7 +113,7 @@ const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, ({ planni
   };
 });
 
-/** Each listed task's status, by its id, built once per delivery that moved the tasks or the Inbox, as the names are. */
+/** Each listed task's status, by its id, built once per delivery that moved the slices the names are read from, as the names are. */
 const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
   namedSlicesAtom,
   ({ planning }) =>
@@ -108,35 +123,6 @@ const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
       ),
     ),
 );
-
-/** Whether main's document holds no read of the task list yet, so nothing follows it and no task's name can land. */
-const listUnreadAtom: Atom.Atom<boolean> = appStateDerivedAtom(
-  (state) => state?.tasks.listStatus === TASKS_READ.IDLE,
-);
-
-/** Whether a chip has asked for the list since it was last unread, so the chips of one transcript ask once between them. */
-const listAsked = { asked: false };
-
-/**
- * Asks the window to follow its task list where a chip names a task and no
- * read of the list has started yet, once between every chip, so the task's
- * name lands. The list is followed live from its first read
- * (`compose-tasks.ts`), so a task the list holds Untitled or not at all
- * takes its name as the service names it, and asking again would read
- * nothing new; nothing for none asked for.
- */
-export function useTaskNameCatchUp(taskId: string | undefined): void {
-  const unread = useAtomValue(listUnreadAtom);
-  useEffect(() => {
-    if (!unread) {
-      listAsked.asked = false;
-      return;
-    }
-    if (taskId === undefined || listAsked.asked) return;
-    listAsked.asked = true;
-    tellAct(ACT_KIND.TASKS_REFRESH);
-  }, [unread, taskId]);
-}
 
 /** No keys: what a window listing no numbered task holds, one object for every reader. */
 const NO_KEY_TARGETS: ReadonlyMap<string, string> = new Map();
@@ -153,8 +139,8 @@ function sameTargets(
 
 /**
  * Each listed task's key (`ACME-42`), the link its mention is written with,
- * built once per delivery that moved the tasks or the Inbox, as the names
- * are. A key two tasks share, as two workspaces whose names begin alike
+ * built once per delivery that moved the slices the names are read from, as
+ * the names are. A key two tasks share, as two workspaces whose names begin alike
  * give theirs, names neither, so words never chip the wrong task. It tells
  * its readers only when a key or its link changed, which a task's other
  * moves never do, so the words drawn with it are read again only then.

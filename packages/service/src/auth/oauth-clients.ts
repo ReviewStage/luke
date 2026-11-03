@@ -5,6 +5,18 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
  * public PKCE client with no secret.
  */
 
+/** A client as this build provisions one: public, with no secret, under the scopes and redirects it names. */
+export interface OAuthClient {
+  readonly id: string;
+  readonly name: string;
+  readonly scopes: readonly string[];
+  readonly redirectUris: readonly string[];
+  readonly tokenEndpointAuthMethod: string;
+  readonly grantTypes: readonly string[];
+  readonly responseTypes: readonly string[];
+  readonly type: string;
+}
+
 export const DESKTOP_OAUTH_CLIENT = {
   id: "desktop",
   name: `${PRODUCT_NAME} for macOS`,
@@ -14,9 +26,7 @@ export const DESKTOP_OAUTH_CLIENT = {
   grantTypes: ["authorization_code", "refresh_token"],
   responseTypes: ["code"],
   type: "native",
-} as const;
-
-export type OAuthClient = typeof DESKTOP_OAUTH_CLIENT;
+} as const satisfies OAuthClient;
 
 /** One `oauth_client` row, camelCase as the auth service's own Kysely adapter reads and writes it. */
 interface OAuthClientRecord {

@@ -4,10 +4,11 @@
 
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
+import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   type AppHolderInboxes,
+  type AppHolderPages,
   type AppHostRead,
   type AppInboxItems,
   type AppPages,
@@ -203,13 +204,14 @@ export function handHostReads(first: {
 
 /**
  * Answers the window's holds on a task's or an agent's pages as the host
- * does, beside whatever acts the test answers by now: what `pagesOf` holds
- * of each is laid on the document through `deliver` as it is first held,
- * and stays there once let go. Answers with every hold asked for, in order.
+ * does, beside whatever acts the test answers by now: where `pagesOf` holds
+ * each, its rows or that the host was refused them, laid on the document
+ * through `deliver` as it is first held, and staying there once let go.
+ * Answers with every hold asked for, in order.
  */
 export function holdPages(
   deliver: HostReadsHanded["deliverPages"],
-  pagesOf: (place: PagePlace) => readonly PageLine[] | undefined,
+  pagesOf: (place: PagePlace) => AppHolderPages | undefined,
 ): readonly PagePlace[] {
   const asked: PagePlace[] = [];
   let held: AppPages = NO_PAGES;
@@ -217,12 +219,12 @@ export function holdPages(
     ...fakeActPortCalls(),
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: (place) => {
       asked.push(place);
-      const pages = pagesOf(place);
+      const read = pagesOf(place);
       const kind = "taskId" in place ? PAGE_OWNER.TASK : PAGE_OWNER.AGENT;
       const id = "taskId" in place ? place.taskId : place.agentId;
       // Note that the host pushes what it read once the hold is taken, never inside it.
-      if (pages !== undefined && held[kind][id] === undefined) {
-        held = { ...held, [kind]: { ...held[kind], [id]: { rows: pages } } };
+      if (read !== undefined && held[kind][id] === undefined) {
+        held = { ...held, [kind]: { ...held[kind], [id]: read } };
         const laid = held;
         void Promise.resolve().then(() => deliver(laid));
       }

@@ -337,6 +337,9 @@ test("an automation's chip, whose choice a new agent starts on, says a model not
     return foot.join("");
   };
 
-  assert.match(footOf(true), /Connect Claude.*Opus 5\.5 cannot run until you connect Claude/u);
+  assert.match(
+    footOf(true),
+    /Connect Claude.*Opus 5\.5 cannot run until you connect a Claude plan/u,
+  );
   assert.doesNotMatch(footOf(false), /cannot run|Connect/u);
 });

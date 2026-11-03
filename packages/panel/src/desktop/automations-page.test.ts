@@ -2685,7 +2685,7 @@ test("the reader's own automation says a model nothing of theirs pays for cannot
       .join("");
   };
 
-  assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect Claude/u);
+  assert.match(await footOn(DIGEST.id), /Opus 5\.5 cannot run until you connect a Claude plan/u);
   const teammates = await footOn(SWEEP.id);
   assert.match(teammates, /Effort/u, "the menu is open on its pinned rows");
   assert.doesNotMatch(teammates, /cannot run|Connect/u);

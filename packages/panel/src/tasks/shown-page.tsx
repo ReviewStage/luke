@@ -1,13 +1,11 @@
-import { useAtomValue } from "@effect/atom-react";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { pageSizeSchema } from "@repo/features/page-size";
-import type { PageLine, PagePlace } from "@repo/features/page-wire";
+import type { PagePlace } from "@repo/features/page-wire";
 import { PageEmbed } from "@repo/ui";
 import { Option, Schema } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { agentPagesAtom, taskPagesAtom } from "./chip-cards.js";
+import { useHostRead } from "../use-host-read.js";
 import { PAGE_SANDBOX, useFrameLinks } from "./page-pane.js";
 
 /**
@@ -18,9 +16,10 @@ import { PAGE_SANDBOX, useFrameLinks } from "./page-pane.js";
  * its links out opened outside it as the tab opens them. The frame stands as
  * tall as the page reports it is (`@repo/features/page-size`), heard from
  * that frame alone and only in that message's shape, and loads only as it
- * nears the screen. A line naming a page draws its newest version, read as
- * a page's chip reads it to hang its card (`chip-cards.tsx`), and nothing
- * while that read is out or where the reader cannot reach the page.
+ * nears the screen. A line naming a page draws its newest version, from the
+ * pages its plan or its agent on no task holds (`LIVE_READ.PAGES`), as a
+ * page's chip hangs its card (`chip-cards.tsx`), and nothing while that read
+ * is out or where the reader cannot reach the page.
  */
 
 const readSize = Schema.decodeUnknownOption(pageSizeSchema);
@@ -72,54 +71,7 @@ export function ShownPage({
   );
 }
 
-/** The page among those read, drawn at its newest version; nothing while they are read or where none is the page. */
-function NewestOf({
-  place,
-  pages,
-  pageId,
-}: {
-  place: PagePlace;
-  pages: readonly PageLine[] | undefined;
-  pageId: string;
-}): ReactNode {
-  const page = pages?.find((each) => each.id === pageId);
-  if (page === undefined) return null;
-  return <ShownPage place={place} pageId={page.id} version={page.version} title={page.title} />;
-}
-
-/** A page of a plan not open, or of an agent on no task, at its newest version as read. */
-function ReadNewestPage({
-  place,
-  read,
-  pageId,
-}: {
-  place: PagePlace;
-  read: AsyncResult.AsyncResult<readonly PageLine[] | undefined>;
-  pageId: string;
-}): ReactNode {
-  if (!AsyncResult.isSuccess(read)) return null;
-  return <NewestOf place={place} pages={read.value} pageId={pageId} />;
-}
-
-function ReadTaskNewestPage({ taskId, pageId }: { taskId: string; pageId: string }): ReactNode {
-  const read = useAtomValue(taskPagesAtom(taskId));
-  return <ReadNewestPage place={{ taskId }} read={read} pageId={pageId} />;
-}
-
-function ReadAgentNewestPage({ agentId, pageId }: { agentId: string; pageId: string }): ReactNode {
-  const read = useAtomValue(agentPagesAtom(agentId));
-  return <ReadNewestPage place={{ agentId }} read={read} pageId={pageId} />;
-}
-
-/** A plan's page at its newest version: the open plan's as the window holds its pages, live as they move, and any other's as read. */
-function TaskNewestPage({ taskId, pageId }: { taskId: string; pageId: string }): ReactNode {
-  const tasks = useAppSlice(APP_SLICE.TASKS);
-  const held = tasks?.activeTaskId === taskId ? tasks.pages : undefined;
-  if (held === undefined) return <ReadTaskNewestPage taskId={taskId} pageId={pageId} />;
-  return <NewestOf place={{ taskId }} pages={held} pageId={pageId} />;
-}
-
-/** A page named by a line of words, drawn live at its newest version. */
+/** A page named by a line of words, drawn live at its newest version as its plan, or its agent on no task, holds its pages; nothing while they are read or where none is the page. */
 export function ShownNewestPage({
   place,
   pageId,
@@ -127,9 +79,7 @@ export function ShownNewestPage({
   place: PagePlace;
   pageId: string;
 }): ReactNode {
-  return "taskId" in place ? (
-    <TaskNewestPage taskId={place.taskId} pageId={pageId} />
-  ) : (
-    <ReadAgentNewestPage agentId={place.agentId} pageId={pageId} />
-  );
+  const page = useHostRead(LIVE_READ.PAGES, place).rows?.find((each) => each.id === pageId);
+  if (page === undefined) return null;
+  return <ShownPage place={place} pageId={page.id} version={page.version} title={page.title} />;
 }

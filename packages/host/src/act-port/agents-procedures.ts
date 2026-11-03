@@ -107,8 +107,6 @@ export interface AgentProceduresDependencies {
     agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
     agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
     agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
-    /** The plan list read again, which carries every agent with no plan beside the plans. */
-    tasksRefresh(): Effect.Effect<void>;
     agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
     agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
     agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
@@ -222,15 +220,10 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const { host, notices } = dependencies;
   /** How many streams stand open of each transcript, so the host lets one go only with the last. */
   const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
-  // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
   const notedAgent = (answer: Effect.Effect<AgentAgentAnswer>) =>
-    Effect.tap(
-      noted(answer, (value) => {
-        if ("agent" in value) notices.observeAgents([value.agent]);
-      }),
-      (value) =>
-        "agent" in value && value.agent.planId === null ? host.tasksRefresh() : Effect.void,
-    );
+    noted(answer, (value) => {
+      if ("agent" in value) notices.observeAgents([value.agent]);
+    });
   return {
     [AGENT_ACT_KIND.AGENTS_MODELS]: actPort[AGENT_ACT_KIND.AGENTS_MODELS].effect(function* ({
       context,
@@ -441,10 +434,7 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       errors,
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that the plan list is read again, which carries every agent with no plan, so the sidebar's row goes.
-      return yield* Effect.tap(host.agentDelete(input), (answer) =>
-        "deleted" in answer ? host.tasksRefresh() : Effect.void,
-      );
+      return yield* host.agentDelete(input);
     }),
     [AGENT_ACT_KIND.AGENTS_SHOWN]: actPort[AGENT_ACT_KIND.AGENTS_SHOWN].effect(function* ({
       input,

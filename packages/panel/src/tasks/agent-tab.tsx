@@ -35,7 +35,6 @@ import {
   sameShape,
 } from "@repo/features/turn-rows";
 import { replyFromWords } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { AGENT_ENTER } from "@repo/settings";
 import {
   ANNOUNCE,
@@ -91,7 +90,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref.js";
 import {
   Conversation,
@@ -159,8 +157,6 @@ import {
   SENT_LINE_STATE,
   type SentLine,
   type StartingLaunch,
-  settledPlanEdits,
-  sidebarCallIds,
   slackLineOf,
   type TurnStretch,
   teammateStarter,
@@ -3081,7 +3077,6 @@ export function StartingAgentTab({ line }: { line?: SentLine | undefined }): Rea
 export function AgentTab(props: AgentTabProps): React.JSX.Element {
   const { agent, control, shown, onHeld, agentId: _agentId, ...rest } = props;
   const agentId = props.agentId === undefined ? props.agent.id : props.agentId;
-  const { tell } = useAct();
   const transcript = useAgentTranscript({
     transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId },
     shown,
@@ -3096,15 +3091,6 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
     const status = pageStatus;
     onHeld(agentId, { messages, status, runStartedAt, title: undefined, subagentTitles });
   }, [onHeld, agentId, messages, pageStatus, runStartedAt, subagentTitles]);
-  // A plan edit that answered has changed the plan the window holds, so the host re-reads it;
-  // the edits already on screen when the tab opened are the plan's as it was read.
-  const settledEdits = settledPlanEdits(transcript.messages);
-  const seenEdits = useRef(settledEdits);
-  useEffect(() => {
-    if (settledEdits <= seenEdits.current) return;
-    seenEdits.current = settledEdits;
-    tell(ACT_KIND.TASKS_REFRESH);
-  }, [settledEdits, tell]);
   // An agent this one started, archived, or brought back moves in the plan's agents only once
   // they are read again, so a call that answered after the tab opened has them read; those
   // already there were read with the plan.
@@ -3116,15 +3102,6 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
     seenListCalls.current = new Set(listCalls);
     if (landed) readAgents();
   }, [listCalls, readAgents]);
-  // A start that made a new task, or a call that made, deleted, or filled a section, changes the
-  // sidebar only once the tasks are read again.
-  const sidebarCalls = useMemo(() => sidebarCallIds(transcript.messages), [transcript.messages]);
-  const seenSidebarCalls = useRef<ReadonlySet<string>>(new Set(sidebarCalls));
-  useEffect(() => {
-    const landed = sidebarCalls.some((id) => !seenSidebarCalls.current.has(id));
-    seenSidebarCalls.current = new Set(sidebarCalls);
-    if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [sidebarCalls, tell]);
   // The tab stands in its own shape until the agent is here; its log stands the same lines until its first page is (`TranscriptSkeleton`).
   if (agent === undefined) return <AgentTabSkeleton />;
   return (

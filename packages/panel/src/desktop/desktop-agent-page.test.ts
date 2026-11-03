@@ -70,7 +70,9 @@ import {
 import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
+  handHostReads,
   handState,
+  holdPages,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -361,14 +363,6 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
-      }
-      // Only the task the agents here stand on holds a page; an agent's own pages hold none.
-      if (request.kind === ACT_KIND.TASKS_PAGES) {
-        const onTask = "taskId" in request.payload && request.payload.taskId === PAGE_TASK;
-        return Promise.resolve({
-          status: FAKE_ANSWER.DONE,
-          value: { pages: onTask ? [FUNNEL] : [] },
-        });
       }
       if (request.kind === ACT_KIND.AGENTS_PAGE) {
         read.push(request.payload.agentId);
@@ -763,6 +757,10 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
+  // Note that only the task the agent stands on holds a page, laid on the document as the host lays the pages a card holds.
+  holdPages(handHostReads({}).deliverPages, (place) => ({
+    rows: "taskId" in place && place.taskId === PAGE_TASK ? [FUNNEL] : [],
+  }));
   const page = mount();
   await settle();
 

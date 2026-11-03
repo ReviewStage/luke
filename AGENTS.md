@@ -341,6 +341,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   caller handed it; the work itself stays on the caller's fiber. What would
   end this row is an Effect transaction in TanStack DB.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
+- **`packages/service/src/member-mcp/server.ts`** — the MCP SDK's `McpServer` awaits each tool's handler as a promise, so a tool's effect runs there on the services the request's fiber handed it, the admitted member provided; what would end this row is an Effect-native MCP server that serves the 2026-07-28 revision without a session.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/hosted-store-database.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a

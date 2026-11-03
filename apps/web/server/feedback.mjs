@@ -1,5 +1,6 @@
 /**
- * Turns one feedback submission into email to the founders.
+ * Turns one feedback submission into email to the founders, and a response
+ * to Vespin's feedback survey in PostHog, which posts it to the team's Slack.
  *
  * This is the fixed endpoint the desktop app's composer posts to
  * (`packages/features/src/feedback/delivery.ts`), deployed with the landing page.
@@ -16,11 +17,35 @@
  * public repository, so the address cannot be scraped from source.
  * `FEEDBACK_FROM` may override the sender. Without either required value the
  * endpoint answers 503 and the composer reports the service unavailable;
- * nothing else about the app depends on it.
+ * nothing else about the app depends on it. Where the deployment also holds
+ * `POSTHOG_PROJECT_API_KEY` (production does, a Preview does not), a note the
+ * mail service took is recorded as a response to the feedback survey: its
+ * words and the credit the user chose, never its screenshots, under a
+ * distinct id of its own that makes no person. A PostHog destination posts
+ * each response to the team's Slack.
  */
 
 const RESEND_URL = "https://api.resend.com/emails";
 const DEFAULT_FROM = "Vespin <feedback@vespin.dev>";
+
+/**
+ * Vespin's feedback survey in PostHog: an API survey, shown to no one, that
+ * a note is recorded under so PostHog reads it as a response, and its one
+ * open question, whose answer PostHog keys by the question's id.
+ */
+const FEEDBACK_SURVEY = {
+  ID: "01a1a39c-6e8f-0000-b2a9-1c94c0673240",
+  NAME: "Feedback",
+  QUESTION_ID: "27a12623-8bc1-494c-a0b3-58bc910437ac",
+  QUESTION: "What can we do to improve Vespin?",
+  RESPONSE_KEY: "$survey_response_27a12623-8bc1-494c-a0b3-58bc910437ac",
+};
+
+const POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com";
+const POSTHOG_CAPTURE_PATH = "/i/v0/e/";
+
+/** How long the survey response may hold the answer, since the note is already delivered by mail. */
+const POSTHOG_TIMEOUT_MS = 5_000;
 
 /**
  * A best-effort brake on abuse: the endpoint is public and each accepted
@@ -265,6 +290,72 @@ function emailBody(submission) {
 }
 
 /**
+ * The survey response a note is recorded as, in the shape PostHog's own
+ * survey SDKs send one. Every note has a distinct id of its own and makes no
+ * person, since the note names its sender only by the credit they chose.
+ *
+ * @param {ReturnType<typeof feedbackSubmission> & object} submission
+ * @param {string} apiKey
+ */
+function surveyResponse(submission, apiKey) {
+  const submissionId = crypto.randomUUID();
+  return {
+    api_key: apiKey,
+    event: "survey sent",
+    distinct_id: `feedback-${submissionId}`,
+    properties: {
+      $survey_id: FEEDBACK_SURVEY.ID,
+      $survey_name: FEEDBACK_SURVEY.NAME,
+      $survey_submission_id: submissionId,
+      $survey_completed: true,
+      $survey_questions: [
+        {
+          id: FEEDBACK_SURVEY.QUESTION_ID,
+          question: FEEDBACK_SURVEY.QUESTION,
+          response: submission.message,
+        },
+      ],
+      [FEEDBACK_SURVEY.RESPONSE_KEY]: submission.message,
+      feedback_kind: submission.kind,
+      feedback_name: submission.name ?? null,
+      feedback_email: submission.email ?? null,
+      feedback_experiment: submission.experiment ?? null,
+      feedback_screenshot_count: submission.images.length,
+      environment: process.env.VERCEL_ENV?.trim() || "development",
+      $process_person_profile: false,
+      // Without it a note with no address resolves to the data center's.
+      $geoip_disable: true,
+    },
+  };
+}
+
+/**
+ * Records a delivered note as a feedback survey response, where the
+ * deployment holds the project key. Best effort: the mail service already
+ * took the note, so a PostHog that fails or is slow costs the response and
+ * never the answer.
+ *
+ * @param {ReturnType<typeof feedbackSubmission> & object} submission
+ */
+async function recordSurveyResponse(submission) {
+  const apiKey = process.env.POSTHOG_PROJECT_API_KEY?.trim();
+  if (!apiKey) return;
+  const host = process.env.POSTHOG_HOST?.trim() || POSTHOG_DEFAULT_HOST;
+  try {
+    const response = await fetch(new URL(POSTHOG_CAPTURE_PATH, host), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(surveyResponse(submission, apiKey)),
+      signal: AbortSignal.timeout(POSTHOG_TIMEOUT_MS),
+    });
+    if (!response.ok)
+      console.error(`Feedback survey response failed with status ${response.status}`);
+  } catch {
+    console.error("Feedback survey response did not reach PostHog");
+  }
+}
+
+/**
  * @param {number} status
  * @param {Record<string, unknown>} body
  */
@@ -337,5 +428,7 @@ export async function POST(request) {
     console.error(`Feedback forwarding failed with status ${response.status}`);
     return json(502, { reason: "The mail service refused this submission." });
   }
+  // Only once the mail is taken, so a retry after a refused send is recorded once.
+  await recordSurveyResponse(submission);
   return json(200, { delivered: true });
 }

@@ -71,7 +71,7 @@ export const CHATGPT_SIGN_IN_REASON = {
   TIMED_OUT: "ChatGPT sign-in timed out.",
   UNREACHABLE: "Couldn't reach ChatGPT. Try again.",
   NOT_REGISTERED: `ChatGPT didn't finish connecting ${PRODUCT_NAME}. Try again.`,
-  USAGE_NOT_ENABLED: `ChatGPT subscription use wasn't enabled for ${PRODUCT_NAME}. Try again and allow it in the browser.`,
+  USAGE_NOT_ENABLED: `ChatGPT plan use wasn't enabled for ${PRODUCT_NAME}. Try again and allow it in the browser.`,
   NOT_VERIFIED: "Couldn't verify the ChatGPT sign-in. Try again.",
 } as const;
 

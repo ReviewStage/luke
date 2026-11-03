@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { PAGE_SHOWER } from "@repo/features/page-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
+import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "../app-state.js";
@@ -155,29 +156,26 @@ it("a slice that moved keeps every part of it that did not, so what a reader hel
     at: 0,
     shownBy: { kind: PAGE_SHOWER.AGENT, agentId },
   });
-  app.update({
-    tasks: {
-      ...app.snapshot().tasks,
-      activeTaskId: "plan-1",
-      pages: [page(PAGE_ONE, "Invites", AGENT), page(PAGE_TWO, "Billing", AGENT)],
+  const held = (second: string) => ({
+    [PAGE_OWNER.TASK]: {
+      "plan-1": { rows: [page(PAGE_ONE, "Invites", AGENT), page(PAGE_TWO, second, AGENT)] },
     },
+    [PAGE_OWNER.AGENT]: {},
   });
-  const held = app.snapshot().tasks;
+  const rowsOf = () => app.snapshot()[LIVE_READ.PAGES][PAGE_OWNER.TASK]["plan-1"]?.rows;
+  app.update({ [LIVE_READ.PAGES]: held("Billing") });
+  const before = rowsOf();
 
-  // The host's next view: the same data, every object of it new, and the second page retitled.
-  const next = {
-    ...structuredClone(held),
-    pages: [page(PAGE_ONE, "Invites", AGENT), page(PAGE_TWO, "Billing and plans", AGENT)],
-  };
-  app.update({ tasks: next });
-  const now = app.snapshot().tasks;
+  // The host's next pages: the same data, every object of it new, and the second page retitled.
+  const next = held("Billing and plans");
+  app.update({ [LIVE_READ.PAGES]: next });
+  const now = rowsOf();
 
   assert.equal(app.snapshot().version, 2);
-  assert.deepEqual(now, next);
-  assert.equal(now.document, held.document);
-  assert.equal(now.pages?.[0], held.pages?.[0]);
-  assert.notEqual(now.pages?.[1], held.pages?.[1]);
-  assert.equal(now.pages?.[1]?.shownBy, held.pages?.[1]?.shownBy);
+  assert.deepEqual(app.snapshot()[LIVE_READ.PAGES], next);
+  assert.equal(now?.[0], before?.[0]);
+  assert.notEqual(now?.[1], before?.[1]);
+  assert.equal(now?.[1]?.shownBy, before?.[1]?.shownBy);
 });
 
 it.effect("a touch re-announces the document without numbering it again", () =>

@@ -1,16 +1,11 @@
-import { useAtomValue } from "@effect/atom-react";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
-import type { PageLine, PagePlace } from "@repo/features/page-wire";
+import type { PagePlace } from "@repo/features/page-wire";
 import { planSections } from "@repo/features/plan-document";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@repo/ui";
-import { Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import { HashIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
-import { askAct } from "../act.js";
 import { AutomationCard, actorCard } from "../actor-ref.js";
 import {
   AutomationDirectory,
@@ -18,8 +13,8 @@ import {
   useAutomationsLanded,
 } from "../automation-directory.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useMentionedReader } from "./mentioned-agent-card.js";
 import { PageCard } from "./page-card.js";
@@ -34,10 +29,9 @@ import { useTaskMentions } from "./task-mentions.js";
  * card (`../desktop/task-card.tsx`), and a section's or a version's the
  * same card's head with the section's heading or the version under it in
  * the agents' stead; a page's is its tab's, its title, its version, when
- * it last moved, and who showed it over a preview of it (`page-card.tsx`), a plan's page
- * read from what the window holds where the plan is open, and the page of
- * any other plan or of an agent on no task, which the window holds nothing
- * of, read as the card is first hung (`ReadPageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
+ * it last moved, and who showed it over a preview of it (`page-card.tsx`),
+ * from the pages its plan or its agent on no task holds, held as the card
+ * is first hung (`PageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
  * its Inbox row's own card (`inbox-item-chip.tsx`); an
  * automation's is its card, the workspace's automations read as the card is
  * first hung where no directory around it reads them yet. Everything else
@@ -179,118 +173,14 @@ export function VersionChipCard({
   );
 }
 
-/** The pages of a plan or of an agent on no task as the service answered them; nothing where it refused, or the place is not the reader's to reach. */
-function placePages(place: PagePlace): Effect.Effect<readonly PageLine[] | undefined> {
-  return Effect.promise(() =>
-    askAct(ACT_KIND.TASKS_PAGES, place).then(
-      (answer) => ("pages" in answer ? answer.pages : undefined),
-      () => undefined,
-    ),
-  );
-}
-
-/** One agent's pages, read once for every card hung of it while one stands. */
-export const agentPagesAtom = Atom.family((agentId: string) =>
-  rendererRuntime.atom(placePages({ agentId })),
-);
-
-/** One plan's pages where the window does not hold them, read once for every card hung of it while one stands. */
-export const taskPagesAtom = Atom.family((taskId: string) =>
-  rendererRuntime.atom(placePages({ taskId })),
-);
-
-/** A page among pages read as its card is hung; `reading` while the read is out, and `fallback` where it failed or holds no such page. */
-function ReadPageChipCard({
-  place,
-  read,
-  pageId,
-  reading,
-  fallback,
-}: {
-  place: PagePlace;
-  read: AsyncResult.AsyncResult<readonly PageLine[] | undefined>;
-  pageId: string;
-  reading: ReactNode;
-  fallback: ReactNode;
-}): ReactNode {
-  if (AsyncResult.isInitial(read)) return reading;
-  const page = AsyncResult.isSuccess(read)
-    ? read.value?.find((each) => each.id === pageId)
-    : undefined;
-  if (page === undefined) return fallback;
-  return <PageCard place={place} page={page} />;
-}
-
-/** What a page's card stands in with: `reading` while its page is read, `fallback` where it cannot be. */
-interface PageWait {
-  readonly reading: ReactNode;
-  readonly fallback: ReactNode;
-}
-
 /**
- * The card of a page of an agent on no task, the page's own card as a
- * plan's page hangs it, read by the agent's pages (`ACT_KIND.TASKS_PAGES`)
- * as it is first hung and never as the chip is drawn, so words full of
- * chips ask nothing until one is looked at.
- */
-function AgentPageChipCard({
-  agentId,
-  pageId,
-  wait,
-}: {
-  agentId: string;
-  pageId: string;
-  wait: PageWait;
-}): ReactNode {
-  const read = useAtomValue(agentPagesAtom(agentId));
-  return <ReadPageChipCard place={{ agentId }} read={read} pageId={pageId} {...wait} />;
-}
-
-/** The card of a page of a plan not open, read by the plan's pages as it is first hung, as an agent's page is. */
-function ReadTaskPageChipCard({
-  taskId,
-  pageId,
-  wait,
-}: {
-  taskId: string;
-  pageId: string;
-  wait: PageWait;
-}): ReactNode {
-  const read = useAtomValue(taskPagesAtom(taskId));
-  return <ReadPageChipCard place={{ taskId }} read={read} pageId={pageId} {...wait} />;
-}
-
-/**
- * A page of a plan's card: the open plan's from the pages the window holds,
- * live as they move, and any other plan's read as it is first hung, so a
- * page's bar in an Inbox item or another task's transcript hangs the card
- * its tab hangs; `fallback` where neither finds the page.
- */
-function TaskPageChipCard({
-  taskId,
-  pageId,
-  wait,
-}: {
-  taskId: string;
-  pageId: string;
-  wait: PageWait;
-}): ReactNode {
-  const tasks = useAppSlice(APP_SLICE.TASKS);
-  // Note that the window holds no pages for the open plan both before they land and once a read found none, so a plan it holds none for is read as a closed one is.
-  const held = tasks?.activeTaskId === taskId ? tasks.pages : undefined;
-  if (held === undefined) {
-    return <ReadTaskPageChipCard taskId={taskId} pageId={pageId} wait={wait} />;
-  }
-  const page = held.find((each) => each.id === pageId);
-  if (page === undefined) return wait.fallback;
-  return <PageCard place={{ taskId }} page={page} />;
-}
-
-/**
- * A page's card, its tab's, previewing it: a plan's page's as the window
- * holds it, an agent's read as it is hung; `reading` while that read is
- * out, which is `fallback` where none is given, and `fallback` where the
- * page cannot be read.
+ * A page's card, its tab's, previewing it: the page among the pages of the
+ * plan the link names it on, or of the agent on no task, held as the card
+ * is first hung and never as the chip is drawn (`LIVE_READ.PAGES`), so
+ * words full of chips ask nothing until one is looked at, and a page of the
+ * open plan, which the window holds already, hangs at once; `reading` while
+ * that read is out, which is `fallback` where none is given, and `fallback`
+ * where it failed or holds no such page.
  */
 export function PageChipCard({
   place,
@@ -304,12 +194,11 @@ export function PageChipCard({
   reading?: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  const wait = { reading: reading ?? fallback, fallback };
-  return "taskId" in place ? (
-    <TaskPageChipCard taskId={place.taskId} pageId={pageId} wait={wait} />
-  ) : (
-    <AgentPageChipCard agentId={place.agentId} pageId={pageId} wait={wait} />
-  );
+  const read = useHostRead(LIVE_READ.PAGES, place);
+  if (read.status === HOST_READ_STATUS.LOADING) return reading ?? fallback;
+  const page = read.rows?.find((each) => each.id === pageId);
+  if (page === undefined) return fallback;
+  return <PageCard place={place} page={page} />;
 }
 
 /** The workspace a link was written under, by its slug, one it stood under before, or its id where it has none, as the account holds it; none where it holds no such workspace. */

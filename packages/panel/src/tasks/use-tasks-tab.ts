@@ -48,7 +48,6 @@ import {
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
-  UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import {
   type ParentCallFailure,
@@ -653,8 +652,8 @@ export interface TasksControl {
   sidePanel: SidePanelControl;
   /** The side panel's tabs holding something that arrived while the panel showed another, and the agents' tabs that ended unseen, each until it is shown. */
   unreadTabs: readonly StripTab[];
-  /** The pages agents wrote for the open task, each by its newest version; absent with none. */
-  pages: TasksView["pages"];
+  /** The pages agents wrote for the open task, each by its newest version, as the window holds them (`LIVE_READ.PAGES`); none until read. */
+  pages: readonly PageLine[] | undefined;
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
   agents: AgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
@@ -1088,7 +1087,7 @@ const NO_REPOSITORY_PINS: readonly RepositoryPin[] = [];
 const NO_PENDING_TASKS: readonly string[] = [];
 
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
-const NO_PAGES: NonNullable<TasksView["pages"]> = [];
+const NO_PAGES: readonly PageLine[] = [];
 
 /** What the Inbox's bare panel, and an agent's own page, hold of the plan's panel kinds: nothing, the task's page drawing what they show. */
 const NO_HOLDS: TaskHolds = {};
@@ -1488,28 +1487,6 @@ export function useTasksTab(input: {
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
   }, [tasklessAgents, listedWorkspaceId]);
-  // An Untitled task takes its first agent's title on the service, and the
-  // window hears no push for a task's row, so the tasks are read again as an
-  // agent of the open task first holds a title while it stands Untitled.
-  // Note that a list read already holding a title is no title landing, so a
-  // task opened on titled agents asks nothing.
-  const agentTitled =
-    agents.agents === undefined ? undefined : agents.agents.some((agent) => agent.title !== null);
-  const openName =
-    tasks.tasks.find((task) => task.id === viewed.activeTaskId)?.name ??
-    (openDocument?.id === viewed.activeTaskId ? openDocument?.name : undefined);
-  const untitled = openName === UNTITLED_TASK_NAME;
-  const titledSeen = useRef<{ taskId: string | undefined; titled: boolean | undefined }>({
-    taskId: undefined,
-    titled: undefined,
-  });
-  useEffect(() => {
-    const seen = titledSeen.current;
-    const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && seen.titled === false && agentTitled === true;
-    titledSeen.current = { taskId, titled: agentTitled };
-    if (landed && untitled) tell(ACT_KIND.TASKS_REFRESH);
-  }, [agentTitled, untitled, viewed.activeTaskId, tell]);
   // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
   const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
   const rowAgents = openRow?.agents;
@@ -1529,8 +1506,13 @@ export function useTasksTab(input: {
     agents.draft?.id,
   );
   mainRef.current = mainTabs;
-  // A page's tab is held to the pages agents wrote for the task.
-  const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
+  // The open task's pages are held whenever a task is open, the Inbox's or an agent's page over it
+  // among them, so its page draws them from where they stand, and a page's tab is held to them.
+  const taskPages = useHostRead(
+    LIVE_READ.PAGES,
+    viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId },
+  ).rows;
+  const pages = useMemo(() => (taskPages ?? NO_PAGES).map((page) => page.id), [taskPages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
   // Terminal's tabs, and nothing of the plan the host has open beneath it, which keeps its own.
   const pageAgent = agentView?.agentId;
@@ -1777,17 +1759,6 @@ export function useTasksTab(input: {
     reportedAgent.current = shownAgent;
     tell(ACT_KIND.AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
-
-  // The tab showing is what asks the host to read the tasks again; the open
-  // task and its call stand through it going away, and a call's drafts reach
-  // the document without any read. A fixture's tasks are read from nowhere.
-  const reading = shown && signedIn && fixture === undefined;
-  const wasReading = useRef(false);
-  useEffect(() => {
-    if (reading === wasReading.current) return;
-    wasReading.current = reading;
-    if (reading) tell(ACT_KIND.TASKS_REFRESH);
-  }, [reading, tell]);
 
   // The host answers a press a round trip later, so where the tab is bound
   // is said at once, and a select that did not open the task takes its ask
@@ -3353,7 +3324,8 @@ export function useTasksTab(input: {
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
-    if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
+    // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
+    if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     return true;
   };
@@ -3578,7 +3550,7 @@ export function useTasksTab(input: {
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
-    pages: tasks.pages,
+    pages: taskPages,
     agents,
     history: {
       ...history,

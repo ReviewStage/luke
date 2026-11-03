@@ -1,4 +1,10 @@
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import {
+  LINK_PLACE,
+  type LinkPlace,
+  type ReadLink,
+  taskNumberOf,
+  withTaskId,
+} from "@repo/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { isGitHubAddress, isOpenableAddress } from "@repo/host/acts";
@@ -24,6 +30,7 @@ import {
   THING,
 } from "../route.js";
 import { useSteadyDoor } from "../steady-door.js";
+import { numberedTaskIdNow } from "./use-link-standing.js";
 
 /**
  * use-open-link.ts -- how a link in written words opens: a transcript's, an agent tab's, or an Inbox item's.
@@ -46,7 +53,7 @@ import { useSteadyDoor } from "../steady-door.js";
  * its words going nowhere.
  *
  * A place may open some links where it stands before the window does
- * (`OpenHereProvider`), as the window's Inbox opens a file, a page, or a pull
+ * (`OpenAddressesHere`), as the window's Inbox opens a file, a page, or a pull
  * request of the item's task in the panel beside the item rather than
  * leaving for the task, and a place a part names rather than a link writes,
  * an agent a message's sender names or a review thread a Pull request tab
@@ -87,18 +94,6 @@ export const OpenAddressesHere = OpenHereContext.Provider;
 /** Only what a link writes, which a place handed rather than written never is. */
 function ofLinks(open: OpenHere): OpenAddressHere {
   return (address) => address.href !== undefined && open(address.href);
-}
-
-/** Hands everything under it the place's own opener of links, asked first of every link opened there. */
-export function OpenHereProvider({
-  value,
-  children,
-}: {
-  value: OpenHere;
-  children?: ReactNode;
-}): ReactNode {
-  const open = useMemo(() => ofLinks(value), [value]);
-  return createElement(OpenHereContext.Provider, { value: open }, children);
 }
 
 /**
@@ -201,9 +196,11 @@ export function openPullRequestsHere(
   here: Extract<Here, { readonly kind: typeof HERE.TASK | typeof HERE.AGENT }>,
   open: (agentId: string, number?: number) => void,
   openPage: (pageId: string, place: PagePlace) => void,
-): OpenHere {
-  return (href) => {
-    const routed = route(addressOf(href), here);
+): OpenAddressHere {
+  return (address) => {
+    // Only what a link writes, which a place handed rather than written never is.
+    if (address.href === undefined) return false;
+    const routed = route(address, here);
     if (routed.kind !== ROUTE.PREVIEW) return false;
     const { thing } = routed;
     if (thing.kind === THING.PAGE && thing.place !== undefined) {
@@ -221,6 +218,24 @@ export function placeOfMention(mention: PlanMention): LinkPlace {
   return mention.kind === MENTION_KIND.TASK
     ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
     : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor };
+}
+
+/**
+ * The address with the task its place names by its number, `…/task/42`,
+ * named by its id where the window lists that task, so a place asked of it
+ * knows the task as its own; any other address as it is. Note that a number
+ * the window lists no task for stays a number, which only the window opens,
+ * finding the task on the service (`use-tasks-tab.ts`'s `openLink`).
+ */
+function byListedTaskId(address: Address): Address {
+  if (address.kind !== ADDRESS.PLACE) return address;
+  const { link } = address;
+  const number = taskNumberOf(link.place);
+  const taskId =
+    number === undefined ? undefined : numberedTaskIdNow({ workspace: link.workspace, number });
+  return taskId === undefined
+    ? address
+    : { ...address, link: { ...link, place: withTaskId(link.place, taskId) } };
 }
 
 /** Opens an address where the place it is pressed on opens it, else where the window does (`route.ts`): a place in the app there, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser. */
@@ -292,7 +307,7 @@ export function useOpenLink(): (href: string) => void {
   const openHere = useContext(OpenHereContext);
   const listed = useContext(ListedTasksContext);
   return useCallback(
-    (href: string) => openAddress(addressOf(href), { openPlace, openHere, listed }),
+    (href: string) => openAddress(byListedTaskId(addressOf(href)), { openPlace, openHere, listed }),
     [openPlace, openHere, listed],
   );
 }

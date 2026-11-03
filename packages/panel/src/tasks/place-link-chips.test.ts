@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
@@ -119,7 +121,12 @@ const STATE: AppStateSnapshot = (() => {
         },
       ],
       activeTaskId: TASK_ID,
-      pages: [{ id: PAGE, title: "Unfurl matrix", version: 1, at: AT }],
+    },
+    [LIVE_READ.PAGES]: {
+      [PAGE_OWNER.TASK]: {
+        [TASK_ID]: { rows: [{ id: PAGE, title: "Unfurl matrix", version: 1, at: AT }] },
+      },
+      [PAGE_OWNER.AGENT]: {},
     },
     inbox: {
       ...snapshot.inbox,

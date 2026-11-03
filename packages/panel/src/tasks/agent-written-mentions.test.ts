@@ -2,7 +2,9 @@
 
 import assert from "node:assert/strict";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -124,10 +126,14 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   const state = stateWith(
     {},
     {
-      tasks: {
-        ...IDLE_TASKS_VIEW,
-        activeTaskId: TASK,
-        pages: [{ id: PAGE, title: "Invite funnel", version: 2, at: 1_800_000_000_000 }],
+      tasks: { ...IDLE_TASKS_VIEW, activeTaskId: TASK },
+      [LIVE_READ.PAGES]: {
+        [PAGE_OWNER.TASK]: {
+          [TASK]: {
+            rows: [{ id: PAGE, title: "Invite funnel", version: 2, at: 1_800_000_000_000 }],
+          },
+        },
+        [PAGE_OWNER.AGENT]: {},
       },
     },
   );

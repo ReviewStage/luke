@@ -154,7 +154,7 @@ test("a choice nothing pays for says it cannot run under the pinned rows, and th
   assert.ok(foot, "the pinned rows stand");
   assert.equal(
     lastLine(menu),
-    "Opus 5.5 cannot run until you connect Claude with a subscription or an API key.",
+    "Opus 5.5 cannot run until you connect a Claude plan or an Anthropic API key.",
   );
   const connect = [...foot.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
     (each) => each.textContent === "Connect Claude",

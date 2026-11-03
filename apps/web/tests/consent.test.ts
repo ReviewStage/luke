@@ -24,6 +24,25 @@ declare global {
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
+/** Every root the pages mount themselves on, to unmount once each test ends. */
+const mounted = vi.hoisted(() => ({ roots: [] as Array<{ unmount(): void }> }));
+
+// Note that a page mounts its own root as its module loads, so React's
+// `createRoot` is wrapped to keep each one, and nothing else about it
+// changes: a pressed button stays busy after the test ends, and its settle
+// would otherwise draw a moment later, after jsdom has gone.
+vi.mock("react-dom/client", async (importOriginal) => {
+  const client = await importOriginal<typeof import("react-dom/client")>();
+  return {
+    ...client,
+    createRoot: (...args: Parameters<typeof client.createRoot>) => {
+      const root = client.createRoot(...args);
+      mounted.roots.push(root);
+      return root;
+    },
+  };
+});
+
 const PATH = {
   SESSION: "/api/auth/get-session",
   PUBLIC_CLIENT: "/api/auth/oauth2/public-client",
@@ -126,6 +145,9 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  act(() => {
+    for (const root of mounted.roots.splice(0)) root.unmount();
+  });
   vi.restoreAllMocks();
   document.body.replaceChildren();
   sent = [];

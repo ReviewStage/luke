@@ -1,12 +1,17 @@
 import { pathToFileURL } from "node:url";
 import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
-import { jwks as jwksTable, oauthClient as oauthClientTable } from "@repo/database/schemas/auth";
-import { authSecrets } from "@repo/service/auth/auth-deployment";
+import {
+  jwks as jwksTable,
+  oauthClient as oauthClientTable,
+  oauthResource as oauthResourceTable,
+} from "@repo/database/schemas/auth";
+import { authDeployment, authSecrets } from "@repo/service/auth/auth-deployment";
 import {
   DESKTOP_OAUTH_CLIENT,
   type OAuthClient,
   oauthClientRecord,
 } from "@repo/service/auth/oauth-clients";
+import { oauthResourceRecord } from "@repo/service/member-mcp/resource";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { inArray } from "drizzle-orm";
 import { Effect, Redacted } from "effect";
@@ -50,6 +55,40 @@ function seedOAuthClient(client: OAuthClient): Effect.Effect<void, QueryError, D
   );
 }
 
+/**
+ * Writes the member MCP server's resource row for this deployment, or brings
+ * an existing one back to what this build says it is, as `seedOAuthClient`
+ * does a client's: the policy the provider mints tokens for the server under
+ * (`@repo/service/member-mcp/resource`). Keyed by the identifier, which is
+ * the deployment's own address of the server, so a Preview seeds its own.
+ */
+function seedOAuthResource(baseURL: string): Effect.Effect<void, QueryError, DatabaseServices> {
+  const record = oauthResourceRecord(baseURL, new Date());
+  const written = {
+    name: record.name,
+    accessTokenTtl: record.accessTokenTtl,
+    refreshTokenTtl: record.refreshTokenTtl,
+    allowedScopes: [...record.allowedScopes],
+    dpopBoundAccessTokensRequired: record.dpopBoundAccessTokensRequired,
+    disabled: record.disabled,
+    policyVersion: record.policyVersion,
+    updatedAt: record.updatedAt,
+  };
+  return Effect.asVoid(
+    Database.use((db) =>
+      db
+        .insert(oauthResourceTable)
+        .values({
+          id: record.id,
+          identifier: record.identifier,
+          createdAt: record.createdAt,
+          ...written,
+        })
+        .onConflictDoUpdate({ target: oauthResourceTable.identifier, set: written }),
+    ),
+  );
+}
+
 /** Whether this deployment's secret opens one sealed private key; a key sealed under another secret does not parse or does not decrypt. */
 function opensUnder(sessionSecret: Redacted.Redacted, privateKey: string): Effect.Effect<boolean> {
   return Effect.tryPromise(async () => {
@@ -89,16 +128,20 @@ export function dropUnreadableJwks(
   });
 }
 
-/** What every deployment build seeds: the desktop client, and then a key set this deployment can sign with. */
+/** What every deployment build seeds: the desktop client, the member MCP server's resource at this deployment's address, and then a key set this deployment can sign with. */
 function seedDeployment(
   variables: Record<string, string | undefined>,
 ): Effect.Effect<void, QueryError, DatabaseServices> {
   const { sessionSecret } = authSecrets(variables);
   // Note that a build without a session secret drops nothing, because the
   // deployment it builds signs nothing, and `auth.ts` says so as it loads.
-  return Effect.andThen(
-    seedOAuthClient(DESKTOP_OAUTH_CLIENT),
-    sessionSecret === undefined ? Effect.void : dropUnreadableJwks(sessionSecret),
+  return Effect.all(
+    [
+      seedOAuthClient(DESKTOP_OAUTH_CLIENT),
+      seedOAuthResource(authDeployment(variables).baseURL),
+      sessionSecret === undefined ? Effect.void : dropUnreadableJwks(sessionSecret),
+    ],
+    { discard: true },
   );
 }
 

@@ -8,8 +8,10 @@ import {
   agentMessageReplyLine,
 } from "@repo/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { PlanMention } from "@repo/features/mention-link";
 import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { ProviderMark } from "@repo/ui";
@@ -777,10 +779,12 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
   const state: AppStateSnapshot = {
     ...snapshot,
-    tasks: {
-      ...IDLE_TASKS_VIEW,
-      activeTaskId: taskId,
-      pages: [{ id: "page-1", title: "Pricing explorer", version: 2, at: 1_000 }],
+    tasks: { ...IDLE_TASKS_VIEW, activeTaskId: taskId },
+    [LIVE_READ.PAGES]: {
+      [PAGE_OWNER.TASK]: {
+        [taskId]: { rows: [{ id: "page-1", title: "Pricing explorer", version: 2, at: 1_000 }] },
+      },
+      [PAGE_OWNER.AGENT]: {},
     },
   };
   fakeAppBridge({

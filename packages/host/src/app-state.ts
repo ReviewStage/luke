@@ -103,6 +103,8 @@ interface AppRunFacts {
   appVersion: string;
   /** The commit the build was cut from, for the Updates row to name. */
   commit?: BuildCommit;
+  /** The named development instance this run is (`run.sh --instance`); none for the plain one or a release. */
+  instance?: string;
   captureMode: boolean;
   fixtureMode: boolean;
   accountRequired: boolean;

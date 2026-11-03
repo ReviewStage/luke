@@ -554,7 +554,7 @@ test("a default nothing pays for, as Claude on an OpenAI key alone, says it cann
   const row = picker.closest(".ui-settings-row") ?? assert.fail("no Model row");
   assert.match(
     row.textContent ?? "",
-    /Opus 5\.5 cannot run until you connect Claude with a subscription or an API key\./u,
+    /Opus 5\.5 cannot run until you connect a Claude plan or an Anthropic API key\./u,
   );
   const connect =
     [...row.querySelectorAll<HTMLButtonElement>("button")].find(
