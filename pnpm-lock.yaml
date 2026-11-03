@@ -894,9 +894,6 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
-      streamdown:
-        specifier: 2.7.0
-        version: 2.7.0(react-dom@19.2.8)(react@19.2.8)
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3

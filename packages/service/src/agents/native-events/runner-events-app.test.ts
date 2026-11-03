@@ -1053,9 +1053,9 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 });
 
-/** P16's hermetic recording of app-server's stdio, as the runner's own tests play it (`tools/codex-probe/fixtures/hermetic/`). */
+/** P16's hermetic recording of app-server's stdio, as the runner's own tests play it. */
 const CODEX_RECORDING = new URL(
-  "../../../../../tools/codex-probe/fixtures/hermetic/app-server.jsonl",
+  "../../../../../packages/agent-runner/src/testing/app-server.jsonl",
   import.meta.url,
 );
 const THREAD = "00000000-0000-4000-8000-000000000002";
