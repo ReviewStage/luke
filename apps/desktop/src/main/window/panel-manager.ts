@@ -410,8 +410,8 @@ export class PanelManager {
       else window.showInactive();
     });
     // Closing is hiding, as for any Mac app that keeps working in the
-    // background: the app keeps listening for its keys, and the Dock tile brings
-    // the window back. Only a quit lets it go.
+    // background: the app keeps listening for its keys, and the Dock tile, ⌘0,
+    // and ⌘N bring the window back (`app-menu.ts`). Only a quit lets it go.
     window.on("close", (event) => {
       this.#keepPlacement(window);
       if (this.#closing()) return;

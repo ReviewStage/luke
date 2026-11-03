@@ -297,14 +297,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // opened without them (`hardenedWebPreferences`).
       if (!config.packaged) stopRendererErrors = reportRendererErrors(config.report);
       if (runMode.takesFocus) config.showMenuBar({ developerTools: true });
-      // The menu's New Task brings the window back where it was closed,
-      // since no window's keymap stands to answer ⌘N then.
+      // The menu's New Task and ⌘0 bring the window back where it was
+      // closed, since no window's keymap stands to answer them then.
       config.showMenuBar({
         panel: {
           isPanel: (window) => panels.windows().some((panel) => panel === window),
           onReopen: (command) => {
             panels.focusExpanded();
-            panels.broadcast(PUSH.MENU_COMMAND, command);
+            if (command !== undefined) panels.broadcast(PUSH.MENU_COMMAND, command);
           },
         },
       });

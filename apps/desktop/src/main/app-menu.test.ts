@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -230,21 +230,35 @@ function aWindow(): BaseWindow {
   return {} as BaseWindow;
 }
 
-/** Presses File's New Task as its key does, over the window in front, and answers the commands the panel was brought back on. */
-function pressNewTask(window: BaseWindow | undefined, panelWindow: BaseWindow): readonly string[] {
+/** What a press brought the panel back on: a command, or the window alone. */
+const WINDOW_ALONE = "the window alone";
+
+/** Presses a command's item as its key does, over the window in front, and answers what the panel was brought back on. */
+function pressKey(
+  command: typeof APP_COMMAND.NEW_TASK | typeof APP_COMMAND.ACTUAL_SIZE,
+  window: BaseWindow | undefined,
+  panelWindow: BaseWindow,
+): readonly string[] {
   const reopened: string[] = [];
   const panel: PanelMenu = {
     isPanel: (candidate) => candidate === panelWindow,
-    onReopen: (command) => reopened.push(command),
+    onReopen: (reopenedOn) => reopened.push(reopenedOn ?? WINDOW_ALONE),
   };
   let drawn: MenuItemConstructorOptions[] = [];
-  menuBarDrawer({ appName: "Vespin", packaged: true }, (template) => {
+  const show = menuBarDrawer({ appName: "Vespin", packaged: true }, (template) => {
     drawn = template;
-  })({ panel });
-  const newTask = everyItem(drawn).find((item) => item.id === APP_COMMAND.NEW_TASK);
-  if (!newTask?.click) return assert.fail("File has no New Task item");
-  newTask.click({} as MenuItem, window, { triggeredByAccelerator: true } as KeyboardEvent);
+  });
+  // The zoom's items stand only in the desktop app.
+  show({ experiments: NO_EXPERIMENTS, capabilities: [HOST_CAPABILITY.DESKTOP_APP] });
+  show({ panel });
+  const item = everyItem(drawn).find((candidate) => candidate.id === command);
+  if (!item?.click) return assert.fail(`no ${command} item`);
+  item.click({} as MenuItem, window, { triggeredByAccelerator: true } as KeyboardEvent);
   return reopened;
+}
+
+function pressNewTask(window: BaseWindow | undefined, panelWindow: BaseWindow): readonly string[] {
+  return pressKey(APP_COMMAND.NEW_TASK, window, panelWindow);
 }
 
 describe("New Task", () => {
@@ -259,6 +273,17 @@ describe("New Task", () => {
   test("its key over the panel is left to the panel's own keymap", () => {
     const panelWindow = aWindow();
     assert.deepEqual(pressNewTask(panelWindow, panelWindow), []);
+  });
+});
+
+describe("⌘0", () => {
+  test("with the window closed, it brings the window back as it was, zoom and all", () => {
+    assert.deepEqual(pressKey(APP_COMMAND.ACTUAL_SIZE, undefined, aWindow()), [WINDOW_ALONE]);
+  });
+
+  test("over the panel, it is left to the panel's own keymap", () => {
+    const panelWindow = aWindow();
+    assert.deepEqual(pressKey(APP_COMMAND.ACTUAL_SIZE, panelWindow, panelWindow), []);
   });
 });
 
