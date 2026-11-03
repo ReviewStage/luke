@@ -4,6 +4,8 @@ import { LANDING_FIELD, LandingField, type LandingFieldPattern } from "./landing
 import { LANDING_SCENE, type LandingScene, LandingSceneView } from "./landing-scenes.js";
 import { SiteFrame, SiteRule } from "./site-frame.js";
 
+export { SiteBarPages } from "./site-frame.js";
+
 /**
  * landing-page.tsx -- the product's landing: a bar that floats once the page scrolls, the one line beside the copper ball, a section per feature each over a moving screen, and a close over the wordmark in dots.
  *

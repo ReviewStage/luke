@@ -30,8 +30,9 @@
   /* The landing's devices: a Mac window's corners, and a phone's outer
      corners and its screen's, which follow them inside the bezel. */
   --ui-display-window-radius: 0.625rem;
-  /* The landing's bar once it floats: half its 52px height, a pill. */
-  --ui-display-bar-radius: 1.625rem;
+  /* The landing's bar once it floats: half its 56px height, a pill round
+     the 44px call it holds 6px in from its end. */
+  --ui-display-bar-radius: 1.75rem;
   --ui-display-phone-radius: 3rem;
   --ui-display-phone-screen-radius: 2.5rem;
   --ui-display-island-radius: 0.75rem;
