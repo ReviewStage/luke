@@ -1,9 +1,12 @@
-import { and, asc, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
+import { INTEGRATION_ROW_STATUS } from "../integration-vocabulary.js";
 import { agentTable } from "../schemas/agent.js";
 import { member, user } from "../schemas/auth.js";
+import { integrationConnection } from "../schemas/integration.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { slackAgentThread, slackInstallation, slackMember } from "../schemas/slack-installation.js";
 import type { TaskStoreEffect } from "./task-store.js";
@@ -17,7 +20,9 @@ import type { TaskStoreEffect } from "./task-store.js";
  * deletes it, and every member's id with it. A member's id is read only
  * through the installation it was looked up under, and is kept as found or
  * as a miss (`slackUserId` null), and a press in Slack finds its member
- * back by that id under the team connected. Whether a member is written at all is
+ * back by that id under the team connected. A member with no id kept may
+ * still be found through a Slack account they connected themselves
+ * (`slackUnresolvedConnections`), which the bot asks Slack about. Whether a member is written at all is
  * their own switch (`account_preference.slack_notifications`), on until they
  * turn it off, in every workspace alike. Whether the account may connect or
  * disconnect is the caller's to check. Every function is an effect over the
@@ -224,6 +229,35 @@ const findMemberByEmail = SqlSchema.findOneOption({
           ),
         )
         .limit(1),
+    ),
+});
+
+/** The Slack accounts the workspace's members connected themselves, of each member whose Slack id is not kept: never looked up, or missed. */
+const findUnresolvedConnections = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ userId: Schema.String, connectSubject: Schema.String }),
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .select({ userId: member.userId, connectSubject: integrationConnection.connectSubject })
+        .from(member)
+        .innerJoin(
+          integrationConnection,
+          and(
+            eq(integrationConnection.userId, member.userId),
+            eq(integrationConnection.provider, INTEGRATION_PROVIDER.SLACK),
+            eq(integrationConnection.status, INTEGRATION_ROW_STATUS.CONNECTED),
+          ),
+        )
+        .leftJoin(
+          slackMember,
+          and(
+            eq(slackMember.organizationId, member.organizationId),
+            eq(slackMember.userId, member.userId),
+          ),
+        )
+        .where(and(eq(member.organizationId, organizationId), isNull(slackMember.slackUserId)))
+        .orderBy(asc(member.userId), asc(integrationConnection.connectionName)),
     ),
 });
 
@@ -439,6 +473,19 @@ export function slackMemberByEmail(
     findMemberByEmail({ organizationId, email }),
     Option.map((row) => row.userId),
   );
+}
+
+/** A Slack account a member connected themselves, by the subject Connect holds its grant under. */
+export interface SlackMemberConnection {
+  readonly userId: string;
+  readonly connectSubject: string;
+}
+
+/** The Slack accounts the workspace's members connected under Settings › Integrations, of each member whose Slack id the bot does not keep. */
+export function slackUnresolvedConnections(
+  organizationId: string,
+): TaskStoreEffect<readonly SlackMemberConnection[]> {
+  return findUnresolvedConnections(organizationId);
 }
 
 /** The repository an agent the member starts from Slack works in where the message names none: their latest agent's in the workspace; nothing where none worked in one. */

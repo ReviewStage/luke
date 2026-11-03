@@ -10,14 +10,20 @@
  * A workspace's owner or admin connects the bot, which reads the team the
  * token answers for (`auth.test`) and keeps it
  * (`@repo/database/models/slack-installation-store`). Writing to a member
- * finds their Slack user id by their email (`users.lookupByEmail`) the first
- * time and keeps it, a miss included, which is asked again only after
- * `SLACK_MEMBER_MISS_LIFETIME`; a member with no match is written nothing.
+ * finds their Slack user id the first time and keeps it: through a Slack
+ * account they connected themselves under Settings › Integrations, whose own
+ * token `auth.test` answers their user id and team for, the first in the
+ * bot's team taken; else by their email (`users.lookupByEmail`), a miss
+ * kept and asked again only after `SLACK_MEMBER_MISS_LIFETIME`. A member
+ * with no match is written nothing.
  *
- * A member who writes to the bot is found by the email Slack holds for them
- * (`users.info`); the bot replies in the thread they wrote in
- * (`chat.postMessage` with `thread_ts`), reading the thread's earlier
- * messages (`conversations.replies`) and its link (`chat.getPermalink`).
+ * A member who writes to the bot is found by the id kept for them, else
+ * through the Slack accounts the workspace's members connected themselves
+ * whose ids are not kept yet (`memberOf`); the caller falls back to the
+ * email Slack holds for them (`users.info`). The bot replies in the thread
+ * they wrote in (`chat.postMessage` with `thread_ts`), reading the thread's
+ * earlier messages (`conversations.replies`) and its link
+ * (`chat.getPermalink`).
  *
  * `dm`, `update`, and those reads and replies are best-effort: whatever fails, Slack, Connect, or the
  * store, is logged by a fixed line and Slack's own error code, never Slack's
@@ -25,17 +31,34 @@
  * yielded inside a transaction, because each waits on Slack.
  */
 
-import type { DatabaseServices } from "@repo/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
 import {
   recordSlackMemberLookup,
   slackMemberLookup,
+  slackMemberOf,
+  slackUnresolvedConnections,
   workspaceSlackInstallation,
 } from "@repo/database/models/slack-installation-store";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { getToken } from "@vercel/connect";
-import { Config, Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
+import {
+  Config,
+  Context,
+  Data,
+  DateTime,
+  Duration,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { readAccountPerson } from "../accounts/account-person.js";
 import { text } from "../core.js";
+import { type ConnectorService, IntegrationConnect } from "../integrations/integration-connect.js";
+import { readIntegrationConnections } from "../integrations/integration-store.js";
 
 /** The variable this deployment names the bot's connector by; a blank value is absent. */
 export const SLACK_BOT_ENVIRONMENT = { CONNECTOR: "SLACK_BOT_CONNECTOR_UID" } as const;
@@ -106,10 +129,16 @@ export class SlackBotFailure extends Data.TaggedError("SlackBotFailure")<{
   }
 }
 
-/** One Web API call: the method, its arguments, and Slack's answer as JSON, an answer Slack marked not ok refused by its code. */
+/**
+ * One Web API call: the method, its arguments, and Slack's answer as JSON,
+ * an answer Slack marked not ok refused by its code. It is made on the
+ * bot's token, or on the token of a member's own Slack account where
+ * `memberSubject` names the subject Connect holds that account under.
+ */
 export type SlackWebApi = (
   method: SlackMethod,
   args: Readonly<Record<string, string>>,
+  memberSubject?: string,
 ) => Effect.Effect<unknown, SlackBotFailure>;
 
 /** our Slack bot as this deployment holds it. */
@@ -124,6 +153,12 @@ export interface SlackBotService {
     userId: string,
     content: SlackMessageContent,
   ) => Effect.Effect<Option.Option<SlackMessage>, never, DatabaseServices>;
+  /** The member of the workspace a Slack user of its connected team is, by the id kept for them or through a Slack account a member connected themselves; nothing where neither finds one. */
+  readonly memberOf: (
+    organizationId: string,
+    teamId: string,
+    slackUserId: string,
+  ) => Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices>;
   /** Rewrites a message the bot wrote; a failure is logged and answers nothing. */
   readonly update: (
     channel: string,
@@ -151,6 +186,9 @@ export class SlackBot extends Context.Service<SlackBot, SlackBotService>()("Slac
 
 /** `auth.test`'s answer, as far as it is read. */
 const AuthTestSchema = Schema.Struct({ team_id: Schema.String, team: Schema.String });
+
+/** `auth.test`'s answer on a member's own token, as far as it is read: who they are, and in which team. */
+const MemberAuthSchema = Schema.Struct({ team_id: Schema.String, user_id: Schema.String });
 
 /** `users.lookupByEmail`'s answer, as far as it is read. */
 const LookupSchema = Schema.Struct({ user: Schema.Struct({ id: Schema.String }) });
@@ -216,16 +254,61 @@ function swallowed<A>(what: string) {
     );
 }
 
-/** The member's Slack user id in the team: kept, or looked up by their email and kept, a miss within its lifetime answering nothing. */
+/** The user id one of a member's own Slack accounts is in the team, as `auth.test` on its token says; nothing for an account in another team, or one whose token failed. */
+function connectedSlackId(
+  api: SlackWebApi,
+  teamId: string,
+  connectSubject: string,
+): Effect.Effect<Option.Option<string>> {
+  return api(SLACK_METHOD.AUTH_TEST, {}, connectSubject).pipe(
+    Effect.flatMap((answer) => readAnswer(SLACK_METHOD.AUTH_TEST, MemberAuthSchema, answer)),
+    Effect.map((answer) =>
+      answer.team_id === teamId ? Option.some(answer.user_id) : Option.none<string>(),
+    ),
+    Effect.catch(swallowed<string>("read a member's own Slack account")),
+  );
+}
+
+/** The member's Slack user id in the team through the Slack accounts they connected themselves, the first in the team taken and kept; nothing where none is. */
+const connectedMemberSlackId = Effect.fnUntraced(function* (
+  api: SlackWebApi,
+  organizationId: string,
+  teamId: string,
+  userId: string,
+) {
+  const connections = yield* readIntegrationConnections(userId);
+  for (const connection of connections) {
+    if (connection.provider !== INTEGRATION_PROVIDER.SLACK) continue;
+    if (connection.status !== INTEGRATION_ROW_STATUS.CONNECTED) continue;
+    const found = yield* connectedSlackId(api, teamId, connection.connectSubject);
+    if (Option.isNone(found)) continue;
+    yield* recordSlackMemberLookup(organizationId, userId, found.value);
+    return found;
+  }
+  return Option.none<string>();
+});
+
+/**
+ * The member's Slack user id in the team: kept, or found through a Slack
+ * account they connected themselves, or looked up by their email, and
+ * kept; an email miss within its lifetime answers nothing. Note that a
+ * kept miss still asks their own accounts, so a member who connects Slack
+ * after a miss is found on the next write.
+ */
 const memberSlackId = Effect.fn("web/slackMemberId")(function* (
   api: SlackWebApi,
   organizationId: string,
+  teamId: string,
   userId: string,
 ) {
   const kept = yield* slackMemberLookup(organizationId, userId);
+  if (Option.isSome(kept) && kept.value.slackUserId !== null) {
+    return Option.some(kept.value.slackUserId);
+  }
+  const connected = yield* connectedMemberSlackId(api, organizationId, teamId, userId);
+  if (Option.isSome(connected)) return connected;
   if (Option.isSome(kept)) {
-    const { slackUserId, lookedUpAt } = kept.value;
-    if (slackUserId !== null) return Option.some(slackUserId);
+    const { lookedUpAt } = kept.value;
     const askedAgainAt = DateTime.addDuration(
       DateTime.fromDateUnsafe(lookedUpAt),
       SLACK_MEMBER_MISS_LIFETIME,
@@ -248,6 +331,37 @@ const memberSlackId = Effect.fn("web/slackMemberId")(function* (
   return found;
 });
 
+/**
+ * The member a Slack user of the workspace's team is: the one kept under
+ * that id, or else one found by asking Slack, through each Slack account a
+ * member whose id is not kept connected themselves, who that account is in
+ * the team; each member found so is kept, and the asking stops at the
+ * Slack user sought.
+ */
+const memberOfSlackUser = Effect.fn("web/slackMemberOf")(function* (
+  api: SlackWebApi,
+  organizationId: string,
+  teamId: string,
+  slackUserId: string,
+) {
+  const kept = yield* slackMemberOf(organizationId, teamId, slackUserId);
+  if (Option.isSome(kept)) return kept;
+  const installation = yield* workspaceSlackInstallation(organizationId);
+  if (Option.isNone(installation) || installation.value.teamId !== teamId) {
+    return Option.none<string>();
+  }
+  const resolved = new Set<string>();
+  for (const { userId, connectSubject } of yield* slackUnresolvedConnections(organizationId)) {
+    if (resolved.has(userId)) continue;
+    const found = yield* connectedSlackId(api, teamId, connectSubject);
+    if (Option.isNone(found)) continue;
+    resolved.add(userId);
+    yield* recordSlackMemberLookup(organizationId, userId, found.value);
+    if (found.value === slackUserId) return Option.some(userId);
+  }
+  return Option.none<string>();
+});
+
 /** The bot over one Web API, or over none where the deployment names no connector. */
 export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
   if (api === undefined) {
@@ -255,6 +369,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       configured: false,
       team: Effect.fail(new SlackBotFailure({ method: SLACK_METHOD.AUTH_TEST })),
       dm: () => Effect.succeedNone,
+      memberOf: slackMemberOf,
       update: () => Effect.void,
       reply: () => Effect.succeedNone,
       threadMessages: () => Effect.succeed([]),
@@ -270,10 +385,14 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
     ),
     dm: (organizationId, userId, content) =>
       Effect.gen(function* () {
-        if (Option.isNone(yield* workspaceSlackInstallation(organizationId))) {
-          return Option.none<SlackMessage>();
-        }
-        const slackId = yield* memberSlackId(api, organizationId, userId);
+        const installation = yield* workspaceSlackInstallation(organizationId);
+        if (Option.isNone(installation)) return Option.none<SlackMessage>();
+        const slackId = yield* memberSlackId(
+          api,
+          organizationId,
+          installation.value.teamId,
+          userId,
+        );
         if (Option.isNone(slackId)) return Option.none<SlackMessage>();
         // Note that a user id as the channel writes to the bot's own conversation with them.
         const posted = yield* api(SLACK_METHOD.CHAT_POST_MESSAGE, {
@@ -283,6 +402,8 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
         const message = yield* readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, posted);
         return Option.some<SlackMessage>({ channel: message.channel, ts: message.ts });
       }).pipe(Effect.catch(swallowed<SlackMessage>("write to a member"))),
+    memberOf: (organizationId, teamId, slackUserId) =>
+      memberOfSlackUser(api, organizationId, teamId, slackUserId),
     update: (channel, ts, content) =>
       api(SLACK_METHOD.CHAT_UPDATE, { channel, ts, ...contentArgs(content) }).pipe(
         Effect.asVoid,
@@ -351,14 +472,34 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
  */
 const BOT_SUBJECT = { subject: { type: "app" } } as const;
 
-/** The Web API under the bot's token from Connect, each call a form post as Slack's docs take every method. */
-function slackWebApi(connector: string, client: HttpClient.HttpClient): SlackWebApi {
-  return (method, args) =>
+/** The token a call is made on: the bot's from its own connector, or a member's own Slack account's from the connector members connect Slack through. */
+function tokenFor(
+  method: SlackMethod,
+  connector: string,
+  members: ConnectorService,
+  memberSubject: string | undefined,
+): Effect.Effect<string, SlackBotFailure> {
+  if (memberSubject === undefined) {
+    return Effect.tryPromise({
+      try: () => getToken(connector, BOT_SUBJECT),
+      catch: () => new SlackBotFailure({ method }),
+    });
+  }
+  return members.token(memberSubject, { fresh: false }).pipe(
+    Effect.map((issued) => Redacted.value(issued.token)),
+    Effect.mapError(() => new SlackBotFailure({ method })),
+  );
+}
+
+/** The Web API under a token from Connect, each call a form post as Slack's docs take every method. */
+function slackWebApi(
+  connector: string,
+  members: ConnectorService,
+  client: HttpClient.HttpClient,
+): SlackWebApi {
+  return (method, args, memberSubject) =>
     Effect.gen(function* () {
-      const token = yield* Effect.tryPromise({
-        try: () => getToken(connector, BOT_SUBJECT),
-        catch: () => new SlackBotFailure({ method }),
-      });
+      const token = yield* tokenFor(method, connector, members, memberSubject);
       const request = HttpClientRequest.post(`${SLACK_API_ORIGIN}/api/${method}`).pipe(
         HttpClientRequest.bearerToken(token),
         HttpClientRequest.acceptJson,
@@ -384,7 +525,7 @@ function slackWebApi(connector: string, client: HttpClient.HttpClient): SlackWeb
 export const slackBotFromEnvironment: Layer.Layer<
   SlackBot,
   Config.ConfigError,
-  HttpClient.HttpClient
+  HttpClient.HttpClient | IntegrationConnect
 > = Layer.effect(
   SlackBot,
   Effect.gen(function* () {
@@ -392,6 +533,7 @@ export const slackBotFromEnvironment: Layer.Layer<
       Option.getOrUndefined(yield* Config.option(Config.String(SLACK_BOT_ENVIRONMENT.CONNECTOR))),
     );
     if (connector === undefined) return slackBotOver(undefined);
-    return slackBotOver(slackWebApi(connector, yield* HttpClient.HttpClient));
+    const members = (yield* IntegrationConnect)[INTEGRATION_PROVIDER.SLACK];
+    return slackBotOver(slackWebApi(connector, members, yield* HttpClient.HttpClient));
   }),
 );

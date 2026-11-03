@@ -983,10 +983,14 @@ Connect, which holds it for the bot rather than for any account; our service
 asks for it each time it calls Slack and never stores it. Connecting asks
 Slack which Slack workspace the bot belongs to, and our service keeps that
 Slack workspace's id and name, and who connected it. The first time the bot
-is to message you, our service sends your Vespin account's email address to
-Slack to find you there, and keeps the Slack user id Slack answered, or that
-it found no one, which it asks again after a day; a member whose email
-matches no one in that Slack workspace is sent nothing. What the bot sends
+is to message you, our service finds you in that Slack workspace. Where you
+connected your own Slack account under Settings › Integrations, it asks
+Slack who that account is, on that account's token from Vercel Connect,
+which it does not store, and takes your Slack user id where the account is
+in the bot's Slack workspace. Otherwise it sends your Vespin account's email
+address to Slack to find you there. It keeps the Slack user id it found, or
+that the email found no one, which it asks again after a day; a member it
+finds neither way is sent nothing. What the bot sends
 you, such as a thread's title and a link to it or an automation's result,
 goes to Slack, which keeps it under Slack's own policy. Disconnecting the bot
 deletes the Slack workspace's record and every member's Slack user id with
@@ -1009,10 +1013,13 @@ id it kept, and keeps nothing else of the press.
 When you mention @Vespin in a Slack channel the bot is in, or write to the
 bot directly, Slack sends that message through Vercel Connect to our
 service, which finds you as a member of a Vespin workspace connected to that
-Slack workspace: by the Slack user id it kept, or else by asking Slack for
-the email address on your Slack profile, matching it to your Vespin
-account's, and keeping the Slack user id from then on. A Slack user it finds
-no member for is told so in the thread, and nothing is started or kept. For
+Slack workspace: by the Slack user id it kept; or else by asking Slack who
+each Slack account that workspace's members connected themselves is, for the
+members whose Slack user id it does not keep yet, as above; or else by asking
+Slack for the email address on your Slack profile and matching it to your
+Vespin account's. It keeps each Slack user id it finds from then on. A Slack
+user it finds no member for is told to connect Slack in Vespin's Settings ›
+Integrations, and nothing is started or kept. For
 a member, it starts a coding agent as you, or, in a thread an agent was
 already started from, sends the message to that agent as yours. The agent is
 handed your message, the earlier messages of the Slack thread it stands in,
