@@ -24,7 +24,7 @@ export const DIALOG_FOOT =
 
 /** The answers at the foot's end, at a common width. */
 export const DIALOG_ANSWERS =
-  "ml-auto flex shrink-0 gap-dialog-action-gap [&>.luke-button]:min-w-dialog-action";
+  "ml-auto flex shrink-0 gap-dialog-action-gap [&>.ui-button]:min-w-dialog-action";
 
 /** A question standing in the foot, as the card hears it. */
 export interface FootClaim {

@@ -62,7 +62,7 @@ import { titleAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { readNativeTurnHanded, recordNativeTurnHanded } from "../coder-host/turn-message.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
   type RunnerAlive,

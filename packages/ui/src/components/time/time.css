@@ -3,7 +3,7 @@
    thread keep the width they had and shift nothing beside them. */
 
 @layer components {
-  .luke-time {
+  .ui-time {
     font-variant-numeric: tabular-nums;
   }
 }

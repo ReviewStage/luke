@@ -81,7 +81,7 @@ export function NoteLine({
   return (
     <p
       {...props}
-      className="luke-note-line"
+      className="ui-note-line"
       data-look={look}
       data-fill={fill ? "" : undefined}
       data-selectable={selectable ? "" : undefined}

@@ -134,7 +134,7 @@ let motion: ReturnType<typeof holdExits>;
 
 beforeEach(() => {
   // jsdom runs no motion, so a Saved tick would be taken the moment it stood.
-  motion = holdExits((element) => element.classList.contains("luke-saved-tick"));
+  motion = holdExits((element) => element.classList.contains("ui-saved-tick"));
   stored = { model: OPUS.id, effort: "high" };
   models = [OPUS, OPUS_FAST];
   keys = [];
@@ -196,13 +196,13 @@ const announced = (page: HTMLElement) =>
 
 /** The settings row a name heads. */
 const rowOf = (page: HTMLElement, label: string) =>
-  [...page.querySelectorAll<HTMLElement>(".luke-settings-row")].find((row) =>
+  [...page.querySelectorAll<HTMLElement>(".ui-settings-row")].find((row) =>
     row.textContent?.startsWith(label),
   ) ?? assert.fail(`no ${label} row`);
 
 /** What stands beside a row's name: its Saved tick and its Modified word. */
 const marksIn = (row: HTMLElement) =>
-  [...row.querySelectorAll(".luke-saved-tick, .luke-settings-changed-mark")].map(
+  [...row.querySelectorAll(".ui-saved-tick, .ui-settings-changed-mark")].map(
     (each) => each.textContent ?? "",
   );
 
@@ -222,7 +222,7 @@ const written = () =>
 const placeholders = (page: HTMLElement) =>
   [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map((status) => [
     status.textContent,
-    status.querySelectorAll(".luke-settings-row").length,
+    status.querySelectorAll(".ui-settings-row").length,
   ]);
 
 test("while the default and the keys are read, placeholder rows stand in each group's place, and the rows land in theirs", async () => {
@@ -459,7 +459,7 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
     [...page.querySelectorAll<HTMLButtonElement>("button")].find(
       (each) =>
         each.textContent === "Manage" &&
-        each.closest(".luke-settings-row")?.textContent?.startsWith("Claude"),
+        each.closest(".ui-settings-row")?.textContent?.startsWith("Claude"),
     ) ?? assert.fail("no Claude row button");
   act(() => row.click());
   act(() =>
@@ -543,7 +543,7 @@ test("a default nothing pays for, as Claude on an OpenAI key alone, says it cann
 
   const picker =
     page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ?? assert.fail();
-  const row = picker.closest(".luke-settings-row") ?? assert.fail("no Model row");
+  const row = picker.closest(".ui-settings-row") ?? assert.fail("no Model row");
   assert.match(
     row.textContent ?? "",
     /Opus 5\.5 cannot run until you connect Claude with a subscription or an API key\./u,

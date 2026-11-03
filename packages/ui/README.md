@@ -12,9 +12,9 @@ the tokens every component reads (`src/tokens/surface.ts`):
 
 | Attribute | Values | What it chooses |
 | --- | --- | --- |
-| `data-luke-profile` | `PROFILE.DESKTOP`, `PROFILE.WEB` | Which app's role values: the window's density or the site's |
-| `data-luke-theme` | `THEME.DARK`, `THEME.LIGHT`, `THEME.SYSTEM` | Which palette; `system` follows the Mac and is the desktop's alone |
-| `data-luke-density` | `DENSITY.COMPACT` | The site's dashboard size, a step under a public page's; web only, and only with a fine pointer: on a coarse one the site's full roles stand |
+| `data-ui-profile` | `PROFILE.DESKTOP`, `PROFILE.WEB` | Which app's role values: the window's density or the site's |
+| `data-ui-theme` | `THEME.DARK`, `THEME.LIGHT`, `THEME.SYSTEM` | Which palette; `system` follows the Mac and is the desktop's alone |
+| `data-ui-density` | `DENSITY.COMPACT` | The site's dashboard size, a step under a public page's; web only, and only with a fine pointer: on a coarse one the site's full roles stand |
 
 The desktop's window page (`index.html`) and each web entry's
 `.html` set them on `<html>`,
@@ -213,7 +213,7 @@ a `Disclosure` is a real `<details>` that keeps a closed body out of the
 layout, holds it through its own fade, and lets a find in the page open it;
 shadcn's item is a flex row, where a list row is the grid of tracks its
 press lays out by subgrid; and the sidebar's menu parts need the sidebar's
-provider. Each part keeps its `luke-*` class, which other sheets and the
+provider. Each part keeps its `ui-*` class, which other sheets and the
 tests find it by. What a row's or a fold's state restyles stays in its
 sheet: a list row's fill and ring, its insets, and the hover acts'
 crossfade, through `:has()` and the pointer's media; a nav item's inks,
@@ -222,7 +222,7 @@ toolbar's row, which the window's custom properties and a style
 query restyle; and every keyframe. A fold's summary takes its classes from
 its look in React, trimmed where a `DisclosureFrame` lays it out. The
 combobox's field wears shadcn's input classes (`INPUT_FIELD`,
-`INPUT_CONTROL`), and the last `.luke-text-field` is gone.
+`INPUT_CONTROL`), and the last `.ui-text-field` is gone.
 
 The content and text components are drawn the same way: `Text` and
 `TextLink` read one table of the type roles' utilities
@@ -233,7 +233,7 @@ are drawn in the theme's utilities with no shadcn base.
 `Shortcut` stands on shadcn's kbd, its chord a `KbdGroup` and each key a
 `Kbd`. Their sheets keep their keyframes and the rules that play them, a cut
 name's fade, and the copy glyph's answer to the chip around it;
-`.luke-visually-hidden` keeps its rule, since other components put the class
+`.ui-visually-hidden` keeps its rule, since other components put the class
 on words of their own. `Prose` and the window's Markdown (`prose.css`) stay a
 sheet, because they style generated HTML element by element, and so does
 `landed.css`, whose wash is played on whatever element a view brings the eye
@@ -255,7 +255,7 @@ The page patterns follow: `SettingsRow` stands on shadcn's item and
 shadcn base, since shadcn has no arrangement or page frame of its own, as
 are `ErrorState`, `FailureNote`, and `GroupHeader`: a failure's line is no
 banner, so shadcn's alert, which `Banner` stands on, is not its base, and a
-group's fold is `Disclosure`'s. Each keeps its `luke-*` hooks, which the panel's
+group's fold is `Disclosure`'s. Each keeps its `ui-*` hooks, which the panel's
 sheets and tests read. What stays in their sheets is what a utility would
 get wrong: what a `Stack` asks of the items it holds, which the held
 component's own sheet must still outrank; the narrow-room container
@@ -411,10 +411,10 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--ui-duration-*`, `--ui-*-delay`). An endless loop whose `animation-play-state` answers `--ui-loop-motion` may keep its literal |
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--ui-spring`, `--ui-spring-fast`, `--ui-motion-exit`, or `--ui-motion-pane`; a hover's `ease` is the default, so drop it |
 | `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
-| `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-luke-profile` selector or variant | A control reads `cursor-press` (`--ui-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--ui-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
+| `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-ui-profile` selector or variant | A control reads `cursor-press` (`--ui-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--ui-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
 | `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--ui-list-gap`, `--ui-tight-gap`, `--ui-control-gap`, `--ui-row-inset`, `--ui-section-gap`, `--ui-page-section-gap`) or, where no role fits, a `--ui-space-*` step |
-| `crumb-width` | A `min-width` above zero on a path's crumb (`.luke-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
-| `bar-corner` | A corner radius on a bar's own box (`.luke-pane-bar`, `.luke-toolbar`), in a stylesheet or as a `rounded-*` beside its class | Nothing: a bar standing at a sheet's top takes the sheet's radius from the one rule in `packages/panel/src/styles/shell.css` ("The sheet's top"). Where a bar there runs square, fix how that rule reads the sheet's top (a layout laying columns side by side joins its split list), never the page |
+| `crumb-width` | A `min-width` above zero on a path's crumb (`.ui-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
+| `bar-corner` | A corner radius on a bar's own box (`.ui-pane-bar`, `.ui-toolbar`), in a stylesheet or as a `rounded-*` beside its class | Nothing: a bar standing at a sheet's top takes the sheet's radius from the one rule in `packages/panel/src/styles/shell.css` ("The sheet's top"). Where a bar there runs square, fix how that rule reads the sheet's top (a layout laying columns side by side joins its split list), never the page |
 | `grid-columns` | A block grid that places its items (`place-items-*`, `justify-items-*`, `place-items: center`) and names no columns | Name them, `grid-cols-1` (`minmax(0, 1fr)`), under the grid's own variants (`sm:grid-cols-1` leaves a phone's column `auto`, as `grid-cols-none` and `[auto]` do everywhere), so the column is the box's width: an `auto` column grows to its item's widest line, and a card or a sheet whose width is a share of it (`min(520px, 100%)`) then centres in a column wider than the screen and stands off its edge on a phone, as New task's Relation sheet did. A grid drawn inline (`inline-grid`) is sized by what it holds and passes |
 
 No comment silences it, and it refuses one that asks to
@@ -445,7 +445,7 @@ A component lands whole in one change:
 1. **Module.** `src/components/<name>/<name>.tsx`: line one names it, a design
    comment says what it owns, its variants are `as const` objects with derived
    types, and its props take no `className` or `style`.
-2. **Stylesheet.** `src/components/<name>/<name>.css`: `luke-<name>*` classes
+2. **Stylesheet.** `src/components/<name>/<name>.css`: `ui-<name>*` classes
    inside `@layer components`, reading only `--ui-*` roles and palette.
    Import it from `src/styles.css`, where order is cascade order. A role a
    component needs that the profiles lack is added to both profiles in

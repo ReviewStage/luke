@@ -142,7 +142,7 @@ function editedLines(view: HTMLElement): (string | undefined)[] {
 function shownWords(line: Element | null): string | undefined {
   const copy = line?.cloneNode(true);
   if (!(copy instanceof Element)) return undefined;
-  for (const hidden of copy.querySelectorAll(".luke-visually-hidden, .luke-visually-hidden"))
+  for (const hidden of copy.querySelectorAll(".ui-visually-hidden, .ui-visually-hidden"))
     hidden.remove();
   return lineWords(copy);
 }
@@ -155,13 +155,13 @@ function cardOf(
 ): HTMLElement {
   const anchor = view.querySelector(`${line} ${selector}`) ?? assert.fail("the ref stands");
   restOn(anchor);
-  return document.querySelector<HTMLElement>(".luke-tooltip-card") ?? assert.fail("the card hangs");
+  return document.querySelector<HTMLElement>(".ui-tooltip-card") ?? assert.fail("the card hangs");
 }
 
 test("the saved body is drawn as Markdown", () => {
   const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK }));
 
-  assert.match(markup, /<p class="luke-markdown-heading" data-level="2">Goal<\/p>/u);
+  assert.match(markup, /<p class="ui-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
@@ -335,7 +335,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
   assert.equal(editedLines(view)[1], "Fix auth flow now");
   assert.equal(ref?.tagName, "BUTTON");
   assert.ok(view.querySelector('.plan-unit-byline .actor-mark[data-kind="agent"] .state-glyph'));
-  assert.equal(cardOf(view).querySelector(".luke-hover-card-name")?.textContent, "Fix auth flow");
+  assert.equal(cardOf(view).querySelector(".ui-hover-card-name")?.textContent, "Fix auth flow");
   act(() => ref?.click());
   assert.deepEqual(opened, [AGENT.id]);
 
@@ -371,7 +371,7 @@ test("the sections changed since the last look are counted beside a face for eac
     ),
     ["person", "app"],
   );
-  assert.equal(line.querySelector(".luke-visually-hidden")?.textContent, "Charles Pan, Vespin");
+  assert.equal(line.querySelector(".ui-visually-hidden")?.textContent, "Charles Pan, Vespin");
   act(() => line.querySelector("button")?.click());
   assert.equal(dismissed, 1);
 });
@@ -387,12 +387,12 @@ test("a plan read and not edited names itself by one h1, its title, with its Cop
   });
 
   const headings = view.querySelectorAll("h1");
-  const more = view.querySelector('.luke-page-header-actions [aria-label="Copy link"]');
+  const more = view.querySelector('.ui-page-header-actions [aria-label="Copy link"]');
 
   assert.equal(headings.length, 1, "the plan page names itself once");
   assert.equal(headings[0]?.textContent, TASK.name);
   assert.ok(
-    more?.closest(".luke-page-header-actions"),
+    more?.closest(".ui-page-header-actions"),
     "the title carries its Copy link button in the header's acts",
   );
   assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);

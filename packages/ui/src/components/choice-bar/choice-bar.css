@@ -14,7 +14,7 @@
 @layer components {
   /* The thumb stands where the row last measured its chosen option; it
      slides on its transform alone, its box landing at once. */
-  .luke-choice-bar-thumb {
+  .ui-choice-bar-thumb {
     width: var(--ui-choice-bar-thumb-width);
     height: var(--ui-choice-bar-thumb-height);
     transform: translate(var(--ui-choice-bar-thumb-x), var(--ui-choice-bar-thumb-y))
@@ -28,11 +28,11 @@
      (`--ui-choice-bar-name`), which `choice-bar.tsx` reads to raise the
      name in the option's hint, since script cannot ask a container query. */
   /* off-scale: 520px, where a fill bar's options stop fitting */
-  @container luke-choice-bar (width < 520px) {
-    .luke-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
-      .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
-      .luke-choice-bar-icon
-      + .luke-choice-bar-label {
+  @container ui-choice-bar (width < 520px) {
+    .ui-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
+      .ui-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
+      .ui-choice-bar-icon
+      + .ui-choice-bar-label {
       --ui-choice-bar-name: folded;
       position: absolute;
       overflow: hidden;
@@ -44,9 +44,9 @@
 
     /* A count's words that fold (`data-folds`) leave every glyphed option
        once the bar folds, the chosen one too, so the counts read alike. */
-    .luke-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
-      .luke-choice-bar-option:has(> .luke-choice-bar-icon)
-      .luke-count-part[data-folds] {
+    .ui-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
+      .ui-choice-bar-option:has(> .ui-choice-bar-icon)
+      .ui-count-part[data-folds] {
       position: absolute;
       overflow: hidden;
       width: 1px;
@@ -65,28 +65,28 @@
      start and fading out over the last stretch, as the edge's fade does;
      a bar with nothing past its end has no scroll to read, which leaves the
      chevron unseen. */
-  .luke-choice-bar[data-fold="words"] {
+  .ui-choice-bar[data-fold="words"] {
     --ui-scroll-fade: var(--ui-space-48);
   }
 
-  .luke-choice-bar-frame {
+  .ui-choice-bar-frame {
     --ui-scroll-fade: var(--ui-space-48);
     timeline-scope: --ui-choice-bar-scroll;
   }
 
-  .luke-choice-bar-frame > .luke-choice-bar {
+  .ui-choice-bar-frame > .ui-choice-bar {
     scroll-timeline: --ui-choice-bar-scroll inline;
   }
 
-  .luke-choice-bar-more {
+  .ui-choice-bar-more {
     opacity: 0;
-    animation-name: luke-choice-bar-more;
+    animation-name: ui-choice-bar-more;
     animation-fill-mode: both;
     animation-timeline: --ui-choice-bar-scroll;
     animation-range: calc(100% - var(--ui-scroll-fade)) 100%;
   }
 
-  @keyframes luke-choice-bar-more {
+  @keyframes ui-choice-bar-more {
     from {
       opacity: 1;
     }
@@ -100,12 +100,12 @@
      (`data-folded`, measured by `choice-bar.tsx`), shows every option by
      its glyph alone, the chosen one too, so no option is named while its
      neighbours are not; a reader still has every name. */
-  .luke-choice-bar[data-fold="together"][data-folded="true"]
-    .luke-choice-bar-icon
-    + .luke-choice-bar-label,
-  .luke-choice-bar[data-fold="together"][data-folded="true"]
-    .luke-choice-bar-option:has(> .luke-choice-bar-icon)
-    .luke-count-part[data-folds] {
+  .ui-choice-bar[data-fold="together"][data-folded="true"]
+    .ui-choice-bar-icon
+    + .ui-choice-bar-label,
+  .ui-choice-bar[data-fold="together"][data-folded="true"]
+    .ui-choice-bar-option:has(> .ui-choice-bar-icon)
+    .ui-count-part[data-folds] {
     position: absolute;
     overflow: hidden;
     width: 1px;
@@ -115,7 +115,7 @@
   }
 
   /* A diff's counts grow as an agent works; the digits keep their width. */
-  .luke-count-part {
+  .ui-count-part {
     font-variant-numeric: tabular-nums;
   }
 }

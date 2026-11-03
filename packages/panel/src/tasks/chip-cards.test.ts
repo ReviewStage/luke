@@ -464,22 +464,20 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
   restOn(chip);
   await settle();
-  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     card: [...card.attributes].map((attribute) => attribute.name).find((name) => name !== "class"),
-    name: card.querySelector(".luke-hover-card-name")?.textContent,
-    sub: card.querySelector(".luke-hover-card-sub")?.textContent,
-    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
-    notes: [...card.querySelectorAll(".luke-hover-card-note")].map((note) => note.textContent),
+    name: card.querySelector(".ui-hover-card-name")?.textContent,
+    sub: card.querySelector(".ui-hover-card-sub")?.textContent,
+    corner: card.querySelector(".ui-hover-card-corner")?.textContent,
+    notes: [...card.querySelectorAll(".ui-hover-card-note")].map((note) => note.textContent),
     focus: card.querySelector("[data-task-card-focus]")?.textContent,
-    details: [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+    details: [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map(
       (detail) => detail.textContent,
     ),
     detailWords: [
-      ...card.querySelectorAll(
-        '.luke-hover-card-row[data-look="detail"] .luke-hover-card-row-label',
-      ),
+      ...card.querySelectorAll('.ui-hover-card-row[data-look="detail"] .ui-hover-card-row-label'),
     ].map((label) => label.textContent),
   };
   assert.equal(carriesWords(card, look.name ?? ""), false, "the card's words ride no attribute");
@@ -651,7 +649,7 @@ test("a chip of a page an agent on no task showed hangs the same card as a plan'
   assert.deepEqual([page.sub, page.detailWords], ["Version 2", ["Shown by Sweep the flaky tests"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.equal(
-    document.querySelector(".luke-tooltip-card .luke-page-thumb-frame")?.getAttribute("src"),
+    document.querySelector(".ui-tooltip-card .ui-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ agentId: SWEEP_AGENT, pageId: SWEEP_PAGE.id, version: 2 }),
     "the preview is the agent's page at its newest version",
   );
@@ -728,7 +726,7 @@ test("an Inbox item's labelled chip is called by the item's title, whether it wa
   );
 
   assert.deepEqual(
-    chipsOf(container).map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
   );
 });

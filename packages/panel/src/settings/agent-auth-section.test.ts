@@ -179,15 +179,15 @@ async function mount(
 
 /** A harness's row button's words, the check it may end in having none. */
 const rowButton = (page: HTMLElement, harness: string) =>
-  [...page.querySelectorAll<HTMLElement>(".luke-settings-row")]
+  [...page.querySelectorAll<HTMLElement>(".ui-settings-row")]
     .find((row) => row.textContent?.startsWith(harness))
     ?.querySelector<HTMLButtonElement>("button") ?? assert.fail(`no ${harness} row`);
 
 /** What a harness's row says under its name, and in which tint, or nothing where it says nothing. */
 const rowState = (page: HTMLElement, harness: string) => {
   const line = rowButton(page, harness)
-    .closest(".luke-settings-row")
-    ?.querySelector<HTMLElement>(".luke-settings-row-state");
+    .closest(".ui-settings-row")
+    ?.querySelector<HTMLElement>(".ui-settings-row-state");
   return line === null || line === undefined
     ? undefined
     : { words: line.textContent, state: line.dataset.state };
@@ -226,7 +226,7 @@ const radio = (dialog: Element, label: string) =>
 
 /** The card a radio heads. */
 const card = (dialog: Element, label: string) =>
-  radio(dialog, label).closest<HTMLElement>(".luke-choice-card") ?? assert.fail(`no ${label} card`);
+  radio(dialog, label).closest<HTMLElement>(".ui-choice-card") ?? assert.fail(`no ${label} card`);
 
 /** The field a visible label names, as a reader finds it. */
 function labelled(within: Element, words: string): HTMLInputElement {
@@ -395,7 +395,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     ) ?? assert.fail("no hint");
   assert.equal(saved.value, "sk-ant-…wxyz");
   assert.equal(saved.readOnly, true);
-  assert.ok(radio(dialog, "API key").querySelector(".luke-settings-saved-mark"));
+  assert.ok(radio(dialog, "API key").querySelector(".ui-settings-saved-mark"));
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Connected with an API key"));
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
@@ -482,7 +482,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     "an unchecked plan reads as a connected one",
   );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
-  assert.ok(radio(dialog, "Subscription").querySelector(".luke-settings-saved-mark"));
+  assert.ok(radio(dialog, "Subscription").querySelector(".ui-settings-saved-mark"));
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Connected with a subscription"));
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 

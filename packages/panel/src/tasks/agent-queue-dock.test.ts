@@ -96,7 +96,7 @@ function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
     );
   return {
     row: (index: number) => presses(rows[index]),
-    words: (index: number) => rows[index]?.querySelector(".luke-one-line")?.textContent ?? "",
+    words: (index: number) => rows[index]?.querySelector(".ui-one-line")?.textContent ?? "",
     /** Whether a reader reaches the row's files, which no hidden region holds back. */
     filesReached: (index: number) => {
       const files = rows[index]?.querySelector('[aria-label="Attached files"]');
@@ -109,7 +109,7 @@ function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
     chips: (index: number) =>
       [...(rows[index]?.querySelectorAll<HTMLElement>("[data-mention-ref]") ?? [])].map((chip) => [
         chip.dataset.kind,
-        chip.querySelector(".luke-inline-ref-label")?.textContent,
+        chip.querySelector(".ui-inline-ref-label")?.textContent,
       ]),
     all: () => presses(container),
   };

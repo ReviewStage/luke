@@ -59,7 +59,7 @@ export function EditableHeading({
     // biome-ignore lint/a11y/useSemanticElements: the words are edited in the heading's own look, which wraps as a heading does; an input cannot.
     <span
       ref={ref}
-      className="luke-editable-heading"
+      className="ui-editable-heading"
       contentEditable="plaintext-only"
       suppressContentEditableWarning
       role="textbox"

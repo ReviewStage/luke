@@ -169,11 +169,11 @@ function lineText(container: HTMLElement, line: number): Node {
 function cardOn(element: Element | undefined): (string | null | undefined)[] {
   assert.ok(element, "the chip is drawn");
   restOn(element);
-  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
-    card.querySelector(".luke-hover-card-name")?.textContent,
-    card.querySelector(".luke-hover-card-note")?.textContent,
+    card.querySelector(".ui-hover-card-name")?.textContent,
+    card.querySelector(".ui-hover-card-note")?.textContent,
   ];
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -223,7 +223,7 @@ test("lines picked by their numbers in a File tab, ⌥⌘K, are a chip in the ag
   assert.equal(ran, true);
   assert.deepEqual(card, ["src/invite.ts", "Lines 2–3 at 0123456"]);
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["invite.ts:2–3"],
   );
   assert.deepEqual(sent, [

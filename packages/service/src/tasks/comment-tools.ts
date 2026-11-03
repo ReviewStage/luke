@@ -139,7 +139,7 @@ export const UPDATE_COMMENT_TOOL = {
   inputSchema: UPDATE_INPUT,
 } as const;
 
-/** The four tools, in the order an agent is offered them. */
+/** The tools, in the order an agent is offered them. */
 const COMMENT_TOOLS = [READ_COMMENTS_TOOL, REPLY_TO_COMMENT_TOOL, UPDATE_COMMENT_TOOL] as const;
 
 type CommentTool = (typeof COMMENT_TOOLS)[number];
@@ -274,10 +274,10 @@ export function runCommentTool(
 }
 
 /**
- * The plan's open threads as the task's assistant is handed them every turn, beside the
- * saved document: one line each, read again every turn, so a comment a
- * member left since its last turn is there to raise. Nothing where the plan
- * holds no open thread.
+ * The plan's open threads as a coding agent's standing context hands them
+ * beside the saved document (`agent-runtime/standing-context.ts`): one line
+ * each, so a comment a member left since its last turn is there to raise.
+ * Nothing where the plan holds no open thread.
  */
 export function openThreadsText(threads: readonly PlanCommentThread[]): readonly string[] {
   const open = threads.filter((thread) => thread.status === PLAN_COMMENT_STATUS.OPEN);
@@ -285,5 +285,5 @@ export function openThreadsText(threads: readonly PlanCommentThread[]): readonly
   return [OPEN_THREADS_MARKER, ...open.map((thread) => JSON.stringify(threadRead(thread)))];
 }
 
-/** The marker the open threads ride behind in the assistant's standing context. */
+/** The marker the open threads ride behind in an agent's standing context. */
 export const OPEN_THREADS_MARKER = "[open comment threads]";

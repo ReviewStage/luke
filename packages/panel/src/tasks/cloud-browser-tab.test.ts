@@ -669,7 +669,7 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   assert.equal(announcedAsAlert(), "", "the window's own alert does not say it again");
   assert.ok(
     document
-      .querySelector(".cloud-browser-standing .luke-failure-note")
+      .querySelector(".cloud-browser-standing .ui-failure-note")
       ?.textContent?.includes("hasn't opened its sandbox"),
     "a refusal is said under the bar as a failure note",
   );

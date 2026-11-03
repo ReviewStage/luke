@@ -10,7 +10,7 @@
 @layer components {
   /* The theme's `pt-public-page-start` and `pb-public-page-end` read the
      first two. */
-  .luke-public-page {
+  .ui-public-page {
     --ui-public-page-start: var(--ui-space-48);
     --ui-public-page-end: var(--ui-space-64);
     --ui-public-page-rhythm: var(--ui-space-64);
@@ -21,7 +21,7 @@
      sets its sections closer, as the landing does on a phone. */
   /* off-scale: 520px, a phone's landing */
   @container (width < 520px) {
-    .luke-public-page > * {
+    .ui-public-page > * {
       --ui-public-page-start: var(--ui-space-32);
       --ui-public-page-end: var(--ui-space-40);
       --ui-public-page-rhythm: var(--ui-space-40);
@@ -32,7 +32,7 @@
   /* The landing's one line, in the site's display style. Note that the
      window has no display type, so on the desktop profile it falls back to
      the page title. */
-  .luke-public-page-title[data-style="hero"] {
+  .ui-public-page-title[data-style="hero"] {
     font-size: var(--ui-display-hero-size, var(--ui-type-title-size));
   }
 
@@ -40,26 +40,26 @@
      column can squeeze it. */
   /* off-scale: 576px, where the hero's 2.25rem title needs about 490px and steps down before the column squeezes it */
   @container (width < 576px) {
-    .luke-public-page-title[data-style="hero"] {
+    .ui-public-page-title[data-style="hero"] {
       font-size: var(--ui-display-hero-size-narrow, var(--ui-type-title-size));
     }
   }
 
-  .luke-public-section + .luke-public-section {
+  .ui-public-section + .ui-public-section {
     margin-top: var(--ui-public-page-rhythm);
   }
 
   /* Ruled sections each open under a rule across the column and keep their
      room inside it, so the rule stands midway between two entries; the last
      one closes on its own room, with no rule under it. */
-  .luke-public-page-sections[data-sections="ruled"] > .luke-public-section {
+  .ui-public-page-sections[data-sections="ruled"] > .ui-public-section {
     margin-top: 0;
     padding-block: var(--ui-public-page-ruled);
     border-top: 1px solid var(--ui-color-border);
   }
 
   /* What a picture or a recording hands the media fills its frame. */
-  .luke-public-media > * {
+  .ui-public-media > * {
     display: block;
     width: 100%;
     height: auto;

@@ -19,7 +19,7 @@ import type { ReactNode } from "react";
 /** Controls drawn stepped back, as what was asked and is no longer. */
 export function SteppedBack({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-stepped-back" data-stepped-back="">
+    <div className="ui-stepped-back" data-stepped-back="">
       {children}
     </div>
   );

@@ -203,7 +203,7 @@ test("a picture from outside Vespin is a link to it, and nothing is read for it"
   const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body) }));
 
   assert.equal(view.querySelector("img"), null);
-  assert.equal(view.querySelector(".luke-text-link")?.textContent, "SSO flow");
+  assert.equal(view.querySelector(".ui-text-link")?.textContent, "SSO flow");
   assert.deepEqual(asked, []);
 });
 

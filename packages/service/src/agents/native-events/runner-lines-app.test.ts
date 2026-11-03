@@ -12,7 +12,7 @@ import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { RUNNER_LINES_PATH, runnerLinesApp } from "./runner-lines-app.js";
 
 /**

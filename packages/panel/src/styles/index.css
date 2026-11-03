@@ -9,7 +9,7 @@
    which rule wins. */
 /* The shared tokens first, `@luke/ui`'s scale, each profile's roles, its
    palette, and the window's old names for them, keyed on the root's
-   `data-luke-profile`, `data-luke-theme`, and `data-luke-density`, so every
+   `data-ui-profile`, `data-ui-theme`, and `data-ui-density`, so every
    sheet below reads them. */
 @import "@luke/ui/tokens.css";
 @import "./settings.css";

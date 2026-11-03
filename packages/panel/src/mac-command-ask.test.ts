@@ -97,7 +97,7 @@ async function mountRefusing(sentence: string): Promise<void> {
 
 /** What each toast standing says, oldest first. */
 function toasts(): string[] {
-  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+  return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
@@ -117,7 +117,7 @@ test("nothing is drawn while no ask waits", async () => {
 test("the earliest ask is drawn with its command, and each answer goes back by the ask's id", async () => {
   const answered = await mount([FIRST, SECOND]);
   assert.ok(document.querySelector('[role="alertdialog"]'), "the prompt stands");
-  assert.equal(document.querySelector(".luke-file-text-words")?.textContent, FIRST.command);
+  assert.equal(document.querySelector(".ui-file-text-words")?.textContent, FIRST.command);
 
   await act(async () => button("Allow once").click());
   await act(async () => button("Allow all commands").click());
@@ -180,7 +180,7 @@ test("an ask main drops fades its card out in place, its words as they were, bef
   );
   await act(async () => vi.advanceTimersToNextFrame());
   assert.ok(card.isConnected, "the card goes the moment the ask does");
-  assert.equal(document.querySelector(".luke-file-text-words")?.textContent, FIRST.command);
+  assert.equal(document.querySelector(".ui-file-text-words")?.textContent, FIRST.command);
 
   await act(async () => exits.finish());
   await act(async () => vi.advanceTimersToNextFrame());

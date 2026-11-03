@@ -4,7 +4,7 @@
    The brand's colours on @luke/ui's roles, both profiles, both themes. The
    roles no brand changes are palettes.css's. */
 
-[data-luke-profile="desktop"] {
+[data-ui-profile="desktop"] {
   --ui-color-ground: light-dark(#fffcfa, #0f0d0b);
   --ui-color-surface: light-dark(#ffffff, #120f0d);
   --ui-color-overlay: light-dark(#ffffff, #171412);
@@ -36,8 +36,8 @@
   --ui-color-merged: light-dark(#744caf, #c29fff);
 }
 
-[data-luke-profile="web"],
-[data-luke-profile="web"][data-luke-theme="light"] {
+[data-ui-profile="web"],
+[data-ui-profile="web"][data-ui-theme="light"] {
   --ui-color-ground: #fffcfa;
   --ui-color-surface: #ffffff;
   --ui-color-overlay: #ffffff;
@@ -69,7 +69,7 @@
   --ui-color-merged: #744caf;
 }
 
-[data-luke-profile="web"][data-luke-theme="dark"] {
+[data-ui-profile="web"][data-ui-theme="dark"] {
   --ui-color-ground: #0f0d0b;
   --ui-color-surface: #120f0d;
   --ui-color-overlay: #171412;

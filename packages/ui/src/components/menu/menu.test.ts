@@ -53,7 +53,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  document.documentElement.removeAttribute("data-luke-room");
+  document.documentElement.removeAttribute("data-ui-room");
 });
 
 /** What a test's menu chose, in the order it chose it. */
@@ -1232,7 +1232,7 @@ test("a menu too tall for the room over a bar it keeps clear of stands above the
 
 /** The window drawn in a phone's layout, as the panel's shell marks its root. */
 function inPhoneLayout(): void {
-  document.documentElement.setAttribute("data-luke-room", "narrow");
+  document.documentElement.setAttribute("data-ui-room", "narrow");
 }
 
 /** jsdom has no ResizeObserver; the way back's fold, which measures by one, is not what these tests read. */
@@ -1353,7 +1353,7 @@ test("a sheet put away sinks out before it goes, held until its sink has played"
 
     key("Escape");
 
-    const sinking = document.querySelector<HTMLElement>(".luke-menu-sheet");
+    const sinking = document.querySelector<HTMLElement>(".ui-menu-sheet");
     expect(sinking?.dataset.leaving).toBe("true");
     act(() => {
       sink.dispatchEvent(new Event("finish"));

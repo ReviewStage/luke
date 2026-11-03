@@ -2,7 +2,7 @@ import { IconButton, riseAbove, Tooltip, useFilePicker, useMenu } from "@luke/ui
 import { PaperclipIcon } from "@luke/ui/icons";
 import { PlusIcon } from "lucide-react";
 import { type Ref, useImperativeHandle } from "react";
-import { ActionMenu, type PanelMenuEntry } from "../desktop/action-menu.js";
+import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 
 /**
  * attach-files-button.tsx -- the + at a message box's foot: the system's file picker, or, where the box takes more than files, a menu raised over it whose Attachment row opens the picker.
@@ -33,7 +33,7 @@ export interface AttachPicker {
 }
 
 /** The + menu's row that opens the file picker, as the + menu and a narrow box's overflow both offer it. */
-export function attachmentRow(open: () => void, disabled: boolean): PanelMenuEntry {
+export function attachmentRow(open: () => void, disabled: boolean): MenuEntry {
   return { label: ATTACHMENT, icon: <PaperclipIcon />, disabled, onSelect: open };
 }
 
@@ -56,7 +56,7 @@ export function AttachFilesButton({
   /** Filled with a way to open the picker, for a box that opens it from elsewhere too. */
   picker?: Ref<AttachPicker> | undefined;
   /** What the box takes beside files, the rows its + menu offers after Attachment; none opens the picker from the + itself. */
-  more?: readonly PanelMenuEntry[] | undefined;
+  more?: readonly MenuEntry[] | undefined;
 }): React.JSX.Element {
   const picker = useFilePicker({ accept, multiple: true, onFiles });
   useImperativeHandle(handed, () => ({ open: picker.open }));

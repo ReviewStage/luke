@@ -2137,7 +2137,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     ),
   );
   await settle();
-  act(() => chip.querySelector<HTMLButtonElement>(".luke-chip")?.click());
+  act(() => chip.querySelector<HTMLButtonElement>(".ui-chip")?.click());
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
@@ -2145,7 +2145,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     [
       // A row names the repository, then its owner after it.
       [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".luke-combobox-option-detail", ".luke-combobox-option-label"]
+        [".ui-combobox-option-detail", ".ui-combobox-option-label"]
           .map((part) => row.querySelector(part)?.textContent)
           .join("/"),
       ),

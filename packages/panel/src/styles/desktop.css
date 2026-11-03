@@ -37,7 +37,7 @@
    height their middle sits at, its y plus half a 14px light. The lights never
    scale with the page, so their width is divided by the zoom; main moves them
    down with it instead, so their middle stays where it is drawn here. */
-:root[data-luke-profile="desktop"] {
+:root[data-ui-profile="desktop"] {
   --traffic-lights-end: calc(79px / var(--zoom));
   --traffic-lights-middle: 25px;
   --title-bar-middle: var(--traffic-lights-middle);
@@ -72,8 +72,8 @@ body,
 /* The Mac panel window's page is clear under the shell, whose frame tint and
    solid sheet paint everything there is, so the window's sidebar material
    (`panel-manager.ts`) frosts through the frame. */
-:root[data-luke-profile="desktop"]:has(.desktop-shell),
-:root[data-luke-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
+:root[data-ui-profile="desktop"]:has(.desktop-shell),
+:root[data-ui-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
   background: transparent;
 }
 
@@ -141,13 +141,13 @@ body,
    same by their own width as well as a narrow room's (`column-split.ts`),
    their list or its item the screen's one column. The one shown stands
    alone, so no edge parts it from the other. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
-:where(:root)[data-luke-room="narrow"] :is(.desktop-settings, .desktop-version-history),
+:where(:root)[data-ui-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
+:where(:root)[data-ui-room="narrow"] :is(.desktop-settings, .desktop-version-history),
 :is(.desktop-settings, .desktop-version-history)[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-:where(:root)[data-luke-room="narrow"]
+:where(:root)[data-ui-room="narrow"]
   .desktop-shell
   :is(.desktop-settings, .desktop-version-history)
   > [hidden],
@@ -155,7 +155,7 @@ body,
   display: none;
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell :is(.settings-pages, .version-log),
+:where(:root)[data-ui-room="narrow"] .desktop-shell :is(.settings-pages, .version-log),
 :is(.desktop-settings, .desktop-version-history)[data-single="true"]
   > :is(.settings-pages, .version-log) {
   border-right: 0;
@@ -163,7 +163,7 @@ body,
 
 /* Settings' list standing alone leads with its one way back, Back to the
    tasks; the history's Back and Forward beside it would be a second. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .settings-pages > .title-bar-controls {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .settings-pages > .title-bar-controls {
   display: none;
 }
 
@@ -175,15 +175,15 @@ body,
    five lines under the cap, since Home scrolls. New task's dialog portals out
    of the shell, so it reads the shell's room off the document's root
    (`stage-room.ts`), and its Start stays in the card above the keyboard. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-field,
-[data-luke-room="narrow"] .new-task .agent-composer-field {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .agent-composer-field,
+[data-ui-room="narrow"] .new-task .agent-composer-field {
   --agent-composer-field-cap: calc(var(--ui-stage-height) * 0.3);
 }
 
 /* A thread opened over a narrow room's plan spans the column rather than
    standing a margin card's width at its right over the words, so its reply
    box has the column's room. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .comment-float {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .comment-float {
   left: calc(var(--ui-space-6) * -1);
   width: auto;
 }
@@ -211,8 +211,8 @@ body,
 /* Every page stands its top row on the frame (shell.css), so the toggle at
    the right and, while the sidebar is folded, the buttons at the left rest
    on the frame as those rows do, with no ground of their own. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .title-bar-controls[data-edge="end"],
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell .title-bar-controls[data-edge="end"],
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: transparent;
@@ -255,7 +255,7 @@ body,
   scale: calc(24 / 22);
 }
 
-.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > .luke-working-mark {
+.actor-mark[data-kind="automation"][data-size="page"] .state-glyph > .ui-working-mark {
   scale: calc(16 / 13);
 }
 
@@ -320,7 +320,7 @@ body,
    was dragged from, ringed so it reads over either pane, and a shadow
    beneath. The sidebar's rows and its sections share it; a board's card is
    a card (`Card`), whose copy keeps the card's own frame. */
-[data-lifted="true"]:not(.luke-card) {
+[data-lifted="true"]:not(.ui-card) {
   border-radius: var(--ui-control-radius);
   background:
     linear-gradient(var(--ui-color-fill-strong), var(--ui-color-fill-strong)), var(--carried-ground);
@@ -375,7 +375,7 @@ body,
 /* The section, or Tasks, a row is carried over is washed while it is, and a
    line stands where the row would land among a section's tasks. A board's
    column is a card (`Card`), which rings and washes itself. */
-[data-row-drop][data-drop-target="true"]:not(.luke-card) {
+[data-row-drop][data-drop-target="true"]:not(.ui-card) {
   border-radius: var(--ui-radius-8);
   background: var(--ui-color-fill-hover);
 }
@@ -409,7 +409,7 @@ body,
   }
 }
 
-[data-luke-profile="desktop"] .offline-mark {
+[data-ui-profile="desktop"] .offline-mark {
   -webkit-app-region: no-drag;
 }
 
@@ -498,7 +498,7 @@ body,
   --ui-toolbar-end-at: var(--column-inset);
 }
 
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .desktop-task[data-panel-open="true"] {
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell .desktop-task[data-panel-open="true"] {
   --ui-toolbar-end-at: 0px;
 }
 
@@ -507,11 +507,11 @@ body,
    sidebar folded it starts past the title bar's buttons, measured from the
    sheet's edge, a gap in from the window's. A bar further in the column, a
    task's Inbox tab's, sets its own start. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
   --ui-toolbar-start-at: 0px;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"]
   > .desktop-main
   .desktop-task-main {
@@ -522,17 +522,17 @@ body,
    controls give way before its tabs do: where the column is narrowest the
    agents' Retry draws its glyph alone (`FoldingButton`). */
 /* off-scale: 320px, the column's narrowest */
-@container luke-toolbar (width < 320px) {
+@container ui-toolbar (width < 320px) {
   .main-tabs {
     --ui-fold: folded;
   }
 }
 
-[data-luke-profile="desktop"] .luke-button,
-[data-luke-profile="desktop"] .luke-chip,
-[data-luke-profile="desktop"] .luke-choice-bar-option,
-[data-luke-profile="desktop"] .luke-nav-item,
-[data-luke-profile="desktop"] .inbox-crumbs {
+[data-ui-profile="desktop"] .ui-button,
+[data-ui-profile="desktop"] .ui-chip,
+[data-ui-profile="desktop"] .ui-choice-bar-option,
+[data-ui-profile="desktop"] .ui-nav-item,
+[data-ui-profile="desktop"] .inbox-crumbs {
   -webkit-app-region: no-drag;
 }
 
@@ -556,15 +556,15 @@ body,
    the layer it stands on over everything, or over a modal it was opened
    from, and its presses claimed back from the toolbar's drag strip it sits
    over. */
-.luke-menu {
+.ui-menu {
   z-index: var(--ui-z-menu);
 }
 
-[data-luke-profile="desktop"] .luke-menu {
+[data-ui-profile="desktop"] .ui-menu {
   -webkit-app-region: no-drag;
 }
 
-.luke-menu[data-layer="dialog"] {
+.ui-menu[data-layer="dialog"] {
   z-index: calc(var(--ui-z-dialog) + 1);
 }
 
@@ -635,7 +635,7 @@ body,
 /* Who sent it can name an automation, an issue, and a runner: too narrow
    for all three on one line, it breaks between them rather than cutting
    each name to its first letters. */
-.agent-origin > .luke-message-line > .luke-message-line-sender > .actor-words {
+.agent-origin > .ui-message-line > .ui-message-line-sender > .actor-words {
   flex-wrap: wrap;
   row-gap: var(--ui-list-gap);
 }
@@ -692,11 +692,11 @@ body,
   --comment-gutter: var(--ui-page-inset);
 }
 
-[data-luke-profile="web"] .desktop-document {
+[data-ui-profile="web"] .desktop-document {
   --comment-gutter: calc(var(--ui-touch-target) + 2 * var(--ui-space-2));
 }
 
-[data-luke-profile="web"] .desktop-document .plan-document-body {
+[data-ui-profile="web"] .desktop-document .plan-document-body {
   padding-right: var(--comment-gutter);
 }
 
@@ -743,7 +743,7 @@ body,
   margin-top: var(--ui-block-gap);
 }
 
-.desktop-document .luke-markdown-heading {
+.desktop-document .ui-markdown-heading {
   color: var(--ui-color-text);
 }
 
@@ -754,8 +754,8 @@ body,
    steps, as they do in every other note. An h3 that follows a block inside
    a section stands the same room above it, so it never sits on the list or
    paragraph before it; one straight under a heading stays close to it. */
-.desktop-document .luke-markdown-heading:is([data-level="1"], [data-level="2"]),
-.desktop-document :not(.luke-markdown-heading) + .luke-markdown-heading[data-level="3"] {
+.desktop-document .ui-markdown-heading:is([data-level="1"], [data-level="2"]),
+.desktop-document :not(.ui-markdown-heading) + .ui-markdown-heading[data-level="3"] {
   margin-top: 1.6em;
 }
 
@@ -796,18 +796,18 @@ body,
 
 /* A tool's page reached from its server's list leads its head with the way
    back, folded to its glyph (`integration-tool-list.tsx`). */
-.integration-tool-detail-head:has(.luke-button) {
+.integration-tool-detail-head:has(.ui-button) {
   --ui-fold: folded;
   padding-left: var(--ui-item-gap);
 }
 
 /* What a tool does, rendered as markdown: its emphasis, headings, and code
    in the full ink, its headings at the words' own size. */
-.integration-tool-description-whole :is(strong, .luke-markdown-heading, code) {
+.integration-tool-description-whole :is(strong, .ui-markdown-heading, code) {
   color: var(--ui-color-text);
 }
 
-.integration-tool-description-whole .luke-markdown-heading {
+.integration-tool-description-whole .ui-markdown-heading {
   margin-top: 0.9em;
   font-size: 1em;
 }
@@ -931,7 +931,7 @@ body,
 
 /* A narrow room's row says when it runs next in the line under its name,
    a failure's mark leading the line as it leads an agent's end line. */
-.automation-group .luke-list-row-description > .failed-mark {
+.automation-group .ui-list-row-description > .failed-mark {
   margin-right: var(--ui-tight-gap);
   vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
 }
@@ -985,7 +985,7 @@ body,
   height: var(--desktop-bar-height);
 }
 
-[data-luke-profile="desktop"]
+[data-ui-profile="desktop"]
   .desktop-shell[data-room="wide"][data-sidebar-collapsed="true"]
   .automation-runs-screen::before {
   -webkit-app-region: drag;
@@ -1002,7 +1002,7 @@ body,
   margin-left: var(--sheet-gap);
 }
 
-[data-luke-profile="desktop"]
+[data-ui-profile="desktop"]
   .desktop-shell[data-room="wide"]
   > [data-single="true"]
   > :not(nav)::before {
@@ -1047,7 +1047,7 @@ body,
   top: calc(var(--desktop-bar-height) + var(--ui-space-8));
 }
 
-[data-luke-profile="desktop"] .find-bar {
+[data-ui-profile="desktop"] .find-bar {
   -webkit-app-region: no-drag;
 }
 
@@ -1129,7 +1129,7 @@ body,
    is a tab's (`PaneBar`), but it stands under the page's toolbar rather than
    a tab strip, so it starts its glyph a column's inset further in, on one
    line with the toolbar's first crumb. */
-.agent-page > .luke-pane-bar {
+.agent-page > .ui-pane-bar {
   padding-inline: calc(var(--column-inset) + var(--ui-list-inset));
 }
 
@@ -1223,8 +1223,8 @@ body,
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
-  .luke-group-header-head,
-.task-summary-card-body > .task-summary-section:first-of-type .luke-group-header-head {
+  .ui-group-header-head,
+.task-summary-card-body > .task-summary-section:first-of-type .ui-group-header-head {
   margin-right: calc(var(--ui-control-height) + var(--ui-tight-gap));
 }
 
@@ -1324,7 +1324,7 @@ body,
    a press on one would start a drag instead. The gutters are the panel's,
    so this stays here beside them rather than in `@luke/ui`'s ResizeEdge. */
 @media (pointer: coarse) {
-  .luke-resize-edge::before {
+  .ui-resize-edge::before {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -1350,11 +1350,11 @@ body,
 
 /* On the frame its first tab starts on one line with its sheet's edge
    below, as the plan's does. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .side-panel-bar {
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell .side-panel-bar {
   padding-left: 0;
 }
 
-[data-luke-profile="desktop"] .side-panel-bar {
+[data-ui-profile="desktop"] .side-panel-bar {
   -webkit-app-region: drag;
 }
 
@@ -1364,7 +1364,7 @@ body,
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
-[data-luke-profile="desktop"] .tab-add-anchor .luke-anchored-popover {
+[data-ui-profile="desktop"] .tab-add-anchor .ui-anchored-popover {
   -webkit-app-region: no-drag;
 }
 
@@ -1424,21 +1424,17 @@ body,
    in the title bar's buttons' place, the column's bar starts and ends at the
    column's own inset, and the side panel draws no bar at all, the row
    standing for it. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .desktop-task-main {
   --ui-toolbar-wrap-start: var(--sidebar-toggle-clearance);
   --ui-toolbar-wrap-end: var(--panel-toggle-clearance);
 }
 
-:where(:root)[data-luke-room="narrow"]
-  .desktop-shell
-  .task-head
-  ~ .desktop-task
-  .desktop-task-main {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .task-head ~ .desktop-task .desktop-task-main {
   --ui-toolbar-wrap-start: var(--column-inset);
   --ui-toolbar-wrap-end: var(--column-inset);
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar:has(> .side-panel-tabs) {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .side-panel-bar:has(> .side-panel-tabs) {
   --bar-start: var(--sidebar-toggle-clearance);
   --bar-end: var(--panel-toggle-clearance);
   flex-wrap: wrap;
@@ -1446,14 +1442,14 @@ body,
   padding-left: var(--bar-start);
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs {
   order: 1;
   flex: 0 0 calc(100% + var(--bar-start) + var(--bar-end) - 2 * var(--column-inset));
   margin-right: calc(var(--column-inset) - var(--bar-end));
   margin-left: calc(var(--column-inset) - var(--bar-start));
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs + * {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs + * {
   min-height: var(--ui-control-height);
   margin-left: auto;
 }
@@ -1506,7 +1502,7 @@ body,
 /* Where the card is too narrow for one row, as in a narrow window zoomed
    in, the foot wraps: its chips and its presses each stand on a line of
    their own, the presses kept at the right. */
-.new-task-composer :is(.luke-composer-foot-bar, .luke-composer-foot-tools) {
+.new-task-composer :is(.ui-composer-foot-bar, .ui-composer-foot-tools) {
   flex-wrap: wrap;
   row-gap: var(--ui-control-gap);
 }
@@ -1585,7 +1581,7 @@ body,
 /* The status's mark before the name, on the name's first line, standing
    over the card's press as its pills do; the name wraps beside it. The
    press holds the name alone, its reach still covering the whole card. */
-.tasks-board-card-title > .luke-chip {
+.tasks-board-card-title > .ui-chip {
   position: relative;
   z-index: 1;
   /* off-scale: centres the compact chip on the name's first line */
@@ -1596,8 +1592,8 @@ body,
    status's and the priority's (or the assignee's face where no priority is
    drawn), stand on one column: each chip is drawn out past the card's
    inset as far, so the two marks stand one above the other. */
-.tasks-board-card-title > .luke-chip,
-.tasks-board-card-pills > .luke-chip[data-icon-only="true"]:first-child {
+.tasks-board-card-title > .ui-chip,
+.tasks-board-card-pills > .ui-chip[data-icon-only="true"]:first-child {
   margin-left: calc(-1 * var(--ui-space-4));
 }
 
@@ -1625,16 +1621,16 @@ body,
   flex: 1 1 auto;
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .tasks-board-column {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .tasks-board-column {
   width: auto;
   flex: 1 1 auto;
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .tasks-board-column-scroll {
+:where(:root)[data-ui-room="narrow"] .desktop-shell .tasks-board-column-scroll {
   flex: 1 1 auto;
 }
 
-.tasks-list-group[data-drop-target="true"] .luke-group-header-head {
+.tasks-list-group[data-drop-target="true"] .ui-group-header-head {
   box-shadow: inset 0 -1px var(--ui-color-focus-ring);
 }
 
@@ -1645,14 +1641,14 @@ body,
   opacity: 0.4;
 }
 
-.luke-task-row[data-lifted="true"] {
+.ui-task-row[data-lifted="true"] {
   display: flex;
   gap: var(--ui-block-gap);
   background: var(--ui-color-surface);
   box-shadow: 0 4px 12px var(--ui-color-shadow-soft);
 }
 
-.luke-task-row[data-lifted="true"] > [data-cell="name"] {
+.ui-task-row[data-lifted="true"] > [data-cell="name"] {
   flex: 1;
 }
 
@@ -1668,7 +1664,7 @@ body,
 /* A row's creator's face (`task-row-parts.tsx`) is a press of its own,
    hanging its card, standing over the row's press in a cell that lets the
    pointer through, so a press beside it still opens the task. */
-.luke-task-row-cell [data-task-creator] {
+.ui-task-row-cell [data-task-creator] {
   position: relative;
   z-index: 1;
   pointer-events: auto;

@@ -56,7 +56,7 @@ export const GLYPH_ARRIVAL = {
 export type GlyphArrival = (typeof GLYPH_ARRIVAL)[keyof typeof GLYPH_ARRIVAL];
 
 /** The slot's square, or a line's height before words that may wrap, its glyph centred in it. */
-const SLOT_BASE = "luke-glyph-slot inline-flex flex-none items-center justify-center";
+const SLOT_BASE = "ui-glyph-slot inline-flex flex-none items-center justify-center";
 
 /** How the glyph stands in its slot: filling it, or a step inside it. */
 const FIT_CLASS = {

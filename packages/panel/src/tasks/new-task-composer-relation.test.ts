@@ -170,7 +170,7 @@ async function relate(container: HTMLElement, kind: string, name: string): Promi
 function docked(container: HTMLElement): string[] {
   return [...container.querySelectorAll<HTMLElement>(".new-task-relations-dock li")].map(
     (each) =>
-      `${each.querySelector('[aria-label^="Relation: "]')?.textContent} ${each.querySelector(".luke-task-row-press span")?.textContent}`,
+      `${each.querySelector('[aria-label^="Relation: "]')?.textContent} ${each.querySelector(".ui-task-row-press span")?.textContent}`,
   );
 }
 
@@ -225,7 +225,7 @@ test("as Sub-task of, a task in another repository says why and takes no pick, a
   act(() => row("Ship login").click());
   await settle();
   const repository =
-    [...container.querySelectorAll<HTMLElement>(".luke-chip")].find((each) =>
+    [...container.querySelectorAll<HTMLElement>(".ui-chip")].find((each) =>
       each.textContent?.includes("acme/web"),
     ) ?? assert.fail("the repository chip stands");
   assert.equal(repository.getAttribute("aria-disabled"), "true");
@@ -242,7 +242,7 @@ test("swapping the card's one tree relation takes a task of another repository, 
 
   await relate(container, "Sub-task of", "Ship login");
   const name =
-    container.querySelector<HTMLElement>(".new-task-relations-dock .luke-task-row-press") ??
+    container.querySelector<HTMLElement>(".new-task-relations-dock .ui-task-row-press") ??
     assert.fail("the row's name stands");
   act(() => name.click());
   await settle();

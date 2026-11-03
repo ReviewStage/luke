@@ -141,7 +141,7 @@ function type(editor: Editor, words: string): void {
 
 /** The rows the `/` menu offers now, by their words; none while it stands closed. */
 function offered(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".luke-block-menu .luke-combobox-option-label")].map(
+  return [...container.querySelectorAll(".ui-block-menu .ui-combobox-option-label")].map(
     (row) => row.textContent ?? "",
   );
 }

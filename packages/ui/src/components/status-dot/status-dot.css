@@ -6,13 +6,13 @@
    ground. The dot's size is set here once, where the hole reads it too. */
 
 @layer components {
-  .luke-status-glyph {
+  .ui-status-glyph {
     --status-glyph-dot: var(--ui-space-6);
     --status-glyph-centre: calc(100% - var(--status-glyph-dot) / 2);
     --status-glyph-hole: calc(var(--status-glyph-dot) / 2 + 1.5px);
   }
 
-  .luke-status-glyph > :not(.luke-status-glyph-dot) {
+  .ui-status-glyph > :not(.ui-status-glyph-dot) {
     mask-image: radial-gradient(
       circle at var(--status-glyph-centre) var(--status-glyph-centre),
       transparent var(--status-glyph-hole),
@@ -20,7 +20,7 @@
     );
   }
 
-  .luke-status-glyph-dot {
+  .ui-status-glyph-dot {
     position: absolute;
     inset-inline-end: 0;
     bottom: 0;

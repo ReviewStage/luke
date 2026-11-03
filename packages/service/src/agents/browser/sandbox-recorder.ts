@@ -80,7 +80,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   window[mark] = true;
   const svg = "http://www.w3.org/2000/svg";
   const host = document.createElement("div");
-  host.setAttribute("data-luke-recording-cursor", "");
+  host.setAttribute("data-ui-recording-cursor", "");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });
@@ -474,7 +474,7 @@ export const RECORDING_READ_EXIT = { NO_VIDEO: 3 } as const;
  * Reads the video back, up to the bytes given and one past them, as base64
  * on one line after the line naming its absolute path, with every
  * capability dropped as the sandbox's other file reads are
- * (`luke-mcp/sandbox-door.ts`); read its run with `recordingBytesOf`. Note
+ * (`workspace-mcp/sandbox-door.ts`); read its run with `recordingBytesOf`. Note
  * that the path is the sandbox user's home's, which the agent's own may not
  * be, as a native runner's is not, so the agent is answered it whole.
  */

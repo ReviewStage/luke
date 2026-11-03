@@ -4,7 +4,7 @@
    what it does in the muted ink. */
 
 @layer components {
-  .luke-menu-keys {
+  .ui-menu-keys {
     display: flex;
     flex: 0 0 auto;
     gap: var(--ui-space-12);
@@ -16,21 +16,21 @@
     white-space: nowrap;
   }
 
-  .luke-menu-keys-item,
-  .luke-menu-keys-key {
+  .ui-menu-keys-item,
+  .ui-menu-keys-key {
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-4);
   }
 
   /* The keys that do one thing sit closer than the words after them. */
-  .luke-menu-keys-key {
+  .ui-menu-keys-key {
     gap: var(--ui-space-2);
   }
 
   /* A finger picks a row by pressing it, so the keys say nothing there. */
   @media (pointer: coarse) {
-    .luke-menu-keys {
+    .ui-menu-keys {
       display: none;
     }
   }

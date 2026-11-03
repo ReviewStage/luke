@@ -27,7 +27,7 @@ const FLIGHT_DURATION = MOTION_TOKEN.DURATION_FAST;
 const FLIGHT_EASING = MOTION_TOKEN.SPRING_FAST;
 
 /** The picture inside the card that lands over the tile: the viewer's zoomed picture. */
-const PICTURE_SELECTOR = ".luke-zoom-image";
+const PICTURE_SELECTOR = ".ui-zoom-image";
 
 /**
  * How far past the card its clip ends, so the shadow it casts is drawn whole

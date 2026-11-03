@@ -159,7 +159,7 @@ test("a box named by a label of its own draws no words and is pressed as any box
     }),
   );
   assert.equal(box(page).getAttribute("aria-label"), "Send the invite");
-  assert.equal(page.querySelector(".luke-checkbox-words"), null);
+  assert.equal(page.querySelector(".ui-checkbox-words"), null);
   press(page.querySelector("label"));
   assert.deepEqual(heard, [true]);
 });

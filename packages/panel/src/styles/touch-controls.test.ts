@@ -71,7 +71,7 @@ function tappableMessage() {
   const part = (selector: string) =>
     container.querySelector<HTMLElement>(selector) ?? assert.fail(selector);
   return {
-    actions: () => part(".luke-message-actions"),
+    actions: () => part(".ui-message-actions"),
     tap: (selector: string) => act(() => part(selector).click()),
   };
 }

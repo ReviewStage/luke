@@ -144,7 +144,7 @@ function section(page: HTMLElement, name: string): HTMLElement {
 test("a section stands under the place's own toolbar, titled Admin, with Open in browser among its acts and its sections a bar under it, the one standing chosen", async () => {
   const { page } = await open({ kind: "users" });
 
-  assert.equal(page.querySelector("header.luke-toolbar h1")?.textContent, "Admin");
+  assert.equal(page.querySelector("header.ui-toolbar h1")?.textContent, "Admin");
   assert.ok(page.querySelector('a[aria-label="Open in browser"][href="https://app.test/admin"]'));
   assert.deepEqual(sections(page), [
     { name: "Overview", chosen: false },
@@ -276,7 +276,7 @@ test("⌘F finds in the view standing, its bar under the view's toolbar, and cou
   });
 
   assert.equal(
-    page.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')?.textContent,
+    page.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')?.textContent,
     "1 of 1",
   );
 });

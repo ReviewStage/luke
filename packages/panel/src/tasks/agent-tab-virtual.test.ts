@@ -222,7 +222,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+  return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
 }
 
@@ -490,7 +490,7 @@ test("⌘F finds a word on a long fence's 55th line, past its cut, and opens the
     (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
   );
   layOut(box);
-  const card = container.querySelector(".luke-code-card") ?? assert.fail("the fence's card");
+  const card = container.querySelector(".ui-code-card") ?? assert.fail("the fence's card");
   const pressNamed = (name: string) =>
     [...card.querySelectorAll("button")].some((button) => button.textContent === name);
   assert.ok(pressNamed("Show all"), "the fence is cut");

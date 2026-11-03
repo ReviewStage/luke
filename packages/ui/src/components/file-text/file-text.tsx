@@ -36,13 +36,13 @@ export function FileText({
   const scrolls = extent !== FILE_TEXT_EXTENT.PEEK;
   return (
     <section
-      className="luke-file-text"
+      className="ui-file-text"
       data-extent={extent}
       aria-label={label}
       // Note that only a peek does not scroll, so every other extent takes a place in the Tab order.
       tabIndex={scrolls ? 0 : undefined}
     >
-      <pre className="luke-file-text-words">{text}</pre>
+      <pre className="ui-file-text-words">{text}</pre>
     </section>
   );
 }

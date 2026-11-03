@@ -27,7 +27,7 @@ const roots: Root[] = [];
 let motion: ReturnType<typeof holdExits>;
 
 beforeEach(() => {
-  motion = holdExits((element) => element.classList.contains("luke-saved-tick"));
+  motion = holdExits((element) => element.classList.contains("ui-saved-tick"));
 });
 
 afterEach(() => {
@@ -62,7 +62,7 @@ function render(start: number): HTMLElement {
 /** What the window's announcer says politely now. */
 const said = () => document.querySelector('[role="status"]')?.textContent;
 /** The tick's words while it stands, or nothing once it is taken. */
-const shown = (page: HTMLElement) => page.querySelector(".luke-saved-tick")?.textContent ?? "";
+const shown = (page: HTMLElement) => page.querySelector(".ui-saved-tick")?.textContent ?? "";
 const land = (page: HTMLElement) => act(() => page.querySelector("button")?.click());
 
 /** The tick's motion ending, its exit last. */
@@ -86,9 +86,9 @@ test("a write landing shows Saved until its motion ends, and says it politely", 
 test("a write landing while the tick stands starts it over", () => {
   const page = render(0);
   land(page);
-  const first = page.querySelector(".luke-saved-tick");
+  const first = page.querySelector(".ui-saved-tick");
   land(page);
-  const second = page.querySelector(".luke-saved-tick");
+  const second = page.querySelector(".ui-saved-tick");
   assert.ok(second);
   assert.notEqual(second, first, "a tick of its own, its motion from the start");
   end();

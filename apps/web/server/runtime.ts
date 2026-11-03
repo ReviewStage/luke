@@ -1,7 +1,7 @@
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
-import { agentSandboxDoors } from "@luke/service/agents/luke-mcp/sandbox-door";
 import { agentMachinesLayer } from "@luke/service/agents/machine/agent-machines";
 import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
+import { agentSandboxDoors } from "@luke/service/agents/workspace-mcp/sandbox-door";
 import { AfterResponse } from "@luke/service/http/after-response";
 import { sentryLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";

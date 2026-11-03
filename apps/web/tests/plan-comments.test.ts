@@ -175,8 +175,6 @@ const commentsAnswer = (request: Request, clock: Clock.Clock, after?: Layer.Laye
     const handle = hostedFetch({
       planComments: planCommentsProcedures({
         resolveUserId,
-        eveOrigin: () => undefined,
-        eve: fakeEve,
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
@@ -196,7 +194,6 @@ const answer = (routes: "comments" | "plans", request: Request) =>
       plans: tasksProcedures({
         resolveUserId,
         workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
       }),

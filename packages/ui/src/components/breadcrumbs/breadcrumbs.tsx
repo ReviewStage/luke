@@ -213,7 +213,7 @@ const LOOK = {
 function Chevron({ at, variant }: { at: Widths; variant: BreadcrumbsVariant }): React.JSX.Element {
   return (
     <BreadcrumbSeparator
-      className={`luke-breadcrumb-separator ${LOOK[variant].separator}`}
+      className={`ui-breadcrumb-separator ${LOOK[variant].separator}`}
       data-wide={at.wide}
       data-narrow={at.narrow}
       data-narrowest={at.narrowest}
@@ -278,7 +278,7 @@ function CrumbFace({
         </span>
       )}
       <ClippedLine
-        className="luke-breadcrumb-label min-w-0 overflow-hidden whitespace-nowrap"
+        className="ui-breadcrumb-label min-w-0 overflow-hidden whitespace-nowrap"
         as={ONE_LINE_ELEMENT.SPAN}
         end={end}
         words={label}
@@ -455,7 +455,7 @@ export function Breadcrumbs({
   return (
     <Breadcrumb
       ref={variant === BREADCRUMBS_VARIANT.CAPTION ? measured : undefined}
-      className={`luke-breadcrumbs relative min-w-0 flex-initial overflow-clip ${LOOK[variant].nav}`}
+      className={`ui-breadcrumbs relative min-w-0 flex-initial overflow-clip ${LOOK[variant].nav}`}
       data-variant={variant}
       aria-label={label}
     >
@@ -492,7 +492,7 @@ export function Breadcrumbs({
  */
 export function BreadcrumbBar({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="@container/luke-breadcrumb-bar flex min-w-0 flex-auto items-center gap-[inherit]">
+    <div className="@container/ui-breadcrumb-bar flex min-w-0 flex-auto items-center gap-[inherit]">
       {children}
     </div>
   );

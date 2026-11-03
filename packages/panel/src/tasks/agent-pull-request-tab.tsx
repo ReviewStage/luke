@@ -2823,7 +2823,7 @@ const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
  * Checks' page column, the Conversation's scroller, and the diff list's.
  */
 const VIEW_SCROLLER =
-  ".luke-detail-page-main, .pull-request-view > .luke-scroll-area, .diff-list > .luke-scroll-area";
+  ".ui-detail-page-main, .pull-request-view > .ui-scroll-area, .diff-list > .ui-scroll-area";
 
 /**
  * Whether `box` is the shown view's own scroller, drawn in the tab at

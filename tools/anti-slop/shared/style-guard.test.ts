@@ -14,7 +14,7 @@ const THEME = `@theme inline {
   --text-body--line-height: var(--ui-type-body-leading);
   --radius-menu: var(--ui-menu-radius);
   --ease-pane: var(--ui-motion-pane);
-  --animate-menu-in: luke-menu-in var(--ui-duration-quick) var(--ui-spring-fast);
+  --animate-menu-in: ui-menu-in var(--ui-duration-quick) var(--ui-spring-fast);
 }`;
 const NAMES = themeNames(THEME);
 const SHEET = "packages/ui/src/components/thing/thing.css";
@@ -45,8 +45,8 @@ describe("a stylesheet", () => {
   it("passes a colour where a token is defined, a brand's ink, and a mask's alpha", () => {
     const css = `
       :root { --file-icon-red: light-dark(#d52c36, #ff6762); }
-      :root[data-luke-theme="dark"] { --ink: #fff; }
-      [data-luke-theme="dark"] .integration-mark-neon { color: #34d59a; }
+      :root[data-ui-theme="dark"] { --ink: #fff; }
+      [data-ui-theme="dark"] .integration-mark-neon { color: #34d59a; }
       .a { mask-image: linear-gradient(#000, transparent); --terminal-red: #f00; }`;
     expect(sheetRules(css)).toEqual([]);
   });
@@ -187,40 +187,40 @@ describe("a stylesheet", () => {
   });
 
   it("refuses a crumb drawn wider than its words, and passes a floor that is its basis under a cap", () => {
-    const floored = `.luke-breadcrumbs[data-variant="caption"] li { min-width: 11em; flex: 0 9 auto; }
-      .luke-breadcrumbs li:has(> .luke-breadcrumb-separator) { min-width: calc(var(--floor) + 12px); }
-      .luke-breadcrumbs li:last-child { flex-grow: 9; }
-      .luke-breadcrumbs li > button { min-width: 11em; }
-      .luke-breadcrumbs, .list li { min-width: 11em; }`;
+    const floored = `.ui-breadcrumbs[data-variant="caption"] li { min-width: 11em; flex: 0 9 auto; }
+      .ui-breadcrumbs li:has(> .ui-breadcrumb-separator) { min-width: calc(var(--floor) + 12px); }
+      .ui-breadcrumbs li:last-child { flex-grow: 9; }
+      .ui-breadcrumbs li > button { min-width: 11em; }
+      .ui-breadcrumbs, .list li { min-width: 11em; }`;
     expect(sheetRules(floored)).toEqual([
       STYLE_RULE.CRUMB_WIDTH,
       STYLE_RULE.CRUMB_WIDTH,
       STYLE_RULE.CRUMB_WIDTH,
     ]);
-    const capped = `.luke-breadcrumbs[data-variant="caption"] li {
+    const capped = `.ui-breadcrumbs[data-variant="caption"] li {
         flex: 1 0 var(--floor); min-width: 0; max-width: max-content; }
-      .luke-breadcrumbs li:last-child { flex-grow: 9; }
-      .luke-breadcrumbs li[data-fixed="true"] { flex: none; }`;
+      .ui-breadcrumbs li:last-child { flex-grow: 9; }
+      .ui-breadcrumbs li[data-fixed="true"] { flex: none; }`;
     expect(sheetRules(capped)).toEqual([]);
   });
 
   it("refuses a page rounding its own bar, and passes the sheet's one rule and a bar's parts", () => {
-    const pages = `.agent-page > .luke-pane-bar { border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; }
-      .side-panel-keeps > * > :is(.luke-pane-bar, .luke-toolbar):first-child { border-top-left-radius: var(--sheet-radius); }
-      .inbox-view .luke-toolbar:not(.x) { border-top-right-radius: 0; }`;
+    const pages = `.agent-page > .ui-pane-bar { border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; }
+      .side-panel-keeps > * > :is(.ui-pane-bar, .ui-toolbar):first-child { border-top-left-radius: var(--sheet-radius); }
+      .inbox-view .ui-toolbar:not(.x) { border-top-right-radius: 0; }`;
     expect(sheetRules(pages, SHELL_SHEET)).toEqual([
       STYLE_RULE.BAR_CORNER,
       STYLE_RULE.BAR_CORNER,
       STYLE_RULE.BAR_CORNER,
     ]);
-    const sheet = `.desktop-shell :is(.luke-pane-bar, .luke-toolbar):not(.x :not(.y) *) {
+    const sheet = `.desktop-shell :is(.ui-pane-bar, .ui-toolbar):not(.x :not(.y) *) {
         border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }
-      .luke-toolbar-heading, .a:not(.luke-pane-bar), .b:has(> .luke-toolbar) { border-radius: var(--ui-radius-6); }
-      .luke-pane-bar .luke-chip { border-radius: var(--ui-radius-6); }`;
+      .ui-toolbar-heading, .a:not(.ui-pane-bar), .b:has(> .ui-toolbar) { border-radius: var(--ui-radius-6); }
+      .ui-pane-bar .ui-chip { border-radius: var(--ui-radius-6); }`;
     expect(sheetRules(sheet, SHELL_SHEET)).toEqual([]);
     expect(
       sheetRules(
-        ".a .luke-toolbar { border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }",
+        ".a .ui-toolbar { border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }",
       ),
     ).toEqual([STYLE_RULE.BAR_CORNER]);
   });
@@ -243,7 +243,7 @@ describe("a stylesheet", () => {
 
   it("refuses the hand spelled out or a cursor chosen per profile, and passes the press and link roles and the other cursors", () => {
     const css = `.a { cursor: pointer; }
-      [data-luke-profile="desktop"] .b { cursor: default; }
+      [data-ui-profile="desktop"] .b { cursor: default; }
       .c { cursor: var(--ui-cursor-press); }
       .d { cursor: var(--ui-cursor-link); }
       .e { cursor: col-resize; }
@@ -315,7 +315,7 @@ describe("a module's class strings", () => {
   });
 
   it("refuses cursor-pointer and a cursor chosen per profile, and passes cursor-press, cursor-link and the other cursors", () => {
-    const source = `const a = cn("cursor-pointer in-data-[luke-profile=desktop]:cursor-default", "cursor-press disabled:cursor-default cursor-link cursor-progress cursor-text");`;
+    const source = `const a = cn("cursor-pointer in-data-[ui-profile=desktop]:cursor-default", "cursor-press disabled:cursor-default cursor-link cursor-progress cursor-text");`;
     expect(classRules(source)).toEqual([STYLE_RULE.CURSOR, STYLE_RULE.CURSOR]);
   });
 
@@ -338,7 +338,7 @@ describe("a module's class strings", () => {
   });
 
   it("refuses a radius beside a bar's own class", () => {
-    const source = `const BAR = "luke-pane-bar flex rounded-t-menu bg-muted"; const CHIP = "luke-chip rounded-menu";`;
+    const source = `const BAR = "ui-pane-bar flex rounded-t-menu bg-muted"; const CHIP = "ui-chip rounded-menu";`;
     expect(classRules(source)).toEqual([STYLE_RULE.BAR_CORNER]);
   });
 

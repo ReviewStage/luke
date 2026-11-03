@@ -3,7 +3,7 @@
    keys draws no ring, the active option marking it. */
 
 @layer components {
-  .luke-combobox-list:focus-visible {
+  .ui-combobox-list:focus-visible {
     outline: none; /* no ring: the active option marks it */
   }
 }

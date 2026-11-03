@@ -1,13 +1,13 @@
 /* note-line.css -- a muted line said where a list's rows would stand. */
 
 @layer components {
-  .luke-note-line {
+  .ui-note-line {
     margin: 0;
     font-family: var(--ui-font-sans);
     overflow-wrap: anywhere;
   }
 
-  .luke-note-line[data-look="centred"] {
+  .ui-note-line[data-look="centred"] {
     display: flex;
     min-height: 40px;
     align-items: center;
@@ -17,25 +17,25 @@
     line-height: var(--ui-type-body-leading);
   }
 
-  .luke-note-line[data-look="list"],
-  .luke-note-line[data-look="inset"],
-  .luke-note-line[data-look="rows"] {
+  .ui-note-line[data-look="list"],
+  .ui-note-line[data-look="inset"],
+  .ui-note-line[data-look="rows"] {
     color: var(--ui-color-text-muted);
     font-size: var(--ui-type-caption-size);
     line-height: var(--ui-type-caption-leading);
   }
 
-  .luke-note-line[data-look="list"] {
+  .ui-note-line[data-look="list"] {
     padding: var(--ui-row-inset) var(--ui-list-inset);
   }
 
-  .luke-note-line[data-look="rows"] {
+  .ui-note-line[data-look="rows"] {
     margin: var(--ui-space-4) var(--ui-row-inset);
   }
 
   /* A trail keeps the leading of the line that holds it, so its chips stand
      as they do in its holder's words, and is centred on its glyph's seat. */
-  .luke-note-line[data-look="trail"] {
+  .ui-note-line[data-look="trail"] {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -44,11 +44,11 @@
     font-size: var(--ui-type-caption-size);
   }
 
-  .luke-note-line[data-fill] {
+  .ui-note-line[data-fill] {
     flex: 1;
   }
 
-  .luke-note-line[data-selectable] {
+  .ui-note-line[data-selectable] {
     -webkit-user-select: text;
     user-select: text;
   }

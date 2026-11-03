@@ -125,15 +125,15 @@ export function SelectionBar({
       role="toolbar"
       aria-labelledby={countId}
       aria-controls={controls}
-      className="luke-selection-bar box-border flex min-w-0 items-center gap-control-gap rounded-control border border-border bg-popover py-tight-gap pr-tight-gap pl-list-inset font-ui text-foreground"
+      className="ui-selection-bar box-border flex min-w-0 items-center gap-control-gap rounded-control border border-border bg-popover py-tight-gap pr-tight-gap pl-list-inset font-ui text-foreground"
     >
       <span
         id={countId}
-        className="luke-selection-bar-count flex-none text-label font-label tabular-nums"
+        className="ui-selection-bar-count flex-none text-label font-label tabular-nums"
       >
         {selectedWords(count)}
       </span>
-      <div className="luke-selection-bar-acts flex min-w-0 flex-auto flex-wrap items-center gap-control-gap">
+      <div className="ui-selection-bar-acts flex min-w-0 flex-auto flex-wrap items-center gap-control-gap">
         {acts.map((act) =>
           act.menu === undefined ? (
             <Button key={act.label} roving icon={act.icon} onClick={act.onAct}>

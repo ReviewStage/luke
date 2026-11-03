@@ -76,7 +76,7 @@ export function WorkingMark(): React.JSX.Element {
   const start = cellAt(0, 0);
   return (
     <svg
-      className="luke-working-mark [&[viewBox]]:block [&[viewBox]]:size-working-mark [&[viewBox]]:flex-none [&[viewBox]]:fill-current"
+      className="ui-working-mark [&[viewBox]]:block [&[viewBox]]:size-working-mark [&[viewBox]]:flex-none [&[viewBox]]:fill-current"
       width={SIDE}
       height={SIDE}
       viewBox={`0 0 ${SIDE} ${SIDE}`}
@@ -85,7 +85,7 @@ export function WorkingMark(): React.JSX.Element {
       {TRACK.map(([column, row], index) => (
         <rect
           key={index}
-          className="luke-working-mark-track opacity-30"
+          className="ui-working-mark-track opacity-30"
           {...cellAt(column, row)}
           width={CELL}
           height={CELL}
@@ -95,7 +95,7 @@ export function WorkingMark(): React.JSX.Element {
       {WORKING_DOTS.map(({ dot, restsOn, tail }) => (
         <rect
           key={dot}
-          className={tail ? "luke-working-mark-dot opacity-60" : "luke-working-mark-dot"}
+          className={tail ? "ui-working-mark-dot opacity-60" : "ui-working-mark-dot"}
           data-dot={dot}
           style={{ transform: restingTransform(restsOn) }}
           {...start}

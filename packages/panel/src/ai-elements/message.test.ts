@@ -66,7 +66,7 @@ function tap(target: Element): void {
 
 /** Whether a card stands, drawn and not on its way out. */
 function cardStands(): boolean {
-  const card = document.querySelector(".luke-tooltip-card");
+  const card = document.querySelector(".ui-tooltip-card");
   return card !== null && !card.hasAttribute("data-leaving");
 }
 

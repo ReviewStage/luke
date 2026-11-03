@@ -79,24 +79,24 @@ export type CodeCardTitle = (typeof CODE_CARD_TITLE)[keyof typeof CODE_CARD_TITL
 
 /** Each row's tint, by what it does. */
 const ROW_CLASS = {
-  [CODE_ROW.ADDED]: "luke-code-card-row block px-list-inset bg-code-added",
-  [CODE_ROW.REMOVED]: "luke-code-card-row block px-list-inset bg-code-removed",
-  [CODE_ROW.CONTEXT]: "luke-code-card-row block px-list-inset",
+  [CODE_ROW.ADDED]: "ui-code-card-row block px-list-inset bg-code-added",
+  [CODE_ROW.REMOVED]: "ui-code-card-row block px-list-inset bg-code-removed",
+  [CODE_ROW.CONTEXT]: "ui-code-card-row block px-list-inset",
 } as const satisfies Record<CodeRow, string>;
 
 /** Each title's face: a name in mono, words in the label's weight and the text's ink. */
 const TITLE_CLASS = {
-  [CODE_CARD_TITLE.NAME]: "luke-code-card-title flex min-w-0 items-center font-mono",
+  [CODE_CARD_TITLE.NAME]: "ui-code-card-title flex min-w-0 items-center font-mono",
   [CODE_CARD_TITLE.WORDS]:
-    "luke-code-card-title flex min-w-0 items-center font-label text-foreground",
+    "ui-code-card-title flex min-w-0 items-center font-label text-foreground",
 } as const satisfies Record<CodeCardTitle, string>;
 
 /** A glyph before the title, at an icon's size on the title's line. */
-const GLYPH = "luke-code-card-glyph mr-icon-gap inline-flex flex-none [&>svg]:size-icon-16";
+const GLYPH = "ui-code-card-glyph mr-icon-gap inline-flex flex-none [&>svg]:size-icon-16";
 
 /** The lines, whole and scrolling sideways, each run in its colour for the appearance it stands in. */
 const BODY =
-  "luke-code-card-body m-0 overflow-x-auto overscroll-x-contain py-row-inset font-mono text-caption leading-reading wrap-normal whitespace-pre text-code [tab-size:2] [&_span]:text-code-run [&>code]:[font:inherit]";
+  "ui-code-card-body m-0 overflow-x-auto overscroll-x-contain py-row-inset font-mono text-caption leading-reading wrap-normal whitespace-pre text-code [tab-size:2] [&_span]:text-code-run [&>code]:[font:inherit]";
 
 /** The lines of a block drawn plain, inset as the card is; and of one drawn as rows, each row inset itself. */
 const BODY_LINES = `${BODY} px-list-inset`;
@@ -238,11 +238,11 @@ export function CodeCard({
       look={CARD_LOOK.CODE}
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.FLUSH}
-      className="luke-code-card ph-no-capture m-0"
+      className="ui-code-card ph-no-capture m-0"
       aria-label={label}
       {...data}
     >
-      <figcaption className="luke-code-card-header flex min-w-0 items-center justify-between gap-control-gap border-b border-border bg-muted pl-list-inset text-caption text-muted-foreground">
+      <figcaption className="ui-code-card-header flex min-w-0 items-center justify-between gap-control-gap border-b border-border bg-muted pl-list-inset text-caption text-muted-foreground">
         <span className={TITLE_CLASS[titleIs]} data-title={titleIs}>
           {glyph === undefined ? null : <span className={GLYPH}>{glyph}</span>}
           {typeof title === "string" ? (
@@ -251,7 +251,7 @@ export function CodeCard({
             title
           )}
         </span>
-        <span className="luke-code-card-actions ml-auto flex flex-none">
+        <span className="ui-code-card-actions ml-auto flex flex-none">
           {actions}
           {copied === undefined ? null : <CopyButton text={copied} what={COPY_WHAT} copy={copy} />}
         </span>
@@ -270,7 +270,7 @@ export function CodeCard({
               <>
                 {/* Note that the newline closes the lead's last line, so the rest's first is never read run on to it. */}
                 {rows === undefined ? "\n" : null}
-                <span ref={rest} className="luke-code-card-rest block">
+                <span ref={rest} className="ui-code-card-rest block">
                   {drawLines(lead, text.length)}
                 </span>
               </>
@@ -279,7 +279,7 @@ export function CodeCard({
         </pre>
       )}
       {cut ? (
-        <div className="luke-code-card-foot border-t border-border px-list-inset py-tight-gap text-caption text-muted-foreground">
+        <div className="ui-code-card-foot border-t border-border px-list-inset py-tight-gap text-caption text-muted-foreground">
           <TextButton
             aria-expanded={whole}
             aria-controls={bodyId}

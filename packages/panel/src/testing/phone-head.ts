@@ -22,7 +22,7 @@ function namesIn(slot: Element | null): string[] {
 /** The phone's headers heading `place` within `root` that stand, as `Toolbar`'s phone look draws them. */
 function standingHeads(root: ParentNode, place: string): HTMLElement[] {
   return [
-    ...root.querySelectorAll<HTMLElement>(`header.luke-toolbar[data-look="phone"].${place}-head`),
+    ...root.querySelectorAll<HTMLElement>(`header.ui-toolbar[data-look="phone"].${place}-head`),
   ].filter((each) => each.closest("[hidden]") === null);
 }
 
@@ -32,9 +32,9 @@ export function readPhoneHead(root: ParentNode, place: string): ReadPhoneHead {
   const [head] = heads;
   if (head === undefined || heads.length !== 1) throw new Error(`one ${place} header stands`);
   return {
-    start: namesIn(head.querySelector(":scope > .luke-toolbar-lead")),
-    title: head.querySelector(":scope > .luke-toolbar-heading h1")?.textContent ?? undefined,
-    end: namesIn(head.querySelector(":scope > .luke-toolbar-actions")),
+    start: namesIn(head.querySelector(":scope > .ui-toolbar-lead")),
+    title: head.querySelector(":scope > .ui-toolbar-heading h1")?.textContent ?? undefined,
+    end: namesIn(head.querySelector(":scope > .ui-toolbar-actions")),
   };
 }
 
@@ -50,9 +50,9 @@ export function pressInPhoneHead(root: ParentNode, place: string, label: string)
 /** The open menu's items as a reader meets them: each one's words, and whether it is unavailable. */
 export function menuItems(): { label: string; disabled: boolean }[] {
   return [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
   ].map((item) => ({
-    label: item.querySelector(".luke-menu-item-label")?.textContent ?? "",
+    label: item.querySelector(".ui-menu-item-label")?.textContent ?? "",
     disabled:
       item.getAttribute("aria-disabled") === "true" ||
       (item instanceof HTMLButtonElement && item.disabled),
@@ -62,8 +62,8 @@ export function menuItems(): { label: string; disabled: boolean }[] {
 /** Presses the open menu's item whose words are `label`. */
 export function chooseMenuItem(label: string): void {
   const item = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
-  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === label);
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
+  ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === label);
   if (item === undefined) throw new Error(`${label} is in the menu`);
   act(() => item.click());
 }

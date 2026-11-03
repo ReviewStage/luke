@@ -200,7 +200,7 @@ test("a control as wide as the row stands under its words, named by the label an
   );
   expect(group.getAttribute("aria-invalid")).toBe("true");
   // It follows the words in reading order, and before the error that describes it.
-  const words = container.querySelector(".luke-settings-row-description");
+  const words = container.querySelector(".ui-settings-row-description");
   const error = container.querySelector('[data-slot="field-error"]');
   if (words === null || error === null) throw new Error("no words or error");
   expect(words.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

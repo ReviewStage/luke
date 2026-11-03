@@ -196,7 +196,7 @@ interface ToolWords {
   readonly ownSandbox: string;
 }
 
-/** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../luke-mcp/app.ts`). */
+/** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../workspace-mcp/app.ts`). */
 const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as ${INTEGRATION_NAMES_SAID}, are MCP servers of your own, one per connection and named for it (\`linear\`, or \`notion-2\` for their second Notion account): use their tools as you use any other. One that lists no tools is not connected, or its sign-in expired, and only the developer can connect it again, in ${PRODUCT_NAME}'s settings.
 
 `;

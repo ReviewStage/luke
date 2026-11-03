@@ -6,8 +6,8 @@ import { PROSE_CLASS } from "../components/prose/prose.js";
 
 /** The classes a note is drawn with: its root, and a heading drawn as a paragraph. */
 export const MARKDOWN_CLASS = {
-  ROOT: "luke-markdown",
-  HEADING: "luke-markdown-heading",
+  ROOT: "ui-markdown",
+  HEADING: "ui-markdown-heading",
 } as const;
 
 /** A note's root classes, with a place's own after them: an editor standing in drawn words' place wears the same, so opening it moves no word. */

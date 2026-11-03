@@ -8,37 +8,37 @@
      springs in as a removable chip does (`chip.css`'s keyframes), unless a
      `ListMotion` follows it (`data-motion-key`), which plays its arrival
      and its exit instead. */
-  .luke-attachment-chip[data-removable="true"]:not([data-motion-key]) {
+  .ui-attachment-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
-      luke-chip-fade-in var(--ui-duration-quick) var(--ui-motion-exit) backwards,
-      luke-chip-pop var(--ui-duration-fast) var(--ui-spring-fast) backwards;
+      ui-chip-fade-in var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-chip-pop var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
   /* Where no share of an upload is known, a third of the track sweeps across
      it from its middle, an endless loop with no end to wait for, so its
      duration is a literal held still on --ui-loop-motion. */
-  .luke-attachment-chip-meter[data-indeterminate="true"] > .luke-attachment-chip-meter-fill {
+  .ui-attachment-chip-meter[data-indeterminate="true"] > .ui-attachment-chip-meter-fill {
     width: 34%;
-    animation: luke-attachment-chip-sweep 1200ms var(--ui-motion-pane) infinite;
+    animation: ui-attachment-chip-sweep 1200ms var(--ui-motion-pane) infinite;
     animation-play-state: var(--ui-loop-motion);
   }
 
   /* A file that lands takes a check on its corner, which springs in on the
      pair an arriving element rides and fades once it has stood as long as
      any confirmation does (`--ui-confirm-delay`). */
-  .luke-attachment-chip-landed {
+  .ui-attachment-chip-landed {
     animation:
-      luke-attachment-chip-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
-      luke-attachment-chip-spring var(--ui-duration-fast) var(--ui-spring-fast) backwards,
-      luke-attachment-chip-leave var(--ui-duration-exit) var(--ui-motion-exit)
-      var(--ui-confirm-delay) forwards;
+      ui-attachment-chip-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
+      ui-attachment-chip-spring var(--ui-duration-fast) var(--ui-spring-fast) backwards,
+      ui-attachment-chip-leave var(--ui-duration-exit) var(--ui-motion-exit) var(--ui-confirm-delay)
+      forwards;
   }
 
   /* Note that the sweep starts with its segment in the track's middle
      third and wraps round off its ends, because a loop held still holds its
      first frame, and a segment held off the track would leave reduced motion
      and a capture with no sign of the upload at all. */
-  @keyframes luke-attachment-chip-sweep {
+  @keyframes ui-attachment-chip-sweep {
     0% {
       transform: translateX(100%);
     }
@@ -53,19 +53,19 @@
     }
   }
 
-  @keyframes luke-attachment-chip-fade {
+  @keyframes ui-attachment-chip-fade {
     from {
       opacity: 0;
     }
   }
 
-  @keyframes luke-attachment-chip-spring {
+  @keyframes ui-attachment-chip-spring {
     from {
       transform: scale(0.4);
     }
   }
 
-  @keyframes luke-attachment-chip-leave {
+  @keyframes ui-attachment-chip-leave {
     to {
       opacity: 0;
     }

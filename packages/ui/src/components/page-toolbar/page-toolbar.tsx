@@ -31,8 +31,8 @@ export function PageToolbar({
   return (
     <ToolbarFrame start={start}>
       {lead}
-      {heading === undefined ? null : <div className="luke-toolbar-heading">{heading}</div>}
-      {actions === undefined ? null : <div className="luke-toolbar-actions">{actions}</div>}
+      {heading === undefined ? null : <div className="ui-toolbar-heading">{heading}</div>}
+      {actions === undefined ? null : <div className="ui-toolbar-actions">{actions}</div>}
     </ToolbarFrame>
   );
 }

@@ -143,7 +143,7 @@ export function TaskHead({
         <Text
           as={TEXT_ELEMENT.H1}
           variant={TEXT_VARIANT.TOOLBAR_TITLE}
-          className="luke-toolbar-title"
+          className="ui-toolbar-title"
         >
           <InlineEdit
             value={title}

@@ -312,7 +312,7 @@ test("a message refused after the developer wrote on stays where it went, marked
   assert.equal(composerEditor(tab.container).textContent, "Then fix CI", "the newer words stay");
   const [line] = tab.lines("Rebase on main");
   assert.ok(line, "the refused words stay on their line");
-  const mark = line.querySelector(".luke-failure-note") ?? assert.fail("marked as not sent");
+  const mark = line.querySelector(".ui-failure-note") ?? assert.fail("marked as not sent");
   assert.equal(mark.textContent, "Not sentRetry", "as an alert");
   assert.equal(mark.getAttribute("role"), "alert");
   const retry = mark.querySelector("button") ?? assert.fail("with a Retry of its own");
@@ -324,7 +324,7 @@ test("a message refused after the developer wrote on stays where it went, marked
     ["Rebase on main", "Rebase on main"],
   );
   assert.equal(tab.sent[1]?.clientKey, tab.sent[0]?.clientKey);
-  assert.equal(line.querySelector(".luke-failure-note"), null, "the line is on its way again");
+  assert.equal(line.querySelector(".ui-failure-note"), null, "the line is on its way again");
   assert.equal(composerEditor(tab.container).textContent, "Then fix CI");
 });
 

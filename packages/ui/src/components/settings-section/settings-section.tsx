@@ -52,7 +52,7 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 /** A card's line where its rows would stand: a note's words, in a description's muted words, or a failure (`ErrorState`). */
 export function SettingsLine({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="luke-settings-line m-0 box-border flex min-h-settings-row min-w-0 items-center gap-control-gap px-settings-row-inline py-settings-row-block font-sans text-caption font-caption text-muted-foreground wrap-anywhere">
+    <div className="ui-settings-line m-0 box-border flex min-h-settings-row min-w-0 items-center gap-control-gap px-settings-row-inline py-settings-row-block font-sans text-caption font-caption text-muted-foreground wrap-anywhere">
       {children}
     </div>
   );
@@ -175,7 +175,7 @@ function RowSkeleton({
 /** The placeholder rows, ruled one from the next as a card's rows are. */
 function RowsSkeleton({ rows }: { rows: readonly SettingsRowSkeletonShape[] }): React.JSX.Element {
   return (
-    <div className="luke-settings-skeleton-rows">
+    <div className="ui-settings-skeleton-rows">
       {rows.map((shape, at) => (
         <RowSkeleton key={at} at={at} shape={shape} />
       ))}
@@ -237,7 +237,7 @@ export function SettingsSectionsSkeleton({
 }): React.JSX.Element {
   return (
     <SkeletonRegion label={label}>
-      <div className="luke-settings-skeleton">
+      <div className="ui-settings-skeleton">
         {sections.map((shape, at) => (
           <SectionSkeleton key={at} at={at} shape={shape} />
         ))}
@@ -280,27 +280,27 @@ function SectionFrame({
     <section
       className={
         rows
-          ? "luke-settings-section flex min-w-0 flex-col gap-tight-gap"
-          : "luke-settings-section flex min-w-0 flex-col gap-ui-8"
+          ? "ui-settings-section flex min-w-0 flex-col gap-tight-gap"
+          : "ui-settings-section flex min-w-0 flex-col gap-ui-8"
       }
       data-frame={frame}
       aria-labelledby={labelledBy}
       {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
     >
       {head === undefined ? null : (
-        <div className={rows ? "luke-settings-section-head" : "luke-settings-section-head px-ui-2"}>
+        <div className={rows ? "ui-settings-section-head" : "ui-settings-section-head px-ui-2"}>
           {head}
         </div>
       )}
       {rows ? (
-        <div className="luke-settings-section-rows flex min-w-0 flex-col gap-tight-gap">
+        <div className="ui-settings-section-rows flex min-w-0 flex-col gap-tight-gap">
           {children}
         </div>
       ) : frame === SETTINGS_SECTION_FRAME.CARD ? (
         <RevealArea root={card}>
           <div
             ref={card}
-            className="luke-settings-section-card flex min-w-0 flex-col rounded-control border border-border bg-surface"
+            className="ui-settings-section-card flex min-w-0 flex-col rounded-control border border-border bg-surface"
             {...revealArea()}
           >
             {children}

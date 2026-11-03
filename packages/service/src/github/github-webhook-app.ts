@@ -19,9 +19,7 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { agentPublished } from "../agents/coder-host/published.js";
-import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
-import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
@@ -455,12 +453,8 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     // Note that the checks finishing are read after the agents' pull requests were read again above,
     // because a wake tells only the agents whose row keeps the finished commit as their head.
     const wakes = [agentWakeOf(event, payload, now), checksCompletedWakeOf(event, payload, now)];
-    // eve's coding-agent service as the deployment acting for each agent's owner, as an automation's
-    // run reaches it (`agents/deployment-eve.ts`); a deployment that cannot reach it tells nobody.
-    const eveForAccount: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
-      deploymentEveOrigin(),
-      EVE_MOUNT.CODER,
-    );
+    // Each agent's sessions as the deployment acting for its owner, as an automation's run reaches them.
+    const eveForAccount: EveForAccount = routedSessions;
     const counts = yield* Effect.forEach(wakes, (wake) =>
       wake === undefined
         ? Effect.succeed(0)

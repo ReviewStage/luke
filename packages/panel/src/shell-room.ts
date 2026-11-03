@@ -8,7 +8,7 @@
  * holds the side panel only full screen (`desktop-shell.tsx`,
  * `use-side-panel.ts`), and shows a screen's list or the item chosen in it
  * one at a time (`hiddenColumns`); the stylesheet reads it off the document
- * root's `data-luke-room` (`stage-room.ts`).
+ * root's `data-ui-room` (`stage-room.ts`).
  * The desktop's window is never narrower than its least width (760), wider
  * than either line here, but zoom shrinks the CSS pixels the stage is
  * measured in: at 125% the least window is 608 wide, at 200% it is 380. So

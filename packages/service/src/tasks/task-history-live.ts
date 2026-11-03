@@ -25,7 +25,7 @@ import { Option } from "effect";
  * does not reach is no rows. Each column is under the key `live-wire.ts`
  * reads it by and each instant in epoch milliseconds. It reads no clock, as
  * Realtime requires, and keeps no order, which the reader keeps
- * (`revisionsOfLiveRows`). Older pages are read as before.
+ * (`revisionsOfLiveRows`). Older pages are read through `listRevisions`.
  */
 
 /** The statement one task's newest page of history is followed by. */

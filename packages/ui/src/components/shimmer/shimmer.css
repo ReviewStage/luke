@@ -4,7 +4,7 @@
    --ui-loop-motion with its play state. */
 
 @layer components {
-  .luke-shimmer {
+  .ui-shimmer {
     display: inline-block;
     background-image: linear-gradient(
       90deg,
@@ -17,11 +17,11 @@
     background-size: 300% 100%;
     background-clip: text;
     color: transparent;
-    animation: luke-shimmer 2s linear infinite;
+    animation: ui-shimmer 2s linear infinite;
     animation-play-state: var(--ui-loop-motion);
   }
 
-  @keyframes luke-shimmer {
+  @keyframes ui-shimmer {
     from {
       background-position: 100% center;
     }

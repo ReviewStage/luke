@@ -155,7 +155,7 @@ test("Turn into drops the blocks with the current one checked, and tells its own
   const menu = document.querySelector<HTMLElement>('[role="menu"]');
   if (menu === null) throw new Error("the menu opens");
   const rows = [...menu.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
-  expect(rows.map((row) => row.querySelector(".luke-menu-item-label")?.textContent)).toEqual([
+  expect(rows.map((row) => row.querySelector(".ui-menu-item-label")?.textContent)).toEqual([
     "Text",
     "Heading 1",
     "Heading 2",

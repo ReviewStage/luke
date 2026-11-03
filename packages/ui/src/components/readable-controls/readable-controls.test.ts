@@ -91,9 +91,9 @@ function heard(page: HTMLElement): string | null | undefined {
 
 test("a drag that selects an option's or a step's words neither picks nor ticks", () => {
   const page = render(createElement(Ask));
-  const detail = words(page, ".luke-choice-detail");
+  const detail = words(page, ".ui-choice-detail");
   press(detail, () => select(detail));
-  const step = words(page, ".luke-checkbox-words");
+  const step = words(page, ".ui-checkbox-words");
   press(step, () => select(step));
   assert.equal(heard(page), "|false");
   assert.equal(document.getSelection()?.toString(), "Run pnpm install");
@@ -101,22 +101,22 @@ test("a drag that selects an option's or a step's words neither picks nor ticks"
 
 test("a press that selects nothing picks and ticks as it always does", () => {
   const page = render(createElement(Ask));
-  press(words(page, ".luke-choice-label"));
-  press(words(page, ".luke-checkbox-words"));
+  press(words(page, ".ui-choice-label"));
+  press(words(page, ".ui-checkbox-words"));
   assert.equal(heard(page), "ship|true");
 });
 
 test("a press beside a selection made before it still presses", () => {
   const page = render(createElement(Ask));
-  select(words(page, ".luke-choice-detail"));
-  press(words(page, ".luke-choice-label"));
-  press(words(page, ".luke-checkbox-words"));
+  select(words(page, ".ui-choice-detail"));
+  press(words(page, ".ui-choice-label"));
+  press(words(page, ".ui-checkbox-words"));
   assert.equal(heard(page), "ship|true");
 });
 
 test("a press from the keyboard presses whatever stands selected", () => {
   const page = render(createElement(Ask));
-  select(words(page, ".luke-choice-detail"));
+  select(words(page, ".ui-choice-detail"));
   act(() => words(page, '[role="radio"]').click());
   assert.equal(heard(page), "ship|false");
 });

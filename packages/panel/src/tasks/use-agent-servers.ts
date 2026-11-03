@@ -39,7 +39,7 @@ export function useAgentServers(input: {
     disabled: agent.disabledServers ?? NONE_OFF,
     onSwitch: (next) => void latest.current.write(agent.id, next),
     onOpenSettings: () => latest.current.onOpenSettings(),
-    luke: {
+    workspace: {
       agentId: agent.id,
       starterReading: input.me !== undefined && agent.startedBy?.userId === input.me,
     },

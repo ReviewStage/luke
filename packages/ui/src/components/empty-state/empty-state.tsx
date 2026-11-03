@@ -40,7 +40,7 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * which a room of no set height would read as the content's.
  */
 const ROOM =
-  "luke-empty-state flex min-h-0 flex-[1_1_0] flex-col items-center overflow-x-hidden overflow-y-auto before:flex-[2_1_0] after:flex-[3_1_0]";
+  "ui-empty-state flex min-h-0 flex-[1_1_0] flex-col items-center overflow-x-hidden overflow-y-auto before:flex-[2_1_0] after:flex-[3_1_0]";
 
 /** How the way on from an empty place is drawn: quiet, or primary where the press is what the place is for. */
 export const EMPTY_STATE_ACTION_LOOK = {
@@ -131,7 +131,7 @@ export function EmptyState({
         {beside === undefined || beside === null ? (
           <WayOn way={action} />
         ) : (
-          <div className="luke-empty-state-beside flex items-center gap-control-gap">
+          <div className="ui-empty-state-beside flex items-center gap-control-gap">
             <WayOn way={action} />
             {beside}
           </div>

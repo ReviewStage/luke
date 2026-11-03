@@ -32,12 +32,12 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
-import { RUN_ON_MAC_OFF } from "@luke/features/luke-tools-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
+import { RUN_ON_MAC_OFF } from "@luke/features/workspace-tools-wire";
 import { unparsedWire } from "@luke/wire";
 import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -46,9 +46,9 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { wokenOnHub } from "../testing/sync-woken.js";
-import { runOnMacStanding } from "./luke-tools.js";
 import { askMac, MAC_COMMAND_STATUS, macCommandsFor, runOnMacTool } from "./mac-command.js";
 import { macCommandsProcedures } from "./mac-commands-procedures.js";
+import { runOnMacStanding } from "./workspace-tools.js";
 
 const ORIGIN = "https://app.test";
 const MAC_COMMANDS = "/api/mac-commands";

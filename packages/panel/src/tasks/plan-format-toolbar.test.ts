@@ -174,7 +174,7 @@ function turnInto(container: HTMLElement, block: string): void {
     document.querySelector<HTMLElement>('[role="menu"]') ?? assert.fail("the menu opens");
   const row =
     [...menu.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
-      (each) => each.querySelector(".luke-menu-item-label")?.textContent === block,
+      (each) => each.querySelector(".ui-menu-item-label")?.textContent === block,
     ) ?? assert.fail(`the menu offers ${block}`);
   act(() => row.click());
 }

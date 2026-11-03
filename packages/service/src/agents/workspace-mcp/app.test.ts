@@ -81,16 +81,16 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
-  LUKE_INTEGRATION_MCP_PATH,
-  LUKE_MCP_PATH,
-  LUKE_MCP_PROTOCOL_VERSIONS,
-  type LukeMcpBrowser,
-  lukeMcpApp,
+  WORKSPACE_INTEGRATION_MCP_PATH,
+  WORKSPACE_MCP_PATH,
+  WORKSPACE_MCP_PROTOCOL_VERSIONS,
+  type WorkspaceMcpBrowser,
+  workspaceMcpApp,
 } from "./app.js";
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
 import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
-import { lukeMcpDoorSeams } from "./door-seams.js";
-import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js";
+import { workspaceMcpDoorSeams } from "./door-seams.js";
+import { refusedByDoor, WORKSPACE_MCP_TOOLS, type WorkspaceMcpServices } from "./tools.js";
 
 /**
  * Our MCP server, answered by its group the way a function answers it,
@@ -124,7 +124,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  eveDeploymentSecret: undefined,
 };
 
 /** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */
@@ -176,13 +175,13 @@ const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
   instead?: Layer.Layer<IntegrationConnect | HttpClient.HttpClient>,
-  browser: LukeMcpBrowser = noSandboxBrowserLayer,
+  browser: WorkspaceMcpBrowser = noSandboxBrowserLayer,
 ) =>
   Effect.gen(function* () {
     const base = yield* doorServices;
     const services = instead === undefined ? base : Layer.merge(base, instead);
     const web = HttpRouter.toWebHandler(
-      lukeMcpApp({ sandbox: () => ({ files: sandbox }), browser }).pipe(
+      workspaceMcpApp({ sandbox: () => ({ files: sandbox }), browser }).pipe(
         HttpRouter.provideRequest(services),
       ),
       { disableLogger: true },
@@ -280,7 +279,11 @@ const agentInSandbox = Effect.gen(function* () {
 });
 
 /** An SDK client connected under the bearer to the server at the path given, our own unless another is named. */
-function connected(fetch: typeof globalThis.fetch, bearer: string, path: string = LUKE_MCP_PATH) {
+function connected(
+  fetch: typeof globalThis.fetch,
+  bearer: string,
+  path: string = WORKSPACE_MCP_PATH,
+) {
   return Effect.promise(async () => {
     const client = new Client({ name: "runner-test", version: "1.0.0" });
     const transport = new StreamableHTTPClientTransport(new URL(`${ORIGIN}${path}`), {
@@ -305,7 +308,7 @@ function post(
     headers.set("content-type", "application/json");
     headers.set("accept", "application/json, text/event-stream");
     if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
-    const response = await fetch(`${ORIGIN}${LUKE_MCP_PATH}`, {
+    const response = await fetch(`${ORIGIN}${WORKSPACE_MCP_PATH}`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -363,7 +366,7 @@ type DirectCall = (
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
   seams: AgentDoorSeams,
-) => Effect.Effect<object, never, LukeMcpServices>;
+) => Effect.Effect<object, never, WorkspaceMcpServices>;
 
 const agentTool =
   (tool: AgentToolCall["tool"]): DirectCall =>
@@ -548,7 +551,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const unspoken = yield* post(fetch, agent.bearer, initialize("2099-01-01"));
 
         assert.equal(spoken.body.result.protocolVersion, "2025-03-26");
-        assert.equal(unspoken.body.result.protocolVersion, LUKE_MCP_PROTOCOL_VERSIONS[0]);
+        assert.equal(unspoken.body.result.protocolVersion, WORKSPACE_MCP_PROTOCOL_VERSIONS[0]);
       }),
   );
 
@@ -609,7 +612,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
-          const served = LUKE_MCP_TOOLS.get(tool.name);
+          const served = WORKSPACE_MCP_TOOLS.get(tool.name);
           assert.ok(served !== undefined);
           // A tool whose words differ by workspace opens on its words for every agent, its workspace's after them.
           if (served.describe === undefined) assert.equal(tool.description, served.description);
@@ -773,7 +776,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
-        const seams = yield* lukeMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
+        const seams = yield* workspaceMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
         const client = yield* connected(fetch, agent.bearer);
 
         for (const [name, door] of Object.entries(DOOR_OF)) {
@@ -931,8 +934,16 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
           NO_SANDBOX,
           Layer.merge(LINEAR_AND_NOTION_CONNECT, linearServer(linearTokenOf(agent.userId), heard)),
         );
-        const linear = yield* connected(fetch, agent.bearer, `${LUKE_INTEGRATION_MCP_PATH}/linear`);
-        const notion = yield* connected(fetch, agent.bearer, `${LUKE_INTEGRATION_MCP_PATH}/notion`);
+        const linear = yield* connected(
+          fetch,
+          agent.bearer,
+          `${WORKSPACE_INTEGRATION_MCP_PATH}/linear`,
+        );
+        const notion = yield* connected(
+          fetch,
+          agent.bearer,
+          `${WORKSPACE_INTEGRATION_MCP_PATH}/notion`,
+        );
 
         const linearTools = yield* Effect.promise(() => linear.listTools());
         const drawn = yield* Effect.promise(() => linear.callTool({ name: "draw", arguments: {} }));
@@ -985,8 +996,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
             }),
           );
 
-        const unbearered = yield* ask(`${LUKE_INTEGRATION_MCP_PATH}/linear`, undefined);
-        const unknown = yield* ask(`${LUKE_INTEGRATION_MCP_PATH}/luke`, agent.bearer);
+        const unbearered = yield* ask(`${WORKSPACE_INTEGRATION_MCP_PATH}/linear`, undefined);
+        const unknown = yield* ask(`${WORKSPACE_INTEGRATION_MCP_PATH}/luke`, agent.bearer);
 
         assert.equal(unbearered.status, 401);
         assert.equal(unknown.status, 404);

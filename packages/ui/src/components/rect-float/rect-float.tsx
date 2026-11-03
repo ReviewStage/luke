@@ -202,7 +202,7 @@ export function RectFloat({
   return (
     <div
       ref={drawn}
-      className="luke-rect-float"
+      className="ui-rect-float"
       data-side={place?.side ?? side}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}

@@ -25,7 +25,7 @@ import {
  */
 
 /** What every block wears, which the page's blocks are stepped across by. */
-export const EDITABLE_BLOCK_CLASS = "luke-editable-block";
+export const EDITABLE_BLOCK_CLASS = "ui-editable-block";
 
 /** What a block holds: the document's title, or a section of its text. */
 export const EDITABLE_BLOCK_KIND = {

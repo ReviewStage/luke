@@ -18,7 +18,7 @@
   /* The light's timing, read where it plays: on the wash, so a motion of the
      place's own never stands in its way, or on a place that draws it itself. */
   [data-landed] {
-    --ui-landed-light: luke-landed var(--ui-duration-shape) var(--ui-motion-exit)
+    --ui-landed-light: ui-landed var(--ui-duration-shape) var(--ui-motion-exit)
       var(--ui-confirm-delay) both;
   }
 
@@ -51,7 +51,7 @@
     border-radius: calc(var(--ui-control-radius) - var(--ui-space-2));
   }
 
-  @keyframes luke-landed {
+  @keyframes ui-landed {
     from {
       --ui-landed: 1;
     }

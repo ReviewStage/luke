@@ -55,7 +55,7 @@ function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            "luke-popover ph-no-capture flex max-h-(--available-height) flex-col overflow-hidden rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in data-ending-style:pointer-events-none data-ending-style:animate-menu-leave",
+            "ui-popover ph-no-capture flex max-h-(--available-height) flex-col overflow-hidden rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in data-ending-style:pointer-events-none data-ending-style:animate-menu-leave",
             className,
           )}
           {...props}

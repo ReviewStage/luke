@@ -25,7 +25,7 @@ import type { ReactNode } from "react";
  * card around it insets both; hidden while it holds nothing drawn.
  */
 const FILES =
-  "luke-composer-files flex flex-wrap gap-tight-gap px-ui-12 pt-ui-12 pb-0 " +
+  "ui-composer-files flex flex-wrap gap-tight-gap px-ui-12 pt-ui-12 pb-0 " +
   "group-data-[look=field]/composer:px-ui-6 group-data-[look=field]/composer:pt-ui-6 " +
   "group-data-[look=input]/composer:px-ui-6 group-data-[look=input]/composer:pt-ui-6 " +
   "group-data-[look=bare]/composer:p-0 [&:not(:has(>:not([hidden])))]:hidden";

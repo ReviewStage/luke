@@ -66,17 +66,17 @@ function DigitSlot({
   const changed = roll !== undefined && was !== digit;
   const leaving = changed && !left ? was : undefined;
   return (
-    <span className="luke-rolling-number-slot relative inline-block [clip-path:inset(0)]">
+    <span className="ui-rolling-number-slot relative inline-block [clip-path:inset(0)]">
       <Fragment key={changed ? turn : "standing"}>
         <span
-          className="luke-rolling-number-digit inline-block"
+          className="ui-rolling-number-digit inline-block"
           data-roll={changed ? roll : undefined}
         >
           {digit}
         </span>
         {leaving === undefined ? null : (
           <span
-            className="luke-rolling-number-leaving pointer-events-none absolute inset-0 before:content-[attr(data-digit)]"
+            className="ui-rolling-number-leaving pointer-events-none absolute inset-0 before:content-[attr(data-digit)]"
             data-roll={roll}
             data-digit={leaving}
             aria-hidden="true"
@@ -119,7 +119,7 @@ export function RollingNumber({
   const left = () => setShown((current) => ({ ...current, left: true }));
   // A digit is matched with the one in its place counted from the units.
   return (
-    <span className="luke-rolling-number inline-flex tabular-nums">
+    <span className="ui-rolling-number inline-flex tabular-nums">
       {digits.map((digit, index) => {
         const place = digits.length - index;
         return (

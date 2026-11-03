@@ -162,7 +162,7 @@ function backRow(view: HTMLElement): HTMLButtonElement | undefined {
 /** The version rows' presses, newest first. */
 function rowsOf(view: HTMLElement): HTMLButtonElement[] {
   return [
-    ...view.querySelectorAll<HTMLButtonElement>('[aria-label="Version list"] .luke-list-row-main'),
+    ...view.querySelectorAll<HTMLButtonElement>('[aria-label="Version list"] .ui-list-row-main'),
   ];
 }
 
@@ -197,7 +197,7 @@ test("focus landing on a version from outside the list does not choose it", () =
 
 /** The foot under the version list, which is the only button in it besides the rows. */
 function foot(view: HTMLElement): HTMLButtonElement | null {
-  return view.querySelector<HTMLButtonElement>(".version-earlier .luke-line-button");
+  return view.querySelector<HTMLButtonElement>(".version-earlier .ui-line-button");
 }
 
 test("the foot counts the older versions, and reading them is its press", async () => {

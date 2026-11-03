@@ -53,7 +53,7 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  * because its addons take the press by a handler of their own where the
  * label already does, and its button is another component's to vendor. The
  * parts are drawn in Tailwind utilities over the theme's field roles, and
- * the well, its field, and its clear keep the `luke-search-field` names a
+ * the well, its field, and its clear keep the `ui-search-field` names a
  * test finds them by.
  */
 
@@ -67,7 +67,7 @@ export type SearchFieldLook = (typeof SEARCH_FIELD_LOOK)[keyof typeof SEARCH_FIE
 
 /** The well: a control tall on the hover fill inside a hairline, the magnifier leading at a control's glyph size. */
 const SEARCH_WELL =
-  "luke-search-field group/search box-border flex h-control min-w-0 cursor-text items-center gap-icon-gap rounded-control border border-border bg-muted pr-ui-2 pl-search-lead text-muted-foreground transition-[border-color] duration-(--ui-duration-hover) ease-plain [&>svg]:size-control-icon [&>svg]:flex-none";
+  "ui-search-field group/search box-border flex h-control min-w-0 cursor-text items-center gap-icon-gap rounded-control border border-border bg-muted pr-ui-2 pl-search-lead text-muted-foreground transition-[border-color] duration-(--ui-duration-hover) ease-plain [&>svg]:size-control-icon [&>svg]:flex-none";
 
 /** Each look's classes over the well's: a menu's head row is a menu row tall, with only a hairline under it and no ring. */
 const SEARCH_LOOK_CLASS = {
@@ -78,11 +78,11 @@ const SEARCH_LOOK_CLASS = {
 
 /** The field, bare in the well and taking the room left. */
 const SEARCH_INPUT =
-  "luke-search-field-input h-full flex-1 rounded-none border-0 bg-transparent p-0 outline-none focus:bg-transparent";
+  "ui-search-field-input h-full flex-1 rounded-none border-0 bg-transparent p-0 outline-none focus:bg-transparent";
 
 /** The tally in a caption's tabular figures, said rather than drawn where the bar is folded. */
 const SEARCH_TALLY =
-  "luke-search-field-tally flex-none pr-ui-6 text-caption tabular-nums [@container_style(--ui-fold:folded)]:sr-only";
+  "ui-search-field-tally flex-none pr-ui-6 text-caption tabular-nums [@container_style(--ui-fold:folded)]:sr-only";
 
 /** The chord, standing until the caret arrives, and never under a finger, which has no key to summon with. */
 const SEARCH_SHORTCUT =
@@ -94,7 +94,7 @@ const SEARCH_SHORTCUT =
  * is what it rides, since a utility would outrank that rule.
  */
 const SEARCH_CLEAR =
-  "luke-search-field-clear m-0 inline-flex size-search-clear flex-none not-in-data-[leaving=true]:animate-pop-in cursor-default items-center justify-center rounded-control-compact border-0 bg-transparent p-0 text-muted-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain hover:bg-fill-selected hover:text-foreground active:bg-fill-pressed not-in-data-[leaving=true]:data-[leaving=true]:animate-pop-out [&>svg]:size-control-icon";
+  "ui-search-field-clear m-0 inline-flex size-search-clear flex-none not-in-data-[leaving=true]:animate-pop-in cursor-default items-center justify-center rounded-control-compact border-0 bg-transparent p-0 text-muted-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain hover:bg-fill-selected hover:text-foreground active:bg-fill-pressed not-in-data-[leaving=true]:data-[leaving=true]:animate-pop-out [&>svg]:size-control-icon";
 
 /** How many results a query found, and which is current, where one is. */
 export interface SearchTally {

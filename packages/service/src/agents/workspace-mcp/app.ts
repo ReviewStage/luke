@@ -19,7 +19,7 @@
  * own client, the one a harness speaks.
  *
  * Beside it stands one server per integration the agent is handed, at
- * `LUKE_INTEGRATION_MCP_PATH/<connection>` (`notion-2` for a member's second
+ * `WORKSPACE_INTEGRATION_MCP_PATH/<connection>` (`notion-2` for a member's second
  * Notion account), on the same bearer and the same JSON-RPC: its
  * `initialize` tells the client what eve tells the model of the connection,
  * which account it is among them, as its `instructions`; its
@@ -77,33 +77,34 @@ import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
-import { lukeMcpCallKey } from "./call-key.js";
-import { lukeMcpDoorSeams } from "./door-seams.js";
+import { workspaceMcpCallKey } from "./call-key.js";
+import { workspaceMcpDoorSeams } from "./door-seams.js";
 import type { AgentSandboxDoors } from "./sandbox-door.js";
 import {
-  LUKE_MCP_TOOLS,
-  type LukeMcpOfferedTo,
-  type LukeMcpServices,
-  type LukeMcpTool,
-  type LukeMcpToolResult,
   type McpContent,
-  offeredLukeMcpTool,
+  offeredWorkspaceMcpTool,
   refusedByDoor,
+  WORKSPACE_MCP_TOOLS,
+  type WorkspaceMcpOfferedTo,
+  type WorkspaceMcpServices,
+  type WorkspaceMcpTool,
+  type WorkspaceMcpToolResult,
 } from "./tools.js";
 
 /** The path a runner's MCP client posts to. */
-export const LUKE_MCP_PATH = "/api/agents/mcp";
+export const WORKSPACE_MCP_PATH = "/api/agents/mcp";
 
 /** The path under which each integration the agent is handed is a server of its own, named by its connection. */
-export const LUKE_INTEGRATION_MCP_PATH = `${LUKE_MCP_PATH}/integrations`;
+export const WORKSPACE_INTEGRATION_MCP_PATH = `${WORKSPACE_MCP_PATH}/integrations`;
 
-/** An integration server's address under an origin: the connection's name, the one path segment after `LUKE_INTEGRATION_MCP_PATH`. */
-export function lukeIntegrationMcpUrl(origin: string, connection: string): string {
-  return new URL(`${LUKE_INTEGRATION_MCP_PATH}/${encodeURIComponent(connection)}`, origin).href;
+/** An integration server's address under an origin: the connection's name, the one path segment after `WORKSPACE_INTEGRATION_MCP_PATH`. */
+export function workspaceIntegrationMcpUrl(origin: string, connection: string): string {
+  return new URL(`${WORKSPACE_INTEGRATION_MCP_PATH}/${encodeURIComponent(connection)}`, origin)
+    .href;
 }
 
 /** The function the server is deployed as. */
-export const LUKE_MCP_FUNCTION = {
+export const WORKSPACE_MCP_FUNCTION = {
   /** The duration its bundle declares: the longest `run_on_mac` a call may wait on, and two minutes for the store and the Mac's answer around it. */
   MAX_DURATION_SECONDS: MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS + 120,
 } as const;
@@ -114,7 +115,7 @@ export const LUKE_MCP_FUNCTION = {
  * one of these, and the newest otherwise, which the client then accepts or
  * leaves.
  */
-export const LUKE_MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
+export const WORKSPACE_MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
 
 /** The version every server names itself with to a client. */
 const SERVER_VERSION = "1.0.0";
@@ -207,14 +208,15 @@ function rpcFailure(code: number, message: string): RpcAnswer {
 /** The protocol version `initialize` answers: the client's own where the server speaks it, else the newest. */
 function negotiatedVersion(asked: string): string {
   return (
-    LUKE_MCP_PROTOCOL_VERSIONS.find((version) => version === asked) ?? LUKE_MCP_PROTOCOL_VERSIONS[0]
+    WORKSPACE_MCP_PROTOCOL_VERSIONS.find((version) => version === asked) ??
+    WORKSPACE_MCP_PROTOCOL_VERSIONS[0]
   );
 }
 
 /** Whether a request names a protocol version the server does not speak; one naming none is taken as the transport's default. */
 function unspokenVersion(request: Request): boolean {
   const named = request.headers.get(PROTOCOL_VERSION_HEADER);
-  return named !== null && !LUKE_MCP_PROTOCOL_VERSIONS.some((version) => version === named);
+  return named !== null && !WORKSPACE_MCP_PROTOCOL_VERSIONS.some((version) => version === named);
 }
 
 /** MCP's result of a tool call: what the tool answered, as content blocks, and whether it is the tool's own error. */
@@ -224,7 +226,7 @@ interface McpToolCallResult {
 }
 
 /** A door's result as MCP's tool result: as the tool shows it (a picture as an image), else its JSON as one text block, marked an error where the door refused. */
-function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallResult {
+function toolResult(tool: WorkspaceMcpTool, result: WorkspaceMcpToolResult): McpToolCallResult {
   return {
     content: tool.content?.(result) ?? [{ type: "text", text: JSON.stringify(result) }],
     isError: refusedByDoor(result),
@@ -269,7 +271,7 @@ const ALWAYS_LOADED_TOOLS: ReadonlySet<string> = new Set([
 const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as const;
 
 /** What an agent whose row is gone is offered by: no repository, on our own machine. */
-const NO_AGENT_OFFERED: LukeMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
+const NO_AGENT_OFFERED: WorkspaceMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
 /** What beside its row an agent whose row is gone is offered by: no Memory, and no outside words. */
 const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, heardFromAnotherAccount: false };
@@ -281,15 +283,15 @@ const DOOR_FAILED_RESULT: McpToolCallResult = {
 };
 
 /** The doors to an admitted agent's sandbox, which the edge composes on its own runner (`sandbox-door.ts`). */
-type LukeMcpSandboxDoor = (admitted: AdmittedConversation) => AgentSandboxDoors;
+type WorkspaceMcpSandboxDoor = (admitted: AdmittedConversation) => AgentSandboxDoors;
 
 /** The agent's browser as the edge composes it (`../browser/agent-browser.ts`'s `agentBrowserServices`), over the runtime's HTTP client. */
-export type LukeMcpBrowser = Layer.Layer<AgentBrowser, never, HttpClient.HttpClient>;
+export type WorkspaceMcpBrowser = Layer.Layer<AgentBrowser, never, HttpClient.HttpClient>;
 
 /** What the server is composed over: the doors to the agent's sandbox, and its browser. */
-export interface LukeMcpDoors {
-  readonly sandbox: LukeMcpSandboxDoor;
-  readonly browser: LukeMcpBrowser;
+export interface WorkspaceMcpDoors {
+  readonly sandbox: WorkspaceMcpSandboxDoor;
+  readonly browser: WorkspaceMcpBrowser;
 }
 
 /**
@@ -302,37 +304,37 @@ interface McpServer {
   /** What `initialize` tells the client of the server, which the harness shows the model; none for our own, whose tools say it. */
   readonly instructions: (
     admitted: AdmittedConversation,
-  ) => Effect.Effect<Option.Option<string>, never, LukeMcpServices>;
+  ) => Effect.Effect<Option.Option<string>, never, WorkspaceMcpServices>;
   readonly listTools: (
     admitted: AdmittedConversation,
-  ) => Effect.Effect<RpcAnswer, never, LukeMcpServices>;
+  ) => Effect.Effect<RpcAnswer, never, WorkspaceMcpServices>;
   readonly callTool: (
     admitted: AdmittedConversation,
     params: UnparsedWireValue,
-  ) => Effect.Effect<RpcAnswer, never, LukeMcpServices>;
+  ) => Effect.Effect<RpcAnswer, never, WorkspaceMcpServices>;
 }
 
 /** One `tools/call` run through the tool's door as the admitted conversation, under the key its input is held (`call-key.ts`). */
-function callLukeTool(
-  doors: LukeMcpDoors,
+function callWorkspaceTool(
+  doors: WorkspaceMcpDoors,
   admitted: AdmittedConversation,
   params: UnparsedWireValue,
-): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
+): Effect.Effect<RpcAnswer, never, WorkspaceMcpServices> {
   const call = readEither(CallParamsSchema, DROPPING_EXCESS)(params);
   if (Result.isFailure(call)) {
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, "Invalid tools/call params"));
   }
   const { name } = call.success;
-  const tool = LUKE_MCP_TOOLS.get(name);
+  const tool = WORKSPACE_MCP_TOOLS.get(name);
   if (tool === undefined) {
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, `Unknown tool: ${name}`));
   }
   const input = fieldOf(params, "arguments") ?? {};
-  return Effect.flatMap(lukeMcpDoorSeams, (seams) => {
+  return Effect.flatMap(workspaceMcpDoorSeams, (seams) => {
     const sandbox = doors.sandbox(admitted);
     const context = {
       sandbox: sandbox.files,
-      callKey: lukeMcpCallKey(admitted, name, input),
+      callKey: workspaceMcpCallKey(admitted, name, input),
       seams,
     };
     return tool.run(admitted, input, context);
@@ -351,14 +353,14 @@ function callLukeTool(
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
  * repository, where it runs, whether anyone but its starter has put words
- * into it, and its starter's Memory (`offeredLukeMcpTool`),
+ * into it, and its starter's Memory (`offeredWorkspaceMcpTool`),
  * each in the words it is shown them with (`describe`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
-function listLukeTools(
+function listWorkspaceTools(
   admitted: AdmittedConversation,
-): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
+): Effect.Effect<RpcAnswer, never, WorkspaceMcpServices> {
   const { userId, conversationId } = admitted.target;
   return readAgentOfConversation(userId, conversationId).pipe(
     Effect.flatMap((found) =>
@@ -370,14 +372,14 @@ function listLukeTools(
             })
           : Effect.succeed(NO_AGENT_BESIDE),
         (beside) =>
-          offeredLukeMcpTool(
+          offeredWorkspaceMcpTool(
             Option.getOrElse(found, () => NO_AGENT_OFFERED),
             beside,
           ),
       ),
     ),
     Effect.flatMap((offered) => {
-      const listed = [...LUKE_MCP_TOOLS].filter(([name]) => offered(name));
+      const listed = [...WORKSPACE_MCP_TOOLS].filter(([name]) => offered(name));
       return Effect.map(
         Effect.forEach(listed, ([name, tool]) =>
           Effect.map(tool.describe?.(admitted) ?? Effect.succeed(tool.description), (words) => ({
@@ -400,12 +402,12 @@ function listLukeTools(
 }
 
 /** Our own server, over the doors the edge composes. */
-function lukeServer(doors: LukeMcpDoors): McpServer {
+function lukeServer(doors: WorkspaceMcpDoors): McpServer {
   return {
     name: WORKSPACE_MCP_SERVER,
     instructions: () => Effect.succeedNone,
-    listTools: listLukeTools,
-    callTool: (admitted, params) => callLukeTool(doors, admitted, params),
+    listTools: listWorkspaceTools,
+    callTool: (admitted, params) => callWorkspaceTool(doors, admitted, params),
   };
 }
 
@@ -463,7 +465,7 @@ function answerRequest(
   admitted: AdmittedConversation,
   method: string,
   params: UnparsedWireValue,
-): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
+): Effect.Effect<RpcAnswer, never, WorkspaceMcpServices> {
   switch (method) {
     case MCP_METHOD.INITIALIZE: {
       const asked = readEither(InitializeParamsSchema, DROPPING_EXCESS)(params);
@@ -500,7 +502,7 @@ function answerMessage(
   admitted: AdmittedConversation,
   message: Message,
   raw: UnparsedWireValue,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, never, LukeMcpServices> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, WorkspaceMcpServices> {
   const { id, method } = message;
   if (id === undefined || method === undefined) {
     return Effect.succeed(HttpServerResponse.empty({ status: HOSTED_HTTP_STATUS.ACCEPTED }));
@@ -521,7 +523,7 @@ function bearerRefused(): HttpServerResponse.HttpServerResponse {
 
 /** The integration server a request's path names by its connection; nothing for a path that names no connection. */
 function integrationServerOf(request: Request): Option.Option<McpServer> {
-  const prefix = `${LUKE_INTEGRATION_MCP_PATH}/`;
+  const prefix = `${WORKSPACE_INTEGRATION_MCP_PATH}/`;
   const { pathname } = new URL(request.url);
   if (!pathname.startsWith(prefix)) return Option.none();
   // Note that a connection's name is lower-case letters, digits, and hyphens alone, so its segment needs no decoding.
@@ -532,12 +534,12 @@ function integrationServerOf(request: Request): Option.Option<McpServer> {
 }
 
 /** POST: one JSON-RPC message to the server the request's path names, admitted on the runner's bearer. */
-const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
+const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMcpEndpoint")(function* (
   serverOf: (request: Request) => Option.Option<McpServer>,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | LukeMcpServices
+  HttpServerRequest.HttpServerRequest | WorkspaceMcpServices
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.POST) {
@@ -576,13 +578,13 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
 });
 
 /** The group: our server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
-export function lukeMcpApp(doors: LukeMcpDoors): WebRoutes<LukeMcpServices> {
+export function workspaceMcpApp(doors: WorkspaceMcpDoors): WebRoutes<WorkspaceMcpServices> {
   const luke = Option.some(lukeServer(doors));
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, LUKE_MCP_PATH, hostedRefusing(mcpEndpoint(() => luke))),
+    HttpRouter.add(ANY_METHOD, WORKSPACE_MCP_PATH, hostedRefusing(mcpEndpoint(() => luke))),
     HttpRouter.add(
       ANY_METHOD,
-      `${LUKE_INTEGRATION_MCP_PATH}/:connection`,
+      `${WORKSPACE_INTEGRATION_MCP_PATH}/:connection`,
       hostedRefusing(mcpEndpoint(integrationServerOf)),
     ),
     hostedNotFoundRoute,
