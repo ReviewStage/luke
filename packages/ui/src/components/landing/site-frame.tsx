@@ -54,12 +54,12 @@ export function SiteFrame({
   footer,
   children,
 }: {
-  /** The site's wordmark and links, laid across the bar. */
-  bar: ReactNode;
+  /** The site's wordmark and links, laid across the bar; none draws no bar. */
+  bar?: ReactNode;
   /** The bar's call at its end, which a page narrower than a phone's leaves out. */
   barCall?: ReactNode;
-  /** The site's closing links and notices. */
-  footer: ReactNode;
+  /** The site's closing links and notices; none draws no foot. */
+  footer?: ReactNode;
   /** The page itself, its `main` among it. */
   children: ReactNode;
 }): React.JSX.Element {
@@ -67,19 +67,23 @@ export function SiteFrame({
   return (
     <div className="ui-landing-page">
       <div className="ui-landing-rails" aria-hidden="true" />
-      <header className="ui-landing-bar" data-floating={floating}>
-        <div className="ui-landing-bar-in">
-          {bar}
-          {barCall === undefined ? null : <span className="ui-landing-bar-call">{barCall}</span>}
-        </div>
-      </header>
+      {bar === undefined || bar === null ? null : (
+        <header className="ui-landing-bar" data-floating={floating}>
+          <div className="ui-landing-bar-in">
+            {bar}
+            {barCall === undefined ? null : <span className="ui-landing-bar-call">{barCall}</span>}
+          </div>
+        </header>
+      )}
       {children}
-      <footer className="ui-landing-foot">
-        <div className="ui-landing-foot-links">{footer}</div>
-        <div className="ui-landing-foot-art">
-          <LandingWordmark />
-        </div>
-      </footer>
+      {footer === undefined || footer === null ? null : (
+        <footer className="ui-landing-foot">
+          <div className="ui-landing-foot-links">{footer}</div>
+          <div className="ui-landing-foot-art">
+            <LandingWordmark />
+          </div>
+        </footer>
+      )}
     </div>
   );
 }
