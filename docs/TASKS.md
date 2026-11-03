@@ -278,14 +278,17 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   drawn as it is now, and one not on that branch, or not read at all, says so
   in its place. A File tab opened from a code block of the task's Inbox is
   read at the commit the agent named instead. File tabs are kept nowhere.
-  The strip scrolls where the agents overflow it, and no tab closes.
+  The strip scrolls where its tabs overflow it. Every tab closes, Plan,
+  Inbox, and Comments among them, by its ×, Delete, ⌘W, or Close and Close
+  others; the "+" opens one again, and closing the last shuts the panel.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for a page an agent shows
   (`tasks/use-side-panel.ts`), and a subagent opened from an agent's
   transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
   sets that tab's label in semibold until it is shown. Its left edge
-  drags it between 280 and 720 pixels wide, and the arrow keys move it once
-  it has the focus.
+  drags it from 280 pixels wide to as wide as leaves the document its room
+  (`--document-reserve`), with no greatest width of its own, and the arrow
+  keys move it once it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
   this Mac's preference, kept in the window's own storage rather than in
   anything main holds. A kept tab the open task does not have reads as its
@@ -300,7 +303,7 @@ Each agent started on the task has a tab of its own in the task's column
 lands, and showing its transcript and its composer. The column's
 strip is the side panel's: tabs drag and step among themselves, close by ×,
 Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
-sidebar. A column whose last tab closes is back on the plan. The tab each
+sidebar. A column whose last tab closes is back on a new agent's draft. The tab each
 task last showed is kept, so a task opens as it was left. ⌘T and ⌘W answer the column
 holding the focus, the side panel's once the pointer goes into it. A
 subagent's tab stays in the side panel.
