@@ -17,7 +17,7 @@
  * kept. Only a
  * page on screen draws, so the frames follow the tab the browser shows; and
  * it draws the agent's pointer into each page it records
- * (`RECORDING_CURSOR_SOURCE`), which the frames would otherwise lack. It
+ * (`recording-cursor.ts`), which the frames would otherwise lack. It
  * stops when the stop file appears or its time runs out, whichever comes
  * first, then re-times the frames to a steady rate, holding each until the
  * next, and encodes them as a VP9 WebM with the ffmpeg Playwright installs
@@ -36,6 +36,7 @@ import { PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { LINK_SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
+import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./recording-cursor.js";
 import { SANDBOX_BROWSER } from "./sandbox-browser.js";
 
 /** Where a recording is kept under the sandbox user's home, and the files it is made of. */
@@ -60,110 +61,6 @@ export const RECORDING_SCRIPT_NAME = "agent-recording";
 
 /** What a start that succeeded prints: a recording it started, or one that already runs. */
 export const RECORDING_START_OUTPUT = { STARTED: "started", RUNNING: "running" } as const;
-
-/**
- * The agent's pointer, drawn into each page while it is recorded, since the
- * pointer the panel draws over the live view is no part of the page's
- * frames (`cloud-browser-cursor.tsx`): an arrow like the panel's, in a closed
- * shadow root on the document's root, hidden from the accessibility tree and
- * taking no pointer events, that follows the input the agent's actions
- * dispatch, which a page hears as a person's (`browser-agent-cdp.ts`), and
- * rings where it presses. The recorder adds it to every page it attaches to,
- * the document standing and each one after, and takes it out as it stops.
- */
-export const RECORDING_CURSOR_SOURCE = `(function draw() {
-  const root = document.documentElement;
-  // A new document runs this before it has a root, so the pointer is drawn once it does.
-  if (!root) return document.addEventListener("DOMContentLoaded", draw, { once: true });
-  // One pointer a document, however often it is added; the mark stands on the window, so a stop finds it though the page removed the host.
-  const mark = Symbol.for("agent.recordingCursor");
-  if (window[mark]) return;
-  window[mark] = true;
-  const svg = "http://www.w3.org/2000/svg";
-  const host = document.createElement("div");
-  host.setAttribute("data-ui-recording-cursor", "");
-  host.setAttribute("aria-hidden", "true");
-  host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
-  const shadow = host.attachShadow({ mode: "closed" });
-  const css = ".c{position:absolute;left:0;top:0;width:20px;height:20px;opacity:0;transition:transform .25s cubic-bezier(.2,.8,.2,1),opacity .15s;filter:drop-shadow(0 0 1.5px rgba(255,255,255,.9)) drop-shadow(0 1px 2px rgba(0,0,0,.35))}.c.on{opacity:1}.c svg{display:block;width:20px;height:20px;transform-origin:1px 1px;transition:transform .12s}.c.down svg{transform:scale(.82)}.r{position:absolute;left:0;top:0;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;border:2px solid rgba(25,113,194,.85);box-sizing:border-box;animation:r .5s ease-out forwards}@keyframes r{from{transform:scale(.3);opacity:1}to{transform:scale(1.6);opacity:0}}";
-  // A constructed sheet, since a page's own style-src may refuse a style element.
-  if ("adoptedStyleSheets" in shadow && typeof CSSStyleSheet.prototype.replaceSync === "function") {
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(css);
-    shadow.adoptedStyleSheets = [sheet];
-  } else {
-    const style = document.createElement("style");
-    style.textContent = css;
-    shadow.append(style);
-  }
-  const arrow = document.createElement("div");
-  arrow.className = "c";
-  const icon = document.createElementNS(svg, "svg");
-  icon.setAttribute("viewBox", "0 0 14 14");
-  icon.setAttribute("width", "20");
-  icon.setAttribute("height", "20");
-  const path = document.createElementNS(svg, "path");
-  path.setAttribute("d", "M1 1 11.94 6.29Q13.87 7.22 12.56 7.58L8.64 8.64 7.58 12.56Q7.22 13.87 6.29 11.94Z");
-  path.setAttribute("fill", "#1f2328");
-  path.setAttribute("stroke", "#fff");
-  path.setAttribute("stroke-width", "1");
-  icon.append(path);
-  arrow.append(icon);
-  shadow.append(arrow);
-  root.append(host);
-  const stop = new AbortController();
-  const on = { capture: true, passive: true, signal: stop.signal };
-  let pressedAt = 0;
-  const moveTo = (x, y) => {
-    if (!host.isConnected && document.documentElement) document.documentElement.append(host);
-    arrow.style.transform = "translate(" + (x - 1) + "px," + (y - 1) + "px)";
-    arrow.classList.add("on");
-  };
-  const ringAt = (x, y) => {
-    const ring = document.createElement("div");
-    ring.className = "r";
-    ring.style.left = x + "px";
-    ring.style.top = y + "px";
-    shadow.append(ring);
-    setTimeout(() => ring.remove(), 600);
-  };
-  const middleOf = (target) => {
-    if (!(target instanceof Element)) return undefined;
-    const box = target.getBoundingClientRect();
-    return box.width > 0 && box.height > 0 ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : undefined;
-  };
-  const place = (event) => moveTo(event.clientX, event.clientY);
-  window.addEventListener("mousemove", place, on);
-  window.addEventListener("wheel", place, on);
-  window.addEventListener("mousedown", (event) => {
-    pressedAt = Date.now();
-    place(event);
-    arrow.classList.add("down");
-    ringAt(event.clientX, event.clientY);
-  }, on);
-  window.addEventListener("mouseup", () => arrow.classList.remove("down"), on);
-  // Typing by ref focuses its field and a choice sets its dropdown, neither with the mouse, so the pointer goes to the field it lands in.
-  window.addEventListener("focusin", (event) => {
-    if (Date.now() - pressedAt < 400) return;
-    const middle = middleOf(event.target);
-    if (middle) moveTo(middle.x, middle.y);
-  }, on);
-  window.addEventListener("change", (event) => {
-    if (!(event.target instanceof HTMLSelectElement)) return;
-    const middle = middleOf(event.target);
-    if (!middle) return;
-    moveTo(middle.x, middle.y);
-    ringAt(middle.x, middle.y);
-  }, on);
-  window.addEventListener("agent-recording-stop", () => {
-    stop.abort();
-    host.remove();
-    delete window[mark];
-  }, { once: true });
-})();`;
-
-/** Takes the pointer out of a document, its listeners with it, whether or not the page kept its host. */
-export const RECORDING_CURSOR_STOP = 'window.dispatchEvent(new Event("agent-recording-stop"));';
 
 /**
  * Whether the page's document has drawn content yet: its first contentful

@@ -151,6 +151,9 @@ test("the image gets Playwright where every user reaches it, Claude Code, Codex,
     "sudo -n env HOME=/root npm install --global --prefix /opt/agent/codex --no-audit --no-fund @openai/codex@0.163.0",
     "sudo -n ln -sfn /opt/agent/codex/bin/codex /usr/local/bin/codex",
     "sudo -n install -d -o agent -g agent -m 0700 /home/agent/.codex",
+    // The pointer an agent's own Playwright script adds to a page it records, every user's to read.
+    "sudo -n tee /usr/local/share/agent-recording/cursor.js",
+    "sudo -n chmod 0644 /usr/local/share/agent-recording/cursor.js",
   ].map((start) => indexOfCall(calls, start));
   const checked = indexOfCall(
     calls,
