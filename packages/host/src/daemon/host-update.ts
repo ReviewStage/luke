@@ -40,8 +40,8 @@ import {
  *
  * Only a host the account install put in place updates itself: `apps/host`
  * hands it the install's releases (`HostReleases`) where the daemon's own
- * real path stands in a version folder of them. A development run and an
- * install that came before are handed none, and take no notice of a release.
+ * real path stands in a version folder of them. A development run is handed
+ * none, and takes no notice of a release.
  *
  * Each answered beat names the release we publish where it is newer
  * than the daemon (`deviceAgentBeatAnswerSchema`'s `release`), and the
@@ -93,10 +93,10 @@ const RELEASES = {
   NEXT_LINK: ".current-next",
 } as const;
 
-/** The tarball's one top folder, which keeps its name from before the rename (`apps/host/scripts/release-layout.ts`), and the command under a release's folder. */
+/** The tarball's one top folder (`apps/host/scripts/release-layout.ts`), and the command under a release's folder. */
 const TARBALL = {
   FILE: "vespin-host.tar.gz",
-  ROOT: "luke-host",
+  ROOT: "vespin-host",
   COMMAND: ["bin", "vespin-host"],
 } as const;
 
@@ -118,7 +118,7 @@ export function hostTargetOf(platform: DevicePlatform, arch: DeviceArch): HostTa
 
 /** The account install's releases, as `apps/host` finds them (`vespin-host.sh`'s `account_home`). */
 export interface HostReleases {
-  /** The releases folder (`~/.local/share/luke-host`): each release under `versions/<version>`, and `current` linking to the one that runs. */
+  /** The releases folder (`~/.local/share/vespin-host`): each release under `versions/<version>`, and `current` linking to the one that runs. */
   readonly folder: string;
   /** The name under `versions/` of the release the daemon runs from, which is never removed. */
   readonly running: string;

@@ -1,5 +1,5 @@
 /**
- * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without systemd or whose user manager cannot be reached is refused with how to fix it, a run under sudo from another account and an install that came before are refused, lingering is turned on with sudo only where the account may not turn it on itself, a download whose SHA-256 is not the one carried is refused, a Mac's LaunchAgent is written and started only where its user is logged in, and a whole run installs the release into the account, starts its service only once the box is connected, in the layout `vespin-host uninstall` removes, and keeps the pairing when run again, moving an install of a release before 0.7.0 over to `vespin-host` in place. Beside it, the host's own `vespin-host uninstall` (`apps/host/scripts/vespin-host.sh`) as an account install, under either name, and a Mac's earlier install run it.
+ * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without systemd or whose user manager cannot be reached is refused with how to fix it, a run under sudo from another account is refused, lingering is turned on with sudo only where the account may not turn it on itself, a download whose SHA-256 is not the one carried is refused, a Mac's LaunchAgent is written and started only where its user is logged in, and a whole run installs the release into the account, starts its service only once the box is connected, in the layout `vespin-host uninstall` removes, and keeps the pairing when run again. Beside it, the host's own `vespin-host uninstall` (`apps/host/scripts/vespin-host.sh`) as an account install runs it.
  *
  * The script is run by `sh` in a temporary folder; `APP_HOST_INSTALL_LIBRARY`
  * has it stop after it defines what it carries and its functions, which the
@@ -28,7 +28,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
@@ -88,7 +88,7 @@ const folders: string[] = [];
 
 /** A folder of the test's own. */
 const folder = () => {
-  const made = mkdtempSync(join(tmpdir(), "luke-host-install-"));
+  const made = mkdtempSync(join(tmpdir(), "vespin-host-install-"));
   folders.push(made);
   return made;
 };
@@ -149,23 +149,22 @@ const accountName = () => spawnSync("id", ["-un"], { encoding: "utf8" }).stdout.
 
 /**
  * Packs a release of the version given into the folder given, as CI packs one
- * under a `luke-host` folder, with the host's real launcher over the fake
- * Node, `bin/luke-host` a link to it, and answers the script with that
+ * under a `vespin-host` folder, with the host's real launcher over the fake
+ * Node, and answers the script with that
  * release written in, its tarball at one address for every target, as the
  * route that serves it writes one.
  */
 function servedScript(served: string, version: string): string {
   const packed = folder();
-  const top = join(packed, "luke-host");
+  const top = join(packed, "vespin-host");
   for (const each of ["bin", "node/bin", "lib"]) mkdirSync(join(top, each), { recursive: true });
   writeFileSync(join(top, "bin/vespin-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
-  symlinkSync("vespin-host", join(top, "bin/luke-host"));
   writeFileSync(join(top, "node/bin/node"), FAKE_NODE, { mode: 0o755 });
   writeFileSync(join(top, "lib/vespin-host.mjs"), "");
-  const tarball = join(served, `luke-host-${version}.tar.gz`);
-  execFileSync("tar", ["-czf", tarball, "-C", packed, "luke-host"]);
+  const tarball = join(served, `vespin-host-${version}.tar.gz`);
+  execFileSync("tar", ["-czf", tarball, "-C", packed, "vespin-host"]);
   const sha256 = createHash("sha256").update(readFileSync(tarball)).digest("hex");
-  const url = `https://releases.test/luke-host-${version}.tar.gz`;
+  const url = `https://releases.test/vespin-host-${version}.tar.gz`;
   let script = readFileSync(SCRIPT, "utf8");
   for (const [placeholder, value] of Object.entries({
     "@@VERSION@@": version,
@@ -261,9 +260,9 @@ const box = (
     spawnSync("sh", [...args], { cwd: folder(), env: { ...env, ...extra }, encoding: "utf8" });
   return {
     home,
-    releases: join(home, ".local/share/luke-host"),
+    releases: join(home, ".local/share/vespin-host"),
     link: join(home, ".local/bin/vespin-host"),
-    state: join(home, ".local/state/luke-host"),
+    state: join(home, ".local/state/vespin-host"),
     service:
       os === OS.LINUX
         ? join(home, ".config/systemd/user/vespin-host.service")
@@ -351,36 +350,6 @@ describe("the host's install script", () => {
     );
     expect(existsSync(computer.releases)).toBe(false);
   });
-
-  it.each([
-    { os: OS.LINUX, earlier: (root: string) => join(root, "opt/luke-host") },
-    {
-      os: OS.DARWIN,
-      earlier: (home: string) => join(home, "Library/Application Support/Vespin Host"),
-    },
-  ])(
-    "refuses to install over an install that came before on $os, naming that install's own uninstall command",
-    ({ os, earlier }) => {
-      const home = folder();
-      const made = earlier(home);
-      mkdirSync(made, { recursive: true });
-      const answer = sh(
-        ["-c", `. "${SCRIPT}"; EARLIER_INSTALL_DIR="$1"; require_no_earlier_install`, "sh", made],
-        {
-          APP_HOST_INSTALL_LIBRARY: "1",
-          HOME: home,
-          PATH: `${bin({ uname: uname(os, "arm64") })}:${process.env.PATH}`,
-        },
-      );
-
-      expect(answer.status).toBe(1);
-      expect(answer.stderr).toContain(
-        os === OS.LINUX
-          ? `Remove it first with: sudo ${made}/bin/luke-host uninstall`
-          : `Remove it first with: sudo '${made}/luke-host/bin/luke-host' uninstall`,
-      );
-    },
-  );
 
   for (const [computer, procVersion] of [
     ["a Linux box that is not WSL", LINUX_PROC_VERSION],
@@ -511,42 +480,6 @@ describe("the host's install script", () => {
     );
   });
 
-  it("run again over an install of a release before 0.7.0, moves it over in place as its daemon would: stops and removes luke-host.service before vespin-host.service starts, and leaves ~/.local/bin/luke-host as it stands", () => {
-    const computer = box(OS.LINUX);
-    // Note that the install is laid out as one of host-v0.6.0 left it, with its unit running.
-    mkdirSync(join(computer.releases, "versions/0.6.0/bin"), { recursive: true });
-    symlinkSync("versions/0.6.0", join(computer.releases, "current"));
-    const oldLink = join(computer.home, ".local/bin/luke-host");
-    mkdirSync(dirname(oldLink), { recursive: true });
-    symlinkSync(join(computer.releases, "current/bin/luke-host"), oldLink);
-    const oldUnit = join(computer.home, ".config/systemd/user/luke-host.service");
-    mkdirSync(dirname(oldUnit), { recursive: true });
-    writeFileSync(oldUnit, `ExecStart=${computer.releases}/current/bin/luke-host run\n`);
-    expect(computer.run(["-c", "systemctl --user start luke-host.service"]).status).toBe(0);
-    const before = computer.asked().length;
-
-    const answer = computer.install("0.7.0");
-
-    expect(answer.status, answer.stderr).toBe(0);
-    const asked = computer.asked().slice(before);
-    const stopped = asked.indexOf("systemctl --user stop luke-host.service");
-    expect(stopped).toBeGreaterThanOrEqual(0);
-    expect(asked.indexOf("systemctl --user start vespin-host.service")).toBeGreaterThan(stopped);
-    expect(asked).toContain("systemctl --user disable luke-host.service");
-    const state = (unit: string) =>
-      computer.run(["-c", `systemctl --user is-active ${unit}`]).stdout.trim();
-    expect(state("luke-host.service")).toBe("inactive");
-    expect(state("vespin-host.service")).toBe("active");
-    expect(stands(oldUnit)).toBe(false);
-    expect(readFileSync(computer.service, "utf8")).toContain(
-      `ExecStart=${computer.releases}/current/bin/vespin-host run`,
-    );
-    expect(readlinkSync(computer.link)).toBe(join(computer.releases, "current/bin/vespin-host"));
-    expect(readlinkSync(oldLink)).toBe(join(computer.releases, "current/bin/luke-host"));
-    expect(existsSync(oldLink)).toBe(true);
-    expect(readdirSync(join(computer.releases, "versions"))).toEqual(["0.7.0"]);
-  });
-
   it("refuses to swap a release for the same version's while its service will not stop, leaving the release it runs as it stands", () => {
     const computer = box(OS.LINUX);
     expect(computer.install("0.3.0").status).toBe(0);
@@ -568,7 +501,7 @@ describe("the host's install script", () => {
 
     expect(answer.status).toBe(0);
     for (const line of [
-      `ExecStart=${home}/.local/share/luke-host/current/bin/vespin-host run`,
+      `ExecStart=${home}/.local/share/vespin-host/current/bin/vespin-host run`,
       "Restart=always",
       "RestartSec=60",
       "WantedBy=default.target",
@@ -590,7 +523,7 @@ describe("the host's install script", () => {
     const written = readFileSync(plist, "utf8").replace(/>\s+</gu, "><");
     for (const entry of [
       `<key>Label</key><string>${LABEL}</string>`,
-      `<key>ProgramArguments</key><array><string>${home}/.local/share/luke-host/current/bin/vespin-host</string><string>run</string></array>`,
+      `<key>ProgramArguments</key><array><string>${home}/.local/share/vespin-host/current/bin/vespin-host</string><string>run</string></array>`,
       "<key>RunAtLoad</key><true/>",
       "<key>KeepAlive</key><true/>",
       "<key>ThrottleInterval</key><integer>60</integer>",
@@ -641,72 +574,13 @@ describe("the host's install script", () => {
   }
 
   it.each([
-    { loaded: false, status: 0 },
-    { loaded: true, status: 1 },
+    { os: "Linux", stops: true },
+    { os: "Linux", stops: false },
+    { os: "Darwin", stops: true },
+    { os: "Darwin", stops: false },
   ])(
-    "a Mac's uninstall removes the machines and folders of the agents its daemon made, never another Vespin install's or root's, and leaves the clones every install shares, unless the LaunchAgent will not stop (still loaded: $loaded)",
-    ({ loaded, status }) => {
-      const removed = status === 0;
-      const fakes = folder();
-      const home = folder();
-      const rootHome = folder();
-      const script = join(folder(), "bin");
-      const deletes = join(folder(), "deletes.log");
-      mkdirSync(script);
-      for (const [name, body] of Object.entries({
-        uname: "echo Darwin",
-        id: '[ "$1" = -u ] && { [ -n "$2" ] && echo 501 || echo 0; }',
-        dscl: `echo "NFSHomeDirectory: ${home}"`,
-        launchctl: `[ "$1" != print ] || exit ${loaded ? 0 : 1}`,
-        sudo: 'shift 3; exec "$@"',
-      })) {
-        writeFileSync(join(fakes, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
-      }
-      const app = join(home, "Library/Application Support/Vespin Host");
-      // Note that one smolvm store holds every install's agents' machines for the user, this one's among them.
-      const smolvm = join(app, "state/agent-tools/smolvm/1/smolvm");
-      mkdirSync(join(smolvm, ".."), { recursive: true });
-      writeFileSync(
-        smolvm,
-        `#!/bin/sh\n[ "$1 $2" != "machine delete" ] || echo "$4" >> "${deletes}"\n`,
-        { mode: 0o755 },
-      );
-      // Note that agent one is this install's, by its daemon's record, and agent two another install's.
-      mkdirSync(join(app, "state/owned-agents"), { recursive: true });
-      writeFileSync(join(app, "state/owned-agents/one"), "");
-      for (const place of [home, rootHome]) {
-        for (const each of ["agents/one", "agents/two", "clones/acme", "keep"]) {
-          mkdirSync(join(place, ".vespin", each), { recursive: true });
-        }
-      }
-      writeFileSync(join(script, "luke-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
-
-      const answer = spawnSync("sh", [join(script, "luke-host"), "uninstall"], {
-        env: { PATH: `${fakes}:${process.env.PATH}`, SUDO_USER: "mac", HOME: rootHome },
-        encoding: "utf8",
-      });
-
-      expect(answer.status).toBe(status);
-      expect(existsSync(deletes) ? readFileSync(deletes, "utf8").trim().split("\n") : []).toEqual(
-        removed ? ["luke-one"] : [],
-      );
-      expect(existsSync(join(home, ".vespin/agents/one"))).toBe(!removed);
-      expect(existsSync(join(home, ".vespin/agents/two"))).toBe(true);
-      expect(existsSync(join(home, ".vespin/clones"))).toBe(true);
-      expect(existsSync(join(home, ".vespin/keep"))).toBe(true);
-      expect(existsSync(join(rootHome, ".vespin/agents/one"))).toBe(true);
-      expect(existsSync(join(rootHome, ".vespin/clones"))).toBe(true);
-    },
-  );
-
-  it.each([
-    { os: "Linux", stops: true, through: "vespin-host" },
-    { os: "Linux", stops: false, through: "vespin-host" },
-    { os: "Darwin", stops: true, through: "luke-host" },
-    { os: "Darwin", stops: false, through: "luke-host" },
-  ])(
-    "the account install's uninstall, run through ~/.local/bin/$through with no sudo on $os, stops its service through the account's own manager, a Linux account's unit by either name, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its links by either name, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
-    ({ os, stops, through }) => {
+    "the account install's uninstall, run through ~/.local/bin/vespin-host with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
+    ({ os, stops }) => {
       const fakes = folder();
       const home = folder();
       const asked = join(folder(), "asked.log");
@@ -719,19 +593,17 @@ describe("the host's install script", () => {
       })) {
         writeFileSync(join(fakes, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
-      const releases = join(home, ".local/share/luke-host");
+      const releases = join(home, ".local/share/vespin-host");
       const release = join(releases, "versions/0.7.0");
       mkdirSync(join(release, "bin"), { recursive: true });
       writeFileSync(join(release, "bin/vespin-host"), readFileSync(UNINSTALL_SCRIPT), {
         mode: 0o755,
       });
-      symlinkSync("vespin-host", join(release, "bin/luke-host"));
       symlinkSync(release, join(releases, "current"));
-      // Note that an install before the rename made the old link, and its daemon the new one once it moved its service over.
-      const links = ["vespin-host", "luke-host"].map((name) => join(home, ".local/bin", name));
+      const link = join(home, ".local/bin/vespin-host");
       mkdirSync(join(home, ".local/bin"), { recursive: true });
-      for (const link of links) symlinkSync(join(releases, "current/bin", basename(link)), link);
-      const state = join(home, ".local/state/luke-host");
+      symlinkSync(join(releases, "current/bin/vespin-host"), link);
+      const state = join(home, ".local/state/vespin-host");
       mkdirSync(join(state, "owned-agents"), { recursive: true });
       writeFileSync(join(state, "owned-agents/one"), "");
       writeFileSync(join(state, "device.json"), "{}");
@@ -739,19 +611,14 @@ describe("the host's install script", () => {
       for (const each of ["agents/one", "agents/two", "clones/acme"]) {
         mkdirSync(join(home, ".vespin", each), { recursive: true });
       }
-      // Note that a Linux account whose move was cut off holds both units.
-      const services =
+      const service =
         os === "Linux"
-          ? ["vespin-host", "luke-host"].map((name) =>
-              join(home, `.config/systemd/user/${name}.service`),
-            )
-          : [join(home, "Library/LaunchAgents/dev.vespin.host.standalone.plist")];
-      for (const service of services) {
-        mkdirSync(join(service, ".."), { recursive: true });
-        writeFileSync(service, `<string>${releases}/current/bin/vespin-host</string>\n`);
-      }
+          ? join(home, ".config/systemd/user/vespin-host.service")
+          : join(home, "Library/LaunchAgents/dev.vespin.host.standalone.plist");
+      mkdirSync(join(service, ".."), { recursive: true });
+      writeFileSync(service, `<string>${releases}/current/bin/vespin-host</string>\n`);
 
-      const answer = spawnSync("sh", [join(home, ".local/bin", through), "uninstall"], {
+      const answer = spawnSync("sh", [link, "uninstall"], {
         env: { PATH: `${fakes}:${process.env.PATH}`, HOME: home },
         encoding: "utf8",
       });
@@ -764,7 +631,7 @@ describe("the host's install script", () => {
       expect(commands).toEqual(
         expect.arrayContaining(
           os === "Linux"
-            ? ["--user disable --now vespin-host.service", "--user disable --now luke-host.service"]
+            ? ["--user disable --now vespin-host.service"]
             : [`bootout gui/${uid}/dev.vespin.host.standalone`],
         ),
       );
@@ -774,16 +641,16 @@ describe("the host's install script", () => {
               `Removed ${join(home, ".vespin/agents/one")}.`,
               `Removed ${state}.`,
               `Removed ${releases}.`,
-              ...links.map((link) => `Removed ${link}.`),
+              `Removed ${link}.`,
             ]
           : [],
       );
       for (const [place, kept] of [
-        ...services.map((service) => [service, !stops] as const),
+        [service, !stops],
         [join(home, ".vespin/agents/one"), !stops],
         [state, !stops],
         [releases, !stops],
-        ...links.map((link) => [link, !stops] as const),
+        [link, !stops],
         [join(home, ".vespin/agents/two"), true],
         [join(home, ".vespin/clones/acme"), true],
       ] as const) {

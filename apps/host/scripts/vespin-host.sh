@@ -1,42 +1,28 @@
 #!/bin/sh
-# vespin-host -- the host's one command: `uninstall` removes the host from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; or, for an install that came before, as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and the machines and folders of the agents it made, by the record its daemon keeps of them; every other command is the daemon's own (lib/vespin-host.mjs), run on the Node the release carries.
+# vespin-host -- the host's one command: `uninstall` removes the host from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; every other command is the daemon's own (lib/vespin-host.mjs), run on the Node the release carries.
 #
-# Shipped as bin/vespin-host in every release tarball, a Mac's among them, with
-# bin/luke-host a link to it, the name every release before 0.7.0 carried
+# Shipped as bin/vespin-host in every release tarball, a Mac's among them
 # (scripts/release-layout.ts). The account install unpacks each release into
-# ~/.local/share/luke-host/versions/<version>, points
-# ~/.local/share/luke-host/current at the one that runs, and links
+# ~/.local/share/vespin-host/versions/<version>, points
+# ~/.local/share/vespin-host/current at the one that runs, and links
 # ~/.local/bin/vespin-host to current/bin/vespin-host; its state root is
-# ~/.local/state/luke-host, and a systemd --user unit, vespin-host.service, or a
-# LaunchAgent runs it. An install of a release before 0.7.0 linked
-# ~/.local/bin/luke-host and ran luke-host.service instead, which its daemon
-# moves over from once it updates (packages/host/src/daemon/host-service-move.ts),
-# leaving the old link in place. An install that came before put the release
-# in /opt/luke-host, or on a Mac in ~/Library/Application Support/Vespin Host,
-# linked from /usr/local/bin/luke-host, the name its release still carries.
+# ~/.local/state/vespin-host, and a systemd --user unit, vespin-host.service, or
+# a LaunchAgent runs it.
 set -eu
 
 root="$(dirname "$(dirname "$(readlink -f "$0")")")"
-HOST_USER="luke-host"
-# The system unit of a Linux box's install that came before.
-EARLIER_UNIT="luke-host.service"
-SMOLVM_DIR="/opt/luke-smolvm"
 # Where the account install puts the host, under the home of the account it
 # runs as, by the names apps/web/install/install.sh gives them: the releases,
 # the state root, the command's link, and on Linux the folder of its unit and
-# the unit. Each name before 0.7.0 stands beside its own where it was renamed.
-ACCOUNT_RELEASES=".local/share/luke-host"
-ACCOUNT_STATE=".local/state/luke-host"
+# the unit.
+ACCOUNT_RELEASES=".local/share/vespin-host"
+ACCOUNT_STATE=".local/state/vespin-host"
 ACCOUNT_LINK=".local/bin/vespin-host"
-ACCOUNT_LINK_BEFORE_RENAME=".local/bin/luke-host"
 ACCOUNT_UNIT_FOLDER=".config/systemd/user"
 ACCOUNT_UNIT="vespin-host.service"
-ACCOUNT_UNIT_BEFORE_RENAME="luke-host.service"
 # Where a Mac's install puts its LaunchAgent and its log, under the home of the user it runs as.
 MAC_LABEL="dev.vespin.host.standalone"
 MAC_LOG_FOLDER="Library/Logs/Vespin Host"
-# Where a Mac's install that came before put the host, under the home of the user it ran as.
-MAC_APP_FOLDER="Library/Application Support/Vespin Host"
 # The daemon's record of the agents whose folder it made, an empty file named for each, in its state root (OWNED_FOLDER in packages/host/src/local-agent-state.ts).
 OWNED_AGENTS="owned-agents"
 # Every agent's folder, one per agent under its id, under the home (DEVICE_AGENT_FOLDER.ROOT in packages/features/src/device-agent-wire.ts).
@@ -51,48 +37,37 @@ account_home() {
   esac
 }
 
-# Stops and removes the account's systemd --user units, the one before 0.7.0
-# among them, refusing, with nothing removed, while either still runs or while
-# this account's systemd cannot be reached to stop a unit it holds.
-remove_user_units() {
-  for unit in "$ACCOUNT_UNIT" "$ACCOUNT_UNIT_BEFORE_RENAME"; do
-    systemctl --user disable --now "$unit" >/dev/null 2>&1 || true
-  done
-  for unit in "$ACCOUNT_UNIT" "$ACCOUNT_UNIT_BEFORE_RENAME"; do
-    # Note that is-active prints nothing where this account's systemd cannot be reached, as under su or sudo.
-    standing="$(systemctl --user is-active "$unit" 2>/dev/null)" || true
-    case "$standing" in
-      inactive | failed | unknown) ;;
-      "")
-        if [ -e "$HOME/$ACCOUNT_UNIT_FOLDER/$unit" ]; then
-          printf 'Could not reach the systemd of %s to stop %s, so nothing was removed. Run this again from a login of that account, over SSH or at its console, rather than through su or sudo.\n' "$(id -un)" "$unit" >&2
-          exit 1
-        fi
-        ;;
-      *)
-        printf 'Could not stop %s, so nothing was removed. Stop it with systemctl --user stop %s, then run this again.\n' "$unit" "$unit" >&2
+# Stops and removes the account's systemd --user unit, refusing, with nothing
+# removed, while it still runs or while this account's systemd cannot be
+# reached to stop it.
+remove_user_unit() {
+  unit_file="$HOME/$ACCOUNT_UNIT_FOLDER/$ACCOUNT_UNIT"
+  systemctl --user disable --now "$ACCOUNT_UNIT" >/dev/null 2>&1 || true
+  # Note that is-active prints nothing where this account's systemd cannot be reached, as under su or sudo.
+  standing="$(systemctl --user is-active "$ACCOUNT_UNIT" 2>/dev/null)" || true
+  case "$standing" in
+    inactive | failed | unknown) ;;
+    "")
+      if [ -e "$unit_file" ]; then
+        printf 'Could not reach the systemd of %s to stop %s, so nothing was removed. Run this again from a login of that account, over SSH or at its console, rather than through su or sudo.\n' "$(id -un)" "$ACCOUNT_UNIT" >&2
         exit 1
-        ;;
-    esac
-  done
-  for unit in "$ACCOUNT_UNIT" "$ACCOUNT_UNIT_BEFORE_RENAME"; do
-    unit_file="$HOME/$ACCOUNT_UNIT_FOLDER/$unit"
-    [ -e "$unit_file" ] || continue
-    rm -f "$unit_file"
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
-    printf 'Stopped and removed %s.\n' "$unit_file"
-  done
+      fi
+      ;;
+    *)
+      printf 'Could not stop %s, so nothing was removed. Stop it with systemctl --user stop %s, then run this again.\n' "$ACCOUNT_UNIT" "$ACCOUNT_UNIT" >&2
+      exit 1
+      ;;
+  esac
+  [ -e "$unit_file" ] || return 0
+  rm -f "$unit_file"
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  printf 'Stopped and removed %s.\n' "$unit_file"
 }
 
 # Boots out and removes the account's LaunchAgent and its log, refusing, with
-# nothing removed, while it is still loaded. Note that a Mac's install that
-# came before wrote its LaunchAgent under the same label, so one that runs
-# another install's release is left as it stands.
+# nothing removed, while it is still loaded.
 remove_launch_agent() {
   plist="$HOME/Library/LaunchAgents/$MAC_LABEL.plist"
-  if [ -e "$plist" ] && ! grep -qF "$HOME/$ACCOUNT_RELEASES/" "$plist"; then
-    return
-  fi
   agent="gui/$(id -u)/$MAC_LABEL"
   launchctl bootout "$agent" >/dev/null 2>&1 || true
   if launchctl print "$agent" >/dev/null 2>&1; then
@@ -103,39 +78,24 @@ remove_launch_agent() {
     rm -f "$plist"
     printf 'Stopped and removed %s.\n' "$plist"
   fi
-  if [ ! -e "$HOME/$MAC_APP_FOLDER" ] && [ -e "$HOME/$MAC_LOG_FOLDER" ]; then
+  if [ -e "$HOME/$MAC_LOG_FOLDER" ]; then
     rm -rf "${HOME:?}/$MAC_LOG_FOLDER"
     printf 'Removed %s.\n' "$HOME/$MAC_LOG_FOLDER"
-  fi
-}
-
-# The command's link as a person in the home given types it: the one before
-# 0.7.0 where only that one stands there, since the daemon makes the new one
-# only once it moved its service over.
-typed_link() {
-  if [ ! -e "$1/$ACCOUNT_LINK" ] && [ -e "$1/$ACCOUNT_LINK_BEFORE_RENAME" ]; then
-    printf '~/%s\n' "$ACCOUNT_LINK_BEFORE_RENAME"
-  else
-    printf '~/%s\n' "$ACCOUNT_LINK"
   fi
 }
 
 # Removes the account install this release is, run as that account with no
 # sudo: its service stopped and removed, then the folders of the agents its
 # daemon made (~/.vespin/agents/<id>, by the record it keeps of them), its
-# state root, its releases and its links, the one before 0.7.0 among them,
-# saying each. Before it changes
+# state root, its releases and its link, saying each. Before it changes
 # anything it says that the agents' folders go, with any work in them that
 # was not pushed, and asks to go on where a person runs it at a terminal.
 # Note that ~/.vespin/clones stays, since every install for the account
-# shares it, and so does an install that came before, under /opt or a Mac's
-# Application Support, which is removed with its own sudo luke-host
-# uninstall, said where one stands, and so does a Linux account's lingering,
-# said where it is on.
+# shares it, and so does a Linux account's lingering, said where it is on.
 uninstall_account() {
   home="$1"
   if [ "$(readlink -f "${HOME:-/}")" != "$home" ]; then
-    printf 'This Vespin host is installed in the account whose home is %s. Run %s uninstall as that account, without sudo.\n' "$home" "$(typed_link "$home")" >&2
+    printf 'This Vespin host is installed in the account whose home is %s. Run ~/%s uninstall as that account, without sudo.\n' "$home" "$ACCOUNT_LINK" >&2
     exit 1
   fi
   agents=0
@@ -160,7 +120,7 @@ uninstall_account() {
   kernel="$(uname -s)"
   case "$kernel" in
     Darwin) remove_launch_agent ;;
-    *) remove_user_units ;;
+    *) remove_user_unit ;;
   esac
   for owned in "$HOME/$ACCOUNT_STATE/$OWNED_AGENTS"/*; do
     [ -e "$owned" ] || continue
@@ -175,23 +135,16 @@ uninstall_account() {
     rm -rf "$folder"
     printf 'Removed %s.\n' "$folder"
   done
-  # Note that each link is read as the install wrote it, since its target is gone by now and a link to nothing resolves to nothing.
-  for link in "$HOME/$ACCOUNT_LINK" "$HOME/$ACCOUNT_LINK_BEFORE_RENAME"; do
-    case "$(readlink "$link" 2>/dev/null)" in
-      "$HOME/$ACCOUNT_RELEASES"/* | "$home/$ACCOUNT_RELEASES"/*)
-        rm -f "$link"
-        printf 'Removed %s.\n' "$link"
-        ;;
-    esac
-  done
+  # Note that the link is read as the install wrote it, since its target is gone by now and a link to nothing resolves to nothing.
+  link="$HOME/$ACCOUNT_LINK"
+  case "$(readlink "$link" 2>/dev/null)" in
+    "$HOME/$ACCOUNT_RELEASES"/* | "$home/$ACCOUNT_RELEASES"/*)
+      rm -f "$link"
+      printf 'Removed %s.\n' "$link"
+      ;;
+  esac
   if [ -e "$HOME/.vespin/clones" ]; then
     printf 'Kept the clones in %s, which every Vespin install for this account shares.\n' "$HOME/.vespin/clones"
-  fi
-  if [ -e /opt/luke-host ] || [ -e "/etc/systemd/system/$EARLIER_UNIT" ]; then
-    printf 'Left the install of Vespin host under /opt/luke-host as it stands. Remove it with: sudo /opt/luke-host/bin/luke-host uninstall\n'
-  fi
-  if [ -e "$HOME/$MAC_APP_FOLDER" ]; then
-    printf "Left the install of Vespin host in %s as it stands. Remove it with: sudo '%s' uninstall\n" "$HOME/$MAC_APP_FOLDER" "$HOME/$MAC_APP_FOLDER/luke-host/bin/luke-host"
   fi
   # Note that lingering is left on, since another service of the account may need it to run while no one is logged in.
   if [ "$kernel" != Darwin ] && [ "$(loginctl show-user "$(id -un)" --property=Linger --value 2>/dev/null)" = yes ]; then
@@ -200,118 +153,12 @@ uninstall_account() {
   printf 'Vespin host is removed from this account. Remove it in Settings › Hosts too, if it is still listed.\n'
 }
 
-# Removes a Mac's install for the user who ran the command under sudo: its
-# LaunchAgent booted out, which stops the daemon and every agent's runner with
-# it, then each of its agents' folder (~/.vespin/agents/<id>) removed, with any
-# machine an older release ran it in deleted, and its LaunchAgent, folder (the
-# release and the Mac's secret) and logs removed. Note that ~/.vespin/clones and ~/.vespin/worktrees stay, since every
-# install of ours on the Mac shares them, the desktop app's own repositories among
-# them.
-# Note that the machines are those older releases ran agents in, smolvm's, kept in the
-# user's own smolvm store rather than the state, so each is deleted by name, with the
-# smolvm such a release fetched, before the state goes; smolvm's cache of the sandbox
-# image stays with that store.
-# Note that the store and ~/.vespin/agents are shared with every other host of
-# ours that ran agents on the Mac, so only the agents the daemon's record names
-# are removed, and ~/.vespin/agents and ~/.vespin only where nothing else stands
-# in them.
-uninstall_darwin() {
-  if [ "$(id -u)" -ne 0 ]; then
-    printf 'Run it as root: sudo luke-host uninstall\n' >&2
-    exit 1
-  fi
-  user="${SUDO_USER:-}"
-  if [ -z "$user" ] || [ "$user" = "root" ]; then
-    printf 'Run it with sudo from the Mac account Vespin host was installed for: sudo luke-host uninstall\n' >&2
-    exit 1
-  fi
-  home="$(dscl . -read "/Users/$user" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')"
-  if [ -z "$home" ]; then
-    printf 'Could not find the home folder of %s.\n' "$user" >&2
-    exit 1
-  fi
-  app="$home/$MAC_APP_FOLDER"
-  agent="gui/$(id -u "$user")/$MAC_LABEL"
-  launchctl bootout "$agent" >/dev/null 2>&1 || true
-  # Note that nothing is removed while the LaunchAgent is still loaded, since its daemon and its agents' runners would run on with their folders gone.
-  if launchctl print "$agent" >/dev/null 2>&1; then
-    printf 'Could not stop Vespin host for %s, so nothing was removed. Stop it with launchctl bootout %s, then run this again.\n' "$user" "$agent" >&2
-    exit 1
-  fi
-  rm -f "$home/Library/LaunchAgents/$MAC_LABEL.plist"
-  for owned in "$app/state/$OWNED_AGENTS"/*; do
-    [ -e "$owned" ] || continue
-    id="${owned##*/}"
-    for smolvm in "$app"/state/agent-tools/smolvm/*/smolvm; do
-      [ -x "$smolvm" ] || continue
-      sudo -u "$user" -H "$smolvm" machine delete --name "luke-$id" -f >/dev/null 2>&1 || true
-    done
-    rm -rf "${home:?}/.vespin/agents/$id"
-  done
-  # Note that the link is read as the install wrote it, before its target goes, since a link to nothing resolves to nothing.
-  if [ "$(readlink /usr/local/bin/luke-host 2>/dev/null)" = "$app/luke-host/bin/luke-host" ]; then
-    rm -f /usr/local/bin/luke-host
-  fi
-  rm -rf "$app" "$home/$MAC_LOG_FOLDER"
-  rmdir "$home/.vespin/agents" "$home/.vespin" 2>/dev/null || true
-  printf 'Vespin host is removed from this Mac for %s. Remove it in Settings › Hosts too, if it is still listed.\n' "$user"
-}
-
 uninstall() {
-  if home="$(account_home)"; then
-    uninstall_account "$home"
-    return
-  fi
-  case "$(uname -s)" in
-    Linux) ;;
-    Darwin)
-      uninstall_darwin
-      return
-      ;;
-    *)
-      printf 'vespin-host uninstall removes Vespin host from a Linux box or a Mac only.\n' >&2
-      exit 1
-      ;;
-  esac
-  if [ "$(id -u)" -ne 0 ]; then
-    printf 'Run it as root: sudo luke-host uninstall\n' >&2
+  if ! home="$(account_home)"; then
+    printf 'vespin-host uninstall removes an install the install script made, under ~/%s.\n' "$ACCOUNT_RELEASES" >&2
     exit 1
   fi
-  systemctl disable --now "$EARLIER_UNIT" >/dev/null 2>&1 || true
-  if id "$HOST_USER" >/dev/null 2>&1; then
-    uid="$(id -u "$HOST_USER")"
-    # Note that lingering is turned off where an earlier build turned it on, since systemd keeps its record past the user.
-    loginctl disable-linger "$HOST_USER" >/dev/null 2>&1 || true
-    loginctl terminate-user "$HOST_USER" >/dev/null 2>&1 || true
-    # Every process of the user's is waited out, and killed after ten seconds, before the user goes.
-    waited=0
-    while pgrep -u "$uid" >/dev/null 2>&1 && [ "$waited" -lt 10 ]; do
-      sleep 1
-      waited=$((waited + 1))
-    done
-    pkill -KILL -u "$uid" >/dev/null 2>&1 || true
-    home="$(getent passwd "$HOST_USER" | cut -d: -f6)"
-    # Note that the home, which holds the box's secret, is removed only once the user is gone.
-    if ! userdel "$HOST_USER"; then
-      printf 'Could not remove the %s user, so its home %s is left in place. Stop its processes and run this again.\n' "$HOST_USER" "$home" >&2
-      exit 1
-    fi
-    if [ "$home" = "/var/lib/luke-host" ]; then
-      rm -rf "$home"
-    fi
-  fi
-  rm -f "/etc/systemd/system/$EARLIER_UNIT"
-  systemctl daemon-reload >/dev/null 2>&1 || true
-  # Note that the link resolves through this release's own bin/luke-host to the vespin-host it names.
-  case "$(readlink -f /usr/local/bin/luke-host 2>/dev/null)" in
-    "$root/bin/luke-host" | "$root/bin/vespin-host") rm -f /usr/local/bin/luke-host ;;
-  esac
-  if [ "$root" = "/opt/luke-host" ]; then
-    rm -rf "$root"
-  fi
-  # Note that smolvm is the install script's own, beside the release rather than in it; its state and any machines left behind are under the luke-host user's home and processes, which went with the user above.
-  rm -rf "$SMOLVM_DIR"
-  printf 'Vespin host is removed from this box. Remove it in Settings › Hosts too, if it is still listed.\n'
+  uninstall_account "$home"
 }
 
 if [ "${1:-}" = "uninstall" ]; then

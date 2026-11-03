@@ -271,7 +271,7 @@ const pairedHost = (userId: string) =>
         body: {
           ...registered(deviceId),
           platform: DEVICE_PLATFORM.LINUX,
-          home: "/var/lib/luke-host",
+          home: "/var/lib/vespin-host",
         },
       }),
     );

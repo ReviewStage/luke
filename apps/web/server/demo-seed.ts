@@ -30,7 +30,7 @@ import { Pool } from "pg";
  *   it is sealed under, which the local server must hold too.
  * - `APP_DEMO_HOST_STATE` and `APP_DEMO_SERVICE_ORIGIN`, optional and
  *   given together: the state folder of the host the run starts on this Mac
- *   (`luke-host run` under `APP_HOST_STATE_ROOT`), and the local server's
+ *   (`vespin-host run` under `APP_HOST_STATE_ROOT`), and the local server's
  *   origin it calls. The host is enrolled as Dean's, every task runs its
  *   agents on it, and its record is written into that folder once the seed
  *   has landed, holding a device secret minted here, which the database

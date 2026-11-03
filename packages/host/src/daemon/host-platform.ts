@@ -47,7 +47,7 @@ const CLAUDE_CODE_SANDBOXED = "IS_SANDBOX";
 interface HostPlatformOptions {
   /** The OS the host runs on, which names its platform, its name, and its check for unsaved work. */
   readonly os: HostOs;
-  /** The folder the host's release is installed in (`/opt/luke-host`), under which the runner's bundle stands. */
+  /** The folder the host's release is installed in (a version folder of `~/.local/share/vespin-host`), under which the runner's bundle stands. */
   readonly installFolder: string;
   /** The Node the host itself runs on, which every runner runs on too. */
   readonly node: string;

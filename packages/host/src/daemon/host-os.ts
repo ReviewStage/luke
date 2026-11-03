@@ -94,7 +94,7 @@ export const DARWIN_HOST: HostOs = {
   formerlyDirect: true,
   storesOwned: false,
   unsavedWorkScript: agentUnsavedWorkScript,
-  stateRoot: (home) => path.join(home, ".local", "state", "luke-host"),
+  stateRoot: (home) => path.join(home, ".local", "state", "vespin-host"),
 };
 
 /** Node's `process.arch` as a device architecture a release for the OS given is built for, or none. */

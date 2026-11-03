@@ -64,24 +64,24 @@ jobs:
       - name: Check the tarball
         run: |
           cd apps/host/dist/release
-          tarball="luke-host-$VERSION-linux-${{ matrix.arch }}.tar.gz"
+          tarball="vespin-host-$VERSION-linux-${{ matrix.arch }}.tar.gz"
           sha256sum -c "$tarball.sha256"
           scratch=$(mktemp -d)
           tar -xzf "$tarball" -C "$scratch"
-          reported=$("$scratch/luke-host/bin/luke-host" version)
+          reported=$("$scratch/vespin-host/bin/vespin-host" version)
           if [[ "$reported" != "$VERSION" ]]; then
             echo "error: the packaged daemon says $reported, not $VERSION" >&2
             exit 1
           fi
-          "$scratch/luke-host/node/bin/node" --version
-          sh -n "$scratch/luke-host/bin/luke-host"
+          "$scratch/vespin-host/node/bin/node" --version
+          sh -n "$scratch/vespin-host/bin/vespin-host"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: luke-host-${{ env.VERSION }}-linux-${{ matrix.arch }}
+          name: vespin-host-${{ env.VERSION }}-linux-${{ matrix.arch }}
           path: |
-            apps/host/dist/release/luke-host-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz
-            apps/host/dist/release/luke-host-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz.sha256
+            apps/host/dist/release/vespin-host-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz
+            apps/host/dist/release/vespin-host-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -119,24 +119,24 @@ jobs:
       - name: Check the tarball
         run: |
           cd apps/host/dist/release
-          tarball="luke-host-$VERSION-darwin-arm64.tar.gz"
+          tarball="vespin-host-$VERSION-darwin-arm64.tar.gz"
           shasum -a 256 -c "$tarball.sha256"
           scratch=$(mktemp -d)
           tar -xzf "$tarball" -C "$scratch"
-          reported=$("$scratch/luke-host/bin/luke-host" version)
+          reported=$("$scratch/vespin-host/bin/vespin-host" version)
           if [[ "$reported" != "$VERSION" ]]; then
             echo "error: the packaged daemon says $reported, not $VERSION" >&2
             exit 1
           fi
-          "$scratch/luke-host/node/bin/node" --version
-          sh -n "$scratch/luke-host/bin/luke-host"
+          "$scratch/vespin-host/node/bin/node" --version
+          sh -n "$scratch/vespin-host/bin/vespin-host"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: luke-host-${{ env.VERSION }}-darwin-arm64
+          name: vespin-host-${{ env.VERSION }}-darwin-arm64
           path: |
-            apps/host/dist/release/luke-host-${{ env.VERSION }}-darwin-arm64.tar.gz
-            apps/host/dist/release/luke-host-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256
+            apps/host/dist/release/vespin-host-${{ env.VERSION }}-darwin-arm64.tar.gz
+            apps/host/dist/release/vespin-host-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14
 

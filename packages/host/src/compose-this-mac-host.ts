@@ -22,7 +22,7 @@ import type { RunMode } from "./run-mode.js";
  * compose-this-mac-host.ts -- This Mac's host, the account install the install command puts on a Mac, kept running while the account has Bring your own host on and stopped while it has it off.
  *
  * There is one such install on a Mac, under the member's own home
- * (`ThisMacHost`'s `stateRoot`, `~/.local/state/luke-host`), so every build
+ * (`ThisMacHost`'s `stateRoot`, `~/.local/state/vespin-host`), so every build
  * of the app, released, Test, development, and each named instance, reads
  * and controls the same host. Where it stands is read again every `IDLE`,
  * and acted on only when it changed: at launch, at sign-in, and when Bring

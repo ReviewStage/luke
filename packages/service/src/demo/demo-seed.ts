@@ -719,7 +719,7 @@ export function demoHostSecret(): MintedSecret {
  * hash of the secret its record holds, and kept as where he last ran a
  * task; where every task runs its agents. Note that Bring your own host is
  * left off for him, because with it on the app keeps the Mac's one account
- * install (~/.local/state/luke-host) running for the account signed in, and
+ * install (~/.local/state/vespin-host) running for the account signed in, and
  * would enroll a Mac with none with the run's server; and that the host is
  * enrolled at the service's floor, because its first call records the
  * version it runs.
