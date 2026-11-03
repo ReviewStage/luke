@@ -37,7 +37,7 @@ const slugOf = (organizationId: string) =>
 
 it.layer(getTestDB())("a task found by its number", (it) => {
   it.effect(
-    "a member finds the task its number names, and another account, or a number naming no task, finds nothing",
+    "a member finds the task its number names under the workspace's slug or id, and another account, or a number naming no task, finds nothing",
     () =>
       Effect.gen(function* () {
         const dean = yield* openAccount;
@@ -51,7 +51,9 @@ it.layer(getTestDB())("a task found by its number", (it) => {
         const slug = yield* slugOf(workspace);
 
         assert.deepEqual(yield* taskIdOfNumber(charles, slug, 2), Option.some(sidebar.id));
+        assert.deepEqual(yield* taskIdOfNumber(charles, workspace, 2), Option.some(sidebar.id));
         assert.deepEqual(yield* taskIdOfNumber(stranger, slug, 2), Option.none());
+        assert.deepEqual(yield* taskIdOfNumber(stranger, workspace, 2), Option.none());
         assert.deepEqual(yield* taskIdOfNumber(dean, slug, 3), Option.none());
       }),
   );
