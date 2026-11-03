@@ -528,6 +528,46 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
   }
 });
 
+test("a page of another task opens beside the Inbox item, drawn there, and Open task lands on that task with the page still chosen and the panel open", () => {
+  const PAGE = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  let control: SidePanelControl | undefined;
+  function Probe({ inbox }: { inbox: boolean }) {
+    control = useSidePanel(
+      undefined,
+      inbox
+        ? { id: TASK, holds: {}, bare: true, pages: { taskId: TASK } }
+        : { ...usedTask(OTHER_TASK), pages: { taskId: OTHER_TASK } },
+      [],
+      [],
+      inbox ? [] : [PAGE],
+      [],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (inbox: boolean) => act(() => root.render(createElement(Probe, { inbox })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(true);
+  act(() => panel().onPreview({ page: PAGE }, { taskId: OTHER_TASK }));
+  const pagesDrawn = () =>
+    panel().strip.flatMap((tab) => (typeof tab === "object" && "page" in tab ? [tab.page] : []));
+  assert.deepEqual(pagesDrawn(), [PAGE], "drawn beside the item it opened on");
+  assert.deepEqual(panel().tab, { page: PAGE });
+  assert.deepEqual(panel().pages[0]?.place, { taskId: OTHER_TASK }, "read on its own task");
+
+  // Open task: the window goes to the page's task, showing the tab there (`onShowPanelTab`).
+  act(() => panel().onShow(OTHER_TASK, { page: PAGE }));
+  render(false);
+  assert.deepEqual(panel().tab, { page: PAGE }, "the page still chosen");
+  assert.ok(panel().open, "the panel still open");
+  assert.deepEqual(pagesDrawn(), [PAGE]);
+});
+
 test("a link opens its tab as the panel's preview, and the next link takes its place, so a run of links read leaves one tab", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   act(() => panel.control().onPreview({ changes: AGENT }));

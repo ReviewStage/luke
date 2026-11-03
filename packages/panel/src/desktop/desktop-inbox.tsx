@@ -480,12 +480,23 @@ export const DesktopInbox = memo(function DesktopInbox({
     // standing on its task but the one last read.
     const { thing } = routed;
     switch (thing.kind) {
-      case THING.FILE:
-        openFile(fileRef(thing.path, thing.lines), thing.lines?.commit);
+      case THING.FILE: {
+        const ref = fileRef(thing.path, thing.lines);
+        if (thing.repository === undefined) {
+          openFile(ref, thing.lines?.commit);
+          return true;
+        }
+        // A file of another repository is read through the item's workspace, whose installation reaches it.
+        if (place === undefined) return false;
+        const { repository } = thing;
+        const reads = { place: { workspaceId: place.workspaceId, repository }, repository };
+        sidePanel.onPreviewFile(ref, thing.lines?.commit, reads);
         return true;
+      }
       case THING.PAGE:
-        // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move.
-        sidePanel.onPreview({ page: thing.pageId });
+        // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move;
+        // another task's, a subtask's among them, opens here too, read on that task, so the reader stays on the item.
+        sidePanel.onPreview({ page: thing.pageId }, thing.place);
         return true;
       case THING.CHANGES:
         sidePanel.onPreview({ changes: thing.agentId });
@@ -1062,6 +1073,7 @@ function InboxSidePanel({
             }
       }
       phone={phone}
+      taskOfTab={tasks}
     />
   );
 }

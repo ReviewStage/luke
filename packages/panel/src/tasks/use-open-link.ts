@@ -1,5 +1,6 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import type { PagePlace } from "@repo/features/page-wire";
 import { isGitHubAddress, isOpenableAddress } from "@repo/host/acts";
 import {
   createContext,
@@ -166,19 +167,27 @@ export function PullRequestsOnGitHub({ children }: { children: ReactNode }): Rea
 }
 
 /**
- * A task's or an agent's page's opener for the pull requests the route table
- * opens beside it (`route.ts`): one of its agents', in that agent's Pull
+ * A task's or an agent's page's opener for what the route table opens beside
+ * it (`route.ts`): a pull request of one of its agents', in that agent's Pull
  * request tab through `open`, or another of its repository, by its number in
- * its first agent's; any other address is the window's.
+ * its first agent's; and a page of another place through `openPage`, read on
+ * that place; any other address is the window's.
  */
 export function openPullRequestsHere(
   here: Extract<Here, { readonly kind: typeof HERE.TASK | typeof HERE.AGENT }>,
   open: (agentId: string, number?: number) => void,
+  openPage: (pageId: string, place: PagePlace) => void,
 ): OpenHere {
   return (href) => {
     const routed = route(addressOf(href), here);
-    if (routed.kind !== ROUTE.PREVIEW || routed.thing.kind !== THING.PULL_REQUEST) return false;
-    open(routed.thing.agentId, routed.thing.number);
+    if (routed.kind !== ROUTE.PREVIEW) return false;
+    const { thing } = routed;
+    if (thing.kind === THING.PAGE && thing.place !== undefined) {
+      openPage(thing.pageId, thing.place);
+      return true;
+    }
+    if (thing.kind !== THING.PULL_REQUEST) return false;
+    open(thing.agentId, thing.number);
     return true;
   };
 }

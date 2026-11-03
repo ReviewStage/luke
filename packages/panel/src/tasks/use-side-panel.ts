@@ -1,4 +1,4 @@
-import type { PagePlace } from "@repo/features/page-wire";
+import { type PagePlace, pagePlaceId } from "@repo/features/page-wire";
 import type { CodeRef } from "@repo/features/task-wire";
 import { CommentsIcon, DocumentIcon } from "@repo/ui";
 import {
@@ -720,9 +720,11 @@ export interface SidePanelControl {
    * one preview, drawn in italics, which the next tab a link opens takes
    * the place of until it is kept (`onKeep`). A tab the strip draws as one
    * of its own is chosen, a fixed kind opens as `onChoose` opens it, and a
-   * link pressed with ⌘ opens a tab of its own.
+   * link pressed with ⌘ opens a tab of its own. A page's tab opened with
+   * `place`, a task or an agent on no task other than the panel's own,
+   * reads on that place and is drawn here too (`OpenPage.shownOn`).
    */
-  onPreview: (tab: SidePanelTab) => void;
+  onPreview: (tab: SidePanelTab, place?: PagePlace) => void;
   /** Opens a file as `onOpenFile` does, as the task's preview, as `onPreview` opens a tab. */
   onPreviewFile: (ref: CodeRef, commit?: string, reads?: FileReads) => void;
   /** Keeps the tab, where it is the task's preview, as a tab of its own: what a double-click on it or typing into it asks. */
@@ -840,6 +842,8 @@ function taskTabs(held: HeldState, taskId: string | undefined): TaskTabs {
 /** A page's tab as the panel holds it: the page, and the task or the agent on no task it stands on, saved as it opened, so it reads there whatever the panel stands beside; none for one opened before its place was known, which reads through the panel's own. */
 export interface OpenPage extends PageStripTab {
   readonly place?: PagePlace | undefined;
+  /** The panel, by the task or the agent it stands for, a page of another place was last opened beside, whose strip draws it with its own; none for one opened on its own place. */
+  readonly shownOn?: string | undefined;
 }
 
 /** A task with no page, the same array every render. */
@@ -1123,16 +1127,24 @@ function withTab(
 /**
  * The state with the open page tab's place saved beside it, where it holds
  * none yet. Note that only the held page keeps it, never the tab chosen or
- * ordered, so every other reader of a tab sees the page alone.
+ * ordered, so every other reader of a tab sees the page alone. A page of
+ * another place (`beside`) is placed there whatever it held, and drawn on
+ * the panel it opened beside (`shownOn`) as well as on its own place.
  */
 function withPagePlaced(
   held: HeldState,
   tab: SidePanelTab,
   place: PagePlace | undefined,
+  beside?: { readonly place: PagePlace; readonly on: string },
 ): HeldState {
-  if (!isPageTab(tab) || place === undefined) return held;
+  if (!isPageTab(tab) || (place === undefined && beside === undefined)) return held;
   const standing = held.pages.find((each) => sameTab(each, tab));
-  if (standing === undefined || standing.place !== undefined) return held;
+  if (standing === undefined) return held;
+  if (beside !== undefined) {
+    const placed = { ...standing, place: beside.place, shownOn: beside.on };
+    return { ...held, pages: held.pages.map((each) => (each === standing ? placed : each)) };
+  }
+  if (standing.place !== undefined) return held;
   const pages = held.pages.map((each) => (each === standing ? { ...each, place } : each));
   return { ...held, pages };
 }
@@ -1949,6 +1961,13 @@ export function useSidePanel(
     () => state.files.flatMap((each) => (each.browsedOn === taskId ? [each.path] : [])),
     [state.files, taskId],
   );
+  // The pages the panel draws tabs of: its place's own, and those of other places opened beside it.
+  const pagesHere = useMemo(() => {
+    const beside = state.pages.flatMap((each) =>
+      each.shownOn === taskId && !pages.includes(each.page) ? [each.page] : [],
+    );
+    return beside.length === 0 ? pages : [...pages, ...beside];
+  }, [state.pages, pages, taskId]);
   const update = useCallback(
     (change: (held: HeldState) => HeldState) => {
       if (stage === undefined) setKept(change);
@@ -1962,7 +1981,7 @@ export function useSidePanel(
       agents,
       subagents,
       files: taskFiles,
-      pages,
+      pages: pagesHere,
       taskAgents,
       heldAgents,
       cloudBrowsers,
@@ -2002,12 +2021,12 @@ export function useSidePanel(
       agents,
       subagents,
       files: taskFiles,
-      pages,
+      pages: pagesHere,
       taskAgents,
       heldAgents,
       cloudBrowsers,
     }),
-    [seen, agents, subagents, taskFiles, pages, taskAgents, heldAgents, cloudBrowsers],
+    [seen, agents, subagents, taskFiles, pagesHere, taskAgents, heldAgents, cloudBrowsers],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
@@ -2154,15 +2173,28 @@ export function useSidePanel(
     [update, drawn, taskId, fileReads],
   );
   const onPreview = useCallback(
-    (tab: SidePanelTab) => {
+    (tab: SidePanelTab, place?: PagePlace) => {
       setAsked(undefined);
       setOpened((was) => was + 1);
+      // Note that a page of the panel's own place, however it was named, is its own.
+      const beside =
+        place === undefined ||
+        taskId === undefined ||
+        (pagePlace !== undefined && pagePlaceId(place) === pagePlaceId(pagePlace))
+          ? undefined
+          : { place, on: taskId };
+      // A page of another place is drawn here as it is opened, before the state naming it lands.
+      const here =
+        beside === undefined || !isPageTab(tab) || drawn.pages.includes(tab.page)
+          ? drawn
+          : { ...drawn, pages: [...drawn.pages, tab.page] };
       update((held) => ({
-        ...withPreview(held, tab, drawn, (from) =>
+        ...withPreview(held, tab, here, (from) =>
           withPagePlaced(
-            withTab(withTabLast(withChosenViewed(from, tab, drawn), tab, drawn), tab, taskId),
+            withTab(withTabLast(withChosenViewed(from, tab, here), tab, here), tab, taskId),
             tab,
             pagePlace,
+            beside,
           ),
         ),
         open: true,
