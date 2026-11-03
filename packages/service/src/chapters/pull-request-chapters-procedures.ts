@@ -275,19 +275,42 @@ const generatingNow = /* @__PURE__ */ Effect.fnUntraced(function* (subject: Chap
   );
 });
 
+/** The member's own API key a model is called on, Anthropic's first, or none where they saved none. */
+const ownKeyFor = (userId: string) =>
+  Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    return yield* hostedStoreOrUnavailable(
+      ownKeyOf(userId, MODEL_PROVIDER.ANTHROPIC, environment.providerKeyEncryptionKeys),
+    );
+  });
+
 /** The model named, on the member's own API key, Anthropic's first, or none where they saved none. */
 const modelOf = (
   seams: PullRequestChaptersProcedureSeams,
   userId: string,
   modelId: ChaptersModelId,
 ) =>
-  Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    const own = yield* hostedStoreOrUnavailable(
-      ownKeyOf(userId, MODEL_PROVIDER.ANTHROPIC, environment.providerKeyEncryptionKeys),
-    );
-    return own === undefined ? undefined : (seams.chaptersModel ?? chaptersModelOf)(own, modelId);
+  Effect.map(ownKeyFor(userId), (own) =>
+    own === undefined ? undefined : (seams.chaptersModel ?? chaptersModelOf)(own, modelId),
+  );
+
+/**
+ * What a reader of an agent's pull request's chapters is admitted to, as
+ * the agent's read and its live read (`live-procedures.ts`) admit one: the
+ * workspace and repository the chapters are kept under, once a token minted
+ * for the repository confirms the workspace still reaches it, none for an
+ * agent with no repository; and whether the reader can generate chapters at
+ * all, on a key of their own, which their choice of model never changes.
+ */
+export const agentChaptersAdmission = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agent: Agent,
+) {
+  const [kept, own] = yield* Effect.all([keptUnder(userId, agent), ownKeyFor(userId)], {
+    concurrency: "unbounded",
   });
+  return { kept, generatable: own !== undefined };
+});
 
 /** The model the member chose in Settings, Haiku where they never chose (the store reads one no build offers as Haiku too). */
 const chosenModelOf = (userId: string) =>
@@ -458,13 +481,9 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       const number = yield* pullRequestNumberOf([input.number]);
       // One number named always reads as one or is refused.
       if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      // Whether the reader can generate at all, on a key of their own, which their choice of model never changes.
-      const [kept, model] = yield* Effect.all(
-        [keptUnder(context.userId, agent), modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT)],
-        { concurrency: "unbounded" },
-      );
+      const { kept, generatable } = yield* agentChaptersAdmission(context.userId, agent);
       if (Option.isNone(kept)) return { pullRequest: null };
-      return yield* answerOf(kept.value, number, model !== undefined);
+      return yield* answerOf(kept.value, number, generatable);
     }),
 
     generate: signedIn.generate.effect(function* ({ input, context }) {
