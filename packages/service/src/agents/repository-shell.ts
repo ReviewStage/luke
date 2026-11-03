@@ -9,6 +9,7 @@ import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import type { GitHubTokenAccess } from "../github/github-app.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
+import { LINK_SANDBOX_STATE_FOLDER, SANDBOX_STATE_FOLDER } from "./sandbox-state-folder.js";
 
 /**
  * repository-shell.ts -- an agent's checkout of the task's GitHub repository in its session's sandbox: the clone, its deepening, and the commit identity set in it.
@@ -74,12 +75,13 @@ const COMMAND_ENVIRONMENT = {
  */
 const CHECKOUT_SCRIPT = [
   "set -e",
+  LINK_SANDBOX_STATE_FOLDER,
   `if [ "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" != "$${SANDBOX_VARIABLE.REPOSITORY}" ]; then rm -rf repository; fi`,
   'partial="repository.$$"',
   'rm -rf "$partial"',
   `git clone --quiet \${${SANDBOX_VARIABLE.DEPTH}:+--depth "$${SANDBOX_VARIABLE.DEPTH}"} --single-branch --branch "$${SANDBOX_VARIABLE.BRANCH}" "$${SANDBOX_VARIABLE.URL}" "$partial"`,
   'if [ -d repository ]; then rm -rf "$partial"; else mv "$partial" repository; fi',
-  "mkdir -p .luke",
+  `mkdir -p ${SANDBOX_STATE_FOLDER}`,
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
 
@@ -94,6 +96,7 @@ const CHECKOUT_SCRIPT = [
  */
 const REFRESH_SCRIPT = [
   "set -e",
+  LINK_SANDBOX_STATE_FOLDER,
   "test -d repository/.git",
   `test "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" = "$${SANDBOX_VARIABLE.REFRESH}"`,
   "cd repository",
@@ -103,8 +106,8 @@ const REFRESH_SCRIPT = [
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
 
-/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. Note that it and the deepen's lock keep the old folder `CHECKOUT_RECORD` keeps, which a persistent sandbox made before still holds. */
-const DEEPENED_RECORD = ".luke/deepened";
+/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. */
+const DEEPENED_RECORD = `${SANDBOX_STATE_FOLDER}/deepened`;
 
 /** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */
 const DEEPEN_LOCK_WAIT_SECONDS = 120;
@@ -120,8 +123,9 @@ const DEEPEN_LOCK_WAIT_SECONDS = 120;
  */
 const DEEPEN_SCRIPT = [
   "set -e",
-  "mkdir -p .luke",
-  "lock=.luke/deepening",
+  LINK_SANDBOX_STATE_FOLDER,
+  `mkdir -p ${SANDBOX_STATE_FOLDER}`,
+  `lock=${SANDBOX_STATE_FOLDER}/deepening`,
   "waited=0",
   `until mkdir "$lock" 2>/dev/null; do waited=$((waited + 1)); [ "$waited" -le ${DEEPEN_LOCK_WAIT_SECONDS} ] || break; sleep 1; done`,
   `trap 'rmdir "$lock" 2>/dev/null || true' EXIT`,
@@ -130,7 +134,7 @@ const DEEPEN_SCRIPT = [
 ].join("\n");
 
 /** The deepen's record written, once its every step is done. */
-const DEEPENED_MARK_SCRIPT = `mkdir -p .luke && touch ${DEEPENED_RECORD}`;
+const DEEPENED_MARK_SCRIPT = `${LINK_SANDBOX_STATE_FOLDER}; mkdir -p ${SANDBOX_STATE_FOLDER} && touch ${DEEPENED_RECORD}`;
 
 /**
  * The sandbox as the shell reaches it: one command run, and, where the
