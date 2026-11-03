@@ -90,8 +90,9 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
  * `@repo/ui`'s dialog drawn bare over the dimmed window, its top clear of the
  * traffic lights, and the viewer's own card (`DialogCard`) filling the room
- * the arrows and the strip leave it, the file fitted inside it edge to edge: a picture or a
- * video up to twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
+ * the arrows and the strip leave it, the file fitted inside it: a picture no
+ * larger than its own pixels, a video up to twice its own, a text file at its
+ * reading width. The window dims, Tab stays inside the card, and
  * Escape, a press on the dimmed window or the room around the file, and the way out all close it and
  * hand focus back to the chip that opened it. A picture opened from its
  * tile grows out of the tile and, closed on that picture, shrinks back into it. The

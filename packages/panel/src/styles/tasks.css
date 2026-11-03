@@ -2169,9 +2169,11 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 }
 
 /* A picture or a video fits the room under the viewer's header edge to
-   edge at its own shape, and grows past its own pixels to fill it at most
-   twice over (`@repo/ui`'s ZoomImage and VideoPlayer say their pixels once
-   they are read). Where the card hugs it (`DialogCard`), as a video's does
+   edge at its own shape (`@repo/ui`'s ZoomImage and VideoPlayer say their
+   pixels once they are read). A video grows past its own pixels to fill it
+   at most twice over; a picture never does, as a browser's own tab, Preview,
+   and Slack draw one, because a picture blown up past its pixels is blurred,
+   and a small one stands at its size in the room, a press zooming it. Where the card hugs it (`DialogCard`), as a video's does
    off a phone, the room is the room between the arrows, less the card's edge
    and its header, so the card takes its shape, and it waits at a
    screenshot's shape until its pixels are read. Where the card fills its
@@ -2221,7 +2223,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
     var(--ui-zoom-natural-width) /
     var(--ui-zoom-natural-height),
     var(--ui-zoom-natural-width) *
-    2px
+    1px
   );
   max-height: 100%;
 }
@@ -2445,33 +2447,39 @@ svg.lucide {
    (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
    by side, sharing the column's width, so a before and an after read as a
    pair, and wrapping where more would leave each too narrow for a video's
-   bar (`grid-cols-picture-row`). Note that each picture fills its cell at a
-   shape between 3:4 and 2:1, cut from its top and center past either, rather
-   than hugging its own shape, because a whole page or a phone's screenshot
-   shrunk to the row's height is a sliver beside a screenshot's wide box; a
-   press still opens it whole. A video keeps its player's own shape. */
+   bar (`grid-cols-picture-row`). Note that each picture of several fills its
+   cell at a shape between 3:4 and 2:1, cut from its top and center past
+   either, rather than hugging its own shape, because a whole page or a
+   phone's screenshot shrunk to the row's height is a sliver beside a
+   screenshot's wide box; a press still opens it whole. A picture alone in
+   its row is drawn as one in words is, whole at its own size up to the
+   column's width and a screenful's height, because filling the column would
+   blow a small picture up past its own pixels and cut it. A video keeps its
+   player's own shape. */
 .transcript-pictures > .picture-block {
   min-width: 0;
   margin: 0;
 }
 
-.transcript-pictures > .picture-block:not([data-video]) {
+.transcript-pictures > .picture-block:not([data-video], :only-child) {
   width: auto;
   container-type: inline-size;
 }
 
-.transcript-pictures > .picture-block:not([data-video]) :is(.ui-picture-tile, .picture-frame) {
+.transcript-pictures
+  > .picture-block:not([data-video], :only-child)
+  :is(.ui-picture-tile, .picture-frame) {
   width: 100%;
 }
 
 /* The frame holds the 3:4 bound, and the picture its own screenful's worth
    (`max-h-picture-most`) under it. */
-.transcript-pictures > .picture-block .picture-frame:has(> .picture-image) {
+.transcript-pictures > .picture-block:not(:only-child) .picture-frame:has(> .picture-image) {
   max-height: calc(100cqw * 4 / 3);
   overflow: clip;
 }
 
-.transcript-pictures > .picture-block .picture-image {
+.transcript-pictures > .picture-block:not(:only-child) .picture-image {
   width: 100%;
   min-height: calc(100cqw / 2);
   object-fit: cover;
