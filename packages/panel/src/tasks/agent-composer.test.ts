@@ -603,6 +603,9 @@ function stubMicrophone(): void {
       createMediaStreamSource() {
         return { connect: ignore };
       }
+      resume() {
+        return Promise.resolve();
+      }
       close() {
         return Promise.resolve();
       }

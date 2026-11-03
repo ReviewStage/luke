@@ -23,7 +23,8 @@ import { openPreferredMicrophone } from "./microphone-choice.js";
  * The press opens the preferred microphone (the Mac's own over a
  * Bluetooth headset's, `./microphone-choice.ts`), after
  * asking macOS where it has not been asked, and records it as Opus in
- * WebM at the wire's bitrate, measured by an analyser the strip draws.
+ * WebM at the wire's bitrate, measured by an analyser the strip draws,
+ * whose audio context the press itself makes, as Safari on iOS requires.
  * Finishing hands the clip to main in one act, and main to our service,
  * which has OpenAI hear it and answers the words; the renderer never
  * reaches OpenAI. The words go in at the caret the press found, carried
@@ -216,7 +217,7 @@ export function useDictation(input: {
     input.editor.current?.focus();
   };
 
-  const open = async (asked: number) => {
+  const open = async (asked: number, context: AudioContext) => {
     // Note that the platform's own microphone permission and route are asked
     // only where it offers them: elsewhere the page's own ask is the whole of it.
     const routed = capabilityNow(HOST_CAPABILITY.MICROPHONE);
@@ -244,12 +245,12 @@ export function useDictation(input: {
     }
     // Note that what follows the open can still throw, a recorder refusing the
     // format, so the microphone is let go there too rather than left lit.
-    let context: AudioContext | undefined;
     try {
-      context = new AudioContext();
       const measured = context.createAnalyser();
       measured.fftSize = ANALYSER_FFT_SIZE;
       context.createMediaStreamSource(stream).connect(measured);
+      // Safari on iOS may suspend the context as the microphone takes the audio session.
+      if (context.state !== "running") context.resume().catch(() => undefined);
       const recorder = new MediaRecorder(stream, {
         mimeType: RECORDING_TYPE,
         audioBitsPerSecond: DICTATION_BOUNDS.AUDIO_BITS_PER_SECOND,
@@ -271,7 +272,7 @@ export function useDictation(input: {
       setAnalyser(measured);
       setStartedAt(standing.startedAt);
     } catch {
-      release(context === undefined ? { stream } : { stream, context });
+      release({ stream, context });
       fail(asked, DICTATION_NOTE.MICROPHONE_FAILED);
     }
   };
@@ -292,7 +293,17 @@ export function useDictation(input: {
     setPhase(DICTATION_PHASE.RECORDING);
     // The caret stays in the box, so its keys are the strip's while the button that was pressed goes.
     box.focus();
-    open(asked).catch(() => fail(asked, DICTATION_NOTE.MICROPHONE_FAILED));
+    // Note that the meter's context is made and resumed in the press itself, because
+    // Safari on iOS runs a context only from a gesture and leaves one made after the
+    // microphone's await suspended: its bars stay at rest while the clip still records.
+    const context = new AudioContext();
+    context.resume().catch(() => undefined);
+    open(asked, context)
+      .catch(() => fail(asked, DICTATION_NOTE.MICROPHONE_FAILED))
+      // A context no recording took, the open failed or passed, is let go here.
+      .finally(() => {
+        if (recording.current?.context !== context) context.close().catch(() => undefined);
+      });
   };
 
   const onFieldKey = (event: KeyboardEvent): boolean => {
