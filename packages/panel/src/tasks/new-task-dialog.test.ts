@@ -269,7 +269,7 @@ async function mount(
     placeholder: () => document.querySelector(".agent-composer-placeholder")?.textContent,
     /** The round Start button, by its place at the foot's end, since an empty box names it for what ⌘Return does there. */
     startButton: () =>
-      document.querySelector<HTMLButtonElement>('.luke-composer-foot button[type="submit"]') ??
+      document.querySelector<HTMLButtonElement>('.ui-composer-foot button[type="submit"]') ??
       assert.fail("the round Start button stands"),
     /** The card's buttons in order, as a reader meets them. */
     controls: () =>
@@ -283,7 +283,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   const card = await mount();
   const controls = card.controls();
   const head = card.dialog()?.querySelector(".new-task-head");
-  const foot = card.dialog()?.querySelector(".luke-composer-foot");
+  const foot = card.dialog()?.querySelector(".ui-composer-foot");
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the task");
@@ -511,7 +511,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
 
   typeInComposer(document, "@roll");
   await settle();
-  const offered = [...document.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+  const offered = [...document.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (row) => row.textContent,
   );
   pressInComposer(document, "Enter");
@@ -527,7 +527,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
     [{ workspaceId: "workspace-acme", repository: "acme/web", path: "", recursive: true }],
   );
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["rollout-store.ts"],
   );
   const file = { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" } as const;
@@ -780,7 +780,7 @@ test("the workspace first resolving keeps a repository picked before the workspa
 
 /** The lines the repository menu says in its rows' place. */
 function menuNotes(): (string | null)[] {
-  return [...document.querySelectorAll(".luke-combobox-note")].flatMap((note) => {
+  return [...document.querySelectorAll(".ui-combobox-note")].flatMap((note) => {
     const lines = [...note.querySelectorAll("p")];
     return lines.length === 0 ? [note.textContent] : lines.map((line) => line.textContent);
   });
@@ -789,7 +789,7 @@ function menuNotes(): (string | null)[] {
 /** The chip's menu opened, and the buttons then drawn anywhere in the document. */
 async function openChip(): Promise<HTMLButtonElement[]> {
   const chip =
-    document.querySelector<HTMLButtonElement>(".luke-chip") ??
+    document.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the dialog draws the repository chip");
   act(() => chip.click());
   await settle();
@@ -1042,8 +1042,8 @@ test("the repository menu names each repository first and its owner after it, so
   await openChip();
   const rows = () =>
     [...document.querySelectorAll('[role="option"]')].map((row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent,
-      row.querySelector(".luke-combobox-option-detail")?.textContent,
+      row.querySelector(".ui-combobox-option-label")?.textContent,
+      row.querySelector(".ui-combobox-option-detail")?.textContent,
     ]);
 
   assert.deepEqual(rows(), [

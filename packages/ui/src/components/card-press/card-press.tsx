@@ -77,7 +77,7 @@ export { SELECT_BOX_PLACE, type SelectBoxPlace } from "../selection/select-box.j
 
 /** The press: a bare button holding the words that name its card. */
 const PRESS =
-  "luke-card-press group/card-press peer/card-press flex min-w-0 flex-col items-stretch border-0 bg-transparent p-0 text-start text-inherit [font:inherit] disabled:cursor-default";
+  "ui-card-press group/card-press peer/card-press flex min-w-0 flex-col items-stretch border-0 bg-transparent p-0 text-start text-inherit [font:inherit] disabled:cursor-default";
 
 /**
  * The reach, covering every edge of the card, the nearest positioned box,
@@ -89,7 +89,7 @@ const PRESS =
  * clicks instead.
  */
 const REACH =
-  "luke-card-press-reach absolute inset-0 rounded-control outline-offset-[calc(-1*var(--ui-focus-ring-width))] transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit group-data-[corner=menu]/card-press:rounded-menu group-data-[reach=card]/card-press:pointer-events-none group-data-[selected=true]/card-press:bg-fill-selected group-[:active:not(:disabled)]/card-press:bg-fill-pressed";
+  "ui-card-press-reach absolute inset-0 rounded-control outline-offset-[calc(-1*var(--ui-focus-ring-width))] transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit group-data-[corner=menu]/card-press:rounded-menu group-data-[reach=card]/card-press:pointer-events-none group-data-[selected=true]/card-press:bg-fill-selected group-[:active:not(:disabled)]/card-press:bg-fill-pressed";
 
 /** How a press reaches its card: lying over it, or hearing through it. */
 export const CARD_PRESS_REACH = {
@@ -143,7 +143,7 @@ type CardPressHintProps = Pick<
  * stands around it but the page's.
  */
 function pulseCard(press: HTMLElement): void {
-  const reach = press.querySelector(":scope > .luke-card-press-reach");
+  const reach = press.querySelector(":scope > .ui-card-press-reach");
   const card = reach instanceof HTMLElement ? reach.offsetParent : null;
   const moved = card instanceof HTMLElement && card !== press.ownerDocument.body ? card : press;
   pulsePress(moved, PRESS_PULSE.QUIET);

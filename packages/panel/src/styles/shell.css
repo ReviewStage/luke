@@ -23,9 +23,9 @@
    (docs/DESIGN.md).
 
    The panel's sheets read the narrow room off one attribute, the document's
-   root's `data-luke-room` (`stage-room.ts`), which a dialog or a toast
+   root's `data-ui-room` (`stage-room.ts`), which a dialog or a toast
    portalled out of the shell answers alike. Note that it is written
-   `:where(:root)[data-luke-room="narrow"] .desktop-shell`, whose weight is
+   `:where(:root)[data-ui-room="narrow"] .desktop-shell`, whose weight is
    that of the `.desktop-shell[data-room]` it replaced, so no rule changes
    which one wins. The shell's own `data-room` stays for `@luke/ui`'s
    `Toolbar`, which reads any ancestor of its own. */
@@ -80,7 +80,7 @@
   height: var(--desktop-bar-height);
 }
 
-[data-luke-profile="desktop"] .desktop-drag-strip {
+[data-ui-profile="desktop"] .desktop-drag-strip {
   -webkit-app-region: drag;
 }
 
@@ -121,7 +121,7 @@
 
 /* Full bleed, the sheet stands no gap in, which what is measured from the
    window's edge reads (`--panel-toggle-clearance`). */
-:where(:root)[data-luke-room="narrow"] .desktop-shell {
+:where(:root)[data-ui-room="narrow"] .desktop-shell {
   --sheet-gap: 0px;
 }
 
@@ -136,20 +136,20 @@
    on it, while the sheet stays solid. A sidebar floating over the work, and
    a capture's frame, which must come out the same on every Mac, keep the
    frame opaque. */
-[data-luke-profile="desktop"] .desktop-shell {
+[data-ui-profile="desktop"] .desktop-shell {
   --frame-tint: color-mix(in srgb, var(--ui-color-sidebar) 62%, transparent);
 
   background: var(--frame-tint);
 }
 
-[data-luke-profile="desktop"]
+[data-ui-profile="desktop"]
   .desktop-shell:not([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
   .desktop-sidebar,
-[data-luke-profile="desktop"] .desktop-shell :is(.settings-pages, .version-log) {
+[data-ui-profile="desktop"] .desktop-shell :is(.settings-pages, .version-log) {
   background: transparent;
 }
 
-[data-luke-profile="desktop"] .app-stage[data-capture="true"] .desktop-shell {
+[data-ui-profile="desktop"] .app-stage[data-capture="true"] .desktop-shell {
   background: var(--ui-color-sidebar);
 }
 
@@ -165,32 +165,32 @@
    because the row above it is the same column's. The Inbox kept drawn,
    hidden, between visits (`desktop-shell.tsx`) is no page standing, so a
    page with tabs is any but the Inbox's, or the Inbox while it is shown. */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main:not(
     :has(.desktop-task:not([data-page="inbox"])),
     [data-inbox-shown="true"]
   )::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > :is(.desktop-settings, .desktop-version-history)
   > :is(.settings-page, .version-page),
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
   > .desktop-task-main::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
   > .agent-page::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
   > .page-find::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -212,7 +212,7 @@
   background: var(--ui-color-ground);
 }
 
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main {
+:where(:root):not([data-ui-room="narrow"]) .desktop-shell > .desktop-main {
   /* The row draws no hairline on the frame, so its middle is the traffic
      lights' own. */
   --desktop-bar-height: calc(2 * var(--title-bar-middle));
@@ -223,14 +223,14 @@
 
 /* Settings, a version history, and Admin head their page with words in the
    sheet rather than a row, so their page is the sheet itself, a gap in. */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > :is(.desktop-settings, .desktop-version-history)
   > :is(.settings-page, .version-page) {
   margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"]
   > .desktop-main {
   --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
@@ -238,7 +238,7 @@
   margin-left: var(--sheet-gap);
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -248,7 +248,7 @@
 }
 
 /* The panel is placed already, full screen and leaving alike (desktop.css). */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -256,28 +256,28 @@
   isolation: isolate;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main:not(
     :has(.desktop-task:not([data-page="inbox"])),
     [data-inbox-shown="true"]
   )::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
   > .desktop-task-main::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
   > .agent-page::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
   > .page-find::before,
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -289,7 +289,7 @@
   pointer-events: none;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -299,7 +299,7 @@
   background: transparent;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -307,7 +307,7 @@
   background: var(--ui-color-well);
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -317,12 +317,12 @@
 
 /* The panel's edge is dragged in the gap between the two sheets, beside
    them rather than over the row above. */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
   > .side-panel
-  > .luke-resize-edge {
+  > .ui-resize-edge {
   top: var(--desktop-bar-height);
   left: calc(-1 * var(--sheet-gap) / 2);
   transform: translateX(-50%);
@@ -330,7 +330,7 @@
 
 /* The Inbox's list is parted from its item inside the sheet, under the row,
    rather than by an edge running up through the row on the frame. */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -338,7 +338,7 @@
   border-right: 0;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -356,7 +356,7 @@
 
 /* The list's search, the first thing in the sheet under its head on the
    frame, stands a row's inset in from the sheet's top as from its rows. */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task
@@ -387,7 +387,7 @@
    holding the left corner alone and the last shown the right. A layout
    that lays columns side by side at a sheet's top joins the split's list
    here, and nowhere else. */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   :is(
     .desktop-shell
       > .desktop-main:not(:has(.desktop-task:not([data-page="inbox"])), [data-inbox-shown="true"]),
@@ -399,16 +399,16 @@
       > :is(.desktop-settings, .desktop-version-history)
       > :is(.settings-page, .version-page)
   )
-  :is(.luke-pane-bar, .luke-toolbar):is(
+  :is(.ui-pane-bar, .ui-toolbar):is(
     :nth-child(
       1 of :not(
         [hidden],
         .side-panel-bar,
-        .luke-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
+        .ui-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
       )
     ),
     :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *,
-    .luke-toolbar:nth-child(1 of :not([hidden]))
+    .ui-toolbar:nth-child(1 of :not([hidden]))
   ):not(
     :is(
         .desktop-shell
@@ -429,7 +429,7 @@
           1 of :not(
             [hidden],
             .side-panel-bar,
-            .luke-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
+            .ui-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
           )
         )
       ):not(
@@ -441,9 +441,9 @@
   border-top-right-radius: var(--sheet-top-right-radius, var(--sheet-radius));
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
-  :is(.luke-pane-bar, .luke-toolbar):is(
+  :is(.ui-pane-bar, .ui-toolbar):is(
     :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-child(1 of :not([hidden]))),
     :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
@@ -453,9 +453,9 @@
   --sheet-top-left-radius: 0px;
 }
 
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
-  :is(.luke-pane-bar, .luke-toolbar):is(
+  :is(.ui-pane-bar, .ui-toolbar):is(
     :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-last-child(1 of :not([hidden]))),
     :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
@@ -467,7 +467,7 @@
 
 /* What paints the page's ground at its sheet's edge, the plan's summary,
    rounds the sheet's corners it stands in. */
-:where(:root):not([data-luke-room="narrow"])
+:where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
   .desktop-task-main
@@ -517,11 +517,11 @@
    otherwise make the page itself taller than the screen, and a finger would
    drag the whole app by the difference. Only the block axis, so its shadow
    still falls over the work beside it; its scroller still scrolls its rows. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell[data-sidebar-collapsed] {
+:where(:root)[data-ui-room="narrow"] .desktop-shell[data-sidebar-collapsed] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell[data-sidebar-collapsed] .desktop-sidebar {
+:where(:root)[data-ui-room="narrow"] .desktop-shell[data-sidebar-collapsed] .desktop-sidebar {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -534,7 +534,7 @@
 /* A drawer is no window to drag and stands under no title bar's buttons, so
    it keeps no strip for them: its workspace row stands at its top, level
    with the work's own bar beside it. */
-:where(:root)[data-luke-room="narrow"]
+:where(:root)[data-ui-room="narrow"]
   .desktop-shell[data-sidebar-collapsed]
   .desktop-sidebar
   > .desktop-drag-strip {
@@ -546,7 +546,7 @@
    the dimmed window as it does open, with its transition off, so it stays
    under the finger; let go, the mark comes off and it travels the rest of
    the way on its own transition from there. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell[data-luke-drawer-drag] .desktop-sidebar {
+:where(:root)[data-ui-room="narrow"] .desktop-shell[data-ui-drawer-drag] .desktop-sidebar {
   z-index: 2;
   box-shadow: var(--ui-menu-shadow);
   opacity: 1;
@@ -560,7 +560,7 @@
    indicator and the keyboard (desktop.css), so the bar needs no inset of
    its own. While a field is being typed in, the keyboard takes the screen's
    foot and the bar steps aside, giving the field's column the room. */
-:where(:root)[data-luke-room="narrow"] .desktop-shell[data-mobile-bar="true"] {
+:where(:root)[data-ui-room="narrow"] .desktop-shell[data-mobile-bar="true"] {
   grid-template-rows: minmax(0, 1fr) auto;
 }
 

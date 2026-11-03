@@ -135,7 +135,7 @@ const HUE_CLASS: Readonly<Record<number, string>> = {
 };
 
 /** The box a glyph stands in: the disc's whole, its glyph a share of it at every size. */
-const GLYPH_BOX = "luke-avatar-glyph grid size-full place-items-center *:size-avatar-glyph-share";
+const GLYPH_BOX = "ui-avatar-glyph grid size-full place-items-center *:size-avatar-glyph-share";
 
 /** What a disc is drawn as, read off its props and how its picture has fared. */
 interface Look {
@@ -181,7 +181,7 @@ function edgeClass({ shape, glyph, edged }: Look): string {
 
 /** Every class a disc wears, its line closing them so a letter of any size sits at the box's centre. */
 function discClass(look: Look): string {
-  return `luke-avatar ${typeClass(look)} ${SHAPE_CLASS[look.shape]} ${groundClass(look)} ${edgeClass(look)} leading-none`;
+  return `ui-avatar ${typeClass(look)} ${SHAPE_CLASS[look.shape]} ${groundClass(look)} ${edgeClass(look)} leading-none`;
 }
 
 interface AvatarProps {
@@ -281,7 +281,7 @@ function AvatarDisc({
       {url === undefined ? null : (
         <ShadcnAvatarImage
           keepMounted
-          className="luke-avatar-picture data-[loaded=false]:invisible"
+          className="ui-avatar-picture data-[loaded=false]:invisible"
           src={url}
           alt=""
           referrerPolicy="no-referrer"
@@ -319,19 +319,19 @@ export function UnassignedAvatar({
 }): React.JSX.Element {
   return (
     <ShadcnAvatar
-      className={`luke-avatar ${SIZE_CLASS[size]} rounded-full bg-transparent text-muted-foreground after:content-none leading-none`}
+      className={`ui-avatar ${SIZE_CLASS[size]} rounded-full bg-transparent text-muted-foreground after:content-none leading-none`}
       data-size={size}
       data-unassigned="true"
       {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": UNASSIGNED_WORDS })}
     >
       <svg
-        className="luke-avatar-unassigned absolute inset-0 size-full"
+        className="ui-avatar-unassigned absolute inset-0 size-full"
         viewBox="0 0 16 16"
         aria-hidden="true"
       >
         {/* Note that the ring is held a hairline on its circle itself, because `vector-effect` is not inherited from the outline around it; its eight long dashes are laid evenly round it (`pathLength`) with round ends, so it is never read as the backlog's shorter-dashed status ring. */}
         <circle
-          className="luke-avatar-unassigned-ring"
+          className="ui-avatar-unassigned-ring"
           cx="8"
           cy="8"
           r="7.3"
@@ -344,7 +344,7 @@ export function UnassignedAvatar({
           vectorEffect="non-scaling-stroke"
         />
         {/* The seat is filled rather than traced, so it holds at a row's smallest size, and fainter than the ring, so the outline leads. The shoulders are the arc of a circle beneath, closed by the bottom of the seat's own 5.4 circle inside the ring, where the two cross. */}
-        <g className="luke-avatar-unassigned-seat" fill="currentColor" opacity="0.62">
+        <g className="ui-avatar-unassigned-seat" fill="currentColor" opacity="0.62">
           <circle cx="8" cy="6.6" r="2.1" />
           <path d="M4.158 11.795A5.2 5.2 0 0 1 11.842 11.795A5.4 5.4 0 0 1 4.158 11.795Z" />
         </g>

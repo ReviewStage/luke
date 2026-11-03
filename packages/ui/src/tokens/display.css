@@ -4,7 +4,7 @@
    They are the site's alone, so they are set under the web profile and read
    by the public pages; the window has no display type. */
 
-[data-luke-profile="web"] {
+[data-ui-profile="web"] {
   /* The landing page's one line, which steps down once on a phone. */
   --ui-display-hero-size: 2.25rem;
   --ui-display-hero-size-narrow: 1.75rem;

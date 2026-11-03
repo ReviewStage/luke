@@ -106,7 +106,7 @@ test("a right-click on a row that opens an address offers the same menu, opening
       }),
     ),
   );
-  const title = document.querySelector(".luke-list-row-title");
+  const title = document.querySelector(".ui-list-row-title");
   assert.ok(title);
 
   rightClick(title);
@@ -130,7 +130,7 @@ test("a right-click on a row naming an agent's page offers Open in browser, whic
     ),
   );
   fakeAppPlatform({ ...QUIET_PANEL, openWeb: (url) => opened.push(url) });
-  const title = document.querySelector(".luke-list-row-title");
+  const title = document.querySelector(".ui-list-row-title");
   assert.ok(title);
 
   rightClick(title);

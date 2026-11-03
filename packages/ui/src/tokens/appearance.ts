@@ -1,5 +1,5 @@
 /**
- * appearance.ts -- whether a surface is drawn dark, read off its root's `data-luke-theme`: the one place script resolves `system` against the machine, as `palettes.css`'s `color-scheme` is the one place a sheet does.
+ * appearance.ts -- whether a surface is drawn dark, read off its root's `data-ui-theme`: the one place script resolves `system` against the machine, as `palettes.css`'s `color-scheme` is the one place a sheet does.
  *
  * A root wears `dark` or `light` where its theme is chosen, as the web app's
  * does from the account's Theme setting, and `system` where it follows the
@@ -18,7 +18,7 @@ import { THEME, type Theme } from "./surface.js";
 const MACHINE_DARK = "(prefers-color-scheme: dark)";
 
 /** The attribute a root wears its theme in (`surfaceAttributes`). */
-const THEME_ATTRIBUTE = "data-luke-theme";
+const THEME_ATTRIBUTE = "data-ui-theme";
 
 /** Every theme a root may wear, to read the attribute by. */
 const THEMES: ReadonlySet<string> = new Set(Object.values(THEME));

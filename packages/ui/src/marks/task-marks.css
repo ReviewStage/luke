@@ -5,23 +5,23 @@
    cross, and urgent's stroke are cut in the ground they sit on. */
 
 @layer components {
-  .luke-task-mark {
+  .ui-task-mark {
     flex: none;
     width: 1em;
     height: 1em;
   }
 
-  .luke-task-mark-line {
+  .ui-task-mark-line {
     fill: none;
     stroke: currentColor;
     stroke-width: 1.5;
   }
 
-  .luke-task-mark-fill {
+  .ui-task-mark-fill {
     fill: currentColor;
   }
 
-  .luke-task-mark-cut {
+  .ui-task-mark-cut {
     fill: none;
     stroke: var(--ui-color-ground);
     stroke-width: 1.5;
@@ -30,27 +30,27 @@
   }
 
   /* A status is in its tone's ink (`tokens/status-tone.css`). */
-  .luke-task-status-mark {
+  .ui-task-status-mark {
     color: var(--ui-tone-ink);
   }
 
-  .luke-task-priority-mark {
+  .ui-task-priority-mark {
     color: var(--ui-color-text-muted);
   }
 
-  .luke-task-priority-mark[data-priority="none"] {
+  .ui-task-priority-mark[data-priority="none"] {
     color: var(--ui-color-text-muted);
   }
 
-  .luke-task-priority-mark [data-lit="false"] {
+  .ui-task-priority-mark [data-lit="false"] {
     opacity: 0.25;
   }
 
-  .luke-task-priority-mark[data-priority="urgent"] {
+  .ui-task-priority-mark[data-priority="urgent"] {
     color: var(--ui-color-attention-fill);
   }
 
-  .luke-task-priority-mark[data-priority="urgent"] .luke-task-mark-cut {
+  .ui-task-priority-mark[data-priority="urgent"] .ui-task-mark-cut {
     stroke: var(--ui-color-on-attention);
     stroke-width: 1.6;
   }

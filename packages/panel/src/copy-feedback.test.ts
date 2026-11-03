@@ -55,7 +55,7 @@ function mount(): void {
 
 /** What each toast standing says, leaving out those on their way out. */
 function standing(): string[] {
-  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+  return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }

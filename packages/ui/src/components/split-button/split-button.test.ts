@@ -223,7 +223,7 @@ test("a split button's main part whose press succeeded wears a check as its ring
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
     value(this: HTMLElement) {
-      return this.classList.contains("luke-button-done") ? [new EventTarget()] : [];
+      return this.classList.contains("ui-button-done") ? [new EventTarget()] : [];
     },
   });
   const draw = (busy: string | undefined, succeeded: boolean) =>
@@ -246,10 +246,10 @@ test("a split button's main part whose press succeeded wears a check as its ring
 
   act(() => root.render(draw("Starting", false)));
   act(() => root.render(draw(undefined, false)));
-  const afterFailure = container.querySelector(".luke-button-done");
+  const afterFailure = container.querySelector(".ui-button-done");
   act(() => root.render(draw("Starting", false)));
   act(() => root.render(draw(undefined, true)));
-  const afterSuccess = container.querySelector(".luke-button-done");
+  const afterSuccess = container.querySelector(".ui-button-done");
   Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
 
   expect(afterFailure).toBeNull();

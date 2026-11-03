@@ -22,7 +22,7 @@ export function Facts({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <dl className="luke-facts" data-ruled={ruled ? "true" : undefined}>
+    <dl className="ui-facts" data-ruled={ruled ? "true" : undefined}>
       {children}
     </dl>
   );
@@ -37,9 +37,9 @@ export function Fact({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="luke-fact">
-      <dt className="luke-fact-label">{label}</dt>
-      <dd className="luke-fact-value">{children}</dd>
+    <div className="ui-fact">
+      <dt className="ui-fact-label">{label}</dt>
+      <dd className="ui-fact-value">{children}</dd>
     </div>
   );
 }

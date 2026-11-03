@@ -2,7 +2,7 @@
    cannot say: rows scrolled up dissolve into the page's top edge, on a scroll
    timeline; an empty state that is the page's content fills the room under
    the title; and the column's inset narrows under 480px of the page, which is
-   a container of its own (`@container/luke-settings-page`). The frame, the
+   a container of its own (`@container/ui-settings-page`). The frame, the
    page's scroller, the room under the head, and the sections' gap are
    utilities; the sections' own heading and card are theirs
    (`settings-section.tsx`). */
@@ -15,7 +15,7 @@
   initial-value: 0px;
 }
 
-@keyframes luke-settings-page-fade {
+@keyframes ui-settings-page-fade {
   from {
     --ui-settings-page-fade: 0px;
   }
@@ -33,10 +33,10 @@
      scrolling, so a page at rest at its top, or one with nothing to scroll,
      whose timeline never runs, is left whole. A scroll timeline is not
      motion, so reduced motion leaves it be. */
-  .luke-settings-page {
+  .ui-settings-page {
     --ui-settings-page-measure: var(--ui-settings-measure);
     mask-image: linear-gradient(to bottom, transparent, #000 var(--ui-settings-page-fade));
-    animation: luke-settings-page-fade linear both;
+    animation: ui-settings-page-fade linear both;
     animation-timeline: scroll(self block);
     animation-range: 0 var(--ui-space-24);
   }
@@ -44,7 +44,7 @@
   /* Note that the column's box, measure, and inset stay here rather than in
      utilities, because the rules below for an empty state and a narrow page
      undo them, and a rule in this layer cannot undo a utility. */
-  .luke-settings-page-column {
+  .ui-settings-page-column {
     box-sizing: content-box;
     max-width: var(--ui-settings-page-measure);
     padding: var(--ui-page-inset);
@@ -53,14 +53,12 @@
   /* A page whose content is an empty state gives it the room under the
      title, the column filling the page's height at its measure, and the
      state standing in the middle of what the head leaves. */
-  .luke-settings-page:has(
-    > .luke-settings-page-column > .luke-settings-page-sections > .luke-empty-state
-  ) {
+  .ui-settings-page:has(> .ui-settings-page-column > .ui-settings-page-sections > .ui-empty-state) {
     display: flex;
     flex-direction: column;
   }
 
-  .luke-settings-page-column:has(> .luke-settings-page-sections > .luke-empty-state) {
+  .ui-settings-page-column:has(> .ui-settings-page-sections > .ui-empty-state) {
     display: flex;
     box-sizing: border-box;
     flex-direction: column;
@@ -69,14 +67,14 @@
     max-width: calc(var(--ui-settings-page-measure) + 2 * var(--ui-page-inset));
   }
 
-  .luke-settings-page-sections:has(> .luke-empty-state) {
+  .ui-settings-page-sections:has(> .ui-empty-state) {
     flex: 1 0 auto;
   }
 
   /* A container query cannot read a custom property, so the contract's
      width is written here (`tokens/profiles.css`). */
-  @container luke-settings-page (width < 480px) {
-    .luke-settings-page-column {
+  @container ui-settings-page (width < 480px) {
+    .ui-settings-page-column {
       padding: var(--ui-page-inset-narrow);
     }
   }

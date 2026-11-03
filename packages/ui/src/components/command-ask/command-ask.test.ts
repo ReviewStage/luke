@@ -74,7 +74,7 @@ test("it lands on Deny, names itself, says what allowing all lets through, and s
     "Allow all commands lets every agent run commands on this Mac without asking. You can change it in Settings › This Mac.",
   );
   assert.equal(document.activeElement, button("Deny"));
-  assert.equal(document.querySelector(".luke-file-text-words")?.textContent, COMMAND);
+  assert.equal(document.querySelector(".ui-file-text-words")?.textContent, COMMAND);
 });
 
 test("each answer is heard as its own, and Escape denies", () => {

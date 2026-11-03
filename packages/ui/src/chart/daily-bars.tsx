@@ -70,7 +70,7 @@ export function DailyBars<Day extends { readonly day: string }>({
   return (
     <ChartContainer
       config={config}
-      className="luke-daily-bars"
+      className="ui-daily-bars"
       data-opens={onOpenDay === undefined ? undefined : ""}
       style={{ height }}
     >

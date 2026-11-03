@@ -48,12 +48,12 @@ export type SkeletonShape = (typeof SKELETON_SHAPE)[keyof typeof SKELETON_SHAPE]
  */
 const SHAPE_CLASS: Record<SkeletonShape, string> = {
   [SKELETON_SHAPE.LINE]:
-    "luke-skeleton w-[var(--ui-skeleton-width,100%)] h-skeleton-line my-skeleton-line-gap rounded-skeleton",
+    "ui-skeleton w-[var(--ui-skeleton-width,100%)] h-skeleton-line my-skeleton-line-gap rounded-skeleton",
   [SKELETON_SHAPE.CONTROL]:
-    "luke-skeleton w-[var(--ui-skeleton-width,100%)] h-control rounded-control",
+    "ui-skeleton w-[var(--ui-skeleton-width,100%)] h-control rounded-control",
   [SKELETON_SHAPE.CIRCLE]:
-    "luke-skeleton w-[var(--ui-skeleton-width,var(--spacing-control))] aspect-square rounded-full",
-  [SKELETON_SHAPE.BLOCK]: "luke-skeleton size-full rounded-control",
+    "ui-skeleton w-[var(--ui-skeleton-width,var(--spacing-control))] aspect-square rounded-full",
+  [SKELETON_SHAPE.BLOCK]: "ui-skeleton size-full rounded-control",
 };
 
 /** A block's shape and width, the width a share of its line or a length. */
@@ -86,8 +86,8 @@ export function SkeletonRegion({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="luke-skeleton-region" role="status" aria-busy="true">
-      <span className="luke-visually-hidden">{label}</span>
+    <div className="ui-skeleton-region" role="status" aria-busy="true">
+      <span className="ui-visually-hidden">{label}</span>
       {children}
     </div>
   );

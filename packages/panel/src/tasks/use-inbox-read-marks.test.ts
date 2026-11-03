@@ -127,7 +127,7 @@ function marks() {
       }),
     /** What each toast standing says, leaving out those on their way out. */
     toasts: () =>
-      [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+      [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
         (words) => words.textContent ?? "",
       ),
     markAll: (items: readonly InboxItem[]) => act(() => held().onMarkAll(items)),

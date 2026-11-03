@@ -116,7 +116,7 @@ function DataTableHeading<Row, Key extends string>({
   if (kind === DATA_TABLE_COLUMN_KIND.MARK) {
     return (
       <TableHead className={CELL_KIND} data-kind={kind}>
-        <span className="luke-visually-hidden">{column.label}</span>
+        <span className="ui-visually-hidden">{column.label}</span>
       </TableHead>
     );
   }

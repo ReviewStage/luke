@@ -72,7 +72,7 @@ function mount(anchor: () => ReturnType<typeof boxAt>, side?: PopoverSide): HTML
   act(() =>
     root.render(createElement(RectFloat, { open: true, anchor, side, children: "Toolbar" })),
   );
-  const layer = owner.querySelector<HTMLElement>(".luke-rect-float");
+  const layer = owner.querySelector<HTMLElement>(".ui-rect-float");
   assert.ok(layer, "the layer is drawn");
   return layer;
 }
@@ -120,7 +120,7 @@ test("a scroll that moves the box moves the layer with it", () => {
 
 test("a margin its owner's rule gives the layer, as one spacing a box's children does, moves it nowhere", () => {
   const style = document.head.appendChild(document.createElement("style"));
-  style.textContent = ".luke-rect-float { margin-top: 6px; margin-left: 3px; }";
+  style.textContent = ".ui-rect-float { margin-top: 6px; margin-left: 3px; }";
   try {
     const layer = mount(() => boxAt(200, 300));
 
@@ -150,7 +150,7 @@ function closing(told: { exited: number }) {
         }),
       ),
     );
-  return { draw, layer: () => owner.querySelector<HTMLElement>(".luke-rect-float") };
+  return { draw, layer: () => owner.querySelector<HTMLElement>(".ui-rect-float") };
 }
 
 test("a layer closed through open stays where it stood, inert and leaving, drawing what it last held, until its fade has run, and then goes and tells its owner", () => {

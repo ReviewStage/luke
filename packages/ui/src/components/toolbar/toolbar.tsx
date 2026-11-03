@@ -116,18 +116,18 @@ const TRAIL_LABEL = "Path";
  * actions do, its controls shrinking to their own floors rather than
  * pushing the actions off the bar.
  */
-const LEAD = "luke-toolbar-lead flex min-w-0 flex-initial items-center gap-control-gap";
-const ACTIONS = "luke-toolbar-actions relative flex flex-none items-center gap-control-gap";
-const TAG = "luke-toolbar-tag flex-none";
+const LEAD = "ui-toolbar-lead flex min-w-0 flex-initial items-center gap-control-gap";
+const ACTIONS = "ui-toolbar-actions relative flex flex-none items-center gap-control-gap";
+const TAG = "ui-toolbar-tag flex-none";
 /** Quiet words after the title, in the body's type, on one line cut short, fading, before the title is. */
-const DETAIL = "luke-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
+const DETAIL = "ui-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
-const TITLE = "luke-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
+const TITLE = "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
 
 /** Where a bar's heading stands its title on one row: the page's own name, its last words. */
 const HEADING_SEAT: TitleSeat = {
-  room: ":scope > .luke-toolbar-heading",
-  words: ":is(.luke-breadcrumb-label, .luke-toolbar-title)",
+  room: ":scope > .ui-toolbar-heading",
+  words: ":is(.ui-breadcrumb-label, .ui-toolbar-title)",
 };
 
 /** A place above the page in its trail: its name, the glyph it wears where it wears one, and the press back to it. */
@@ -170,7 +170,7 @@ export interface ToolbarProps {
   readonly look?: ToolbarLook | undefined;
   /** What the bar heads (`task`), which names it to the page's own rules and its tests as `task-head`. */
   readonly place?: string | undefined;
-  /** Whether the bar is a container its slots' rules answer the width of (`@container luke-toolbar`), so a control folds before the title or tabs beside it do. */
+  /** Whether the bar is a container its slots' rules answer the width of (`@container ui-toolbar`), so a control folds before the title or tabs beside it do. */
   readonly measure?: boolean | undefined;
   /** Whether every labelled control of the bar draws its glyph alone, named still. */
   readonly folded?: boolean | undefined;
@@ -231,7 +231,7 @@ function ToolbarTrail({
 function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Element {
   return (
     <span
-      className="luke-toolbar-pick-up"
+      className="ui-toolbar-pick-up"
       data-shown={pickUp.shown ? "true" : "false"}
       aria-hidden={pickUp.shown ? undefined : "true"}
     >
@@ -274,7 +274,7 @@ export function Toolbar({
       wrapHeading={wrapHeading}
     >
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
-      <div className="luke-toolbar-heading">
+      <div className="ui-toolbar-heading">
         {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
           <ToolbarTrail trail={trail} title={title} />
         ) : trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined ? (

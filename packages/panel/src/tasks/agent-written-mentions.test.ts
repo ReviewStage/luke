@@ -106,7 +106,7 @@ test("an agent's written mentions of a page, an agent, a section, and a file are
   assert.deepEqual(
     chips.map((chip) => [
       chip.dataset.kind,
-      chip.querySelector(".luke-inline-ref-label")?.textContent,
+      chip.querySelector(".ui-inline-ref-label")?.textContent,
     ]),
     [
       ["page", "Invite funnel"],
@@ -143,10 +143,10 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   const page = container.querySelector<HTMLElement>('[data-mention-ref][data-kind="page"]');
   assert.ok(page, "the page's chip");
   restOn(page);
-  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-page-card]");
   assert.ok(card, "the page's tab's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Invite funnel");
-  assert.equal(card.querySelector(".luke-hover-card-sub")?.textContent, "Version 2");
+  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "Invite funnel");
+  assert.equal(card.querySelector(".ui-hover-card-sub")?.textContent, "Version 2");
   assert.equal(
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId: TASK, pageId: PAGE, version: 2 }),

@@ -38,10 +38,10 @@ export type SpinnerSize = (typeof SPINNER_SIZE)[keyof typeof SPINNER_SIZE];
 
 /** The ring's box: 12px on a caption's line, 16px beside words or inside a control, 22px alone in a region, in the muted ink a wait is said in. */
 const SPINNER_BOX =
-  "luke-spinner inline-flex flex-none size-spinner text-muted-foreground data-[size=small]:size-spinner-small data-[size=region]:size-spinner-region";
+  "ui-spinner inline-flex flex-none size-spinner text-muted-foreground data-[size=small]:size-spinner-small data-[size=region]:size-spinner-region";
 
 /** The ring's box inside a busy control, in the control's own ink, standing in the one cell it shares with the control's words. */
-const BUSY_SPINNER_BOX = "luke-spinner inline-flex flex-none size-spinner col-start-1 row-start-1";
+const BUSY_SPINNER_BOX = "ui-spinner inline-flex flex-none size-spinner col-start-1 row-start-1";
 
 /**
  * The ring alone, decorative: a mark that is itself the wait, such as a
@@ -72,7 +72,7 @@ export function Spinner({
   return (
     <span className={SPINNER_BOX} data-size={size} role="status">
       {delay && !settled ? null : <SpinnerRing />}
-      <span className="luke-visually-hidden">{label}</span>
+      <span className="ui-visually-hidden">{label}</span>
     </span>
   );
 }
@@ -86,7 +86,7 @@ export function SpinnerRegion({
   delay?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="luke-spinner-region flex min-h-0 flex-1 items-center justify-center self-stretch p-spinner-region-inset">
+    <div className="ui-spinner-region flex min-h-0 flex-1 items-center justify-center self-stretch p-spinner-region-inset">
       <Spinner label={label} size={SPINNER_SIZE.REGION} delay={delay} />
     </div>
   );
@@ -114,10 +114,10 @@ export function BusyLabel({
   if (!busy) return <>{children}</>;
   const ringShown = !delay || settled;
   return (
-    <span className="luke-busy-label inline-grid items-center justify-items-center gap-[inherit]">
+    <span className="ui-busy-label inline-grid items-center justify-items-center gap-[inherit]">
       <span
         className={cn(
-          "luke-busy-label-words col-start-1 row-start-1 inline-flex items-center gap-[inherit]",
+          "ui-busy-label-words col-start-1 row-start-1 inline-flex items-center gap-[inherit]",
           ringShown && "invisible",
         )}
       >
@@ -128,7 +128,7 @@ export function BusyLabel({
           <SpinnerRing />
         </span>
       ) : null}
-      <span className="luke-visually-hidden">{label}</span>
+      <span className="ui-visually-hidden">{label}</span>
     </span>
   );
 }

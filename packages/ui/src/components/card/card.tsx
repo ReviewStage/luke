@@ -199,7 +199,7 @@ function frameClass(
   className: string | undefined,
 ): string {
   return [
-    "luke-card",
+    "ui-card",
     LOOK_CLASS[look],
     cornerClass(look, corner),
     PADDING_CLASS[padding],
@@ -272,7 +272,7 @@ export function CardHead({ children }: { children: ReactNode }): React.JSX.Eleme
     <Text
       as={TEXT_ELEMENT.DIV}
       variant={TEXT_VARIANT.GROUP}
-      className="luke-card-head flex min-h-control min-w-0 flex-wrap items-center justify-between gap-x-card-head-gap gap-y-card-head-block px-card-head-inline py-card-head-block"
+      className="ui-card-head flex min-h-control min-w-0 flex-wrap items-center justify-between gap-x-card-head-gap gap-y-card-head-block px-card-head-inline py-card-head-block"
     >
       {children}
     </Text>

@@ -5,11 +5,11 @@
    utilities; the fade stands here beside the chip's and the badge's. */
 
 @layer components {
-  .luke-inline-ref-label[data-overflow="true"] {
+  .ui-inline-ref-label[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
-  .luke-inline-ref-label[data-name="path"][data-overflow="true"] {
+  .ui-inline-ref-label[data-name="path"][data-overflow="true"] {
     mask-image: linear-gradient(to right, transparent, #000 var(--ui-label-fade));
   }
 }

@@ -23,7 +23,7 @@ import { LengthCounter } from "../length-counter/length-counter.js";
  * end of its label's line once they near the limit (`LengthCounter`). The field owns the room
  * between its parts; the room around it is its container's. It is drawn by
  * shadcn/ui's field (`../../shadcn/field.tsx`); its label keeps the
- * `luke-field-label` name a test finds it by.
+ * `ui-field-label` name a test finds it by.
  */
 
 /** What a field hands the control it holds, spread onto an input or read by a control of its own. */
@@ -44,7 +44,7 @@ function said(words: ReactNode): boolean {
 }
 
 /** The muted caption Optional is set in after a label, a short step off it. */
-const OPTIONAL_MARK = "luke-field-optional ms-ui-6 text-caption font-text text-muted-foreground";
+const OPTIONAL_MARK = "ui-field-optional ms-ui-6 text-caption font-text text-muted-foreground";
 
 /** A control under `label`, described by `description`, and marked invalid by `error` while it says something. */
 export function FormField({
@@ -76,9 +76,9 @@ export function FormField({
     .filter((part) => part !== undefined)
     .join(" ");
   const labelled = (
-    <FieldLabel className="luke-field-label" id={labelId} htmlFor={controlId}>
+    <FieldLabel className="ui-field-label" id={labelId} htmlFor={controlId}>
       {/* Note that the words stand in a span of their own, which a readable region lets select where the label itself may not. */}
-      <span className="luke-field-words">{label}</span>
+      <span className="ui-field-words">{label}</span>
       {optional ? <span className={OPTIONAL_MARK}>{FIELD_WORDS.OPTIONAL}</span> : null}
     </FieldLabel>
   );

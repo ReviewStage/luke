@@ -10,7 +10,7 @@
   /* An action that is on wears a dot over its corner, in the accent's ink,
      since the web's accent fill is too light to hold 3:1 as a mark on its
      light page. */
-  .luke-group-header-action[data-state="active"]::after {
+  .ui-group-header-action[data-state="active"]::after {
     position: absolute;
     top: var(--ui-space-4);
     right: var(--ui-space-4);
@@ -25,7 +25,7 @@
   /* Note that each action waits on its own rather than the row of them,
      because one that is on stands while the rest wait, and the row's
      opacity would hide it with them. */
-  .luke-group-header-actions[data-shown="on-hover"] > * {
+  .ui-group-header-actions[data-shown="on-hover"] > * {
     opacity: var(--ui-group-header-shown, 0);
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
@@ -37,24 +37,24 @@
      read, rather than on each action under a `:has()`, because a `:has()`
      whose subject is any child makes the browser restyle the whole window
      for every element added under it. */
-  .luke-group-header-head:is(:focus-within, [data-menu-open="true"]) .luke-group-header-actions > *,
-  .luke-group-header-actions > .luke-group-header-action[data-state="active"] {
+  .ui-group-header-head:is(:focus-within, [data-menu-open="true"]) .ui-group-header-actions > *,
+  .ui-group-header-actions > .ui-group-header-action[data-state="active"] {
     opacity: 1;
   }
 
-  .luke-group-header-head .luke-group-header-actions:has([aria-expanded="true"]) {
+  .ui-group-header-head .ui-group-header-actions:has([aria-expanded="true"]) {
     --ui-group-header-shown: 1;
   }
 
   @media (hover: hover) {
-    .luke-group-header-head:hover .luke-group-header-actions > * {
+    .ui-group-header-head:hover .ui-group-header-actions > * {
       opacity: 1;
     }
   }
 
   /* A screen with no hover shows them at rest, in the room they keep. */
   @media (hover: none) {
-    .luke-group-header-head .luke-group-header-actions[data-shown] > * {
+    .ui-group-header-head .ui-group-header-actions[data-shown] > * {
       opacity: 1;
     }
   }
@@ -63,7 +63,7 @@
      its glyph centred in it, so two side by side each take a whole press
      rather than splitting the room their presses overlap in (`button.css`). */
   @media (pointer: coarse) {
-    .luke-group-header-actions .luke-button[data-size="compact"][data-icon-only="true"] {
+    .ui-group-header-actions .ui-button[data-size="compact"][data-icon-only="true"] {
       min-width: var(--ui-touch-target);
     }
   }

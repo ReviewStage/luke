@@ -122,7 +122,7 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = 
   draw();
   const picture = () => {
     const image =
-      document.querySelector<HTMLImageElement>(".luke-zoom-image") ??
+      document.querySelector<HTMLImageElement>(".ui-zoom-image") ??
       assert.fail("the viewer draws the picture");
     const frame = image.parentElement ?? assert.fail("the picture stands in its frame");
     laidOut(frame, {
@@ -542,7 +542,7 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
   });
 
   assert.equal(
-    document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+    document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
       ?.textContent,
     "1 of 1",
   );
@@ -568,7 +568,7 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its che
   assert.deepEqual(copied, [PIXEL], "the PNG's own bytes, whatever the address says after them");
   const glyph = () =>
     document
-      .querySelector('button[aria-label="Copy image"] .luke-copy-glyph')
+      .querySelector('button[aria-label="Copy image"] .ui-copy-glyph')
       ?.getAttribute("data-state");
   assert.equal(glyph(), "copied");
   viewer.key("ArrowLeft");
@@ -680,7 +680,7 @@ test("a Mermaid file opened over the window is drawn as its diagram, zoomed and 
     sideBundles({ diagram: () => Promise.resolve(diagram) }),
   );
 
-  const picture = document.querySelector<HTMLImageElement>(".luke-zoom-image");
+  const picture = document.querySelector<HTMLImageElement>(".ui-zoom-image");
   assert.equal(picture?.getAttribute("src"), drawn);
   assert.equal(picture?.getAttribute("alt"), "Diagram: flowchart LR");
   assert.ok(document.querySelector('button[aria-label="Zoom in"]'));
@@ -699,5 +699,5 @@ test("a file that is no diagram opened over the window imports no diagram bundle
   await openedOver(textFile("notes.md", "flowchart LR\n  A --> B"), bundles);
 
   assert.equal(imports, 0);
-  assert.equal(document.querySelector(".luke-zoom-image"), null);
+  assert.equal(document.querySelector(".ui-zoom-image"), null);
 });

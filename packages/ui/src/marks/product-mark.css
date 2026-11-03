@@ -5,7 +5,7 @@
    lays it out gives it one. */
 
 @layer components {
-  .luke-product-mark {
+  .ui-product-mark {
     display: block;
     width: 1em;
     height: 1em;
@@ -13,16 +13,16 @@
     color: var(--ui-color-text);
   }
 
-  .luke-product-mark[data-muted="true"] {
+  .ui-product-mark[data-muted="true"] {
     color: var(--ui-color-text-muted);
   }
 
-  .luke-product-mark[data-fill="true"] {
+  .ui-product-mark[data-fill="true"] {
     width: 100%;
     height: 100%;
   }
 
-  .luke-product-mark[data-inherit="true"] {
+  .ui-product-mark[data-inherit="true"] {
     color: inherit;
   }
 }

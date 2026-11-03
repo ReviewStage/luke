@@ -7,7 +7,7 @@
    mounts it. */
 
 @layer components {
-  .luke-chart {
+  .ui-chart {
     display: flex;
     justify-content: center;
     aspect-ratio: 16 / 9;
@@ -17,36 +17,36 @@
 
   /* A window's days (`daily-bars.tsx`): as wide as its frame and as tall as
      its caller says, and pressable where a day's column opens a page. */
-  .luke-chart.luke-daily-bars {
+  .ui-chart.ui-daily-bars {
     aspect-ratio: auto;
     width: 100%;
   }
 
-  .luke-chart.luke-daily-bars[data-opens] {
+  .ui-chart.ui-daily-bars[data-opens] {
     cursor: var(--ui-cursor-press);
   }
 
-  .luke-chart .recharts-cartesian-axis-tick text {
+  .ui-chart .recharts-cartesian-axis-tick text {
     fill: var(--ui-color-text-muted);
   }
 
-  .luke-chart .recharts-cartesian-grid line[stroke="#ccc"] {
+  .ui-chart .recharts-cartesian-grid line[stroke="#ccc"] {
     stroke: color-mix(in srgb, var(--ui-color-border) 50%, transparent);
   }
 
-  .luke-chart .recharts-curve.recharts-tooltip-cursor,
-  .luke-chart .recharts-polar-grid [stroke="#ccc"],
-  .luke-chart .recharts-reference-line [stroke="#ccc"] {
+  .ui-chart .recharts-curve.recharts-tooltip-cursor,
+  .ui-chart .recharts-polar-grid [stroke="#ccc"],
+  .ui-chart .recharts-reference-line [stroke="#ccc"] {
     stroke: var(--ui-color-border);
   }
 
-  .luke-chart .recharts-dot[stroke="#fff"],
-  .luke-chart .recharts-sector[stroke="#fff"] {
+  .ui-chart .recharts-dot[stroke="#fff"],
+  .ui-chart .recharts-sector[stroke="#fff"] {
     stroke: transparent;
   }
 
-  .luke-chart .recharts-radial-bar-background-sector,
-  .luke-chart .recharts-rectangle.recharts-tooltip-cursor {
+  .ui-chart .recharts-radial-bar-background-sector,
+  .ui-chart .recharts-rectangle.recharts-tooltip-cursor {
     fill: var(--ui-color-fill-hover);
   }
 
@@ -54,7 +54,7 @@
      accessibility layer, whose arrows walk the tooltip) and a pie's root,
      keeps the window's ring, because a keyboard reader has to see it holds
      focus; only the parts no Tab reaches drop theirs. */
-  .luke-chart :is(.recharts-layer, .recharts-sector, .recharts-surface):not([tabindex="0"]) {
+  .ui-chart :is(.recharts-layer, .recharts-sector, .recharts-surface):not([tabindex="0"]) {
     outline: none; /* no ring: no Tab stops here */
   }
 
@@ -63,9 +63,9 @@
      there and it is the focus's only cue; on the rest it would ring every
      layer at once. */
   @media (forced-colors: active) {
-    .luke-chart .recharts-layer:focus-visible,
-    .luke-chart .recharts-sector:focus-visible,
-    .luke-chart .recharts-surface:focus-visible {
+    .ui-chart .recharts-layer:focus-visible,
+    .ui-chart .recharts-sector:focus-visible,
+    .ui-chart .recharts-surface:focus-visible {
       outline: var(--ui-focus-ring-width) solid transparent;
       outline-offset: var(--ui-focus-ring-offset);
     }
@@ -74,7 +74,7 @@
   /* The tooltip floats over a chart that sits on a card, so it is drawn on
      the overlay's ground, a step above the card in the dark, never the
      page's, which would draw the one floating surface below what it covers. */
-  .luke-chart-tooltip {
+  .ui-chart-tooltip {
     display: grid;
     align-items: start;
     gap: var(--ui-space-6);
@@ -88,16 +88,16 @@
     line-height: var(--ui-type-caption-leading);
   }
 
-  .luke-chart-tooltip-label {
+  .ui-chart-tooltip-label {
     font-weight: var(--ui-type-label-weight);
   }
 
-  .luke-chart-tooltip-rows {
+  .ui-chart-tooltip-rows {
     display: grid;
     gap: var(--ui-space-6);
   }
 
-  .luke-chart-tooltip-row {
+  .ui-chart-tooltip-row {
     display: flex;
     align-items: center;
     gap: var(--ui-space-8);
@@ -105,8 +105,8 @@
   }
 
   /* A series' swatch, or the icon its config names in its place. */
-  .luke-chart-tooltip-swatch,
-  .luke-chart-tooltip-row > svg {
+  .ui-chart-tooltip-swatch,
+  .ui-chart-tooltip-row > svg {
     flex-shrink: 0;
     width: var(--ui-space-8);
     height: var(--ui-space-8);
@@ -115,11 +115,11 @@
 
   /* Note that the corner is the scale's two-pixel step, because a swatch
      this small rounded at a control's corner would read as a dot. */
-  .luke-chart-tooltip-swatch {
+  .ui-chart-tooltip-swatch {
     border-radius: var(--ui-space-2);
   }
 
-  .luke-chart-tooltip-entry {
+  .ui-chart-tooltip-entry {
     display: flex;
     flex: 1;
     align-items: center;
@@ -128,11 +128,11 @@
     line-height: 1;
   }
 
-  .luke-chart-tooltip-name {
+  .ui-chart-tooltip-name {
     color: var(--ui-color-text-muted);
   }
 
-  .luke-chart-tooltip-value {
+  .ui-chart-tooltip-value {
     color: var(--ui-color-text);
     font-family: var(--ui-font-mono);
     font-weight: var(--ui-type-label-weight);

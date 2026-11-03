@@ -165,7 +165,7 @@ function rightClick(row: HTMLElement): HTMLButtonElement[] {
 
 /** What a menu item says, its chord left out. */
 function wordsOf(item: Element | undefined): string | null | undefined {
-  return item?.querySelector(".luke-menu-item-label")?.textContent ?? item?.textContent;
+  return item?.querySelector(".ui-menu-item-label")?.textContent ?? item?.textContent;
 }
 
 /** The item under `label` among those offered, or a failure saying it is not offered. */
@@ -267,8 +267,8 @@ test("rested on, the row hangs the agent's card beside it, naming it as its tab'
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Remove the stale copy");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Remove the stale copy");
 });
 
 /** Writes words into the agent's box's draft, as typing on its page would. */
@@ -341,14 +341,14 @@ test("the row's card says the agent last moved when its row does, the end of its
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.equal(
-    card?.querySelector(".luke-hover-card-corner")?.textContent,
+    card?.querySelector(".ui-hover-card-corner")?.textContent,
     "2m",
     "its run's end rather than its start three days ago",
   );
   assert.equal(
-    card?.querySelector("[data-pull-request-mark]")?.closest(".luke-hover-card-row")?.textContent,
+    card?.querySelector("[data-pull-request-mark]")?.closest(".ui-hover-card-row")?.textContent,
     "#42 Remove the stale copy",
     "its pull request",
   );
@@ -369,8 +369,8 @@ test("the row's card shows a pull request read since the list was, before the li
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const mark = document.querySelector(".luke-tooltip-card [data-pull-request-mark]");
-  assert.match(mark?.closest(".luke-hover-card-row")?.textContent ?? "", /^#43/u);
+  const mark = document.querySelector(".ui-tooltip-card [data-pull-request-mark]");
+  assert.match(mark?.closest(".ui-hover-card-row")?.textContent ?? "", /^#43/u);
 });
 
 /** Presses `label` in the row's right-click menu. */

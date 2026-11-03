@@ -158,7 +158,7 @@ export function useRowMenu(
     button,
     /** The ⋯ as a revealed end of the row (`row-menu.css`): shown as the row is reached for, its room kept. */
     more: (moreOptions?: RowMoreOptions): ReactNode =>
-      moreDrawn ? <span className="luke-row-more">{button(moreOptions)}</span> : null,
+      moreDrawn ? <span className="ui-row-more">{button(moreOptions)}</span> : null,
     /** What a row that is no `ListRow` spreads on its box: the three doors, and the marks its ⋯'s reveal and its ring read. */
     props: {
       ...withContextMenu<HTMLElement>(doors, {}),

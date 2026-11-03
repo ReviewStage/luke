@@ -114,7 +114,7 @@ test("Pinned folds on its name, counts its pins folded, and leaves the pin that 
     }),
   );
   const names = () =>
-    [...sidebar.querySelectorAll('nav[aria-label="Pinned"] .luke-list-row-title')].map(
+    [...sidebar.querySelectorAll('nav[aria-label="Pinned"] .ui-list-row-title')].map(
       (title) => title.firstChild?.textContent,
     );
   assert.equal(fold(sidebar, "Pinned").getAttribute("aria-expanded"), "true");
@@ -139,7 +139,7 @@ test("a folded repository leaves the task that is open standing, and unfolds to 
     }),
   );
   const names = () =>
-    [...sidebar.querySelectorAll('nav[aria-label="My tasks"] .luke-list-row-title')].map(
+    [...sidebar.querySelectorAll('nav[aria-label="My tasks"] .ui-list-row-title')].map(
       (title) => title.firstChild?.textContent,
     );
   assert.deepEqual(names().sort(), ["Invite expiry", "Retry audit"]);
@@ -250,7 +250,7 @@ test("a child task stands under its parent, folded until the parent's chevron op
     ],
   });
   const names = (within: HTMLElement) =>
-    [...within.querySelectorAll('nav[aria-label="My tasks"] .luke-list-row-title')].map(
+    [...within.querySelectorAll('nav[aria-label="My tasks"] .ui-list-row-title')].map(
       (title) => title.firstChild?.textContent,
     );
   const chevron = (within: HTMLElement, name: string) => {
@@ -286,7 +286,7 @@ function family(id: string, parentTaskId?: string, more: Partial<TaskSummary> = 
 
 /** The names of the rows a list of the sidebar draws, in order. */
 function rowNames(within: HTMLElement, list: string): (string | null | undefined)[] {
-  return [...within.querySelectorAll(`nav[aria-label="${list}"] .luke-list-row-title`)].map(
+  return [...within.querySelectorAll(`nav[aria-label="${list}"] .ui-list-row-title`)].map(
     (title) => title.firstChild?.textContent,
   );
 }

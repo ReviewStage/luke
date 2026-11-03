@@ -8,7 +8,7 @@
 @import "tailwindcss";
 
 /* The shared tokens: `@luke/ui`'s scale, the web profile's roles, and its
-   light and dark palettes, keyed on each page root's `data-luke-profile="web"` and `data-luke-theme` (the HTML entry
+   light and dark palettes, keyed on each page root's `data-ui-profile="web"` and `data-ui-theme` (the HTML entry
    points). */
 @import "@luke/ui/tokens.css";
 /* The shared components' own rules, in Tailwind's `components` layer, over
@@ -56,16 +56,16 @@
    page that draws an integration's mark, its landing, is on the dark ground,
    so these are the dark inks: Executor's, Notion's, and Sentry's white,
    Mercury's near-white, and Neon's green for a dark ground. */
-[data-luke-theme="dark"]
+[data-ui-theme="dark"]
 :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
   color: #fff;
 }
 
-[data-luke-theme="dark"] .integration-mark-mercury {
+[data-ui-theme="dark"] .integration-mark-mercury {
   color: #f4f5f9;
 }
 
-[data-luke-theme="dark"] .integration-mark-neon {
+[data-ui-theme="dark"] .integration-mark-neon {
   color: #34d59a;
 }
 

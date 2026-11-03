@@ -197,12 +197,11 @@ function headOf(container: Element): string {
 
 /** The line under the replay card as a reader reads it: whom it names, if anyone, and the moment its time stands for. */
 function cardMeta(container: Element) {
-  const meta = container.querySelector(":has(> [data-replay-card]) ~ .luke-message-line");
+  const meta = container.querySelector(":has(> [data-replay-card]) ~ .ui-message-line");
   assert.ok(meta !== null);
   return {
     sender:
-      meta.querySelector(".luke-message-line-sender .luke-inline-ref-label")?.textContent ??
-      undefined,
+      meta.querySelector(".ui-message-line-sender .ui-inline-ref-label")?.textContent ?? undefined,
     at: meta.querySelector("time")?.getAttribute("dateTime") ?? undefined,
   };
 }
@@ -253,8 +252,8 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
   // The reader started it, and the message's time is unknown, so the card's line names nobody and no time, and holds its Copy alone.
-  const cardLine = cards[1]?.querySelector(":scope > .luke-message-line");
-  assert.equal(cardLine?.querySelector(".luke-message-line-sender") ?? null, null);
+  const cardLine = cards[1]?.querySelector(":scope > .ui-message-line");
+  assert.equal(cardLine?.querySelector(".ui-message-line-sender") ?? null, null);
   assert.equal(cardLine?.querySelector("time") ?? null, null);
   assert.equal(
     cardLine?.querySelector('button[aria-label="Copy message"]') instanceof HTMLElement,
@@ -274,7 +273,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.ok(!container.textContent?.includes("Note from the developer"));
 
   // The source's chip opens its tab, and leaves the card folded.
-  press(container.querySelector("[data-replay-card] ~ .luke-disclosure-actions [data-actor-ref]"));
+  press(container.querySelector("[data-replay-card] ~ .ui-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
   assert.equal(container.querySelector("[data-replay-step]"), null);
 });
@@ -288,7 +287,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
 
-  const body = container.querySelector("[data-replay-card] .luke-disclosure-body");
+  const body = container.querySelector("[data-replay-card] .ui-disclosure-body");
   assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u);
   assert.doesNotMatch(body?.textContent ?? "", /left out/u);
   const steps = [...container.querySelectorAll("[data-replay-step]")];
@@ -299,7 +298,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   // A line is a sent message, named by whoever sent it, Charles here though Dean started the source.
   const [line, call, said] = steps;
   assert.match(line?.textContent ?? "", /Use seven days\./u);
-  assert.equal(line?.querySelector(".luke-message-head-sender")?.textContent, "Charles Pan");
+  assert.equal(line?.querySelector(".ui-message-head-sender")?.textContent, "Charles Pan");
   assert.match(said?.textContent ?? "", /Seven days it is\./u);
   // A call is a call's row, its verb and subject on the line, folded until opened.
   const head = call?.querySelector("summary");
@@ -335,7 +334,7 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
   assert.match(
-    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .ui-disclosure-body")?.textContent ?? "",
     /209 earlier steps were left out to keep the replay within its size limit\./u,
   );
 });
@@ -359,7 +358,7 @@ test("an agent continued from an automation's run opens on the run's Prompt card
   const prompt = container.querySelector(".agent-origin [data-origin-plan]");
   assert.equal(prompt?.getAttribute("aria-label"), "Prompt");
   assert.match(
-    container.querySelector(".agent-origin .luke-message-line-sender")?.textContent ?? "",
+    container.querySelector(".agent-origin .ui-message-line-sender")?.textContent ?? "",
     /Nightly triage/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
@@ -396,7 +395,7 @@ test("on an agent's own page, which lists no source, the card names the source a
     false,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
-  press(container.querySelector("[data-replay-card] ~ .luke-disclosure-actions [data-actor-ref]"));
+  press(container.querySelector("[data-replay-card] ~ .ui-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, []);
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: SOURCE.id }]);
 });
@@ -424,7 +423,7 @@ test("a replay holding Vespin's summary of the oldest steps opens on one folded 
   assert.equal(row?.textContent, "Summary of 174 earlier steps (written by Vespin)");
   // The summary stands for the steps it summarized, so none is said to be left out.
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .ui-disclosure-body")?.textContent ?? "",
     /left out/u,
   );
   // It stands ahead of the steps.
@@ -463,10 +462,10 @@ test("a replayed line is named under its sender as a transcript names one: Vespi
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
   const senders = [...container.querySelectorAll("[data-replay-step]")].map((step) => {
-    const sender = step.querySelector(".luke-message-head-sender");
+    const sender = step.querySelector(".ui-message-head-sender");
     if (sender === null) return null;
     const ref = sender.querySelector<HTMLElement>("[data-actor-ref]");
-    const name = ref?.querySelector(".luke-inline-ref-label")?.textContent ?? sender.textContent;
+    const name = ref?.querySelector(".ui-inline-ref-label")?.textContent ?? sender.textContent;
     return [ref?.dataset.kind ?? "", name ?? ""];
   });
   assert.deepEqual(senders, [
@@ -479,7 +478,7 @@ test("a replayed line is named under its sender as a transcript names one: Vespi
     ["", "Charles Pan"],
   ]);
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .ui-disclosure-body")?.textContent ?? "",
     /\bYou\b/u,
   );
 });
@@ -501,7 +500,7 @@ test("the line under the card says when the reader's own agent was started, nami
     at: new Date(SENT_AT).toISOString(),
   });
   assert.doesNotMatch(
-    container.querySelector(":has(> [data-replay-card]) ~ .luke-message-line")?.textContent ?? "",
+    container.querySelector(":has(> [data-replay-card]) ~ .ui-message-line")?.textContent ?? "",
     /You|·/u,
   );
 });
@@ -524,9 +523,8 @@ test("the line under the card names a teammate who started the agent by their fa
     at: new Date(SENT_AT).toISOString(),
   });
   assert.match(
-    container.querySelector(
-      ":has(> [data-replay-card]) ~ .luke-message-line .luke-message-line-time",
-    )?.textContent ?? "",
+    container.querySelector(":has(> [data-replay-card]) ~ .ui-message-line .ui-message-line-time")
+      ?.textContent ?? "",
     /^·/u,
   );
 });
@@ -563,7 +561,7 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
   assert.equal(document.activeElement, container.querySelector("[data-replay-steps]"));
   // The replay kept every step, so none is said to be left out.
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .ui-disclosure-body")?.textContent ?? "",
     /left out/u,
   );
 });
@@ -587,7 +585,7 @@ test("Vespin's summary and the steps left out stand over the earlier-steps row, 
   assert.equal(headOf(container), "Continued from Wire the start from field · 30 of 140 steps");
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
-  const body = container.querySelector("[data-replay-card] .luke-disclosure-body");
+  const body = container.querySelector("[data-replay-card] .ui-disclosure-body");
   const summaryRow = body?.querySelector("[data-replay-summary]");
   const left = [...(body?.querySelectorAll("p") ?? [])].find((each) =>
     /left out/u.test(each.textContent ?? ""),
@@ -660,7 +658,7 @@ test("a replayed call whose marker names its tool is drawn as the live transcrip
   assert.ok(patch?.querySelector('[data-row="removed"]') instanceof HTMLElement);
   // A call about an agent names it by the chip its tab wears.
   assert.equal(
-    read?.querySelector("[data-tool-agent-ref] .luke-inline-ref-label")?.textContent,
+    read?.querySelector("[data-tool-agent-ref] .ui-inline-ref-label")?.textContent,
     "Wire the start from field",
   );
 });
@@ -691,10 +689,10 @@ test("a replayed line stands under who sent it, over when and Copy, and the card
 
   const step = container.querySelector("[data-replay-step='line']");
   assert.equal(
-    step?.querySelector(".luke-message-head-sender .luke-inline-ref-label")?.textContent,
+    step?.querySelector(".ui-message-head-sender .ui-inline-ref-label")?.textContent,
     "Charles Pan",
   );
-  const line = step?.querySelector(":scope > .luke-message-line");
+  const line = step?.querySelector(":scope > .ui-message-line");
   assert.equal(
     line?.querySelector("time")?.getAttribute("dateTime"),
     new Date(SENT_AT).toISOString(),
@@ -705,7 +703,7 @@ test("a replayed line stands under who sent it, over when and Copy, and the card
 
   press(
     container.querySelector(
-      ':has(> [data-replay-card]) ~ .luke-message-line button[aria-label="Copy message"]',
+      ':has(> [data-replay-card]) ~ .ui-message-line button[aria-label="Copy message"]',
     ),
   );
   await settle();

@@ -71,7 +71,7 @@ function word(query: string): ComposerTrigger {
 
 /** The rows the open list draws, by name. */
 const rows = (page: HTMLElement) =>
-  [...page.querySelectorAll(".luke-combobox-option-label")].map((row) => row.textContent);
+  [...page.querySelectorAll(".ui-combobox-option-label")].map((row) => row.textContent);
 
 test("an @ list closed with Escape stays closed in its word, and opens again once the word is left and written anew", () => {
   const { picker, page } = mounted();
@@ -95,7 +95,7 @@ test("an @ list closed with Escape stays drawn, inert, with its rows while it fa
   act(() => {
     picker().onKey(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
   });
-  const fading = page.querySelector<HTMLElement>(".luke-rect-float");
+  const fading = page.querySelector<HTMLElement>(".ui-rect-float");
   const fadingRows = rows(page);
   const expanded = picker().aria["aria-expanded"];
   act(() => exits.finish());
@@ -104,13 +104,13 @@ test("an @ list closed with Escape stays drawn, inert, with its rows while it fa
   assert.equal(fading.hasAttribute("inert"), true, "the fading list takes nothing");
   assert.deepEqual(fadingRows, ["Margins"], "the fading list keeps the rows it closed with");
   assert.equal(expanded, "false", "the field reads the list closed as it starts to fade");
-  assert.equal(page.querySelector(".luke-rect-float"), null, "the list goes once it has faded");
+  assert.equal(page.querySelector(".ui-rect-float"), null, "the list goes once it has faded");
 });
 
 test("the @ list's foot names its keys through Shortcut, ⏎ and ⇥ mention and Esc closes", () => {
   const { picker, page } = mounted();
   act(() => picker().onTrigger(word("mar")));
-  const foot = page.querySelector(".luke-menu-keys");
+  const foot = page.querySelector(".ui-menu-keys");
   assert.ok(foot, "the list has a foot");
   assert.deepEqual(
     [...foot.children].map((item) => item.textContent),
@@ -156,7 +156,7 @@ async function mountedOnPlan(chosen: MentionNode[]) {
 /** The rows the open list draws, by name and the detail beside it. */
 const detailedRows = (page: HTMLElement) =>
   [...page.querySelectorAll('[role="option"]')].map((row) =>
-    [".luke-combobox-option-label", ".luke-combobox-option-detail"]
+    [".ui-combobox-option-label", ".ui-combobox-option-detail"]
       .map((part) => row.querySelector(part)?.textContent)
       .filter((words) => words !== undefined)
       .join(" · "),

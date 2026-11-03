@@ -4,7 +4,7 @@
    glyph cell (`harness-mark.tsx`). */
 
 @layer components {
-  .luke-harness-mark {
+  .ui-harness-mark {
     flex: none;
   }
 }

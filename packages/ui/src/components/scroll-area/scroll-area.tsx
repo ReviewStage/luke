@@ -171,7 +171,7 @@ export function scrollFadeMarks(
   "data-axis": ScrollAxis;
   "data-fade": ScrollFade;
 } {
-  return { className: "luke-scroll-area", "data-axis": axis, "data-fade": fade };
+  return { className: "ui-scroll-area", "data-axis": axis, "data-fade": fade };
 }
 
 /** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` and `fadeInset` say, a swipe past its end stopping or handed on as `overscroll` says. */
@@ -188,7 +188,7 @@ export function ScrollArea({
   return (
     <ShadcnScrollArea
       {...div}
-      className={`luke-scroll-area ${SIZE_CLASS[size]} ${OVERSCROLL_CLASS[overscroll]} ${GUTTER_CLASS[gutter]}`}
+      className={`ui-scroll-area ${SIZE_CLASS[size]} ${OVERSCROLL_CLASS[overscroll]} ${GUTTER_CLASS[gutter]}`}
       data-axis={axis}
       data-size={size}
       data-fade={fade}

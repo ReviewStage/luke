@@ -125,7 +125,7 @@ interface InlineRefFace {
 
 /** What every token is drawn with: one target that never outgrows its column, its words the line's own. */
 const ROOT =
-  "luke-inline-ref inline-flex min-w-0 max-w-full items-center p-0 border-0 text-left align-baseline [font:inherit] no-underline whitespace-nowrap";
+  "ui-inline-ref inline-flex min-w-0 max-w-full items-center p-0 border-0 text-left align-baseline [font:inherit] no-underline whitespace-nowrap";
 
 /** Each look's own box and ink at rest, a pill's type asked on its look so it outranks the line's own font the root takes. Note that a wash's name stands at least a 16px mark's height, so a mark beside it stays centred on it. */
 const LOOK_ROOT = {
@@ -172,7 +172,7 @@ function rootClass({
 /** A token's glyph, centred in a box the line's size; a pill's in the muted ink. */
 function glyphClass(look: InlineRefLook): string {
   const glyph =
-    "luke-inline-ref-glyph inline-grid flex-none place-items-center empty:hidden [&>svg]:size-[1em]";
+    "ui-inline-ref-glyph inline-grid flex-none place-items-center empty:hidden [&>svg]:size-[1em]";
   return look === INLINE_REF_LOOK.PILL ? `${glyph} size-[1em] text-muted-foreground` : glyph;
 }
 
@@ -188,7 +188,7 @@ function labelClass({
   gone: boolean;
   pressable: boolean;
 }): string {
-  const parts = ["luke-inline-ref-label min-w-0 self-baseline overflow-hidden"];
+  const parts = ["ui-inline-ref-label min-w-0 self-baseline overflow-hidden"];
   if (name === INLINE_REF_NAME.PATH) parts.push("[direction:rtl] font-mono");
   if (gone) parts.push("line-through");
   if (look === INLINE_REF_LOOK.LINK && pressable) {
@@ -200,7 +200,7 @@ function labelClass({
 
 /** Where a token stands, after its name, never cut; a pill's set off by a hairline. */
 function stateClass(look: InlineRefLook): string {
-  const state = "luke-inline-ref-state flex-none self-baseline text-muted-foreground";
+  const state = "ui-inline-ref-state flex-none self-baseline text-muted-foreground";
   return look === INLINE_REF_LOOK.PILL
     ? `${state} border-l border-border-strong pl-ui-4 font-caption`
     : state;
@@ -262,7 +262,7 @@ function InlineRefRoot({
   const stated = !(state === undefined || state === null || labelHidden);
   const face = (
     <>
-      {kind === undefined ? null : <span className="luke-visually-hidden">{`${kind} `}</span>}
+      {kind === undefined ? null : <span className="ui-visually-hidden">{`${kind} `}</span>}
       {glyph === undefined ? null : (
         <span className={glyphClass(look)} aria-hidden="true">
           {glyph}
@@ -270,9 +270,7 @@ function InlineRefRoot({
       )}
       <span
         ref={measured}
-        className={
-          labelHidden ? "luke-visually-hidden" : labelClass({ look, name, gone, pressable })
-        }
+        className={labelHidden ? "ui-visually-hidden" : labelClass({ look, name, gone, pressable })}
         data-name={name}
         data-overflow={String(clipped)}
       >
@@ -280,8 +278,8 @@ function InlineRefRoot({
         {name === INLINE_REF_NAME.PATH ? <bdi>{label}</bdi> : label}
       </span>
       {!stated ? null : <span className={stateClass(look)}>{state}</span>}
-      {heard === undefined ? null : <span className="luke-visually-hidden">{heard}</span>}
-      {gone ? <span className="luke-visually-hidden">{GONE_HEARD}</span> : null}
+      {heard === undefined ? null : <span className="ui-visually-hidden">{heard}</span>}
+      {gone ? <span className="ui-visually-hidden">{GONE_HEARD}</span> : null}
     </>
   );
   const own = {

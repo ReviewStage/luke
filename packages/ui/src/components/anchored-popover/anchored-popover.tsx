@@ -72,10 +72,10 @@ export type PopoverBounds = (typeof POPOVER_BOUNDS)[keyof typeof POPOVER_BOUNDS]
  * its presses; a small gap above the box that
  * holds the button, or below it where only there is room, its asked edge at
  * the inset and width it was measured to. What it holds draws its own
- * surface. `luke-anchored-popover` names it for what hangs in it.
+ * surface. `ui-anchored-popover` names it for what hangs in it.
  */
 const LAYER =
-  "luke-anchored-popover absolute z-menu data-[side=above]:bottom-[calc(100%+--spacing(1))] data-[side=below]:top-[calc(100%+--spacing(1))]";
+  "ui-anchored-popover absolute z-menu data-[side=above]:bottom-[calc(100%+--spacing(1))] data-[side=below]:top-[calc(100%+--spacing(1))]";
 
 /** The width a popover asks for unless its owner asks another, the desktop's searchable menu's own, which the room may narrow. */
 const DEFAULT_WIDTH = 340;

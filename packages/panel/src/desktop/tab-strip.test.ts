@@ -50,9 +50,9 @@ let moves: [number, number][] = [];
 /** The pill of the tab labelled `label`. */
 function pill(container: HTMLElement, label: string): HTMLElement {
   const tab = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === label,
+    (each) => each.querySelector(".ui-tab-label")?.textContent === label,
   );
-  return tab?.closest<HTMLElement>(".luke-tab") ?? assert.fail(`${label}'s tab stands`);
+  return tab?.closest<HTMLElement>(".ui-tab") ?? assert.fail(`${label}'s tab stands`);
 }
 
 /** A strip of three tabs with menus, each with a Close of its own, which may be moved. */
@@ -75,14 +75,14 @@ function MenuStrip(): ReactNode {
 
 /** The words of every item of the menus standing. */
 function menuWords(): string[] {
-  return [...document.querySelectorAll(".luke-menu-item-label")].map(
+  return [...document.querySelectorAll(".ui-menu-item-label")].map(
     (each) => each.textContent ?? "",
   );
 }
 
 /** The menu item named `label`. */
 function menuItem(label: string): HTMLElement {
-  const name = [...document.querySelectorAll(".luke-menu-item-label")].find(
+  const name = [...document.querySelectorAll(".ui-menu-item-label")].find(
     (each) => each.textContent === label,
   );
   return name?.closest<HTMLElement>('[role="menuitem"]') ?? assert.fail(`no ${label} item`);
@@ -139,7 +139,7 @@ test("with a mouse, a tab's menu offers Move left and Move right too, each with 
   });
 
   assert.deepEqual(menuWords(), ["Move left", "Move right", "Close"]);
-  assert.equal(menuItem("Move left").querySelector(".luke-menu-item-hint")?.textContent, "⇧⌘←");
+  assert.equal(menuItem("Move left").querySelector(".ui-menu-item-hint")?.textContent, "⇧⌘←");
   act(() => menuItem("Move right").click());
   assert.deepEqual(moves, [[1, 2]]);
 });
@@ -154,7 +154,7 @@ test("a tab's menu standing open leaves the strip's row holding its tabs alone",
 
   assert.deepEqual(menuWords(), ["Move right", "Close"]);
   assert.deepEqual(
-    [...strip.children].map((each) => each.classList.contains("luke-tab")),
+    [...strip.children].map((each) => each.classList.contains("ui-tab")),
     [true, true, true],
   );
 });

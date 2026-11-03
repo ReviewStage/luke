@@ -158,10 +158,10 @@ test("Esc is the owner's cancel; with the / menu open it closes the menu alone, 
     );
   });
   type("/");
-  assert.ok(holder.querySelector(".luke-block-menu") !== null, "the / menu stands");
+  assert.ok(holder.querySelector(".ui-block-menu") !== null, "the / menu stands");
 
   press({ key: "Escape" });
-  assert.equal(holder.querySelector(".luke-block-menu"), null, "Esc closes the menu");
+  assert.equal(holder.querySelector(".ui-block-menu"), null, "Esc closes the menu");
   assert.deepEqual(heard.cancels, [], "and lets nothing go");
 
   press({ key: "Escape" });

@@ -40,7 +40,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   laid?.remove();
   laid = undefined;
-  document.documentElement.removeAttribute("data-luke-profile");
+  document.documentElement.removeAttribute("data-ui-profile");
   Reflect.deleteProperty(window, "visualViewport");
   vi.restoreAllMocks();
 });
@@ -64,7 +64,7 @@ function layOut(
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(height);
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("tab-add-anchor")) return plus;
-    if (this.classList.contains("luke-anchored-popover")) {
+    if (this.classList.contains("ui-anchored-popover")) {
       return box(0, 0, MENU_WIDTH, MENU_HEIGHT);
     }
     if (panel !== undefined && this.hasAttribute("data-popover-room")) return panel;
@@ -109,11 +109,11 @@ async function opened(container: HTMLElement, plus: DOMRect): Promise<[number, n
     assert.fail("the + stands");
   await act(async () => button.click());
   assert.ok(
-    container.querySelector(".luke-searchable-menu [role='option']"),
+    container.querySelector(".ui-searchable-menu [role='option']"),
     "the menu offers its tabs",
   );
   const layer =
-    container.querySelector<HTMLElement>(".luke-anchored-popover") ??
+    container.querySelector<HTMLElement>(".ui-anchored-popover") ??
     assert.fail("the menu hangs from the +");
   const width = Number.parseFloat(layer.style.width);
   const left =
@@ -156,7 +156,7 @@ function resolved(element: Element, length: string): string {
 }
 
 test('on a phone whose keyboard leaves the screen short of the "+" menu\'s height, the menu ends inside what is seen', async () => {
-  document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.setAttribute("data-ui-profile", "web");
   laid = layContainersAt({}, { touch: true });
   const plus = box(216, 60, 44, 44);
   layOut(390, 844, plus, box(0, 0, 390, 844));
@@ -175,8 +175,8 @@ test('on a phone whose keyboard leaves the screen short of the "+" menu\'s heigh
   });
   const container = await drawn(true);
   await opened(container, plus);
-  const layer = container.querySelector<HTMLElement>(".luke-anchored-popover") ?? assert.fail();
-  const menu = container.querySelector<HTMLElement>(".luke-searchable-menu") ?? assert.fail();
+  const layer = container.querySelector<HTMLElement>(".ui-anchored-popover") ?? assert.fail();
+  const menu = container.querySelector<HTMLElement>(".ui-searchable-menu") ?? assert.fail();
   assert.equal(layer.dataset.side, "below", "the menu drops into the larger room, under the +");
   const tallest = Number.parseFloat(resolved(menu, getComputedStyle(menu).maxHeight));
   assert.ok(

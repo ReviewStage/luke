@@ -172,8 +172,8 @@ function scrollHeading(container: Element, away: boolean): void {
 
 /** The bar's copy of the page's name, as a reader is handed it: its words, or none where it is hidden from them or not drawn. */
 function barName(container: Element): string | undefined {
-  const bar = find(container, "header.luke-toolbar");
-  const copy = [...bar.querySelectorAll(".luke-toolbar-pick-up")].find(
+  const bar = find(container, "header.ui-toolbar");
+  const copy = [...bar.querySelectorAll(".ui-toolbar-pick-up")].find(
     (element) => element.closest('[aria-hidden="true"]') === null,
   );
   return copy?.textContent ?? undefined;
@@ -187,7 +187,7 @@ test("once the header's title scrolls out of view the bar names the page, as wor
   scrollHeading(container, true);
   expect(barName(container)).toBe("Launch checklist");
   expect(container.querySelectorAll("h1")).toHaveLength(1);
-  expect(find(container, "header.luke-toolbar").querySelector("h1, [role='heading']")).toBeNull();
+  expect(find(container, "header.ui-toolbar").querySelector("h1, [role='heading']")).toBeNull();
 
   scrollHeading(container, false);
   expect(barName(container)).toBeUndefined();
@@ -235,7 +235,7 @@ test("a page whose bar stands outside it draws no bar and hands the caller the n
     ),
   );
 
-  expect(container.querySelector("header.luke-toolbar")).toBeNull();
+  expect(container.querySelector("header.ui-toolbar")).toBeNull();
   expect(container.querySelectorAll("h1")).toHaveLength(1);
   expect(picked.at(-1)).toEqual({ name: "Launch checklist", shown: false });
 

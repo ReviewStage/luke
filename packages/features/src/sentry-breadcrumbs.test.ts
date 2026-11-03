@@ -29,7 +29,7 @@ test("a failed join's validate fetch, its token in the query, is dropped", () =>
     level: "error" as const,
     data: {
       method: "GET",
-      url: `https://luke-avatar.livekit.cloud/rtc/v1/validate?access_token=${TOKEN}&auto_subscribe=1`,
+      url: `https://ui-avatar.livekit.cloud/rtc/v1/validate?access_token=${TOKEN}&auto_subscribe=1`,
     },
   };
   assert.equal(withoutAccessTokens(breadcrumb), null);

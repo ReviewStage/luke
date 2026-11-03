@@ -51,7 +51,7 @@ const SHOWN_ATTRIBUTE = "data-shown";
  * press's reach, a layer up, so a press on it is its own.
  */
 const BOX =
-  "luke-select-box absolute z-1 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit hover:opacity-100 peer-hover/card-press:opacity-100 peer-focus-visible/card-press:opacity-100 data-[shown=true]:opacity-100";
+  "ui-select-box absolute z-1 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit hover:opacity-100 peer-hover/card-press:opacity-100 peer-focus-visible/card-press:opacity-100 data-[shown=true]:opacity-100";
 
 /** Where each place stands the box in its row. */
 const PLACED: Record<SelectBoxPlace, string> = {

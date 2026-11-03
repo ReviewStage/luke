@@ -81,7 +81,7 @@ export function ComposerFrame({
     {
       ...rest,
       ref,
-      className: ["luke-composer-frame group/composer", LOOK_CLASS[look], DROPPING, className ?? ""]
+      className: ["ui-composer-frame group/composer", LOOK_CLASS[look], DROPPING, className ?? ""]
         .filter((part) => part !== "")
         .join(" "),
       noValidate: Element === COMPOSER_ELEMENT.FORM ? true : undefined,

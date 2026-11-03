@@ -85,6 +85,6 @@ test("in a narrow room the page's bar is led by the way back to the list, which 
   const page = drawn({ kind: HISTORY_READ.READING }, SHELL_ROOM.NARROW).querySelector(
     ".version-page",
   );
-  const banner = page?.querySelector("header.luke-toolbar");
-  assert.ok(banner?.querySelector(".luke-toolbar-lead button"), "the way back leads the bar");
+  const banner = page?.querySelector("header.ui-toolbar");
+  assert.ok(banner?.querySelector(".ui-toolbar-lead button"), "the way back leads the bar");
 });

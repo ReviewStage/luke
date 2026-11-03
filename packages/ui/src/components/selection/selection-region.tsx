@@ -49,7 +49,7 @@ export function SelectionRegion({
     // biome-ignore lint/a11y/noStaticElementInteractions: the region only hears the keys its rows' presses raise, which bubble to it; the presses are the controls.
     <div
       id={id}
-      className="luke-selection-region contents"
+      className="ui-selection-region contents"
       {...selectionRoot()}
       onKeyDown={(event) => {
         chooser.onKeyDown(event);

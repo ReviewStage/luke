@@ -128,8 +128,8 @@ The tokens a control is drawn with, and every control any app draws,
 are `@luke/ui`'s (`packages/ui/src/tokens/`, `packages/ui/src/components/`),
 so the window and the site draw one control at two densities rather than two
 controls, and a control only one app draws lives there too. A root, and every overlay it portals into the body, carries two
-attributes (`surfaceAttributes` in `surface.ts`): `data-luke-profile`,
-`desktop` or `web`, which picks the density, and `data-luke-theme`, `dark`,
+attributes (`surfaceAttributes` in `surface.ts`): `data-ui-profile`,
+`desktop` or `web`, which picks the density, and `data-ui-theme`, `dark`,
 `light`, or, on the desktop alone, `system`, which picks the palette. Both
 roots follow the Theme setting: the desktop's stays `system` while Electron
 steers the Mac's appearance to the setting, and the web's wears the setting

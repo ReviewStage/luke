@@ -52,7 +52,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * It is drawn in shadcn/ui's calendar classes over the Tailwind theme
  * (`../../shadcn/calendar.ts`), with none of react-day-picker under it,
  * whose local dates and own focus would keep none of the above. Each part
- * keeps its `luke-calendar-*` name beside its classes, which draws nothing
+ * keeps its `ui-calendar-*` name beside its classes, which draws nothing
  * but the keyboard's ring (`calendar.css`).
  */
 
@@ -296,12 +296,12 @@ export function Calendar({
   };
 
   return (
-    <div className={cn("luke-calendar", CALENDAR)}>
-      <div className={cn("luke-calendar-head", CALENDAR_CAPTION)}>
-        <span className={cn("luke-calendar-title", CALENDAR_CAPTION_LABEL)} id={titleId}>
+    <div className={cn("ui-calendar", CALENDAR)}>
+      <div className={cn("ui-calendar-head", CALENDAR_CAPTION)}>
+        <span className={cn("ui-calendar-title", CALENDAR_CAPTION_LABEL)} id={titleId}>
           {caption}
         </span>
-        <span className={cn("luke-calendar-steps", CALENDAR_NAV)}>
+        <span className={cn("ui-calendar-steps", CALENDAR_NAV)}>
           <Tooltip label="Previous month">
             <IconButton
               icon={<BackIcon />}
@@ -324,7 +324,7 @@ export function Calendar({
       </div>
       <table
         ref={grid}
-        className={cn("luke-calendar-grid", CALENDAR_MONTH_GRID)}
+        className={cn("ui-calendar-grid", CALENDAR_MONTH_GRID)}
         // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a date grid is a table the arrows move through, which is what ARIA's grid is for, as the APG's date picker draws it.
         role="grid"
         aria-labelledby={titleId}
@@ -337,7 +337,7 @@ export function Calendar({
             {WEEKDAYS.map((weekday) => (
               <th
                 key={weekday.day}
-                className={cn("luke-calendar-weekday", CALENDAR_WEEKDAY)}
+                className={cn("ui-calendar-weekday", CALENDAR_WEEKDAY)}
                 scope="col"
                 aria-label={weekday.long}
               >
@@ -360,7 +360,7 @@ export function Calendar({
                   <td
                     key={day}
                     className={cn(
-                      "luke-calendar-cell",
+                      "ui-calendar-cell",
                       CALENDAR_DAY,
                       place === undefined ? undefined : CALENDAR_RANGE[place],
                     )}
@@ -370,7 +370,7 @@ export function Calendar({
                     <button
                       type="button"
                       className={cn(
-                        "luke-calendar-day",
+                        "ui-calendar-day",
                         CALENDAR_DAY_BUTTON,
                         picked ? CALENDAR_DAY_FACE.PICKED : CALENDAR_DAY_FACE.OPEN,
                         dayInk(place, isToday, outside),

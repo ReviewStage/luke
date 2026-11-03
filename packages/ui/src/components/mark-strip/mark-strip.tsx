@@ -37,14 +37,13 @@ export interface StripMark {
 /** The strip, a column of marks filling the box its place stands it in; bars share its height with no gap between. */
 const STRIP_CLASS = {
   [MARK_STRIP_LOOK.DOTS]:
-    "luke-mark-strip flex min-w-0 flex-1 flex-col items-center gap-ui-4 py-ui-12",
-  [MARK_STRIP_LOOK.BARS]:
-    "luke-mark-strip flex min-w-0 flex-1 flex-col items-center gap-0 py-ui-12",
+    "ui-mark-strip flex min-w-0 flex-1 flex-col items-center gap-ui-4 py-ui-12",
+  [MARK_STRIP_LOOK.BARS]: "ui-mark-strip flex min-w-0 flex-1 flex-col items-center gap-0 py-ui-12",
 } as const satisfies Record<MarkStripLook, string>;
 
 /** A mark's ink, in its status tone's where it has one (`tokens/status-tone.css`). */
 const MARK_INK =
-  "luke-mark-strip-mark [--ui-mark-strip-ink:var(--ui-color-border-strong)] data-tone:[--ui-mark-strip-ink:var(--ui-tone-ink)]";
+  "ui-mark-strip-mark [--ui-mark-strip-ink:var(--ui-color-border-strong)] data-tone:[--ui-mark-strip-ink:var(--ui-tone-ink)]";
 
 /** A dot, or a bar: a share of the strip's height, at most a dot's, its ink filling the top of its share so the gap between bars shrinks with them. */
 const MARK_SHAPE = {

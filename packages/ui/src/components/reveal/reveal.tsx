@@ -92,7 +92,7 @@ function RevealedRows({ revealed }: { revealed: readonly Revealed[] }): React.JS
   return (
     <>
       {drawn.map(({ key, value }) => (
-        <div key={key} className="luke-reveal" {...motionKey(key)} {...motionRows()}>
+        <div key={key} className="ui-reveal" {...motionKey(key)} {...motionRows()}>
           {value.rows}
         </div>
       ))}

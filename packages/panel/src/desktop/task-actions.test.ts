@@ -208,12 +208,12 @@ function menuItems(): HTMLButtonElement[] {
 }
 /** What an item says, without the chord printed at its end. */
 function itemLabel(item: HTMLElement): string | null {
-  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
+  return item.querySelector(".ui-menu-item-label")?.textContent ?? null;
 }
 /** Each item of the open menu that prints a chord, as what it says and the chord's glyphs. */
 function itemChords(): [string | null, string][] {
   return menuItems().flatMap((item): [string | null, string][] => {
-    const keys = item.querySelector(".luke-shortcut");
+    const keys = item.querySelector(".ui-shortcut");
     return keys === null ? [] : [[itemLabel(item), keys.textContent ?? ""]];
   });
 }
@@ -385,7 +385,7 @@ function planShown(tasks: TasksControl): TasksControl {
 
 /** The lines under the open menu's items, each with its time left off. */
 function menuFooter(): string[] {
-  const notes = document.querySelectorAll('[role="menu"] .luke-menu-footer p');
+  const notes = document.querySelectorAll('[role="menu"] .ui-menu-footer p');
   return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
 }
 
@@ -393,7 +393,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   openMenu(mountPlanTab(planShown(sharedTab(DEAN.userId))));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
-  const faces = document.querySelectorAll('[role="menu"] .luke-menu-footer .actor-mark');
+  const faces = document.querySelectorAll('[role="menu"] .ui-menu-footer .actor-mark');
   assert.deepEqual(
     [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
     [
@@ -401,7 +401,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
       ["person", "D"],
     ],
   );
-  const times = document.querySelectorAll('[role="menu"] .luke-menu-footer time');
+  const times = document.querySelectorAll('[role="menu"] .ui-menu-footer time');
   assert.deepEqual(
     [...times].map((time) => time.getAttribute("datetime")),
     [new Date(60_000).toISOString(), new Date(120_000).toISOString()],
@@ -431,7 +431,7 @@ test("a sidebar task wears its assignee's face where someone else is on it, the 
     );
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
     // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
-    const line = container.querySelector(".luke-list-row-title");
+    const line = container.querySelector(".ui-list-row-title");
     const said = [...(line?.childNodes ?? [])]
       .map(heard)
       .join("")
@@ -471,7 +471,7 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
-    const line = container.querySelector(".luke-list-row-title");
+    const line = container.querySelector(".ui-list-row-title");
     const said = [...(line?.childNodes ?? [])]
       .map(heard)
       .join("")
@@ -528,7 +528,7 @@ test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to de
       tasks: sharedTab(DEAN.userId),
     }),
   );
-  assert.equal(container.querySelector('.luke-toolbar [aria-label="Task actions"]'), null);
+  assert.equal(container.querySelector('.ui-toolbar [aria-label="Task actions"]'), null);
   assert.equal(container.querySelector(".side-panel-bar"), null, "the panel is shut");
 
   act(() => {
@@ -579,7 +579,7 @@ test("a sidebar task's press says its status after its name, as a List row's doe
         children: sidebarTask(tasks, { ...task, assignee: DEAN }, asked),
       }),
     );
-    const press = container.querySelector(".luke-list-row-title");
+    const press = container.querySelector(".ui-list-row-title");
     const words = press === null ? "" : heard(press);
     unmountAll();
     return words;
@@ -605,7 +605,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
     "the row wears its agents' icon",
   );
   assert.deepEqual(
-    [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
+    [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map(heard),
     ["Repository belongs to Stage"],
   );
 });
@@ -658,7 +658,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
   openMenu(mountPlanTab(tasks));
   await copyFromMenu();
   const title = document.querySelector<HTMLButtonElement>(
-    '.luke-page-header-actions button[aria-label="Copy link"]',
+    '.ui-page-header-actions button[aria-label="Copy link"]',
   );
   assert.ok(title, "the title has a Copy link button");
   await act(async () => title.click());
@@ -682,8 +682,8 @@ test("a task's card says who created it where others share its workspace, the re
         children: taskCardOf(tasks, { ...task, workspaceId: workspace.id }, task.updatedAt),
       }),
     );
-    const lines = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
-      (line) => heard(line).replace(/ · .*$/u, ""),
+    const lines = [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return lines;
@@ -722,7 +722,7 @@ test("a task's card's creator line opens the creator's page in the window, and i
           : card,
       }),
     );
-    return [...view.querySelectorAll<HTMLElement>('.luke-hover-card-row[data-look="detail"]')].find(
+    return [...view.querySelectorAll<HTMLElement>('.ui-hover-card-row[data-look="detail"]')].find(
       (each) => each.textContent?.includes("Created by"),
     );
   };
@@ -765,8 +765,8 @@ test("a task's card says you of the reader's own task outside a member directory
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const said = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
-      (line) => heard(line).replace(/ · .*$/u, ""),
+    const said = [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return said;
