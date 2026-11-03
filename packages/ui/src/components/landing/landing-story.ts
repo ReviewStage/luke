@@ -1,12 +1,12 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { prefersStill } from "./landing-paint.js";
+import { heldStill } from "./landing-paint.js";
 
 /**
  * landing-story.ts -- the clock the landing's scenes play their stories on, and the moment their times count back from.
  *
  * A story is a count of steps, each held for a beat. Its clock runs only
  * while the scene is on screen, so a reader scrolling to it meets its start,
- * starts over at its end, and under reduced motion stands at its last step,
+ * starts over at its end, and where motion is held stands at its last step,
  * where the whole story is told. Every time a scene shows counts back from
  * one fixed moment, so a page drawn on any day says the same ages, and a
  * prerendered page and the browser agree.
@@ -23,7 +23,7 @@ export function still(): void {}
 /**
  * A story's step, from 0 to `count - 1`, held `beat` milliseconds each, on a
  * clock that runs only while the element `ref` names is on screen, or the
- * last step under reduced motion.
+ * last step where motion is held.
  */
 export function useStory(
   count: number,
@@ -34,7 +34,7 @@ export function useStory(
   useEffect(() => {
     const scene = ref.current;
     if (!scene) return undefined;
-    if (prefersStill()) {
+    if (heldStill()) {
       setStep(count - 1);
       return undefined;
     }

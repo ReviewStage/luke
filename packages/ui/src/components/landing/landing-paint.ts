@@ -4,9 +4,11 @@
  * Every canvas on the landing paints in the theme's own roles, read at mount
  * through a probe so whatever CSS colour a role holds resolves, and lands each
  * cell on a flat colour through an 8×8 Bayer map rather than a gradient. The
- * loop draws once and stands still under reduced motion, and skips its frames
- * while its canvas is scrolled away.
+ * loop draws once and stands still where motion is held (reduced motion, a
+ * capture run), and skips its frames while its canvas is scrolled away.
  */
+
+import { motionHeld } from "../../motion-timing.js";
 
 /** An 8×8 Bayer map's thresholds, row by row, each between 0 and 1. */
 const BAYER_8: readonly number[] = [
@@ -30,22 +32,19 @@ export function roleChannels(near: HTMLElement, role: string): readonly [number,
   return [Number(parts[0] ?? 0) / 255, Number(parts[1] ?? 0) / 255, Number(parts[2] ?? 0) / 255];
 }
 
-/** Whether the reader asked for less motion. */
-export function prefersStill(): boolean {
+/** Whether motion is held still, as reduced motion and a capture run hold it (`motionHeld`). */
+export function heldStill(): boolean {
   // Note that a document with no media queries, as jsdom's is, is drawn still, because it lays out no frames to play either.
-  return (
-    typeof window.matchMedia !== "function" ||
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
+  return typeof window.matchMedia !== "function" || motionHeld();
 }
 
 /**
  * Draws `draw` on every frame while `canvas` is on screen, with the seconds
- * since the page opened, or once at zero under reduced motion. Answers the
- * loop's stop.
+ * since the page opened, or once at zero where motion is held still. Answers
+ * the loop's stop.
  */
 export function paintLoop(canvas: HTMLCanvasElement, draw: (seconds: number) => void): () => void {
-  if (prefersStill()) {
+  if (heldStill()) {
     draw(0);
     return () => undefined;
   }
