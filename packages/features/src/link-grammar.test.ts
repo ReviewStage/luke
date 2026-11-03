@@ -107,6 +107,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT, itemId: OTHER },
     `${HOME}/agent/${AGENT}/inbox/${OTHER}`,
   ],
+  [{ kind: LINK_PLACE.INBOX_ITEM, itemId: OTHER }, `${HOME}/inbox/${OTHER}`],
   [{ kind: LINK_PLACE.CHANNEL, channelId: OTHER }, `${HOME}/channel/${OTHER}`],
   [{ kind: LINK_PLACE.AUTOMATIONS }, `${HOME}/automations`],
   [{ kind: LINK_PLACE.AUTOMATION, automationId: OTHER }, `${HOME}/automation/${OTHER}`],
@@ -258,7 +259,7 @@ test("an address that names no place in Vespin names nothing", () => {
     // The task's Call tab is gone, and a link to it, or to a call there, names nothing.
     `${HOME}/plan/${TASK}/call`,
     `${HOME}/plan/${TASK}/call/call_9`,
-    `${HOME}/inbox/${OTHER}`,
+    `${HOME}/inbox/${OTHER}/answer`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/inbox/${OTHER}`,
     `${HOME}/agent/${AGENT}/inbox/${OTHER}/answer`,
     `${HOME}/agent/${AGENT}/page/${OTHER}/source`,

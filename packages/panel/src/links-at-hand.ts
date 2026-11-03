@@ -179,11 +179,12 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
   }
 }
 
-/** An Inbox item's place, under its agent; under its task only while an older link opened it naming no agent. */
+/** An Inbox item's place, under its agent; under its task only while an older link opened it naming no agent, and by its id alone where a link so named one the account may not read. */
 function inboxItemPlace(chosen: InboxChoice): LinkPlace {
-  if (!("taskId" in chosen)) {
+  if ("agentId" in chosen) {
     return { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
   }
+  if (!("taskId" in chosen)) return { kind: LINK_PLACE.INBOX_ITEM, itemId: chosen.itemId };
   const { taskId, itemAgentId, itemId } = chosen;
   return itemAgentId === undefined
     ? { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId }

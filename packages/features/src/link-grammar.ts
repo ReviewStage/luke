@@ -33,6 +33,8 @@ import { parsedUrl } from "./parsed-url.js";
  * - the Inbox, `/inbox`, and an item in it under the agent that posted it,
  *   `/agent/<agentId>/inbox/<itemId>`, whose task, where it has one, is the
  *   reader's to find, by the agent, to open the item in that task's Inbox;
+ *   or by its id alone, `/inbox/<itemId>`, whose agent, task, and workspace
+ *   are the reader's to ask the service for, by the item;
  * - a channel of the workspace, `/channel/<channelId>`, whose threads are
  *   those Inbox items, each still linked under its agent;
  * - the Automations page, `/automations`, an automation,
@@ -385,6 +387,7 @@ const linkPlaceSchema = EffectSchema.Union([
     agentId: idSchema,
     itemId: idSchema,
   }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.INBOX_ITEM), itemId: idSchema }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.CHANNEL), channelId: idSchema }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.AUTOMATIONS) }),
   EffectSchema.Struct({
@@ -547,7 +550,7 @@ function placeFields(steps: readonly string[]) {
     case STEP.AGENT:
       return id === undefined ? undefined : agentFields(undefined, id, rest);
     case STEP.INBOX:
-      return id === undefined ? { kind: LINK_PLACE.INBOX } : undefined;
+      return inboxFields(id, rest);
     case STEP.CHANNEL:
       return id === undefined || rest.length > 0
         ? undefined
@@ -574,6 +577,14 @@ function placeFields(steps: readonly string[]) {
     default:
       return undefined;
   }
+}
+
+/** The Inbox's fields past its step: the Inbox itself, or an item by its id alone, a picture in its words opening the item. */
+function inboxFields(itemId: string | undefined, rest: readonly string[]) {
+  if (itemId === undefined) return { kind: LINK_PLACE.INBOX };
+  return rest.length === 0 || namesItemPicture(rest)
+    ? { kind: LINK_PLACE.INBOX_ITEM, itemId }
+    : undefined;
 }
 
 /** The Admin place's fields past its step: its Overview, a section, an account's page, or a day's. */
@@ -630,9 +641,10 @@ function placePath(place: LinkPlace): readonly string[] {
     case LINK_PLACE.INBOX:
       return [STEP.INBOX];
     case LINK_PLACE.INBOX_ITEM:
-      return "planId" in place
-        ? [STEP.TASK, place.planId, STEP.INBOX, place.itemId]
-        : [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId];
+      if ("planId" in place) return [STEP.TASK, place.planId, STEP.INBOX, place.itemId];
+      return "agentId" in place
+        ? [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId]
+        : [STEP.INBOX, place.itemId];
     case LINK_PLACE.CHANNEL:
       return [STEP.CHANNEL, place.channelId];
     case LINK_PLACE.AUTOMATIONS:

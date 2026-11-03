@@ -570,6 +570,11 @@ function fakeService() {
         asked.push(`inbox-read:${itemId}`);
         return { id: itemId, unread: false, ...committedIn };
       }),
+    inboxItemHome: (itemId) =>
+      Effect.sync(() => {
+        asked.push(`inbox-home:${itemId}`);
+        return { agentId: ITEM.agentId, planId: null, workspaceId: "workspace-1" };
+      }),
     markInboxItemUnread: (itemId) =>
       Effect.sync(() => {
         asked.push(`inbox-unread:${itemId}`);

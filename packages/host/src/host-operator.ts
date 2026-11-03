@@ -23,6 +23,8 @@ import {
   type AgentInboxAttachmentParams,
   type AgentInboxAttachmentView,
   type AgentInboxCloseParams,
+  type AgentInboxItemHomeParams,
+  type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
   type AgentInboxReadAllParams,
@@ -74,6 +76,7 @@ import {
   agentGitHubImageViewSchema,
   agentInboxAnsweredViewSchema,
   agentInboxAttachmentViewSchema,
+  agentInboxItemHomeViewSchema,
   agentInboxMessagedViewSchema,
   agentInboxReadAllViewSchema,
   agentInboxReadStateViewSchema,
@@ -866,6 +869,8 @@ export interface HostOperator {
   agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
+  /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
+  agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
   agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
@@ -2224,6 +2229,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           unread: params.unread,
         }),
         answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
+      ),
+    agentInboxItemHome: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME, { itemId: params.itemId }),
+        answerOf(agentInboxItemHomeViewSchema, AGENT_UNANSWERED),
       ),
     agentInboxReadAll: (params) =>
       Effect.map(

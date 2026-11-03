@@ -73,6 +73,7 @@ const REFUSAL = {
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: "Could not close the inbox item on this system.",
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: "Could not send the message on this system.",
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: "Could not mark the inbox item on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME]: "Could not find the inbox item on this system.",
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: "Could not mark the inbox read on this system.",
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]:
     "Could not read the inbox item's image on this system.",
@@ -106,6 +107,11 @@ const ACTS: readonly {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE,
     payload: { itemId: ITEM.id, unread: true },
     ask: "agentInboxReadState",
+  },
+  {
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME,
+    payload: { itemId: ITEM.id },
+    ask: "agentInboxItemHome",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL,

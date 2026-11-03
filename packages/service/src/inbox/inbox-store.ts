@@ -62,6 +62,7 @@ import {
   type InboxAskStanding,
   type InboxFileType,
   type InboxItem,
+  type InboxItemHome,
   type InboxMessage,
   inboxAnswersRefusal,
   inboxAnswersSchema,
@@ -1790,6 +1791,27 @@ const findItem = SqlSchema.findOneOption({
     ),
 });
 
+/** Where an item the account may read stands: its agent, its task, and its workspace. */
+const findItemHome = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
+  Result: Schema.Struct({
+    agentId: Schema.String,
+    planId: Schema.NullOr(Schema.String),
+    workspaceId: Schema.String,
+  }),
+  execute: ({ userId, itemId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          agentId: inboxItem.agentId,
+          planId: inboxItem.taskId,
+          workspaceId: inboxItem.organizationId,
+        })
+        .from(inboxItem)
+        .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
+    ),
+});
+
 /** The item by its id alone, read for the reader named where the caller has reached it already. */
 const findItemOf = SqlSchema.findOneOption({
   Request: Schema.Struct({ readerId: Schema.String, itemId: Schema.String }),
@@ -3121,6 +3143,14 @@ export function readInboxItem(
     findItem({ userId, itemId }),
     Option.map((row) => storedItem(row, userId)),
   );
+}
+
+/** Where the item stands, its agent, task, and workspace, as a link by its id alone is opened; nothing for one the account may not read, as for one that does not exist. */
+export function readInboxItemHome(
+  userId: string,
+  itemId: string,
+): InboxStoreEffect<Option.Option<InboxItemHome>> {
+  return findItemHome({ userId, itemId });
 }
 
 /**

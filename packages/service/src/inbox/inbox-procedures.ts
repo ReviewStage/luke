@@ -86,6 +86,7 @@ import {
   markInboxRead,
   postInboxMessage,
   readInboxItem,
+  readInboxItemHome,
   retitleInboxThread,
   type StoredInboxItem,
   startInboxThread,
@@ -703,6 +704,13 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }) {
       const itemId = yield* pathUuid(input.params.id);
       return yield* closed(writer, context.userId, itemId, input.body);
+    }),
+    // Note that an item the account may not read is answered as one that does not exist, so a link by its id says nothing of it.
+    home: signedIn.home.effect(function* ({ input, context }) {
+      const itemId = yield* pathUuid(input.id);
+      const home = yield* hostedStoreOrUnavailable(readInboxItemHome(context.userId, itemId));
+      if (Option.isNone(home)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return home.value;
     }),
     markItemRead: signedIn.markItemRead.effect(function* ({ input, context }) {
       const itemId = yield* pathUuid(input.id);

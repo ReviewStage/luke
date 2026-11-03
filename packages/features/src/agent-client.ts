@@ -21,6 +21,7 @@ import {
   type AgentGitHubImageView,
   type AgentInboxAnsweredView,
   type AgentInboxAttachmentView,
+  type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
   type AgentInboxReadAllView,
   type AgentInboxReadStateView,
@@ -1477,6 +1478,13 @@ export class HostedAgentClient {
       askHosted(this.#hosted.inbox.start, body, HOSTED_DEADLINE.STEER),
       INBOX_ANSWER_REFUSALS,
     );
+  }
+
+  /** Where one item stands, its agent, task, and workspace, as a link naming it by its id alone is opened; not found where the item is not one the account may read. */
+  inboxItemHome(
+    itemId: string,
+  ): Effect.Effect<AgentInboxItemHomeView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.inbox.home, { id: itemId }), ROW_REFUSALS);
   }
 
   /**
