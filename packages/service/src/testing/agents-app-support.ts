@@ -343,7 +343,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -446,7 +445,6 @@ export const standing = (
           (input) =>
             Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
         ),
-      eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
       // The deployment acting for an account, an agent's starter for another agent's message or the
       // account a cookie named, which the fake writes down apart from any bearer.

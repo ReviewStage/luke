@@ -19,12 +19,12 @@ import { type Agent, hasRepository } from "@luke/database/models/agent-store";
 import { readNativeSequence } from "@luke/database/models/native-projection-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { Effect, Layer, Option } from "effect";
+import { deploymentOrigin } from "../../deployment-origin.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
   type ConnectionDoorServices,
   nativeAgentConnections,
 } from "../../integrations/connection-door.js";
-import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
 import type { AgentMachine, MachineLayout } from "../machine/agent-machine.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
@@ -105,7 +105,7 @@ export function nativeAgentSessionsLayer(
     NativeAgentSessions,
     Effect.gen(function* () {
       const context = yield* Effect.context<RunnerServices | ConnectionDoorServices>();
-      const originOf = options.origin ?? deploymentEveOrigin;
+      const originOf = options.origin ?? deploymentOrigin;
       /** What every harness's sessions are handed, for the account given and worded for the harness. */
       const optionsFor = (
         account: string,

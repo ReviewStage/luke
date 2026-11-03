@@ -254,8 +254,7 @@ export function upstreamRefused(upstreamStatus: number): HostedRefusal {
  * does not verify). An endpoint that does on a GET what a link must not
  * make a browser do asks for this itself, because a Lax cookie rides a
  * top-level navigation and every function holding a group answers every
- * path the group declares; and the work that reaches eve picks its caller
- * by it (`agents/coder-host/stop.ts`'s `eveFor`).
+ * path the group declares.
  */
 export function hostedCarriesBearer(request: Request): boolean {
   return request.headers.has("authorization");

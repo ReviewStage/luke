@@ -12,8 +12,8 @@ import { PRODUCT_NAME } from "@luke/features/product-name";
 import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
+import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
-import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
@@ -28,10 +28,8 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * and the plan and answer in the thread, and nothing more of what it
  * discusses. The agent hears it as a message from the member who sent it,
  * through the one steer path every message to an agent takes
- * (`coder-host/steer.ts`), reaching eve as the request's own caller
- * (`coder-host/stop.ts`'s `eveFor`), never as the plan's owner: over the
- * member's own bearer from the desktop, and from a browser's session cookie
- * as the deployment acting for the member. It is sent under a key
+ * (`coder-host/steer.ts`), for the member the request resolved to, never as
+ * the plan's owner. It is sent under a key
  * drawn from the one the member's client made for the comment, so a comment
  * sent again is handed over once. A comment in a thread no agent is in
  * that mentions none hands nothing to anyone, an `@` of the app's own name
@@ -125,9 +123,6 @@ export function commentAskMessage(ask: CommentAsk): string {
   return [lead, pagePlace(thread, thread.page, page), "", ...comments, "", doing].join("\n");
 }
 
-/** What a hand-over needs: eve as the member reaches it. */
-export type CommentAskSeams = EveReach;
-
 /** The agent an ask names, where it is the plan's own and stands; nothing otherwise, which no ask is written for. */
 export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -149,28 +144,24 @@ export type CommentRecipient = NonNullable<Effect.Success<ReturnType<typeof aska
  * The thread handed to the agent asked, under the member's key, as a message
  * from the member. Fails with the refusal the route answers where it was not.
  */
-export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CommentAskSeams,
-  request: Request,
-  input: {
-    readonly userId: string;
-    readonly to: CommentRecipient;
-    readonly clientKey: string;
-    readonly text: string;
-    /** The comment thread handed over, which the line's row names. */
-    readonly threadId: string;
-    /** The asking member's own words, whose servers and links alone the agent's next turn takes up, never another writer's in the thread. */
-    readonly words: string;
-    /** What a window draws the line by in place of the text: the task, what the thread is on, and the page where it is on one. */
-    readonly line: {
-      readonly taskId: string;
-      readonly quote: string | undefined;
-      readonly page: { readonly id: string; readonly title: string } | undefined;
-    };
-  },
-) {
+export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
+  readonly userId: string;
+  readonly to: CommentRecipient;
+  readonly clientKey: string;
+  readonly text: string;
+  /** The comment thread handed over, which the line's row names. */
+  readonly threadId: string;
+  /** The asking member's own words, whose servers and links alone the agent's next turn takes up, never another writer's in the thread. */
+  readonly words: string;
+  /** What a window draws the line by in place of the text: the task, what the thread is on, and the page where it is on one. */
+  readonly line: {
+    readonly taskId: string;
+    readonly quote: string | undefined;
+    readonly page: { readonly id: string; readonly title: string } | undefined;
+  };
+}) {
   const { userId, to, clientKey, text, threadId, words, line } = input;
-  const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+  const eve = yield* routedSessions<EveTypedTurn>(userId);
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   yield* steerAgent(eve, writer, userId, to, {
     text,

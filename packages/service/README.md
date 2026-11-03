@@ -382,20 +382,11 @@ never falls to the cookie beside it, because Better Auth's bearer plugin
 leaves the cookie standing under any header it did not sign. So a page on the
 deployment's own origin reaches the account routes the desktop does, its
 state-changing requests held to that origin by `src/http/origin-guard.ts`
-first. The work that reaches an agent's session picks its caller per request
-in one place (`src/agents/coder-host/stop.ts`'s `eveFor`): a request that
-carries an `Authorization` header reaches it over that bearer as it came, as
-every desktop request does, and one that carries none, whose account the
-cookie named, as the deployment acting for that account. The account is
-always the one the route resolved from that request, never one the request or
-a row names, and a deployment with no `EVE_DEPLOYMENT_SECRET` or no eve
-origin answers such a request unavailable, a delete included: a cookie's
-delete composes the sessions before it stops or erases anything and is
-refused where it cannot (`src/agents/retire-sessions.ts`'s `retiringReach`),
-while a bearer's goes on with its retires a courtesy, as it always has.
-Either way a coding agent's session is answered by the harness its
-conversation runs on (`src/agents/coder-host/runtime-sessions.ts`), and one
-that ran on eve is refused as ended; nothing is sent to eve. What acts for
+first. The work that reaches an agent's session reaches it for the account
+the route resolved from that request, never one the request or a row names,
+whether a bearer or a cookie named it (`src/agents/coder-host/runtime-sessions.ts`'s
+`routedSessions`): a coding agent's session is answered by the harness its
+conversation runs on, and one that ran on eve is refused as ended. What acts for
 one device rather than the account takes the bearer alone: the Mac's
 commands (`resolveHostedBearerUserId`), as the terminal relay
 resolves with `userIdForAuthorization`. Because a tab opened on a byte route now
@@ -2095,29 +2086,6 @@ DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
 APP_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
 
-## Reaching eve as the deployment
-
-A hosted route that holds no bearer of the account's reaches an agent's
-sessions as the deployment acting for one account
-(`src/agents/deployment-eve.ts`'s `deploymentEve`, and the agent tools'
-doors in `src/agents/coder-host/agent-doors.ts`): a cookie request's
-`eveFor`, a GitHub wake, an automation's run, an agent's own `start_agent`
-and `message_agent`, and a comment's hand-over to an agent it mentions
-(`src/tasks/comment-ask.ts`). Every coding agent's session it composes is
-answered by the harness its conversation runs on
-(`src/agents/coder-host/runtime-sessions.ts`), so nothing reaches eve, whose
-service and door are gone, and an agent that ran on eve is refused as ended.
-The composition still asks for the deployment's `EVE_DEPLOYMENT_SECRET` and
-an eve origin (`deploymentEveOrigin` in `src/agents/eve-host/eve-origin.ts`:
-`APP_EVE_ORIGIN` where it is set, otherwise the project's production domain
-in production and the deployment's own host on any other deployment), and
-answers unavailable where either is missing, although neither is sent
-anywhere that checks it now. Production and Preview each hold a secret of
-their own, and neither is `CRON_SECRET`'s. One set to the cron's value is
-read as unset (`environment.ts`), as a blank one is: the build logs that
-once, by the two names, and the admin dashboard's Reliability screen shows it
-as not configured.
-
 ## Vespin Sync
 
 `src/sync/` is what a wait on the database waits through. A reader opens a
@@ -2176,10 +2144,8 @@ at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance
-routes alone, this one and the provider-key rewrap asked by hand: every
-other web function acts for an account as the deployment instead
-("Reaching eve as the deployment"), under a secret that is never the cron's,
-so the scheduler's secret opens no session. Without it the route answers 503 and the schedule is
+routes alone, this one and the provider-key rewrap asked by hand, so the
+scheduler's secret opens nothing else. Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
 

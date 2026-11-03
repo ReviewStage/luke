@@ -49,7 +49,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  eveDeploymentSecret: undefined,
 };
 
 interface Answer {
@@ -77,7 +76,6 @@ const openAccounts = () =>
           Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
         ),
       // This suite deletes nothing, so it retires no session and reaches no eve.
-      eveOrigin: () => undefined,
       standingSessions: () => Effect.die(new Error("this suite deletes no account")),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,

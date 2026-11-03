@@ -80,7 +80,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -107,7 +106,6 @@ const openAccounts = Effect.gen(function* () {
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
       ),
     // This suite deletes nothing, so it retires no session and reaches no eve.
-    eveOrigin: () => undefined,
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,

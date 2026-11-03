@@ -87,7 +87,6 @@ export const MESSAGE_AGENT_REFUSAL = {
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
   STARTER_LEFT:
     "Not sent: the member who started that agent has left your workspace, so nothing reaches it.",
-  NO_SERVICE: "Not sent: this deployment cannot reach the agents' service.",
   NOT_PERMITTED:
     "Not sent: that agent runs on its starter's own GitHub token or plan, so only they and their agents can message it.",
   NOT_REACHABLE:
@@ -231,8 +230,7 @@ export function runMessageAgent(
         return agentToolRejected(MESSAGE_AGENT_REFUSAL.STARTER_LEFT);
       }
       // The line is minted for the receiving agent's starter, whose principal its turn runs under.
-      const eve = call.eveAs?.(target.userId);
-      if (eve === undefined) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_SERVICE);
+      const eve = call.eveAs(target.userId);
       const step = yield* workspaceStepOf(userId, workspace.value);
       const mention = writtenMention(
         { kind: MENTION_KIND.AGENT, agentId: sender.id },
