@@ -102,6 +102,7 @@ const DECLARED_TABLES = [
   "sandbox_terminal_lease",
   "session",
   "session_sandbox_cleanup",
+  "slack_agent_thread",
   "slack_installation",
   "slack_member",
   "task",

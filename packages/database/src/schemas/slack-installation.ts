@@ -1,5 +1,6 @@
-import { pgTable, primaryKey, text } from "drizzle-orm/pg-core";
+import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
 
 /**
@@ -17,6 +18,12 @@ import { organization, user } from "./auth.js";
  * is kept too, as a null id, so a member with no match is not asked about
  * on every message. Each row leaves with its installation, so a Disconnect
  * forgets every member, and with its account.
+ *
+ * A Slack thread a member started an agent from, by mentioning the bot in a
+ * channel or writing to it directly, is kept against that agent, so a later
+ * mention in the thread is sent to the agent rather than starting another,
+ * and each of the agent's settled turns is posted back in the thread once.
+ * Each row leaves with its installation, its agent, and its member.
  */
 export const slackInstallation = pgTable("slack_installation", {
   organizationId: text("organization_id")
@@ -49,4 +56,32 @@ export const slackMember = pgTable(
     lookedUpAt: timestamptz("looked_up_at").notNull(),
   },
   (t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
+);
+
+/** A Slack thread an agent was started from, which its later mentions are sent to and its final messages are posted in. */
+export const slackAgentThread = pgTable(
+  "slack_agent_thread",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => slackInstallation.organizationId, { onDelete: "cascade" }),
+    /** Slack's id for the conversation the thread is in (`C…`, `G…`, or `D…`). */
+    channelId: text("channel_id").notNull(),
+    /** The timestamp of the thread's first message, which Slack names a thread by. */
+    threadTs: text("thread_ts").notNull(),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agentTable.id, { onDelete: "cascade" }),
+    /** The member who started the agent from the thread. */
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** The agent's latest turn whose outcome was posted in the thread; null before the first. */
+    postedTurnId: text("posted_turn_id"),
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.channelId, t.threadTs] }),
+    index("slack_agent_thread_agent_id").on(t.agentId),
+  ],
 );

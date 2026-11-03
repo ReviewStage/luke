@@ -88,7 +88,10 @@ component, factored out of the surface where it builds the box by hand.
   webhook body an automation's caller sends, or an
   integration trigger's event (a Sentry issue or alert as Vespin's Sentry
   integration delivers it), may reach that run's agent task, transcript and
-  traces. And an automation webhook secret may be shown once, in the window that
+  traces. And a Slack message a member addresses to Vespin's Slack bot (an
+  @Vespin mention or a DM), with the earlier messages of the Slack thread it
+  stands in, may reach the agent it starts or is sent to: that agent's task,
+  transcript and traces. And an automation webhook secret may be shown once, in the window that
   minted it, at creation or rotation; never anywhere else. And an agent's cloud
   browser, a
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view

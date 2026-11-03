@@ -5,16 +5,20 @@ import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { linkSlackInstallation } from "@repo/database/models/slack-installation-store";
+import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS } from "@repo/features/inbox-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
+import { modelCatalogOf } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { githubReaching, openGithubUser } from "../testing/github-app-fake.js";
 import { recordingHarness } from "../testing/native-harness-fake.js";
@@ -28,7 +32,9 @@ import { dmThreadPost } from "./thread-dms.js";
  * keys: a press of a decide ask's option in the DM the bot wrote answers
  * the ask as the member it was written to, hands the agent its answer, and
  * rewrites the DM to say the option chosen, and a request Connect did not
- * sign is refused before anything of it is read.
+ * sign is refused before anything of it is read; and a mention of the bot
+ * starts an agent as the member Slack's email names, replying with its
+ * link, and starts nothing for a Slack user who is no member.
  *
  * Synthetic accounts, workspaces, tokens, and Slack ids throughout.
  */
@@ -50,6 +56,15 @@ function fakeSlack(calls: SlackCall[]): SlackWebApi {
     switch (method) {
       case "users.lookupByEmail":
         return Effect.succeed({ ok: true, user: { id: `U-${args.email}` } });
+      case "users.info": {
+        const email = args.user?.startsWith("U-") ? args.user.slice(2) : undefined;
+        return Effect.succeed({
+          ok: true,
+          user: { profile: email === undefined ? {} : { email } },
+        });
+      }
+      case "chat.getPermalink":
+        return Effect.succeed({ ok: true, permalink: "https://team.slack.com/archives/C0001/p1" });
       case "chat.postMessage":
         return Effect.succeed({ ok: true, channel: "D0001", ts: "1700000000.000100" });
       default:
@@ -134,6 +149,14 @@ const answer = (bot: Layer.Layer<SlackBot>, request: Request) =>
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, ENVIRONMENT),
       githubReaching([]).layer,
+      modelCatalogOf([
+        {
+          id: AGENT_DEFAULT_CHOICE.model,
+          name: "Claude Opus 5.5",
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          efforts: ["low", "medium", "high", "max"],
+        },
+      ]),
       HARNESS.layer,
       bot,
     );
@@ -167,6 +190,28 @@ function press(
       ...(bearer === undefined ? undefined : { authorization: `Bearer ${bearer}` }),
     },
     body: new URLSearchParams({ payload: JSON.stringify(payload) }).toString(),
+  });
+}
+
+/** Slack's mention of the bot in a channel by the Slack user given, as Connect forwards it with its bearer. */
+function mention(slackUserId: string, eventId: string): Request {
+  const payload = {
+    type: "event_callback",
+    team_id: "T0001",
+    event_id: eventId,
+    authorizations: [{ user_id: "UBOT" }],
+    event: {
+      type: "app_mention",
+      user: slackUserId,
+      text: "<@UBOT> find the flakiest test and fix it",
+      ts: "1700000002.000300",
+      channel: "C0001",
+    },
+  };
+  return new Request(new URL(EVENTS, ORIGIN), {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${CONNECT_TOKEN}` },
+    body: JSON.stringify(payload),
   });
 }
 
@@ -212,6 +257,46 @@ it.layer(getTestDB())("our Slack route", (it) => {
           updated[0]?.args.text,
           "How long should an invitation last? · You chose A month",
         );
+      });
+    },
+  );
+
+  it.effect(
+    "a mention starts an agent as the member Slack's email names and replies with its link; one from no member starts nothing",
+    () => {
+      const calls: SlackCall[] = [];
+      const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
+      return Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
+        const task = yield* startTask(owner, { name: "Flaky tests" });
+        yield* linkSlackInstallation({
+          organizationId: task.workspaceId,
+          teamId: "T0001",
+          teamName: "Team",
+          userId: owner,
+        });
+        const [row] = yield* (yield* Database)
+          .select({ email: user.email })
+          .from(user)
+          .where(eq(user.id, owner));
+        const opened = () => HARNESS.heard.filter((heard) => heard.call === "open").length;
+        const replies = () =>
+          calls.filter((call) => call.method === "chat.postMessage" && call.args.thread_ts);
+
+        const before = opened();
+        const stranger = yield* answer(bot, mention("U-nobody@app.test", `Ev${randomUUID()}`));
+        const afterStranger = opened();
+        const started = yield* answer(bot, mention(`U-${row?.email}`, `Ev${randomUUID()}`));
+
+        assert.equal(stranger.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(afterStranger, before);
+        assert.equal(started.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
+        const [refused, onIt] = replies();
+        assert.match(refused?.args.text ?? "", /couldn't find you/u);
+        assert.equal(onIt?.args.thread_ts, "1700000002.000300");
+        assert.match(onIt?.args.text ?? "", /^On it: https:\/\/.+\/agent\//u);
       });
     },
   );
