@@ -134,13 +134,13 @@ import {
 import {
   type AccountReads,
   accountReads,
+  type HeldSlice,
   type RowRefused,
   type RowWrite,
   type RowWritten,
 } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
-  type HolderInboxes,
   holderInboxes,
   InboxScopeKey,
   type ScopeInboxes,
@@ -365,9 +365,7 @@ export function composeAgents(
     const holders = yield* holderInboxes(inboxes, {
       gate,
       tell: (held: AppHolderInboxes) =>
-        Effect.sync(() =>
-          dependencies.kernel.emit(GATEWAY_EVENT.HOLDER_INBOXES_CHANGED, carried(held)),
-        ),
+        dependencies.kernel.emit(GATEWAY_EVENT.HOLDER_INBOXES_CHANGED, carried(held)),
     });
     // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
     const sessionReads = yield* accountReads<LiveRead>(
@@ -407,7 +405,7 @@ interface Transcripts {
 /** The scopes' subscriptions the windows share, the held lifetime over them, and the windows' holds, one fiber per scope held. */
 interface ScopeFollows {
   readonly inboxes: ScopeInboxes;
-  readonly holders: HolderInboxes;
+  readonly holders: HeldSlice<InboxScopeKey>;
   readonly holds: FiberMap.FiberMap<InboxScopeKey>;
   /** The followed inboxes' waits, the account's among them, which a mark, an answer, or a close waits on. */
   readonly reads: InboxReads;
