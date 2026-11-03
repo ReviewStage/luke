@@ -1,4 +1,4 @@
-import { once } from "node:events";
+import { on } from "node:events";
 import path from "node:path";
 import type { DevBuildBadge } from "@repo/settings/dev-build";
 import { app, BrowserWindow, type NativeImage, nativeImage, nativeTheme } from "electron";
@@ -55,10 +55,14 @@ function bandedTilePage(tile: NativeImage, badge: DevBuildBadge): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(page)}`;
 }
 
+/** How many frames the band's window may paint empty before it is given up on. */
+const PAINT_FRAMES = 60;
+
 /**
  * Draws a page into an image off screen. The main process draws no text of
  * its own, so a hidden, script-free window lays the band's words out and is
- * closed once it has painted them.
+ * closed once it has painted them. Note that we wait for the first frame that
+ * holds an image, because the first an offscreen window paints is empty.
  */
 async function paintOffscreen(page: string): Promise<NativeImage> {
   const window = new BrowserWindow({
@@ -70,34 +74,33 @@ async function paintOffscreen(page: string): Promise<NativeImage> {
     webPreferences: { offscreen: true, javascript: false, sandbox: true },
   });
   try {
+    const frames = on(window.webContents, "paint");
     await window.loadURL(page);
-    // Note that we ask for a fresh frame after the load, because one painted
-    // while it loaded may not hold the image yet.
-    const painted = once(window.webContents, "paint");
     window.webContents.invalidate();
-    const [, , image] = (await painted) as [unknown, unknown, NativeImage];
-    return image;
+    let painted = 0;
+    for await (const [, , image] of frames as AsyncIterable<[unknown, unknown, NativeImage]>) {
+      if (!image.isEmpty()) return image;
+      painted += 1;
+      if (painted >= PAINT_FRAMES) break;
+    }
+    throw new Error(`no frame held the band after ${PAINT_FRAMES} paints`);
   } finally {
     window.destroy();
   }
 }
 
-/** The theme's tile, banded for a development build, or as it is for a release. */
-async function dockImage(
-  iconDirectory: string,
-  badge: DevBuildBadge | undefined,
-): Promise<NativeImage> {
+/** The theme's plain tile, empty where the build carries no artwork. */
+function plainTile(iconDirectory: string): NativeImage {
   const file = nativeTheme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
-  const tile = nativeImage.createFromPath(path.join(iconDirectory, file));
-  if (badge === undefined || tile.isEmpty()) return tile;
-  return paintOffscreen(bandedTilePage(tile, badge));
+  return nativeImage.createFromPath(path.join(iconDirectory, file));
 }
 
 /**
  * Draws the app's own icon in the Dock, matched to the theme. Artwork missing
  * from a build draws nothing, leaving the bundle icon (or the stock one) in
- * place rather than an empty tile; a band that failed to draw leaves the
- * plain tile.
+ * place rather than an empty tile. A development build's band is drawn over
+ * the plain tile once it has painted, so a band that fails, or never paints,
+ * leaves the plain tile standing rather than Electron's own.
  */
 async function drawDockIcon(
   iconDirectory: string,
@@ -105,13 +108,18 @@ async function drawDockIcon(
   report: (message: string) => void,
 ): Promise<void> {
   if (!app.dock) return;
-  const image = await dockImage(iconDirectory, badge).catch((error: unknown) => {
+  const tile = plainTile(iconDirectory);
+  if (tile.isEmpty()) return;
+  app.dock.setIcon(tile);
+  if (badge === undefined) return;
+  try {
+    const banded = await paintOffscreen(bandedTilePage(tile, badge));
+    app.dock.setIcon(banded);
+  } catch (error) {
     report(
       `the Dock band could not be drawn: ${error instanceof Error ? error.message : String(error)}`,
     );
-    return dockImage(iconDirectory, undefined);
-  });
-  if (!image.isEmpty()) app.dock.setIcon(image);
+  }
 }
 
 /**
