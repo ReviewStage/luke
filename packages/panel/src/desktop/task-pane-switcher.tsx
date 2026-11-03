@@ -54,9 +54,6 @@ export type TaskPane = (typeof TASK_PANE)[keyof typeof TASK_PANE];
 /** What the way out of a task is called where no page stands behind it, and it opens the Tasks page. */
 export const TASKS_BACK = "Tasks";
 
-/** What the way back from an agent's screen is called. */
-export const OVERVIEW_BACK = "Overview";
-
 /** What the way out of a task is called where the page behind it has no name yet. */
 const BACK = "Back";
 

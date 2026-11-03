@@ -96,46 +96,6 @@
     }
   }
 
-  /* A bar a finger works (`words`) scrolls sideways where its names run
-     past its end, and says so twice: its cut edge fades deeper than a
-     scroll area's, so the last option in view dissolves into it rather than
-     ending on a whole word that reads as the last option there is, and its
-     frame's chevron stands over that edge. The chevron reads the bar's own
-     scroll, named on the frame so its sibling can, standing whole at the
-     start and fading out over the last stretch, as the edge's fade does;
-     a bar with nothing past its end has no scroll to read, which leaves the
-     chevron unseen. */
-  .ui-choice-bar[data-fold="words"] {
-    --ui-scroll-fade: var(--ui-space-48);
-  }
-
-  .ui-choice-bar-frame {
-    --ui-scroll-fade: var(--ui-space-48);
-    timeline-scope: --ui-choice-bar-scroll;
-  }
-
-  .ui-choice-bar-frame > .ui-choice-bar {
-    scroll-timeline: --ui-choice-bar-scroll inline;
-  }
-
-  .ui-choice-bar-more {
-    opacity: 0;
-    animation-name: ui-choice-bar-more;
-    animation-fill-mode: both;
-    animation-timeline: --ui-choice-bar-scroll;
-    animation-range: calc(100% - var(--ui-scroll-fade)) 100%;
-  }
-
-  @keyframes ui-choice-bar-more {
-    from {
-      opacity: 1;
-    }
-
-    to {
-      opacity: 0;
-    }
-  }
-
   /* A bar folding together, once its options' names no longer fit
      (`data-folded`, measured by `choice-bar.tsx`), shows every option by
      its glyph alone, the chosen one too, so no option is named while its

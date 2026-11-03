@@ -139,7 +139,7 @@ export type MemberWrite<A> = (
 /**
  * One write as the member on a pull request whose repository the caller
  * already confirmed in the workspace's reach: the member's token read, and
- * the write made with it; how it went, or our own refusal.
+ * the write made with it; how it went, or Luke's own refusal.
  */
 export const memberWriteOnReached = <A>(
   userId: string,
