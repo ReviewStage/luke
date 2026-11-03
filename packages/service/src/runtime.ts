@@ -23,6 +23,7 @@ import { localDemoFromEnvironment } from "./local/local-demo.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { pageLinksFromEnvironment } from "./pages/page-links.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
+import { slackBotFromEnvironment } from "./slack/slack-bot.js";
 import { syncFromEnvironment } from "./sync/hub.js";
 import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
 
@@ -73,7 +74,8 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  *
  * `IntegrationConnect` is the one place each integration's connector UID and
  * allowlist are read, for the account routes that connect and disconnect an account and
- * the agents that read its tokens alike.
+ * the agents that read its tokens alike. `SlackBot` is the one place the
+ * bot's own connector is read (`slack/slack-bot.ts`).
  *
  * `SettledTurnListener` is here because the store writer tells it of every
  * coding agent turn it settles, on whichever function the settle ran: it
@@ -133,6 +135,7 @@ export const webServices = Layer.mergeAll(
   ),
   sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
+  slackBotFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
   webLogger,
   syncFromEnvironment,
   bearerCallersLayer,

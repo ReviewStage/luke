@@ -7,6 +7,7 @@ import type {
 } from "@luke/features/sentry-install-wire";
 import type { FailureSurface } from "@luke/features/shown-failure";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import type { WorkspaceSlackBot } from "@luke/features/slack-bot-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import {
@@ -109,7 +110,7 @@ import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
-import { useSentryRead } from "./use-sentry-read.js";
+import { useWorkspaceRead } from "./use-workspace-read.js";
 import {
   AddTokenRepository,
   TokenRepositoryRows,
@@ -218,6 +219,7 @@ const READ_FAILED = {
   MEMBERS: "The members could not be read.",
   INVITATIONS: "The invitations could not be read.",
   SENTRY: "The workspace's Sentry could not be read.",
+  SLACK_BOT: "The workspace's Slack bot could not be read.",
 } as const;
 
 /**
@@ -296,6 +298,26 @@ const SENTRY_MARK = (
   </SettingsRowMark>
 );
 
+/** Slack's own mark, which leads the Slack bot's row as Sentry's leads Sentry's. */
+const SLACK_MARK = (
+  <SettingsRowMark>
+    <ProviderMark provider={INTEGRATION_PROVIDER.SLACK} />
+  </SettingsRowMark>
+);
+
+/**
+ * What the Slack bot row's line says, by whether it is connected and who is
+ * reading it. Note that every line names messages to members, because this
+ * row is easily read as the Slack an agent reads through, which is each
+ * member's own in Settings › Integrations; this one is the bot that writes
+ * to the workspace's members.
+ */
+const SLACK_BOT_LINE = {
+  CONNECTED: (team: string) => `Connected to ${team} · Messages members whose email matches`,
+  MANAGES: `Not connected. Connect ${PRODUCT_NAME}'s bot to message members in Slack.`,
+  MEMBER: `Not connected. Ask an owner or admin to connect ${PRODUCT_NAME}'s bot.`,
+} as const;
+
 /**
  * What the Sentry row's line says, by whether an installation stands and who
  * is reading it. Note that every line names automations, because this row is
@@ -344,6 +366,7 @@ const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
 const WORKSPACE_INTEGRATIONS = [
   { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
   { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
+  { service: INTEGRATION_PROVIDER.SLACK, Row: WorkspaceSlackBotRow },
 ] as const;
 
 /**
@@ -1594,7 +1617,7 @@ function ManagedSentry({
  * a read that did not land says so in the row's place, with Retry.
  */
 function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const { read, retry, changed } = useSentryRead(workspace.id);
+  const { read, retry, changed } = useWorkspaceRead(ACT_KIND.WORKSPACE_SENTRY_READ, workspace.id);
   if (read === undefined) return null;
   if ("failed" in read)
     return (
@@ -1604,13 +1627,150 @@ function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.
         onRetry={retry}
       />
     );
-  const { sentry } = read;
+  const sentry = read.answer;
   if (!sentry.configured) return null;
   if (managesWorkspace(workspace)) {
     return <ManagedSentry workspace={workspace} sentry={sentry} onChanged={changed} />;
   }
   return (
     <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(sentry, false)}>
+      {() => null}
+    </SettingsRow>
+  );
+}
+
+/** The Slack bot row's line: the team it is connected to, or the ask to connect it. */
+function slackBotLine(slackBot: WorkspaceSlackBot, manages: boolean): React.ReactNode {
+  if (slackBot.team === undefined) return manages ? SLACK_BOT_LINE.MANAGES : SLACK_BOT_LINE.MEMBER;
+  return (
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+      {SLACK_BOT_LINE.CONNECTED(slackBot.team.name)}
+    </SettingsRowStateLine>
+  );
+}
+
+/**
+ * The workspace's Slack bot, for an owner or an admin: Connect Slack bot
+ * while it is not connected, which asks Slack which team the bot answers
+ * for and keeps it, a connect that failed saying why under the row; and
+ * once it is, a ⋯ whose menu disconnects it, which asks first. A disconnect
+ * stops the bot writing to the workspace's members; the bot stays installed
+ * in Slack, which the dialog says.
+ */
+function ManagedSlackBot({
+  workspace,
+  slackBot,
+  onChanged,
+}: {
+  workspace: Workspace;
+  slackBot: WorkspaceSlackBot;
+  onChanged: (slackBot: WorkspaceSlackBot) => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const workspaceId = workspace.id;
+  const [refusal, setRefusal] = useState<string>();
+  const [connecting, setConnecting] = useState(false);
+  const underWay = useRef(false);
+  const connect = () => {
+    if (underWay.current) return;
+    underWay.current = true;
+    setConnecting(true);
+    setRefusal(undefined);
+    act(ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT, { workspaceId })
+      .then(onChanged, (refused: Error) => setRefusal(refused.message))
+      .finally(() => {
+        underWay.current = false;
+        setConnecting(false);
+      });
+  };
+  const disconnect = useConfirmDialog(
+    { subject: slackBot.team !== undefined, surfaceOpen: true },
+    () =>
+      act(ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT, { workspaceId }).then((now) => {
+        onChanged(now);
+        return ACCEPTED;
+      }, refusedWith),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_SLACK_BOT_DISCONNECT),
+  );
+  const actions =
+    slackBot.team === undefined
+      ? []
+      : [
+          [
+            {
+              label: "Disconnect",
+              icon: <GLYPH.DISCONNECT />,
+              danger: true,
+              onSelect: () => disconnect.ask(),
+            },
+          ],
+        ];
+  return (
+    <Stack gap={GAP.NONE}>
+      <MenuRow
+        thing="Slack bot"
+        alone
+        actions={actions}
+        row={{
+          leading: SLACK_MARK,
+          label: "Slack bot",
+          description: slackBotLine(slackBot, true),
+          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT),
+          control:
+            slackBot.team !== undefined ? null : (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={connecting}
+                busyLabel="Connecting"
+                onClick={connect}
+              >
+                Connect Slack bot
+              </Button>
+            ),
+        }}
+      />
+      <ConfirmDialog
+        open
+        confirm={disconnect}
+        question={{
+          title: `Disconnect the Slack bot from ${workspace.name}?`,
+          body: `${PRODUCT_NAME} stops messaging this workspace's members in Slack. The bot stays installed in Slack until a Slack admin removes it.`,
+          verb: "Disconnect",
+          running: "Disconnecting",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
+      />
+    </Stack>
+  );
+}
+
+/**
+ * The workspace's Slack bot: drawn only where the deployment holds
+ * our bot, an owner's or an admin's to connect for everyone, and for a
+ * member, read only, where it is connected or the ask to have it; a read
+ * that did not land says so in the row's place, with Retry.
+ */
+function WorkspaceSlackBotRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
+  const { read, retry, changed } = useWorkspaceRead(
+    ACT_KIND.WORKSPACE_SLACK_BOT_READ,
+    workspace.id,
+  );
+  if (read === undefined) return null;
+  if ("failed" in read)
+    return (
+      <ReadFailed
+        line={READ_FAILED.SLACK_BOT}
+        surface={FAILURE_SURFACE.WORKSPACE_SLACK_BOT_READ}
+        onRetry={retry}
+      />
+    );
+  const slackBot = read.answer;
+  if (!slackBot.configured) return null;
+  if (managesWorkspace(workspace)) {
+    return <ManagedSlackBot workspace={workspace} slackBot={slackBot} onChanged={changed} />;
+  }
+  return (
+    <SettingsRow leading={SLACK_MARK} label="Slack bot" description={slackBotLine(slackBot, false)}>
       {() => null}
     </SettingsRow>
   );

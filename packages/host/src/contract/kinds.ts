@@ -495,6 +495,9 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SENTRY_READ: "workspace.sentryRead",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",
+  WORKSPACE_SLACK_BOT_READ: "workspace.slackBotRead",
+  WORKSPACE_SLACK_BOT_CONNECT: "workspace.slackBotConnect",
+  WORKSPACE_SLACK_BOT_DISCONNECT: "workspace.slackBotDisconnect",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**

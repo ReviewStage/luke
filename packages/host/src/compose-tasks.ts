@@ -69,6 +69,7 @@ import {
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceSentryAnswer,
+  type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
@@ -367,6 +368,9 @@ export type TasksClient = Pick<
     | "sentryInstallations"
     | "sentryInstall"
     | "sentryDisconnect"
+    | "slackBot"
+    | "slackBotConnect"
+    | "slackBotDisconnect"
     | "people"
     | "peopleLive"
     | "invitationsLive"
@@ -2750,6 +2754,48 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksWorkspaceSentryAnswer>(
           sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
+        );
+      }),
+    // A workspace's Slack bot is answered to the window that asked and held
+    // nowhere, as its Sentry is: the row reads it as it opens and as the
+    // window comes forward, and a connect or disconnect answers it anew.
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "reading the Slack bot names a workspace",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBot(read.workspaceId));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "connecting the Slack bot names a workspace",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBotConnect(read.workspaceId));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "disconnecting the Slack bot names a workspace",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBotDisconnect(read.workspaceId));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
         );
       }),
     // The members, and who the workspace's work names but left, are answered to the window that asked and held nowhere:

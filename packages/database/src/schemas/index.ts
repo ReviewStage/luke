@@ -41,6 +41,7 @@ export * from "./repository-pin.js";
 export * from "./runner-line.js";
 export * from "./sandbox-terminal-lease.js";
 export * from "./session-sandbox.js";
+export * from "./slack-installation.js";
 export * from "./storage.js";
 export * from "./task.js";
 export * from "./task-block.js";

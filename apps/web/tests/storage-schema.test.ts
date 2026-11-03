@@ -102,6 +102,8 @@ const DECLARED_TABLES = [
   "sandbox_terminal_lease",
   "session",
   "session_sandbox_cleanup",
+  "slack_installation",
+  "slack_member",
   "task",
   "task_block",
   "task_number_counter",

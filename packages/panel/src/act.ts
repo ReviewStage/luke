@@ -55,7 +55,7 @@ type ActResults = { readonly [Kind in PortActKind]: PortActResult<Kind> };
 type ActPayload<Kind extends PortActKind> = ActPayloads[Kind];
 
 /** What a kind answers. */
-type ActResult<Kind extends PortActKind> = ActResults[Kind];
+export type ActResult<Kind extends PortActKind> = ActResults[Kind];
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends PortActKind> =

@@ -975,6 +975,24 @@ and asks Vercel Connect to revoke the grant; what agents already sent or
 changed in Slack, and the record of it, stays, and a grant Vercel Connect
 could not revoke stays until you remove Vespin in Slack's own settings.
 
+**Vespin's Slack bot, where an owner or admin connects it.** Apart from the
+Slack each member connects for their agents, a workspace's owner or admin can
+connect Vespin's own Slack bot under Settings › Workspace, so Vespin can
+message the workspace's members in Slack. The bot's token stays in Vercel
+Connect, which holds it for the bot rather than for any account; our service
+asks for it each time it calls Slack and never stores it. Connecting asks
+Slack which Slack workspace the bot belongs to, and our service keeps that
+Slack workspace's id and name, and who connected it. The first time the bot
+is to message you, our service sends your Vespin account's email address to
+Slack to find you there, and keeps the Slack user id Slack answered, or that
+it found no one, which it asks again after a day; a member whose email
+matches no one in that Slack workspace is sent nothing. What the bot sends
+you, such as a thread's title and a link to it or an automation's result,
+goes to Slack, which keeps it under Slack's own policy. Disconnecting the bot
+deletes the Slack workspace's record and every member's Slack user id with
+it; deleting the workspace does the same, and deleting your account deletes
+your Slack user id. Messages the bot already sent stay in Slack.
+
 **Gmail, Google Calendar, and Google Drive, where they are offered.** Our
 service offers them only to the accounts of the organization it names, while
 Google's sign-in for them is limited to that organization's Google
@@ -1549,6 +1567,10 @@ only when you press Send.
 - Vercel Connect and Slack, if you connect Slack where it is offered: Vercel
   Connect keeps Slack's token, and our service sends each Slack call, with its
   input, to Slack's MCP server, which keeps it under Slack's own policy.
+- Vercel Connect and Slack, if your workspace connects Vespin's Slack bot:
+  Vercel Connect keeps the bot's token, and our service sends Slack your
+  email address to find you there and each message the bot sends you, which
+  Slack keeps under its own policy.
 - GitHub's MCP server, if you signed in with GitHub: our service sends each
   GitHub call, with its input and your Vespin GitHub App token, to GitHub's MCP
   server, which keeps it under GitHub's own policy.

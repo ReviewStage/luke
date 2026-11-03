@@ -71,6 +71,7 @@
     "./host-release": "./src/host-release.js",
     "./mac-command-wire": "./src/mac-command-wire.js",
     "./sentry-install-wire": "./src/sentry-install-wire.js",
+    "./slack-bot-wire": "./src/slack-bot-wire.js",
     "./landing-outcome": "./src/landing-outcome.js",
     "./link-home": "./src/link-home.js",
     "./link-site": "./src/link-site.js",

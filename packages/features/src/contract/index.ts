@@ -36,6 +36,7 @@ import { tasksContract } from "./tasks.js";
 import { workspaceGithubContract } from "./workspace-github.js";
 import { workspaceInvitationsContract } from "./workspace-invitations.js";
 import { workspaceSentryContract } from "./workspace-sentry.js";
+import { workspaceSlackBotContract } from "./workspace-slack-bot.js";
 import { workspacesContract } from "./workspaces.js";
 
 export { AGENT_START_STATUS } from "./agents.js";
@@ -78,5 +79,6 @@ export const hostedContract = {
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,
   workspaceSentry: workspaceSentryContract,
+  workspaceSlackBot: workspaceSlackBotContract,
   workspaces: workspacesContract,
 };

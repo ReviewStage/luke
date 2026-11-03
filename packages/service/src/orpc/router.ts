@@ -84,6 +84,7 @@ import {
   integrationsProcedures,
 } from "../integrations/integrations-procedures.js";
 import { type LiveProcedureSeams, liveProcedures } from "../live/live-procedures.js";
+import { type SlackBotProcedureSeams, slackBotProcedures } from "../slack/slack-bot-procedures.js";
 import {
   type PlanCommentsProcedureSeams,
   planCommentsProcedures,
@@ -135,6 +136,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   WorkspaceGithubProcedureSeams &
   WorkspaceInvitationsProcedureSeams &
   SentryInstallProcedureSeams &
+  SlackBotProcedureSeams &
   WorkspacesProcedureSeams;
 
 /** The hosted router: one line per resource, in alphabetical order. */
@@ -173,6 +175,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     workspaceGithub: workspaceGithubProcedures(seams),
     workspaceInvitations: workspaceInvitationsProcedures(seams),
     workspaceSentry: sentryInstallProcedures(seams),
+    workspaceSlackBot: slackBotProcedures(seams),
     workspaces: workspacesProcedures(seams),
   });
 }
