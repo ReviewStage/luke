@@ -1374,9 +1374,8 @@ error notice's Copy details button puts the same facts on your clipboard, with
 the time, the app's version, and the ids Sentry gave the report, and sends
 nothing anywhere: they go only where you paste them.
 
-**Error, performance, and agent reports from our service.** Our service and
-Vespin's agents send Sentry reports so that we can find and fix failures. Our
-service's web functions send every error they did not handle or that ended
+**Error and performance reports from our service.** Our service sends Sentry
+reports so that we can find and fix failures. Our service's web functions send every error they did not handle or that ended
 work they run apart from a request (such as standing the terminal service),
 with its message, stack trace, and
 the lines of code around it; performance traces of a share of the requests
@@ -1389,28 +1388,15 @@ not send a request's headers or body, the values of local variables, or the IP
 address a request came from, except the trace id a request names in its
 `traceparent` header, which its trace, its errors, and its log lines carry, in
 Sentry and in our service's own logs alike, so the app's report of a request
-that failed and the service's record of the same request share one id. Vespin's agents send what Sentry's SDK collects by
-default, apart from request bodies and what a model is sent or answers: every
-error they did not handle or that ended work they started apart from a turn,
-with its message, stack trace, the lines of code around it, and the values of
-local variables, apart from a tool's refusal the agent was handed back to go
-on from, which its agent trace still shows; performance traces of each
-request they answer, each database query, and each request they make, with
-their headers, addresses, the names of their query parameters, and database
-query parameters, and the IP address a request came from; every line they
-log, with the values it was logged under; and Sentry's agent traces of each turn, which name the model and each
-tool called and say how long each call took, how many tokens it used, and
-whether it failed. Neither the agents nor the web functions send Sentry the
+that failed and the service's record of the same request share one id.
+An agent itself, and what it runs, sends our Sentry nothing, whether in its
+sandbox or as a local agent on your Mac or a host. The web functions do not send Sentry the
 instructions or messages sent to a model (the plan, the conversation, or what
 the agents read, such as code, a command's output from
 your Mac, or an integration's answer), a model's replies, or a tool call's
-arguments or result. The words of an error, a log line, or a local variable
-can still quote what an agent was working on, such as the path of a file a
-tool could not find. In what the agents send, Sentry replaces a value whose
-name looks like a credential (such as `auth`, `token`, `secret`, `password`,
-`key`, or `session`) before it leaves, but not a credential written in free
-text, such as a key in an error's words. In the address of a request
-that the web functions or the agents give on a trace, an error, a breadcrumb,
+arguments or result. The words of an error or a log line can still quote what
+an agent was working on, such as the path of a file a tool could not find. In
+the address of a request that the web functions give on a trace, an error, a breadcrumb,
 or a log line, the value of each query parameter and the fragment are replaced,
 and so is any part of its path shaped like a credential, such as a long token;
 the scheme, the host, the rest of the path, and the parameters' names are sent
@@ -1464,8 +1450,8 @@ only when you press Send.
   task is likely to contain — its repository's name, its title, and the file
   paths it names — so they are spelled right. Only the text comes back, into
   the box at the caret, and it goes nowhere until you send it. Our service
-  stores and logs neither the recording nor the text, apart from the reports to Sentry described under "Error, performance,
-  and agent reports from our service", and counts
+  stores and logs neither the recording nor the text, apart from the reports to Sentry described under "Error and
+  performance reports from our service", and counts
   only the clip and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app, screen
@@ -1475,8 +1461,8 @@ only when you press Send.
   recordings go from the Mac app to PostHog directly, and from your browser
   through vespin.dev, which passes them on to PostHog.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
-  reports, and our service's and Vespin's agents' error, performance, log, and
-  agent reports, described above.
+  reports, and our service's error, performance, and log reports, described
+  above.
 - Resend, for email. When an owner or admin of a workspace invites someone,
   our service sends Resend the invited address, the workspace's name, the
   inviter's name (or their email address where their account has none), and
@@ -1739,7 +1725,7 @@ keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and an agent's changes are held in a Vercel Sandbox and
 its snapshot; usage counts and recordings are held by PostHog, and crash
-and error, performance, and agent reports by Sentry.
+and error and performance reports by Sentry.
 
 ## Your choices
 
