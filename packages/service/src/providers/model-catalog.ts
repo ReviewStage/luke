@@ -83,6 +83,13 @@ export const FAST_PROVIDERS: ReadonlySet<ModelProvider> = new Set([
   MODEL_PROVIDER.OPENAI,
 ]);
 
+/**
+ * The suffix AI Gateway gives a model's batch version (`openai/gpt-5.5-batch`),
+ * which stands for the provider's asynchronous Batch API: no provider's own
+ * id, and nothing an agent's turn can wait on, so it is never offered.
+ */
+const BATCH_SLUG_SUFFIX = "-batch";
+
 const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER));
 
 /**
@@ -298,10 +305,10 @@ function contextWindowsOf(
   };
 }
 
-/** The entry as an offered model, or nothing for one we do not offer: a fast slug among them where its provider's fast option is not confirmed. */
+/** The entry as an offered model, or nothing for one we do not offer: a batch slug, and a fast slug where its provider's fast option is not confirmed. */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const named = providerModelOf(entry.id);
-  if (named === undefined) return undefined;
+  if (named === undefined || entry.id.endsWith(BATCH_SLUG_SUFFIX)) return undefined;
   if (named.fast && !FAST_PROVIDERS.has(named.provider)) return undefined;
   const { provider } = named;
   const tags = entry.tags ?? [];
