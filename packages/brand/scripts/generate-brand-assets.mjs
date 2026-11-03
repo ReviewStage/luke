@@ -141,10 +141,10 @@ for (const [mode, ink] of Object.entries(INKS)) {
 }
 
 // The share of an app icon's tile the disc spans, in every app icon alike:
-// the macOS icon, the web app icon, and the favicon. Note that it is larger
-// than a round glyph's usual half, because at half the mark stood small
-// beside every other app's glyph in the Dock, and smaller than the 80%
-// circle Android's maskable icon keeps, so no mask clips its rim.
+// the macOS icon, the web app icon, the favicon, and the avatar. Note that
+// it is larger than a round glyph's usual half, because at half the mark
+// stood small beside every other app's glyph in the Dock, and smaller than
+// the 80% circle Android's maskable icon keeps, so no mask clips its rim.
 const ICON_MARK = 0.78;
 
 // App icon, one per mode, on Apple's macOS icon grid: an 824-unit tile with a
@@ -237,10 +237,11 @@ const SQUARE = { side: 120, disc: 100 };
   );
 }
 
-// Avatar: the disc at 56% of the square, so the circle a profile photo is
-// cut to (GitHub, X, Slack, LinkedIn) leaves air round the rim. Opaque
-// tiles, because a profile photo rarely shows through.
-const AVATAR = { side: 100, disc: 56 };
+// Avatar: the disc spanning ICON_MARK of the square, as in the app icons,
+// so the circle a profile photo is cut to (GitHub, X, Slack, LinkedIn) still
+// leaves a ring of the tile round the rim. Opaque tiles, because a profile
+// photo rarely shows through.
+const AVATAR = { side: 100, disc: 100 * ICON_MARK };
 {
   const at = (AVATAR.side - AVATAR.disc) / 2;
   const open = svgOpen(AVATAR.side, AVATAR.side);
