@@ -54,7 +54,7 @@ function Landing(): React.JSX.Element {
       <LandingSection
         title="Bring your own keys."
         lead="Use your Claude Code/Codex subscriptions or bring your own API keys."
-        scene={LANDING_SCENE.MODELS}
+        scene={LANDING_SCENE.KEYS}
         aside={
           <LandingFacts
             facts={[
