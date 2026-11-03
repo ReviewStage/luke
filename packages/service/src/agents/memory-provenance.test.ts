@@ -47,7 +47,7 @@ const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
     const workspaceId = yield* openWorkspace(userId);
     const started = yield* createAgent(userId, {

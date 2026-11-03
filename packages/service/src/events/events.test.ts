@@ -81,7 +81,7 @@ function postOverDatabase(
 const openAccount = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
   const personal = yield* openWorkspace(userId);
   const now = yield* DateTime.nowAsDate;

@@ -14,7 +14,7 @@ import { fakeAppPlatform } from "./testing/app-platform.js";
  * `/<workspace>/plan/<id>` rather than the folder the files are served from.
  */
 
-const BASE = "https://luke.example/assets/panel/";
+const BASE = "https://app.example/assets/panel/";
 
 test("the Codex mark resolves from the asset base the shell names", () => {
   window.history.replaceState(null, "", "/acme/plan/0b805267");

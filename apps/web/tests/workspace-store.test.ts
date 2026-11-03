@@ -60,7 +60,7 @@ const openUser = (name: string) =>
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
     yield* Database.use((db) =>
-      db.insert(user).values({ id: userId, name, email: `${userId}@luke.test` }),
+      db.insert(user).values({ id: userId, name, email: `${userId}@app.test` }),
     );
     return userId;
   });

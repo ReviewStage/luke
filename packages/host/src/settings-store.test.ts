@@ -407,32 +407,32 @@ test("the day a usage count was sent survives a reopen and a sign-out, by accoun
   const dayActive = { name: "app:day_active", discriminator: "day" } as const;
 
   await store.setAccount(TEST_ACCOUNT);
-  await store.keepProductEventDay({ ...dayActive, account: "ada@luke.test", day: "2026-08-19" });
-  await store.keepProductEventDay({ ...dayActive, account: "grace@luke.test", day: "2026-08-19" });
+  await store.keepProductEventDay({ ...dayActive, account: "ada@app.test", day: "2026-08-19" });
+  await store.keepProductEventDay({ ...dayActive, account: "grace@app.test", day: "2026-08-19" });
   await store.clearAccount();
 
   const reopened = storeIn(directory);
   assert.equal(
-    await reopened.lastProductEventDay("app:day_active", "day", "ada@luke.test"),
+    await reopened.lastProductEventDay("app:day_active", "day", "ada@app.test"),
     "2026-08-19",
   );
   assert.equal(
-    await reopened.lastProductEventDay("app:day_active", "day", "grace@luke.test"),
+    await reopened.lastProductEventDay("app:day_active", "day", "grace@app.test"),
     "2026-08-19",
   );
-  assert.equal(await reopened.lastProductEventDay("app:launch", "day", "ada@luke.test"), undefined);
+  assert.equal(await reopened.lastProductEventDay("app:launch", "day", "ada@app.test"), undefined);
 
-  await reopened.keepProductEventDay({ ...dayActive, account: "ada@luke.test", day: "2026-08-20" });
+  await reopened.keepProductEventDay({ ...dayActive, account: "ada@app.test", day: "2026-08-20" });
   const nextDay = storeIn(directory);
   assert.equal(
-    await nextDay.lastProductEventDay("app:day_active", "day", "ada@luke.test"),
+    await nextDay.lastProductEventDay("app:day_active", "day", "ada@app.test"),
     "2026-08-20",
   );
   assert.equal(
-    await nextDay.lastProductEventDay("app:day_active", "day", "grace@luke.test"),
+    await nextDay.lastProductEventDay("app:day_active", "day", "grace@app.test"),
     undefined,
   );
-  assert.ok(!(await readSettingsFile(directory)).includes("grace@luke.test"));
+  assert.ok(!(await readSettingsFile(directory)).includes("grace@app.test"));
 });
 
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {

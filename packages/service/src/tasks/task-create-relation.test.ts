@@ -40,7 +40,7 @@ import { tasksProcedures } from "./tasks-procedures.js";
  * and tokens throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SIDE = { owner: "octo-member", name: "side" } as const;
 const SIDE_REPOSITORY = `${SIDE.owner}/${SIDE.name}`;
 

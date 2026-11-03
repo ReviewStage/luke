@@ -46,7 +46,7 @@ import { type GitHubUnlink, githubUnlink } from "./github-unlink.js";
  * Synthetic accounts, bearers, secrets, and tokens throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SECRET = "github-connection-test-secret-with-enough-length";
 const PASSWORD = "fixture-password-of-enough-length";
 const GITHUB_ACCOUNT_ID = 4242;
@@ -152,7 +152,7 @@ const openService = Effect.gen(function* () {
   const signUp = (name: string) =>
     Effect.gen(function* () {
       const browser = new Browser();
-      const email = `${name.toLowerCase()}@luke.test`;
+      const email = `${name.toLowerCase()}@app.test`;
       const response = yield* toAuth(browser, "/sign-up/email", {
         email,
         password: PASSWORD,

@@ -32,10 +32,10 @@ it.effect("a route that dies answers 500 and is captured; one that answers is no
         { disableLogger: true },
       );
       const died = yield* Effect.promise(() =>
-        handler(new Request("https://luke.test/dies"), context),
+        handler(new Request("https://app.test/dies"), context),
       );
       const answered = yield* Effect.promise(() =>
-        handler(new Request("https://luke.test/answers"), context),
+        handler(new Request("https://app.test/answers"), context),
       );
       yield* Effect.promise(() => dispose());
       return [died.status, answered.status];
@@ -258,7 +258,7 @@ it.effect("a web function that throws is captured, and throws the same failure o
       () => {},
     );
     yield* Effect.promise(() =>
-      assert.rejects(fetch(new Request("https://luke.test/api/plans")), {
+      assert.rejects(fetch(new Request("https://app.test/api/plans")), {
         name: "SyntaxError",
         message: "DATABASE_URL is not set",
       }),
@@ -286,7 +286,7 @@ it.effect("a web function answers before its report has left, and keeps awake un
         (request) => handler(request, context),
         (sending) => awake.push(sending),
       );
-      const answer = yield* Effect.promise(() => fetch(new Request("https://luke.test/dies")));
+      const answer = yield* Effect.promise(() => fetch(new Request("https://app.test/dies")));
       let delivered = false;
       const keptAwake = Promise.all(awake).then(() => {
         delivered = true;
@@ -327,8 +327,8 @@ it.effect(
           { disableLogger: true },
         );
         for (const address of [
-          `https://luke.test/api/auth/callback/github?code=fixture-oauth-code&state=fixture-oauth-state&${invite}=1`,
-          `https://luke.test/api/workspaces/${workspace}/invites/${invite}`,
+          `https://app.test/api/auth/callback/github?code=fixture-oauth-code&state=fixture-oauth-state&${invite}=1`,
+          `https://app.test/api/workspaces/${workspace}/invites/${invite}`,
         ]) {
           yield* Effect.promise(() => handler(new Request(address), context));
         }
@@ -349,7 +349,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const sentry = recordingSentry();
-      const callback = "https://luke.test/api/auth/callback/github?code=fixture-oauth-code";
+      const callback = "https://app.test/api/auth/callback/github?code=fixture-oauth-code";
       yield* Effect.gen(function* () {
         // Note that the request is attached as Sentry's HTTP and request-data integrations attach the one an eve root answers.
         yield* Effect.sync(() => {
@@ -368,10 +368,10 @@ it.effect(
         { request: [request.url, request.query_string], breadcrumb: breadcrumbs[0].data.url },
         {
           request: [
-            "https://luke.test/api/auth/callback/github?code=[redacted]",
+            "https://app.test/api/auth/callback/github?code=[redacted]",
             "code=[redacted]",
           ],
-          breadcrumb: "https://luke.test/api/auth/callback/github?code=[redacted]",
+          breadcrumb: "https://app.test/api/auth/callback/github?code=[redacted]",
         },
       );
     }),

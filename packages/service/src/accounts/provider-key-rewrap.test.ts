@@ -106,7 +106,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           `user-${randomUUID()}`,
         ];
         for (const id of [first, second, subscriber]) {
-          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
         }
         yield* storeKey(
           ring(KEK.ONE),
@@ -192,7 +192,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         const owner = `user-${randomUUID()}`;
         yield* db
           .insert(user)
-          .values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
+          .values({ id: owner, name: "Test User", email: `${owner}@app.test` });
         yield* storeKey(
           ring(KEK.ONE),
           owner,
@@ -210,7 +210,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         ) =>
           Effect.gen(function* () {
             const response = yield* handleProviderKeyRewrap({
-              request: new Request("https://luke.test/api/maintenance/provider-keys-rewrap", {
+              request: new Request("https://app.test/api/maintenance/provider-keys-rewrap", {
                 method: init.method ?? "POST",
                 headers:
                   init.bearer === undefined ? {} : { authorization: `Bearer ${init.bearer}` },

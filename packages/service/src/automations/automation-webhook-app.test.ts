@@ -45,7 +45,7 @@ import { automationsProcedures } from "./automations-procedures.js";
  * Synthetic accounts and words throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 interface Answer {
   readonly status: number;

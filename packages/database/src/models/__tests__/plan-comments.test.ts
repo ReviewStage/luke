@@ -55,7 +55,7 @@ const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
     return id;
   });
 

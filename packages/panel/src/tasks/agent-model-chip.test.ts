@@ -60,7 +60,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   // The GPT model's row wears its harness's mark, an asset of the panel's.
-  fakeAppPlatform({ assetBase: () => "https://luke.test/" });
+  fakeAppPlatform({ assetBase: () => "https://app.test/" });
 });
 
 afterEach(() => {
@@ -261,7 +261,7 @@ test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not eve
 
 test("a Codex agent's menu ends on \"Using ChatGPT subscription · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
   const opened: string[] = [];
-  fakeAppPlatform({ assetBase: () => "https://luke.test/", openWeb: (href) => opened.push(href) });
+  fakeAppPlatform({ assetBase: () => "https://app.test/", openWeb: (href) => opened.push(href) });
   const codex = openMenuOn(AGENT_RUNTIME.CODEX, {
     model: "openai/gpt-6.1-sol",
     effort: "low",

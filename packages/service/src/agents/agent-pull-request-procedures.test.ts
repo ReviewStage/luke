@@ -26,7 +26,7 @@ import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const USER_ID = "user-1";
 const JSON_TYPE = "application/json";
 

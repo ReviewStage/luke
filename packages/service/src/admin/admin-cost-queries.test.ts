@@ -55,7 +55,7 @@ const openAccount = (role: string = USER_ROLE.USER) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test`, role });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test`, role });
     return id;
   });
 
@@ -360,7 +360,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           cost.topAccounts.map((account) => [account.id, account.spendUsd, account.unpricedTokens]),
           [[spender, 3, 1_000]],
         );
-        assert.equal(cost.topAccounts[0]?.email, `${spender}@luke.test`);
+        assert.equal(cost.topAccounts[0]?.email, `${spender}@app.test`);
       }),
   );
 });

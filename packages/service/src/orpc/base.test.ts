@@ -40,7 +40,7 @@ import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { bearerOnlyMiddleware, type HostedContext, hosted, sessionMiddleware } from "./base.js";
 import { hostedFetch } from "./handler.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const BEARER_PATH = "/api/test/bearer";
 const SESSION_PATH = "/api/test/session";
 const USER_ID = "user-1";
@@ -108,7 +108,7 @@ const openSessions = Effect.gen(function* () {
   yield* Database.use((db) =>
     db
       .insert(user)
-      .values([ada, grace].map((id) => ({ id, name: "Test User", email: `${id}@luke.test` }))),
+      .values([ada, grace].map((id) => ({ id, name: "Test User", email: `${id}@app.test` }))),
   ).pipe(Effect.provide(plugin.database));
   return {
     plugin,

@@ -86,7 +86,7 @@ function tokens(
 }
 
 function account(id: string): AdminCostAccountInfo {
-  return { id, name: id, email: `${id}@luke.test`, image: null, admin: false };
+  return { id, name: id, email: `${id}@app.test`, image: null, admin: false };
 }
 
 function built(usage: Partial<AdminCostUsage>, accounts: readonly string[] = []) {

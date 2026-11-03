@@ -36,7 +36,7 @@ import { LAUNCH_NOTE } from "./local-agent-first-lines.js";
 import { fakeClis } from "./testing/fake-clis.js";
 import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
 const DEVICE_ID = "2b7e1d4c-8a3f-4e95-b061-5c2d7f8e9a10";
 

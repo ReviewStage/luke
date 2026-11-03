@@ -111,7 +111,7 @@ const automationRunsPath = (automationId: string): string => `${automationPath(a
 /** What the routes counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 /**
  * The installations reaching the repository, one for each owner's workspace,

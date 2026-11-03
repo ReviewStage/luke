@@ -106,7 +106,7 @@ import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js"
  * client upgrade that stops speaking to this server fails here.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** A picture's bytes: a PNG's signature and a few more, which is all the store reads of them. */
 const PICTURE: Picture = {
@@ -198,7 +198,7 @@ const standing = standingOver();
 const agentWithBearer = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -227,7 +227,7 @@ const agentWithBearer = Effect.gen(function* () {
 const agentOnNoTaskWithBearer = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const organizationId = yield* openWorkspace(userId);
   const started = yield* createAgent(userId, {
     taskId: null,
@@ -634,7 +634,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         yield* Database.use((db) =>
           db
             .insert(user)
-            .values({ id: teammate, name: "Teammate", email: `${teammate}@luke.test` }),
+            .values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
         );
         yield* Database.use((db) =>
           db.insert(messages).values({

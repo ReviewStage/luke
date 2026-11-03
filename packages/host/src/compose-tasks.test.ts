@@ -299,7 +299,7 @@ type RecordPart = "plan" | "pages" | "calls" | "code";
 const NOT_FOUND_LIVE = { failure: TASK_CALL_FAILURE.NOT_FOUND } as const;
 
 /** The origin a workspace's invitations are answered with, which each accept link is built on. */
-const INVITATIONS_ORIGIN = "https://luke.test";
+const INVITATIONS_ORIGIN = "https://app.test";
 
 /** The sidebar as its live statements' rows carry it: what the wire leaves out is null. */
 function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly RepositoryPin[]) {
@@ -348,13 +348,13 @@ const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
-  email: "ada@luke.test",
+  email: "ada@app.test",
   role: WORKSPACE_ROLE.ADMIN,
 };
 const GRACE: WorkspaceMember = {
   userId: "user-grace",
   name: "Grace Hopper",
-  email: "grace@luke.test",
+  email: "grace@app.test",
   role: WORKSPACE_ROLE.MEMBER,
 };
 
@@ -4328,7 +4328,7 @@ it.effect(
       yield* settled;
 
       const accept = (id: string) =>
-        `https://luke.test/accept-invitation.html?id=${id}&email=${id}%40example.com`;
+        `https://app.test/accept-invitation.html?id=${id}&email=${id}%40example.com`;
       assert.deepEqual(invitations(), [
         {
           workspaceId: ACME.id,

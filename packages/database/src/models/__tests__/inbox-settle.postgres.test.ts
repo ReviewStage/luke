@@ -47,7 +47,7 @@ const anotherConnection = Effect.gen(function* () {
 const openQuestion = Effect.gen(function* () {
   const db = yield* Database;
   const dean = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: dean, name: "Test User", email: `${dean}@luke.test` });
+  yield* db.insert(user).values({ id: dean, name: "Test User", email: `${dean}@app.test` });
   const workspace = yield* openWorkspace(dean);
   const { id: taskId } = yield* createTask(dean, { organizationId: workspace });
   const agentId = yield* openTaskAgent(dean, workspace, taskId);

@@ -70,7 +70,7 @@ import { integrationsProcedures } from "./integrations-procedures.js";
  * through the real GitHub App over the account rows a sign-in leaves.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 const SLACK = INTEGRATION_PROVIDER.SLACK;
 const SLACK_CONNECTOR = { SLACK_CONNECTOR_UID: "oauth/slack" } as const;
@@ -585,10 +585,10 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
     Effect.gen(function* () {
       const group = yield* standing({
         ...SLACK_CONNECTOR,
-        SLACK_ALLOWED_ACCOUNTS: "@other.example,pat@luke.example",
+        SLACK_ALLOWED_ACCOUNTS: "@other.example,pat@app.example",
       });
-      const pat = yield* openAccount("pat@luke.example");
-      const colleague = yield* openAccount("sam@luke.example");
+      const pat = yield* openAccount("pat@app.example");
+      const colleague = yield* openAccount("sam@app.example");
 
       assert.equal(yield* group.slackStatus(pat), INTEGRATION_STATUS.DISCONNECTED);
       assert.equal(yield* group.slackStatus(colleague), INTEGRATION_STATUS.UNAVAILABLE);
@@ -600,7 +600,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
     () =>
       Effect.gen(function* () {
         const anyone = yield* openAccount("quinn@elsewhere.example");
-        for (const listed of ["   ", "@", " @ , luke.example, @@elsewhere.example, quinn@"]) {
+        for (const listed of ["   ", "@", " @ , app.example, @@elsewhere.example, quinn@"]) {
           const group = yield* standing({ ...SLACK_CONNECTOR, SLACK_ALLOWED_ACCOUNTS: listed });
           assert.equal(yield* group.slackStatus(anyone), INTEGRATION_STATUS.UNAVAILABLE, listed);
         }

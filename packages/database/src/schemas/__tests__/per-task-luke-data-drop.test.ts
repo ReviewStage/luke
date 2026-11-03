@@ -61,7 +61,7 @@ const migrate = Effect.gen(function* () {
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Dean", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Dean", email: `${userId}@app.test` });
   const organizationId = yield* openWorkspace(userId);
   const task = yield* createTask(userId, { organizationId, name: "Teammate invitations" });
   return { userId, organizationId, taskId: task.id };

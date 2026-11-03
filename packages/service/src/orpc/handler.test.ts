@@ -34,7 +34,7 @@ import type { WebServices } from "../runtime.js";
 import type { HostedContext } from "./base.js";
 import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "./handler.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const WHEN_PATH = "/api/test/{id}/when";
 const REACH_PATH = "/api/test/reach";
 const ITEMS_PATH = "/api/test/items";

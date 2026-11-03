@@ -1,5 +1,5 @@
 /**
- * fake-luke.ts -- a fake of the service's events route for the runner's tests: it applies each sequence at most once, as the real route does, and answers each post as the test scripted.
+ * fake-service.ts -- a fake of the service's events route for the runner's tests: it applies each sequence at most once, as the real route does, and answers each post as the test scripted.
  */
 
 import assert from "node:assert/strict";
@@ -24,7 +24,7 @@ export type Answer = (typeof ANSWER)[keyof typeof ANSWER];
  * applied message holds `watchFor`. `bodies` keeps every post's body as it
  * crossed the wire, for a test of what the runner never sends.
  */
-export function makeFakeLuke(options: {
+export function makeFakeService(options: {
   readonly url: string;
   readonly firstSequence: number;
   readonly answers?: readonly Answer[] | undefined;

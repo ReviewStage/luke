@@ -27,7 +27,7 @@ import { fixedAccountSource } from "./testing/fixed-account-source.js";
  * would, which for a cookie session is with no header at all.
  */
 
-const SERVICE_BASE_URL = "https://luke.example.test";
+const SERVICE_BASE_URL = "https://app.example.test";
 
 /** A settings concern in a run that sends, over a service that answers every request and keeps what each carried. */
 const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {

@@ -17,7 +17,7 @@ import { type EveReach, eveFor } from "./stop.js";
  * throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 /** The deployment's own secret, the one a cookie's request is carried under. */
 const SECRET = "eve-deployment-secret-1";
 /** The cron's bearer, which the deployment holds beside it and which carries nothing. */

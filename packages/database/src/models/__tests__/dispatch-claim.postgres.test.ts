@@ -55,7 +55,7 @@ const anotherConnection = Effect.gen(function* () {
 const openAgentConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)

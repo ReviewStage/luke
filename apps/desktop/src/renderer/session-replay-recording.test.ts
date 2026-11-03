@@ -83,7 +83,7 @@ const WORDS = [
 const GZIP_MAGIC = "\u001f\u008b";
 
 /** The account's name and email, as the host holds them for whoever is signed in. */
-const PERSON = { name: "Ada Lovelace", email: "ada@luke.test" } as const;
+const PERSON = { name: "Ada Lovelace", email: "ada@app.test" } as const;
 
 function bootstrap(permitted: boolean, accountId = "user-1"): SessionReplayBootstrap {
   return { permitted, appVersion: "1.2.3", packaged: true, accountId, ...PERSON };
@@ -316,19 +316,19 @@ test("a signed-out run records nothing, a sign-in records under the person it na
   );
   assert.deepEqual(identify?.$set, {
     name: "Ada Lovelace",
-    email: "ada@luke.test",
+    email: "ada@app.test",
     platform: "desktop",
   });
   assert.equal(identify?.properties.platform, "desktop");
 
   // The same account renamed while it records: the person is shown by what it is called now.
-  applySessionReplay({ ...bootstrap(true, "user-2"), email: "ada@new.luke.test" }, importRecorder);
+  applySessionReplay({ ...bootstrap(true, "user-2"), email: "ada@new.app.test" }, importRecorder);
   assert.equal(posthog.get_distinct_id(), "user-2");
   const renamed = sent.findLast((event) => event.event === "$set");
-  assert.equal(renamed?.properties.$set?.email, "ada@new.luke.test");
+  assert.equal(renamed?.properties.$set?.email, "ada@new.app.test");
   // And its name taken away: the old one is not left standing on the person.
   applySessionReplay(
-    { ...bootstrap(true, "user-2"), email: "ada@new.luke.test", name: undefined },
+    { ...bootstrap(true, "user-2"), email: "ada@new.app.test", name: undefined },
     importRecorder,
   );
   const unnamed = sent.findLast((event) => event.properties.$unset !== undefined);

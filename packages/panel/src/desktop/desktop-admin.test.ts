@@ -76,7 +76,7 @@ beforeEach(() => {
   sent = [];
   answer = { answer: ROSTER };
   localStorage.clear();
-  fakeAppPlatform({ adminDashboard: () => ({ href: "https://luke.test/admin" }) });
+  fakeAppPlatform({ adminDashboard: () => ({ href: "https://app.test/admin" }) });
   fakeActPortAnswering((request) => {
     sent.push(request);
     return Promise.resolve(request.kind === ACT_KIND.ADMIN_READ ? onTheWire(answer) : undefined);
@@ -145,7 +145,7 @@ test("a section stands under the place's own toolbar, titled Admin, with Open in
   const { page } = await open({ kind: "users" });
 
   assert.equal(page.querySelector("header.luke-toolbar h1")?.textContent, "Admin");
-  assert.ok(page.querySelector('a[aria-label="Open in browser"][href="https://luke.test/admin"]'));
+  assert.ok(page.querySelector('a[aria-label="Open in browser"][href="https://app.test/admin"]'));
   assert.deepEqual(sections(page), [
     { name: "Overview", chosen: false },
     { name: "Cost", chosen: false },

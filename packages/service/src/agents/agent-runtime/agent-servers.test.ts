@@ -159,7 +159,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
             standing([GITHUB, LINEAR]),
             standing([GITHUB]),
           ]);
-          assert.deepEqual(yield* handed(`${agent.userId}@luke.test`), [
+          assert.deepEqual(yield* handed(`${agent.userId}@app.test`), [
             standing([GITHUB, LINEAR, SLACK]),
             standing([GITHUB, LINEAR, SLACK]),
             standing([GITHUB, SLACK]),
@@ -182,7 +182,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
           const deployment = integrationConnectOver({
             LINEAR_CONNECTOR_UID: "oauth/linear",
             SLACK_CONNECTOR_UID: "oauth/slack",
-            SLACK_ALLOWED_ACCOUNTS: `${agent.userId}@luke.test`,
+            SLACK_ALLOWED_ACCOUNTS: `${agent.userId}@app.test`,
           });
           const handed = (policy: typeof AGENT_SWITCHES | typeof AGENT_SWITCHES_AND_MENTIONS) =>
             turnServers(policy === AGENT_SWITCHES ? agent.admission : agent.admission, policy).pipe(

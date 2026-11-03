@@ -91,7 +91,7 @@ it.effect(
 it.effect("an admin's read is an admin, and a sign-out leaves no admin standing", () =>
   Effect.gen(function* () {
     const { client } = service([json({ admin: true })]);
-    const { held, account, published } = holder(client, "admin@luke.test");
+    const { held, account, published } = holder(client, "admin@app.test");
     assert.deepEqual(held.current(), UNREAD);
 
     yield* held.refresh;
@@ -106,7 +106,7 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
     assert.deepEqual(published.at(-1), UNREAD);
 
     // The same account back is no admin until it is read again.
-    account.key = "admin@luke.test";
+    account.key = "admin@app.test";
     yield* held.accountChanged;
     assert.deepEqual(held.current(), UNREAD);
   }),
@@ -115,7 +115,7 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
 it.effect("a sign-out the same account returned from before its change landed still forgets", () =>
   Effect.gen(function* () {
     const { client } = service([json({ admin: true })]);
-    const { held, published } = holder(client, "admin@luke.test");
+    const { held, published } = holder(client, "admin@app.test");
     yield* held.refresh;
 
     // The gate closed and opened again before either change event was taken: both read the account back.
@@ -130,10 +130,10 @@ it.effect("a sign-out the same account returned from before its change landed st
 it.effect("an admin's read is no answer for another account signed in after it", () =>
   Effect.gen(function* () {
     const { client } = service([json({ admin: true }), json({ admin: false })]);
-    const { held, account, published } = holder(client, "admin@luke.test");
+    const { held, account, published } = holder(client, "admin@app.test");
     yield* held.refresh;
 
-    account.key = "member@luke.test";
+    account.key = "member@app.test";
     yield* held.accountChanged;
     assert.deepEqual(held.current(), UNREAD);
     assert.deepEqual(published.at(-1), UNREAD);
@@ -151,7 +151,7 @@ it.effect("a read answered after the account changed is kept for nobody", () =>
       whileAnswering();
       return jsonResponse({ admin: true });
     });
-    const { held, account, published } = holder(accessClient, "admin@luke.test");
+    const { held, account, published } = holder(accessClient, "admin@app.test");
     whileAnswering = () => {
       account.key = undefined;
     };
@@ -160,7 +160,7 @@ it.effect("a read answered after the account changed is kept for nobody", () =>
     assert.deepEqual(held.current(), UNREAD);
     assert.deepEqual(published, []);
 
-    account.key = "admin@luke.test";
+    account.key = "admin@app.test";
     assert.deepEqual(held.current(), UNREAD);
   }),
 );
@@ -180,7 +180,7 @@ it.effect("a read still out across a sign-out and the same account's return is d
           { status: 200, headers: { "content-type": "application/json" } },
         ),
     ]);
-    const { held: access, published } = holder(held.client, "admin@luke.test");
+    const { held: access, published } = holder(held.client, "admin@app.test");
 
     const reading = yield* Effect.forkChild(access.refresh);
     for (let turn = 0; turn < 1_000 && body === undefined; turn += 1) yield* Effect.yieldNow;
@@ -208,7 +208,7 @@ it.effect("a read that fails, or answers no flag, is no admin", () =>
       () => new Response("not json", { status: 200 }),
     ];
     for (const failure of failures) {
-      const { held } = holder(service([failure]).client, "admin@luke.test");
+      const { held } = holder(service([failure]).client, "admin@app.test");
       yield* held.refresh;
       assert.deepEqual(held.current(), NOT_ADMIN);
     }
