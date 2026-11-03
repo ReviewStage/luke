@@ -1116,13 +1116,21 @@ function withTab(
       };
 }
 
-/** The tab as it opens on the panel: a page's with `place` saved beside it, where it holds none of its own. */
-function placedTab(tab: SidePanelTab, place: PagePlace | undefined): SidePanelTab {
-  if (!isPageTab(tab) || place === undefined) return tab;
-  const page: OpenPage = tab;
-  if (page.place !== undefined) return tab;
-  const placed: OpenPage = { ...page, place };
-  return placed;
+/**
+ * The state with the open page tab's place saved beside it, where it holds
+ * none yet. Note that only the held page keeps it, never the tab chosen or
+ * ordered, so every other reader of a tab sees the page alone.
+ */
+function withPagePlaced(
+  held: HeldState,
+  tab: SidePanelTab,
+  place: PagePlace | undefined,
+): HeldState {
+  if (!isPageTab(tab) || place === undefined) return held;
+  const standing = held.pages.find((each) => sameTab(each, tab));
+  if (standing === undefined || standing.place !== undefined) return held;
+  const pages = held.pages.map((each) => (each === standing ? { ...each, place } : each));
+  return { ...held, pages };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -2084,16 +2092,19 @@ export function useSidePanel(
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
   const onToggleAskedAnswered = useCallback(() => setToggleAskedOn(undefined), []);
   const onChoose = useCallback(
-    (asked: SidePanelTab) => {
-      if (asked === SIDE_PANEL_TAB.INBOX) return;
+    (tab: SidePanelTab) => {
+      if (tab === SIDE_PANEL_TAB.INBOX) return;
       setAsked(undefined);
-      const tab = placedTab(asked, pagePlace);
       update((held) => ({
-        ...withTab(
-          withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
+        ...withPagePlaced(
+          withTab(
+            withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
+            tab,
+            taskId,
+            drawn.task.bare === true,
+          ),
           tab,
-          taskId,
-          drawn.task.bare === true,
+          pagePlace,
         ),
         open: true,
       }));
@@ -2138,12 +2149,15 @@ export function useSidePanel(
     [update, drawn, taskId, fileReads],
   );
   const onPreview = useCallback(
-    (asked: SidePanelTab) => {
+    (tab: SidePanelTab) => {
       setAsked(undefined);
-      const tab = placedTab(asked, pagePlace);
       update((held) => ({
         ...withPreview(held, tab, drawn, (from) =>
-          withTab(withTabLast(withChosenViewed(from, tab, drawn), tab, drawn), tab, taskId),
+          withPagePlaced(
+            withTab(withTabLast(withChosenViewed(from, tab, drawn), tab, drawn), tab, taskId),
+            tab,
+            pagePlace,
+          ),
         ),
         open: true,
       }));
