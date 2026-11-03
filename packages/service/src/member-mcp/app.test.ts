@@ -8,7 +8,10 @@ import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resourc
 import { it } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Database } from "@repo/database/core/query";
-import { createTask } from "@repo/database/models/task-store";
+import { readAgent } from "@repo/database/models/agent-store";
+import { listRevisions } from "@repo/database/models/plan-revisions";
+import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
+import { createTask, readTask } from "@repo/database/models/task-store";
 import { oauthClient, oauthClientResource, oauthResource } from "@repo/database/schemas/auth";
 import {
   openMigratedPglite,
@@ -16,12 +19,16 @@ import {
   openWorkspace,
   sqlClientOverPglite,
 } from "@repo/database/testing";
+import { AGENT_ARCHIVER } from "@repo/features/agent-wire";
+import { NOTE_KIND } from "@repo/features/plan-template";
+import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
+import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, vi } from "vitest";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
@@ -38,6 +45,7 @@ import {
   type OAuthClient,
   oauthClientRecord,
 } from "../auth/oauth-clients.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { NO_GITHUB } from "../testing/github-app-fake.js";
@@ -60,7 +68,8 @@ import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools
  * against is fetched from the auth service, as on a deployment, through a
  * `fetch` that reaches the in-process handler alone. The SDK's own client
  * drives the server at both revisions it serves. GitHub is reached by no
- * read here, and the model catalog offers nothing. Synthetic accounts.
+ * call here, no agent's session is, and the model catalog offers nothing.
+ * Synthetic accounts.
  */
 
 const ORIGIN = "https://app.test";
@@ -86,6 +95,18 @@ const MCP_CLIENT: OAuthClient = {
   grantTypes: ["authorization_code", "refresh_token"],
   responseTypes: ["code"],
   type: "web",
+};
+
+/** The deployment's environment with no key of its own, which no call here reads. */
+const NO_ENVIRONMENT: HostedEnvironmentValues = {
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: undefined,
 };
 
 /** The protocol revisions the server serves, as the SDK's client is told to speak each. */
@@ -115,6 +136,10 @@ const decodeListed = Schema.decodeUnknownSync(
       }),
     ),
   }),
+);
+
+const decodeMade = Schema.decodeUnknownSync(
+  Schema.Struct({ task: Schema.Struct({ id: Schema.String }) }),
 );
 
 /** The JSON Schema goldens of the server's tools, where a tool's input a model is shown is recorded. */
@@ -175,6 +200,7 @@ const standing = Effect.gen(function* () {
     Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
     NO_GITHUB,
     modelCatalogOf([]),
+    Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
   );
   yield* seedRows.pipe(Effect.provide(services));
   // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
@@ -374,7 +400,7 @@ it.effect(
 );
 
 it.effect.each(Object.values(REVISION))(
-  "an SDK client at %s lists every tool as its golden shows it, each only reading, and runs list_workspaces as the member",
+  "an SDK client at %s lists every tool as its golden shows it, with its annotations, and runs list_workspaces as the member",
   (revision) =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -396,13 +422,13 @@ it.effect.each(Object.values(REVISION))(
       yield* Effect.promise(() => client.close());
 
       assert.equal(transport.protocolVersion, revision);
-      const goldens = yield* Effect.forEach(MEMBER_MCP_TOOLS, ({ name }) =>
+      const goldens = yield* Effect.forEach(MEMBER_MCP_TOOLS, ({ name, annotations }) =>
         Effect.promise(async () => ({
           name,
           inputSchema: JSON.parse(
             await fs.readFile(path.join(GOLDEN_ROOT, `${goldenOf(name)}.json`), "utf8"),
           ),
-          annotations: { readOnlyHint: true },
+          annotations,
         })),
       );
       assert.deepEqual(
@@ -517,6 +543,155 @@ it.effect(
         );
       }
       for (const read of owns) assert.equal(read.refused, false, read.text);
+    }),
+);
+
+it.effect(
+  "a member makes, starts, messages, stops, changes, and plans nothing in a workspace they are not in",
+  () =>
+    Effect.gen(function* () {
+      const { auth, fetch, services } = yield* standing;
+      const member = yield* Effect.promise(() => signUp(auth));
+      const stranger = yield* Effect.promise(() => signUp(auth));
+      const rows = yield* Effect.gen(function* () {
+        yield* openWorkspace(member.userId);
+        const elsewhere = yield* openWorkspace(stranger.userId);
+        const task = yield* createTask(stranger.userId, {
+          organizationId: elsewhere,
+          name: "A stranger's task",
+        });
+        const sectionId = randomUUID();
+        yield* writeTaskSections(stranger.userId, {
+          kind: TASK_SECTION_WRITE.CREATE,
+          id: sectionId,
+          workspaceId: elsewhere,
+          title: "A stranger's section",
+        });
+        return {
+          elsewhere,
+          taskId: task.id,
+          sectionId,
+          agentId: yield* openTaskAgent(stranger.userId, elsewhere, task.id),
+        };
+      }).pipe(Effect.provide(services));
+      const token = yield* Effect.promise(() =>
+        mintedToken(auth, member.cookie, {
+          client: MCP_CLIENT,
+          scope: [MEMBER_MCP_SCOPE.MCP],
+          resource: RESOURCE,
+        }),
+      );
+      const { client } = yield* connected(fetch, token, REVISION.MODERN);
+      const workspace = `workspace-${rows.elsewhere}`;
+      const { taskId, agentId } = rows;
+
+      const answers = yield* Effect.forEach(
+        [
+          [MEMBER_MCP_TOOL.CREATE_TASK, { workspace, name: "Planted" }],
+          [MEMBER_MCP_TOOL.UPDATE_TASK, { taskId, name: "Renamed" }],
+          [
+            MEMBER_MCP_TOOL.EDIT_PLAN,
+            { taskId, notes: [{ kind: NOTE_KIND.ADD, section: "Problem", text: "Planted." }] },
+          ],
+          [MEMBER_MCP_TOOL.CREATE_SECTION, { workspace, title: "Planted" }],
+          [MEMBER_MCP_TOOL.DELETE_SECTION, { sectionId: rows.sectionId }],
+          [MEMBER_MCP_TOOL.START_AGENT, { taskId }],
+          [MEMBER_MCP_TOOL.START_AGENT, { workspace, prompt: "Go." }],
+          [MEMBER_MCP_TOOL.START_AGENT, { from: { agentId } }],
+          [MEMBER_MCP_TOOL.MESSAGE_AGENT, { agentId, text: "Hello." }],
+          [MEMBER_MCP_TOOL.STOP_AGENT, { agentId }],
+          [MEMBER_MCP_TOOL.UPDATE_AGENT, { agentId, archived: true }],
+        ] as const,
+        ([name, args]) =>
+          Effect.promise(async () => {
+            const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
+            return { name, refused: answer.isError === true, text: answer.content[0].text };
+          }),
+      );
+      yield* Effect.promise(() => client.close());
+      const after = yield* Effect.gen(function* () {
+        return {
+          task: yield* readTask(stranger.userId, taskId),
+          sections: yield* listTaskSections(stranger.userId),
+          agent: yield* readAgent(stranger.userId, agentId),
+        };
+      }).pipe(Effect.provide(services));
+
+      for (const answer of answers) {
+        assert.equal(answer.refused, true, `${answer.name}: ${answer.text}`);
+        assert.ok(!answer.text.includes(taskId) && !answer.text.includes(rows.elsewhere));
+      }
+      const task = Option.getOrThrow(after.task);
+      assert.equal(task.task.name, "A stranger's task");
+      assert.equal(task.text, "");
+      assert.deepEqual(
+        after.sections.sections.map(({ id }) => id),
+        [rows.sectionId],
+      );
+      assert.equal(Option.getOrThrow(after.agent).archivedAt, null);
+    }),
+);
+
+it.effect(
+  "a task a member makes, its plan's notes, and an agent they archive are the member's own, as the desktop shows them",
+  () =>
+    Effect.gen(function* () {
+      const { auth, fetch, services } = yield* standing;
+      const member = yield* Effect.promise(() => signUp(auth));
+      const agentId = yield* Effect.gen(function* () {
+        const own = yield* openWorkspace(member.userId);
+        return yield* openTaskAgent(member.userId, own, null);
+      }).pipe(Effect.provide(services));
+      const token = yield* Effect.promise(() =>
+        mintedToken(auth, member.cookie, {
+          client: MCP_CLIENT,
+          scope: [MEMBER_MCP_SCOPE.MCP],
+          resource: RESOURCE,
+        }),
+      );
+      const { client } = yield* connected(fetch, token, REVISION.MODERN);
+      const call = (name: string, args: Record<string, unknown>) =>
+        Effect.promise(async () => {
+          const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
+          assert.notEqual(answer.isError, true, `${name}: ${answer.content[0].text}`);
+          return JSON.parse(answer.content[0].text);
+        });
+
+      const made = decodeMade(
+        yield* call(MEMBER_MCP_TOOL.CREATE_TASK, {
+          name: "Seat billing",
+          plan: "## Problem\n\nSeats drift.",
+        }),
+      );
+      const taskId = made.task.id;
+      yield* call(MEMBER_MCP_TOOL.EDIT_PLAN, {
+        taskId,
+        notes: [{ kind: NOTE_KIND.ADD, section: "Problem", text: "Invoices lag too." }],
+      });
+      yield* call(MEMBER_MCP_TOOL.UPDATE_TASK, { taskId, status: TASK_STATUS.IN_PROGRESS });
+      yield* call(MEMBER_MCP_TOOL.UPDATE_AGENT, { agentId, archived: true, reason: "Done." });
+      yield* Effect.promise(() => client.close());
+      const after = yield* Effect.gen(function* () {
+        return {
+          task: Option.getOrThrow(yield* readTask(member.userId, taskId)),
+          revisions: yield* listRevisions(member.userId, taskId),
+          agent: Option.getOrThrow(yield* readAgent(member.userId, agentId)),
+        };
+      }).pipe(Effect.provide(services));
+
+      assert.equal(after.task.ownerId, member.userId);
+      assert.equal(after.task.task.status, TASK_STATUS.IN_PROGRESS);
+      assert.equal(after.task.text, "## Problem\n\nSeats drift.\n\nInvoices lag too.");
+      // The plan's first text and the note are the member's own, as their window writes it, and no agent's.
+      assert.deepEqual(
+        [...new Set(after.revisions.revisions.map(({ lastEdit }) => lastEdit.actor))],
+        [PLAN_ACTOR.DEVELOPER],
+      );
+      assert.deepEqual(after.agent.archivedBy, {
+        by: AGENT_ARCHIVER.MEMBER,
+        userId: member.userId,
+        reason: "Done.",
+      });
     }),
 );
 

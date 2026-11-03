@@ -45,7 +45,7 @@ export const MEMBER_MCP_METADATA_PATHS = [
 
 /** The function the server is deployed as. */
 export const MEMBER_MCP_FUNCTION = {
-  /** The duration its bundle declares: a call answers once its one tool has, and a tool of a later child may wait on an agent's start, two minutes, with room for the store around it. */
+  /** The duration its bundle declares: a call answers once its one tool has, and a start waits on its agent's session up to two minutes, with room for the store around it. */
   MAX_DURATION_SECONDS: 300,
 } as const;
 
