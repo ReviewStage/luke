@@ -283,6 +283,15 @@ function contentArgs(content: SlackMessageContent): Record<string, string> {
   return { text: content.text, blocks: JSON.stringify(content.blocks) };
 }
 
+/**
+ * A new message's arguments: its content, with Slack's link and media
+ * previews off. Note that we turn them off, because an agent's words name
+ * many pull requests, and a preview of each buries the message itself.
+ */
+function postArgs(content: SlackMessageContent): Record<string, string> {
+  return { ...contentArgs(content), unfurl_links: "false", unfurl_media: "false" };
+}
+
 /** Logs a failure by its fixed line, and answers nothing. */
 function swallowed<A>(what: string) {
   return (cause: { readonly message: string }) =>
@@ -440,7 +449,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
           ...(thread === undefined
             ? { channel: slackId.value }
             : { channel: thread.channel, thread_ts: thread.ts }),
-          ...contentArgs(content),
+          ...postArgs(content),
         });
         const message = yield* readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, posted);
         return Option.some<SlackMessage>({ channel: message.channel, ts: message.ts });
@@ -457,7 +466,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       api(SLACK_METHOD.CHAT_POST_MESSAGE, {
         channel,
         thread_ts: threadTs,
-        ...contentArgs(content),
+        ...postArgs(content),
       }).pipe(
         Effect.flatMap((answer) =>
           readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, answer),
