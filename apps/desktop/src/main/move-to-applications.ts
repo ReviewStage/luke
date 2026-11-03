@@ -15,7 +15,7 @@ const MOVE_ANSWER = { MOVE: 0, NOT_NOW: 1 } as const;
  * Moves the app into Applications. Note that a move that lands quits this
  * copy through the ordinary quit, its teardown and its questions included,
  * and opens the moved one once this process has left, so nothing here
- * quits; a move the developer cancelled at macOS's password prompt changes
+ * quits; a move the developer canceled at macOS's password prompt changes
  * nothing, and one that could not copy throws Electron's own words.
  */
 export function moveToApplications(): void {
