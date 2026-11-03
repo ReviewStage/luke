@@ -391,7 +391,7 @@ const NO_RUNS: AdminAutomationCount = { failed: 0, skipped: 0, total: 0 };
 
 /** Whose work a turn is: the app's, a coding agent's own run, or a subagent one of its turns delegated to. */
 const TURN_WORK = {
-  LUKE: "luke",
+  APP: "app",
   AGENT: "agent",
   AGENT_SUBAGENT: "agent-subagent",
 } as const;
@@ -401,7 +401,7 @@ type TurnWork = (typeof TURN_WORK)[keyof typeof TURN_WORK];
 function turnWorkOf(kind: string, parentKind: string | null): TurnWork {
   if (kind === CONVERSATION_KIND.AGENT) return TURN_WORK.AGENT;
   if (parentKind === CONVERSATION_KIND.AGENT) return TURN_WORK.AGENT_SUBAGENT;
-  return TURN_WORK.LUKE;
+  return TURN_WORK.APP;
 }
 
 /**
@@ -427,7 +427,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
     { concurrency: "unbounded" },
   );
 
-  const lukeTurns = new Map<string, AdminFailureCount>();
+  const appTurns = new Map<string, AdminFailureCount>();
   const agentRuns = new Map<string, AdminFailureCount>();
   const abandonedTurns = new Map<string, number>();
   for (const row of outcomes) {
@@ -437,7 +437,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
     }
     const work = turnWorkOf(row.kind, row.parentKind);
     if (work === TURN_WORK.AGENT_SUBAGENT) continue;
-    bump(work === TURN_WORK.AGENT ? agentRuns : lukeTurns, row.day, NO_FAILURES, (counted) => ({
+    bump(work === TURN_WORK.AGENT ? agentRuns : appTurns, row.day, NO_FAILURES, (counted) => ({
       failed: counted.failed + failed,
       total: counted.total + row.value,
     }));
@@ -471,7 +471,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
     agentFailures.set(failure, (agentFailures.get(failure) ?? 0) + 1);
   }
 
-  return { lukeTurns, agentRuns, abandonedTurns, agentFailures };
+  return { appTurns, agentRuns, abandonedTurns, agentFailures };
 });
 
 const readAutomationSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityAutomations")(function* (
@@ -612,7 +612,7 @@ function emptySource(
 ): AdminReliabilitySource {
   return {
     daily: {
-      lukeTurns: new Map(),
+      appTurns: new Map(),
       agentRuns: new Map(),
       abandonedTurns: new Map(),
       automationRuns: new Map(),
@@ -661,7 +661,7 @@ export function readAdminReliabilitySource(input: {
 
     return {
       daily: {
-        lukeTurns: turnSeries.lukeTurns,
+        appTurns: turnSeries.appTurns,
         agentRuns: turnSeries.agentRuns,
         abandonedTurns: turnSeries.abandonedTurns,
         automationRuns: automations.automationRuns,

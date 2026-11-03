@@ -966,16 +966,17 @@ test("the links written in words are every inline link whatever its label, an au
   );
 });
 
-test("Vespin on a task is mentioned by the task's link and `/luke`, read back by either scheme, and on no task names nothing", () => {
-  const luke: Mention = { kind: MENTION_KIND.LUKE, taskId: "plan-1" };
+test("Vespin on a task is mentioned by the task's link and `/app`, read back by either scheme or the `/luke` an earlier build wrote, and on no task names nothing", () => {
+  const app: Mention = { kind: MENTION_KIND.APP, taskId: "plan-1" };
 
-  assert.equal(encodeMention(luke, PLACE), "https://vespin.dev/acme/plan/plan-1/luke");
-  assert.deepEqual(decodeMention("https://vespin.dev/acme/plan/plan-1/luke", null), luke);
-  assert.deepEqual(decodeMention("vespin://vespin.dev/acme/plan/plan-1/luke", null), luke);
+  assert.equal(encodeMention(app, PLACE), "https://vespin.dev/acme/plan/plan-1/app");
+  assert.deepEqual(decodeMention("https://vespin.dev/acme/plan/plan-1/app", null), app);
+  assert.deepEqual(decodeMention("vespin://vespin.dev/acme/plan/plan-1/app", null), app);
+  assert.deepEqual(decodeMention("https://vespin.dev/acme/plan/plan-1/luke", null), app);
   for (const target of [
-    "https://vespin.dev/acme/luke",
-    "https://vespin.dev/acme/plan/plan-1/luke/more",
-    "https://vespin.dev/acme/plan/plan-1/luke#top",
+    "https://vespin.dev/acme/app",
+    "https://vespin.dev/acme/plan/plan-1/app/more",
+    "https://vespin.dev/acme/plan/plan-1/app#top",
   ]) {
     assert.equal(decodeMention(target, null), undefined, target);
   }
@@ -983,7 +984,7 @@ test("Vespin on a task is mentioned by the task's link and `/luke`, read back by
 
 test("a comment's words ask the agents they mention with `@`, each once, and no bare link or Vespin", () => {
   const words = [
-    "[@Vespin](https://vespin.dev/acme/plan/plan-1/luke), and",
+    "[@Vespin](https://vespin.dev/acme/plan/plan-1/app), and",
     "[@Wire it](https://vespin.dev/acme/plan/plan-1/agent/agent-1) with",
     "[@wire it again](https://vespin.dev/acme/plan/plan-1/agent/AGENT-1),",
     "[@Other](https://vespin.dev/acme/agent/agent-2), not",
@@ -1069,7 +1070,7 @@ test("words that are one member's mention link, written whole or as its address,
   const person = { kind: MENTION_KIND.PERSON, userId: "user-1" } as const;
   const address = encodeMention(person, PLACE);
   const link = `[@Ada Lovelace](${address})`;
-  const luke = `[@Vespin](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK_ID }, PLACE)})`;
+  const luke = `[@Vespin](${encodeMention({ kind: MENTION_KIND.APP, taskId: TASK_ID }, PLACE)})`;
   const task = `[@Checkout](${encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK_ID }, PLACE)})`;
   assert.deepEqual(memberMentionOf(link), person);
   assert.deepEqual(memberMentionOf(address), person);
@@ -1082,7 +1083,7 @@ test("a member's link is written as its name alone, its address written bare too
   const address = encodeMention({ kind: MENTION_KIND.PERSON, userId: "user-1" }, PLACE);
   const agentId = "11111111-2222-4333-8444-555555555555";
   const agent = `[@Invite emails](${encodeMention({ kind: MENTION_KIND.AGENT, agentId }, PLACE)})`;
-  const luke = `[@Vespin](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK_ID }, PLACE)})`;
+  const luke = `[@Vespin](${encodeMention({ kind: MENTION_KIND.APP, taskId: TASK_ID }, PLACE)})`;
   const plan = encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK_ID }, PLACE);
   const task = `[@Checkout](${plan})`;
   assert.equal(

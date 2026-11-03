@@ -379,7 +379,7 @@ it.layer(getTestDB())("the sweep over withdrawn lines", (it) => {
         for (const text of ["Rerun the tests.", "Push the branch."]) {
           yield* writer.writeAwaitingLine(
             target,
-            { text, clientKey: text, sender: { kind: MESSAGE_SENDER.LUKE } },
+            { text, clientKey: text, sender: { kind: MESSAGE_SENDER.APP } },
             Effect.succeed(false),
           );
         }

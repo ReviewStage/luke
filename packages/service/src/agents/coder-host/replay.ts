@@ -188,7 +188,7 @@ const CALL_ENTRY_WORDS = {
 const REPLAY_WORDS = {
   SAID: "Said",
   DEVELOPER: "The developer",
-  LUKE: PRODUCT_NAME,
+  APP: PRODUCT_NAME,
   FORMER_MEMBER: "A former member",
   STARTING_AGENT: "The agent that started it",
   ATTACHED: "Attached file",
@@ -314,8 +314,8 @@ function senderOf(sent: LineSent | undefined): NonNullable<ReplayStep["sender"]>
       return sent.member === undefined
         ? { kind: REPLAY_SENDER.MEMBER }
         : { kind: REPLAY_SENDER.MEMBER, memberId: sent.member.userId };
-    case MESSAGE_SENDER.LUKE:
-      return { kind: REPLAY_SENDER.LUKE };
+    case MESSAGE_SENDER.APP:
+      return { kind: REPLAY_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
       return { kind: REPLAY_SENDER.AUTOMATION };
     case MESSAGE_SENDER.GITHUB:
@@ -332,8 +332,8 @@ function senderName(sent: LineSent | undefined): string {
       return REPLAY_WORDS.DEVELOPER;
     case MESSAGE_SENDER.MEMBER:
       return sent.member?.name ?? REPLAY_WORDS.FORMER_MEMBER;
-    case MESSAGE_SENDER.LUKE:
-      return REPLAY_WORDS.LUKE;
+    case MESSAGE_SENDER.APP:
+      return REPLAY_WORDS.APP;
     case MESSAGE_SENDER.AUTOMATION:
       return sent.name;
     case MESSAGE_SENDER.GITHUB:

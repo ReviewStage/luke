@@ -31,7 +31,7 @@ import {
  * conversations throughout.
  */
 
-const SENDER = { kind: MESSAGE_SENDER.LUKE } as const;
+const SENDER = { kind: MESSAGE_SENDER.APP } as const;
 
 const openAgentConversation = Effect.gen(function* () {
   const db = yield* Database;

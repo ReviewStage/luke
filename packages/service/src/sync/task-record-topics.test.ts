@@ -103,7 +103,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
             owner,
             taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
           onTask,
           [taskRecordLive.topics(params), taskPagesLive.topics(params)],

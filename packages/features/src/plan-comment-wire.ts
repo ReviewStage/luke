@@ -1,3 +1,4 @@
+import { LEGACY_APP_WORD, literalsReadingLegacy } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import { agentMessageRequestSchema } from "./agent-wire.js";
 import { pageVersionNumberSchema } from "./page-wire.js";
@@ -80,11 +81,18 @@ export type PlanCommentStatus = (typeof PLAN_COMMENT_STATUS)[keyof typeof PLAN_C
 /** Who wrote an entry: a member of the workspace, the app, or one of the task's coding agents. */
 export const PLAN_COMMENT_ACTOR = {
   MEMBER: "member",
-  LUKE: "luke",
+  APP: "app",
   AGENT: "agent",
 } as const;
 
 export type PlanCommentActor = (typeof PLAN_COMMENT_ACTOR)[keyof typeof PLAN_COMMENT_ACTOR];
+
+/** Who wrote an entry or was asked in it, as its row stores it. Note that it reads `luke`, which rows from before the app was named `app` hold, as the app (a legacy read). */
+export const planCommentActorSchema = literalsReadingLegacy(
+  Object.values(PLAN_COMMENT_ACTOR),
+  LEGACY_APP_WORD,
+  PLAN_COMMENT_ACTOR.APP,
+);
 
 /** What one entry of a thread is: a comment, or a line of what happened to the thread. */
 export const PLAN_COMMENT_ENTRY = {
@@ -118,7 +126,7 @@ const planCommentSpanSchema = EffectSchema.Struct({
  * An entry whose member's account is gone names no member.
  */
 const planCommentWriterSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals(Object.values(PLAN_COMMENT_ACTOR)),
+  actor: planCommentActorSchema,
   by: EffectSchema.optionalKey(memberRefSchema),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
@@ -127,7 +135,11 @@ export type PlanCommentWriter = typeof planCommentWriterSchema.Type;
 
 /** Who a thread was sent to: the app, or a coding agent by its id. */
 const planCommentAskedSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals([PLAN_COMMENT_ACTOR.LUKE, PLAN_COMMENT_ACTOR.AGENT]),
+  actor: literalsReadingLegacy(
+    [PLAN_COMMENT_ACTOR.APP, PLAN_COMMENT_ACTOR.AGENT],
+    LEGACY_APP_WORD,
+    PLAN_COMMENT_ACTOR.APP,
+  ),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 

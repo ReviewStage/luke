@@ -252,7 +252,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         SERVER_EVENT.HOST_INSTALL,
         { userId: polled.userId },
         {
-          kind: SERVER_HOST_KIND.LUKE_HOST,
+          kind: SERVER_HOST_KIND.BOX_HOST,
         },
       );
       return { status: polled.status, deviceId: polled.deviceId, deviceSecret: minted.secret };

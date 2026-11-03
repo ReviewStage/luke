@@ -464,7 +464,7 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
       ),
       comment(
         "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e64",
-        { actor: PLAN_COMMENT_ACTOR.LUKE },
+        { actor: PLAN_COMMENT_ACTOR.APP },
         CALL_AT - 4 * HOUR + 2 * 60_000,
         'Added under Hard parts: a withdrawn link reads "This invite is no longer valid" and grants nothing.',
       ),

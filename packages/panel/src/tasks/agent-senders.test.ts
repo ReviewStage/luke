@@ -118,7 +118,7 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
   line("dean", "Use seven days.", { ...DEAN, kind: MEMBER }),
   { ...line("charles", "Not five.", { ...CHARLES, kind: MEMBER }), sentAt: CHARLES_SENT_AT },
   line("earlier", "Keep the old copy."),
-  line("luke", "Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.LUKE }),
+  line("app", "Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.APP }),
   line("automation", "Triage the failures.", {
     name: "Nightly triage",
     kind: AGENT_SENDER.AUTOMATION,
@@ -252,7 +252,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
 
   // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
   const others: readonly Seen[] = [
-    ["luke", ACTOR_KIND.LUKE, "Vespin"],
+    ["app", ACTOR_KIND.APP, "Vespin"],
     ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
     ["gone", ACTOR_KIND.SOMEONE, "Former member"],
     // GitHub names who caused what it told the agent of: a person by their login and its avatar, a bot by its App's.

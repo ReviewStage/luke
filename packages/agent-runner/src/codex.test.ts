@@ -49,8 +49,8 @@ import {
   type Spawned,
 } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
-import { makeFakeService } from "./testing/fake-service.js";
 import { UNREAD_PROC } from "./testing/fake-proc.js";
+import { makeFakeService } from "./testing/fake-service.js";
 
 const BEARER = "runner-bearer-for-tests";
 const EVENTS_URL = "https://app.test/runner/events";
@@ -688,13 +688,13 @@ it.effect("ends the launch as failed when app-server exits, its secrets taken ou
 
 it.effect("ends an idle launch at once on a stop, and on stdin closing, with no turn started", () =>
   Effect.gen(function* () {
-    const stoppedLuke = fakeService();
-    const stopped = yield* launch([{ exchanges: OPEN }], stoppedLuke);
+    const stoppedService = fakeService();
+    const stopped = yield* launch([{ exchanges: OPEN }], stoppedService);
     yield* stopped.write(CONFIG);
     yield* stopped.write({ type: INPUT_LINE.STOP });
     assert.equal(yield* Fiber.join(stopped.run), RUNNER_END.STOPPED);
     assert.deepEqual(received(stopped.spawned[0], "turn/start"), []);
-    assert.deepEqual(kinds(stoppedLuke.applied), [...notified(OPEN), RUNNER_EVENT.END]);
+    assert.deepEqual(kinds(stoppedService.applied), [...notified(OPEN), RUNNER_EVENT.END]);
 
     const closed = yield* launch([{ exchanges: OPEN }], fakeService());
     yield* closed.write(CONFIG);

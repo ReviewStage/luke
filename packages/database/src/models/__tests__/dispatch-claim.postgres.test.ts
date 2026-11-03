@@ -34,7 +34,7 @@ import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../wri
  * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
-const SENDER = { kind: MESSAGE_SENDER.LUKE } as const;
+const SENDER = { kind: MESSAGE_SENDER.APP } as const;
 
 /**
  * Answers how to run an effect on a connection of its own to the test's

@@ -1,3 +1,4 @@
+import { literalsReadingLegacy } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import { AGENT_FAILURE, AGENT_STATUS, disabledServersSchema } from "./agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
@@ -125,8 +126,8 @@ export const scheduleTriggerSchema = EffectSchema.Struct({
 export const GITHUB_SENDER = {
   /** A person's own account. */
   PEOPLE: "people",
-  /** Our coding agents: our GitHub App, and a developer an agent opening its pull request from a `luke/` branch writes as. */
-  LUKE_AGENTS: "luke-agents",
+  /** Our coding agents: our GitHub App, and a developer an agent opening its pull request from an agent's branch writes as. */
+  APP_AGENTS: "app-agents",
   /** Any other App or bot account: Dependabot, Renovate, and their like. */
   OTHER_BOTS: "other-bots",
 } as const;
@@ -207,9 +208,31 @@ export const sentryTriggerSchema = EffectSchema.Struct({
   filters: EffectSchema.optionalKey(sentryTriggerFiltersSchema),
 });
 
+/** What a trigger stored before the app was named `app` names our agents by among its senders. */
+const LEGACY_APP_AGENTS = "luke-agents";
+
+/**
+ * A GitHub trigger as a row stores it or a client sends it. Note that its
+ * senders read `luke-agents`, which triggers saved before the app was named
+ * `app` hold, as our agents (a legacy read), while the agent's tool is shown
+ * `githubTriggerSchema`, which names today's words alone.
+ */
+const storedGithubTriggerSchema = EffectSchema.Struct({
+  ...githubTriggerSchema.fields,
+  senders: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      literalsReadingLegacy(
+        Object.values(GITHUB_SENDER),
+        LEGACY_APP_AGENTS,
+        GITHUB_SENDER.APP_AGENTS,
+      ),
+    ),
+  ),
+});
+
 export const automationTriggerSchema = EffectSchema.Union([
   scheduleTriggerSchema,
-  githubTriggerSchema,
+  storedGithubTriggerSchema,
   webhookTriggerSchema,
   sentryTriggerSchema,
 ]);

@@ -178,7 +178,7 @@ const pageWriterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (shownBy === undefined) return undefined;
   return shownBy.kind === PAGE_SHOWER.AGENT
     ? { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: shownBy.agentId }
-    : { actor: PLAN_COMMENT_ACTOR.LUKE };
+    : { actor: PLAN_COMMENT_ACTOR.APP };
 });
 
 /** One the thread is handed to, and whether a hand-over that could not land is said back, as one asked whatever the words say is. */

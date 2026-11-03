@@ -658,7 +658,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const review = yield* listening({
           kind: AUTOMATION_TRIGGER.GITHUB,
           event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
-          senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.LUKE_AGENTS],
+          senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.APP_AGENTS],
           moments: [PULL_REQUEST_MOMENT.OPENED, PULL_REQUEST_MOMENT.PUSHED],
         });
         const everything = yield* listening({
@@ -750,7 +750,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
             Option.getOrThrow,
           );
         const people = yield* hearing([GITHUB_SENDER.PEOPLE]);
-        const agents = yield* hearing([GITHUB_SENDER.LUKE_AGENTS]);
+        const agents = yield* hearing([GITHUB_SENDER.APP_AGENTS]);
         const github = githubReaching([]);
         const developer = { type: "User", login: "ada" };
         const pull = (

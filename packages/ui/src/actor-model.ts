@@ -42,7 +42,7 @@ import { TAB_WORDS } from "./tab-strip-model.js";
 /** The kinds of actor the window names. */
 export const ACTOR_KIND = {
   PERSON: "person",
-  LUKE: "luke",
+  APP: "app",
   AGENT: "agent",
   AUTOMATION: "automation",
   SOMEONE: "someone",
@@ -81,7 +81,7 @@ export interface PersonActor {
 
 export type Actor =
   | PersonActor
-  | { readonly kind: typeof ACTOR_KIND.LUKE }
+  | { readonly kind: typeof ACTOR_KIND.APP }
   | {
       readonly kind: typeof ACTOR_KIND.AGENT;
       /** The agent's id, which tells two agents of one name apart; absent where an older service named none. */
@@ -133,7 +133,7 @@ export const ROLE_WORDS = {
 } as const satisfies Record<WorkspaceRole, string>;
 
 /** The app itself, which is always the same actor. */
-export const LUKE_ACTOR: Actor = { kind: ACTOR_KIND.LUKE };
+export const APP_ACTOR: Actor = { kind: ACTOR_KIND.APP };
 
 /** How many hues an identity's letter is drawn on: `--ui-color-identity-1` through `--ui-color-identity-6`. */
 const IDENTITY_HUES = 6;
@@ -217,7 +217,7 @@ export function actorName(
       case ACTOR_KIND.AGENT:
       case ACTOR_KIND.AUTOMATION:
         return actor.name;
-      case ACTOR_KIND.LUKE:
+      case ACTOR_KIND.APP:
         return PRODUCT_NAME;
       case ACTOR_KIND.SOMEONE:
         return actor.name ?? inSentence(SOMEONE_WORDS[actor.reason], sentence);
@@ -397,7 +397,7 @@ export function originActor(
   agent: OriginAgent | undefined,
 ): Actor | undefined {
   if (origin === undefined) return undefined;
-  if (origin.actor === PLAN_ACTOR.NOTETAKER) return LUKE_ACTOR;
+  if (origin.actor === PLAN_ACTOR.NOTETAKER) return APP_ACTOR;
   if (agent?.automationName !== undefined) {
     return { kind: ACTOR_KIND.AUTOMATION, name: agent.automationName, state: ACTOR_STATE.REST };
   }
@@ -449,7 +449,7 @@ export function editActor(
     case PLAN_ACTOR.DEVELOPER:
       return editPerson(edit, reader);
     case PLAN_ACTOR.NOTETAKER:
-      return LUKE_ACTOR;
+      return APP_ACTOR;
     case PLAN_ACTOR.AGENT:
       return {
         kind: ACTOR_KIND.AGENT,
@@ -474,7 +474,7 @@ function changedBy(edit: PlanLastEdit, actor: Actor): boolean {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
       return edit.actor === PLAN_ACTOR.DEVELOPER && edit.by?.userId === actor.userId;
-    case ACTOR_KIND.LUKE:
+    case ACTOR_KIND.APP:
       return edit.actor === PLAN_ACTOR.NOTETAKER;
     case ACTOR_KIND.AGENT:
       return (
@@ -532,8 +532,8 @@ function sameActor(one: Actor, other: Actor): boolean {
   switch (one.kind) {
     case ACTOR_KIND.PERSON:
       return other.kind === ACTOR_KIND.PERSON && other.userId === one.userId;
-    case ACTOR_KIND.LUKE:
-      return other.kind === ACTOR_KIND.LUKE;
+    case ACTOR_KIND.APP:
+      return other.kind === ACTOR_KIND.APP;
     case ACTOR_KIND.AGENT:
       return other.kind === ACTOR_KIND.AGENT && sameAgent(one, other);
     case ACTOR_KIND.AUTOMATION:

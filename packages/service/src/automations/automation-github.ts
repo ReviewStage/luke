@@ -184,7 +184,7 @@ function senderOf(
   agentLogin: string | undefined,
 ): GitHubSender {
   if (agentLogin !== undefined && sender.login.toLowerCase() === agentLogin.toLowerCase()) {
-    return GITHUB_SENDER.LUKE_AGENTS;
+    return GITHUB_SENDER.APP_AGENTS;
   }
   return sender.type === BOT_SENDER ? GITHUB_SENDER.OTHER_BOTS : GITHUB_SENDER.PEOPLE;
 }
@@ -208,7 +208,7 @@ function pullRequestSender(
   const head = read.pull_request.head?.ref;
   const agentBranch = head !== undefined && isAgentBranch(head);
   const agentOpened = !fork && agentBranch && AGENT_OPENING_ACTIONS.has(read.action);
-  return sender === GITHUB_SENDER.PEOPLE && agentOpened ? GITHUB_SENDER.LUKE_AGENTS : sender;
+  return sender === GITHUB_SENDER.PEOPLE && agentOpened ? GITHUB_SENDER.APP_AGENTS : sender;
 }
 
 /** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
@@ -410,7 +410,7 @@ function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): bool
   ) {
     return false;
   }
-  if (read.sender === GITHUB_SENDER.LUKE_AGENTS && read.pushed) return false;
+  if (read.sender === GITHUB_SENDER.APP_AGENTS && read.pushed) return false;
   const moments = trigger.moments ?? PULL_REQUEST_DEFAULT_MOMENTS;
   if (read.moment !== undefined && !moments.includes(read.moment)) return false;
   if ((read.draft && trigger.drafts !== true) || (read.fork && trigger.forks !== true)) {

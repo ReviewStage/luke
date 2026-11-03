@@ -41,10 +41,10 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  APP_ACTOR,
   type AssigneeFace,
   actorName,
   type GitHubActor,
-  LUKE_ACTOR,
   type PersonActor,
   ROLE_WORDS,
   SOMEONE_REASON,
@@ -152,7 +152,7 @@ const FOR_OF_SIZE = {
 /** Whether an actor stands in a rounded square rather than on a circle: the app, an agent, an automation, and an App's bot on GitHub. */
 function squared(actor: Actor): boolean {
   return (
-    actor.kind === ACTOR_KIND.LUKE ||
+    actor.kind === ACTOR_KIND.APP ||
     actor.kind === ACTOR_KIND.AGENT ||
     actor.kind === ACTOR_KIND.AUTOMATION ||
     (actor.kind === ACTOR_KIND.GITHUB && actor.bot)
@@ -284,7 +284,7 @@ function Face({
       return (
         <PersonDisc id={actor.userId} name={actor.name} pictureUrl={actor.pictureUrl} size={size} />
       );
-    case ACTOR_KIND.LUKE:
+    case ACTOR_KIND.APP:
       return (
         <GlyphSquare
           name={actorName(actor)}
@@ -368,7 +368,7 @@ export function commentAuthor(actor: Actor): CommentAuthor {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
       return { name: actor.name, id: actor.userId, picture: picture(actor.pictureUrl) };
-    case ACTOR_KIND.LUKE:
+    case ACTOR_KIND.APP:
       return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <ProductMark small /> };
     case ACTOR_KIND.AGENT:
       return {
@@ -467,7 +467,7 @@ export function ActorMark({
         "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
         // The app wears the working ink on its mark, the colour its voice already answers in, its mark filling more of its square than a glyph does. Note that the size is important, because base.css sizes every mark outside the layers.
-        actor.kind === ACTOR_KIND.LUKE &&
+        actor.kind === ACTOR_KIND.APP &&
           "text-working [&_.ui-product-mark]:size-actor-mark-share! [&_.ui-product-mark]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
         // A member who left keeps their own face, grayed and muted on the tile, their name saying they left.
@@ -677,7 +677,7 @@ export function PersonCard({
 }
 
 /** The app's own card: its face, how long ago it wrote where the place knows, then what it wrote here. Read, never followed. */
-export function LukeCard({
+export function AppCard({
   sub,
   latest,
 }: {
@@ -687,8 +687,8 @@ export function LukeCard({
   latest?: ReactNode;
 }): React.JSX.Element {
   return (
-    <HoverCard data-actor-card={ACTOR_KIND.LUKE}>
-      <ActorHead actor={LUKE_ACTOR} sub={sub} />
+    <HoverCard data-actor-card={ACTOR_KIND.APP}>
+      <ActorHead actor={APP_ACTOR} sub={sub} />
       {latest === undefined ? null : <LatestRow latest={latest} />}
     </HoverCard>
   );
@@ -874,7 +874,7 @@ const ACTOR_CARD: { readonly [K in Actor["kind"]]: (actor: ActorOf<K>) => ReactN
   [ACTOR_KIND.PERSON]: (actor) => <PersonCard actor={actor} />,
   [ACTOR_KIND.SOMEONE]: (actor) => <SomeoneCard actor={actor} />,
   [ACTOR_KIND.GITHUB]: (actor) => <GitHubCard actor={actor} />,
-  [ACTOR_KIND.LUKE]: () => <LukeCard />,
+  [ACTOR_KIND.APP]: () => <AppCard />,
   [ACTOR_KIND.AGENT]: (actor) =>
     actor.agentId === undefined ? undefined : (
       <AgentHoverCard actor={actor} agentId={actor.agentId} />

@@ -3,7 +3,7 @@ import type { KnownNames } from "@luke/features/place-chip-model";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ProviderMark } from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, APP_ACTOR } from "@luke/ui/actor-model";
 import { CalendarIcon, GLYPH, HashIcon, MessageSquareIcon, ShieldUserIcon } from "@luke/ui/icons";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
@@ -207,7 +207,7 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.PAGE]: () => <GLYPH.PAGE />,
   [THING_KIND.AGENT]: (agent, at) => <AgentThingMark agent={agent} at={at} />,
   [THING_KIND.WORKER]: () => <GLYPH.AGENT />,
-  [THING_KIND.LUKE]: () => <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />,
+  [THING_KIND.APP]: () => <ActorMark actor={APP_ACTOR} size={ACTOR_SIZE.INLINE} />,
   [THING_KIND.CHANGES]: () => <GLYPH.PULL_REQUEST_CHANGES />,
   // A pull request its provider answered for wears its mark for where it stands, as everywhere the window draws one.
   [THING_KIND.PULL_REQUEST]: (_pullRequest, { standing }) =>

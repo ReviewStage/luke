@@ -77,7 +77,7 @@ const pageOnTask = Effect.gen(function* () {
   const task = yield* startTask(starter, { name: "Teammate invitations" });
   yield* joinWorkspace(task.workspaceId, teammate);
   const page = Option.getOrThrow(
-    yield* writePage(starter, taskPageOwner(task.id), CHART, { kind: PAGE_SHOWER.LUKE }),
+    yield* writePage(starter, taskPageOwner(task.id), CHART, { kind: PAGE_SHOWER.APP }),
   );
   return { starter, teammate, task, page };
 });

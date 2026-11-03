@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { wireRefusal } from "./effect/json-schema.js";
+import { LEGACY_APP_WORD, literalsReadingLegacy } from "./legacy-app-word.js";
 import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
 
 /**
@@ -59,7 +60,7 @@ export const MESSAGE_CHANNEL = {
   COMMENT: "comment",
   START: "start",
   GITHUB: "github",
-  LUKE: "luke",
+  APP: "app",
   AUTOMATION: "automation",
 } as const;
 
@@ -372,12 +373,16 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
 
-/** A service line is one the service sent the agent on its own, such as a wakeup it set. */
-const LUKE_LINE_METADATA = EffectSchema.Struct({
-  channel: EffectSchema.Literal(MESSAGE_CHANNEL.LUKE),
+/**
+ * A service line is one the service sent the agent on its own, such as a
+ * wakeup it set. Note that a line kept before the app was named `app` names
+ * its channel `luke`, which still reads as the app's (a legacy read).
+ */
+const APP_LINE_METADATA = EffectSchema.Struct({
+  channel: literalsReadingLegacy([MESSAGE_CHANNEL.APP], LEGACY_APP_WORD, MESSAGE_CHANNEL.APP),
 });
 
-export type LukeLineMetadata = EffectSchema.Schema.Type<typeof LUKE_LINE_METADATA>;
+export type AppLineMetadata = EffectSchema.Schema.Type<typeof APP_LINE_METADATA>;
 
 /**
  * An automation line is an automation's run's prompt, the agent's first line
@@ -407,7 +412,7 @@ export type UserMessageMetadata =
   | CommentLineMetadata
   | StartLineMetadata
   | GitHubLineMetadata
-  | LukeLineMetadata
+  | AppLineMetadata
   | AutomationLineMetadata
   | ObservationMetadata;
 
@@ -420,7 +425,7 @@ export const USER_MESSAGE_METADATA = EffectSchema.Union([
   COMMENT_LINE_METADATA,
   START_LINE_METADATA,
   GITHUB_LINE_METADATA,
-  LUKE_LINE_METADATA,
+  APP_LINE_METADATA,
   AUTOMATION_LINE_METADATA,
   OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));

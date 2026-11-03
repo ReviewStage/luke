@@ -159,7 +159,7 @@ export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
 /** Who wrote an entry, as an agent reads it. */
 function writerOf(entry: PlanCommentEntry): string {
   switch (entry.writer.actor) {
-    case PLAN_COMMENT_ACTOR.LUKE:
+    case PLAN_COMMENT_ACTOR.APP:
       return PRODUCT_NAME;
     case PLAN_COMMENT_ACTOR.AGENT:
       return entry.writer.agentId === undefined ? "agent" : `agent ${entry.writer.agentId}`;
@@ -185,7 +185,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
     .map((entry) => ({
       by: writerOf(entry),
       to:
-        entry.asked?.actor === PLAN_COMMENT_ACTOR.LUKE
+        entry.asked?.actor === PLAN_COMMENT_ACTOR.APP
           ? PRODUCT_NAME
           : `agent ${entry.asked?.agentId ?? ""}`,
     }));

@@ -27,7 +27,7 @@ import {
   claimDueAgentWakeups,
   deleteAgentWakeup,
 } from "@luke/database/models/agent-wakeups";
-import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
+import { APP_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { agentLineSender, steerAgent } from "../agents/coder-host/steer.js";
@@ -73,7 +73,7 @@ const deliver = (eveFor: EveForAccount, wakeup: ClaimedAgentWakeup) =>
       text: wakeup.prompt,
       clientKey: wakeupKey(wakeup),
       sender: agentLineSender(agent.value),
-      metadata: LUKE_LINE_METADATA,
+      metadata: APP_LINE_METADATA,
     });
     yield* deleteAgentWakeup(wakeup.id);
     return true;

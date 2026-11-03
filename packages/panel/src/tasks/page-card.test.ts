@@ -85,8 +85,8 @@ test("a provenance row says who showed the version, wherever the card hangs: Ves
 
   assert.deepEqual(
     [
-      subOf({ ...FUNNEL, shownBy: { kind: PAGE_SHOWER.LUKE } }),
-      subOf({ ...FUNNEL, version: 1, shownBy: { kind: PAGE_SHOWER.LUKE } }),
+      subOf({ ...FUNNEL, shownBy: { kind: PAGE_SHOWER.APP } }),
+      subOf({ ...FUNNEL, version: 1, shownBy: { kind: PAGE_SHOWER.APP } }),
       subOf({
         ...FUNNEL,
         shownBy: { kind: PAGE_SHOWER.AGENT, agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },

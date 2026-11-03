@@ -91,7 +91,7 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
             owner,
             taskPageOwner(task.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         yield* writePage(
@@ -104,14 +104,14 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
           owner,
           taskPageOwner(other.id),
           { title: "Another task's page", html: "<p>Elsewhere</p>" },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
         assert.equal((yield* agrees).length, 2);
         yield* writePage(
           owner,
           taskPageOwner(task.id),
           { pageId: funnel.id, title: "Invite funnel, revised", html: "<p>Two</p>" },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
         const pages = yield* agrees;
         assert.deepEqual(
@@ -145,7 +145,7 @@ it.layer(getTestDB())("a task's pages followed live", (it) => {
           owner,
           taskPageOwner(task.id),
           { title: "The task's", html: "<p>t</p>" },
-          { kind: PAGE_SHOWER.LUKE },
+          { kind: PAGE_SHOWER.APP },
         );
 
         const held = yield* listPages(owner, owned);

@@ -547,8 +547,8 @@ function sentByOf(step: ReplayStep, name: string): AgentSender | undefined {
       return sent.memberId === undefined
         ? { kind: AGENT_SENDER.MEMBER, name }
         : { kind: AGENT_SENDER.MEMBER, userId: sent.memberId, name };
-    case REPLAY_SENDER.LUKE:
-      return { kind: AGENT_SENDER.LUKE, name };
+    case REPLAY_SENDER.APP:
+      return { kind: AGENT_SENDER.APP, name };
     case REPLAY_SENDER.AUTOMATION:
       return { kind: AGENT_SENDER.AUTOMATION, name };
     case REPLAY_SENDER.GITHUB:

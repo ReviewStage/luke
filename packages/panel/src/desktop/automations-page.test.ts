@@ -2730,7 +2730,7 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   assert.deepEqual(creates[0]?.trigger, {
     kind: AUTOMATION_TRIGGER.GITHUB,
     event: "pull-request-updated",
-    senders: ["people", "luke-agents"],
+    senders: ["people", "app-agents"],
     moments: ["opened", "ready", "pushed"],
     drafts: false,
     forks: false,

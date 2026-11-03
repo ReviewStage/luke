@@ -315,7 +315,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
             dana,
             taskPageOwner(started.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         const path = "/api/live/task-pages";
@@ -481,7 +481,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         userId,
         taskPageOwner(taskId),
         { title: "Invite funnel", html: "<p>One</p>" },
-        { kind: PAGE_SHOWER.LUKE },
+        { kind: PAGE_SHOWER.APP },
       ),
       Option.getOrThrow,
     );
@@ -898,7 +898,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
             dana,
             taskPageOwner(started.id),
             { title: "Invite funnel", html: "<p>One</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         yield* TestClock.adjust(Duration.seconds(3));

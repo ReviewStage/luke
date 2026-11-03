@@ -37,6 +37,7 @@ export {
   withoutTrailingSlash,
 } from "./json.js";
 export { keepIdentity } from "./keep-identity.js";
+export { LEGACY_APP_WORD, literalsReadingLegacy } from "./legacy-app-word.js";
 export {
   EXCESS_KEYS,
   type ExcessKeys,
@@ -54,6 +55,7 @@ export {
 } from "./turn.js";
 export {
   type AgentMessageMetadata,
+  type AppLineMetadata,
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
   type AutomationLineMetadata,
@@ -67,7 +69,6 @@ export {
   type GitHubLineMetadata,
   isDeveloperLine,
   isFailingConclusion,
-  type LukeLineMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,

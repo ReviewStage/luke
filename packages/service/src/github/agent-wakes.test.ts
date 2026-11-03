@@ -75,7 +75,7 @@ import {
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-const LUKE_BOT = "luke-agents[bot]";
+const APP_BOT = "luke-agents[bot]";
 const MADE_AT = Date.parse("2026-10-16T12:00:00Z");
 
 /** One installation per test's workspace, since one installation connects to one workspace and the tests share a database. */
@@ -493,14 +493,14 @@ test("a person's review reaches an agent at work or not, Vespin's App's only an 
   const endedSince = turn(MADE_AT + 2_000);
   const atWork = turn(undefined);
   const woken = (wake: AgentWake, at: AgentLatestTurn) =>
-    agentIsWoken(wake, agent, at, LUKE_BOT, now);
+    agentIsWoken(wake, agent, at, APP_BOT, now);
 
   assert.deepEqual(
     [idleBefore, endedSince, atWork].map((at) => woken(review("octocat"), at)),
     [true, true, true],
   );
   assert.deepEqual(
-    [idleBefore, endedSince, atWork].map((at) => woken(review(LUKE_BOT), at)),
+    [idleBefore, endedSince, atWork].map((at) => woken(review(APP_BOT), at)),
     [true, false, false],
     "Vespin's App's review reaches only an agent that could not have made it",
   );
@@ -520,7 +520,7 @@ test("a person's review reaches an agent at work or not, Vespin's App's only an 
       review("octocat"),
       { ...agent, archivedAt: new Date(now) },
       idleBefore,
-      LUKE_BOT,
+      APP_BOT,
       now,
     ),
     false,
@@ -543,10 +543,10 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         );
         const deliveryId = randomUUID();
 
-        const told = yield* wakeAgents(eve.eveFor, wake, deliveryId, LUKE_BOT).pipe(
+        const told = yield* wakeAgents(eve.eveFor, wake, deliveryId, APP_BOT).pipe(
           Effect.provide(github),
         );
-        const again = yield* wakeAgents(eve.eveFor, wake, deliveryId, LUKE_BOT).pipe(
+        const again = yield* wakeAgents(eve.eveFor, wake, deliveryId, APP_BOT).pipe(
           Effect.provide(github),
         );
 
@@ -572,12 +572,12 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
 
         // The agent replied as our App inside a turn that has since ended: its own reply wakes nobody.
         yield* endedTurn(owner, agent.conversationId, MADE_AT + 30_000);
-        const reply = { ...wake, by: LUKE_BOT, at: MADE_AT + 20_000 };
-        const own = yield* wakeAgents(eve.eveFor, reply, randomUUID(), LUKE_BOT).pipe(
+        const reply = { ...wake, by: APP_BOT, at: MADE_AT + 20_000 };
+        const own = yield* wakeAgents(eve.eveFor, reply, randomUUID(), APP_BOT).pipe(
           Effect.provide(github),
         );
         yield* archiveAgent(owner, agent.id, true);
-        const archived = yield* wakeAgents(eve.eveFor, wake, randomUUID(), LUKE_BOT).pipe(
+        const archived = yield* wakeAgents(eve.eveFor, wake, randomUUID(), APP_BOT).pipe(
           Effect.provide(github),
         );
         assert.deepEqual([own, archived, eve.sent.length], [0, 0, 1]);
@@ -595,9 +595,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         const heardAfter = (wake: AgentWake | undefined) =>
           Effect.gen(function* () {
             assert.ok(wake);
-            yield* wakeAgents(eve.eveFor, wake, randomUUID(), LUKE_BOT).pipe(
-              Effect.provide(github),
-            );
+            yield* wakeAgents(eve.eveFor, wake, randomUUID(), APP_BOT).pipe(Effect.provide(github));
             return yield* heardFromAnotherAccount(target);
           });
         const delivered = (event: string, delivery: WireBoundaryInput) =>
@@ -658,7 +656,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           words: "Does this handle a revoked seat?",
         };
 
-        yield* wakeAgents(eve.eveFor, comment, randomUUID(), LUKE_BOT).pipe(
+        yield* wakeAgents(eve.eveFor, comment, randomUUID(), APP_BOT).pipe(
           Effect.provide(githubReaching(INSTALLATIONS).layer),
         );
 
@@ -700,7 +698,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           eve.eveFor,
           reviewWakeOf(ref, "devin-ai-integration[bot]"),
           deliveryId,
-          LUKE_BOT,
+          APP_BOT,
         ).pipe(Effect.provide(github));
 
         assert.equal(told, 1);
@@ -783,7 +781,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           at: MADE_AT,
         };
 
-        yield* wakeAgents(eve.eveFor, failed, randomUUID(), LUKE_BOT).pipe(
+        yield* wakeAgents(eve.eveFor, failed, randomUUID(), APP_BOT).pipe(
           Effect.provide(githubReaching(INSTALLATIONS).layer),
         );
 
@@ -812,7 +810,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         return Response.json(Array.from({ length: count }, (_, index) => comment(first + index)));
       }).layer;
 
-      yield* wakeAgents(eve.eveFor, reviewWakeOf(ref, "octocat"), randomUUID(), LUKE_BOT).pipe(
+      yield* wakeAgents(eve.eveFor, reviewWakeOf(ref, "octocat"), randomUUID(), APP_BOT).pipe(
         Effect.provide(github),
       );
 
@@ -840,14 +838,14 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         ).layer;
         const long = "<".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS);
 
-        yield* wakeAgents(eve.eveFor, reviewWakeOf(ref, "octocat"), randomUUID(), LUKE_BOT).pipe(
+        yield* wakeAgents(eve.eveFor, reviewWakeOf(ref, "octocat"), randomUUID(), APP_BOT).pipe(
           Effect.provide(refused),
         );
         yield* wakeAgents(
           eve.eveFor,
           reviewWakeOf(ref, "octocat", long),
           randomUUID(),
-          LUKE_BOT,
+          APP_BOT,
         ).pipe(Effect.provide(githubReaching(INSTALLATIONS).layer));
 
         const [unread, cut] = eve.sent.map((sent) => sentText(sent.message.message));
@@ -886,7 +884,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           sha: HEAD,
         };
         const deliver = Effect.suspend(() =>
-          wakeAgents(eve.eveFor, wake, randomUUID(), LUKE_BOT).pipe(Effect.provide(github)),
+          wakeAgents(eve.eveFor, wake, randomUUID(), APP_BOT).pipe(Effect.provide(github)),
         );
 
         const running = yield* deliver;
@@ -1007,10 +1005,10 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
             : undefined,
         ).layer;
 
-        yield* wakeAgents(eve.eveFor, failedOn(read.ref), randomUUID(), LUKE_BOT).pipe(
+        yield* wakeAgents(eve.eveFor, failedOn(read.ref), randomUUID(), APP_BOT).pipe(
           Effect.provide(holding),
         );
-        yield* wakeAgents(eve.eveFor, failedOn(unread.ref), randomUUID(), LUKE_BOT).pipe(
+        yield* wakeAgents(eve.eveFor, failedOn(unread.ref), randomUUID(), APP_BOT).pipe(
           Effect.provide(failing),
         );
 
@@ -1073,7 +1071,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           sha: HEAD,
         });
         const deliver = (ref: string) =>
-          wakeAgents(eve.eveFor, wakeOn(ref), randomUUID(), LUKE_BOT).pipe(Effect.provide(github));
+          wakeAgents(eve.eveFor, wakeOn(ref), randomUUID(), APP_BOT).pipe(Effect.provide(github));
 
         const idle = yield* openAgent;
         yield* endedTurn(idle.owner, idle.agent.conversationId, MADE_AT - 60_000);

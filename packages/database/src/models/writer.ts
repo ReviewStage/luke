@@ -15,12 +15,12 @@ import {
 } from "@luke/features/turn-run";
 import {
   type AgentMessageMetadata,
+  type AppLineMetadata,
   type AutomationLineMetadata,
   type CommentLineMetadata,
   type GitHubLineMetadata,
   isWireString,
   jsonRoundTrip,
-  type LukeLineMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -72,7 +72,7 @@ import {
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER, messageSenderSchema } from "../storage-vocabulary.js";
 import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -310,7 +310,7 @@ type TurnEnqueueResult = Result.Result<
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
-  | { readonly kind: typeof MESSAGE_SENDER.LUKE }
+  | { readonly kind: typeof MESSAGE_SENDER.APP }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
@@ -360,7 +360,7 @@ export type AwaitingLineMetadata =
   | CommentLineMetadata
   | StartLineMetadata
   | GitHubLineMetadata
-  | LukeLineMetadata
+  | AppLineMetadata
   | AutomationLineMetadata;
 
 /** An awaiting line naming no channel is the developer's typed ask. */
@@ -369,7 +369,7 @@ const TYPED_LINE_METADATA: TypedAskMetadata = {
 };
 
 /** A line the brain sent the agent on its own. */
-export const LUKE_LINE_METADATA: LukeLineMetadata = { channel: MESSAGE_CHANNEL.LUKE };
+export const APP_LINE_METADATA: AppLineMetadata = { channel: MESSAGE_CHANNEL.APP };
 
 /**
  * An automation's run's prompt, saying whether what fired the run put words
@@ -623,7 +623,7 @@ const MessageInsertSchema = Schema.Struct({
   createdAt: Schema.Date,
   placedAt: Schema.Date,
   finishedAt: Schema.NullOr(Schema.Date),
-  sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
+  sender: Schema.NullOr(messageSenderSchema),
   senderUserId: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),

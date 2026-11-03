@@ -4,7 +4,6 @@ import {
   AGENT_BRIEF,
   AGENT_KIND,
   AGENT_MACHINE,
-  AGENT_PAYER,
   type AgentAuthor,
   type AgentBrief,
   type AgentKind,
@@ -12,6 +11,7 @@ import {
   type AgentPayer,
   type AgentPullRequest,
   type AgentSubagentTitle,
+  agentPayerSchema,
   agentPullRequestSchema,
   CONTEXT_WINDOW,
   type ContextWindow,
@@ -67,6 +67,7 @@ import {
   CONVERSATION_RUNTIME,
   type ConversationRuntime,
   MESSAGE_SENDER,
+  messageSenderSchema,
 } from "../storage-vocabulary.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
@@ -685,7 +686,7 @@ const ownStarterOf = Effect.fnUntraced(function* (userId: string, agentId: strin
 /** A runtime as a conversation's row holds it. */
 const RuntimeColumnSchema = Schema.Literals(Object.values(CONVERSATION_RUNTIME));
 /** A payer as the agent's row holds it. */
-const PayerColumnSchema = Schema.Literals(Object.values(AGENT_PAYER));
+const PayerColumnSchema = agentPayerSchema;
 
 const insertAgentConversation = SqlSchema.findOne({
   Request: Schema.Struct({ userId: Schema.String, runtime: RuntimeColumnSchema, now: Schema.Date }),
@@ -3527,7 +3528,7 @@ export type LineSent =
       readonly kind: typeof MESSAGE_SENDER.MEMBER;
       readonly member: { readonly userId: string; readonly name: string } | undefined;
     }
-  | { readonly kind: typeof MESSAGE_SENDER.LUKE }
+  | { readonly kind: typeof MESSAGE_SENDER.APP }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
@@ -3545,7 +3546,7 @@ interface SendingAgent {
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
   id: Schema.String,
-  sender: Schema.Literals(Object.values(MESSAGE_SENDER)),
+  sender: messageSenderSchema,
   memberId: Schema.NullOr(Schema.String),
   memberName: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
@@ -3597,8 +3598,8 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
             ? undefined
             : { userId: row.memberId, name: row.memberName },
       };
-    case MESSAGE_SENDER.LUKE:
-      return { kind: MESSAGE_SENDER.LUKE };
+    case MESSAGE_SENDER.APP:
+      return { kind: MESSAGE_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
       return row.senderName === null
         ? undefined

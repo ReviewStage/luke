@@ -74,7 +74,7 @@ export interface TasksFilter {
 export const TASK_MAKER = {
   PERSON: "person",
   AGENT: "agent",
-  LUKE: "luke",
+  APP: "app",
 } as const;
 
 export type TaskMaker = (typeof TASK_MAKER)[keyof typeof TASK_MAKER];
@@ -419,7 +419,7 @@ function makerOf(task: Pick<TaskSummary, "origin">): TaskMaker {
     case PLAN_ACTOR.AGENT:
       return TASK_MAKER.AGENT;
     case PLAN_ACTOR.NOTETAKER:
-      return TASK_MAKER.LUKE;
+      return TASK_MAKER.APP;
   }
 }
 

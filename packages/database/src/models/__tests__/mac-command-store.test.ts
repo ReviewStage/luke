@@ -361,7 +361,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
           kind: MESSAGE_SENDER.AGENT,
           agentId: own.id,
         });
-        yield* sendLine(starter, agent.conversationId, 3, { kind: MESSAGE_SENDER.LUKE });
+        yield* sendLine(starter, agent.conversationId, 3, { kind: MESSAGE_SENDER.APP });
         const target = { userId: starter, conversationId: agent.conversationId };
         assert.equal(yield* heardFromAnotherAccount(target), false);
       }),

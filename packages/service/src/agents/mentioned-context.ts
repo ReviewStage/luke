@@ -377,7 +377,7 @@ function handedMention(
       return mention.lines === undefined ? undefined : mention;
     case MENTION_KIND.FOLDER:
     // The app named in words is a comment's ask of it, which hands an agent nothing.
-    case MENTION_KIND.LUKE:
+    case MENTION_KIND.APP:
     // A date's words are the date in full, which is all there is to hand.
     case MENTION_KIND.DATE:
     // A channel's link names it, which the agent posts to by name; nothing more is handed.

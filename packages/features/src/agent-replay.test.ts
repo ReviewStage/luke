@@ -226,7 +226,7 @@ test("a tool step's state, input, and output read back from its marker, whatever
       kind: REPLAY_STEP_KIND.LINE,
       summary: "Vespin: hi",
       words: "Hi.",
-      sender: { kind: REPLAY_SENDER.LUKE },
+      sender: { kind: REPLAY_SENDER.APP },
     },
   ];
   const read = firstMessageParts(firstMessageText("Fix it.", { ...replay, steps }, undefined))
@@ -251,7 +251,7 @@ test("a message whose markers were written under `luke`, before `agent`, reads b
       kind: REPLAY_STEP_KIND.LINE,
       summary: "Vespin: go",
       words: "Go.",
-      sender: { kind: REPLAY_SENDER.LUKE },
+      sender: { kind: REPLAY_SENDER.APP },
     },
   ];
   const summarized: Replay = { ...replay, steps, summary: { text: "Recap", steps: 2 } };

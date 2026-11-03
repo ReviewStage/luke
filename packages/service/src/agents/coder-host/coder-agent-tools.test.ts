@@ -3097,7 +3097,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
         bob,
         taskPageOwner(tasks.billing),
         { title: "Seats", html: "<h1>One</h1>" },
-        { kind: PAGE_SHOWER.LUKE },
+        { kind: PAGE_SHOWER.APP },
       ),
     ),
   );
@@ -3106,7 +3106,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
       bob,
       taskPageOwner(tasks.billing),
       { pageId: shown.id, title: "Seats by month", html: rows },
-      { kind: PAGE_SHOWER.LUKE },
+      { kind: PAGE_SHOWER.APP },
     ),
   );
   const elsewhere = Option.getOrThrow(
@@ -3115,7 +3115,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
         agents.otherWorkspaces.userId,
         taskPageOwner(tasks.elsewhere),
         { title: "Theirs", html: "<p/>" },
-        { kind: PAGE_SHOWER.LUKE },
+        { kind: PAGE_SHOWER.APP },
       ),
     ),
   );

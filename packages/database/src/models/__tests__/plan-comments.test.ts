@@ -496,7 +496,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
             owner,
             taskPageOwner(taskId),
             { title: "Invite funnel", html: "<h1>Invites</h1><p>12 sent</p>" },
-            { kind: PAGE_SHOWER.LUKE },
+            { kind: PAGE_SHOWER.APP },
           ),
         );
         yield* startPlanCommentThread(

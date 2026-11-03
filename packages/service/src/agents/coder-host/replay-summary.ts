@@ -215,7 +215,7 @@ export function filesBytes(files: readonly AgentAttachment[]): number {
 
 /** What a line's sender is called in the words a summary call reads: the app by its product's name, the rest by their kind. */
 function senderName(kind: string): string {
-  return kind === REPLAY_SENDER.LUKE ? PRODUCT_NAME : kind;
+  return kind === REPLAY_SENDER.APP ? PRODUCT_NAME : kind;
 }
 
 /** A step as a summary call reads it: its sender where it has one, its line, then its words. */

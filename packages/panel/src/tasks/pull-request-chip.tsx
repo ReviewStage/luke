@@ -1,11 +1,4 @@
-import {
-  CHIP_LOOK,
-  CHIP_SIZE,
-  Chip,
-  ChipName,
-  pullRequestMarkState,
-  Tooltip,
-} from "@luke/ui";
+import { CHIP_LOOK, CHIP_SIZE, Chip, ChipName, pullRequestMarkState, Tooltip } from "@luke/ui";
 import type { ReactNode } from "react";
 import { pullRequestNumberLabel } from "./agent-model.js";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";

@@ -7,17 +7,17 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  APP_ACTOR,
   activityWords,
   actorName,
   distinctActors,
   type EditAgent,
   type EditReader,
   editActor,
-  LUKE_ACTOR,
   latestActivity,
 } from "@luke/ui/actor-model";
 import { useMemo } from "react";
-import { ActorRef, LukeCard, PersonCard } from "../actor-ref.js";
+import { ActorRef, AppCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph.js";
 import { agentGlyphState, agentName, providerOf } from "./agent-model.js";
@@ -174,9 +174,9 @@ function WriterRef({
   const agent = agentOf(edit, place.agents);
   const actor = writerOf(edit, place);
   if (actor === undefined) return null;
-  if (actor.kind === ACTOR_KIND.LUKE) {
+  if (actor.kind === ACTOR_KIND.APP) {
     const card = (
-      <LukeCard sub={agoText(edit.at, now)} latest={latestLine(LUKE_ACTOR, place, now, false)} />
+      <AppCard sub={agoText(edit.at, now)} latest={latestLine(APP_ACTOR, place, now, false)} />
     );
     return <ActorRef actor={actor} card={card} faceOnly={faceOnly} />;
   }

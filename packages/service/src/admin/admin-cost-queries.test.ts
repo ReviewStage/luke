@@ -191,7 +191,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           },
           {
             day: TODAY,
-            source: COST_SOURCE.LUKE,
+            source: COST_SOURCE.APP,
             model: MODEL.OPUS,
             fastRefused: false,
             inputTokens: 100,
@@ -199,7 +199,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           },
           {
             day: TODAY,
-            source: COST_SOURCE.LUKE,
+            source: COST_SOURCE.APP,
             model: MODEL.MINI,
             fastRefused: false,
             inputTokens: 57,
