@@ -42,6 +42,7 @@ import { insideCode } from "@repo/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@repo/host/app-state";
+import { markdownTree } from "@repo/ui/markdown-words";
 import { matchesTokens } from "@repo/ui/search-tokens";
 import { isWireString } from "@repo/wire";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
@@ -447,6 +448,44 @@ export function decideButtons(ask: Pick<InboxDecideAsk, "options" | "multiple">)
 /** How many steps a `do` ask shows: its own, or one, the item's title, for a to-do from before version 5 that named none. */
 function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
   return Math.max(ask.steps.length, 1);
+}
+
+/** A fenced block a to-do's step holds: its code, its lines kept, and the language its fence names, none where it names none. */
+interface StepFence {
+  readonly code: string;
+  readonly lang: string | undefined;
+}
+
+/**
+ * A to-do's step as its box draws it: its words, the box's label, and the
+ * fenced blocks standing at its top level, each drawn under the words as a
+ * card to copy from, so a command keeps its lines rather than running into
+ * the label's one line. Note that a fence inside a list or a quote stays in
+ * the words, as a part of the block holding it.
+ */
+export function stepParts(step: string): {
+  readonly say: string;
+  readonly fences: readonly StepFence[];
+} {
+  const fences = markdownTree(step).children.filter(
+    (node): node is Extract<typeof node, { type: "code" }> => node.type === "code",
+  );
+  // Note that the words are what stands between the fences, each run apart from the next as a paragraph.
+  const ends = [
+    0,
+    ...fences.flatMap((fence) => [
+      fence.position?.start.offset ?? 0,
+      fence.position?.end.offset ?? 0,
+    ]),
+    step.length,
+  ];
+  const runs = Array.from({ length: ends.length / 2 }, (_, at) =>
+    step.slice(ends[2 * at], ends[2 * at + 1]).trim(),
+  );
+  return {
+    say: runs.filter((run) => run !== "").join("\n\n"),
+    fences: fences.map((fence) => ({ code: fence.value, lang: fence.lang ?? undefined })),
+  };
 }
 
 /** The steps the draft ticks, in order, each once. */

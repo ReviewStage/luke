@@ -17,7 +17,10 @@ import { Checkbox as ShadcnCheckbox } from "../../shadcn/checkbox.js";
  * unavailable box's faded one, its press and Space changing nothing. A box
  * whose words stand beside it already, a task item's marker, is named by a
  * `label` of its own and draws the box alone, which on a coarse pointer
- * takes a press a finger's width across, centred on it.
+ * takes a press a finger's width across, centred on it. A box with words may
+ * hold a `detail` under them, aligned with them and outside the box's press,
+ * such as a to-do step's command in its card, which a press on its Copy
+ * leaves unticked.
  */
 
 /** How a box is named: by its words beside it, or by a label of its own where it stands alone. */
@@ -49,6 +52,10 @@ const CHECKBOX =
 const BOX_ALONE =
   "relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:size-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']";
 
+/** What stands under a box's words, in from the box by its size and the gap after it, so it lines up with the words. */
+const DETAIL =
+  "ui-checkbox-detail min-w-0 pl-[calc(var(--spacing-select-box)+var(--spacing-icon-gap))]";
+
 /** The box beside words, stood on their first line. */
 const BOX_ON_LINE = "mt-[calc((var(--ui-type-body-leading)-14px)/2)]";
 
@@ -64,6 +71,7 @@ export function Checkbox({
   "aria-describedby": describedBy,
   children,
   label,
+  detail,
 }: Named & {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -76,10 +84,12 @@ export function Checkbox({
   id?: string | undefined;
   /** The id of the words that say more of what checking it does. */
   "aria-describedby"?: string | undefined;
+  /** What stands under its words, lined up with them, which a press on takes no part in the box's; none for words alone. */
+  detail?: ReactNode;
 }): React.JSX.Element {
   const words = label === undefined;
   const box = useRef<HTMLElement | null>(null);
-  return (
+  const checkbox = (
     // biome-ignore lint/a11y/noLabelWithoutControl: the box inside is Base UI's checkbox, whose native input the label's press reaches, which the rule cannot see through a component.
     <label
       className={cn(
@@ -115,5 +125,12 @@ export function Checkbox({
       />
       {words ? <span className="ui-checkbox-words min-w-0 wrap-anywhere">{children}</span> : null}
     </label>
+  );
+  if (detail === undefined || !words) return checkbox;
+  return (
+    <div className="ui-checkbox-detailed flex min-w-0 flex-col gap-tight-gap">
+      {checkbox}
+      <div className={DETAIL}>{detail}</div>
+    </div>
   );
 }
