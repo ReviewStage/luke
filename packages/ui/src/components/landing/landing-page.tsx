@@ -1,11 +1,7 @@
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { MarkOrb } from "../../marks/mark-orb.js";
-import {
-  LANDING_FIELD,
-  LandingField,
-  type LandingFieldPattern,
-  LandingWordmark,
-} from "./landing-field.js";
+import { LANDING_FIELD, LandingField, type LandingFieldPattern } from "./landing-field.js";
+import { LandingWordmark } from "./landing-wordmark.js";
 import { LANDING_SCENE, type LandingScene, LandingSceneView } from "./landing-scenes.js";
 
 /**

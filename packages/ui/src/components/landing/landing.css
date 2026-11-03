@@ -300,9 +300,11 @@
     padding: 0 var(--ui-landing-gutter) 40px;
   }
 
+  /* The wordmark's foot keeps one shape at every width, so a phone draws
+     the word as densely as a desktop, only smaller. */
   .ui-landing-foot-art {
     position: relative;
-    height: 300px;
+    aspect-ratio: 24 / 5;
     overflow: hidden;
   }
 
@@ -399,15 +401,85 @@
     background: var(--ui-color-sidebar);
   }
 
-  /* The app inside a window: the frame's sidebar beside the page, whose bar
-     stands on the frame over a sheet, as the desktop draws them. */
+  /* The app inside a window, drawn at the Mac app's own profile (the
+     screen carries the desktop's surface attributes): the frame's sidebar
+     beside the page, whose bars stand on the frame over sheets, as the
+     desktop draws them. The sizes are the desktop shell's (`shell.css`):
+     a 264px sidebar, 50px bars, an 8px frame round the sheets. */
+  .ui-landing-desktop {
+    --ui-toolbar-height: 50px;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: var(--ui-color-sidebar);
+    color: var(--ui-color-text);
+    font-family: var(--ui-font-sans);
+  }
+
   .ui-landing-app {
+    position: relative;
     display: grid;
     grid-template-columns: 264px minmax(0, 1fr);
     height: 100%;
   }
 
+  .ui-landing-app-folded {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ui-landing-app-folded .ui-landing-main {
+    margin-left: 8px;
+  }
+
+  /* The title bar's controls: the sidebar's toggle past the window's
+     lights, the way back and forward at the sidebar's end, and the side
+     panel's toggle at the window's. */
+  .ui-landing-title-bar {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 51px;
+  }
+
+  .ui-landing-title-bar-start,
+  .ui-landing-title-bar-folded {
+    position: absolute;
+    top: 10px;
+    left: 87px;
+    z-index: 2;
+    display: flex;
+  }
+
+  .ui-landing-title-bar-history {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: flex;
+  }
+
+  .ui-landing-title-bar-end {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 2;
+  }
+
+  .ui-landing-app-folded .ui-landing-automation-bar {
+    padding-left: 152px;
+  }
+
+  /* The last column's bar ends short of the side panel's toggle over it. */
+  .ui-landing-inbox-thread > :first-child,
+  .ui-landing-automation-bar {
+    padding-right: 36px;
+  }
+
+  /* A composer's one field, inset as the panel's is. */
+  .ui-landing-composer-field {
+    padding: 12px 16px 4px;
+  }
+
   .ui-landing-sidebar {
+    position: relative;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -425,17 +497,32 @@
     min-width: 0;
   }
 
-  .ui-landing-workspace-words {
-    display: flex;
-    flex-direction: column;
-  }
-
   .ui-landing-sidebar-group {
     margin-top: var(--ui-section-gap);
   }
 
+  .ui-landing-repository + .ui-landing-repository {
+    margin-top: 8px;
+  }
+
+  .ui-landing-hidden-statuses {
+    margin: var(--ui-tight-gap) var(--ui-row-inset);
+    color: var(--ui-color-text-muted);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
+  }
+
   .ui-landing-sidebar-foot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .ui-landing-sidebar-foot > :first-child {
+    flex: 1;
+    min-width: 0;
   }
 
   .ui-landing-row-time,
@@ -455,7 +542,9 @@
   /* A column of the page: its bar on the frame, then its share of the sheet. */
   .ui-landing-inbox-list,
   .ui-landing-inbox-thread,
-  .ui-landing-agent-log {
+  .ui-landing-agent-log,
+  .ui-landing-automation,
+  .ui-landing-side {
     position: relative;
     display: grid;
     grid-template-rows: 50px minmax(0, 1fr);
@@ -468,14 +557,17 @@
     grid-template-columns: 320px minmax(0, 1fr);
   }
 
-  .ui-landing-agent {
-    grid-template-columns: minmax(0, 1fr) 300px;
+  .ui-landing-task {
+    grid-template-columns: minmax(0, 1fr) 400px;
     gap: 8px;
   }
 
-  /* The sheet the columns' content stands on, under their bars. */
+  /* The sheet the columns' content stands on, under their bars; the side
+     panel's is the well. */
   .ui-landing-inbox::before,
-  .ui-landing-agent-log::before {
+  .ui-landing-agent-log::before,
+  .ui-landing-automation::before,
+  .ui-landing-side::before {
     content: "";
     position: absolute;
     inset: 50px 0 0;
@@ -484,6 +576,10 @@
     box-shadow:
       0 0 0 1px var(--ui-color-border),
       0 1px 2px var(--ui-color-shadow-soft);
+  }
+
+  .ui-landing-side::before {
+    background: var(--ui-color-well);
   }
 
   .ui-landing-sheet-start,
@@ -498,6 +594,7 @@
   }
 
   .ui-landing-search {
+    display: block;
     padding: 8px var(--ui-space-12) var(--ui-row-inset);
   }
 
@@ -526,18 +623,20 @@
   }
 
   .ui-landing-empty {
-    display: grid;
-    place-items: center;
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-control-gap);
     height: 100%;
+    color: var(--ui-color-text-muted);
   }
 
-  /* The thread: its subject over the comments and the ask, on the reading
-     column. */
+  /* The thread: its subject over the comments, a line joining their faces,
+     on the reading column. */
   .ui-landing-thread {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-block-gap);
     padding: var(--ui-section-gap) max(20px, calc((100% - 720px) / 2)) 20px;
   }
 
@@ -549,96 +648,207 @@
   .ui-landing-comments {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    padding: 8px 0 0;
+    padding: var(--ui-section-gap) 0 0;
     list-style: none;
   }
 
-  .ui-landing-ask {
-    padding: var(--ui-list-inset);
-  }
-
-  .ui-landing-working {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-item-gap);
-  }
-
-  /* An agent's log, with the task's sub-tasks on a second sheet beside it. */
-  .ui-landing-log {
+  .ui-landing-comment {
+    position: relative;
+    isolation: isolate;
     display: flex;
     flex-direction: column;
+    gap: var(--ui-tight-gap);
+    min-width: 0;
+    padding-bottom: 20px;
+  }
+
+  .ui-landing-comment:last-child {
+    padding-bottom: 0;
+  }
+
+  .ui-landing-comment:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    bottom: -10px;
+    left: 9px;
+    z-index: -1;
+    width: 2px;
+    background: var(--ui-color-border);
+  }
+
+  /* The reader's draft: the ask's options in the composer with the way to
+     resolve it unanswered, and the new thread's choice under it. */
+  .ui-landing-draft-ask {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ui-tight-gap);
+    padding: var(--ui-list-inset) var(--ui-list-inset) var(--ui-tight-gap);
+  }
+
+  .ui-landing-draft-ask-options {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .ui-landing-new-thread {
+    display: flex;
+    min-width: 0;
+    padding: 8px 0 0 4px;
+    color: var(--ui-color-text-muted);
+  }
+
+  /* A task's page: its tabs on the frame, the agent's log over its foot,
+     and the side panel's plan on the well beside it. */
+  .ui-landing-tabs {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-list-gap);
+    min-width: 0;
+  }
+
+  .ui-landing-log-sheet {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ui-landing-log {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
     gap: var(--ui-block-gap);
-    padding: var(--ui-section-gap) 28px 20px;
+    min-height: 0;
+    overflow: hidden;
+    padding: var(--ui-section-gap) max(20px, calc((100% - 720px) / 2)) 20px;
   }
 
   .ui-landing-call {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-tight-gap);
-    color: var(--ui-color-text-body);
     font-size: var(--ui-type-caption-size);
     line-height: var(--ui-type-caption-leading);
   }
 
   .ui-landing-call-words {
     display: inline-flex;
+    flex: 1;
     align-items: baseline;
     gap: var(--ui-tight-gap);
     min-width: 0;
+  }
+
+  .ui-landing-call-verb {
+    color: var(--ui-color-text);
   }
 
   .ui-landing-call-subject {
     color: var(--ui-color-text-muted);
   }
 
-  .ui-landing-message {
+  .ui-landing-received {
     align-items: flex-start;
     max-width: 85%;
     margin-right: auto;
   }
 
   .ui-landing-bubble {
+    width: fit-content;
     padding: var(--ui-row-inset) var(--ui-list-inset);
     border-radius: var(--ui-radius-14);
     background: var(--ui-color-fill-strong);
   }
 
-  .ui-landing-side {
-    align-self: stretch;
-    margin-top: 50px;
-    padding: 12px;
-    border-radius: var(--ui-radius-14);
-    background: var(--ui-color-well);
-    box-shadow: 0 0 0 1px var(--ui-color-border);
+  .ui-landing-working {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-item-gap);
+    color: var(--ui-color-text-muted);
+    font-variant-numeric: tabular-nums;
   }
 
-  /* An automation, drawn as a sheet alone: its bar over its settings and
-     its runs. */
-  .ui-landing-sheet {
-    overflow: hidden;
-    border: 1px solid var(--ui-color-border-strong);
-    border-radius: var(--ui-radius-14);
-    background: var(--ui-color-ground);
+  .ui-landing-agent-foot {
+    flex: none;
   }
 
-  .ui-landing-automation > :first-child {
-    padding: 4px var(--ui-space-12);
-    border-bottom: 1px solid var(--ui-color-border);
+  .ui-landing-dock {
+    padding: 0 16px var(--ui-row-inset);
   }
 
-  .ui-landing-automation-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-    gap: 32px;
-    padding: 16px 20px 20px;
+  .ui-landing-composer {
+    padding: 0 16px var(--ui-list-inset);
   }
 
-  .ui-landing-automation-settings,
-  .ui-landing-automation-runs {
+  .ui-landing-pull-request {
+    display: inline-flex;
+    color: var(--ui-color-complete);
+  }
+
+  .ui-landing-effort {
+    color: var(--ui-color-text-muted);
+  }
+
+  .ui-landing-side-bar {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .ui-landing-side-sheet {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--ui-control-gap);
+    min-height: 0;
+    overflow: hidden;
+    padding: var(--ui-section-gap) var(--ui-space-12);
+  }
+
+  /* An automation's page, its sidebar folded: its toolbar on the frame
+     over a sheet holding its settings beside its runs. */
+  .ui-landing-crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--ui-type-label-size);
+    font-weight: var(--ui-type-label-weight);
+  }
+
+  .ui-landing-crumb > svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .ui-landing-automation-sheet {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .ui-landing-automation-page {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 48px;
+    box-sizing: border-box;
+  }
+
+  .ui-landing-automation-title {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-control-gap);
+  }
+
+  .ui-landing-runs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-control-gap);
+    padding: 16px;
+    border-left: 1px solid var(--ui-color-border);
   }
 
   /* The devices: the Mac window, with the phone standing over its corner. */
@@ -666,26 +876,36 @@
     width: 254px;
   }
 
+  /* The phone's Inbox: its bar under the status bar's room, its search, its
+     rows, and the bar of places at its foot. */
   .ui-landing-phone-app {
     display: grid;
-    grid-template-rows: 46px minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     height: 100%;
     padding-top: 54px;
     box-sizing: border-box;
+    color: var(--ui-color-text);
   }
 
-  .ui-landing-phone-body {
-    min-height: 0;
+  .ui-landing-phone-app .ui-landing-rows {
     overflow: hidden;
   }
 
-  .ui-landing-phone-body .ui-landing-thread {
-    padding-inline: var(--ui-space-12);
+  .ui-landing-phone-places {
+    display: flex;
+    padding: 2px 4px 20px;
+    border-top: 1px solid var(--ui-color-border);
+    background: var(--ui-color-ground);
+  }
+
+  .ui-landing-phone-places > * {
+    flex: 1;
   }
 
   .ui-landing-models {
     max-width: 520px;
     margin: 0 auto;
+    background: transparent;
   }
 
   /* Under 640px of room the page keeps to one column: the ball under the
@@ -757,10 +977,6 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .ui-landing-automation-body {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
     .ui-landing-stage[data-scene="devices"] {
       height: 420px;
     }
@@ -797,10 +1013,6 @@
       flex-direction: column;
       align-items: stretch;
       padding: 72px var(--ui-landing-gutter) 48px;
-    }
-
-    .ui-landing-foot-art {
-      height: 140px;
     }
   }
 }
