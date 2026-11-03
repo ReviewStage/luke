@@ -722,10 +722,13 @@ else.
 **Agents' working memory.** Each agent works
 from a session history of its own turns — the model's record of what it read,
 said, and did, folded into a written summary when it grows long — kept by
-Vercel Workflow for our service on the terms under "Who we send it to"; our
-database keeps the record of each turn described under "Your account", from
-which a new session picks up. None of it is held on your Mac, in memory or on
-disk.
+Claude Code or Codex as files on the agent's sandbox's disk, on the terms
+under "An agent that runs on Claude Code" and "An agent that runs on Codex",
+or, for a local agent, in its folder on your Mac or the host. Our database
+keeps the record of each turn described under "Your account"; a session that
+has ended does not pick up again from it, and the agent's next message starts
+a fresh one. Apart from a local agent's folder, none of it is held on your
+Mac, in memory or on disk.
 
 Earlier versions kept the conversation, Vespin's working memory, the things
 it remembered about you, and a search index over its workspace files in a
@@ -1618,22 +1621,16 @@ only when you press Send.
   which keeps it under that service's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our
   database: everything our service keeps is stored with Neon and passes
-  through Vercel. Each agent and its workers also run as sessions on
-  Vercel Workflow, which keeps each
-  session's history (the messages, files, tool calls, and answers its model
-  works from) so the session can pick up where it stopped. Deleting a task or
-  your account asks Vercel Workflow to end each of its sessions for good, a
-  turn still running included; a session that could not be reached or did
-  not confirm in time is noted in our service's logs and left as it stood,
-  and the delete goes on without it, its history kept under Vercel's own
-  retention. When a session of Vespin's ends, Vercel deletes that history at
-  once, though the session's ids, status, and times may stay as long as
-  Vercel's own retention. This holds for a session started on or after
-  13 October 2026. For now, an agent's session keeps its history after
-  it ends for our hosting plan's Workflow retention period, so that we can
-  find out why a session stopped partway, and Vercel deletes it after that.
-  A session of Vespin's started before then, and the session of a worker
-  either one hands work to, keeps its history under Vercel's own retention.
+  through Vercel. Each agent's session history (the messages, files, tool
+  calls, and answers its model works from) is kept by Claude Code or Codex on
+  its sandbox's disk, as described under "Agents' working memory". Deleting a
+  task or your account ends each of its agents' sessions for good through
+  Claude Code or Codex, a turn still running included, and deletes each one's
+  sandbox; a session that could not be reached or did not confirm in time is
+  noted in our service's logs, and the delete goes on without it. Earlier
+  versions ran each agent and its workers as sessions on Vercel Workflow;
+  what Vercel still keeps of such a session stays under Vercel's own
+  retention.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Vespin
   opens, every four hours, and when you ask from Vespin's menu or Settings,
@@ -1772,12 +1769,13 @@ and error and performance reports by Sentry.
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot
   be reached, the account is deleted anyway and a grant stays until you revoke
-  Vespin in that service's own settings. It asks Vercel Workflow to end every
-  session of yours, noting in our logs any it could not, and, shortly after,
-  deletes their sandboxes with the snapshots no other sandbox uses; the
-  session history Vercel Workflow keeps goes as described under "Who we send
-  it to", and anything stored only on
-  your Mac stays there until you remove it.
+  Vespin in that service's own settings. It ends every agent's session of
+  yours through Claude Code or Codex, noting in our logs any it could not, and
+  deletes their sandboxes, with the session history on their disks and the
+  snapshots no other sandbox uses, at once or shortly after; what Vercel
+  Workflow still keeps of an earlier version's session goes as described
+  under "Who we send it to", and anything stored only on your Mac stays there
+  until you remove it.
 
 ## Google user data
 
