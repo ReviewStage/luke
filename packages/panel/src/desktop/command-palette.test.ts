@@ -18,7 +18,6 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
@@ -2736,7 +2735,7 @@ test("⌘K still offers Show inbox for a task an item waits on while its agents 
   assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
 });
 
-test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
+test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();
@@ -2747,8 +2746,7 @@ test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps 
       "All",
       "Tasks",
       "This task",
-      "Threads",
-      "Channels",
+      "Inbox",
       "People",
       "Automations",
       "Files",
@@ -2756,45 +2754,6 @@ test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps 
       "Settings",
     ],
   );
-});
-
-test("with Channels on, ⌘K's Channels lists the workspace's channels by name and purpose, and one chosen narrows the Inbox to it; with Channels off it draws no Channels filter", async () => {
-  const app = {
-    id: "a1000001-0000-4000-8000-000000000002",
-    name: "app",
-    purpose: "The desktop and web app",
-    project: false,
-    createdAt: 1,
-    waiting: 0,
-  };
-  const held = { [LIVE_READ.CHANNELS]: { [ACME.id]: { rows: { open: [app], archived: [] } } } };
-  handState({}, held);
-  await paletteUnderState(tasksControl({ workspace: ACME }));
-  await settle();
-  const offWithout = filterOptions().every((option) => option.textContent !== "Channels");
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-  document.body.innerHTML = "";
-  handState(experimentsOn(EXPERIMENT.CHANNELS), held);
-  const opened: string[] = [];
-  const base = tasksControl({ workspace: ACME });
-  await paletteUnderState(
-    tasksControl({
-      workspace: ACME,
-      inboxView: { ...base.inboxView, onOpenChannel: (channelId) => opened.push(channelId) },
-    }),
-  );
-  await settle();
-  chooseFilter("Channels");
-  await settle();
-
-  assert.ok(offWithout, "no Channels filter stands with Channels off");
-  assert.deepEqual(rows(), ["app · The desktop and web app"]);
-  press("app · The desktop and web app");
-  await settle();
-  assert.deepEqual(opened, [app.id]);
-  handState({});
 });
 
 test("⌘K's Automations lists the workspace's automations by name and what fires them, found by their task's name too, and one chosen opens its page", async () => {

@@ -13,10 +13,8 @@ import {
   type AppPages,
   type AppStateDelivery,
   type AppStateSnapshot,
-  type AppWorkspaceChannels,
   NO_HOLDER_INBOXES,
   NO_PAGES,
-  NO_WORKSPACE_CHANNELS,
   UNREAD,
 } from "@repo/host/app-state";
 import { SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
@@ -73,7 +71,6 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
     [LIVE_READ.PAGES]: NO_PAGES,
-    [LIVE_READ.CHANNELS]: NO_WORKSPACE_CHANNELS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -164,12 +161,11 @@ export interface HostReadsHanded {
   readonly deliverItems: (next: AppHostRead<AppInboxItems>) => void;
   readonly deliverHolders: (next: AppHolderInboxes) => void;
   readonly deliverPages: (next: AppPages) => void;
-  readonly deliverChannels: (next: AppWorkspaceChannels) => void;
 }
 
 /**
  * Lays the host's reads as given, the account's feed of every item, the
- * holders' own inboxes, and the workspaces' channels, over whatever
+ * and the holders' own inboxes, over whatever
  * document the window was handed, its experiments and the reads handed
  * before among it, and answers with how each is delivered again as it
  * moves, as the host tells it.
@@ -177,7 +173,6 @@ export interface HostReadsHanded {
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
   readonly holders?: AppHolderInboxes;
-  readonly channels?: AppWorkspaceChannels;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
@@ -189,7 +184,6 @@ export function handHostReads(first: {
       version,
       ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
       ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
-      ...(first.channels === undefined ? undefined : { [LIVE_READ.CHANNELS]: first.channels }),
     }),
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
@@ -204,7 +198,6 @@ export function handHostReads(first: {
     deliverItems: (next) => deliver({ [LIVE_READ.INBOX_ITEMS]: next }),
     deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
     deliverPages: (next) => deliver({ [LIVE_READ.PAGES]: next }),
-    deliverChannels: (next) => deliver({ [LIVE_READ.CHANNELS]: next }),
   };
 }
 

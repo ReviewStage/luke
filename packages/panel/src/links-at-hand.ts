@@ -1,5 +1,4 @@
 import {
-  channelPlace,
   LINK_PLACE,
   type LinkPlace,
   linkOf,
@@ -19,7 +18,6 @@ import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import { type ShownChannel, useShownChannel } from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 
@@ -58,10 +56,6 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  * its own width, in a room still wide), Settings' page list, whose link
  * names no page, and the Admin
  * place's section list, whose link names no view.
- *
- * With Channels on, an Inbox narrowed to a channel has the channel's link
- * in the Inbox's, and its chosen thread's link is at hand before it as an
- * item's is, naming the step in its place where it stands alone.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -79,8 +73,6 @@ const LINK_THING = {
   CHANGES: "pull request",
   INBOX: "Inbox",
   INBOX_ITEM: "Inbox item",
-  CHANNEL: "channel",
-  THREAD: "thread",
   AUTOMATIONS: "Automations",
   AUTOMATION: "automation",
   SETTINGS: "settings page",
@@ -120,8 +112,6 @@ export interface WindowAt {
   readonly pageWorkspace?: PageWorkspace | undefined;
   /** Whether the room is narrow, showing one pane at a time. */
   readonly narrow?: boolean;
-  /** The channel the Inbox is narrowed to, with Channels on. */
-  readonly channel?: ShownChannel | undefined;
 }
 
 const PageWorkspaceContext = createContext<(held: PageWorkspace | undefined) => void>(
@@ -189,23 +179,6 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
 /** An Inbox item's place, by its id alone, whose agent, task, and workspace its reader asks the service for, as every Copy link of an item writes it. */
 function inboxItemPlace(chosen: InboxChoice): LinkPlace {
   return { kind: LINK_PLACE.INBOX_ITEM, itemId: chosen.itemId };
-}
-
-/** The links of an Inbox narrowed to a channel: its chosen thread's, a step of its own where it stands alone, and the channel's. */
-function channelLinks(
-  tasks: TasksControl,
-  shown: ShownChannel,
-  alone: boolean,
-  at: (place: LinkPlace, thing: LinkThing, step: boolean) => LinkAtHand,
-): readonly LinkAtHand[] {
-  const channel = channelPlace(shown.channel.id);
-  const { chosen } = tasks.inboxView;
-  if (chosen === undefined) return [at(channel, LINK_THING.CHANNEL, true)];
-  const item = inboxItemPlace(chosen);
-  if (alone) {
-    return [at(item, LINK_THING.THREAD, true), at(channel, LINK_THING.CHANNEL, false)];
-  }
-  return [at(item, LINK_THING.THREAD, false), at(channel, LINK_THING.CHANNEL, true)];
 }
 
 /** The links of the task drawn: its version chosen, its tabs', and its own, the most specific first. */
@@ -314,12 +287,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     const home = workspaceId === undefined ? listed : slugOf(tasks.workspaces, workspaceId);
     return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
   }
-  if (tasks.inboxView.open && at.channel !== undefined) {
-    const alone = at.narrow === true || tasks.inboxView.single === true;
-    return channelLinks(tasks, at.channel, alone, (place, thing, step) =>
-      step ? at_(place, thing) : within(place, thing),
-    );
-  }
   if (tasks.inboxView.open) {
     const inbox = at_({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX);
     const { chosen } = tasks.inboxView;
@@ -414,14 +381,12 @@ export function useCopyLink(
   const copy = (held: LinkAtHand) =>
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
   const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
-  const channel = useShownChannel(tasks.workspace?.id);
   const linksAt = (sidePanelFocused: boolean) =>
     linksAtHand(tasks, {
       settings,
       sidePanelFocused,
       pageWorkspace,
       narrow: room === SHELL_ROOM.NARROW,
-      channel,
     });
   useAppCommand(
     APP_COMMAND.COPY_LINK,

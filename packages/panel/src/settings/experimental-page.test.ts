@@ -105,7 +105,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     EXPERIMENT.BRING_YOUR_OWN_HOST,
     EXPERIMENT.SKILLS,
     EXPERIMENT.PILOT,
-    EXPERIMENT.CHANNELS,
     EXPERIMENT.MEMORY,
   ]);
 });

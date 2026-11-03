@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { test } from "vitest";
-import { liveStepTitle, NAMED_STEP, stepTitle } from "./history-titles.js";
+import { stepTitle } from "./history-titles.js";
 import { PANEL_TAB } from "./panel-tabs.js";
 import { SIDE_PANEL_TAB } from "./tasks/use-side-panel.js";
 import type { InboxChoice } from "./tasks/use-tasks-tab.js";
@@ -10,8 +10,7 @@ import { tasksControl } from "./testing/tasks-control.js";
 /**
  * history-titles.test.ts -- each step of the history is named as Back's menu
  * lists it: a task by its name with the tabs it showed, the Inbox with the
- * task its item is of, or with Channels on by its channel's name now, and
- * every other page by what the window's title calls it.
+ * task its item is of, and every other page by what the window's title calls it.
  */
 
 const TASK = {
@@ -69,26 +68,4 @@ test("the Inbox's step names the task its item is of, and Settings and Home are 
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, inbox), { label: "Inbox", detail: "Auth refactor" });
   assert.deepEqual(stepTitle(PANEL_TAB.SETTINGS, base), { label: "Settings" });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Home" });
-});
-
-test("with Channels on, a step on a channel listed later is named by the channel's name now, with the task of the thread open in it", () => {
-  const channel = {
-    id: "channel-1",
-    name: "app-v2",
-    purpose: "",
-    project: false,
-    createdAt: 1,
-    waiting: 0,
-  };
-  const tasks = tasksControl({ tasks: [TASK] });
-  const step = { kind: NAMED_STEP.INBOX, taskId: TASK.id, channelId: channel.id } as const;
-
-  assert.deepEqual(
-    liveStepTitle(step, { label: "#app", detail: "Auth refactor" }, tasks, undefined, [channel]),
-    { label: "#app-v2", detail: "Auth refactor" },
-  );
-  assert.deepEqual(
-    liveStepTitle({ ...step, taskId: undefined }, { label: "#app" }, tasks, undefined, [channel]),
-    { label: "#app-v2", detail: undefined },
-  );
 });

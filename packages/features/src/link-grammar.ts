@@ -733,11 +733,6 @@ export function linkOf(place: LinkPlace, workspace: string): string {
   return link;
 }
 
-/** The place a channel of the workspace is linked by, which a menu's Copy link copies. */
-export function channelPlace(channelId: string): LinkPlace {
-  return { kind: LINK_PLACE.CHANNEL, channelId };
-}
-
 /**
  * The place a link names and the workspace it was written under, by the
  * web's scheme or the desktop's, on our home or a host it once had;

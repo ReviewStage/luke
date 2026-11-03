@@ -36,9 +36,8 @@ import { ACT_KIND } from "@repo/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS } from "@repo/host/fixture-stage";
-import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
-import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
+import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import { timeRuntime } from "@repo/ui";
 import { memoryHistory } from "@repo/ui/history-adapter";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -77,7 +76,6 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
-import { type ChannelPlaceControl, useChannelPlace } from "./use-channels.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -1305,56 +1303,6 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
   assert.equal(listed, ACME.id);
   assert.equal(tab.control().inboxView.open, true);
   assert.deepEqual(tab.control().inboxView.chosen, { itemId: unknownId, opened: true });
-});
-
-/** The window's channel place as a surface drawing it reads it now. */
-function channelPlaceNow(): () => ChannelPlaceControl {
-  let seen: ChannelPlaceControl | undefined;
-  const Reader = () => {
-    seen = useChannelPlace();
-    return null;
-  };
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  act(() => root.render(createElement(Reader)));
-  return () => seen ?? assert.fail("the channel place is read");
-}
-
-test("with Channels on, a channel's link opens the Inbox narrowed to it, which a thread's link of an agent with no task keeps until its item is read, and an item opened from another surface narrows it to the item's channel", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
-  await settle();
-  const place = channelPlaceNow();
-  const app = "a1000001-6d9f-4ab7-92df-000000000002";
-  const design = "a1000001-6d9f-4ab7-92df-000000000003";
-  const linked = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
-  const opened = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.CHANNEL, channelId: app },
-    }),
-  );
-  const channel = {
-    open: tab.control().inboxView.open,
-    chosen: tab.control().inboxView.chosen,
-    channelId: place().channelId,
-  };
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT_ID, itemId: linked },
-    }),
-  );
-  const thread = place().channelId;
-  act(() => tab.control().inboxView.onOpenItem({ taskId: "alerts", itemId: opened }, design));
-
-  assert.deepEqual(channel, { open: true, chosen: undefined, channelId: app });
-  assert.equal(thread, app);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "alerts", itemId: opened });
-  assert.equal(place().channelId, design);
-  handState({});
 });
 
 test("a Vespin link to an automation's run opens its editor naming the run, which its runs mark", () => {

@@ -13,7 +13,6 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@repo/features/automation-wire";
-import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { pageFrameUrl } from "@repo/features/page-frame";
@@ -21,21 +20,14 @@ import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type {
-  AppInboxTask,
-  AppInboxTasklessItem,
-  AppWorkspaceChannels,
-} from "@repo/host/app-state";
-import { EXPERIMENT } from "@repo/settings";
+import type { AppInboxTasklessItem } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -56,8 +48,6 @@ import {
   chooseView,
   columnsShown,
   EXPIRY,
-  GENERAL,
-  headTitle,
   hoveredCard,
   INVITES,
   item,
@@ -65,7 +55,6 @@ import {
   layOut,
   listEdge,
   listed,
-  menuItem,
   mount,
   noticeOf,
   ON_THRESHOLD,
@@ -75,7 +64,6 @@ import {
   QUARANTINE,
   READER,
   RETRY,
-  ROW_TITLE,
   readTitle,
   rowNamed,
   STRAY_AGENT,
@@ -95,8 +83,7 @@ import {
 } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { tasksControl, waitingOf } from "../testing/tasks-control.js";
-import { newestToastSays } from "../testing/toast.js";
+import { tasksControl } from "../testing/tasks-control.js";
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -476,7 +463,6 @@ function tasklessItem(asked: InboxItem): AppInboxTasklessItem {
     automationId: null,
     automationName: null,
     repository: null,
-    ...(asked.channelId === undefined ? undefined : { channelId: asked.channelId }),
   };
 }
 
@@ -1155,89 +1141,6 @@ test("on a phone the panel open over an item heads itself: the way back to the i
   assert.equal(shut, 1, "the way back shuts the panel");
 });
 
-/** #app, a second standing channel of the workspace. */
-const APP_CHANNEL: Channel = {
-  id: "c0ffee00-0000-4000-8000-000000000002",
-  name: "app",
-  purpose: "The desktop and web apps",
-  project: false,
-  createdAt: 2,
-  waiting: 0,
-};
-
-/**
- * Hands the listed workspace's channels as the host holds them, open and
- * archived, and answers the channels' writes as the host does: each made,
- * archived, unarchived, or looked at delivers the channels as they then
- * stand to the window, and every other act is answered as before.
- */
-function answerChannels(answers: {
-  channels?: () => readonly Channel[];
-  /** A channel made, archived, or unarchived, or a thread moved, before the service answers it. */
-  onWrite?: (write: AnyAct) => void;
-  archived?: () => readonly ArchivedChannel[];
-}): void {
-  const previous = fakeActsAnswer();
-  const workspaceId = world.listedWorkspace?.id ?? ACME.id;
-  const held = (): AppWorkspaceChannels => ({
-    [workspaceId]: {
-      rows: { open: answers.channels?.() ?? [GENERAL], archived: answers.archived?.() ?? [] },
-    },
-  });
-  world.channels = held();
-  const done = (value: unknown): Promise<FakeActAnswer> =>
-    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (
-        request.kind === ACT_KIND.CHANNELS_LOOK ||
-        request.kind === ACT_KIND.CHANNELS_CREATE ||
-        request.kind === ACT_KIND.CHANNELS_ARCHIVE ||
-        request.kind === ACT_KIND.CHANNELS_UNARCHIVE
-      ) {
-        answers.onWrite?.(request);
-        world.deliverChannels(held());
-        return done({ channels: answers.channels?.() ?? [GENERAL] });
-      }
-      if (request.kind === ACT_KIND.CHANNELS_MOVE) {
-        answers.onWrite?.(request);
-        return done({ thread: { ...THRESHOLD, channelId: request.payload.channelId } });
-      }
-      return previous(request);
-    },
-  });
-}
-
-/** The rows the list draws, by their titles, in its order. */
-function rowTitles(page: HTMLElement): (string | null | undefined)[] {
-  return [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main"),
-  ].map((row) => row.querySelector(ROW_TITLE)?.textContent);
-}
-
-/** The words after the list's head's title: a channel's purpose, or when it was archived. */
-function headDetail(page: HTMLElement): string | null | undefined {
-  return page.querySelector(".inbox-tasks .ui-toolbar-detail")?.textContent;
-}
-
-/** The sidebar's channel rows under its Inbox row, as a reader meets them: each one's words, its count among them. */
-function sidebarChannels(page: HTMLElement): (string | null)[] {
-  const group =
-    page.querySelector('.sidebar-places [role="group"][aria-label="Channels"]') ??
-    assert.fail("the channels stand among the sidebar's places");
-  return [...group.querySelectorAll(".ui-nav-item")].map((row) => row.textContent);
-}
-
-/** Types `words` into a field as a reader would. */
-function typeInto(field: HTMLInputElement | null, words: string): void {
-  if (field === null) assert.fail("the field stands");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
 /** The button standing anywhere in the window whose words are `words`. */
 function buttonSaying(words: string): HTMLButtonElement {
   return (
@@ -1247,106 +1150,9 @@ function buttonSaying(words: string): HTMLButtonElement {
   );
 }
 
-test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
+test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent, which the Inbox then opens, the box a reply again", async () => {
   world.listedWorkspace = ACME;
-  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
-  world.inboxes = new Map([
-    [
-      BILLING.id,
-      [
-        { ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE },
-        { ...RETRY, channelId: APP_CHANNEL.id },
-      ],
-    ],
-    [INVITES.id, [{ ...EXPIRY, channelId: GENERAL.id }]],
-  ]);
-  const { page } = mount([], { channels: true });
-  await settle();
-
-  assert.equal(headTitle(page), "#general");
-  assert.equal(headDetail(page), GENERAL.purpose);
-  assert.deepEqual(
-    rowTitles(page),
-    [EXPIRY.title, THRESHOLD.title],
-    "#general's threads alone, a teammate's among them, the latest first",
-  );
-});
-
-test("a channel's view's menu narrows it as the Inbox's does, its scope standing in every channel and in the Inbox", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
-  world.inboxes = new Map([
-    [
-      BILLING.id,
-      [
-        { ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE },
-        { ...RETRY, channelId: APP_CHANNEL.id, startedBy: TEAMMATE },
-      ],
-    ],
-  ]);
-  const { page } = mount([], { channels: true });
-  await settle();
-  showScope(page, "Open");
-  chooseView(page, "Addressed to", "Me");
-  await settle();
-  assert.deepEqual(rowTitles(page), [], "Open addressed to Me leaves out the teammate's thread");
-
-  act(() => chooseChannel(APP_CHANNEL.id));
-  await settle();
-  assert.deepEqual(rowTitles(page), [], "another channel opens on it too");
-
-  act(() => leaveChannel());
-  await settle();
-  assert.deepEqual(rowTitles(page), [], "the Inbox stands on it too");
-
-  showScope(page, "All");
-  chooseView(page, "Addressed to", "Anyone");
-  act(() => chooseChannel(GENERAL.id));
-  await settle();
-  assert.deepEqual(
-    rowTitles(page),
-    [THRESHOLD.title],
-    "a scope turned in the Inbox stands in a channel",
-  );
-});
-
-test("a channel chosen while the workspace's channels could not be read says so with Retry, and ⌘K's Mark all as read marks the chosen channel's threads alone", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
-  world.channels = { [world.listedWorkspace.id]: { failed: true } };
-  world.inboxes = new Map([
-    [
-      BILLING.id,
-      [
-        { ...THRESHOLD, channelId: GENERAL.id, unread: true },
-        { ...RETRY, channelId: APP_CHANNEL.id, unread: true },
-      ],
-    ],
-  ]);
-  const { page } = mount([], { channels: true });
-  await settle();
-  const notRead =
-    page.querySelector<HTMLElement>('section[aria-label="Channels not read"]') ??
-    assert.fail("the failed read is said");
-  assert.match(notRead.textContent ?? "", /This workspace's channels could not be read\./u);
-  assert.equal(runAppCommand(APP_COMMAND.MARK_INBOX_READ), true);
-  await settle();
-  assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`], "never the workspace's whole");
-});
-
-test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  const moves: unknown[] = [];
-  answerChannels({
-    channels: () => [GENERAL, APP_CHANNEL],
-    onWrite: (write) => {
-      if (write.kind === ACT_KIND.CHANNELS_MOVE) moves.push(write.payload);
-    },
-  });
-  world.inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: APP_CHANNEL.id }]]]);
+  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
   const starts = heldStarts();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -1356,8 +1162,8 @@ test("ticking the box's checkbox under an open question sets its options aside a
     assert.fail("the box offers a new thread");
   assert.equal(
     box().closest("label")?.textContent,
-    "Send as a new thread to Alerts in app",
-    "it names the item's agent and channel",
+    "Send as a new thread to Alerts",
+    "it names the item's agent",
   );
   const options = () => itemPane(page).querySelectorAll('[role="radio"]').length;
   assert.equal(options(), 2, "the question's options stand over the box");
@@ -1376,35 +1182,12 @@ test("ticking the box's checkbox under an open question sets its options aside a
     starts.map(({ agentId, title, text }) => ({ agentId, title, text })),
     [{ agentId: AGENT.id, title: undefined, text: "Draft the annual plan's line too." }],
   );
-  assert.deepEqual(moves, [{ threadId: STARTED.id, channelId: APP_CHANNEL.id }]);
   assert.equal(
     itemPane(page).getAttribute("aria-label"),
     STARTED.title,
     "the thread it started opens",
   );
   assert.equal(box().getAttribute("aria-checked"), "false", "its box is a reply again");
-});
-
-test("a press on the channel's chip beside the box's checkbox opens the channel and leaves the box unticked", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
-  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: APP_CHANNEL.id }]]]);
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-
-  const box =
-    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
-    assert.fail("the box offers a new thread");
-  const chip =
-    [...(box.closest("label")?.querySelectorAll("button") ?? [])].find(
-      (each) => each.textContent === APP_CHANNEL.name,
-    ) ?? assert.fail("the channel's chip is a button");
-  act(() => chip.click());
-  await settle();
-
-  assert.equal(box.getAttribute("aria-checked"), "false");
-  assert.equal(headTitle(page), `#${APP_CHANNEL.name}`);
 });
 
 test("words written in the box while its new thread starts stay in it once the thread has started", async () => {
@@ -1445,210 +1228,6 @@ test("words written in the box while its new thread starts stay in it once the t
   assert.equal(composerEditor(itemPane(page)).textContent, "And the footer.");
 });
 
-test("a thread started from an item of an archived channel lands in #general, and the Inbox turns to #general to open it", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  const old: ArchivedChannel = {
-    id: "c0ffee00-0000-4000-8000-0000000000aa",
-    name: "old-app",
-    purpose: "The apps, before the split",
-    project: false,
-    createdAt: 1,
-    archivedAt: 2,
-  };
-  answerChannels({ archived: () => [old] });
-  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: old.id }]]]);
-  heldStarts();
-  const { page } = mount([], { channels: true, chosen: ON_THRESHOLD });
-  await settle();
-  act(() => chooseChannel(old.id));
-  await settle();
-
-  const box =
-    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
-    assert.fail("the box offers a new thread");
-  assert.equal(box.closest("label")?.textContent, "Send as a new thread to Alerts in general");
-  act(() => box.click());
-  const pane = itemPane(page);
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-      assert.fail("the box has a Send")
-    ).click(),
-  );
-  await settle();
-
-  assert.equal(headTitle(page), "#general");
-  assert.equal(itemPane(page).getAttribute("aria-label"), STARTED.title);
-});
-
-test("with Channels on, a row's ⋯ moves its thread to the channel picked", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  const moves: unknown[] = [];
-  answerChannels({
-    channels: () => [GENERAL, APP_CHANNEL],
-    onWrite: (write) => {
-      if (write.kind === ACT_KIND.CHANNELS_MOVE) moves.push(write.payload);
-    },
-  });
-  world.inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: GENERAL.id }]]]);
-  const { page } = mount();
-  await settle();
-
-  act(() => {
-    rowNamed(page, THRESHOLD.title).dispatchEvent(
-      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
-    );
-  });
-  act(() => menuItem("Move to channel").click());
-  await settle();
-  act(() => buttonSaying("Move to #app").click());
-  await settle();
-
-  assert.deepEqual(moves, [{ threadId: THRESHOLD.id, channelId: APP_CHANNEL.id }]);
-});
-
-test("the sidebar lists the channels under the Inbox's row, each with what waits on the reader, and a press narrows the Inbox to one", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  const project: Channel = {
-    ...APP_CHANNEL,
-    id: "c0ffee00-0000-4000-8000-000000000003",
-    name: "launch",
-    project: true,
-  };
-  answerChannels({ channels: () => [project, GENERAL, APP_CHANNEL] });
-  // Note that a row counts the questions main lists in its channel, as the Inbox's row counts them.
-  const waiting: readonly AppInboxTask[] = [
-    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
-    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: GENERAL.id })] },
-  ];
-  const { page } = mount([], { withSidebar: true, waiting });
-  await settle();
-
-  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch"]);
-  act(() =>
-    (
-      [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .ui-nav-item')].find(
-        (row) => row.textContent === "app",
-      ) ?? assert.fail("#app's row stands")
-    ).click(),
-  );
-  await settle();
-  assert.equal(headTitle(page), "#app");
-});
-
-test("a channel made from the Inbox row's ⋯ narrows the Inbox to it once the service has made it", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  let standing: readonly Channel[] = [GENERAL];
-  answerChannels({
-    channels: () => standing,
-    onWrite: (write) => {
-      if (write.kind === ACT_KIND.CHANNELS_CREATE) standing = [GENERAL, APP_CHANNEL];
-    },
-  });
-  const { page } = mount([], { withSidebar: true });
-  await settle();
-  act(() =>
-    (
-      document.querySelector<HTMLButtonElement>('[aria-label="Inbox actions"]') ??
-      assert.fail("the Inbox's row wears its ⋯")
-    ).click(),
-  );
-  act(() => menuItem("New channel").click());
-  const dialog = document.querySelector('[role="dialog"]') ?? assert.fail("the dialog stands");
-  const [name, purpose] = dialog.querySelectorAll<HTMLInputElement>("input");
-  typeInto(name ?? null, "app");
-  typeInto(purpose ?? null, "The desktop and web apps");
-  act(() => buttonSaying("Create channel").click());
-  await settle();
-  assert.equal(headTitle(page), "#app");
-});
-
-test("a channel archived or unknown says so in the list's place, with the way to #general", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  answerChannels({});
-  const { page } = mount([], { channels: true });
-  await settle();
-  act(() => chooseChannel("c0ffee00-0000-4000-8000-0000000000ff"));
-  await settle();
-  const missing =
-    page.querySelector<HTMLElement>('section[aria-label="Channel not found"]') ??
-    assert.fail("the channel's absence is said");
-
-  act(() =>
-    [...missing.querySelectorAll("button")]
-      .find((button) => button.textContent === "Go to #general")
-      ?.click(),
-  );
-  await settle();
-  assert.equal(headTitle(page), "#general");
-});
-
-test("an archived channel narrows the Inbox under its name and when it was archived, and Unarchive opens it again", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  const old: ArchivedChannel = {
-    id: "c0ffee00-0000-4000-8000-0000000000aa",
-    name: "old-app",
-    purpose: "The apps, before the split",
-    project: false,
-    createdAt: 1,
-    archivedAt: 2,
-  };
-  const unarchived: string[] = [];
-  answerChannels({
-    archived: () => [old],
-    onWrite: (write) => {
-      if (write.kind === ACT_KIND.CHANNELS_UNARCHIVE) unarchived.push(write.payload.channelId);
-    },
-  });
-  world.inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: old.id }]]]);
-  const { page } = mount([], { channels: true });
-  await settle();
-  act(() => chooseChannel(old.id));
-  await settle();
-
-  assert.equal(headTitle(page), "#old-app");
-  assert.match(headDetail(page) ?? "", /^Archived /u);
-  assert.deepEqual(rowTitles(page), [THRESHOLD.title]);
-  act(() => buttonSaying("Unarchive").click());
-  await settle();
-  assert.deepEqual(unarchived, [old.id]);
-});
-
-test("archiving the channel shown moves the window to #general and says so", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  let standing: readonly Channel[] = [GENERAL, APP_CHANNEL];
-  answerChannels({
-    channels: () => standing,
-    onWrite: (write) => {
-      if (write.kind === ACT_KIND.CHANNELS_ARCHIVE) standing = [GENERAL];
-    },
-  });
-  const { page } = mount([], { channels: true, withSidebar: true, toasts: true });
-  await settle();
-  act(() => chooseChannel(APP_CHANNEL.id));
-  await settle();
-  const row =
-    [...page.querySelectorAll<HTMLElement>('[aria-label="Channels"] .ui-nav-item')].find(
-      (each) => each.textContent === "app",
-    ) ?? assert.fail("#app's row stands");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-  });
-  act(() => menuItem("Archive").click());
-  act(() => buttonSaying("Archive channel").click());
-  await settle();
-  assert.equal(headTitle(page), "#general");
-  assert.match(newestToastSays() ?? "", /#app is archived\. You're in #general now\./u);
-});
-
 test("an item opened whose agent's inbox could not be read says so in the pane, and Retry reads it there", async () => {
   world.listedWorkspace = ACME;
   // Note that no holding names the billing task, nor the feed its agent, so its item is opened by its agent, whose own read fails.
@@ -1669,61 +1248,6 @@ test("an item opened whose agent's inbox could not be read says so in the pane, 
     itemPane(page).getAttribute("aria-label"),
     THRESHOLD.title,
     "the item is read again",
-  );
-});
-
-/** The count a sidebar row wears, by the row's name; none where it wears none. */
-function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
-  const row =
-    [...page.querySelectorAll<HTMLElement>(".ui-nav-item")].find(
-      (each) => each.querySelector(".ui-nav-item-name")?.textContent === name,
-    ) ?? assert.fail(`the sidebar draws the row ${name}`);
-  const count = row.textContent?.match(/\d+/u)?.[0];
-  return count === undefined ? undefined : Number(count);
-}
-
-test("the channels' counts add up to the Inbox's, a taskless agent's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
-  answerChannels({
-    channels: () => [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })),
-  });
-  world.agentInboxes = new Map([[TASKLESS_AGENT, [DOMAIN]]]);
-  const waiting: readonly AppInboxTask[] = [
-    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
-    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: APP_CHANNEL.id })] },
-  ];
-  const archived = "c0ffee00-0000-4000-8000-000000000009";
-  const { page } = mount(
-    [
-      { ...tasklessItem({ ...DOMAIN, channelId: APP_CHANNEL.id }), workspaceId: ACME.id },
-      {
-        ...tasklessItem({ ...BUMP, agentId: TASKLESS_AGENT, channelId: archived }),
-        workspaceId: ACME.id,
-      },
-      // Note that another workspace's question is set in #general's place, so it would show on that row were it counted.
-      {
-        ...tasklessItem({
-          ...item("a1b2c3d4-0000-4000-8000-00000000000e", "Rotate the beta key?", 1_100),
-          agentId: TASKLESS_AGENT,
-          channelId: GENERAL.id,
-        }),
-        workspaceId: "workspace-beta",
-      },
-    ],
-    { withSidebar: true, waiting },
-  );
-  await settle();
-  assert.equal(
-    sidebarRowCount(page, "Inbox"),
-    4,
-    "both tasks' questions and the taskless agent's two",
-  );
-  assert.deepEqual(
-    [sidebarRowCount(page, "general"), sidebarRowCount(page, "app")],
-    [1, 2],
-    "the channels count three of them, the taskless agent's in #app among them, the archived channel's on no row",
   );
 });
 

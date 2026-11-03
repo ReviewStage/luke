@@ -13,12 +13,11 @@ import {
 import { InboxIcon } from "@repo/ui/icons";
 import { useRef } from "react";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
-import type { InboxChannels } from "./sidebar-channels.js";
 import { groupCount } from "./sidebar-fold.js";
 import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
 
 /**
- * sidebar-inbox-row.tsx -- the sidebar's Inbox row, its ⋯ and its menu, and, with Channels on, the chevron it heads the channels with.
+ * sidebar-inbox-row.tsx -- the sidebar's Inbox row, its ⋯ and its menu.
  */
 
 /** What the Inbox's ⋯ is named for, and the menu it drops. */
@@ -36,9 +35,7 @@ const INBOX_THING = "Inbox";
  * Its ⋯, which comes in beside its chord while it is hovered, a
  * right-click, a long press, or the menu key opens its menu, Mark all as
  * read, which marks every unread thread of the listed workspace read
- * (`sidebar-read-all.tsx`). With Channels on it heads them (`channels`):
- * the chevron that folds them, and after Mark all as read, its menu offers
- * what makes a channel and lists the archived ones.
+ * (`sidebar-read-all.tsx`).
  */
 export function SidebarInboxRow({
   waiting,
@@ -46,7 +43,6 @@ export function SidebarInboxRow({
   disabled,
   shown,
   readAll,
-  channels,
   onOpen,
 }: {
   waiting: number;
@@ -55,7 +51,6 @@ export function SidebarInboxRow({
   /** Whether the sidebar is in sight, which its menu closes with. */
   shown: boolean;
   readAll: SidebarReadAll;
-  channels?: InboxChannels | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const menu = useMenu(shown && !disabled);
@@ -72,7 +67,6 @@ export function SidebarInboxRow({
         aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
         shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
         disabled={disabled}
-        fold={channels?.fold}
         actions={
           disabled ? undefined : (
             <MoreButton
@@ -94,7 +88,7 @@ export function SidebarInboxRow({
           readAll={readAll}
           label={moreLabel(INBOX_THING)}
           menu={menu.drawn}
-          groups={(markAll) => [[markAll], ...(channels?.groups ?? [])]}
+          groups={(markAll) => [[markAll]]}
           onClose={menu.close}
         />
       )}

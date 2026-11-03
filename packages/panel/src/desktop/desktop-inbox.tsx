@@ -1,14 +1,12 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
-import type { Channel } from "@repo/features/channel-wire";
-import type { InboxItem } from "@repo/features/inbox-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@repo/features/mention-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeRef } from "@repo/features/task-wire";
 import { backToWords, readFailedWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@repo/settings";
+import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar } from "@repo/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@repo/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -24,13 +22,6 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName, messageFailureWords } from "../tasks/agent-model.js";
-import {
-  ChannelMissing,
-  ChannelsNotRead,
-  type HeadedChannel,
-  useChannelHead,
-} from "../tasks/channel-head.js";
-import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
 import { type InboxCodeDoors, UNREAD_FILE } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
@@ -38,7 +29,7 @@ import {
   INBOX_VIEW_ITEMS,
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListNote, InboxPaneEmpty, NOTHING_HERE } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, InboxPaneEmpty } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   holderAutomationId,
@@ -49,7 +40,6 @@ import {
 } from "../tasks/inbox-model.js";
 import { useInboxPager } from "../tasks/inbox-pager.js";
 import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
-import { useMoveThreadDialog } from "../tasks/move-thread-dialog.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
   heldTaskMentions,
@@ -62,14 +52,6 @@ import {
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import {
-  openChannelThread,
-  useArchivedChannels,
-  useChannelPlace,
-  useChannels,
-  useInboxNarrowed,
-  useThreadChannel,
-} from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { useInboxItemOpenSpan, useInboxOpenSpan } from "../tasks/use-inbox-spans.js";
@@ -77,8 +59,7 @@ import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, useToast } from "../toast.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
 import {
@@ -145,18 +126,6 @@ import { taskCardOf } from "./task-card.js";
  * their `SKILL.md` in the panel beside it, as a file the item names opens,
  * or on GitHub where the item has no plan whose panel could open it.
  *
- * With Channels on, a channel chosen from the sidebar narrows the page to
- * its own items, the same list, reading pane, and keys, under the channel's
- * name and purpose (`channel-head.tsx`), under the Inbox's own view's menu
- * and scope (`use-inbox-listing.ts`), and "Nothing here" where it holds none; Mark
- * all as read, which ⌘K and a phone's ⋯ offer, marks its items
- * alone; leaving it stamps the
- * reader's look at it; and a row's ⋯ moves its thread to another channel
- * (`move-thread-dialog.tsx`). An item opened into a channel from a link
- * narrows the page to its own channel once read, and a channel archived or
- * never the workspace's says so in the list's place, with the way to
- * #general.
- *
  * Its items are read and listed by `use-inbox-listing.ts`.
  *
  * It is a memo boundary over the window's steady tasks (`useSteadyDoors`),
@@ -185,12 +154,6 @@ const NO_UNREAD: readonly StripTab[] = [];
 /** No agent's tab stands open beside the Inbox, so no worker's tab stands in its panel. */
 const NO_OPEN_AGENTS: readonly string[] = [];
 
-/** No channel is read yet. */
-const NO_CHANNELS: readonly Channel[] = [];
-
-/** What heads the Inbox narrowed to no channel: nothing it draws. */
-const NO_CHANNEL: HeadedChannel = { id: "", name: "", purpose: "" };
-
 /**
  * `drawn` as last drawn while `holding`, else as it is now. Note that what
  * is handed back while holding is the element drawn before, which React
@@ -216,38 +179,6 @@ export const DesktopInbox = memo(function DesktopInbox({
 }): React.JSX.Element {
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
-  // With Channels on, a row's ⋯ moves its thread to another channel, and a channel chosen narrows the Inbox to its own items.
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const narrowed = useInboxNarrowed();
-  const channelPlace = useChannelPlace();
-  // The channel the list is narrowed to, chosen whether or not its channel is read yet.
-  const narrowedTo = narrowed ? channelPlace.channelId : undefined;
-  const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined);
-  // A channel chosen that is open no more is looked for among the archived ones, and shown to read where it is one.
-  const chosenGone =
-    narrowed &&
-    channels.channels !== undefined &&
-    channelPlace.channelId !== undefined &&
-    !channels.channels.some((each) => each.id === channelPlace.channelId);
-  const archived = useArchivedChannels(chosenGone ? tasks.workspace?.id : undefined);
-  const channelState = channelShown(
-    narrowed ? channels.channels : undefined,
-    channelPlace.channelId,
-    archived.channels,
-  );
-  const archivedShown =
-    channelState.kind === CHANNEL_SHOWN.ARCHIVED ? channelState.channel : undefined;
-  const channel: HeadedChannel | undefined =
-    channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel : archivedShown;
-  const channelHead = useChannelHead(
-    channel ?? NO_CHANNEL,
-    archivedShown === undefined
-      ? undefined
-      : {
-          archivedAt: archivedShown.archivedAt,
-          onUnarchive: () => channels.onUnarchive(archivedShown.id),
-        },
-  );
   const {
     view,
     act,
@@ -282,63 +213,12 @@ export const DesktopInbox = memo(function DesktopInbox({
     clear,
     closeItem,
     onRetry,
-  } = useInboxListing(tasks, narrowedTo);
-  // An item opened into a channel from a link, which names its item and not its channel, narrows the Inbox to its own channel once read.
-  useThreadChannel(narrowed ? chosen?.item : undefined);
-  // Leaving a channel is having looked at it, so its row no longer reads unread for what was posted before.
-  const shownChannelId = channel?.id;
-  const look = useRef(channels.onLook);
-  look.current = channels.onLook;
-  useEffect(
-    () => (shownChannelId === undefined ? undefined : () => look.current(shownChannelId)),
-    [shownChannelId],
-  );
-  // Every item standing, which Mark all as read marks and a thread is moved among.
-  const standingItems = useMemo(() => standing.flatMap(({ items }) => items), [standing]);
+  } = useInboxListing(tasks);
   const unread = useMemo(() => anyUnread(standing), [standing]);
-  // Mark all as read marks the listed workspace's items, or a channel's alone, each on its own, since the service marks a workspace's whole.
-  const { onMarkAll, onMarkEach } = marks;
-  // Note that it asks of the channel chosen rather than the channel read, as the list does, so a channel whose read is still out never marks the workspace's whole.
-  const markAll = () => (narrowedTo === undefined ? onMarkAll : onMarkEach)(standingItems);
+  // Mark all as read marks the listed workspace's items.
+  const { onMarkAll } = marks;
+  const markAll = () => onMarkAll(standing.flatMap(({ items }) => items));
   useAppCommand(APP_COMMAND.MARK_INBOX_READ, tasks.shown && unread ? markAll : undefined);
-  // An item's ⋯, its row's and its thread bar's, moves its thread to another open channel, which the channels' counts are read again for.
-  const move = useMoveThreadDialog({
-    channels: channels.channels ?? NO_CHANNELS,
-    threads: standingItems,
-    shown: tasks.shown,
-    onMove: channels.onMove,
-    onMoved: channels.onRefresh,
-  });
-  const { ask: askThreadMove } = move;
-  const askMove =
-    channelsOn && askThreadMove !== undefined
-      ? (listed: InboxListed) => askThreadMove(listed.item)
-      : undefined;
-  const general = generalChannel(channels.channels ?? NO_CHANNELS);
-  // A thread started from an item's box lands in that item's channel where it is open, else in #general, where a thread starts.
-  const landsIn = (from: InboxItem): Channel | undefined =>
-    channelsOn
-      ? (channels.channels?.find((each) => each.id === from.channelId) ?? general)
-      : undefined;
-  // It is moved there once started, since a thread starts in #general; a move refused says why.
-  const toast = useToast();
-  const startedIn = (started: InboxItem, from: InboxItem) => {
-    const into = landsIn(from)?.id;
-    if (into === undefined || started.channelId === into) return;
-    channels.onMove(started.id, into).then((refused) => {
-      if (refused === undefined) return channels.onRefresh();
-      toast({
-        words: refused.words,
-        tone: STATUS_TONE.DANGER,
-        hold: TOAST_HOLD.FAILED,
-        failure: {
-          surface: FAILURE_SURFACE.CHANNEL_MOVE,
-          cause: refused.cause,
-          about: { inboxItemId: started.id, agentId: started.agentId, channelId: into },
-        },
-      });
-    });
-  };
   // Note that a phone shows one thing at a time across the screen: the list, or the item in its place.
   const phone = room === SHELL_ROOM.NARROW;
   // A missing item's pane stands where its item would, and so does one whose read failed, so a narrow Inbox shows the notice rather than the list.
@@ -379,13 +259,10 @@ export const DesktopInbox = memo(function DesktopInbox({
       : (tasks.workspaces.find((each) => each.id === chosenWorkspaceId)?.slug ?? chosenWorkspaceId);
   // What the chosen item's box offers an `@`, read under that workspace and repository.
   const readMentionAgents = useMentionAgentsReader(place?.workspaceId, tasks.tasks, named.models);
-  // An item's box starts a new thread with its agent, which lands in the item's channel and opens in its place.
+  // An item's box starts a new thread with its agent, which opens in its place.
   const { startInboxThread } = agents;
   const newThread: InboxNewThread | undefined = tasks.signedIn
     ? {
-        channelOf: landsIn,
-        workspaceId: tasks.workspace?.id,
-        onOpenChannel: view.onOpenChannel,
         onStart: (item, start) =>
           startInboxThread({
             agentId: item.agentId,
@@ -400,9 +277,6 @@ export const DesktopInbox = memo(function DesktopInbox({
             )
             .then((answer) => {
               if ("failure" in answer) return messageFailureWords(answer.failure);
-              startedIn(answer.item, item);
-              // An Inbox narrowed to a channel turns to the one the thread lands in, which is #general's where the item's is archived.
-              openChannelThread(answer.item.id, landsIn(item)?.id);
               const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
               view.onChoose({
                 ...(holder?.kind === INBOX_HOLDER.TASK
@@ -580,7 +454,6 @@ export const DesktopInbox = memo(function DesktopInbox({
               onBack={columns.onBack}
               pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
               mentions={mentions}
-              channelName={channel?.name}
               newThread={newThread}
               phone={
                 phone ? { onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle } : undefined
@@ -594,7 +467,6 @@ export const DesktopInbox = memo(function DesktopInbox({
                 }),
                 onMark: markItem,
                 onClose: closeItem,
-                onMove: channelsOn ? askThreadMove : undefined,
               }}
             />
           </TaskMentions>
@@ -655,59 +527,45 @@ export const DesktopInbox = memo(function DesktopInbox({
               hidden={sidePanel.fullScreen}
             >
               <div className={INBOX_VIEW} ref={columns.ref} data-columns={columns.shown}>
-                {narrowed && channels.channels === undefined && channels.failed ? (
-                  <ChannelsNotRead onRetry={channels.onRefresh} />
-                ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
-                  <ChannelMissing
-                    onGeneral={
-                      general === undefined ? undefined : () => channelPlace.onChoose(general.id)
-                    }
-                  />
-                ) : (
-                  <InboxList
-                    view={list}
-                    scene={narrowedTo}
-                    chosen={chosen?.item.id}
-                    columns={columns.shown}
-                    rows={columns.rows}
-                    head={{
-                      shown: tasks.shown,
-                      view: choices,
-                      search,
-                      phone:
-                        room === SHELL_ROOM.NARROW
-                          ? {
-                              start: <NewTaskButton tasks={tasks} />,
-                              readAll: { unread, onMarkAll: markAll },
-                            }
-                          : undefined,
-                      channel: channel === undefined ? undefined : channelHead,
-                    }}
-                    models={named.models}
-                    readerId={tasks.me}
-                    reading={reading}
-                    note={
-                      <InboxListNote
-                        failed={failed}
-                        reading={reading}
-                        empty={listedRows.length === 0}
-                        alone={columns.shown === INBOX_COLUMNS.LIST}
-                        filteredOut={filteredOut ? choices : undefined}
-                        counts={counts}
-                        onList={columns.onList}
-                        onRetry={onRetry}
-                        searched={searched}
-                        onNewTask={narrowedTo === undefined ? newTask : undefined}
-                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
-                      />
-                    }
-                    onChoose={open}
-                    onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
-                    onClose={closeItem}
-                    onAskMove={askMove}
-                    onPointing={onPointing}
-                  />
-                )}
+                <InboxList
+                  view={list}
+                  chosen={chosen?.item.id}
+                  columns={columns.shown}
+                  rows={columns.rows}
+                  head={{
+                    shown: tasks.shown,
+                    view: choices,
+                    search,
+                    phone:
+                      room === SHELL_ROOM.NARROW
+                        ? {
+                            start: <NewTaskButton tasks={tasks} />,
+                            readAll: { unread, onMarkAll: markAll },
+                          }
+                        : undefined,
+                  }}
+                  models={named.models}
+                  readerId={tasks.me}
+                  reading={reading}
+                  note={
+                    <InboxListNote
+                      failed={failed}
+                      reading={reading}
+                      empty={listedRows.length === 0}
+                      alone={columns.shown === INBOX_COLUMNS.LIST}
+                      filteredOut={filteredOut ? choices : undefined}
+                      counts={counts}
+                      onList={columns.onList}
+                      onRetry={onRetry}
+                      searched={searched}
+                      onNewTask={newTask}
+                    />
+                  }
+                  onChoose={open}
+                  onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
+                  onClose={closeItem}
+                  onPointing={onPointing}
+                />
                 {chosen === undefined ? (
                   <section
                     className={INBOX_VIEW_ITEMS}
@@ -737,11 +595,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                       </ErrorState>
                     ) : failed || reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
-                      <InboxPaneEmpty
-                        listed={listedRows.length}
-                        newTask={narrowedTo === undefined ? newTask : undefined}
-                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
-                      />
+                      <InboxPaneEmpty listed={listedRows.length} newTask={newTask} />
                     )}
                   </section>
                 ) : (
@@ -749,7 +603,6 @@ export const DesktopInbox = memo(function DesktopInbox({
                 )}
               </div>
             </PageFind>
-            {move.dialog}
             {heldPanel}
           </div>
         </AutomationDirectory>

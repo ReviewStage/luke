@@ -2,33 +2,23 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@repo/features/agent-wire";
-import type { Channel } from "@repo/features/channel-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@repo/settings";
+import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { experimentsOn } from "@repo/settings/testing";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, onTestFinished, test, vi } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import {
-  DESKTOP_CAPABILITIES,
-  handCapabilities,
-  handState,
-  stateWith,
-} from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
@@ -397,62 +387,6 @@ test("a person's page card wears their face and name, not a generic icon", async
   const card = cards().find((each) => each.textContent?.includes("Ada Lovelace"));
   assert.ok(card, "the person's page is a card");
   assert.equal(card.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
-});
-
-/** A channel of the workspace as the service answers it, synthetic. */
-function channelNamed(name: string, id: string): Channel {
-  return { id, name, purpose: "", project: false, createdAt: 1, waiting: 0 };
-}
-
-/** The general channel the workspace's channels hold. */
-const GENERAL_ID = "a1000001-6d9f-4ab7-92df-000000000002";
-
-/** The cards' names with Channels on and the workspace's channels held by the host, over a task with the Inbox's place the stop behind, the channel `chosen` shown in it, or none. */
-async function channelCardNames(chosen: string | undefined): Promise<string[]> {
-  const base = stateWith({}, {});
-  const workspace = {
-    id: "workspace-acme",
-    name: "Acme",
-    role: WORKSPACE_ROLE.MEMBER,
-    github: null,
-  };
-  const open = [
-    channelNamed("app", "a1000001-6d9f-4ab7-92df-000000000001"),
-    channelNamed("general", GENERAL_ID),
-  ];
-  handState(experimentsOn(EXPERIMENT.CHANNELS), {
-    run: { ...base.run, capabilities: DESKTOP_CAPABILITIES },
-    [LIVE_READ.CHANNELS]: { [workspace.id]: { rows: { open, archived: [] } } },
-  });
-  if (chosen === undefined) leaveChannel();
-  else chooseChannel(chosen);
-  onTestFinished(leaveChannel);
-  const told = asked();
-  const window = await mounted();
-  const { inboxView } = tasksControl();
-  await window.draw(
-    onTask(SIDE_PANEL_TAB.PLAN, told, { workspace, inboxView: { ...inboxView, open: true } }),
-  );
-  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told, { workspace, inboxView }));
-
-  tab();
-  tab(true);
-  return cards().map((card) => card.textContent ?? "");
-}
-
-test("with Channels on, the Inbox's card names the channel its place shows by its bare name beside its glyph", async () => {
-  const names = await channelCardNames(GENERAL_ID);
-  assert.ok(names.includes("general"), `the card names general: ${names.join(" | ")}`);
-  assert.ok(!names.some((name) => /Inbox/u.test(name)));
-});
-
-test("with Channels on and no channel chosen, the Inbox's card is the Inbox's", async () => {
-  const names = await channelCardNames(undefined);
-  assert.ok(
-    names.some((name) => /Inbox/u.test(name)),
-    `a card names the Inbox: ${names.join(" | ")}`,
-  );
-  assert.ok(!names.some((name) => name.includes("general")));
 });
 
 test("a card pressed while the cards show is gone to, a place through its own door", async () => {

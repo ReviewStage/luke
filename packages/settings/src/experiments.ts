@@ -12,8 +12,6 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
   MEMORY: "memory",
-  /** Channels: a workspace's threads read as Slack-style streams by topic, the sidebar listing channels in place of the Inbox and the tasks. */
-  CHANNELS: "channels",
   /** Pilot: a new task can start with one pilot agent that plans the work, splits it into sub-tasks, and runs a coding agent on each. */
   PILOT: "pilot",
   /** Skills: the skills a member installs into the app for their agents, managed in Settings › Skills, and the `/` list of skills in a box written to an agent. */
@@ -69,15 +67,6 @@ export const EXPERIMENTS = [
       "and runs an agent on each.",
     owner: "Charles",
     since: "2026-10-29",
-  },
-  {
-    key: EXPERIMENT.CHANNELS,
-    name: "Channels",
-    detail:
-      "Read your workspace's threads by topic, each channel a stream your agents post to, " +
-      "with the sidebar listing channels in place of your inbox and your tasks.",
-    owner: "Dean",
-    since: "2026-10-25",
   },
   {
     key: EXPERIMENT.MEMORY,

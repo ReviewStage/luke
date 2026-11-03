@@ -1,6 +1,5 @@
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
-import { GLYPH } from "@repo/ui/icons";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { closeAction } from "./inbox-close.js";
@@ -12,23 +11,16 @@ import { markReadItem } from "./task-menu-items.js";
  *
  * Each menu offers the same groups in the same order: Copy link, the
  * item's link under the task or the agent that holds it; Mark as read or
- * unread, naming U where U reaches the item; Move to channel, which asks
- * which channel its thread moves to (`move-thread-dialog.tsx`); and, alone
- * and last while the item is open, Resolve without answering, asked first
+ * unread, naming U where U reaches the item; and, alone and last while the item is open, Resolve without answering, asked first
  * through the surface's one question (`inbox-close.tsx`). A surface hands
  * down only the doors it has, and a group whose door is missing stands
  * nowhere.
  */
 
-/** What moves an item's thread, which asks where to first. */
-const MOVE_TO_CHANNEL = "Move to channel";
-
 /** What an item's acts are offered with: the doors the surface hands down, and whether U reaches the item there. */
 interface InboxItemDoors {
   /** Marks the item read or unread; none where the surface offers no mark. */
   readonly onMark: ((item: InboxItem, unread: boolean) => void) | undefined;
-  /** Asks which channel the item's thread moves to; none where Channels is off or the surface offers no move. */
-  readonly onMove?: ((item: InboxItem) => void) | undefined;
   /** Asks to close an open item without an answer, through the question the surface draws (`useInboxCloseAsk`); none where it offers no close. */
   readonly onAskClose: ((item: InboxItem) => void) | undefined;
   /** Whether U marks this item, so its Mark names the chord. */
@@ -48,23 +40,18 @@ function inboxItemPlace(item: InboxItem): LinkPlace {
 
 /** One item's acts. */
 export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): InboxItemActions {
-  const { onMark, onMove, onAskClose, keyed } = doors;
+  const { onMark, onAskClose, keyed } = doors;
   const read =
     onMark === undefined
       ? undefined
       : markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }, keyed);
   const copyLink = useCopyLinkItem()(inboxItemPlace(item));
   const close = closeAction(item, onAskClose);
-  const move: MenuAction | undefined =
-    onMove === undefined
-      ? undefined
-      : { label: MOVE_TO_CHANNEL, icon: <GLYPH.CHANNEL />, onSelect: () => onMove(item) };
   const groups = (lead: readonly MenuAction[][] = []) =>
     [
       ...lead,
       copyLink === undefined ? [] : [copyLink],
       read === undefined ? [] : [read],
-      move === undefined ? [] : [move],
       close === undefined ? [] : [close],
     ].filter((group) => group.length > 0);
   return { groups };

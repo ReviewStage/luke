@@ -33,7 +33,6 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -183,7 +182,6 @@ function mount(
         onClose: ignore,
         onChoose: ignore,
         onOpenItem: () => undefined,
-        onOpenChannel: () => undefined,
         onClear: ignore,
         pages: undefined,
         onTaskAgents: () => undefined,
@@ -494,7 +492,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, or Channels in its place, Automations, or Settings, and Vespin once signed out", async () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Automations, or Settings, and Vespin once signed out", async () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
@@ -721,30 +719,6 @@ test("the sidebar offers no Issues row, with every experiment on, since Vespin k
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-test("with Channels on, the sidebar keeps the Tasks section and stands the channels right under the Inbox's row, which marks the Inbox until a channel is chosen", async () => {
-  await handBridge(experimentsOn(EXPERIMENT.CHANNELS));
-  const page = mount(true, false, { workspaces: [ACME], workspace: ACME });
-  await settle();
-  const sidebar = page.querySelector("aside.desktop-sidebar") ?? assert.fail("the sidebar stands");
-  const groups = [...sidebar.querySelectorAll("nav[aria-label]")].map((nav) =>
-    nav.getAttribute("aria-label"),
-  );
-  assert.ok(groups.includes("My tasks"), `the Tasks section stands: ${groups.join(", ")}`);
-  assert.ok(!groups.includes("Channels"), "the channels head no section of their own");
-  const inbox = () => placeRow(page, "Inbox") ?? assert.fail("the Inbox's row stands");
-  assert.equal(
-    inbox().nextElementSibling?.getAttribute("aria-label"),
-    "Channels",
-    "the channels stand right under the Inbox's row",
-  );
-  assert.equal(inbox().getAttribute("aria-current"), "page");
-
-  act(() => chooseChannel("c1000001-6d9f-4ab7-92df-000000000001"));
-  await settle();
-  assert.equal(inbox().getAttribute("aria-current"), null, "a channel marks its own row");
-  act(() => leaveChannel());
-});
-
 /** The shell in a narrow room, a phone's, over `overrides`, the sidebar patched as given. */
 async function mountNarrow(
   overrides: Partial<TasksControl>,
@@ -780,28 +754,23 @@ function barItem(page: HTMLElement, name: string): HTMLButtonElement {
   return item;
 }
 
-test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox, with Channels on as off", async () => {
-  for (const experiments of [{}, experimentsOn(EXPERIMENT.CHANNELS)]) {
-    handState(experiments);
-    const asked: string[] = [];
-    const page = await mountNarrow({
-      boardView: { ...tasksControl().boardView, open: true },
-      inboxView: {
-        ...tasksControl().inboxView,
-        onOpen: () => asked.push("open"),
-      },
-    });
-    assert.deepEqual(
-      barItems(page).map((item) => item.textContent),
-      ["Inbox", "Tasks", "More"],
-    );
-    assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
-    assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
-    act(() => barItem(page, "Inbox").click());
-    assert.deepEqual(asked, ["open"]);
-    act(() => root?.unmount());
-    page.remove();
-  }
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox", async () => {
+  const asked: string[] = [];
+  const page = await mountNarrow({
+    boardView: { ...tasksControl().boardView, open: true },
+    inboxView: {
+      ...tasksControl().inboxView,
+      onOpen: () => asked.push("open"),
+    },
+  });
+  assert.deepEqual(
+    barItems(page).map((item) => item.textContent),
+    ["Inbox", "Tasks", "More"],
+  );
+  assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
+  assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
+  act(() => barItem(page, "Inbox").click());
+  assert.deepEqual(asked, ["open"]);
 });
 
 test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {
@@ -1220,7 +1189,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   });
 });
 
-test("the side panel's toggle stands for the Inbox's chosen item, in the Inbox narrowed to a channel too", async () => {
+test("the side panel's toggle stands for the Inbox's chosen item", async () => {
   const control = tasksControl();
   const chosen = {
     inboxView: {
@@ -1229,31 +1198,25 @@ test("the side panel's toggle stands for the Inbox's chosen item, in the Inbox n
       chosen: { taskId: DOCUMENT_TASK.id, itemId: "inbox-item-1" },
     },
   };
-  const toggled: Record<string, boolean> = {};
-  for (const [shown, experiments, patch, stream] of [
-    ["the Inbox", {}, chosen, false],
-    ["a channel", experimentsOn(EXPERIMENT.CHANNELS), chosen, true],
-  ] as const) {
-    await handBridge(experiments);
-    if (stream) chooseChannel("c1000001-6d9f-4ab7-92df-000000000001");
-    else leaveChannel();
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    act(() =>
-      root?.render(
-        onRegistry(AtomRegistry.make(), createElement(PlacedShell, { place: PLACE.INBOX, patch })),
+  await handBridge();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(PlacedShell, { place: PLACE.INBOX, patch: chosen }),
       ),
-    );
-    await settle();
-    toggled[shown] = [...container.querySelectorAll("button")].some((button) =>
-      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
-    );
-    act(() => root?.unmount());
-    container.remove();
-  }
-  leaveChannel();
-  assert.deepEqual(toggled, { "the Inbox": true, "a channel": true });
+    ),
+  );
+  await settle();
+  const toggled = [...container.querySelectorAll("button")].some((button) =>
+    ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+  );
+  act(() => root?.unmount());
+  container.remove();
+  assert.ok(toggled, "the toggle stands for the Inbox's chosen item");
 });
 
 test("⌘F opens a find over every page that stands in the window, and Settings keeps it for its own search", async () => {

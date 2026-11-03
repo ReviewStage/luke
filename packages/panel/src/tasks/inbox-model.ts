@@ -422,19 +422,6 @@ export function awaitsNod(item: InboxItem): boolean {
   return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) === undefined;
 }
 
-/**
- * Whether the item offers the reader Got it: a notice waiting on a nod
- * (`awaitsNod`), and, while Channels is on, one that waits on the reader
- * (`inboxWaitsOn`: the member its agent addressed it to, else its task's
- * assignee, else its agent's starter), since one waiting on a teammate is
- * theirs to settle.
- */
-export function asksNod(item: InboxItem, readerId: string | undefined, channels: boolean): boolean {
-  if (!awaitsNod(item)) return false;
-  if (!channels) return true;
-  return readerId !== undefined && inboxWaitsOn(item)?.userId === readerId;
-}
-
 /** What an option the agent recommends is called: the badge it wears, as a choice's or a form's option or as one of two small buttons, and the word after it on its row. */
 export const RECOMMENDED = "Recommended";
 
@@ -1129,11 +1116,6 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** A count of threads with its words, as a channel's card says it: "1 thread", "3 threads". */
-export function threadsWords(count: number): string {
-  return `${count} ${count === 1 ? "thread" : "threads"}`;
-}
-
 /** What holds an item: the task its agent works on, or, for an agent with no task, the agent itself. */
 export const INBOX_HOLDER = {
   TASK: "plan",
@@ -1365,7 +1347,7 @@ export type InboxWhose =
   | { readonly kind: typeof INBOX_WHOSE.MINE }
   | { readonly kind: typeof INBOX_WHOSE.PERSON; readonly userId: string; readonly name: string };
 
-/** Anyone's items, as a channel lists them until told otherwise. */
+/** Anyone's items, as a task's own Inbox lists them. */
 export const EVERYONES: InboxWhose = { kind: INBOX_WHOSE.EVERYONE };
 
 /** The reader's own items, as the window's Inbox lists them until told otherwise. */
@@ -1476,47 +1458,21 @@ function needsReader(item: InboxItem, readerId: string | undefined): boolean {
 
 /**
  * Whether opening the item acknowledges it, as Got it did: a notice that
- * offers Got it (`asksNod`), so under Channels one waiting on the reader,
- * the reader's own (`needsReader`) by an id already
+ * offers Got it (`awaitsNod`), the reader's own (`needsReader`) by an id already
  * known, since an acknowledgement settles it for every member, and one
  * whose agent does not wait to hear back (`needsReply`), since a notice
  * that asks to be heard back would reach its agent on a mere open. A box
  * holding no words or files for it offers no Got it.
  */
-export function acknowledgedOnOpen(
-  item: InboxItem,
-  readerId: string | undefined,
-  channels: boolean,
-): boolean {
+export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined): boolean {
   return (
-    readerId !== undefined &&
-    needsReader(item, readerId) &&
-    asksNod(item, readerId, channels) &&
-    !item.needsReply
+    readerId !== undefined && needsReader(item, readerId) && awaitsNod(item) && !item.needsReply
   );
 }
 
 /** Whether a listed item needs the reader (`needsReader`), whatever its task's status. */
 export function needsYou(listed: InboxListed, readerId: string | undefined): boolean {
   return needsReader(listed.item, readerId);
-}
-
-/**
- * Every holder's items that live in one channel, as an Inbox narrowed to it
- * lists and counts them, a holder left with none left out; and the item
- * `kept`, wherever it lives, so one opened from another channel stands
- * chosen until the Inbox follows it there. Note that an item from a service
- * that names no channel lives in none.
- */
-export function channelGroups(
-  groups: readonly InboxGroup[],
-  channelId: string,
-  kept: string | undefined,
-): readonly InboxGroup[] {
-  return groups.flatMap(({ holder, items }) => {
-    const held = items.filter((item) => item.channelId === channelId || item.id === kept);
-    return held.length === 0 ? [] : [{ holder, items: held }];
-  });
 }
 
 /**

@@ -8,7 +8,6 @@ import { afterPaint } from "../after-paint.js";
 import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
-  channelGroups,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -57,11 +56,6 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * to the window once that frame has painted (`useChoiceFirst`), so the
  * sidebar, the side panel, and the window's history, which follow the
  * window's choice, draw it a frame later rather than holding up the thread.
- *
- * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under the Inbox's own view choices, so a scope turned
- * in a channel stands in every channel and in the Inbox, and across a
- * launch. Its order, the latest first, is the Inbox's own.
  */
 
 /**
@@ -153,14 +147,12 @@ function useChoiceFirst(
 }
 
 /**
- * The window's Inbox as it is read and listed, narrowed to `channelId`
- * where one is given, and its chosen item; see the module's head, its list
+ * The window's Inbox as it is read and listed, and its chosen item; see the module's head, its list
  * held still while it is shown (`use-held-inbox-list.ts`).
  */
-export function useInboxListing(tasks: TasksControl, channelId?: string) {
+export function useInboxListing(tasks: TasksControl) {
   const view = tasks.inboxView;
   const { act } = useAct();
-  // Note that a channel lists under the Inbox's kept choices, so one scope stands wherever the page is narrowed.
   const choices = useInboxViewChoices();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
@@ -290,7 +282,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@repo/host`'s `inbox-collections.ts`).
   const everyTask = tasks.tasks;
   const listedWorkspace = tasks.workspace?.id;
-  const everyChannel: readonly InboxGroup[] = useMemo(
+  const standing: readonly InboxGroup[] = useMemo(
     () =>
       inboxGroups(held, {
         tasks: holdings,
@@ -299,14 +291,6 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
         workspaceId: listedWorkspace,
       }),
     [held, holdings, everyTask, holdingAgents, listedWorkspace],
-  );
-  const keptInChannel = asked?.opened === true ? asked.itemId : undefined;
-  const standing = useMemo(
-    () =>
-      channelId === undefined
-        ? everyChannel
-        : channelGroups(everyChannel, channelId, keptInChannel),
-    [everyChannel, channelId, keptInChannel],
   );
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });

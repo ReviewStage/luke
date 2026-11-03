@@ -1,7 +1,6 @@
 import { useAtom } from "@effect/atom-react";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { AgentPullRequest, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
-import type { Channel } from "@repo/features/channel-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -42,7 +41,6 @@ import {
 } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxItems } from "@repo/host/app-state";
-import { EXPERIMENT } from "@repo/settings";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import {
   BackButton,
@@ -106,11 +104,10 @@ import {
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
-import { appStateDerivedAtom, useAppSlice, useExperiment } from "../use-app-state.js";
+import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
-import { ChannelCard } from "./channel-card.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -203,9 +200,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * what it asks, said by its task or its agent on no task, hanging its
  * Inbox row's card: no mention names a thread, so a pick writes the
  * thread's link (`@repo/features/link-grammar`), which every place draws
- * as its chip. With Channels on it offers the workspace's open channels
- * the same way, each by its name and purpose, a pick written as the
- * channel's mention; their list is held only while the list stands open.
+ * as its chip.
  *
  * Where the words typed read as a date (`@repo/features/date-mention`),
  * `tomorrow 3pm`, `next fri`, `oct 20 to 24`, the list offers that date
@@ -241,7 +236,6 @@ const MENTION_GROUP = {
   PAGES: "Pages",
   FILES: "Files and folders",
   THREADS: "Threads",
-  CHANNELS: "Channels",
   PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
   SERVERS: INTEGRATION_LABEL.many,
@@ -257,7 +251,6 @@ const MENTION_FROM = {
   AGENTS: "agents",
   PEOPLE: "people",
   THREADS: "threads",
-  CHANNELS: "channels",
   PULL_REQUESTS: "prs",
   SKILLS: "skills",
   DATES: "dates",
@@ -320,14 +313,8 @@ const TOOL_DETAIL = "Tool";
 /** What stands between a server's name and its tool's in a tool's mention. */
 const TOOL_JOIN = " · ";
 
-/** What the Threads kind counts, as the Inbox's channels call its items. */
+/** What the Threads kind counts, the Inbox's items. */
 const THREAD_NOUN = { one: "thread", many: "threads" } as const;
-
-/** What the Channels kind counts. */
-const CHANNEL_NOUN = { one: "channel", many: "channels" } as const;
-
-/** What a channel's row says beside its name where it states no purpose. */
-const CHANNEL_DETAIL = "Channel";
 
 /** The repository's skills as an `@` list offers them: as read, the ask to read them, and the pick that writes one as its `/name` chip. */
 export interface MentionSkills {
@@ -756,17 +743,6 @@ function threadRows(
     .map((each) => each.row);
 }
 
-/** Each of the workspace's open channels' rows, by its name, said by its purpose, found by both, hanging its card. */
-function channelRows(channels: readonly Channel[], workspaceId: string | undefined): MentionRow[] {
-  return channels.map((channel) => ({
-    mention: { kind: MENTION_KIND.CHANNEL, channelId: channel.id },
-    name: channel.name,
-    detail: channel.purpose === "" ? CHANNEL_DETAIL : channel.purpose,
-    terms: `${channel.name} ${channel.purpose}`,
-    card: <ChannelCard channel={channel} workspaceId={workspaceId} />,
-  }));
-}
-
 /**
  * Each of the place's pull requests' rows, its task's or its agent's on no
  * task, by its number and title, wearing its mark, labelled by the agent
@@ -1009,8 +985,6 @@ interface KindRows {
   readonly people: readonly MentionRow[];
   /** The workspace's Inbox threads. */
   readonly threads: readonly MentionRow[];
-  /** The workspace's open channels. */
-  readonly channels: readonly MentionRow[];
   readonly pullRequests: readonly MentionRow[];
   readonly skills: readonly MentionRow[];
   /** The date the words name, or the dates a list narrowed to dates offers. */
@@ -1042,8 +1016,6 @@ function narrowedRows(
       return best(rows.people, term, PER_KIND);
     case MENTION_FROM.THREADS:
       return best(rows.threads, term, PER_KIND);
-    case MENTION_FROM.CHANNELS:
-      return best(rows.channels, term, PER_KIND);
     case MENTION_FROM.PULL_REQUESTS:
       return best(rows.pullRequests, term, PER_KIND);
     case MENTION_FROM.SKILLS:
@@ -1090,13 +1062,10 @@ function groupsFor(
   };
   // The group holding the task the words are the key of, the plan's own or another, leads the list.
   const keyedGroup = [plan, tasks].find((group) => group.rows.some((row) => keyed(row, term)));
-  // The workspace's threads and channels are offered only once a word is typed, as its tasks are.
+  // The workspace's threads are offered only once a word is typed, as its tasks are.
   const inbox = bare
     ? []
-    : [
-        { label: MENTION_GROUP.THREADS, rows: best(rows.threads, term, PER_GROUP) },
-        { label: MENTION_GROUP.CHANNELS, rows: best(rows.channels, term, PER_GROUP) },
-      ];
+    : [{ label: MENTION_GROUP.THREADS, rows: best(rows.threads, term, PER_GROUP) }];
   // Note that agents and tasks lead and files come last of these, because they are what is
   // mentioned most, and a path's letters in order find it by almost any word.
   const ranked = [
@@ -1136,8 +1105,6 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
       return <UsersIcon aria-hidden="true" />;
     case MENTION_FROM.THREADS:
       return <GLYPH.THREAD />;
-    case MENTION_FROM.CHANNELS:
-      return <GLYPH.CHANNEL />;
     case MENTION_FROM.PULL_REQUESTS:
       return <GitPullRequestIcon aria-hidden="true" />;
     case MENTION_FROM.SKILLS:
@@ -1286,7 +1253,6 @@ const MENTION_READ = {
   FILES: "the repository's files",
   SKILLS: "skills",
   THREADS: "Inbox threads",
-  CHANNELS: "channels",
 } as const;
 
 type MentionRead = (typeof MENTION_READ)[keyof typeof MENTION_READ];
@@ -1477,7 +1443,7 @@ function treeKey(
  * where it reads them, its other tasks where it holds any, its people where
  * the window has read them, the plan where one stands, the pages of what
  * holds it, its repository's files and folders where it names one, its
- * Inbox threads and channels where it holds any, the pull requests
+ * Inbox threads where it holds any, the pull requests
  * the plan's agents or the agent on no task published, the repository's skills where the words go
  * to an agent, dates wherever the list stands, and each connected server, the
  * first of each provider narrowed to by the provider's own word.
@@ -1489,7 +1455,7 @@ function kindsOf(
   servers: readonly NamedServer[],
   people: number,
   tasks: number,
-  inbox: { readonly threads: number; readonly channels: number },
+  threads: number,
 ): readonly MentionKind[] {
   const { holder, repository } = source;
   const taskId = holderTaskId(holder);
@@ -1548,22 +1514,13 @@ function kindsOf(
     ...(repository === null || treeKey(taskId, source.workspaceId, repository) === undefined
       ? []
       : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
-    ...(inbox.threads === 0
+    ...(threads === 0
       ? []
       : [
           {
             from: MENTION_FROM.THREADS,
             name: MENTION_GROUP.THREADS,
-            detail: countWords(inbox.threads, THREAD_NOUN),
-          },
-        ]),
-    ...(inbox.channels === 0
-      ? []
-      : [
-          {
-            from: MENTION_FROM.CHANNELS,
-            name: MENTION_GROUP.CHANNELS,
-            detail: countWords(inbox.channels, CHANNEL_NOUN),
+            detail: countWords(threads, THREAD_NOUN),
           },
         ]),
     ...(pullRequests === 0
@@ -1764,13 +1721,6 @@ export function useMentionPicker({
   const threadRowsOffered = threadsAsked
     ? threadRows(feed.rows, taskId, tasksWorkspace, listed.tasks, listed.tasklessAgents)
     : [];
-  // The channels offered are the workspace's open ones, held while the list stands open and Channels is on.
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const channelsAsked = open && channelsOn && tasksWorkspaceId !== undefined;
-  const channels = useHostRead(LIVE_READ.CHANNELS, channelsAsked ? tasksWorkspaceId : undefined);
-  const channelRowsOffered = channelsAsked
-    ? channelRows(channels.rows?.open ?? [], tasksWorkspaceId)
-    : [];
   // The plan's own key, which finds the plan's row as another task's finds its.
   const planNumber = listed.tasks.find((task) => task.id === taskId)?.number;
   const planKey =
@@ -1779,10 +1729,15 @@ export function useMentionPicker({
       : taskKey(tasksWorkspace.name, planNumber);
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
   const kinds = open
-    ? kindsOf(source, self, skills, servers, people.length, taskRowsOffered.length, {
-        threads: threadRowsOffered.length,
-        channels: channelRowsOffered.length,
-      })
+    ? kindsOf(
+        source,
+        self,
+        skills,
+        servers,
+        people.length,
+        taskRowsOffered.length,
+        threadRowsOffered.length,
+      )
     : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
   const term = scope?.term ?? "";
@@ -1850,7 +1805,6 @@ export function useMentionPicker({
             ),
             people: personRows(people, readerId),
             threads: threadRowsOffered,
-            channels: channelRowsOffered,
             pullRequests: pullRequestRows(source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
             dates: dateRows(term, narrow?.from === MENTION_FROM.DATES, now, readerZone()),
@@ -1876,8 +1830,7 @@ export function useMentionPicker({
         !pathsFailed &&
         treeKey(taskId, workspaceId, repository) !== undefined) ||
       (skills !== undefined && skills.known === undefined && !skills.unread) ||
-      (threadsAsked && feed.status === HOST_READ_STATUS.LOADING) ||
-      (channelsAsked && channels.status === HOST_READ_STATUS.LOADING));
+      (threadsAsked && feed.status === HOST_READ_STATUS.LOADING));
   // The list says a read could not be read, never that nothing matches, and Retry reads it again.
   const failures: readonly MentionReadFailure[] = open
     ? [
@@ -1891,9 +1844,6 @@ export function useMentionPicker({
         ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
         ...(threadsAsked && feed.status === HOST_READ_STATUS.FAILED
           ? [{ read: MENTION_READ.THREADS, retry: feed.retry }]
-          : []),
-        ...(channelsAsked && channels.status === HOST_READ_STATUS.FAILED
-          ? [{ read: MENTION_READ.CHANNELS, retry: channels.retry }]
           : []),
       ]
     : [];

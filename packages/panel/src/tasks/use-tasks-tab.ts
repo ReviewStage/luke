@@ -69,7 +69,7 @@ import type {
   AppInboxTaskHolding,
   AppInboxTasklessItem,
 } from "@repo/host/app-state";
-import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@repo/settings";
+import { APP_SETTING_DEFAULTS } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
@@ -118,7 +118,7 @@ import {
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ActHandle,
   askKept,
@@ -143,12 +143,7 @@ import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import {
-  APP_SETTINGS_VIEW,
-  useAppSlice,
-  useExperiment,
-  useStartsWithoutRepository,
-} from "../use-app-state.js";
+import { APP_SETTINGS_VIEW, useAppSlice, useStartsWithoutRepository } from "../use-app-state.js";
 import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -178,13 +173,6 @@ import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import { type AgentsControl, type ModelsRead, readAgentById, useAgents } from "./use-agents.js";
-import {
-  chooseChannel,
-  leaveChannel,
-  listChannelWorkspace,
-  openChannelThread,
-  standChannelPlace,
-} from "./use-channels.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
@@ -281,19 +269,10 @@ interface InboxViewControl {
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
    * Opens the Inbox on an item, from wherever the window stands: the
-   * command palette, a person's page, or a link. With Channels on it
-   * opens the item as a thread, in `channelId` where the caller knows it,
-   * and in the channel its item names once read otherwise. Asked first
-   * where leaving would lose unsaved work, as every door that moves the
-   * place is.
+   * command palette, a person's page, or a link. Asked first where leaving
+   * would lose unsaved work, as every door that moves the place is.
    */
-  readonly onOpenItem: (chosen: InboxChoice, channelId?: string) => void;
-  /**
-   * Opens the Inbox narrowed to a channel with Channels on, from wherever
-   * the window stands: the sidebar's row, the command palette. It chooses
-   * no item, as the Inbox's own row opens it.
-   */
-  readonly onOpenChannel: (channelId: string) => void;
+  readonly onOpenItem: (chosen: InboxChoice) => void;
   /** Chooses no item, which stands the list alone where the Inbox shows one column. */
   readonly onClear: () => void;
   /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
@@ -1374,16 +1353,11 @@ export function useTasksTab(input: {
   const chooseListed = useCallback(
     (workspaceId: string) => {
       workspaceChoices.current += 1;
-      listChannelWorkspace(workspaceId);
       listWorkspace(workspaceId);
     },
     [listWorkspace],
   );
   const listedWorkspace = workspace.chosen;
-  // Note that a workspace listed by any other way, as the account's workspaces change, moves the channel place before the window paints.
-  useLayoutEffect(() => {
-    if (listedWorkspace !== undefined) listChannelWorkspace(listedWorkspace.id);
-  }, [listedWorkspace]);
   // A person's page is theirs in the workspace it opened in, so another listed in its
   // place, chosen or fallen back to as the account's workspaces change, closes it.
   if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
@@ -1613,7 +1587,6 @@ export function useTasksTab(input: {
           : [...cloudListed.map((each) => each.id), ...cloudDrafts.map((each) => each.id)],
     [cloudPlace, cloudListed, cloudDrafts],
   );
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
@@ -3008,8 +2981,6 @@ export function useTasksTab(input: {
       }));
       return;
     }
-    // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
-    if (channelsOn) openChannelThread(place.itemId);
     standInFor({ kind: STAND_IN.INBOX, chosen: { ...inboxChoiceOf(place), opened: true } });
   };
 
@@ -3152,16 +3123,12 @@ export function useTasksTab(input: {
       case LINK_PLACE.INBOX_ITEM:
         openInboxItem(workspace, place);
         return;
-      // A channel's link opens the Inbox narrowed to it; one archived or unknown says so there (`desktop-inbox.tsx`).
-      case LINK_PLACE.CHANNEL: {
+      // A channel's link, written before channels were removed, opens the Inbox, where its threads now stand.
+      case LINK_PLACE.CHANNEL:
         listLinked(workspace);
-        if (!channelsOn) return;
-        standChannelPlace(place.channelId);
-        // Note that a channel's link opens it as its row does: on no item.
         timeInboxOpen();
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
-      }
       case LINK_PLACE.AUTOMATIONS:
         listLinked(workspace);
         standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });
@@ -3540,28 +3507,19 @@ export function useTasksTab(input: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
       // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
-      // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
       onOpen: guard(() => {
         timeInboxOpen();
         setHistoryFor(undefined);
-        if (channelsOn) leaveChannel();
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
-      onOpenItem: guard((chosen: InboxChoice, channelId?: string) => {
+      onOpenItem: guard((chosen: InboxChoice) => {
         setHistoryFor(undefined);
-        if (channelsOn) openChannelThread(chosen.itemId, channelId);
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? { ...held, chosen } : { kind: STAND_IN.INBOX, chosen },
         );
-      }),
-      onOpenChannel: guard((channelId: string) => {
-        timeInboxOpen();
-        setHistoryFor(undefined);
-        chooseChannel(channelId);
-        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
       onClear: () =>
         setStandIn((held) =>

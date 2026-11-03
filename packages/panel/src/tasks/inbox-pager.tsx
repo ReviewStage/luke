@@ -18,7 +18,7 @@ import { type InboxListed, type InboxListView, inboxEnds, inboxSteps } from "./i
  * Inbox has them: split, they move the chosen row and the item beside it;
  * one column wide, the item standing alone, whose bar draws the pager with
  * its up and down arrows, as Mail's message toolbar does while its list is
- * hidden. An Inbox narrowed to a channel pages its own list alike.
+ * hidden.
  */
 
 /** What the pager draws and steps by. */

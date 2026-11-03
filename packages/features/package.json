@@ -50,7 +50,6 @@
     "./chapters-model-choice": "./src/chapters-model-choice.js",
     "./agent-status": "./src/agent-status.js",
     "./channel-live": "./src/channel-live.js",
-    "./channel-view": "./src/channel-view.js",
     "./channel-wire": "./src/channel-wire.js",
     "./agent-view": "./src/agent-view.js",
     "./agent-queue-wire": "./src/agent-queue-wire.js",

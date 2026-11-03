@@ -1,5 +1,4 @@
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import type { Channel } from "@repo/features/channel-wire";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import {
   fieldValueWords,
@@ -62,7 +61,6 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@repo/ui/actor-model";
-import { GLYPH } from "@repo/ui/icons";
 import { isWireString } from "@repo/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -89,7 +87,6 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { ChannelCard } from "./channel-card.js";
 import { type AnswerNewThread, InboxAnswerBox, type NewThreadStart } from "./inbox-answer-box.js";
 import {
   ANSWERED,
@@ -1097,7 +1094,7 @@ const ITEM_THING = "Inbox item";
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
  * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U; Move to channel; and, while the
+ * agent; Mark as read or unread, naming U; and, while the
  * item is open, Resolve without answering, asked first. It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.
@@ -1106,7 +1103,6 @@ function InboxItemMenu({
   item,
   shown,
   onMark,
-  onMove,
   onClose,
   lead = NO_LEAD,
   heading,
@@ -1114,7 +1110,6 @@ function InboxItemMenu({
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
-  onMove: InboxPaneDoors["onMove"];
   onClose: InboxCloser | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
@@ -1125,7 +1120,6 @@ function InboxItemMenu({
   const close = useInboxClose(item, onClose, shown);
   const { groups: itemGroups } = useInboxItemActions(item, {
     onMark,
-    onMove,
     onAskClose: close.ask,
     keyed: true,
   });
@@ -1287,32 +1281,22 @@ export interface InboxPaneDoors {
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
-  /** Asks which channel the item's thread moves to, from the bar's ⋯ menu; none where Channels is off. */
-  readonly onMove?: ((item: InboxItem) => void) | undefined;
 }
 
 /** What starts a new thread from an item's box instead of a reply, where the page offers one. */
 export interface InboxNewThread {
-  /** The channel the item stands in, which a thread started from it lands in; none where the window lists no channels. */
-  readonly channelOf: (item: InboxItem) => Channel | undefined;
-  /** The workspace whose channels those are, whose members name a channel's maker on its card. */
-  readonly workspaceId: string | undefined;
-  /** Opens a channel, as its row in the sidebar does, from its chip. */
-  readonly onOpenChannel: (channelId: string) => void;
-  /** Starts a thread with the item's agent, in the item's channel, and opens it; answers why it did not start, or nothing once it did. */
+  /** Starts a thread with the item's agent and opens it; answers why it did not start, or nothing once it did. */
   readonly onStart: (item: InboxItem, start: NewThreadStart) => Promise<string | undefined>;
 }
 
 /**
  * The box's new thread for one item: the item's agent's chip, wearing its
- * tile as a mention of the agent does, and its channel's chip, each hanging
- * its card and opening what it names, as a chip does elsewhere. Note that a
- * chip is a button, so its press opens it rather than ticking the checkbox
- * whose words it stands in.
+ * tile as a mention of the agent does, hanging its card and opening the
+ * agent, as a chip does elsewhere. Note that a chip is a button, so its
+ * press opens it rather than ticking the checkbox whose words it stands in.
  */
 function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
   const { name, tile } = by.subject;
-  const channel = offer.channelOf(item);
   return {
     agent: (
       <InlineRef
@@ -1323,16 +1307,6 @@ function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent):
         onPress={by.onOpen}
       />
     ),
-    channel:
-      channel === undefined ? undefined : (
-        <InlineRef
-          look={INLINE_REF_LOOK.PILL}
-          glyph={<GLYPH.CHANNEL />}
-          label={channel.name}
-          card={<ChannelCard channel={channel} workspaceId={offer.workspaceId} />}
-          onPress={() => offer.onOpenChannel(channel.id)}
-        />
-      ),
     onStart: (start) => offer.onStart(item, start),
   };
 }
@@ -1475,7 +1449,6 @@ export function InboxPane({
   pager,
   mentions,
   phone,
-  channelName,
   newThread,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
@@ -1500,8 +1473,6 @@ export function InboxPane({
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
   phone?: InboxPanePhone | undefined;
-  /** The channel the Inbox is narrowed to, by name, which the way back to the list names; none where it lists every channel. */
-  channelName?: string | undefined;
   /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
 }): React.JSX.Element {
@@ -1602,13 +1573,7 @@ export function InboxPane({
       {phoneHead ? (
         <PhoneHead
           place="inbox-item"
-          start={
-            channelName === undefined ? (
-              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
-            ) : (
-              <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
-            )
-          }
+          start={<BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />}
           title={<PhoneHolder holder={holder} by={by} doors={doors} />}
           end={
             <InboxItemMenu
@@ -1616,7 +1581,6 @@ export function InboxPane({
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
-              onMove={doors.onMove}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1631,10 +1595,8 @@ export function InboxPane({
           start={TOOLBAR_INSET.COLUMN}
           wrapHeading
           lead={
-            onBack === undefined ? undefined : channelName === undefined ? (
+            onBack === undefined ? undefined : (
               <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
-            ) : (
-              <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
           title={
@@ -1658,7 +1620,6 @@ export function InboxPane({
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
-                onMove={doors.onMove}
                 onClose={doors.onClose}
               />
             </>

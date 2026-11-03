@@ -10,14 +10,7 @@ import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import type { BuildCommit } from "@repo/settings/update";
 import { keepIdentity } from "@repo/wire";
 import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
-import {
-  type AppState,
-  NO_ACCESS,
-  NO_HOLDER_INBOXES,
-  NO_PAGES,
-  NO_WORKSPACE_CHANNELS,
-  UNREAD,
-} from "../app-state.js";
+import { type AppState, NO_ACCESS, NO_HOLDER_INBOXES, NO_PAGES, UNREAD } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -230,7 +223,6 @@ export function initialAppState(
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
     [LIVE_READ.PAGES]: NO_PAGES,
-    [LIVE_READ.CHANNELS]: NO_WORKSPACE_CHANNELS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },

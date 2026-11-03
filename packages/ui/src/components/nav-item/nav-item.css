@@ -5,10 +5,9 @@
    pointer and the keyboard, through `:has()` and the pointer's media; a
    step's meta line under its name, and its glyph and end level with the
    name's first line; its actions' ⋯, which comes in over that end the same
-   way; and its fold's chevron, which comes in over its glyph. A row
-   standing in a frame is hovered while the pointer is anywhere on the
-   frame, its ⋯ and chevron included, so its fill and its chord hold as the
-   pointer moves onto either. The keyboard's ring is the app's reset's, as
+   way. A row standing in a frame is hovered while the pointer is anywhere
+   on the frame, its ⋯ included, so its fill and its chord hold as the
+   pointer moves onto it. The keyboard's ring is the app's reset's, as
    it is for every control. */
 
 @layer components {
@@ -225,52 +224,6 @@
     }
 
     .ui-nav-item-frame[data-actions="true"]:hover .ui-nav-item-rest {
-      opacity: 0;
-    }
-  }
-
-  /* A row heading a fold wears the fold's chevron in its glyph's cell while
-     it is hovered or the keyboard reached it, its glyph giving way, as a
-     group's head's does, so a click on the row leaves its glyph standing;
-     an unseen chevron takes no press, so the row's lead goes
-     to its place at rest. A screen with no hover draws it at rest. */
-  .ui-nav-item-fold {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
-  }
-
-  .ui-nav-item-frame[data-folds="true"] .ui-nav-item-icon {
-    transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
-  }
-
-  .ui-nav-item-frame:has(:focus-visible) > .ui-nav-item-fold {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .ui-nav-item-frame[data-folds="true"]:has(:focus-visible) .ui-nav-item-icon {
-    opacity: 0;
-  }
-
-  @media (hover: hover) {
-    .ui-nav-item-frame:hover > .ui-nav-item-fold {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .ui-nav-item-frame[data-folds="true"]:hover .ui-nav-item-icon {
-      opacity: 0;
-    }
-  }
-
-  @media (hover: none) {
-    .ui-nav-item-fold {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .ui-nav-item-frame[data-folds="true"] .ui-nav-item-icon {
       opacity: 0;
     }
   }
