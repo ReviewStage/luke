@@ -47,7 +47,13 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { AGENT_USER, RUNNER_DIRECTORY, SHARED_FILES_DIRECTORY } from "@repo/agent-runner/pins";
+import {
+  AGENT_USER,
+  RUNNER_DIRECTORY,
+  SANDBOX_TOOLS_DIRECTORY,
+  SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
+  SHARED_FILES_DIRECTORY,
+} from "@repo/agent-runner/pins";
 import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
@@ -189,6 +195,16 @@ const RUNNER_PATH = {
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
 
 /**
+ * The link a sandbox made before the product's rename is given on each
+ * launch, root's, from our tools' directory to the one its image put them
+ * in, so the runner's bundle and the Claude Code binary are found where the
+ * pins name them. Note that it can go only once Vercel lists no sandbox made
+ * before the rename (named `luke-agent-` and a UUID), because a sandbox in
+ * steady use resumes from its own snapshot for as long as it lives.
+ */
+const LINK_TOOLS_DIRECTORY = `if [ -d ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ] && [ ! -e ${SANDBOX_TOOLS_DIRECTORY} ] && [ ! -L ${SANDBOX_TOOLS_DIRECTORY} ]; then ln -s ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ${SANDBOX_TOOLS_DIRECTORY}; fi`;
+
+/**
  * The launch, run by bash as root: the uploaded bundle installed where only
  * root writes and checked against the digest we computed, the member's
  * installed skills, where the sandbox's opening uploaded them, moved where
@@ -205,6 +221,7 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
  */
 const LAUNCH_SCRIPT = [
   "set -euo pipefail",
+  LINK_TOOLS_DIRECTORY,
   `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
   `rm -f ${RUNNER_PATH.UPLOAD}`,
   `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,

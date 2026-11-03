@@ -74,7 +74,7 @@ const INSTALL_GTK =
  * `--with-deps` install takes no option to wait, so the wait is set in apt's
  * configuration, where it and every install here read it.
  */
-const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; fi >/dev/null; fi`;
+const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; fi >/dev/null; fi`;
 
 /**
  * Installs bubblewrap and socat, which Claude Code's command sandbox runs
@@ -161,7 +161,7 @@ const MAKE_RUNNER_DIRECTORY = [`$SUDO install -d -o root -g root -m 0755 ${RUNNE
 const SANDBOX_USER = "vercel-sandbox";
 
 /** The drop-in that keeps the API's `sudo` to Vercel's documented contract. */
-const SUDO_ENV_DROP_IN = "/etc/sudoers.d/luke-env";
+const SUDO_ENV_DROP_IN = "/etc/sudoers.d/sandbox-env";
 
 /**
  * Vercel documents that the API's `sudo: true` keeps the command's

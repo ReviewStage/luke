@@ -67,22 +67,32 @@ export const SANDBOX_BROWSER_PIN = {
 /** What every command a harness runs in the cloud is handed of the image's tools: each Playwright's browsers in its own package (`PLAYWRIGHT_PIN`). */
 export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: "0" } as const;
 
-/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. Note that it keeps its old name, because a persistent sandbox resumes from its own snapshot of the image it was made from, and a launch into one finds it there. */
-export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
+/**
+ * The directory the image installs our own tools under, only root writing
+ * it. Note that a persistent sandbox resumes from its own snapshot of the
+ * image it was made from, so one made before the product's rename holds them
+ * under `SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME`, which each launch links this
+ * name to (`vercel-machine.ts`'s launch).
+ */
+export const SANDBOX_TOOLS_DIRECTORY = "/opt/agent";
+
+/** Where a sandbox made before the rename holds our tools, read through `SANDBOX_TOOLS_DIRECTORY`'s link and never written. */
+export const SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME = "/opt/luke";
+
+/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
+export const RUNNER_DIRECTORY = `${SANDBOX_TOOLS_DIRECTORY}/agent-runner`;
 
 /**
  * The Claude Agent SDK, pinned exactly, and the `claude` binary its
  * platform package carries (the SDK's own `claudeCodeVersion`), so
  * installing the one installs the other. Installed as root in a directory
  * only root writes; the binary is the Linux x86-64 build, the Vercel
- * sandbox's architecture. Note that `DIRECTORY` keeps its old name, because
- * a persistent sandbox resumes from its own snapshot of the image it was made
- * from, and a launch into one runs the binary there.
+ * sandbox's architecture.
  */
 export const CLAUDE_CODE_PIN = {
   SDK_VERSION: "0.3.304",
   VERSION: "2.1.304",
-  DIRECTORY: "/opt/luke/claude-agent-sdk",
+  DIRECTORY: `${SANDBOX_TOOLS_DIRECTORY}/claude-agent-sdk`,
   /** The binary, under `DIRECTORY`. */
   BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
   /** The Linux arm64 build's binary, under `DIRECTORY`, which the image's setup links as `claude` instead where it runs on arm64. */
@@ -97,12 +107,11 @@ export const CLAUDE_EXECUTABLE = `${CLAUDE_CODE_PIN.DIRECTORY}/${CLAUDE_CODE_PIN
 /**
  * Codex, pinned exactly, installed as root under a prefix only root writes.
  * Its `CODEX_HOME` is in `agent`'s home, on the sandbox's persisted disk, so
- * the threads it keeps there outlive a stop. Note that `DIRECTORY` keeps its
- * old name, as `CLAUDE_CODE_PIN`'s does, for the sandboxes made before.
+ * the threads it keeps there outlive a stop.
  */
 export const CODEX_PIN = {
   VERSION: "0.163.0",
-  DIRECTORY: "/opt/luke/codex",
+  DIRECTORY: `${SANDBOX_TOOLS_DIRECTORY}/codex`,
   /** Where the image links the binary as `codex`. */
   LINK: "/usr/local/bin/codex",
   HOME: `/home/${AGENT_USER}/.codex`,

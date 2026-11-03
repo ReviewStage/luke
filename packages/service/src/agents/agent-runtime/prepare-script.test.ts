@@ -100,12 +100,12 @@ async function prepare(t: TestContext, scenario: Scenario) {
   for (const name of STOOD_IN) symlinkSync(join(root, "stand-in"), join(bin, name));
   const log = join(root, "calls");
   writeFileSync(log, "");
-  // The script looks for an install already in place under `/opt/luke`, which a machine
+  // The script looks for an install already in place under `/opt/agent`, which a machine
   // prepared from the image has, so that directory is the temporary one's instead.
   const opt = join(root, "opt");
   const ran = spawnSync(
     "/bin/bash",
-    ["-c", PREPARE_SCRIPT.replaceAll("/opt/luke/", `${opt}/luke/`)],
+    ["-c", PREPARE_SCRIPT.replaceAll("/opt/agent/", `${opt}/agent/`)],
     {
       cwd: root,
       encoding: "utf8",
@@ -120,7 +120,7 @@ async function prepare(t: TestContext, scenario: Scenario) {
     },
   );
   const calls = readFileSync(log, "utf8")
-    .replaceAll(`${opt}/luke/`, "/opt/luke/")
+    .replaceAll(`${opt}/agent/`, "/opt/agent/")
     .split("\n")
     .filter(Boolean);
   return { exitCode: ran.status, stderr: ran.stderr, calls };
@@ -143,13 +143,13 @@ test("the image gets Playwright where every user reaches it, Claude Code, Codex,
     "sudo -n env HOME=/root PLAYWRIGHT_BROWSERS_PATH=0 /usr/local/bin/playwright install --with-deps chromium",
     "sudo -n chmod -R a+rX /usr/local/lib/node_modules/playwright/node_modules/playwright-core/.local-browsers",
     "sudo -n dnf install -y bubblewrap socat",
-    "sudo -n env HOME=/root npm install --prefix /opt/luke/claude-agent-sdk --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@0.3.304",
-    "sudo -n ln -sfn /opt/luke/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude /usr/local/bin/claude",
+    "sudo -n env HOME=/root npm install --prefix /opt/agent/claude-agent-sdk --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@0.3.304",
+    "sudo -n ln -sfn /opt/agent/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude /usr/local/bin/claude",
     "sudo -n useradd --create-home --shell /bin/bash agent",
     "sudo -n chmod 700 /home/agent",
     "sudo -n usermod -aG vercel-sandbox agent",
-    "sudo -n env HOME=/root npm install --global --prefix /opt/luke/codex --no-audit --no-fund @openai/codex@0.163.0",
-    "sudo -n ln -sfn /opt/luke/codex/bin/codex /usr/local/bin/codex",
+    "sudo -n env HOME=/root npm install --global --prefix /opt/agent/codex --no-audit --no-fund @openai/codex@0.163.0",
+    "sudo -n ln -sfn /opt/agent/codex/bin/codex /usr/local/bin/codex",
     "sudo -n install -d -o agent -g agent -m 0700 /home/agent/.codex",
   ].map((start) => indexOfCall(calls, start));
   const checked = indexOfCall(
@@ -186,10 +186,10 @@ test("the image makes the runner's directory root's and keeps the sandbox user's
   assert.equal(exitCode, 0, stderr);
 
   const steps = [
-    "sudo -n install -d -o root -g root -m 0755 /opt/luke/agent-runner",
-    "sudo -n tee /etc/sudoers.d/luke-env",
-    "sudo -n chmod 0440 /etc/sudoers.d/luke-env",
-    "sudo -n visudo -c -q -f /etc/sudoers.d/luke-env",
+    "sudo -n install -d -o root -g root -m 0755 /opt/agent/agent-runner",
+    "sudo -n tee /etc/sudoers.d/sandbox-env",
+    "sudo -n chmod 0440 /etc/sudoers.d/sandbox-env",
+    "sudo -n visudo -c -q -f /etc/sudoers.d/sandbox-env",
     "sudo -n bash -c ",
   ].map((start) => indexOfCall(calls, start));
   assert.deepEqual(
