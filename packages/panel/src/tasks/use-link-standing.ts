@@ -312,6 +312,24 @@ function wordsWorkspace(
   );
 }
 
+/**
+ * The id of the task a link names by its number, `…/task/42`, among the
+ * tasks the window lists: the one of that number in the workspace the
+ * link's first step names among the reader's own (`workspaceOfSlug`); none
+ * where it names no number, or the window lists no such task, as one moved
+ * out of the workspace since, which only the service still finds.
+ */
+export function useNumberedTaskId(
+  workspace: string,
+  number: number | undefined,
+): string | undefined {
+  const planning = useAppSlice(workspacePlacesAtom);
+  if (number === undefined || planning === undefined) return undefined;
+  const named = workspaceOfSlug(planning.workspaces, workspace);
+  if (named === undefined) return undefined;
+  return planning.tasks.find((task) => task.workspaceId === named.id && task.number === number)?.id;
+}
+
 /** The id of the workspace the words a chip stands in are of (`wordsWorkspace`); none where they name none. */
 export function useWordsWorkspaceId(where: ChipWhere): string | undefined {
   return wordsWorkspace(useAppSlice(workspacePlacesAtom), where, useContext(WordsWorkspaceContext))

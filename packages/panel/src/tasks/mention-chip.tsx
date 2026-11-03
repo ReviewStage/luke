@@ -9,9 +9,13 @@ import {
   issueAddressOf,
   LINK_PLACE,
   type LinkPlace,
+  linkOf,
   MENTION_SIGIL,
   pullRequestAddressOf,
+  type ReadLink,
   readLink,
+  taskNumberOf,
+  withTaskId,
 } from "@repo/features/link-grammar";
 import {
   decodeMention,
@@ -70,7 +74,12 @@ import { OpenedByRow, PullRequestCard } from "./pull-request-card.js";
 import { branchNote, thingCard } from "./thing-card.js";
 import { type AgentTiles, thingMark } from "./thing-mark.js";
 import { useKnownNames, useTaskNameCatchUp, useWordTargets } from "./use-known-names.js";
-import { type LinkStanding, useLinkStanding, useWordsWorkspaceId } from "./use-link-standing.js";
+import {
+  type LinkStanding,
+  useLinkStanding,
+  useNumberedTaskId,
+  useWordsWorkspaceId,
+} from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 import { useWordsDates } from "./words-dates.js";
 
@@ -843,6 +852,53 @@ function InboxItemChip({
   return <PlaceChip place={place} read={read} {...chip} />;
 }
 
+/**
+ * A link naming its task by its number, `…/task/42`, which no mention
+ * names, since a mention names its task by its id: drawn as the chip the
+ * link by the task's id draws, the task's, a section's, or a page's, once
+ * the window finds the task among its own (`useNumberedTaskId`); a place's
+ * chip, called by its words, until it does, or where it finds none.
+ */
+function NumberedLinkChip({
+  href,
+  read,
+  label,
+  doors,
+}: {
+  href: string;
+  read: ReadLink;
+  /** The words it was written with, its address where it was written bare. */
+  label: string;
+  doors: MentionDoors;
+}): React.JSX.Element {
+  const taskId = useNumberedTaskId(read.workspace, taskNumberOf(read.place));
+  const bare = isBareLink(label, href);
+  const byId =
+    taskId === undefined ? undefined : linkOf(withTaskId(read.place, taskId), read.workspace);
+  const found =
+    byId === undefined ? undefined : linkMention(bare ? byId : label, byId, doors.place.repository);
+  if (found !== undefined) {
+    return (
+      <MentionChip
+        mention={found.mention}
+        target={href}
+        name={found.name}
+        doors={doors}
+        bare={bare}
+      />
+    );
+  }
+  return (
+    <PlaceChip
+      href={href}
+      place={read.place}
+      workspace={read.workspace}
+      label={bare ? undefined : mentionName(label.trim())}
+      doors={doors}
+    />
+  );
+}
+
 /** The kind a chip of a place in the app carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";
 
@@ -891,6 +947,9 @@ export function linkChip(
   }
   const read = readLink(href);
   if (read === undefined) return undefined;
+  if (taskNumberOf(read.place) !== undefined) {
+    return <NumberedLinkChip href={href} read={read} label={label} doors={placed} />;
+  }
   const written = bare ? undefined : mentionName(label.trim());
   if (read.place.kind === LINK_PLACE.INBOX_ITEM) {
     return (

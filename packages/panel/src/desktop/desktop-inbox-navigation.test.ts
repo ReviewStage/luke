@@ -680,7 +680,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   assert.match(hoveredCard(row, "[data-inbox-item-card]") ?? "", /Nightly flake sweep$/u);
 });
 
-test("an item's row offers Copy link on a right-click, copying the item's link under the agent that posted it, whichever task holds it", async () => {
+test("an item's row offers Copy link on a right-click, copying the item's link by its id alone, whichever agent posted it and task holds it", async () => {
   world.listedWorkspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -701,9 +701,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   assert.ok(item, "the row's menu offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(world.copied, [
-    `https://vespin.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
-  ]);
+  assert.deepEqual(world.copied, [`https://vespin.dev/acme/inbox/${THRESHOLD.id}`]);
 });
 
 test("an item a link names that no read holds, of a task the reader cannot read, is not found in its pane, and no other item is chosen in its place", async () => {

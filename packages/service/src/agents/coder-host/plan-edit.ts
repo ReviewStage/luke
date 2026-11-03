@@ -121,7 +121,7 @@ const readEditedTask = readEither(editedTaskSchema, { excess: EXCESS_KEYS.DROP }
 const EDIT_PLAN_INPUT = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
-    `The task whose plan to edit, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered or a mention of it names.`,
+    `The task whose plan to edit, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   ),
   ...planNotesSchema.fields,
   pictures: Schema.optionalKey(

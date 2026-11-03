@@ -24,14 +24,17 @@ const FILLED: ReadonlyMap<string, string> = new Map([
   ["<path>", "apps/web/store.ts"],
   ["<commit>", "3f9c2e1d5b7a4c6e8f0a2b4c6d8e0f1a3b5c7d9e"],
   ["<page-id>", "page-1"],
-  ["<task-id>", "pl_2"],
+  ["<number>", "7"],
   ["<agent-id>", "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"],
   ["<issue-id>", "3f0e6f5c-7d1a-4f6e-9a55-000000000042"],
   ["<item-id>", "9b2e4c6a-1d3f-4e5a-8b7c-0d1e2f3a4b5c"],
 ]);
 
-/** The task the coding agent works on, whose link its instructions are handed. */
-const TASK_ADDRESS = "https://vespin.dev/acme/task/pl_1";
+/** The task the coding agent works on, whose link and id its instructions are handed. */
+const TASK_ADDRESS = {
+  link: "https://vespin.dev/acme/task/42",
+  id: "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f",
+} as const;
 
 /** Every Markdown link to a web page the words show, its label and its target, the placeholders filled in as an author would. */
 function linksIn(words: string): { label: string; target: string }[] {
@@ -58,7 +61,8 @@ function drawnAs(words: string): (string | undefined)[] {
 
 test("a coding agent is shown to name each kind as a mention Vespin draws as its chip, its task's own under its task's link and only where it has a task, and one on no task its own pages under its own link", () => {
   const shared = [MENTION_KIND.FILE, MENTION_KIND.FILE, MENTION_KIND.LINK, MENTION_KIND.LINK];
-  const own = [MENTION_KIND.TASK, MENTION_KIND.SECTION, MENTION_KIND.PAGE];
+  // A task's own things are named by its number, a place the window draws as the task's chip once it finds the task.
+  const own = [LINK_PLACE.TASK, LINK_PLACE.SECTION, LINK_PLACE.PAGE];
   for (const brief of Object.values(AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const words = coderInstructions(REPOSITORY, brief, true, onTask ? TASK_ADDRESS : null);
@@ -69,7 +73,7 @@ test("a coding agent is shown to name each kind as a mention Vespin draws as its
           ...shared,
           ...(onTask ? own : [MENTION_KIND.PAGE]),
           MENTION_KIND.AGENT,
-          MENTION_KIND.TASK,
+          LINK_PLACE.TASK,
           LINK_PLACE.INBOX_ITEM,
         ],
         `${brief} ${onTask}`,

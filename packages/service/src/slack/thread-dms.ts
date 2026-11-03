@@ -271,9 +271,9 @@ const claimSettledDms = SqlSchema.findAll({
     }),
 });
 
-/** The item's link under its agent, whichever task that works on, as its other links name it. */
-function threadLink(itemId: string, place: { readonly agentId: string; readonly step: string }) {
-  return linkOf({ kind: LINK_PLACE.INBOX_ITEM, agentId: place.agentId, itemId }, place.step);
+/** The item's link by its id alone, whose agent and task a reader asks the service for. */
+function threadLink(itemId: string, place: { readonly step: string }) {
+  return linkOf({ kind: LINK_PLACE.INBOX_ITEM, itemId }, place.step);
 }
 
 /** Whether the agent's item under the key stands open, read before a post so the post's DM tells a follow-up from a thread opened. */

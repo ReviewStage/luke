@@ -1961,7 +1961,9 @@ export function useMentionPicker({
     else if ("picksDate" in row) {
       if (trigger !== undefined) pickNewDate(trigger);
     } else if ("thread" in row) {
-      onChoose({ name: row.name, target: linkOf(row.thread, place.workspace) });
+      // A thread is written by its id alone, whose agent and task its reader asks the service for.
+      const thread = { kind: LINK_PLACE.INBOX_ITEM, itemId: row.thread.itemId } as const;
+      onChoose({ name: row.name, target: linkOf(thread, place.workspace) });
     } else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
   };
 

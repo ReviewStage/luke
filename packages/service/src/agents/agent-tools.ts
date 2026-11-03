@@ -169,11 +169,11 @@ import {
   workspaceAgentsOf,
 } from "./workspace-agents.js";
 import {
-  pageMention,
-  pageStepOf,
   workspaceNamingOf,
   workspaceStepOf,
   writtenMention,
+  writtenPageMention,
+  writtenTaskMention,
 } from "./written-mentions.js";
 
 /**
@@ -702,8 +702,7 @@ const readAgentAsked = Schema.decodeUnknownResult(CODER_READ_AGENT_INPUT);
 const UPDATE_TASK_INPUT = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
-    `The task's id, as ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered it, or a ` +
-      "mention of it names.",
+    `The task's id, as ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered it.`,
   ),
   name: Schema.optionalKey(
     describeWire(
@@ -1964,7 +1963,7 @@ const taskUpdateAnswer = (
         name: task.name,
         repository: task.repository,
         pinned: task.pinnedAt !== undefined,
-        mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+        mention: writtenTaskMention(task, task.name, step),
         ...(section === undefined
           ? undefined
           : { section: section === null ? null : { ...section } }),
@@ -2576,7 +2575,7 @@ export function runListTasks(
         startedBy: task.createdBy?.name ?? null,
         isYourTask: task.id === ownTask,
         sectionId: sectionOf.get(task.id) ?? null,
-        mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+        mention: writtenTaskMention(task, task.name, step),
       }));
       const next = offset + TASKS_LIST_LIMIT;
       return {
@@ -2719,7 +2718,7 @@ export function runReadPage(
       // A page of another workspace, even one the member is also in, is none of the caller's.
       const standing = yield* pageStandingOf(caller, owner);
       if (Option.isNone(standing)) return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
-      const step = yield* pageStepOf(userId, owner);
+      const mention = yield* writtenPageMention(userId, owner, page.id, page.title);
       const cut = pageCut(page.html);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -2730,9 +2729,7 @@ export function runReadPage(
           newestVersion,
           ...standing.value,
           // The page's mention, ready to write, wherever its owner's workspace reads for the member.
-          ...(Option.isNone(step)
-            ? undefined
-            : { mention: writtenMention(pageMention(owner, page.id), page.title, step.value) }),
+          ...(Option.isNone(mention) ? undefined : { mention: mention.value }),
           html: cut.html,
           leftOutChars: cut.leftOutChars,
         },

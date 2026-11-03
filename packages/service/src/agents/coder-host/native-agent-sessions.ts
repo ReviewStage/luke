@@ -17,6 +17,7 @@
 
 import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import { readNativeSequence } from "@repo/database/models/native-projection-store";
+import { readTaskHeader } from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { Effect, Layer, Option } from "effect";
 import { deploymentOrigin } from "../../deployment-origin.js";
@@ -49,12 +50,22 @@ export interface NativeAgentSessionsOptions {
   readonly origin?: () => string | undefined;
 }
 
+/** The number the agent's task goes by in its workspace, which its link names it by; none for an agent on no task, or where it is not read, and the link names the task's id. */
+const agentTaskNumber = (userId: string, agent: Agent) =>
+  agent.taskId === null
+    ? Effect.succeed(undefined)
+    : readTaskHeader(userId, agent.taskId).pipe(
+        Effect.map((header) => Option.getOrUndefined(header)?.number),
+        Effect.tapError(logStoreFailure),
+        Effect.orElseSucceed(() => undefined),
+      );
+
 /**
  * Our coder instructions for an agent on the harness given, composed on
  * what its row names (`instructions.ts`'s `agentCoderInstructions`): whether
  * its token reads the repository's CI, the co-author trailer where it writes
- * as its developer, the workspace its links are written under, and whether
- * its starter turned Memory on.
+ * as its developer, the workspace its links are written under, the number
+ * its task goes by there, and whether its starter turned Memory on.
  */
 const nativeCoderInstructions = (
   userId: string,
@@ -70,11 +81,13 @@ const nativeCoderInstructions = (
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed(() => agent.organizationId),
     );
+    const taskNumber = yield* agentTaskNumber(userId, agent);
     const memoryOn = yield* memoryOnFor(userId);
     return agentCoderInstructions(agent, {
       ciReadable,
       coAuthor,
       workspace,
+      taskNumber,
       memoryOn,
       harness,
       place,

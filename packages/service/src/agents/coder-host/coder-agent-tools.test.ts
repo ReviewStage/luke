@@ -679,6 +679,8 @@ async function openWorkspaces() {
     workspaceId,
     elsewhere,
     plans: { invitations: invitations.id, billing: billing.id, elsewhere: elsewhereTask.id },
+    // The workspace counts its tasks from one in the order they were made, which their links name them by.
+    numbers: { invitations: 1, billing: 2 },
     agents: { caller, teammates, archived, otherWorkspaces, strangers },
   };
 }
@@ -1736,7 +1738,7 @@ test("start_agent from a source whose transcript does not fit the new agent's wi
 });
 
 test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused, one a run's agent starts beside itself belonging to that run", async () => {
-  const { workspaceId, elsewhere, plans: taskIds, agents } = await openWorkspaces();
+  const { workspaceId, elsewhere, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
@@ -1757,13 +1759,13 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
         id: taskIds.billing,
         name: "Billing",
         isYourTask: false,
-        mention: `[@Billing](${home}/${taskIds.billing})`,
+        mention: `[@Billing](${home}/${numbers.billing})`,
       },
       {
         id: taskIds.invitations,
         name: "Teammate invitations",
         isYourTask: true,
-        mention: `[@Teammate invitations](${home}/${taskIds.invitations})`,
+        mention: `[@Teammate invitations](${home}/${numbers.invitations})`,
       },
     ],
   );
@@ -1923,7 +1925,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
     assignee: null,
     name,
     repository: RELAY_FULL_NAME,
-    mention: `[@${name}](https://vespin.dev/workspace-${workspaceId}/task/${taskId})`,
+    mention: `[@${name}](https://vespin.dev/workspace-${workspaceId}/task/${stored.task.number})`,
   });
   assert.deepEqual(
     [stored.ownerId, stored.task.workspaceId, stored.task.repository, stored.text, stored.brief],
@@ -2332,7 +2334,7 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
 });
 
 test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { workspaceId, plans: tasks, numbers, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
   await turnOn(agents.teammates, false);
@@ -2352,7 +2354,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       name: "Billing",
       repository: RELAY_FULL_NAME,
       pinned: false,
-      mention: `[@Billing](https://vespin.dev/workspace-${workspaceId}/task/${tasks.billing})`,
+      mention: `[@Billing](https://vespin.dev/workspace-${workspaceId}/task/${numbers.billing})`,
     },
     already,
   });
@@ -3086,7 +3088,7 @@ test("stop_agent answers a turn eve says ended before its cancel as not stopped 
 });
 
 test("read_page reads a page a teammate showed on another task of the caller's workspace, its newest version or one named, its HTML cut on a line to the bound, and nothing of another workspace's or a version never written", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { workspaceId, plans: tasks, numbers, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
   const bob = agents.teammates.userId;
@@ -3131,7 +3133,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   assert.ok(
     isWireString(read.mention) &&
       read.mention.startsWith("[@Seats by month](") &&
-      read.mention.endsWith(`/task/${tasks.billing}/page/${shown.id})`),
+      read.mention.endsWith(`/task/${numbers.billing}/page/${shown.id})`),
     String(read.mention),
   );
   assert.ok(isWireString(read.html) && read.html.length <= 40_000 && read.html.endsWith("</p>"));
@@ -3649,7 +3651,7 @@ test("a Codex agent lists its GPT models alone with no fast version, and update_
 });
 
 test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, and reads no task of another workspace", async () => {
-  const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
+  const { workspaceId, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
@@ -3664,7 +3666,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   assert.ok(isRecord(read.task) && isRecord(read.plan));
   assert.deepEqual(
     [read.task.name, read.task.isYourTask, read.task.mention],
-    ["Billing", false, `[@Billing](${home}/${taskIds.billing})`],
+    ["Billing", false, `[@Billing](${home}/${numbers.billing})`],
   );
   assert.deepEqual(read.plan, { text: plan, saved: true, leftOutChars: 0 });
   const own = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.invitations });

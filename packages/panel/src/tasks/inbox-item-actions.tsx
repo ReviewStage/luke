@@ -41,9 +41,9 @@ interface InboxItemActions {
   readonly groups: (lead?: readonly MenuAction[][]) => MenuAction[][];
 }
 
-/** The place an item is linked by: under its agent, whichever task holds it, which its reader finds by the agent. */
+/** The place an item is linked by: its id alone, whose agent and task its reader asks the service for. */
 function inboxItemPlace(item: InboxItem): LinkPlace {
-  return { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id };
+  return { kind: LINK_PLACE.INBOX_ITEM, itemId: item.id };
 }
 
 /** One item's acts. */

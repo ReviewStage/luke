@@ -67,7 +67,7 @@ export const COMMENT_TOOL_REFUSAL = {
 /** The task a call names, whose plan's comments it acts on. */
 const TASK_ID = describeWire(
   wireUuidSchema,
-  `The task whose plan's comments to act on, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered or a mention of it names.`,
+  `The task whose plan's comments to act on, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
 );
 
 const THREAD_ID = describeWire(wireUuidSchema, "The thread's id, as read_comments lists it.");

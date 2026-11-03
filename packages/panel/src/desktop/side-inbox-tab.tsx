@@ -134,11 +134,7 @@ export function SideInboxTab({
   const link =
     chosen === undefined || columns.shown === INBOX_COLUMNS.LIST
       ? undefined
-      : linkItem({
-          kind: LINK_PLACE.INBOX_ITEM,
-          agentId: chosen.item.agentId,
-          itemId: chosen.item.id,
-        });
+      : linkItem({ kind: LINK_PLACE.INBOX_ITEM, itemId: chosen.item.id });
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   const timeOpen = useInboxItemOpenSpan(chosen?.item.id, inbox.read);
   // A row's press opens its item, the keyboard following it.

@@ -13,6 +13,7 @@ import {
   MENTION_KIND,
   type Mention,
   mentionName,
+  type NumberedTaskIdOf,
   type PersonMention,
   type PlanMention,
   type ServerMention,
@@ -120,19 +121,29 @@ export interface MentionedPerson {
   readonly role: WorkspaceRole;
 }
 
-/** What the send read of the pages a message mentions on the agent's own plan and the agents and people it mentions in its workspace, each by its id; one it did not find is absent. */
+/** The tasks a message's links name by their number, as the send found them for its sender: each task's id, by the workspace step the link spells and then the number. */
+type MentionedTasks = ReadonlyMap<string, ReadonlyMap<number, string>>;
+
+/** What the send read of the pages a message mentions on the agent's own plan and the agents and people it mentions in its workspace, each by its id, and of the tasks its links name by their number; one it did not find is absent. */
 export interface MentionedReads {
   readonly pages: ReadonlyMap<string, PageLine>;
   readonly agents: ReadonlyMap<string, MentionedAgent>;
   readonly people: ReadonlyMap<string, MentionedPerson>;
+  readonly tasks: MentionedTasks;
 }
 
-/** The reads of a message that mentions no page, no agent, and no person. */
+/** The reads of a message that mentions no page, no agent, no person, and no task by its number. */
 export const NO_MENTIONED_READS: MentionedReads = {
   pages: new Map(),
   agents: new Map(),
   people: new Map(),
+  tasks: new Map(),
 };
+
+/** A task a link names by its number, found by its id among those the send found. */
+function foundTask(tasks: MentionedTasks): NumberedTaskIdOf {
+  return ({ workspace, number }) => tasks.get(workspace)?.get(number);
+}
 
 /** The room an excerpt leaves in the part for the closing line saying what was left out, which never names a heading. */
 const LEFT_OUT_ROOM = 120;
@@ -466,12 +477,14 @@ export function mentionedIds(
   words: string,
   task: Task | undefined,
   agentId?: string | undefined,
+  tasks: MentionedTasks = NO_MENTIONED_READS.tasks,
 ): MentionedIds {
   const owner = pagesOwnerOf(task, agentId);
   const pages = new Set<string>();
   const agents = new Set<string>();
   const people = new Set<string>();
-  for (const { mention } of handedMentionsIn(words, task?.repository ?? null)) {
+  const handed = handedMentionsIn(words, task?.repository ?? null, { taskIdOf: foundTask(tasks) });
+  for (const { mention } of handed) {
     if (mention.kind === MENTION_KIND.PAGE && standsOn(mention, owner)) pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
     if (mention.kind === MENTION_KIND.PERSON) people.add(mention.userId);
@@ -513,7 +526,8 @@ export function mentionedContext(
   const owner = pagesOwnerOf(task, agentId);
   const named: HandedMention[] = [];
   const repository = task?.repository ?? null;
-  for (const { mention, label, target } of handedMentionsIn(words, repository)) {
+  const taskIdOf = foundTask(reads.tasks);
+  for (const { mention, label, target } of handedMentionsIn(words, repository, { taskIdOf })) {
     const handed = handedMention(mention, task, owner);
     if (handed === undefined) continue;
     // A bare address is named by what it says of the thing, a section by its anchor, as its chip is.

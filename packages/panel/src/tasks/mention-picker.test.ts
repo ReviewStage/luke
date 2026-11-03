@@ -293,7 +293,7 @@ test("on a plan, the workspace's Inbox threads are found by their title, the pla
   assert.equal(picked.name, "Keep the meter's old alerts?");
   assert.deepEqual(readLink(picked.target), {
     workspace: "stage",
-    place: { kind: LINK_PLACE.INBOX_ITEM, planId: "plan-42", itemId: "item-billing" },
+    place: { kind: LINK_PLACE.INBOX_ITEM, itemId: "item-billing" },
   });
 
   // The box draws the thread's link as the thread's chip, not as its words.
