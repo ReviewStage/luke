@@ -28,14 +28,31 @@ import {
 } from "@luke/features/integration-wire";
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import { orList } from "@luke/features/words";
+import type { WireRecord, WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
+import { toolResultJson, toolResultTexts } from "./mcp-tools.js";
 
-/** Where a provider answers whose account a token is: the address read with the token, and the account's name in its JSON answer. */
-export interface AccountNameRead {
+/** Where a provider's API answers whose account a token is: the address read with the token, and the account's name in its JSON answer. */
+export interface AccountNameApiRead {
   readonly URL: string;
   /** The account's name in the provider's answer (an email, a workspace's, a team's), where it holds one. */
   readonly NAME: (answer: unknown) => Option.Option<string>;
 }
+
+/**
+ * Where a provider's own MCP server answers whose account a token is: a tool
+ * it lists that only reads, called with the token its tools are, the
+ * arguments it is called with, and the account's name in its result.
+ */
+export interface AccountNameToolRead {
+  readonly TOOL: string;
+  readonly ARGUMENTS: WireRecord;
+  /** The account's name in the tool's result (an organization's, a workspace's, an email), where it holds one. */
+  readonly NAME: (result: WireValue) => Option.Option<string>;
+}
+
+/** Where a provider answers whose account a token is: its API, where that is documented to take the token, else its MCP server. */
+export type AccountNameRead = AccountNameApiRead | AccountNameToolRead;
 
 export interface IntegrationDefinition {
   /**
@@ -70,6 +87,8 @@ export interface IntegrationDefinition {
    * account carries its name at the provider, an account alone among them;
    * read only with a scope its sign-in already asks for, so no account is
    * asked to consent again, and kept only as `accountNameLine` keeps a name.
+   * A token issued for the provider's MCP server is read there, through a
+   * tool it lists that only reads, since its API may refuse that token.
    */
   readonly ACCOUNT_NAME?: AccountNameRead;
   /** The provider's own hosted MCP server. */
@@ -86,6 +105,83 @@ const decodeCalendarListEntry = Schema.decodeUnknownOption(Schema.Struct({ id: S
 
 const decodeDriveAbout = Schema.decodeUnknownOption(
   Schema.Struct({ user: Schema.Struct({ emailAddress: Schema.String }) }),
+);
+
+/**
+ * The account's name in the first of a tool's JSON answers `decode` reads
+ * and `name` finds one in, where any does.
+ */
+const toolAnswerName =
+  <A>(decode: (answer: unknown) => Option.Option<A>, name: (read: A) => string | undefined) =>
+  (result: WireValue): Option.Option<string> =>
+    Option.fromUndefinedOr(
+      toolResultJson(result)
+        .flatMap((answer) => Option.toArray(decode(answer)))
+        .map(name)
+        .find((each) => each !== undefined),
+    );
+
+/** The one entry of a list, or nothing where it holds more or none: a list of several names no one account. */
+function onlyOne<A>(list: readonly A[]): A | undefined {
+  return list.length === 1 ? list[0] : undefined;
+}
+
+const decodeNamed = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
+
+const decodeQuotedName = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.String));
+
+/**
+ * The top-level `name:` of a tool's text answered as TOON, PostHog's way of
+ * writing an object (`name: Acme`, quoted as a JSON string where it holds
+ * what TOON would read otherwise), or of its JSON where it answered that.
+ */
+function toonOrJsonName(result: WireValue): Option.Option<string> {
+  const fromJson = toolAnswerName(decodeNamed, (read) => read.name)(result);
+  if (Option.isSome(fromJson)) return fromJson;
+  for (const text of toolResultTexts(result)) {
+    const line = text.split(/\r?\n/).find((each) => each.startsWith("name: "));
+    if (line === undefined) continue;
+    const value = line.slice("name: ".length).trim();
+    return value.startsWith('"') ? decodeQuotedName(value) : Option.some(value);
+  }
+  return Option.none();
+}
+
+const decodeOrganizations = Schema.decodeUnknownOption(
+  Schema.Struct({ organizations: Schema.Array(Schema.Struct({ name: Schema.String })) }),
+);
+
+const decodeNamedList = Schema.decodeUnknownOption(
+  Schema.Array(Schema.Struct({ name: Schema.String })),
+);
+
+const decodeSentryOrganizations = Schema.decodeUnknownOption(
+  Schema.Struct({
+    organizations: Schema.Array(Schema.Struct({ slug: Schema.String })),
+    hasMore: Schema.optionalKey(Schema.Boolean),
+  }),
+);
+
+const decodeMercuryOrganization = Schema.decodeUnknownOption(
+  Schema.Struct({ organization: Schema.Struct({ legalBusinessName: Schema.String }) }),
+);
+
+const decodeEmail = Schema.decodeUnknownOption(Schema.Struct({ email: Schema.String }));
+
+const decodeVercelUser = Schema.decodeUnknownOption(
+  Schema.Struct({
+    result: Schema.Struct({ user: Schema.Struct({ email: Schema.String }) }),
+  }),
+);
+
+const decodeNotionSelf = Schema.decodeUnknownOption(
+  Schema.Struct({ workspace: Schema.Struct({ name: Schema.String }) }),
+);
+
+const decodeYcProfile = Schema.decodeUnknownOption(
+  Schema.Struct({
+    result: Schema.Struct({ profile: Schema.Struct({ email: Schema.String }) }),
+  }),
 );
 
 export const INTEGRATION = {
@@ -138,7 +234,8 @@ export const INTEGRATION = {
     ADD_ACCOUNT_PROMPT: "select_account",
     ACCOUNT_NAME: {
       URL: "https://gmail.googleapis.com/gmail/v1/users/me/profile",
-      NAME: (answer) => Option.map(decodeGmailProfile(answer), (read) => read.emailAddress),
+      NAME: (answer: unknown) =>
+        Option.map(decodeGmailProfile(answer), (read) => read.emailAddress),
     },
     MCP_URL: "https://gmailmcp.googleapis.com/mcp/v1",
     DESCRIPTION:
@@ -151,7 +248,7 @@ export const INTEGRATION = {
     ADD_ACCOUNT_PROMPT: "select_account",
     ACCOUNT_NAME: {
       URL: "https://www.googleapis.com/calendar/v3/users/me/calendarList/primary",
-      NAME: (answer) => Option.map(decodeCalendarListEntry(answer), (read) => read.id),
+      NAME: (answer: unknown) => Option.map(decodeCalendarListEntry(answer), (read) => read.id),
     },
     MCP_URL: "https://calendarmcp.googleapis.com/mcp/v1",
     DESCRIPTION:
@@ -164,7 +261,8 @@ export const INTEGRATION = {
     ADD_ACCOUNT_PROMPT: "select_account",
     ACCOUNT_NAME: {
       URL: "https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)",
-      NAME: (answer) => Option.map(decodeDriveAbout(answer), (read) => read.user.emailAddress),
+      NAME: (answer: unknown) =>
+        Option.map(decodeDriveAbout(answer), (read) => read.user.emailAddress),
     },
     MCP_URL: "https://drivemcp.googleapis.com/mcp/v1",
     DESCRIPTION:
@@ -173,6 +271,12 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.GRANOLA]: {
     CONNECTOR_VARIABLE: "GRANOLA_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "GRANOLA_ALLOWED_ACCOUNTS",
+    // A Granola account is its user's, who may belong to several workspaces, so it is called by its email.
+    ACCOUNT_NAME: {
+      TOOL: "get_account_info",
+      ARGUMENTS: {},
+      NAME: toolAnswerName(decodeEmail, (read) => read.email),
+    },
     MCP_URL: "https://mcp.granola.ai/mcp",
     DESCRIPTION:
       "Granola, the developer's meeting notes, as their own account sees it: search and read meetings, their notes, transcripts, attachments, and folders.",
@@ -190,6 +294,14 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.MERCURY]: {
     CONNECTOR_VARIABLE: "MERCURY_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "MERCURY_ALLOWED_ACCOUNTS",
+    ACCOUNT_NAME: {
+      TOOL: "getOrganization",
+      ARGUMENTS: {},
+      NAME: toolAnswerName(
+        decodeMercuryOrganization,
+        (read) => read.organization.legalBusinessName,
+      ),
+    },
     MCP_URL: "https://mcp.mercury.com/mcp",
     DESCRIPTION:
       "Mercury, the developer's company banking, as their own account sees it: read accounts, balances, transactions, cards, recipients, invoices, and treasury, categorize and annotate transactions, and request payments and transfers, which an approver confirms in Mercury.",
@@ -197,6 +309,12 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.NEON]: {
     CONNECTOR_VARIABLE: "NEON_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "NEON_ALLOWED_ACCOUNTS",
+    // Neon lists every organization its user belongs to, and answers no email, so only a lone one names the account.
+    ACCOUNT_NAME: {
+      TOOL: "list_organizations",
+      ARGUMENTS: {},
+      NAME: toolAnswerName(decodeNamedList, (read) => onlyOne(read)?.name),
+    },
     MCP_URL: "https://mcp.neon.tech/mcp",
     DESCRIPTION:
       "Neon, the developer's serverless Postgres, as their own account sees it: find and manage projects, branches, databases, roles, and computes, read schemas, run SQL, and prepare and apply migrations.",
@@ -205,6 +323,12 @@ export const INTEGRATION = {
     CONNECTOR_VARIABLE: "NOTION_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "NOTION_ALLOWED_ACCOUNTS",
     MULTIPLE_ACCOUNTS_VARIABLE: "NOTION_MULTIPLE_ACCOUNTS",
+    // Read only for an account whose grant named no workspace.
+    ACCOUNT_NAME: {
+      TOOL: "notion-get-self",
+      ARGUMENTS: {},
+      NAME: toolAnswerName(decodeNotionSelf, (read) => read.workspace.name),
+    },
     MCP_URL: "https://mcp.notion.com/mcp",
     DESCRIPTION:
       "Notion, the developer's workspace of pages and databases, as their own account sees it: search, read, create, and update pages, databases, and comments.",
@@ -219,6 +343,19 @@ export const INTEGRATION = {
     CONNECTOR_VARIABLE: "POSTHOG_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "POSTHOG_ALLOWED_ACCOUNTS",
     MULTIPLE_ACCOUNTS_VARIABLE: "POSTHOG_MULTIPLE_ACCOUNTS",
+    /*
+     * With no id, `organization-get` answers the active organization, the
+     * one the grant chose; it asks every caller why it is called and which
+     * model calls it, for PostHog's analytics alone, and no model does here.
+     */
+    ACCOUNT_NAME: {
+      TOOL: "organization-get",
+      ARGUMENTS: {
+        context: "Naming the connected account in the integrations settings list.",
+        llm_model: "unknown",
+      },
+      NAME: toonOrJsonName,
+    },
     MCP_URL: "https://mcp.posthog.com/mcp?mode=tools",
     DESCRIPTION:
       "PostHog, the developer's product analytics, as their own account sees it: query events and insights with SQL, and read and change dashboards, feature flags, experiments, surveys, error tracking, and session recordings.",
@@ -226,6 +363,14 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.SENTRY]: {
     CONNECTOR_VARIABLE: "SENTRY_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "SENTRY_ALLOWED_ACCOUNTS",
+    // Sentry names an organization by its slug alone, and only a lone one is the account's.
+    ACCOUNT_NAME: {
+      TOOL: "find_organizations",
+      ARGUMENTS: {},
+      NAME: toolAnswerName(decodeSentryOrganizations, (read) =>
+        read.hasMore === true ? undefined : onlyOne(read.organizations)?.slug,
+      ),
+    },
     MCP_URL: "https://mcp.sentry.dev/mcp",
     DESCRIPTION:
       "Sentry, the developer's error and performance monitoring, as their own account sees it: find and read issues, errors, events, traces, logs, and releases, and update issues where the account allows it.",
@@ -255,6 +400,12 @@ export const INTEGRATION = {
     CONNECTOR_VARIABLE: "SUPABASE_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "SUPABASE_ALLOWED_ACCOUNTS",
     MULTIPLE_ACCOUNTS_VARIABLE: "SUPABASE_MULTIPLE_ACCOUNTS",
+    // Supabase answers no email, so only a lone organization names the account.
+    ACCOUNT_NAME: {
+      TOOL: "list_organizations",
+      ARGUMENTS: {},
+      NAME: toolAnswerName(decodeOrganizations, (read) => onlyOne(read.organizations)?.name),
+    },
     MCP_URL: "https://mcp.supabase.com/mcp",
     DESCRIPTION:
       "Supabase, the developer's Postgres backend, as their own account sees it: find and manage projects and branches, read schemas, run SQL, apply migrations, read logs, and deploy edge functions.",
@@ -262,6 +413,12 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.VERCEL]: {
     CONNECTOR_VARIABLE: "VERCEL_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "VERCEL_ALLOWED_ACCOUNTS",
+    // A Vercel grant is its user's, across every team, so it is called by its email.
+    ACCOUNT_NAME: {
+      TOOL: "get_auth_user",
+      ARGUMENTS: {},
+      NAME: toolAnswerName(decodeVercelUser, (read) => read.result.user.email),
+    },
     MCP_URL: "https://mcp.vercel.com",
     DESCRIPTION:
       "Vercel, the developer's hosting, as their own account sees it: find and manage teams, projects, deployments, domains, and environment variables, read build and runtime logs and errors, and search Vercel's documentation.",
@@ -269,6 +426,12 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.YCOMBINATOR]: {
     CONNECTOR_VARIABLE: "YCOMBINATOR_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "YCOMBINATOR_ALLOWED_ACCOUNTS",
+    // A Bookface account is its founder's, who may hold more than one company, so it is called by its email.
+    ACCOUNT_NAME: {
+      TOOL: "profile",
+      ARGUMENTS: { action: "get" },
+      NAME: toolAnswerName(decodeYcProfile, (read) => read.result.profile.email),
+    },
     MCP_URL: "https://api.ycombinator.com/v1/mcp",
     DESCRIPTION:
       "Y Combinator's Bookface, as the developer's own YC account sees it: search YC companies, founders, investors, forum posts, launches, and the startup library, and work with the company's hiring, fundraising, launches, office hours, and profile.",
