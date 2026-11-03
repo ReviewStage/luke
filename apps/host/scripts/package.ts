@@ -1,5 +1,5 @@
 /**
- * package.ts -- one host release for the OS and architecture given: the daemon's and the runner's bundles, the `luke-host` command, and the Node they run on, under one `luke-host/` folder, as a tarball beside its SHA-256.
+ * package.ts -- one host release for the OS and architecture given: the daemon's and the runner's bundles, the `vespin-host` command, and the Node they run on, under one `luke-host/` folder, as a tarball beside its SHA-256.
  *
  * Run by CI for each Linux architecture and for an Apple silicon Mac
  * (`.github/workflows/release-host.yml`) once both bundles are built
@@ -13,12 +13,12 @@
  * `NODE_LINUX_PINS`, `NODE_MAC_PIN`), refused unless it arrived at its
  * pinned size and digest, and only its pinned members are kept. Claude Code and Codex are
  * not carried: the daemon fetches each at its pin on the box
- * (`@luke/host/daemon`). The tarball is written by GNU tar, a Mac's `gtar`,
- * with every entry owned by root and stamped at one time, in name order, so
- * its digest is the contents' alone. It lands in `dist/release/`, named as
- * the release names it (`@luke/features/host-release`), with a `.sha256`
- * beside it in `sha256sum`'s own format, which the install script's digest is
- * read off.
+ * (`@luke/host/daemon`). The release is laid out and packed as
+ * `release-layout.ts` says. It lands in `dist/release/`, named as the release
+ * names it (`@luke/features/host-release`), and from the rename on again
+ * under the name a host through 0.6.0 fetches it by, the same bytes, each
+ * with a `.sha256` beside it in `sha256sum`'s own format, which the install
+ * script's digest is read off.
  */
 
 import { execFileSync } from "node:child_process";
@@ -36,20 +36,19 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { type AgentToolPin, NODE_LINUX_PINS, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import { DEVICE_ARCH, DEVICE_PLATFORM, type DeviceArch } from "@luke/features/device-agent-wire";
-import { HOST_TARGET, type HostTarget, hostTarballName } from "@luke/features/host-release";
+import { HOST_TARGET, type HostTarget, hostTarballNames } from "@luke/features/host-release";
+import {
+  packedRelease,
+  type ReleaseSources,
+  ROOT_FOLDER,
+  stagedRelease,
+} from "./release-layout.js";
 
 const APP = join(import.meta.dirname, "..");
 const REPOSITORY = join(APP, "..", "..");
 /** Where a checked pinned archive is kept between runs: the repository's own scratch, which git ignores. */
 const KEPT_PINS = join(REPOSITORY, ".build", "pins");
 const RELEASE = join(APP, "dist", "release");
-const ROOT_FOLDER = "luke-host";
-
-/** One time every entry of the tarball is stamped with, so the same contents make the same bytes. */
-const STAMP = "2026-01-01T00:00:00Z";
-
-/** GNU tar, whose flags the tarball is written with: a Mac's own `tar` is bsdtar, and GNU's is `gtar` there. */
-const GNU_TAR = process.platform === DEVICE_PLATFORM.DARWIN ? "gtar" : "tar";
 
 /** Each Linux architecture's release target. */
 const LINUX_TARGETS: Readonly<Record<DeviceArch, HostTarget>> = {
@@ -59,18 +58,14 @@ const LINUX_TARGETS: Readonly<Record<DeviceArch, HostTarget>> = {
 
 const USAGE = "usage: package.ts --arch x64|arm64 | --os darwin --arch arm64";
 
-/** The files every release carries, by where each lands under the root folder, and where each comes from: both bundles, its `luke-host` command, and the license. */
-const RELEASE_FILES = [
-  { from: join(APP, "dist", "luke-host.mjs"), to: "lib/luke-host.mjs", mode: 0o644 },
-  {
-    from: join(REPOSITORY, "packages", "agent-runner", "dist", "agent-runner.mjs"),
-    to: "lib/agent-runner.mjs",
-    mode: 0o644,
-  },
-  { from: join(APP, "scripts", "luke-host.sh"), to: "bin/luke-host", mode: 0o755 },
-  { from: join(REPOSITORY, "LICENSE"), to: "LICENSE", mode: 0o644 },
-  { from: join(REPOSITORY, "NOTICE"), to: "NOTICE", mode: 0o644 },
-] as const;
+/** Where each file a release carries comes from: both bundles, its `vespin-host` command, and the license. */
+const SOURCES: ReleaseSources = {
+  daemon: join(APP, "dist", "vespin-host.mjs"),
+  runner: join(REPOSITORY, "packages", "agent-runner", "dist", "agent-runner.mjs"),
+  command: join(APP, "scripts", "vespin-host.sh"),
+  license: join(REPOSITORY, "LICENSE"),
+  notice: join(REPOSITORY, "NOTICE"),
+};
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -121,46 +116,30 @@ async function fetchPinned(pin: AgentToolPin, folder: string, scratch: string): 
 /** The release's files and its pinned Node laid out under `root`, fetched through `scratch`, which is removed after. */
 async function stage(root: string, node: AgentToolPin): Promise<void> {
   const scratch = join(dirname(root), ".scratch");
-  rmSync(root, { recursive: true, force: true });
+  stagedRelease(root, SOURCES);
   mkdirSync(scratch, { recursive: true });
-  for (const file of RELEASE_FILES) {
-    mkdirSync(dirname(join(root, file.to)), { recursive: true });
-    copyFileSync(file.from, join(root, file.to));
-    chmodSync(join(root, file.to), file.mode);
-  }
   await fetchPinned(node, join(root, "node"), scratch);
   rmSync(scratch, { recursive: true, force: true });
 }
 
-/** The target's tarball, on the Node given, and its `.sha256`, in `dist/release/`. */
+/** The target's tarball, on the Node given, under every name it is published by, each with its `.sha256`, in `dist/release/`. */
 async function packageTarball(target: HostTarget, node: AgentToolPin): Promise<void> {
   const { version } = JSON.parse(readFileSync(join(APP, "package.json"), "utf8")) as {
     version: string;
   };
-  const name = hostTarballName(version, target);
+  const [name, ...copies] = hostTarballNames(version, target);
   const staging = join(RELEASE, target);
   rmSync(staging, { recursive: true, force: true });
   await stage(join(staging, ROOT_FOLDER), node);
   const tarball = join(RELEASE, name);
-  execFileSync(GNU_TAR, [
-    "--create",
-    "--gzip",
-    "--file",
-    tarball,
-    "--directory",
-    staging,
-    "--owner=0",
-    "--group=0",
-    "--numeric-owner",
-    "--mode=go-w,a-s",
-    "--sort=name",
-    `--mtime=${STAMP}`,
-    ROOT_FOLDER,
-  ]);
-  const digest = sha256(readFileSync(tarball));
-  writeFileSync(`${tarball}.sha256`, `${digest}  ${name}\n`);
+  packedRelease(staging, tarball);
   rmSync(staging, { recursive: true, force: true });
-  process.stdout.write(`${name} ${digest}\n`);
+  const digest = sha256(readFileSync(tarball));
+  for (const copy of copies) copyFileSync(tarball, join(RELEASE, copy));
+  for (const each of [name, ...copies]) {
+    writeFileSync(join(RELEASE, `${each}.sha256`), `${digest}  ${each}\n`);
+    process.stdout.write(`${each} ${digest}\n`);
+  }
 }
 
 async function main(): Promise<void> {

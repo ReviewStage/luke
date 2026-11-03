@@ -330,7 +330,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.ADD_HOSTS,
           label: "Add hosts",
           page: SETTINGS_VIEW.HOSTS,
-          haystack: ["Add hosts", "machine host server linux mac install luke-host"],
+          haystack: ["Add hosts", "machine host server linux mac install vespin-host"],
         }
       : undefined,
     // The Workspace page's groups, as it draws them for the workspace it

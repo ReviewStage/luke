@@ -8,8 +8,13 @@ import {
   HOST_UPDATE,
   HOST_UPDATE_FAILURE_MAX_CHARS,
 } from "@luke/features/device-agent-wire";
-import { HOST_TARGET, type HostTarget, hostTarballUrl } from "@luke/features/host-release";
-import { hostVersionMeets, readHostVersion } from "@luke/features/host-wire";
+import {
+  HOST_TARGET,
+  type HostTarget,
+  hostTarballUrl,
+  hostVersionMeets,
+  readHostVersion,
+} from "@luke/features/host-release";
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   Deferred,
@@ -51,11 +56,11 @@ import {
  * agents keep running, one fetch at a time: streamed to a staging folder
  * beside the releases and hashed as it arrives within `HOST_FETCH`'s bounds,
  * checked against the SHA-256 the answer named, unpacked by the system's
- * `tar`, its `luke-host` found executable, and renamed into
+ * `tar`, its `vespin-host` found executable, and renamed into
  * `versions/<version>` (`staged-fetch.ts`). While it waits there every beat
  * says so (`HOST_UPDATE.WAITING`), and the follower switches to it once the
  * device is idle and claims nothing (`LocalAgentsUpdate.switched`): the new
- * version's `luke-host version` must answer that version; every release but
+ * version's `vespin-host version` must answer that version; every release but
  * the running one, the new one, and the one `current` names is removed; a
  * beat says it is updating; `current` is moved in one `rename(2)`, a new
  * relative link beside it renamed over it; and the daemon ends (`ended`)
@@ -82,7 +87,7 @@ const HOST_FETCH: FetchBounds = {
 /** How long after a failed update it is tried again, while the service names the same release. */
 const RETRY_AFTER = Duration.hours(1);
 
-/** How long the new version's `luke-host version` may take to answer. */
+/** How long the new version's `vespin-host version` may take to answer. */
 const VERSION_ANSWER = Duration.seconds(30);
 
 /** The names under the releases folder: each release under `versions/`, the link to the one that runs, and what a fetch stages in and a switch links beside it. */
@@ -93,11 +98,11 @@ const RELEASES = {
   NEXT_LINK: ".current-next",
 } as const;
 
-/** The tarball's one top folder, and the command under a release's folder. */
+/** The tarball's one top folder, which keeps its name from before the rename (`apps/host/scripts/release-layout.ts`), and the command under a release's folder. */
 const TARBALL = {
-  FILE: "luke-host.tar.gz",
+  FILE: "vespin-host.tar.gz",
   ROOT: "luke-host",
-  COMMAND: ["bin", "luke-host"],
+  COMMAND: ["bin", "vespin-host"],
 } as const;
 
 /** The target each platform and architecture a host runs on fetches its release for. */
@@ -116,7 +121,7 @@ export function hostTargetOf(platform: DevicePlatform, arch: DeviceArch): HostTa
   return TARGET_OF[platform]?.[arch];
 }
 
-/** The account install's releases, as `apps/host` finds them (`luke-host.sh`'s `account_home`). */
+/** The account install's releases, as `apps/host` finds them (`vespin-host.sh`'s `account_home`). */
 export interface HostReleases {
   /** The releases folder (`~/.local/share/luke-host`): each release under `versions/<version>`, and `current` linking to the one that runs. */
   readonly folder: string;
@@ -236,7 +241,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
             if (
               !Option.exists(command, (info) => info.type === "File" && (info.mode & 0o111) !== 0)
             ) {
-              return yield* Effect.fail(`the ${version} download holds no luke-host to run`);
+              return yield* Effect.fail(`the ${version} download holds no vespin-host to run`);
             }
             return unpacked;
           }),
@@ -267,7 +272,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
       Effect.provideContext(services),
     );
 
-  /** What the new version's `luke-host version` printed, nothing where it did not answer, failed, or outlasted `VERSION_ANSWER`. */
+  /** What the new version's `vespin-host version` printed, nothing where it did not answer, failed, or outlasted `VERSION_ANSWER`. */
   const versionAnswered = (version: string) =>
     Effect.scoped(
       Effect.gen(function* () {

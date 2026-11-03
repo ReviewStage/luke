@@ -193,7 +193,7 @@ import type { RunMode } from "./run-mode.js";
  * gate opens, so every agent this machine made (`ownedAgents`) has its turn
  * let go of too, whatever a run that died left in its folder. An agent this
  * machine did not make is never touched, since This Mac and a Mac's own
- * `luke-host` share the user's `~/.vespin/agents`.
+ * `vespin-host` share the user's `~/.vespin/agents`.
  *
  * The service's list of the device's open launches is what the device
  * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
@@ -579,7 +579,7 @@ export function composeLocalAgents(
      * Every agent this install's own state names kept as one whose folder
      * it made (`keepOwnedAgent`), under the home folder given, so an agent
      * it last ran before it kept that record is let go of as the rest are:
-     * each its `modes` names, which This Mac and a Mac's own `luke-host`
+     * each its `modes` names, which This Mac and a Mac's own `vespin-host`
      * each keep in their own state, and each of a launch it kept; and, on a
      * device whose agents' folders are its own alone (`storesOwned`), each
      * with a folder there.
@@ -1901,7 +1901,7 @@ export function composeLocalAgents(
       yield* Effect.forkScoped(Effect.forever(guarded));
     });
 
-    // Note that the follower answers nothing itself: the panel asks This Mac's luke-host (`compose-this-mac-host.ts`).
+    // Note that the follower answers nothing itself: the panel asks This Mac's vespin-host (`compose-this-mac-host.ts`).
     const methods: Composer["methods"] = {};
     return { methods, lifetime } satisfies Composer;
   });

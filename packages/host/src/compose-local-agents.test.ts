@@ -917,13 +917,13 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
 const RUNNING = "0.3.0";
 const NEWER = "0.4.0";
 
-/** The newer release's tarball, as CI packs one: its `luke-host` command, which answers its version, under one `luke-host/` folder. */
+/** The newer release's tarball, as CI packs one: its `vespin-host` command, which answers its version, under one `luke-host/` folder. */
 const newerTarball = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const scratch = yield* temporaryDirectoryScoped("luke-host-tarball-");
   yield* fileSystem.makeDirectory(`${scratch}/luke-host/bin`, { recursive: true });
   yield* fileSystem.writeFileString(
-    `${scratch}/luke-host/bin/luke-host`,
+    `${scratch}/luke-host/bin/vespin-host`,
     `#!/bin/sh\necho ${NEWER}\n`,
     { mode: 0o755 },
   );

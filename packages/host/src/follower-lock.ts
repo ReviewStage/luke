@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
  * follower-lock.ts -- the one follower a machine runs at a time: a lease in the state root that whoever follows the machine's local agents holds, renewed while it follows, and that every other follower is refused by.
  *
  * Two daemons on one state root, the one its service runs and a
- * `luke-host run` started by hand beside it, share the state root's
+ * `vespin-host run` started by hand beside it, share the state root's
  * `local-agents.json` and would each claim lines and write that file over
  * the other's, so a follower takes this lease before it registers, holds it
  * for as long as its gate stands open, and gives it back as its follow

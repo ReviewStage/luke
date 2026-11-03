@@ -469,15 +469,15 @@ agent; one where your Mac's check finds work that no remote has, or cannot
 tell, is kept for seven days, and then deleted. Only the folders of the agents
 your Mac's host made are ever touched. Nothing of this happens until you turn
 Bring your own host on. Turning it on enrolls your Mac on your sign-in and
-installs Vespin's host program, `luke-host`, into your account on the Mac, as
+installs Vespin's host program, `vespin-host`, into your account on the Mac, as
 the install command in Settings › Hosts does: the app runs the install script
 our service serves, which puts the host under `~/.local` with a LaunchAgent
 that runs it at each login, whether the app is open or not, and the host keeps
 the secret it acts on in `~/.local/state/luke-host`, readable by you alone.
 Every copy of Vespin on your Mac drives that one host. Turning Bring your own
 host off stops it and keeps it from starting at the next login, with its files
-left in place; `luke-host uninstall` removes it, with the folders of the
-agents it ran. To run them, `luke-host` downloads Claude Code, Codex, and
+left in place; `vespin-host uninstall` removes it, with the folders of the
+agents it ran. To run them, `vespin-host` downloads Claude Code, Codex, and
 GitHub's CLI from their publishers once, and keeps each in its own folder on
 your Mac only once it matches the checksum Vespin pins. An agent that ran on
 your Mac before Vespin gave each agent a folder of its own is not started

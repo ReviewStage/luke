@@ -74,12 +74,11 @@ import {
 } from "@luke/database/models/host-pairing-store";
 import { enrollOwnDevice, hostsOf, registerHost } from "@luke/database/models/host-store";
 import { type DeviceAgentRelease, knownDeviceCapabilities } from "@luke/features/device-agent-wire";
-import { HOST_RELEASE } from "@luke/features/host-release";
+import { HOST_RELEASE, hostVersionMeets } from "@luke/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   hostConnectPath,
-  hostVersionMeets,
   type OwnDeviceEnrollRequest,
   shownHostUserCode,
 } from "@luke/features/host-wire";
