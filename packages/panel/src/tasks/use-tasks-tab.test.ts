@@ -838,6 +838,31 @@ test("in a narrow room Back to a task opens it as it stood, its plan's tab close
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
+test("in a narrow room a task with no page behind it leaves for Home, not the Board, and Back opens it again", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve(undefined),
+    },
+  );
+  await settle();
+  const away = tab.history().away;
+
+  act(() => tab.history().onLeave());
+  tab.stand({ tasks: listRead([listed()]) });
+  await settle();
+  const left = {
+    closed: tab.told.includes(ACT_KIND.TASKS_CLOSE),
+    board: tab.control().boardView.open,
+  };
+  act(() => tab.history().onBack());
+
+  assert.equal(away, undefined, "no page stands behind the task");
+  assert.deepEqual(left, { closed: true, board: false });
+  assert.equal(tab.control().boundFor, TASK.id, "Back opens the task again");
+});
+
 test("in a narrow room a Vespin link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
   const tab = mount(
     { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID }, room: SHELL_ROOM.NARROW },
