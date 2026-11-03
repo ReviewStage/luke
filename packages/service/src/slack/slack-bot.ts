@@ -160,11 +160,12 @@ export interface SlackBotService {
   readonly configured: boolean;
   /** The team the bot's token answers for, as `auth.test` says. */
   readonly team: Effect.Effect<SlackTeam, SlackBotFailure>;
-  /** Writes to the member directly, where the workspace's bot is connected and their email matches someone in its team; nothing otherwise, or where anything failed. */
+  /** Writes to the member directly, in the thread under the DM `thread` names where given, where the workspace's bot is connected and their email matches someone in its team; nothing otherwise, or where anything failed. */
   readonly dm: (
     organizationId: string,
     userId: string,
     content: SlackMessageContent,
+    thread?: SlackMessage,
   ) => Effect.Effect<Option.Option<SlackMessage>, never, DatabaseServices>;
   /** The member of the workspace a Slack user of its connected team is, by the id kept for them or through a Slack account a member connected themselves; nothing where neither finds one. */
   readonly memberOf: (
@@ -423,7 +424,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       Effect.flatMap((answer) => readAnswer(SLACK_METHOD.AUTH_TEST, AuthTestSchema, answer)),
       Effect.map((answer) => ({ id: answer.team_id, name: answer.team })),
     ),
-    dm: (organizationId, userId, content) =>
+    dm: (organizationId, userId, content, thread) =>
       Effect.gen(function* () {
         const installation = yield* workspaceSlackInstallation(organizationId);
         if (Option.isNone(installation)) return Option.none<SlackMessage>();
@@ -436,7 +437,9 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
         if (Option.isNone(slackId)) return Option.none<SlackMessage>();
         // Note that a user id as the channel writes to the bot's own conversation with them.
         const posted = yield* api(SLACK_METHOD.CHAT_POST_MESSAGE, {
-          channel: slackId.value,
+          ...(thread === undefined
+            ? { channel: slackId.value }
+            : { channel: thread.channel, thread_ts: thread.ts }),
           ...contentArgs(content),
         });
         const message = yield* readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, posted);

@@ -10,6 +10,7 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { answerInboxAsk, postInboxThread } from "../inbox/inbox-store.js";
 import { SlackBot, type SlackWebApi, slackBotOver } from "./slack-bot.js";
 import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js";
@@ -19,8 +20,8 @@ import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js
  * on, over a real store and a fake Slack: the DM goes to that member's
  * Slack user, says the thread's title and the agent's Markdown in a
  * `markdown` block, a mention chip as a plain link, and links to the thread; a
- * follow-up that asks nothing new writes none; and an answer rewrites the
- * DM to say it was answered.
+ * follow-up lands in that DM's Slack thread; and an answer rewrites the
+ * first DM to say it was answered.
  *
  * Synthetic accounts, workspaces, and Slack ids throughout.
  */
@@ -79,67 +80,76 @@ const openConnectedAgent = Effect.gen(function* () {
 const blocksOf = (call: SlackCall | undefined) => JSON.parse(call?.args.blocks ?? "[]");
 
 it.layer(getTestDB())("a thread's Slack DM", (it) => {
-  it.effect("writes the member it waits on once, and says it was answered once they answer", () => {
-    const calls: SlackCall[] = [];
-    return Effect.gen(function* () {
-      const { agent, organizationId, email, slug } = yield* openConnectedAgent;
-      const ask = {
-        key: "branch-protection",
-        title: "Require a review on main",
-        body: "Turn it on in [@settings](https://github.com/acme/relay/settings).",
-        ask: { type: INBOX_ASK.DO, steps: [] },
-        needsReply: true,
-      };
-      const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
-      yield* dmThreadPost({ organizationId, item, asked: true, wasOpen: false });
-      const wasOpen = yield* threadStandsOpen(agent, ask.key);
-      const followUp = Result.getOrThrow(
-        yield* postInboxThread(agent, { key: ask.key, body: "Still needed." }),
-      );
-      yield* dmThreadPost({ organizationId, item: followUp, asked: false, wasOpen });
+  it.effect(
+    "writes the member it waits on, replies with a follow-up in that DM's thread, and says it was answered once they answer",
+    () => {
+      const calls: SlackCall[] = [];
+      return Effect.gen(function* () {
+        const { agent, organizationId, email, slug } = yield* openConnectedAgent;
+        const ask = {
+          key: "branch-protection",
+          title: "Require a review on main",
+          body: "Turn it on in [@settings](https://github.com/acme/relay/settings).",
+          ask: { type: INBOX_ASK.DO, steps: [] },
+          needsReply: true,
+        };
+        const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
+        yield* dmThreadPost({ organizationId, item, asked: true, wasOpen: false });
+        const wasOpen = yield* threadStandsOpen(agent, ask.key);
+        // The follow-up comes later than the ask, as an agent's next post does.
+        yield* TestClock.adjust("1 second");
+        const followUp = Result.getOrThrow(
+          yield* postInboxThread(agent, { key: ask.key, body: "Still needed." }),
+        );
+        yield* dmThreadPost({ organizationId, item: followUp, asked: false, wasOpen });
 
-      const link = `https://vespin.dev/${slug}/inbox/${item.id}`;
-      const posted = calls.filter((call) => call.method === "chat.postMessage");
-      assert.equal(posted.length, 1);
-      assert.equal(posted[0]?.args.channel, `U-${email}`);
-      assert.equal(posted[0]?.args.text, "Require a review on main");
-      assert.deepEqual(blocksOf(posted[0]), [
-        { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
-        {
-          type: "markdown",
-          text: "Turn it on in [settings](https://github.com/acme/relay/settings).",
-        },
-        {
-          type: "actions",
-          elements: [
-            {
-              type: "button",
-              text: { type: "plain_text", text: "Open in Vespin" },
-              url: link,
-            },
-          ],
-        },
-      ]);
+        const link = `https://vespin.dev/${slug}/inbox/${item.id}`;
+        const posted = calls.filter((call) => call.method === "chat.postMessage");
+        assert.equal(posted.length, 2);
+        assert.equal(posted[0]?.args.channel, `U-${email}`);
+        assert.equal(posted[0]?.args.thread_ts, undefined);
+        assert.equal(posted[1]?.args.channel, "D0001");
+        assert.equal(posted[1]?.args.thread_ts, "1700000000.000100");
+        assert.deepEqual(blocksOf(posted[1])[1], { type: "markdown", text: "Still needed." });
+        assert.equal(posted[0]?.args.text, "Require a review on main");
+        assert.deepEqual(blocksOf(posted[0]), [
+          { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
+          {
+            type: "markdown",
+            text: "Turn it on in [settings](https://github.com/acme/relay/settings).",
+          },
+          {
+            type: "actions",
+            elements: [
+              {
+                type: "button",
+                text: { type: "plain_text", text: "Open in Vespin" },
+                url: link,
+              },
+            ],
+          },
+        ]);
 
-      const askId =
-        item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
-      yield* answerInboxAsk(agent.userId, item.id, {
-        answers: { ask: askId, reply: INBOX_REPLY.DONE },
-        text: "",
-        clientKey: randomUUID(),
-      });
-      yield* settleThreadDms(item.id);
-      yield* settleThreadDms(item.id);
+        const askId =
+          item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
+        yield* answerInboxAsk(agent.userId, item.id, {
+          answers: { ask: askId, reply: INBOX_REPLY.DONE },
+          text: "",
+          clientKey: randomUUID(),
+        });
+        yield* settleThreadDms(item.id);
+        yield* settleThreadDms(item.id);
 
-      const updated = calls.filter((call) => call.method === "chat.update");
-      assert.equal(updated.length, 1);
-      assert.equal(updated[0]?.args.channel, "D0001");
-      assert.equal(updated[0]?.args.ts, "1700000000.000100");
-      assert.equal(updated[0]?.args.text, "Require a review on main · Answered in Vespin");
-      assert.deepEqual(blocksOf(updated[0])[2], {
-        type: "context",
-        elements: [{ type: "plain_text", text: "Answered in Vespin" }],
-      });
-    }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls))));
-  });
+        const updated = calls.filter((call) => call.method === "chat.update");
+        assert.equal(updated.length, 1);
+        assert.equal(updated[0]?.args.channel, "D0001");
+        assert.equal(updated[0]?.args.ts, "1700000000.000100");
+        assert.equal(updated[0]?.args.text, "Require a review on main · Answered in Vespin");
+        assert.deepEqual(blocksOf(updated[0])[2], {
+          type: "context",
+          elements: [{ type: "plain_text", text: "Answered in Vespin" }],
+        });
+      }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls))));
+    },
+  );
 });
