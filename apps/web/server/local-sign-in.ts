@@ -18,9 +18,9 @@
  * function's bundle may reach this module: the deploy's bundle step and
  * `tests/vercel-functions.test.ts` both refuse one that does. And each request
  * reads the environment again and is refused wherever the local server would
- * have refused to start (`local-server-guard.ts`), so a copy mounted beside a
- * Vercel deployment's variables, or over a database off this machine, mints
- * nothing.
+ * have refused to start (`@luke/service/local/local-server-guard`), so a copy
+ * mounted beside a Vercel deployment's variables, or over a database off this
+ * machine, mints nothing.
  */
 
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
@@ -30,10 +30,10 @@ import {
   socialProviderFromState,
 } from "@luke/features/sign-in-provider";
 import { LOGIN_PAGE } from "@luke/service/auth/auth-policy";
+import { localServerRefusal } from "@luke/service/local/local-server-guard";
 import type { Route } from "@luke/service/route";
 import type { AuthContext } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
-import { localServerRefusal } from "./local-server-guard.js";
 
 /** The path the sign-in answers: the login page the OAuth provider sends an authorization to. */
 export const LOCAL_SIGN_IN_PATH = LOGIN_PAGE;
