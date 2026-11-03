@@ -1535,7 +1535,7 @@ function ManagedSentry({
   );
   const actions = [
     sentry.installations.map((installation) => ({
-      // Note that a lone installation's act stands as a button of its own, so it says only Disconnect.
+      // Note that a lone installation's act says only Disconnect, since the menu offers no other to tell it from.
       label:
         installation.account === undefined || sentry.installations.length === 1
           ? "Disconnect"
@@ -1552,7 +1552,6 @@ function ManagedSentry({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Sentry"
-        alone
         actions={actions}
         row={{
           leading: SENTRY_MARK,
