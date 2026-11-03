@@ -126,6 +126,12 @@ export const GATEWAY_METHOD = {
   WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
   /** One of a workspace's Sentry installations disconnected on the service, answered with the workspace's Sentry as it then stands. */
   WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
+  /** Whether the deployment holds our Slack bot, and the Slack team a workspace's bot is connected to, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_SLACK_BOT: "workspaces.slackBot",
+  /** A workspace's Slack bot connected on the service by an owner or admin, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_CONNECT: "workspaces.slackBotConnect",
+  /** A workspace's Slack bot disconnected on the service by an owner or admin, answered with the bot as it then stands. */
+  WORKSPACES_SLACK_BOT_DISCONNECT: "workspaces.slackBotDisconnect",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /**

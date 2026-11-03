@@ -311,6 +311,24 @@ Custom Integrations › Create New Integration, choose a public integration and 
 Then copy the integration's slug, client id, and client secret into the three
 variables above for every environment that receives its deliveries.
 
+## The Vespin Slack bot
+
+Vespin's own Slack bot writes to a workspace's members in Slack. It is one
+Slack app, Vercel Connect's managed `slack/slack` connector, apart from the
+Slack connector each member connects for their agents (`SLACK_CONNECTOR_UID`).
+`src/slack/slack-bot.ts`'s `SlackBot` reads the connector's UID from
+`SLACK_BOT_CONNECTOR_UID` and asks Connect for the bot token under an app
+subject at each call; a deployment without the variable builds the service,
+answers `configured: false`, and writes nothing. Only the deployment's own
+Vercel OIDC token can mint the app token, so the CLI cannot check it: check it
+on a Preview. An owner or admin connects the bot under Settings › Workspace
+(`src/slack/slack-bot-procedures.ts`), which calls `auth.test` and keeps the
+team in `slack_installation`, one per workspace; Disconnect deletes it.
+`SlackBot.dm` finds a member by their email (`users.lookupByEmail`) the first
+time and keeps the answer, a miss included, in `slack_member`
+(`@repo/database/models/slack-installation-store`). `dm` and `update` log and
+swallow every failure; never yield either inside a transaction.
+
 ## The admin resource
 
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted

@@ -235,6 +235,16 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`sentry-disconnect:${params.workspaceId}:${params.installationId}`, () =>
         script.notPermitted ? refusal() : { sentry: { configured: true, installations: [] } },
       ),
+    workspaceSlackBot: (params) =>
+      ask(`slack-bot:${params.workspaceId}`, () => ({ slackBot: { configured: true } })),
+    workspaceSlackBotConnect: (params) =>
+      ask(`slack-bot-connect:${params.workspaceId}`, () =>
+        script.notPermitted ? refusal() : { slackBot: { configured: true } },
+      ),
+    workspaceSlackBotDisconnect: (params) =>
+      ask(`slack-bot-disconnect:${params.workspaceId}`, () =>
+        script.notPermitted ? refusal() : { slackBot: { configured: true } },
+      ),
     workspaceMembers: (params) =>
       ask(`members:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id ? { members: [GRACE], former: [ALAN] } : refusal(),

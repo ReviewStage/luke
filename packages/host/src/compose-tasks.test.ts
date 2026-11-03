@@ -695,6 +695,9 @@ function fakeService(tasks: Task[]): FakeService {
       sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBot: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotConnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
       people: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`members:${workspaceId}`);

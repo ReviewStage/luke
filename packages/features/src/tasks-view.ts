@@ -38,6 +38,7 @@ import {
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
+import { workspaceSlackBotAnswerSchema } from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   listedPullRequestSchema,
@@ -924,6 +925,14 @@ export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
+
+/** A workspace's Slack bot as the window hears it after a read, a connect, or a disconnect: whether the deployment holds the bot and the team it is connected to, or why there is no answer. */
+export const tasksWorkspaceSlackBotAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ slackBot: workspaceSlackBotAnswerSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceSlackBotAnswer = typeof tasksWorkspaceSlackBotAnswerSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

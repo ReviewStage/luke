@@ -307,6 +307,7 @@ import {
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceSentryDisconnectParams,
+  type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
   type TasksWorkspaceTokenRepositorySetParams,
@@ -347,6 +348,7 @@ import {
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceSentryAnswerSchema,
+  tasksWorkspaceSlackBotAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
@@ -600,6 +602,16 @@ export interface HostOperator {
   workspaceSentryDisconnect(
     params: TasksWorkspaceSentryDisconnectParams,
   ): Effect.Effect<TasksWorkspaceSentryAnswer>;
+  /** Whether the deployment holds our Slack bot, and the team a workspace's bot is connected to; or why there is no answer. */
+  workspaceSlackBot(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** A workspace's Slack bot connected; the bot as it then stands, or why it is not. */
+  workspaceSlackBotConnect(
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** A workspace's Slack bot disconnected; the bot as it then stands, or why it is not. */
+  workspaceSlackBotDisconnect(
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
@@ -1510,6 +1522,25 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           installationId: params.installationId,
         }),
         answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBot: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT, { workspaceId: params.workspaceId }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceMembers: (params) =>
       Effect.map(

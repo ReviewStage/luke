@@ -370,6 +370,12 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_SENTRY_INSTALLATIONS: "/api/workspaces/sentry/installations",
   /** One of a workspace's Sentry installations disconnected by an owner or admin (POST), answering the installations as they then stand. */
   WORKSPACE_SENTRY_DISCONNECT: "/api/workspaces/sentry/disconnect",
+  /** Whether the deployment holds our Slack bot, and the Slack team a workspace's bot is connected to, to a member (GET, `WORKSPACE_SLACK_BOT_QUERY`). */
+  WORKSPACE_SLACK_BOT: "/api/workspaces/slack-bot",
+  /** A workspace's Slack bot connected by an owner or admin to the team its token answers for (POST), answering the bot as it then stands (`slack-bot-wire.ts`). */
+  WORKSPACE_SLACK_BOT_CONNECT: "/api/workspaces/slack-bot/connect",
+  /** A workspace's Slack bot disconnected by an owner or admin (POST), answering the bot as it then stands. */
+  WORKSPACE_SLACK_BOT_DISCONNECT: "/api/workspaces/slack-bot/disconnect",
   /**
    * The Sentry integration's Redirect URL (GET): Sentry lands the browser
    * here after an install with the code, the installation's id, the

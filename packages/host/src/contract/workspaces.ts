@@ -1,5 +1,6 @@
 import { workspaceTokenRepositorySchema } from "@repo/features/github-repositories-wire";
 import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire";
+import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
@@ -98,6 +99,21 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSentryDisconnectParamsSchema))
     .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_READ]: actProcedure(
+    "Could not read that workspace's Slack bot on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT]: actProcedure(
+    "Could not connect the Slack bot to that workspace on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT]: actProcedure(
+    "Could not disconnect the Slack bot from that workspace on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actProcedure(
     "Could not read that workspace's members on this system.",
   )

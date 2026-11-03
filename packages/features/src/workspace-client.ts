@@ -33,6 +33,11 @@ import {
   readServiceAnswer,
 } from "./service-wire.js";
 import {
+  WORKSPACE_SLACK_BOT_QUERY,
+  type WorkspaceSlackBot,
+  workspaceSlackBotRequestSchema,
+} from "./slack-bot-wire.js";
+import {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallFailure,
   type WorkspaceCallResult,
@@ -363,6 +368,49 @@ export class HostedWorkspaceClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
       askHosted(this.#hosted.workspaceSentry.disconnect, admitted),
+      (answer) => answer,
+    );
+  }
+  /** Whether the deployment holds our Slack bot, and the Slack team the workspace's bot is connected to. */
+  slackBot(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.read, {
+        [WORKSPACE_SLACK_BOT_QUERY.WORKSPACE_ID]: admitted.workspaceId,
+      }),
+      (answer) => answer,
+    );
+  }
+
+  /** The workspace's Slack bot connected to the team its token answers for, answering the bot as it then stands. */
+  slackBotConnect(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.connect, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** The workspace's Slack bot disconnected, answering the bot as it then stands. */
+  slackBotDisconnect(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.disconnect, admitted),
       (answer) => answer,
     );
   }

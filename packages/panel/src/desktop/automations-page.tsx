@@ -70,7 +70,7 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MemberDirectory, useCreator } from "../member-directory.js";
-import { useSentryRead } from "../settings/use-sentry-read.js";
+import { useWorkspaceRead } from "../settings/use-workspace-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -934,9 +934,9 @@ const SENTRY_UNREAD: SentryOffer = {
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const { act } = useAct();
-  const { read: answer, retry } = useSentryRead(workspaceId);
+  const { read: answer, retry } = useWorkspaceRead(ACT_KIND.WORKSPACE_SENTRY_READ, workspaceId);
   // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
-  const read = answer !== undefined && "sentry" in answer ? answer.sentry : undefined;
+  const read = answer !== undefined && "answer" in answer ? answer.answer : undefined;
   const failed = answer !== undefined && "failed" in answer;
   const [installing, setInstalling] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);

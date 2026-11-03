@@ -15,6 +15,7 @@ import {
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
@@ -144,6 +145,8 @@ let refuseGitHubOpen = false;
 const SENTRY_NOT_SET_UP: WorkspaceSentry = { configured: false, installations: [] };
 /** The workspace's Sentry as the service answers it; none where the read is refused. */
 let sentry: WorkspaceSentry | undefined = SENTRY_NOT_SET_UP;
+/** The workspace's Slack bot as the fake service holds it; unset, it holds none. */
+let slackBot: WorkspaceSlackBot = { configured: false };
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -291,6 +294,14 @@ function answer(request: Asked): Promise<Answered> {
       return Promise.resolve(done(sentry));
     case ACT_KIND.WORKSPACE_SENTRY_INSTALL:
       return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_SLACK_BOT_READ:
+      return Promise.resolve(done(slackBot));
+    case ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT:
+      slackBot = { configured: true, team: SLACK_TEAM };
+      return Promise.resolve(done(slackBot));
+    case ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT:
+      slackBot = { configured: true };
+      return Promise.resolve(done(slackBot));
     case ACT_KIND.WORKSPACE_SENTRY_DISCONNECT: {
       const { installationId } = request.payload;
       const was: WorkspaceSentry = sentry ?? { configured: true, installations: [] };
@@ -504,6 +515,7 @@ beforeEach(() => {
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   sentry = SENTRY_NOT_SET_UP;
+  slackBot = { configured: false };
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
@@ -989,7 +1001,9 @@ test("the chosen team workspace's members are listed with their email and role, 
     sent
       .filter(
         (request) =>
-          request.kind.startsWith("workspace.") && request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ,
+          request.kind.startsWith("workspace.") &&
+          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => request.kind),
     [
@@ -1133,7 +1147,7 @@ test("before the workspaces are read, placeholder sections stand in the page's s
   assert.deepEqual(sections, [
     [false, 1],
     [true, 1],
-    [true, 2],
+    [true, 3],
   ]);
 });
 
@@ -2078,7 +2092,8 @@ test("the owner invites an address as a role, sees it pending with its link to c
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
           request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
-          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ,
+          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [
@@ -2509,6 +2524,40 @@ test("an installed workspace's Sentry names its organization, its Disconnect but
     "Not installed. Install to start automations from Sentry alerts.",
   ]);
   assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed for automations · acme"]);
+  assert.deepEqual(rowButtons(memberRow), []);
+});
+
+const SLACK_TEAM = { id: "T0001", name: "Acme Slack" };
+
+test("an admin connects the Slack bot, which then names its team, and disconnects it after asking; a member sees it read only", async () => {
+  slackBot = { configured: true };
+  const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const before = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+
+  act(() => button(rowNamed(githubGroup(admin.page), "Slack bot"), "Connect Slack bot").click());
+  await settle();
+  const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  await chooseAction(rowNamed(githubGroup(admin.page), "Slack bot"), "Disconnect");
+  await confirm("Disconnect");
+  const after = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  slackBot = { configured: true, team: SLACK_TEAM };
+  const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
+  const memberRow = rowNamed(githubGroup(member.page), "Slack bot");
+
+  assert.deepEqual(before, [
+    "Slack bot",
+    "Not connected. Connect Vespin's bot to message members in Slack.",
+  ]);
+  assert.deepEqual(connected, [
+    "Slack bot",
+    "Connected to Acme Slack · Messages members whose email matches",
+  ]);
+  assert.deepEqual(after, before);
+  assert.deepEqual(rowWords(memberRow), [
+    "Slack bot",
+    "Connected to Acme Slack · Messages members whose email matches",
+  ]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 
