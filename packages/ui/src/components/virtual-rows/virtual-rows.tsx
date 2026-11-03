@@ -198,7 +198,7 @@ function rowClassOf(
   index: number,
 ): string {
   const own = typeof rowClassName === "function" ? rowClassName(index) : rowClassName;
-  return own === undefined ? "luke-virtual-row" : `luke-virtual-row ${own}`;
+  return own === undefined ? "ui-virtual-row" : `ui-virtual-row ${own}`;
 }
 
 /** The row of the run that `target` stands in: the child of `block` holding it, none where it is outside every row. */
@@ -234,7 +234,7 @@ export function VirtualRows({
   keys: readonly string[];
   /** The height a row is taken to have before it is measured, in pixels. */
   estimate: number;
-  /** The room between two rows, in pixels, which the stylesheet sets as the run's `--luke-virtual-gap`. */
+  /** The room between two rows, in pixels, which the stylesheet sets as the run's `--ui-virtual-gap`. */
   gap?: number;
   overscan?: number | undefined;
   /** Which end keeps the reader's place: the last row, as a log's, unless said. */
@@ -398,7 +398,7 @@ export function VirtualRows({
   const last = items.at(-1);
   const before = first === undefined ? 0 : first.start - margin;
   const after = last === undefined ? 0 : virtualizer.getTotalSize() - (last.end - margin);
-  const own = listItems ? "luke-virtual-rows luke-virtual-items" : "luke-virtual-rows";
+  const own = listItems ? "ui-virtual-rows ui-virtual-items" : "ui-virtual-rows";
   const run = {
     ref: holdBlock,
     className: className === undefined ? own : `${own} ${className}`,
@@ -406,7 +406,7 @@ export function VirtualRows({
     ...(moves ? motionRows() : {}),
     // Note that the spacers are the block's own padding rather than properties its rows inherit, because a property the rows inherit is read again for every element in them each time the drawn rows move.
     style: {
-      ...cssCustomProperties({ "--luke-virtual-gap": `${gap}px` }),
+      ...cssCustomProperties({ "--ui-virtual-gap": `${gap}px` }),
       paddingBlockStart: `${Math.max(0, before)}px`,
       paddingBlockEnd: `${Math.max(0, after)}px`,
     },

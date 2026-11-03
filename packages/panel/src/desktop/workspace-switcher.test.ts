@@ -91,7 +91,7 @@ function open(switcher: HTMLButtonElement | null): void {
 
 /** An item's label, the words beside its glyph. */
 function labelOf(item: HTMLElement): string | null {
-  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
+  return item.querySelector(".ui-menu-item-label")?.textContent ?? null;
 }
 
 /** Chooses the open menu's item by its label. */
@@ -335,7 +335,7 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
     const page = mount({ workspaces, workspace: workspaces[0] });
     open(page.switcher());
     const drawn = menuItems()
-      .map((item) => item.querySelector(".luke-avatar[data-shape='tile']"))
+      .map((item) => item.querySelector(".ui-avatar[data-shape='tile']"))
       .filter((tile) => tile !== null)
       .map((tile) => [tile.textContent, tile.getAttribute("data-hue")]);
     // Each reading stands alone, so the next finds only its own menu.
@@ -375,7 +375,7 @@ test("each workspace in the menu says who shares it under its name, to the eye a
     .slice(0, 4)
     .map((item) => [
       labelOf(item),
-      item.querySelector(".luke-menu-item-detail")?.textContent,
+      item.querySelector(".ui-menu-item-detail")?.textContent,
       item.getAttribute("aria-label"),
     ]);
 
@@ -400,7 +400,7 @@ test("the head says who shares the workspace, to the eye and to a screen reader:
     const heard = head?.getAttribute("aria-label");
     for (const root of roots.splice(0)) act(() => root.unmount());
     document.body.innerHTML = "";
-    return [head?.querySelector(".luke-avatar[data-shape='tile']")?.textContent, said, heard];
+    return [head?.querySelector(".ui-avatar[data-shape='tile']")?.textContent, said, heard];
   };
 
   assert.deepEqual(shared(5), ["A", ["5 members", 1], "Workspace: acme, 5 members"]);

@@ -27,7 +27,7 @@ import { fixedAccountSource } from "./testing/fixed-account-source.js";
  * would, which for a cookie session is with no header at all.
  */
 
-const SERVICE_BASE_URL = "https://luke.example.test";
+const SERVICE_BASE_URL = "https://app.example.test";
 
 /** A settings concern in a run that sends, over a service that answers every request and keeps what each carried. */
 const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
@@ -37,7 +37,7 @@ const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
     requests.push({ url: request.url, authorization: request.headers.get("authorization") });
     return new Response(null, { status: 204 });
   };
-  const stateRoot = yield* temporaryDirectoryScoped("luke-settings-sending-");
+  const stateRoot = yield* temporaryDirectoryScoped("settings-sending-");
   const machine = Layer.mergeAll(
     Layer.succeed(
       HostKernelTag,
@@ -166,7 +166,7 @@ const tabOver = Effect.fnUntraced(function* (
 
 /** A writing tab, and a reading tab whose shell says the file changed each time `signal` is offered. */
 const twoTabs = Effect.fnUntraced(function* () {
-  const stateRoot = yield* temporaryDirectoryScoped("luke-settings-elsewhere-");
+  const stateRoot = yield* temporaryDirectoryScoped("settings-elsewhere-");
   const signal = yield* Queue.unbounded<void>();
   const writer = yield* tabOver(stateRoot, Layer.empty);
   const reader = yield* tabOver(
@@ -206,7 +206,7 @@ it.effect(
   "a reset whose kept fields name anything but settings is refused, and the group stands as it was",
   () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-settings-reset-");
+      const stateRoot = yield* temporaryDirectoryScoped("settings-reset-");
       const { settings } = yield* tabOver(stateRoot, Layer.empty);
       yield* settings.store.set("theme", THEME.DARK);
       const reset = settings.methods[GATEWAY_METHOD.SETTINGS_RESET];

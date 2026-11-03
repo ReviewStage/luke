@@ -69,10 +69,10 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
@@ -91,9 +91,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  */
 
 const SNAPSHOT = "snap_fixture_image";
-const EVENTS_URL = "https://luke.test/api/agents/runner-events";
-const LINES_URL = "https://luke.test/api/agents/runner-lines";
-const MCP_URL = "https://luke.test/api/agents/mcp";
+const EVENTS_URL = "https://app.test/api/agents/runner-events";
+const LINES_URL = "https://app.test/api/agents/runner-lines";
+const MCP_URL = "https://app.test/api/agents/mcp";
 
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
@@ -102,7 +102,7 @@ const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('ru
 const KEK = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const ISSUED_CLIENT = "oaiapp_test_client";
 const THREAD = "019a0b1c-2d3e-7f40-8a5b-6c7d8e9f0a1b";
-const TOKEN_URL = "https://luke.test/api/agents/runner-token";
+const TOKEN_URL = "https://app.test/api/agents/runner-token";
 const MINUTE = 60 * 1000;
 
 function ring(): KeyRing {
@@ -139,7 +139,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
 };
@@ -180,7 +179,7 @@ function services(
 const openAgent = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createAgent(userId, {
@@ -275,7 +274,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
       Effect.gen(function* () {
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         yield* signIn(userId, 60);
         const deviceId = randomUUID();
@@ -413,7 +412,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
           tokenUrl: TOKEN_URL,
-          installedSkills: "/opt/luke/installed-skills",
+          installedSkills: "/opt/agent/installed-skills",
           warm: true,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);
@@ -441,7 +440,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const apiKey = "sk-proj-fixture-account-key";
         const userId = `user-${randomUUID()}`;
         yield* Effect.flatMap(Database, (db) =>
-          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {

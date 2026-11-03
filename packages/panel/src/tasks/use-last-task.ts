@@ -33,7 +33,7 @@ const storedTasks = Schema.fromJsonString(Schema.Record(Schema.String, Schema.St
 type KeptTasks = typeof storedTasks.Type;
 
 /** Where the tasks are kept in the renderer's storage, and where they were kept before tasks had their name. */
-const KEPT = { TASKS: keptKey("luke.lastTask", storedTasks, "luke.lastPlan") } as const;
+const KEPT = { TASKS: keptKey("app.lastTask", storedTasks, "app.lastPlan") } as const;
 
 const NONE_KEPT: KeptTasks = {};
 

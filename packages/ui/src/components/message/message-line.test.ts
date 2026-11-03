@@ -22,20 +22,20 @@ function drawn(props: Parameters<typeof MessageLine>[0]): HTMLElement | null {
     renderToStaticMarkup(createElement(MessageLine, props)),
     "text/html",
   );
-  return page.querySelector<HTMLElement>(".luke-message-line");
+  return page.querySelector<HTMLElement>(".ui-message-line");
 }
 
 const ACTIONS = createElement(MessageActions, null, "Copy");
 
 test("a message's line says who sent it, then when, as a call's day and clock", () => {
   const line = drawn({ sender: "Ada", at: AT, actions: ACTIONS });
-  assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Ada");
-  assert.match(line?.querySelector(".luke-message-line-time")?.textContent ?? "", /·.*3:42/u);
+  assert.equal(line?.querySelector(".ui-message-line-sender")?.textContent, "Ada");
+  assert.match(line?.querySelector(".ui-message-line-time")?.textContent ?? "", /·.*3:42/u);
 });
 
 test("a message from the reader names no one, so its time stands without a dot before it", () => {
   const line = drawn({ at: AT, actions: ACTIONS });
-  assert.equal(line?.querySelector(".luke-message-line-sender"), null);
+  assert.equal(line?.querySelector(".ui-message-line-sender"), null);
   assert.doesNotMatch(line?.textContent ?? "", /·/u);
 });
 

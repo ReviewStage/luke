@@ -196,7 +196,7 @@ interface ToolWords {
   readonly ownSandbox: string;
 }
 
-/** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../luke-mcp/app.ts`). */
+/** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../workspace-mcp/app.ts`). */
 const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as ${INTEGRATION_NAMES_SAID}, are MCP servers of your own, one per connection and named for it (\`linear\`, or \`notion-2\` for their second Notion account): use their tools as you use any other. One that lists no tools is not connected, or its sign-in expired, and only the developer can connect it again, in ${PRODUCT_NAME}'s settings.
 
 `;
@@ -351,7 +351,7 @@ When a result reads better as something to look at or click through than as word
 const TASK_PLACE_WORDS = {
   onTask: {
     link: ` A \`${LINK_ORIGIN}/<workspace>/plan/<id>\` link names a task, or with \`#\` one of its plan's sections: what its plan said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
-    olderLinks: ", `luke://folder/<path>/`, and `luke://plan/<id>#<heading>`",
+    olderLinks: ", `<scheme>://folder/<path>/`, and `<scheme>://plan/<id>#<heading>`",
     startAgent:
       " Start it on your own task, which is where a piece of this task's work belongs; start one on another task, or on a new task of its own, only for work unrelated to your task, or where the developer asked for that",
     status: `
@@ -367,7 +367,7 @@ Members and agents leave comment threads on a plan's text, each beside the words
   },
   taskless: {
     link: "",
-    olderLinks: " and `luke://folder/<path>/`",
+    olderLinks: " and `<scheme>://folder/<path>/`",
     comments: "",
     status: "",
     startAgent: ` You work on no task, so leave its taskId out to start it beside you, in your own workspace and the repository you work in, if any, or name another repository, or null for none; name a task by its id only for work that belongs to that task, and make one first with \`${CODER_TOOL.CREATE_TASK}\` only for work that should stand as a task of its own`,
@@ -472,8 +472,8 @@ function namingWords(repository: string | null, taskLink: string | null): string
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository ?? EXAMPLE_REPOSITORY}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`. Write one so every time you name it, in passing and in a report to another agent among them, never as a bare \`#42\`, which draws as no chip; where no tool answered a pull request's address, spell it from its number, its repository's address with \`/pull/\` and the number.${ownTask}
 - Another agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](${LINK_ORIGIN}/acme/plan/<task-id>/agent/<agent-id>)\`.
 - One of your threads, by the \`mention\` each of your thread tools answered for it: \`[@Review the invite flow](${inboxItem})\`.
-- A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](luke://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)\`.
-- An MCP server, by its connection's name as your tools list it: \`[@Linear](luke://mcp/linear)\`, or \`[@Notion](luke://mcp/notion-2)\` for a second Notion account.
+- A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](mention://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](mention://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](mention://date/2026-10-20/2026-10-24)\`.
+- An MCP server, by its connection's name as your tools list it: \`[@Linear](mention://mcp/linear)\`, or \`[@Notion](mention://mcp/notion-2)\` for a second Notion account.
 
 Name a skill as \`/name\`, which ${PRODUCT_NAME} draws as the skill's chip.
 
@@ -1069,7 +1069,7 @@ export function coderInstructions(
   const sections = pilot ? PILOT_SECTION_WORDS : CODER_SECTION_WORDS;
   return `${place.work}${tools.todos}
 
-${place.search}${place.skills}${place.links}${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside ${PRODUCT_NAME}, such as a commit or a pull request, where it leads nowhere; a GitHub or ${LINK_HOME.HOST} link may be written as it is.
+${place.search}${place.skills}${place.links}${place.link} Older messages write the same things in an app-only scheme, as \`<scheme>://file/<path>\`${place.olderLinks}. Write the name rather than an app-only link, such as a \`mention://\` one, anywhere outside ${PRODUCT_NAME}, such as a commit or a pull request, where it leads nowhere; a GitHub or ${LINK_HOME.HOST} link may be written as it is.
 
 ## Threads
 

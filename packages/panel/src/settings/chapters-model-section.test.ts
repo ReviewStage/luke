@@ -56,7 +56,7 @@ let motion: ReturnType<typeof holdExits>;
 
 beforeEach(() => {
   // jsdom runs no motion, so the Saved tick would be taken the moment it stood.
-  motion = holdExits((element) => element.classList.contains("luke-saved-tick"));
+  motion = holdExits((element) => element.classList.contains("ui-saved-tick"));
   stored = CHAPTERS_MODEL.HAIKU;
   sent = [];
   failRead = false;
@@ -95,7 +95,7 @@ const written = () =>
 
 /** What stands beside the row's name now: its Saved tick and its Modified word. */
 const marks = (page: HTMLElement) =>
-  [...page.querySelectorAll(".luke-saved-tick, .luke-settings-changed-mark")].map(
+  [...page.querySelectorAll(".ui-saved-tick, .ui-settings-changed-mark")].map(
     (each) => each.textContent ?? "",
   );
 

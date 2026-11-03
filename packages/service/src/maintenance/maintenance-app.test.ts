@@ -22,7 +22,6 @@ import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { EVE_HOST_ENVIRONMENT, EVE_HOST_HEADER } from "../agents/eve-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { GitHubApp } from "../github/github-app.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
@@ -52,9 +51,6 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 
 const CRON_SECRET = "cron-secret-1";
 /** The deployment's own secret at eve's door, which every deployment here holds beside the cron's. */
-const EVE_DEPLOYMENT_SECRET = "eve-deployment-secret-1";
-/** The origin eve answers on, as `APP_EVE_ORIGIN` names it to the sweep. */
-const EVE_ORIGIN = "https://luke.test";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -68,7 +64,6 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     posthogProjectApiKey: undefined,
     posthogIngestHost: undefined,
     cronSecret: cronSecret === undefined ? undefined : Redacted.make(cronSecret),
-    eveDeploymentSecret: Redacted.make(EVE_DEPLOYMENT_SECRET),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
   };
@@ -112,7 +107,7 @@ const sweep = (
       maintenanceApp().pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const request = new Request(`https://luke.test${MAINTENANCE_SWEEP_PATH}`, {
+    const request = new Request(`https://app.test${MAINTENANCE_SWEEP_PATH}`, {
       headers: { authorization: `Bearer ${bearer}` },
     });
     const response = yield* Effect.promise(() => handler(request));
@@ -138,22 +133,6 @@ it.effect("a call that is not the cron's checks nothing in", () =>
     assert.equal(status, 401);
     assert.deepEqual(checkIns(sentry.sent), []);
   }),
-);
-
-it.effect(
-  "a call under the deployment's own secret at eve's door is not the cron's, beside the cron's secret or without it, and checks nothing in",
-  () =>
-    Effect.gen(function* () {
-      const sentry = recordingSentry();
-      const beside = yield* sweep(CRON_SECRET, EVE_DEPLOYMENT_SECRET).pipe(
-        Effect.provide(sentry.layer),
-      );
-      const without = yield* sweep(undefined, EVE_DEPLOYMENT_SECRET).pipe(
-        Effect.provide(sentry.layer),
-      );
-      assert.deepEqual([beside, without], [401, 503]);
-      assert.deepEqual(checkIns(sentry.sent), []);
-    }),
 );
 
 it.layer(getTestDB())("a sweep that runs", (it) => {
@@ -282,56 +261,34 @@ const openDueAutomation = Effect.gen(function* () {
 });
 
 /**
- * GitHub reaching the automation's repository and eve behind the
- * deployment's rewrites, as one HTTP boundary, with the catalog the
- * automation's model is offered in; every request eve receives is written
- * down by its route, bearer, and the account it names.
+ * GitHub reaching the automation's repository, the catalog the automation's
+ * model is offered in, and a harness that writes down each call and whom it
+ * acted for.
  */
-function githubAndEve() {
-  const asked: {
-    readonly url: string;
-    readonly authorization: string | null;
-    readonly account: string | null;
-  }[] = [];
-  const github = githubReaching([INSTALLATION], undefined, {}, (sent) => {
-    if (!sent.url.startsWith(`${EVE_ORIGIN}/eve/`)) return undefined;
-    asked.push({
-      url: sent.url,
-      authorization: sent.headers.get("authorization"),
-      account: sent.headers.get(EVE_HOST_HEADER.ACCOUNT),
-    });
-    return Response.json(
-      { ok: true, sessionId: "wrun_01SWEPTAUTOMATION000000000", status: "accepted" },
-      { status: 202 },
-    );
-  });
+function githubAndHarness() {
+  const github = githubReaching([INSTALLATION]);
   const catalog = modelCatalogOf([
     { id: MODEL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
   ]);
   const harness = recordingHarness();
   return {
-    asked,
     heard: harness.heard,
     reached: Layer.mergeAll(github.layer, catalog, harness.layer),
   };
 }
 
 it.layer(getTestDB())("an automation the sweep starts", (it) => {
-  it.effect(
-    "reaches its agent's harness acting for its owner, and sends eve nothing, the cron's bearer the sweep was called with least of all",
-    () =>
-      Effect.gen(function* () {
-        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
-        const owner = yield* openDueAutomation;
-        const eve = githubAndEve();
-        const sentry = recordingSentry();
-        const database = yield* testDatabase;
-        const status = yield* sweep(CRON_SECRET, CRON_SECRET, database, eve.reached).pipe(
-          Effect.provide(sentry.layer),
-        );
-        assert.equal(status, 200);
-        assert.deepEqual(eve.heard, [{ call: "open", account: owner }]);
-        assert.deepEqual(eve.asked, []);
-      }),
+  it.effect("reaches its agent's harness acting for its owner", () =>
+    Effect.gen(function* () {
+      const owner = yield* openDueAutomation;
+      const eve = githubAndHarness();
+      const sentry = recordingSentry();
+      const database = yield* testDatabase;
+      const status = yield* sweep(CRON_SECRET, CRON_SECRET, database, eve.reached).pipe(
+        Effect.provide(sentry.layer),
+      );
+      assert.equal(status, 200);
+      assert.deepEqual(eve.heard, [{ call: "open", account: owner }]);
+    }),
   );
 });

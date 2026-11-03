@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
 import {
   AGENT_BRIEF,
   AGENT_KIND,
@@ -196,7 +197,7 @@ test.each([
       if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
       // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
       assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
-      assert.ok(!words.includes("/tmp/luke"), label);
+      assert.ok(!words.includes(SHARED_FILES_DIRECTORY), label);
     }
   },
 );

@@ -91,8 +91,8 @@ export function MessageContent({ children, className, ...props }: MessageContent
     // developer's turn and a received line raise it in a bubble.
     <div
       className={cn(
-        "message-content min-w-0 max-w-full overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-body leading-reading text-foreground",
-        "group-[:is(.is-user,.is-received)]/message:w-fit group-[:is(.is-user,.is-received)]/message:rounded-luke-14 group-[:is(.is-user,.is-received)]/message:bg-fill-strong group-[:is(.is-user,.is-received)]/message:px-list-inset group-[:is(.is-user,.is-received)]/message:py-row-inset",
+        "message-content min-w-0 max-w-full overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)] text-body leading-reading text-foreground",
+        "group-[:is(.is-user,.is-received)]/message:w-fit group-[:is(.is-user,.is-received)]/message:rounded-ui-14 group-[:is(.is-user,.is-received)]/message:bg-fill-strong group-[:is(.is-user,.is-received)]/message:px-list-inset group-[:is(.is-user,.is-received)]/message:py-row-inset",
         className,
       )}
       {...props}
@@ -190,8 +190,8 @@ export const PANEL_MARKDOWN_COMPONENTS: MarkdownComponents = {
   h4: ({ children }) => <TranscriptHeading level={4}>{children}</TranscriptHeading>,
   h5: ({ children }) => <TranscriptHeading level={5}>{children}</TranscriptHeading>,
   h6: ({ children }) => <TranscriptHeading level={6}>{children}</TranscriptHeading>,
-  ul: ({ children }) => <ul className="my-tight-gap list-disc pl-luke-20">{children}</ul>,
-  ol: ({ children }) => <ol className="my-tight-gap list-decimal pl-luke-20">{children}</ol>,
+  ul: ({ children }) => <ul className="my-tight-gap list-disc pl-ui-20">{children}</ul>,
+  ol: ({ children }) => <ol className="my-tight-gap list-decimal pl-ui-20">{children}</ol>,
   li: ({ children }) => <li className="my-list-gap">{children}</li>,
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };

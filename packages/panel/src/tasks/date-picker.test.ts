@@ -37,7 +37,7 @@ const TASK: Task = {
   ...DOCUMENT_TASK,
   repository: "acme/relay",
   document: {
-    body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nShip by [@Oct 23, 2026](luke://date/2026-10-23).",
+    body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nShip by [@Oct 23, 2026](mention://date/2026-10-23).",
     assumptions: [],
   },
 };
@@ -278,16 +278,16 @@ test("a day picked names the chip anew in place once the picker closes, and undo
   pickDay(dialog, "Saturday, October 24, 2026");
   await pressKey(dialog, "Escape");
   const picked = mentionsIn(editor);
-  const chip = chipIn(container).querySelector(".luke-inline-ref-label")?.textContent;
+  const chip = chipIn(container).querySelector(".ui-inline-ref-label")?.textContent;
   act(() => {
     editor.commands.undo();
   });
 
   assert.equal(picker(container), null);
-  assert.deepEqual(picked, [{ name: "Oct 24, 2026", target: "luke://date/2026-10-24" }]);
+  assert.deepEqual(picked, [{ name: "Oct 24, 2026", target: "mention://date/2026-10-24" }]);
   assert.equal(chip, "Saturday");
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
+    { name: "Oct 23, 2026", target: "mention://date/2026-10-23" },
   ]);
 });
 
@@ -300,7 +300,7 @@ test("End date makes the date a range, the next day picked its end", async () =>
   await pressKey(dialog, "Escape");
 
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026 → Oct 26, 2026", target: "luke://date/2026-10-23/2026-10-26" },
+    { name: "Oct 23, 2026 → Oct 26, 2026", target: "mention://date/2026-10-23/2026-10-26" },
   ]);
 });
 
@@ -313,13 +313,13 @@ test("End date switched on and closed at once writes the range it shows, to the 
   const end = fieldOf(dialog, "End");
   const shown = [start.value, end.value];
   // Note that each date stands in its field, under its name, so the row is the line the two fields share.
-  const oneRow = start.closest(".luke-inline") === end.closest(".luke-inline");
+  const oneRow = start.closest(".ui-inline") === end.closest(".ui-inline");
   await pressKey(dialog, "Escape");
 
   assert.deepEqual(shown, ["Oct 23, 2026", "Oct 24, 2026"]);
   assert.ok(oneRow, "with no time, the two dates stand on one row");
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026 → Oct 24, 2026", target: "luke://date/2026-10-23/2026-10-24" },
+    { name: "Oct 23, 2026 → Oct 24, 2026", target: "mention://date/2026-10-23/2026-10-24" },
   ]);
 });
 
@@ -337,7 +337,7 @@ test("End date on a time in the day's last hour ends an hour later, past midnigh
   assert.deepEqual(ends, ["23:30", "00:30"]);
   assert.match(
     mention?.target ?? "",
-    /^luke:\/\/date\/2026-10-23T23:30[+-]\d\d:\d\d\/2026-10-24T00:30[+-]\d\d:\d\d$/u,
+    /^mention:\/\/date\/2026-10-23T23:30[+-]\d\d:\d\d\/2026-10-24T00:30[+-]\d\d:\d\d$/u,
   );
 });
 
@@ -357,7 +357,7 @@ test("an end picked on its start's day at an earlier time swaps with the start, 
   assert.deepEqual(ends, ["09:00", "10:00"]);
   assert.match(
     mention?.target ?? "",
-    /^luke:\/\/date\/2026-10-23T09:00[+-]\d\d:\d\d\/2026-10-23T10:00[+-]\d\d:\d\d$/u,
+    /^mention:\/\/date\/2026-10-23T09:00[+-]\d\d:\d\d\/2026-10-23T10:00[+-]\d\d:\d\d$/u,
   );
 });
 
@@ -370,7 +370,7 @@ test("an end picked before the start becomes the start, so the range stays in or
   await pressKey(dialog, "Escape");
 
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 20, 2026 → Oct 23, 2026", target: "luke://date/2026-10-20/2026-10-23" },
+    { name: "Oct 20, 2026 → Oct 23, 2026", target: "mention://date/2026-10-20/2026-10-23" },
   ]);
 });
 
@@ -385,10 +385,10 @@ test("Include time puts a time on the day, spelled with the offset the reader's 
   const offset = readerOffset(Date.parse("2026-10-23T12:00:00Z"));
 
   assert.equal(time, "09:00");
-  assert.equal(mention?.target, `luke://date/2026-10-23T09:00${offset}`);
+  assert.equal(mention?.target, `mention://date/2026-10-23T09:00${offset}`);
   assert.match(mention?.name ?? "", /^Oct 23, 2026, 9:00 AM /u);
   assert.equal(
-    chipIn(container).querySelector(".luke-inline-ref-label")?.textContent,
+    chipIn(container).querySelector(".ui-inline-ref-label")?.textContent,
     "Friday 9:00 AM",
   );
 });
@@ -421,7 +421,7 @@ test("Time zone keeps the time as written, read in the zone picked, and names th
   assert.equal(field.getAttribute("aria-label"), "Time zone: Asia/Tokyo");
   assert.equal(focused, true, "the focus is back on Time zone's field");
   assert.equal(time, "09:00");
-  assert.equal(mention?.target, "luke://date/2026-10-23T09:00+09:00");
+  assert.equal(mention?.target, "mention://date/2026-10-23T09:00+09:00");
   assert.equal(mention?.name, "Oct 23, 2026, 9:00 AM GMT+9");
 });
 
@@ -443,7 +443,7 @@ test("a zone of the same offset picked names the date anew in that zone's words"
   await pressKey(picker(container) ?? again, "Escape");
   const [mention] = mentionsIn(editor);
 
-  assert.equal(mention?.target, "luke://date/2026-10-23T09:00-07:00");
+  assert.equal(mention?.target, "mention://date/2026-10-23T09:00-07:00");
   assert.equal(mention?.name, "Oct 23, 2026, 9:00 AM MST");
 });
 
@@ -459,7 +459,7 @@ test("Escape on the zones turns back to the date, which stays open and unchanged
   assert.ok(card, "the picker is still open");
   assert.equal(fieldOf(card, "Start time").value, "09:00");
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
+    { name: "Oct 23, 2026", target: "mention://date/2026-10-23" },
   ]);
 });
 
@@ -480,7 +480,7 @@ test("words typed in the picker that name a date are written as it on Enter", as
 
   assert.equal(picker(container), null);
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 28, 2026", target: "luke://date/2026-10-28" },
+    { name: "Oct 28, 2026", target: "mention://date/2026-10-28" },
   ]);
 });
 
@@ -497,7 +497,7 @@ test("words typed into the end's field are read as that end once the field is le
 
   assert.equal(shown, "Oct 30, 2026");
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026 → Oct 30, 2026", target: "luke://date/2026-10-23/2026-10-30" },
+    { name: "Oct 23, 2026 → Oct 30, 2026", target: "mention://date/2026-10-23/2026-10-30" },
   ]);
 });
 
@@ -526,9 +526,9 @@ test("words naming a time typed into a day's field put the time on, the date wri
   await pressKey(dialog, "Enter");
   const [mention] = mentionsIn(editor);
 
-  assert.match(mention?.target ?? "", /^luke:\/\/date\/2026-10-28T15:00[+-]\d\d:\d\d$/u);
+  assert.match(mention?.target ?? "", /^mention:\/\/date\/2026-10-28T15:00[+-]\d\d:\d\d$/u);
   assert.equal(
-    chipIn(container).querySelector(".luke-inline-ref-label")?.textContent,
+    chipIn(container).querySelector(".ui-inline-ref-label")?.textContent,
     "Oct 28 3:00 PM",
   );
 });
@@ -546,7 +546,7 @@ test("a day typed into the end's field before the start shows its own month as t
 
   assert.match(month, /September 2026/u);
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Sep 20, 2026 → Oct 23, 2026", target: "luke://date/2026-09-20/2026-10-23" },
+    { name: "Sep 20, 2026 → Oct 23, 2026", target: "mention://date/2026-09-20/2026-10-23" },
   ]);
 });
 
@@ -559,7 +559,7 @@ test("words typed in the picker that name no date are marked and change nothing"
 
   assert.equal(fieldOf(dialog, "Start").getAttribute("aria-invalid"), "true");
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
+    { name: "Oct 23, 2026", target: "mention://date/2026-10-23" },
   ]);
 });
 
@@ -620,7 +620,7 @@ test("the picker closed with nothing changed leaves the chip as it was", async (
 
   assert.equal(picker(container), null);
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
+    { name: "Oct 23, 2026", target: "mention://date/2026-10-23" },
   ]);
 });
 
@@ -652,8 +652,8 @@ test("a day picked from the plan at rest saves the plan with the date named anew
       document: {
         base: TASK.document.body,
         value: TASK.document.body.replace(
-          "[@Oct 23, 2026](luke://date/2026-10-23)",
-          "[@Oct 24, 2026](luke://date/2026-10-24)",
+          "[@Oct 23, 2026](mention://date/2026-10-23)",
+          "[@Oct 24, 2026](mention://date/2026-10-24)",
         ),
       },
     },
@@ -662,7 +662,7 @@ test("a day picked from the plan at rest saves the plan with the date named anew
 
 test("a day picked from the plan at rest whose save is refused leaves the date as it was and says the plan could not be saved", async () => {
   const { container, saves } = drawnAtRest();
-  const before = chipAtRest(container).querySelector(".luke-inline-ref-label")?.textContent;
+  const before = chipAtRest(container).querySelector(".ui-inline-ref-label")?.textContent;
 
   act(() => chipAtRest(container).click());
   await act(async () => undefined);
@@ -676,7 +676,7 @@ test("a day picked from the plan at rest whose save is refused leaves the date a
 
   assert.equal(saves.length, 1, "the save was asked");
   assert.equal(
-    chipAtRest(container).querySelector(".luke-inline-ref-label")?.textContent,
+    chipAtRest(container).querySelector(".ui-inline-ref-label")?.textContent,
     before,
     "the chip names the date as it was",
   );
@@ -685,7 +685,7 @@ test("a day picked from the plan at rest whose save is refused leaves the date a
 
 test("a tick, a date and a tick from the plan at rest, before it is drawn anew, are each written over the one before", async () => {
   const body =
-    "## Rollout\n\n- [ ] One\n- [ ] Two\n\nShip by [@Oct 23, 2026](luke://date/2026-10-23).";
+    "## Rollout\n\n- [ ] One\n- [ ] Two\n\nShip by [@Oct 23, 2026](mention://date/2026-10-23).";
   const { container, saves } = drawnAtRest(
     { ...TASK, document: { body, assumptions: [] } },
     true,
@@ -715,8 +715,8 @@ test("a tick, a date and a tick from the plan at rest, before it is drawn anew, 
 
   const ticked = body.replace("[ ] One", "[x] One");
   const dated = ticked.replace(
-    "[@Oct 23, 2026](luke://date/2026-10-23)",
-    "[@Oct 24, 2026](luke://date/2026-10-24)",
+    "[@Oct 23, 2026](mention://date/2026-10-23)",
+    "[@Oct 24, 2026](mention://date/2026-10-24)",
   );
   assert.deepEqual(
     saves.map((save) => save.document),
@@ -744,7 +744,7 @@ test("Clear from the plan at rest saves the plan with the date taken out", async
 
   assert.deepEqual(
     saves.map((save) => save.document?.value),
-    [TASK.document.body.replace("[@Oct 23, 2026](luke://date/2026-10-23)", "")],
+    [TASK.document.body.replace("[@Oct 23, 2026](mention://date/2026-10-23)", "")],
   );
 });
 
@@ -785,8 +785,8 @@ test("words written above a date while its picker is open leave the date changed
       {
         base: grown.document.body,
         value: grown.document.body.replace(
-          "[@Oct 23, 2026](luke://date/2026-10-23)",
-          "[@Oct 24, 2026](luke://date/2026-10-24)",
+          "[@Oct 23, 2026](mention://date/2026-10-23)",
+          "[@Oct 24, 2026](mention://date/2026-10-24)",
         ),
       },
     ],
@@ -815,7 +815,7 @@ test("a date chip in a plan that takes no change opens no picker", () => {
   act(() => chip.click());
 
   assert.equal(chip.tagName, "SPAN");
-  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Friday");
+  assert.equal(chip.querySelector(".ui-inline-ref-label")?.textContent, "Friday");
   assert.equal(picker(container), null);
 });
 
@@ -828,7 +828,7 @@ test("Pick a date in the @ list narrowed to dates opens the picker, and the day 
     editor.view.dispatch(editor.state.tr.insertText(" Due @dates:"));
   });
   await act(async () => undefined);
-  const rows = [...container.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+  const rows = [...container.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (row) => row.textContent,
   );
   const key = (name: string) =>
@@ -848,8 +848,8 @@ test("Pick a date in the @ list narrowed to dates opens the picker, and the day 
   assert.deepEqual(rows, ["Today", "Tomorrow", "Oct 26", "Pick a date"]);
   assert.equal(picker(container), null);
   assert.deepEqual(mentionsIn(editor), [
-    { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
-    { name: "Oct 29, 2026", target: "luke://date/2026-10-29" },
+    { name: "Oct 23, 2026", target: "mention://date/2026-10-23" },
+    { name: "Oct 29, 2026", target: "mention://date/2026-10-29" },
   ]);
   assert.equal(editor.getText().includes("@dates:"), false);
 });

@@ -272,7 +272,7 @@ function AgentPageBar({
   const { rename } = actions;
   const title =
     rename?.editing === true ? (
-      <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
+      <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="ui-toolbar-title">
         <InlineEdit
           value={rename.asked ?? label}
           label={NAME_LABEL}

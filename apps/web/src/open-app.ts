@@ -1,5 +1,5 @@
 /**
- * open-luke.ts -- the Open link, the one way back every sign-in and connect page offers, as the Mac app at its home.
+ * open-app.ts -- the Open link, the one way back every sign-in and connect page offers, as the Mac app at its home.
  *
  * A page a flow the Mac started passes through has nothing but the Mac app to
  * go back to: on a Mac it opens the app through its own scheme, at the app's home
@@ -15,14 +15,14 @@ import type { AuthAction } from "@luke/ui";
 import { browserLinkPlatform } from "./link-platform";
 
 /** The words every way back is offered in. */
-export const OPEN_LUKE = `Open ${PRODUCT_NAME}`;
+export const OPEN_APP = `Open ${PRODUCT_NAME}`;
 
 /** The Open link as the Mac app at its home, on a Mac; nothing on any other platform. */
 export function openMacApp(platform: LinkPlatform): AuthAction | undefined {
-  return platform === LINK_PLATFORM.MAC ? { label: OPEN_LUKE, href: APP_HOME_LINK } : undefined;
+  return platform === LINK_PLATFORM.MAC ? { label: OPEN_APP, href: APP_HOME_LINK } : undefined;
 }
 
 /** The Open link on a page a flow the Mac started passes through, on the browser's own platform. */
-export function openLukeFromMac(): AuthAction | undefined {
+export function openAppFromMac(): AuthAction | undefined {
   return openMacApp(browserLinkPlatform());
 }

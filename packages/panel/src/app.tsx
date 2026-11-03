@@ -422,7 +422,7 @@ function AppWindow(): React.JSX.Element {
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
   // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
-  const openLukeLink = useSteadyDoor((link: ReadLink) => {
+  const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       adminOn: adminOn || adminPending,
@@ -441,7 +441,7 @@ function AppWindow(): React.JSX.Element {
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
-  const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
+  const openLink = useLinkOpener(accountGated || workspacesUnread, openAppLink);
   // A link of the account's own names no workspace, so it waits on the sign-in alone.
   const openAccount = useLinkOpener(accountGated, openAccountLink);
   useEffect(
@@ -655,7 +655,7 @@ function AppWindow(): React.JSX.Element {
 
   return (
     <OpenSettingsProvider value={openSettings}>
-      <OpenLinkProvider value={openLukeLink}>
+      <OpenLinkProvider value={openAppLink}>
         <ListedPullRequests tasks={listedTasks} agents={listedAgents}>
           <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
             <OpenPersonProvider value={openPerson}>

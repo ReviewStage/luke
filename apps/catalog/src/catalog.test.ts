@@ -49,6 +49,10 @@ test("an example asked for at 390 is framed at 390 pixels", () => {
   assert.ok(frame.textContent?.length, "the example draws inside the frame");
 });
 
+test("a fractional width, which the browser no longer refuses, is framed at the nearest pixel", () => {
+  assert.equal(frameOf(open("?example=badges&width=390.6"))?.style.inlineSize, "391px");
+});
+
 test("every other way to change the view keeps the width", () => {
   const page = open("?example=badges&width=390");
   const links = [...page.querySelectorAll<HTMLAnchorElement>("nav a, [aria-label=Theme] a")];

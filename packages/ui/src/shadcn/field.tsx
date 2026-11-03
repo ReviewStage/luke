@@ -26,11 +26,7 @@ import { Label } from "./label.js";
 
 export function Field({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div
-      data-slot="field"
-      className={cn("flex min-w-0 flex-col gap-luke-6", className)}
-      {...props}
-    />
+    <div data-slot="field" className={cn("flex min-w-0 flex-col gap-ui-6", className)} {...props} />
   );
 }
 

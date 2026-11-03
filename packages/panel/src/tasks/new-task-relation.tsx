@@ -27,6 +27,7 @@ import { CornerLeftUpIcon, GLYPH, HandIcon, NetworkIcon, OctagonMinusIcon } from
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useId, useState } from "react";
 import { RelationKindPill } from "./relation-kind-pill.js";
+import { TASK_RELATION_MENU } from "./task-relation-menu.js";
 import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
 
 /**
@@ -74,7 +75,7 @@ const KIND_ORDER: readonly TaskCreateRelationKind[] = [
 
 /** The menu's words, the rows', and why a task cannot take a kind. */
 const WORDS = {
-  MENU: "Task relation",
+  MENU: TASK_RELATION_MENU,
   KIND: "Relation",
   FIND: "Find a task",
   NO_MATCH: "No tasks match",

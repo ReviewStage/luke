@@ -1,6 +1,6 @@
 // app-theme.js -- the web app's theme before its first frame: the theme the
 // account last chose in this browser, kept by `src/app/web-appearance.tsx`
-// under `luke.theme`, worn on the root and the browser's chrome before the
+// under `app.theme`, worn on the root and the browser's chrome before the
 // stylesheet paints, so a dark tab is never light while its state is read.
 // A classic script rather than a module, because only a classic script in
 // the head runs before the first frame, and a file rather than inline,
@@ -24,10 +24,10 @@
   let sidebarCollapsed = null;
   let sidebarWidth = null;
   try {
-    chosen = localStorage.getItem("luke.theme");
-    signedIn = localStorage.getItem("luke.signed-in-here");
-    sidebarCollapsed = localStorage.getItem("luke.sidebar-collapsed");
-    sidebarWidth = localStorage.getItem("luke.sidebar-width");
+    chosen = localStorage.getItem("app.theme");
+    signedIn = localStorage.getItem("app.signed-in-here");
+    sidebarCollapsed = localStorage.getItem("app.sidebar-collapsed");
+    sidebarWidth = localStorage.getItem("app.sidebar-width");
   } catch {
     // A storage the browser refuses keeps no choice, so the machine's stands, and the frame draws no sidebar.
   }
@@ -38,14 +38,14 @@
         ? "dark"
         : "light";
   const root = document.documentElement;
-  root.setAttribute("data-luke-theme", theme);
+  root.setAttribute("data-ui-theme", theme);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", GROUND[theme]);
   if (signedIn === "true" && sidebarCollapsed === "false") {
-    root.setAttribute("data-luke-boot-sidebar", "pinned");
+    root.setAttribute("data-ui-boot-sidebar", "pinned");
     const width = Number(sidebarWidth);
     if (sidebarWidth !== null && sidebarWidth.trim() !== "" && Number.isFinite(width)) {
       const clamped = Math.min(SIDEBAR_WIDTH.MAX, Math.max(SIDEBAR_WIDTH.MIN, Math.round(width)));
-      root.style.setProperty("--luke-boot-sidebar-width", `${clamped}px`);
+      root.style.setProperty("--ui-boot-sidebar-width", `${clamped}px`);
     }
   }
 })();

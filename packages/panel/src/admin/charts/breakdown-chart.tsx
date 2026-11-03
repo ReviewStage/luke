@@ -101,7 +101,7 @@ export function BreakdownChart({
                 dataKey={(row: (typeof data)[number]) => (row.labelAt === key ? row.total : "")}
                 position="right"
                 offset={8}
-                className="fill-(--luke-color-text-muted)"
+                className="fill-(--ui-color-text-muted)"
               />
             </Bar>
           ))}

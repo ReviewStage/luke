@@ -9,7 +9,7 @@ import { cn } from "../cn.js";
  * allows, so a later `shadcn add button` reads as a small diff. Our
  * changes: the sizes are the control's roles (`control`, `compact`, `icon`,
  * `icon-compact`, and a menu's `row`) and a `shape` that rounds them; the
- * looks are not here, because a look is a set of `--luke-button-*` inks a
+ * looks are not here, because a look is a set of `--ui-button-*` inks a
  * container's sheet may restyle (`components/button/button.css`), so the
  * fill and ink are drawn there and only the edge is read here; none of
  * shadcn's outline or ring utilities, because the window's own focus ring
@@ -22,14 +22,14 @@ import { cn } from "../cn.js";
  */
 
 const buttonVariants = cva(
-  "group/button relative flex-none items-center justify-center max-w-full m-0 border border-solid border-button-edge font-ui no-underline whitespace-nowrap transition-[--luke-button-fill,background-color,color,filter,opacity] duration-(--luke-duration-hover) ease-motion-exit",
+  "group/button relative flex-none items-center justify-center max-w-full m-0 border border-solid border-button-edge font-ui no-underline whitespace-nowrap transition-[--ui-button-fill,background-color,color,filter,opacity] duration-(--ui-duration-hover) ease-motion-exit",
   {
     variants: {
       size: {
         control: "inline-flex h-control rounded-control text-label font-label",
         compact: "inline-flex h-6 px-2 rounded-control text-tag font-tag",
         icon: "inline-flex size-control p-0 rounded-control text-label font-label",
-        "icon-compact": "inline-flex size-6 p-0 rounded-luke-6 text-label font-label",
+        "icon-compact": "inline-flex size-6 p-0 rounded-ui-6 text-label font-label",
         row: "flex w-full justify-start h-menu-row px-2 rounded-menu-row text-body font-text",
       },
       shape: {
@@ -41,10 +41,10 @@ const buttonVariants = cva(
       {
         shape: "round",
         size: "control",
-        class: "rounded-luke-full px-[calc(var(--luke-control-height)/2)]",
+        class: "rounded-ui-full px-[calc(var(--ui-control-height)/2)]",
       },
-      { shape: "round", size: "compact", class: "rounded-luke-full" },
-      { shape: "round", size: "icon", class: "rounded-luke-full" },
+      { shape: "round", size: "compact", class: "rounded-ui-full" },
+      { shape: "round", size: "icon", class: "rounded-ui-full" },
     ],
     defaultVariants: {
       size: "control",

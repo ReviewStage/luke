@@ -25,7 +25,7 @@ const CALENDAR_CELL_RADIUS = "25%";
 
 function calendarCellFill(total: number, maxTotal: number): string {
   const fill = Math.max(CALENDAR_FILL_FLOOR_PERCENT, Math.round((total / maxTotal) * 100));
-  return `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`;
+  return `color-mix(in oklab, var(--ui-color-chart-1) ${fill}%, transparent)`;
 }
 
 /** Sunday first, the calendar's own week convention (`activity-calendar.ts`). */
@@ -45,13 +45,13 @@ function CalendarDayCell({
   onHide: () => void;
 }): React.JSX.Element {
   const provisional =
-    day.day === partialDay ? " border border-dashed border-(--luke-color-text-muted)/60" : "";
+    day.day === partialDay ? " border border-dashed border-(--ui-color-text-muted)/60" : "";
   return (
     <div
       role="img"
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatCount(day.calls)} hosted calls`}
       data-calendar-day={day.day}
-      className={`outline-offset-2 ${day.calls === 0 ? "bg-(--luke-color-fill-hover)/60" : ""}${provisional}`}
+      className={`outline-offset-2 ${day.calls === 0 ? "bg-(--ui-color-fill-hover)/60" : ""}${provisional}`}
       style={{
         borderRadius: CALENDAR_CELL_RADIUS,
         backgroundColor: day.calls === 0 ? undefined : calendarCellFill(day.calls, maxTotal),
@@ -89,7 +89,7 @@ const CALENDAR_GAP_PX = 3;
  * The grid's height: its month-label row, a caption's line, over the seven
  * day rows, each a gap under the row above it.
  */
-const CALENDAR_GRID_HEIGHT = `calc(var(--luke-type-caption-leading) + ${DAYS_PER_WEEK * (CALENDAR_CELL_PX + CALENDAR_GAP_PX)}px)`;
+const CALENDAR_GRID_HEIGHT = `calc(var(--ui-type-caption-leading) + ${DAYS_PER_WEEK * (CALENDAR_CELL_PX + CALENDAR_GAP_PX)}px)`;
 
 /** What the calendar's cells say, under the grid. */
 const CALENDAR_LEGEND =

@@ -36,7 +36,7 @@ import { terminalFindTints, terminalTheme } from "./terminal-theme.js";
 const SURFACE_CLASS = "terminal-surface";
 
 /** The token the terminal's typeface is read from, and the face it falls back to without one. */
-const FONT_TOKEN = "--luke-font-mono";
+const FONT_TOKEN = "--ui-font-mono";
 const FALLBACK_FONT = "monospace";
 
 /**

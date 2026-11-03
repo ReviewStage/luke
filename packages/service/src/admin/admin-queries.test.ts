@@ -32,7 +32,7 @@ const openAccount = (name: string, providers: readonly string[], role: string = 
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${name}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test`, role });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test`, role });
     for (const providerId of providers) {
       yield* db.insert(account).values({
         id: randomUUID(),

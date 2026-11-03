@@ -40,7 +40,6 @@ import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { afterEach, vi } from "vitest";
-import { EVE_HOST_ENVIRONMENT } from "../agents/eve-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
@@ -69,11 +68,9 @@ import { githubWebhookApp } from "./github-webhook-app.js";
  * Synthetic accounts, secrets, repositories, and deliveries throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const WEBHOOK = "/api/github/webhook";
 const SECRET = "whsec-fixture-luke";
-/** The origin eve answers on, as `APP_EVE_ORIGIN` names it to the delivery's wakes. */
-const EVE_ORIGIN = "https://eve.test";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -115,10 +112,6 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
   });
   return (sent: SentToGitHub): Response | undefined => {
     const url = new URL(sent.url);
-    // eve's coding-agent service, which a wake reaches over the same client, takes every follow-up.
-    if (url.origin === EVE_ORIGIN) {
-      return Response.json({ sessionId: "wrun_eve", deliveryId: "delivery-1" }, { status: 202 });
-    }
     if (url.pathname === "/graphql" && sent.method === "POST") {
       const mergeQueueEntry = pull.queued === true ? { position: 1 } : null;
       return Response.json({ data: { repository: { pullRequest: { mergeQueueEntry } } } });
@@ -149,7 +142,6 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     posthogProjectApiKey: undefined,
     posthogIngestHost: undefined,
     cronSecret: undefined,
-    eveDeploymentSecret: undefined,
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
     providerKeyEncryptionKeys: undefined,
   };
@@ -407,7 +399,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
             yield* Database.use((db) =>
               db
                 .insert(user)
-                .values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+                .values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
             );
             for (const [providerId, accountId] of [
               [GITHUB_PROVIDER_ID, String(githubUserId)],
@@ -877,10 +869,9 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     }),
   );
   it.effect(
-    "a person's review on an agent's branch wakes the agent through its harness acting for its owner, and sends eve nothing, under the cron's secret least of all",
+    "a person's review on an agent's branch wakes the agent through its harness acting for its owner",
     () =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
         const pull = { state: "open", merged: false, conclusion: "success" } as const;
         const { github, ref, owner, agent } = yield* openAgent({ ...pull });
         yield* claimRuntimeSession(
@@ -904,7 +895,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
 
         const answered = yield* answer(github, SECRET, delivery("pull_request_review", review), {
           cronSecret: Redacted.make("cron-secret-1"),
-          eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
         });
 
         assert.deepEqual(answered, { status: 200, body: { read: 0, queued: 0, told: 1 } });
@@ -912,17 +902,12 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           HARNESS.heard.filter((heard) => heard.account === owner),
           [{ call: "send", account: owner }],
         );
-        assert.deepEqual(
-          github.sent.filter((sent) => new URL(sent.url).origin === EVE_ORIGIN),
-          [],
-        );
       }),
   );
   it.effect(
     "a check suite completing on the head of an agent at work reads its pull request again, then wakes the agent once every check on that head finished",
     () =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
         const pull = { state: "open", merged: false, conclusion: "success" } as const;
         const { github, ref, owner, agent } = yield* openAgent({ ...pull });
         const now = yield* DateTime.nowAsDate;
@@ -954,9 +939,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           },
         };
 
-        const answered = yield* answer(github, SECRET, delivery("check_suite", suite), {
-          eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
-        });
+        const answered = yield* answer(github, SECRET, delivery("check_suite", suite), {});
 
         assert.deepEqual(answered, { status: 200, body: { read: 1, queued: 0, told: 1 } });
         assert.deepEqual(
@@ -969,7 +952,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     "a repository renamed on GitHub still wakes its agent and still names its task: the first delivery under the new name relabels what the store kept under the old",
     () =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
         const pull = { state: "open", merged: false, conclusion: "success" } as const;
         const {
           github: before,
@@ -1012,9 +994,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           pull_request: { number: 41, head: { ref } },
         };
 
-        const answered = yield* answer(github, SECRET, delivery("pull_request_review", review), {
-          eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
-        });
+        const answered = yield* answer(github, SECRET, delivery("pull_request_review", review), {});
 
         assert.deepEqual(answered, { status: 200, body: { read: 0, queued: 0, told: 1 } });
         const stored = Option.getOrThrow(yield* readTask(owner, task.id));

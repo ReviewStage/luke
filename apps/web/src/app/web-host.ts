@@ -92,7 +92,7 @@ import { copyPng, downloadText, openTab, webPlatform } from "./web-platform";
 import { openTerminalSocketFromPage } from "./web-terminal-socket";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
-const STATE_ROOT = "/luke";
+const STATE_ROOT = "/app";
 
 /** The platform a tab names in app state, where the desktop names Node's `process.platform`. */
 const RUN_PLATFORM = { WEB: "web" } as const;
@@ -139,7 +139,7 @@ class ComposedWebTag extends Context.Service<ComposedWebTag, ComposedWeb>()(
  * page it comes back to counts it: the tab's own, so another tab's return
  * is never this one's, and it outlives the provider's pages between.
  */
-const SIGN_IN_LEFT_KEY = "luke.host.signInLeft";
+const SIGN_IN_LEFT_KEY = "app.host.signInLeft";
 
 /** Keeps that a sign-in is leaving the tab; a storage the browser refuses keeps nothing, and the return goes uncounted. */
 function keepSignInLeft(): void {

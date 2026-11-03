@@ -920,7 +920,7 @@ const NEWER = "0.4.0";
 /** The newer release's tarball, as CI packs one: its `vespin-host` command, which answers its version, under one `luke-host/` folder. */
 const newerTarball = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
-  const scratch = yield* temporaryDirectoryScoped("luke-host-tarball-");
+  const scratch = yield* temporaryDirectoryScoped("host-tarball-");
   yield* fileSystem.makeDirectory(`${scratch}/luke-host/bin`, { recursive: true });
   yield* fileSystem.writeFileString(
     `${scratch}/luke-host/bin/vespin-host`,
@@ -946,7 +946,7 @@ const newerTarball = Effect.gen(function* () {
 const updatingHost = (tarball: Uint8Array<ArrayBuffer>) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const folder = yield* temporaryDirectoryScoped("luke-host-releases-");
+    const folder = yield* temporaryDirectoryScoped("host-releases-");
     for (const version of ["0.2.0", RUNNING]) {
       yield* fileSystem.makeDirectory(`${folder}/versions/${version}/bin`, { recursive: true });
     }

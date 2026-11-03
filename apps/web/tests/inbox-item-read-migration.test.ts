@@ -29,7 +29,7 @@ const MIGRATION = "20261018153718_inbox_item_read";
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-inbox-read-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-inbox-read-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(MIGRATION) < 0,
   );
@@ -40,7 +40,7 @@ const foldersBefore = Effect.gen(function* () {
 });
 
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
+  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
 
 it.effect(
   "an item that stood before unread was kept reads as read for every member, and one posted after it as unread",

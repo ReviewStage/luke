@@ -45,7 +45,7 @@ import { fixedAccountSource } from "./testing/fixed-account-source.js";
  * since the cookie is the browser's and rides the request on its own.
  */
 
-const ORIGIN = "https://luke.example.test";
+const ORIGIN = "https://app.example.test";
 const ACCOUNT_BASE_URL = `${ORIGIN}/api/auth`;
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
 /** A hosted route the account reaches, which refuses a request with no session behind it. */
@@ -1106,7 +1106,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     });
   };
   return Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-settings-");
+    const stateRoot = yield* temporaryDirectoryScoped("cookie-settings-");
     const { settings, account } = yield* composedTab(stateRoot, (settings) =>
       Effect.orDie(settings.store.set("linkOpen", LINK_OPEN.BROWSER)),
     );
@@ -1166,7 +1166,7 @@ it.effect("sends no day one person marked under the cookie another tab signed in
     return respond(state, { method: request.method, pathname, body });
   };
   return Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-events-");
+    const stateRoot = yield* temporaryDirectoryScoped("cookie-events-");
     // The launch counts itself and marks the day for the person signed in.
     yield* composedTab(stateRoot);
 
@@ -1218,7 +1218,7 @@ describe("a settings store that keeps no account of its own", () => {
 
   it.effect("keeps the session account's experiments across a reopen, for that account alone", () =>
     Effect.gen(function* () {
-      const directory = yield* temporaryDirectoryScoped("luke-cookie-store-");
+      const directory = yield* temporaryDirectoryScoped("cookie-store-");
       const signedIn: SignedIn = { email: ADA };
       const store = yield* storeOver(directory, signedIn);
       assert.equal(yield* store.cacheExperiments(ADA, { [EXPERIMENT.MEMORY]: true }), true);
@@ -1234,7 +1234,7 @@ describe("a settings store that keeps no account of its own", () => {
     "drops the preferences kept for an account once another is signed in, or it leaves",
     () =>
       Effect.gen(function* () {
-        const directory = yield* temporaryDirectoryScoped("luke-cookie-store-");
+        const directory = yield* temporaryDirectoryScoped("cookie-store-");
         const signedIn: SignedIn = { email: ADA };
         const store = yield* storeOver(directory, signedIn);
         yield* store.set("linkOpen", LINK_OPEN.MAC_APP);
@@ -1270,7 +1270,7 @@ it.effect(
       return jsonResponse({ preferences: {}, experiments: {} });
     };
     return Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-unsettled-");
+      const stateRoot = yield* temporaryDirectoryScoped("cookie-unsettled-");
       // The file as an earlier build left it for Ada: her link choice and her voice, which no
       // build keeps any more, and the baseline that names her.
       const fileSystem = yield* FileSystem.FileSystem;

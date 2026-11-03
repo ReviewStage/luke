@@ -45,7 +45,7 @@ export function HoldPress({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: it lays nothing out and hears the presses of the control it wraps, which is the keyboard's; the right-click's list is the control's context menu.
     <span
-      className="luke-hold-press"
+      className="ui-hold-press"
       data-long-press=""
       onPointerDown={(event) => {
         if (disabled) return;

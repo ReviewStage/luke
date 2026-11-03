@@ -276,7 +276,7 @@ const linkedAccount = (githubId: number) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     yield* db.insert(account).values({
       id: `account-${randomUUID()}`,
       accountId: String(githubId),
@@ -525,9 +525,9 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         let asked = 0;
         const script = repository({
           deployments: [
-            deployment("Preview – luke-web", "SUCCESS", "https://luke-web-git-x.vercel.app"),
+            deployment("Preview – luke-web", "SUCCESS", "https://web-git-x.vercel.app"),
             deployment("Preview – docs", "IN_PROGRESS", "https://docs-git-x.vercel.app"),
-            deployment("Preview – luke-web", "FAILURE", "https://luke-web-old.vercel.app"),
+            deployment("Preview – luke-web", "FAILURE", "https://web-old.vercel.app"),
             deployment("staging", "ERROR", "http://staging.example.com"),
             deployment("review-app", "INACTIVE", null),
             deployment("queued", null, null),
@@ -543,7 +543,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           {
             environment: "Preview – luke-web",
             state: DEPLOYMENT_STATE.READY,
-            url: "https://luke-web-git-x.vercel.app",
+            url: "https://web-git-x.vercel.app",
             avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
           },
           {

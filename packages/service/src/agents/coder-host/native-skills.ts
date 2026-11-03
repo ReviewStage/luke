@@ -29,14 +29,14 @@ type SandboxFile = Parameters<VercelSandboxApi["writeFiles"]>[1][number];
 
 /** Where the installed skills stand: uploaded as the default user, then where root installs them, which a launch's config names. */
 export const NATIVE_SKILLS_PATH = {
-  UPLOAD: "/tmp/luke-installed-skills",
-  INSTALLED: "/opt/luke/installed-skills",
+  UPLOAD: "/tmp/agent-installed-skills",
+  INSTALLED: "/opt/agent/installed-skills",
 } as const;
 
 /** The mode each file is written with; root's install makes them every user's to read. */
 const FILE_MODE = 0o644;
 
-/** The plugin's manifest, which names it, so Claude Code lists its skills as `luke:<name>`. */
+/** The plugin's manifest, which names it, so Claude Code lists its skills as `workspace:<name>`. */
 const MANIFEST = {
   name: INSTALLED_SKILLS.PLUGIN,
   description: `The skills you installed into ${PRODUCT_NAME}.`,

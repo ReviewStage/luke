@@ -148,11 +148,11 @@ function agentAuthor(name: string): CommentAuthor {
 /** A member's workspace at the sidebar's head: its tile, its name, and what kind of workspace it is. */
 function Workspace(): React.JSX.Element {
   return (
-    <div className="luke-landing-workspace">
+    <div className="ui-landing-workspace">
       <NavItem variant={NAV_ITEM_VARIANT.IDENTITY} mark={<ChevronDownIcon />}>
-        <span className="luke-landing-workspace-ref">
+        <span className="ui-landing-workspace-ref">
           <Avatar name="acme" size={AVATAR_SIZE.CARD} shape={AVATAR_SHAPE.TILE} decorative />
-          <span className="luke-landing-workspace-words">
+          <span className="ui-landing-workspace-words">
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
               acme
             </Text>
@@ -185,7 +185,7 @@ function Sidebar({
   openTask?: string | undefined;
 }): React.JSX.Element {
   return (
-    <aside className="luke-landing-sidebar">
+    <aside className="ui-landing-sidebar">
       <Workspace />
       <SidebarPlaces label="Places">
         <NavItem icon={<ComposeIcon />}>New task</NavItem>
@@ -201,7 +201,7 @@ function Sidebar({
         <NavItem icon={<ZapIcon />}>Automations</NavItem>
       </SidebarPlaces>
       <SidebarRule />
-      <nav className="luke-landing-sidebar-group" aria-label="My tasks">
+      <nav className="ui-landing-sidebar-group" aria-label="My tasks">
         <GroupHeader heading={GROUP_HEADING.NONE} label="My tasks" />
         <List label="My tasks" density={LIST_DENSITY.DENSE}>
           {tasks.map((task) => (
@@ -213,7 +213,7 @@ function Sidebar({
               leading={<TaskStatusMark status={task.status} />}
               title={task.name}
               meta={
-                <span className="luke-landing-row-time">
+                <span className="ui-landing-row-time">
                   {task.status === TASK_STATUS.IN_PROGRESS ? <WorkingMark /> : null}
                   <Time at={NOW - task.ago * MINUTE} now={NOW} hint={false} />
                 </span>
@@ -224,7 +224,7 @@ function Sidebar({
           ))}
         </List>
       </nav>
-      <span className="luke-landing-sidebar-foot">
+      <span className="ui-landing-sidebar-foot">
         <NavItem icon={<Avatar name="Sam Reyes" size={AVATAR_SIZE.ROW} decorative />}>
           Sam Reyes
         </NavItem>
@@ -281,15 +281,15 @@ function InboxRow({ item }: { item: InboxItem }): React.JSX.Element {
       lead={{ icon: <TaskStatusMark status={item.status} />, label: item.task }}
       leadAt={LIST_ROW_LEAD.ABOVE}
       description={
-        <span className="luke-landing-line">
-          <span className="luke-landing-line-glyph" data-open={open}>
+        <span className="ui-landing-line">
+          <span className="ui-landing-line-glyph" data-open={open}>
             {LINE_GLYPH[item.kind]}
           </span>
           {item.line}
         </span>
       }
       meta={
-        <span className="luke-landing-row-marks">
+        <span className="ui-landing-row-marks">
           {open ? <AttentionMark /> : null}
           <Time at={NOW - item.ago * MINUTE} now={NOW} hint={false} />
         </span>
@@ -374,13 +374,13 @@ function ThreadPath(): React.JSX.Element {
 function QuestionThread({ step }: { step: number }): React.JSX.Element {
   const picked = step >= 3;
   return (
-    <div className="luke-landing-thread">
-      <header className="luke-landing-subject">
+    <div className="ui-landing-thread">
+      <header className="ui-landing-subject">
         <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2}>
           {QUESTION.TITLE}
         </Text>
       </header>
-      <ol className="luke-landing-comments">
+      <ol className="ui-landing-comments">
         <Comment
           as={COMMENT_ELEMENT.LI}
           author={agentAuthor(QUESTION.AGENT)}
@@ -396,7 +396,7 @@ function QuestionThread({ step }: { step: number }): React.JSX.Element {
         ) : null}
       </ol>
       <ComposerFrame>
-        <div className="luke-landing-ask">
+        <div className="ui-landing-ask">
           {picked ? (
             <ChoiceList
               legend="Options"
@@ -420,7 +420,7 @@ function QuestionThread({ step }: { step: number }): React.JSX.Element {
       </ComposerFrame>
       {step >= 5 ? (
         <NoteLine look={NOTE_LINE_LOOK.INSET}>
-          <span className="luke-landing-working">
+          <span className="ui-landing-working">
             <WorkingMark />
             <Shimmer>{`${QUESTION.AGENT} is working…`}</Shimmer>
           </span>
@@ -446,10 +446,10 @@ function InboxScreen({ step }: { step: number }): React.JSX.Element {
   };
   const items = step >= 1 ? [question, ...OTHER_ITEMS] : OTHER_ITEMS;
   return (
-    <div className="luke-landing-app">
+    <div className="ui-landing-app">
       <Sidebar current="inbox" tasks={MY_TASKS} />
-      <div className="luke-landing-main luke-landing-inbox">
-        <nav className="luke-landing-inbox-list" aria-label="Inbox">
+      <div className="ui-landing-main ui-landing-inbox">
+        <nav className="ui-landing-inbox-list" aria-label="Inbox">
           <Toolbar
             title="Inbox"
             end={TOOLBAR_INSET.COLUMN}
@@ -457,8 +457,8 @@ function InboxScreen({ step }: { step: number }): React.JSX.Element {
               <IconButton icon={<SlidersHorizontalIcon />} label="View options" onClick={still} />
             }
           />
-          <div className="luke-landing-sheet-start">
-            <search className="luke-landing-search">
+          <div className="ui-landing-sheet-start">
+            <search className="ui-landing-search">
               <SearchField
                 label="Search inbox"
                 placeholder="Search inbox"
@@ -466,7 +466,7 @@ function InboxScreen({ step }: { step: number }): React.JSX.Element {
                 onChange={still}
               />
             </search>
-            <div className="luke-landing-rows">
+            <div className="ui-landing-rows">
               <List label="Inbox items">
                 {items.map((item) => (
                   <InboxRow key={item.id} item={item} />
@@ -475,17 +475,17 @@ function InboxScreen({ step }: { step: number }): React.JSX.Element {
             </div>
           </div>
         </nav>
-        <section className="luke-landing-inbox-thread">
+        <section className="ui-landing-inbox-thread">
           <Toolbar
             start={TOOLBAR_INSET.COLUMN}
             title={open ? <ThreadPath /> : undefined}
             actions={open ? <MoreButton thing="thread" onClick={still} /> : undefined}
           />
-          <div className="luke-landing-sheet-end">
+          <div className="ui-landing-sheet-end">
             {open ? (
               <QuestionThread step={step} />
             ) : (
-              <div className="luke-landing-empty">
+              <div className="ui-landing-empty">
                 <Text tone={TEXT_TONE.MUTED}>Choose an item</Text>
               </div>
             )}
@@ -499,7 +499,7 @@ function InboxScreen({ step }: { step: number }): React.JSX.Element {
 function InboxScene(): React.JSX.Element {
   const [ref, step] = useStory(6, BEAT.INBOX);
   return (
-    <div ref={ref} className="luke-landing-scene">
+    <div ref={ref} className="ui-landing-scene">
       <LandingWindow label="The Inbox, where an agent's question is answered">
         <InboxScreen step={step} />
       </LandingWindow>
@@ -522,12 +522,12 @@ function CallLine({
   words?: string;
 }): React.JSX.Element {
   return (
-    <div className="luke-landing-call luke-landing-enter">
+    <div className="ui-landing-call ui-landing-enter">
       <GlyphSlot size={ICON_SIZE.MEDIUM}>{icon}</GlyphSlot>
-      <span className="luke-landing-call-words">
+      <span className="ui-landing-call-words">
         <span>{verb}</span>
         <InlineRef look={INLINE_REF_LOOK.PILL} glyph={glyph} label={to} hint={false} />
-        {words === undefined ? null : <span className="luke-landing-call-subject">{words}</span>}
+        {words === undefined ? null : <span className="ui-landing-call-subject">{words}</span>}
       </span>
     </div>
   );
@@ -536,9 +536,9 @@ function CallLine({
 /** Another agent's message in the log: its name over its words in a bubble. */
 function AgentMessage({ sender, words }: { sender: string; words: string }): React.JSX.Element {
   return (
-    <MessageFrame className="luke-landing-message luke-landing-enter">
+    <MessageFrame className="ui-landing-message ui-landing-enter">
       <MessageHead sender={sender} />
-      <div className="luke-landing-bubble">
+      <div className="ui-landing-bubble">
         <Text>{words}</Text>
       </div>
     </MessageFrame>
@@ -565,17 +565,17 @@ function AgentsScene(): React.JSX.Element {
     { id: "emails", name: "Invite emails through Postmark", status: subTask(0, 6), key: "ACME-57" },
   ] as const;
   return (
-    <div ref={ref} className="luke-landing-scene">
+    <div ref={ref} className="ui-landing-scene">
       <LandingWindow label="An agent's log, as it starts another agent and they message each other">
-        <div className="luke-landing-app">
+        <div className="ui-landing-app">
           <Sidebar current="task" tasks={MY_TASKS} openTask="invites" />
-          <div className="luke-landing-main luke-landing-agent">
-            <section className="luke-landing-agent-log">
+          <div className="ui-landing-main ui-landing-agent">
+            <section className="ui-landing-agent-log">
               <Toolbar
                 title={INVITE_EMAILS}
                 actions={<MoreButton thing="agent" onClick={still} />}
               />
-              <div className="luke-landing-sheet-start luke-landing-log">
+              <div className="ui-landing-sheet-start ui-landing-log">
                 <MessageFrame>
                   <Text>
                     The emails need the accept page's route before they can link to it, so I'll
@@ -623,7 +623,7 @@ function AgentsScene(): React.JSX.Element {
                 )}
               </div>
             </section>
-            <aside className="luke-landing-side">
+            <aside className="ui-landing-side">
               <GroupHeader
                 label="Sub-tasks"
                 count={{ value: subTasks.length, noun: "sub-tasks" }}
@@ -667,15 +667,15 @@ function AutomationsScene(): React.JSX.Element {
   };
   const runs = step >= 1 ? [latest, ...RUNS] : RUNS;
   return (
-    <div ref={ref} className="luke-landing-scene">
-      <div className="luke-landing-sheet luke-landing-automation" inert>
+    <div ref={ref} className="ui-landing-scene">
+      <div className="ui-landing-sheet ui-landing-automation" inert>
         <Toolbar
           lead={<GlyphSlot size={ICON_SIZE.MEDIUM}>{<GLYPH.AUTOMATION />}</GlyphSlot>}
           title="Nightly flaky-test sweep"
           actions={<MoreButton thing="automation" onClick={still} />}
         />
-        <div className="luke-landing-automation-body">
-          <div className="luke-landing-automation-settings">
+        <div className="ui-landing-automation-body">
+          <div className="ui-landing-automation-settings">
             <GroupHeader heading={GROUP_HEADING.NONE} label="Trigger" />
             <Facts>
               <Fact label="Type">Schedule</Fact>
@@ -689,7 +689,7 @@ function AutomationsScene(): React.JSX.Element {
               <Fact label="Model">Claude Opus 5.5 · High</Fact>
             </Facts>
           </div>
-          <div className="luke-landing-automation-runs">
+          <div className="ui-landing-automation-runs">
             <GroupHeader heading={GROUP_HEADING.NONE} label="Runs" />
             <List label="Runs" density={LIST_DENSITY.COMPACT}>
               {runs.map((run) => {
@@ -722,9 +722,9 @@ function AutomationsScene(): React.JSX.Element {
 /** The question's thread as a phone draws it: the path in its bar over the thread. */
 function PhoneThread(): React.JSX.Element {
   return (
-    <div className="luke-landing-phone-app">
+    <div className="ui-landing-phone-app">
       <Toolbar start={TOOLBAR_INSET.COLUMN} title={<ThreadPath />} />
-      <div className="luke-landing-phone-body">
+      <div className="ui-landing-phone-body">
         <QuestionThread step={2} />
       </div>
     </div>
@@ -733,13 +733,13 @@ function PhoneThread(): React.JSX.Element {
 
 function DevicesScene(): React.JSX.Element {
   return (
-    <div className="luke-landing-scene luke-landing-devices">
-      <div className="luke-landing-devices-window">
+    <div className="ui-landing-scene ui-landing-devices">
+      <div className="ui-landing-devices-window">
         <LandingWindow label="The Inbox in the Mac app">
           <InboxScreen step={2} />
         </LandingWindow>
       </div>
-      <div className="luke-landing-devices-phone">
+      <div className="ui-landing-devices-phone">
         <LandingPhone label="The same question on a phone">
           <PhoneThread />
         </LandingPhone>
@@ -784,7 +784,7 @@ const MODEL_AGENTS: readonly ModelAgent[] = [
 function ModelsScene(): React.JSX.Element {
   const [ref, step] = useStory(7, BEAT.MODELS);
   return (
-    <div ref={ref} className="luke-landing-scene luke-landing-models">
+    <div ref={ref} className="ui-landing-scene ui-landing-models">
       <List label="Agents" variant={LIST_VARIANT.CARD}>
         {MODEL_AGENTS.map((agent) => (
           <ListRow
@@ -795,12 +795,12 @@ function ModelsScene(): React.JSX.Element {
             description={agent.model}
             meta={
               step >= agent.done ? (
-                <span className="luke-landing-row-marks">
+                <span className="ui-landing-row-marks">
                   <TaskStatusMark status={TASK_STATUS.DONE} />
                   Done
                 </span>
               ) : (
-                <span className="luke-landing-row-marks">
+                <span className="ui-landing-row-marks">
                   <WorkingMark />
                   <Shimmer>Working</Shimmer>
                 </span>

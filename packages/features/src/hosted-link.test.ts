@@ -23,7 +23,7 @@ import { MODEL_PROVIDER } from "./models-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-const BASE_URL = "https://luke.test";
+const BASE_URL = "https://app.test";
 const MODELS_ROUTE = "GET /api/models";
 
 const MODEL = {

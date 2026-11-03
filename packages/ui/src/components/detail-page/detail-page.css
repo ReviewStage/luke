@@ -13,25 +13,25 @@
    stands across the room on the toolbar's edges. */
 
 @layer components {
-  .luke-detail-page {
-    --luke-detail-page-width: var(--luke-page-measure);
-    --luke-detail-page-secondary-width: 240px;
-    --luke-detail-page-inset: var(--luke-page-inset);
+  .ui-detail-page {
+    --ui-detail-page-width: var(--ui-page-measure);
+    --ui-detail-page-secondary-width: 240px;
+    --ui-detail-page-inset: var(--ui-page-inset);
   }
 
-  [data-luke-profile="web"] .luke-detail-page {
-    --luke-detail-page-width: 1040px;
-    --luke-detail-page-secondary-width: 320px;
+  [data-ui-profile="web"] .ui-detail-page {
+    --ui-detail-page-width: 1040px;
+    --ui-detail-page-secondary-width: 320px;
   }
 
   /* What stands either side of the measure: the inset, or more in a room
      wider than the measure and its insets. It is worked out on the page's
      children, where the room is the page's own width and the inset is the
      one the narrow rule below may change. */
-  .luke-detail-page > * {
-    --luke-detail-page-side: max(
-      var(--luke-detail-page-edge, var(--luke-detail-page-inset)),
-      (100cqi - var(--luke-detail-page-width)) /
+  .ui-detail-page > * {
+    --ui-detail-page-side: max(
+      var(--ui-detail-page-edge, var(--ui-detail-page-inset)),
+      (100cqi - var(--ui-detail-page-width)) /
       2
     );
   }
@@ -39,13 +39,13 @@
   /* At a column's inset the words stand as far in from the sides as tabs
      read at the measure stand theirs, whatever the room; the page keeps its
      own inset above and below. */
-  .luke-detail-page[data-inset="reading"] > * {
-    --luke-detail-page-edge: var(--luke-space-12);
+  .ui-detail-page[data-inset="reading"] > * {
+    --ui-detail-page-edge: var(--ui-space-12);
   }
 
   /* Across the whole room, the inset alone stands either side. */
-  .luke-detail-page[data-width="full"] > * {
-    --luke-detail-page-side: var(--luke-detail-page-edge, var(--luke-detail-page-inset));
+  .ui-detail-page[data-width="full"] > * {
+    --ui-detail-page-side: var(--ui-detail-page-edge, var(--ui-detail-page-inset));
   }
 
   /* Under the window's own toolbar the page is a workspace's rather than a
@@ -58,54 +58,54 @@
      that `:has()` one, because a `:has()` over a page whose subject is any
      child makes the browser restyle the whole window for every element
      added under it. */
-  .luke-detail-page[data-frame="toolbar"] > .luke-toolbar ~ .luke-detail-page-body {
-    --luke-detail-page-side: calc(var(--luke-space-12) + var(--luke-row-inset));
+  .ui-detail-page[data-frame="toolbar"] > .ui-toolbar ~ .ui-detail-page-body {
+    --ui-detail-page-side: calc(var(--ui-space-12) + var(--ui-row-inset));
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
   @container (width < 480px) {
-    .luke-detail-page > * {
-      --luke-detail-page-inset: var(--luke-page-inset-narrow);
+    .ui-detail-page > * {
+      --ui-detail-page-inset: var(--ui-page-inset-narrow);
     }
   }
 
   /* Beside the header, the secondary column opens level with the title. */
-  .luke-detail-page[data-frame="page"] .luke-detail-page-secondary > .luke-detail-page-content {
-    padding-top: var(--luke-detail-page-inset);
+  .ui-detail-page[data-frame="page"] .ui-detail-page-secondary > .ui-detail-page-content {
+    padding-top: var(--ui-detail-page-inset);
   }
 
   /* The columns under the bar: the main one takes what the secondary
      leaves, and each reaches the page's edge on its own side, so the wheel
      moves it from anywhere over it. */
-  .luke-detail-page-body {
+  .ui-detail-page-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .luke-detail-page-body:has(> .luke-detail-page-secondary) {
+  .ui-detail-page-body:has(> .ui-detail-page-secondary) {
     grid-template-columns:
       minmax(0, 1fr)
-      calc(var(--luke-detail-page-secondary-width) + var(--luke-detail-page-side));
+      calc(var(--ui-detail-page-secondary-width) + var(--ui-detail-page-side));
   }
 
-  .luke-detail-page-main,
-  .luke-detail-page-secondary {
+  .ui-detail-page-main,
+  .ui-detail-page-secondary {
     overflow-x: hidden;
     overflow-y: auto;
   }
 
-  .luke-detail-page-main {
-    padding-inline: var(--luke-detail-page-side);
+  .ui-detail-page-main {
+    padding-inline: var(--ui-detail-page-side);
   }
 
   /* Beside a secondary column the main one ends a section's gap short of
      it. */
-  .luke-detail-page-main:has(+ .luke-detail-page-secondary) {
-    padding-inline-end: var(--luke-space-32);
+  .ui-detail-page-main:has(+ .ui-detail-page-secondary) {
+    padding-inline-end: var(--ui-space-32);
   }
 
-  .luke-detail-page-secondary {
-    padding-inline-end: var(--luke-detail-page-side);
+  .ui-detail-page-secondary {
+    padding-inline-end: var(--ui-detail-page-side);
   }
 
   /* A plain list in the content, straight or under one of its sections,
@@ -113,49 +113,49 @@
      the title's edge and its fill runs out either side; its rows of blocks
      while it is read reach as far. A card's list keeps to the column, its
      edge the card's. */
-  .luke-detail-page-content > .luke-list[data-variant="plain"][data-density="regular"],
-  .luke-detail-page-content
-    > .luke-skeleton-region
-    > .luke-list[data-variant="plain"][data-density="regular"],
-  .luke-detail-page-content > section > .luke-list[data-variant="plain"][data-density="regular"],
-  .luke-detail-page-content
+  .ui-detail-page-content > .ui-list[data-variant="plain"][data-density="regular"],
+  .ui-detail-page-content
+    > .ui-skeleton-region
+    > .ui-list[data-variant="plain"][data-density="regular"],
+  .ui-detail-page-content > section > .ui-list[data-variant="plain"][data-density="regular"],
+  .ui-detail-page-content
     > section
-    > .luke-skeleton-region
-    > .luke-list[data-variant="plain"][data-density="regular"] {
-    margin-inline: calc(-1 * var(--luke-space-12));
+    > .ui-skeleton-region
+    > .ui-list[data-variant="plain"][data-density="regular"] {
+    margin-inline: calc(-1 * var(--ui-space-12));
   }
 
   /* Under a toolbar each column opens a section's gap below its hairline,
      inside its own scroll so the wheel works right up to it. */
-  .luke-detail-page[data-frame="toolbar"] .luke-detail-page-content {
-    padding-top: var(--luke-section-gap);
+  .ui-detail-page[data-frame="toolbar"] .ui-detail-page-content {
+    padding-top: var(--ui-section-gap);
   }
 
   /* A main column holding nothing but an empty or failed state (an
      `EmptyState`, or a centred `ErrorState` where the thing could not be
      read) fills the column, so the state stands a little above the room's
      middle, as a collection's empty or failed state does. */
-  .luke-detail-page-main:has(> .luke-detail-page-content > .luke-empty-state:only-child) {
+  .ui-detail-page-main:has(> .ui-detail-page-content > .ui-empty-state:only-child) {
     display: flex;
     flex-direction: column;
   }
 
-  .luke-detail-page-content:has(> .luke-empty-state:only-child) {
+  .ui-detail-page-content:has(> .ui-empty-state:only-child) {
     display: flex;
     flex: 1 0 auto;
     flex-direction: column;
   }
 
   /* Content across the room scrolls sideways in its own column. */
-  .luke-detail-page[data-width="full"] .luke-detail-page-main {
+  .ui-detail-page[data-width="full"] .ui-detail-page-main {
     overflow-x: auto;
   }
 
   /* In a pane too narrow for two columns, the secondary one follows the
      main in the one scroll, both at the page's inset. */
   @container (width < 720px) {
-    .luke-detail-page-body,
-    .luke-detail-page-body:has(> .luke-detail-page-secondary) {
+    .ui-detail-page-body,
+    .ui-detail-page-body:has(> .ui-detail-page-secondary) {
       display: block;
       overflow-x: hidden;
       overflow-y: auto;
@@ -163,28 +163,28 @@
       scrollbar-gutter: stable;
     }
 
-    .luke-detail-page-main,
-    .luke-detail-page-main:has(+ .luke-detail-page-secondary),
-    .luke-detail-page-secondary {
+    .ui-detail-page-main,
+    .ui-detail-page-main:has(+ .ui-detail-page-secondary),
+    .ui-detail-page-secondary {
       overflow: visible;
-      padding-inline: var(--luke-detail-page-side);
+      padding-inline: var(--ui-detail-page-side);
     }
 
     /* A lone empty or failed state fills the one scroll, as it fills the
        main column above. */
-    .luke-detail-page-body:has(
-        > .luke-detail-page-main > .luke-detail-page-content > .luke-empty-state:only-child
+    .ui-detail-page-body:has(
+        > .ui-detail-page-main > .ui-detail-page-content > .ui-empty-state:only-child
       ) {
       display: flex;
       flex-direction: column;
     }
 
-    .luke-detail-page-main:has(> .luke-detail-page-content > .luke-empty-state:only-child) {
+    .ui-detail-page-main:has(> .ui-detail-page-content > .ui-empty-state:only-child) {
       flex: 1 0 auto;
     }
 
     /* The secondary column follows the main one's end gap, no more. */
-    .luke-detail-page[data-frame] .luke-detail-page-secondary > .luke-detail-page-content {
+    .ui-detail-page[data-frame] .ui-detail-page-secondary > .ui-detail-page-content {
       padding-top: 0;
     }
   }

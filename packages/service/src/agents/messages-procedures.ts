@@ -90,15 +90,16 @@ import {
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import {
   claimNext,
-  queueEveFor,
+  type QueueEve,
   sendClaimed,
   sendQueued,
   wireQueue,
 } from "./coder-host/agent-queue.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
+import { routedSessions } from "./coder-host/runtime-sessions.js";
 import { startedBlank } from "./coder-host/status.js";
 import { steerAgentWritten } from "./coder-host/steer.js";
-import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
+import { summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
   cursorOfWire,
@@ -124,7 +125,7 @@ import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
 
-export interface MessagesProcedureSeams extends EveReach {
+export interface MessagesProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
@@ -397,7 +398,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(tooLongMiddleware)
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
-        const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
+        const eve = yield* routedSessions<EveTypedTurn>(context.userId);
         const { txid, sent } = yield* steerAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
@@ -429,7 +430,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const { userId } = context;
       // The queue is its starter's own messages to come, so the starter alone changes it; a teammate reads it.
       if (agent.userId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      const eve = queueEveFor(seams, context.request, userId);
+      const eve: QueueEve = routedSessions;
       const body = input.body;
       /** A store's answer for the account's agent, its absence answered as no such agent. */
       const found = <A>(effect: Effect.Effect<Option.Option<A>, StoreFailure, DatabaseServices>) =>

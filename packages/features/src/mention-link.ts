@@ -16,19 +16,19 @@ import {
   GITHUB_PAGE,
   gitHubFilePageRepositoryOf,
   gitHubPageLink,
-  LEGACY_LINK_HOST,
-  type LegacyLink,
   LINK_PLACE,
   type LinkPlace,
-  legacyLinkOf,
   linkOf,
   linkTarget,
   MENTION_SIGIL,
   mentionMarkdownLink,
   readGitHubPage,
   readLabel,
-  readLegacyLink,
   readLink,
+  readSchemeLink,
+  SCHEME_LINK_HOST,
+  type SchemeLink,
+  schemeLinkOf,
 } from "./link-grammar.js";
 import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
@@ -46,7 +46,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * Which target a mention is written with is decided here: every caller
  * holds a `Mention`, which names its subject and nothing of the form, and
  * goes through `encodeMention` and `decodeMention` to write and read one.
- * How each address is spelled, ours, GitHub's, and the `luke:` form, is
+ * How each address is spelled, ours, GitHub's, and the app-only `mention:` form, is
  * `link-grammar.ts`'s, which this reads and writes every target through.
  *
  * Drawn, the `@` is not asked for: wherever the app draws words a person,
@@ -104,18 +104,20 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * The forms written before the link was settled, `luke://plan/<id>`
  * (`#<heading>` after it, the heading's own words), `luke://file/<path>`,
  * and `luke://folder/<path>/`, stand in plans and messages already, so
- * they are read forever, as the same mention the settled form names. A
- * thing with no page of its own on the web keeps the `luke:` form, which
- * nothing outside the app opens: an MCP server, `luke://mcp/<connection>`,
- * and one of its tools, `luke://mcp/<connection>/<tool>`, where the
+ * they are read forever, as the same mention the settled form names; so
+ * does every `luke://` form below, written before it took the `mention:`
+ * scheme, which reads the same under either. A thing with no page of its
+ * own on the web is written in the `mention:` form, which nothing outside
+ * the app opens: an MCP server, `mention://mcp/<connection>`,
+ * and one of its tools, `mention://mcp/<connection>/<tool>`, where the
  * connection is one account at the provider (`notion`, or `notion-2` for a
  * second account, the first account's name being its provider's, so every
  * address written before a second account was possible keeps its meaning),
  * the tool's own name
  * as the server lists it.
  *
- * A date has no page of its own either, so it keeps the `luke:` form too:
- * `luke://date/<start>`, and `luke://date/<start>/<end>` for a range, each
+ * A date has no page of its own either, so it takes the `mention:` form too:
+ * `mention://date/<start>`, and `mention://date/<start>/<end>` for a range, each
  * end ISO 8601 as Notion holds a date's (`date-mention.ts`): a day,
  * `2026-10-20`, or a time on one with its offset, `2026-10-20T15:00-07:00`.
  * Its label is the date in full, so the words read as it anywhere.
@@ -419,7 +421,7 @@ function decodedSteps(steps: readonly string[]): string | undefined {
   return read.every((step) => step !== undefined) ? read.join("/") : undefined;
 }
 
-/** A legacy target's path read back from its steps, a folder's trailing slash taken off. */
+/** A `mention:` or `luke:` target's path read back from its steps, a folder's trailing slash taken off. */
 function decodedPath(steps: readonly string[]): string | undefined {
   return decodedSteps(steps.at(-1) === "" ? steps.slice(0, -1) : steps);
 }
@@ -430,7 +432,7 @@ function headingAnchor(heading: string): string {
 }
 
 /**
- * The server a `luke://mcp/` address's first segment names: a connection
+ * The server a `mention://mcp/` address's first segment names: a connection
  * name, whose provider is the server's and which is kept where it names an
  * account past the provider's first; any other segment is handed on as the
  * provider for the schema to refuse.
@@ -443,27 +445,27 @@ function serverOfSegment(segment: string) {
     : { provider: account.provider, connection: segment };
 }
 
-/** The fields a legacy `luke:` target spells, for the schema to read; nothing where it is none. */
-function legacyFields({ host, steps, hash, search }: LegacyLink) {
+/** The fields a `mention:` or `luke:` target spells, for the schema to read; nothing where it is none. */
+function schemeFields({ host, steps, hash, search }: SchemeLink) {
   switch (host) {
-    case LEGACY_LINK_HOST.FILE:
+    case SCHEME_LINK_HOST.FILE:
       return { kind: MENTION_KIND.FILE, path: decodedPath(steps) };
-    case LEGACY_LINK_HOST.FOLDER:
+    case SCHEME_LINK_HOST.FOLDER:
       return { kind: MENTION_KIND.FOLDER, path: decodedPath(steps) };
-    case LEGACY_LINK_HOST.MCP: {
+    case SCHEME_LINK_HOST.MCP: {
       const [segment, tool, ...rest] = steps;
       if (rest.length > 0 || hash !== "" || search !== "") return undefined;
       const server = serverOfSegment(segment ?? "");
       if (tool === undefined) return { kind: MENTION_KIND.SERVER, ...server };
       return { kind: MENTION_KIND.TOOL, ...server, tool: decodedStep(tool) };
     }
-    case LEGACY_LINK_HOST.DATE: {
+    case SCHEME_LINK_HOST.DATE: {
       const [start, end, ...rest] = steps;
       if (rest.length > 0 || hash !== "" || search !== "") return undefined;
       const moments = { kind: MENTION_KIND.DATE, start: decodedStep(start ?? "") };
       return end === undefined ? moments : { ...moments, end: decodedStep(end) };
     }
-    case LEGACY_LINK_HOST.PLAN: {
+    case SCHEME_LINK_HOST.PLAN: {
       const taskId = decodedStep(steps.join("/"));
       if (hash === "") return { kind: MENTION_KIND.TASK, taskId };
       // Note that a heading's words name the first section under them, as its anchor without a suffix does.
@@ -577,8 +579,8 @@ function linkFields(url: URL) {
  * else a GitHub address names.
  */
 function fieldsOf(target: string, repository: string | null) {
-  const legacy = readLegacyLink(target);
-  if (legacy !== undefined) return legacyFields(legacy);
+  const scheme = readSchemeLink(target);
+  if (scheme !== undefined) return schemeFields(scheme);
   const url = parsedUrl(target);
   if (url === undefined) return undefined;
   if (isLinkHome(url)) return lukeFields(url);
@@ -729,7 +731,7 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
   });
 }
 
-/** A file's or a folder's page on GitHub, or the legacy form where the task has no repository to name it under. */
+/** A file's or a folder's page on GitHub, or the app's own form where the task has no repository to name it under. */
 function repositoryTarget(
   kind: typeof MENTION_KIND.FILE | typeof MENTION_KIND.FOLDER,
   path: string,
@@ -737,8 +739,8 @@ function repositoryTarget(
   lines: MentionLines | undefined,
 ): string {
   if (place.repository === null) {
-    const host = kind === MENTION_KIND.FOLDER ? LEGACY_LINK_HOST.FOLDER : LEGACY_LINK_HOST.FILE;
-    return legacyLinkOf(host, `${encodedPath(path)}${kind === MENTION_KIND.FOLDER ? "/" : ""}`);
+    const host = kind === MENTION_KIND.FOLDER ? SCHEME_LINK_HOST.FOLDER : SCHEME_LINK_HOST.FILE;
+    return schemeLinkOf(host, `${encodedPath(path)}${kind === MENTION_KIND.FOLDER ? "/" : ""}`);
   }
   const repository = place.repository;
   if (kind === MENTION_KIND.FOLDER) {
@@ -779,10 +781,10 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       );
     // An MCP server has no page of its own, so it keeps the app's own form, wherever it is written.
     case MENTION_KIND.SERVER:
-      return legacyLinkOf(LEGACY_LINK_HOST.MCP, mention.connection ?? mention.provider);
+      return schemeLinkOf(SCHEME_LINK_HOST.MCP, mention.connection ?? mention.provider);
     case MENTION_KIND.TOOL:
-      return legacyLinkOf(
-        LEGACY_LINK_HOST.MCP,
+      return schemeLinkOf(
+        SCHEME_LINK_HOST.MCP,
         `${mention.connection ?? mention.provider}/${encodedStep(mention.tool)}`,
       );
     case MENTION_KIND.LINK:
@@ -809,8 +811,8 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return `${linkOf({ kind: LINK_PLACE.TASK, planId: mention.taskId }, workspace)}/${LUKE_STEP}`;
     // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
     case MENTION_KIND.DATE:
-      return legacyLinkOf(
-        LEGACY_LINK_HOST.DATE,
+      return schemeLinkOf(
+        SCHEME_LINK_HOST.DATE,
         mention.end === undefined ? mention.start : `${mention.start}/${mention.end}`,
       );
   }

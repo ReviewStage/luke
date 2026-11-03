@@ -14,8 +14,8 @@ import { Kbd, KbdGroup } from "../../shadcn/kbd.js";
  * One look in every place a chord is shown — a hover, a menu, a sidebar
  * row, ⌘K and its foot, a button, and the Keyboard shortcuts page — so a
  * chord reads the same wherever it is met. A place says only how big and how
- * loud (`--luke-shortcut-text`, `--luke-shortcut-ink`), never draws it some
- * other way. Each key is a glyph of its own (`luke-shortcut-glyph`), so the
+ * loud (`--ui-shortcut-text`, `--ui-shortcut-ink`), never draws it some
+ * other way. Each key is a glyph of its own (`ui-shortcut-glyph`), so the
  * stylesheet can set a modifier and a letter on one line and centre the
  * chord on the words beside it. Where the window's command key is Ctrl, in a
  * browser on Windows or Linux (`COMMAND_KEY`), the modifiers are words, and
@@ -39,7 +39,7 @@ import { Kbd, KbdGroup } from "../../shadcn/kbd.js";
 
 /** The chord's look, every place's: set tight in the hooks' size and ink, spaced a word apart where its keys are words, and a row's value at the label's size in the value's ink. */
 const CHORD =
-  "luke-shortcut flex-none gap-[0.04em] [font-family:inherit] text-shortcut font-caption leading-none text-shortcut-ink tabular-nums whitespace-nowrap data-words:gap-luke-4 data-value:[--luke-shortcut-ink:var(--luke-color-text-muted)] data-value:[--luke-shortcut-text:var(--luke-type-label-size)] finger:not-data-value:hidden";
+  "ui-shortcut flex-none gap-[0.04em] [font-family:inherit] text-shortcut font-caption leading-none text-shortcut-ink tabular-nums whitespace-nowrap data-words:gap-ui-4 data-value:[--ui-shortcut-ink:var(--ui-color-text-muted)] data-value:[--ui-shortcut-text:var(--ui-type-label-size)] finger:not-data-value:hidden";
 
 /** Which chord: the window's own, or a system-wide key's accelerator as Settings stores it. */
 type ShortcutOf =
@@ -74,7 +74,7 @@ export function Shortcut(
       aria-hidden={props.spoken === true ? undefined : "true"}
     >
       {shortcutGlyphs(accelerator).map((glyph) => (
-        <Kbd key={glyph} className="luke-shortcut-glyph">
+        <Kbd key={glyph} className="ui-shortcut-glyph">
           {glyph}
         </Kbd>
       ))}

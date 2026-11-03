@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { ConfigProvider, Effect, Layer, Logger, Redacted } from "effect";
 import { test } from "vitest";
-import { EVE_HOST_ENVIRONMENT } from "./agents/eve-host/bounds.js";
 import {
   HostedEnvironment,
   type HostedEnvironmentValues,
@@ -56,50 +55,9 @@ test("a secret that is set travels sealed and trimmed, and its value is the one 
   assert.equal(Redacted.value(environment.cronSecret), "cron-secret-1");
 });
 
-test("the deployment's secret at eve's door is read from its own variable and never from the cron's", async () => {
-  const cronAlone = await environmentOver({
-    [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-    [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: undefined,
-  });
-  assert.equal(cronAlone.eveDeploymentSecret, undefined);
-  const logged: string[] = [];
-  const both = await environmentOver(
-    {
-      [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-      [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: " eve-deployment-secret-1 ",
-    },
-    logged,
-  );
-  assert.ok(both.cronSecret && both.eveDeploymentSecret);
-  assert.equal(Redacted.value(both.cronSecret), "cron-secret-1");
-  assert.equal(Redacted.value(both.eveDeploymentSecret), "eve-deployment-secret-1");
-  assert.deepEqual(logged, []);
-});
-
-test("a blank eve secret, empty or spaces alone, reads as unset", async () => {
+test("a blank secret, empty or spaces alone, reads as unset", async () => {
   for (const blank of ["", "   ", "\n\t "]) {
-    const environment = await environmentOver({
-      [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-      [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: blank,
-    });
-    assert.equal(environment.eveDeploymentSecret, undefined, JSON.stringify(blank));
+    const environment = await environmentOver({ [CRON_ENVIRONMENT.CRON_SECRET]: blank });
+    assert.equal(environment.cronSecret, undefined, JSON.stringify(blank));
   }
-});
-
-test("an eve secret that is the cron's own value reads as unset, the cron's stays, and the build says so once by name and never by value", async () => {
-  const logged: string[] = [];
-  const environment = await environmentOver(
-    {
-      [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-      [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: "  cron-secret-1\n",
-    },
-    logged,
-  );
-  assert.equal(environment.eveDeploymentSecret, undefined);
-  assert.ok(environment.cronSecret);
-  assert.equal(Redacted.value(environment.cronSecret), "cron-secret-1");
-  assert.equal(logged.length, 1);
-  assert.match(logged[0] ?? "", /EVE_DEPLOYMENT_SECRET/u);
-  assert.match(logged[0] ?? "", /CRON_SECRET/u);
-  assert.equal(logged[0]?.includes("cron-secret-1"), false);
 });

@@ -64,7 +64,7 @@ import { rendererRuntime } from "./renderer-runtime.js";
  */
 
 /** Where the drafts are kept in the renderer's storage. */
-const STORAGE_KEY = "luke.composerDrafts";
+const STORAGE_KEY = "app.composerDrafts";
 
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;

@@ -13,9 +13,9 @@ import { ChartEmpty, ChartFrame, ChartFrameSkeleton, LEGEND, LEGEND_ENTRY } from
 
 /** Each source's name and its series colour, in the order the bars stack them from the axis up. */
 const COST_CHART = {
-  [COST_SOURCE.AGENTS]: { label: "Agents", color: "var(--luke-color-chart-1)" },
-  [COST_SOURCE.LUKE]: { label: `${PRODUCT_NAME}'s own turns`, color: "var(--luke-color-chart-2)" },
-  [COST_SOURCE.DICTATION]: { label: "Dictation", color: "var(--luke-color-chart-3)" },
+  [COST_SOURCE.AGENTS]: { label: "Agents", color: "var(--ui-color-chart-1)" },
+  [COST_SOURCE.LUKE]: { label: `${PRODUCT_NAME}'s own turns`, color: "var(--ui-color-chart-2)" },
+  [COST_SOURCE.DICTATION]: { label: "Dictation", color: "var(--ui-color-chart-3)" },
 } as const satisfies ChartConfig;
 
 const SOURCES: readonly CostSource[] = Object.values(COST_SOURCE);
@@ -27,9 +27,9 @@ const COST_PLOT_HEIGHT = "12rem";
 
 /** The swatch beside a legend's name, in the series' own colour. */
 const SWATCH = {
-  [COST_SOURCE.AGENTS]: "bg-(--luke-color-chart-1)",
-  [COST_SOURCE.LUKE]: "bg-(--luke-color-chart-2)",
-  [COST_SOURCE.DICTATION]: "bg-(--luke-color-chart-3)",
+  [COST_SOURCE.AGENTS]: "bg-(--ui-color-chart-1)",
+  [COST_SOURCE.LUKE]: "bg-(--ui-color-chart-2)",
+  [COST_SOURCE.DICTATION]: "bg-(--ui-color-chart-3)",
 } as const;
 
 function CostLegend(): React.JSX.Element {

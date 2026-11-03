@@ -113,7 +113,7 @@ function useDots(cell: number, shadeFor: (canvas: HTMLCanvasElement) => Shade) {
 /** A stage's field of drifting dots, filling the stage behind what it holds. */
 export function LandingField({ pattern }: { pattern: LandingFieldPattern }): React.JSX.Element {
   const ref = useDots(CELL.FIELD, () => PATTERNS[pattern]);
-  return <canvas ref={ref} className="luke-landing-field" />;
+  return <canvas ref={ref} className="ui-landing-field" />;
 }
 
 /** The product's wordmark in dots across the foot of the page, a band of light passing through it. */
@@ -136,5 +136,5 @@ export function LandingWordmark(): React.JSX.Element {
       return 0.34 + 0.06 * Math.sin(y * 0.18 + x * 0.01) + band * 0.55;
     };
   });
-  return <canvas ref={ref} className="luke-landing-wordmark" />;
+  return <canvas ref={ref} className="ui-landing-wordmark" />;
 }

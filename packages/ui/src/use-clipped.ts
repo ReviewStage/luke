@@ -23,7 +23,7 @@ function cutShort(element: HTMLElement): boolean {
  * since a box whose width its row sets keeps that width when its words are
  * renamed longer or shorter. The owner marks it `data-overflow`, which its
  * stylesheet fades out over its last few pixels
- * (`--luke-label-fade`), as Chrome's and Arc's tabs end a long title.
+ * (`--ui-label-fade`), as Chrome's and Arc's tabs end a long title.
  *
  * An owner that draws its words from a string hands it as `words`, and the
  * box is measured in the render that changes it, before it is painted.

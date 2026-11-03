@@ -138,9 +138,7 @@ test("a Cancel main refuses says why in a toast, and the gate is offered again a
 
   await act(async () => press("Cancel").click());
 
-  const toasts = [
-    ...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words"),
-  ];
+  const toasts = [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")];
   assert.equal(toasts.at(-1)?.textContent, refusal);
   assert.equal(press("Continue with Google").disabled, false);
 });

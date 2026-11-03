@@ -4,7 +4,7 @@
   "headers": [
     [
       "location",
-      "https://luke.test/sign-in.html?ok=1"
+      "https://app.test/sign-in.html?ok=1"
     ]
   ],
   "body": ""

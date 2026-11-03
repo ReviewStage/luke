@@ -95,7 +95,7 @@ import { KEPT_LINK, type PullRequestLinks, pullRequestLinksLayer } from "./pull-
  * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** A pull request of `acme/relay` as GitHub's API names it by number. */
 const PULL_PATH = /^\/repos\/acme\/relay\/pulls\/(\d+)$/u;
@@ -267,7 +267,7 @@ const openAccounts = (github: FakeGitHub) =>
     const db = yield* Database;
     const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@luke.test` });
+    yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@app.test` });
     const bearers = new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],

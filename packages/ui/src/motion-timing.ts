@@ -11,16 +11,16 @@
 
 /** The custom properties a script-played motion reads, the same a stylesheet's transition does. */
 export const MOTION_TOKEN = {
-  DURATION_FAST: "--luke-duration-fast",
-  DURATION_PANE: "--luke-duration-pane",
-  DURATION_QUICK: "--luke-duration-quick",
-  DURATION_EXIT: "--luke-duration-exit",
-  DURATION_SHAPE: "--luke-duration-shape",
-  SPRING: "--luke-spring",
-  SPRING_FAST: "--luke-spring-fast",
-  EASE_EXIT: "--luke-motion-exit",
-  EASE_PANE: "--luke-motion-pane",
-  ROW_STAGGER: "--luke-row-stagger",
+  DURATION_FAST: "--ui-duration-fast",
+  DURATION_PANE: "--ui-duration-pane",
+  DURATION_QUICK: "--ui-duration-quick",
+  DURATION_EXIT: "--ui-duration-exit",
+  DURATION_SHAPE: "--ui-duration-shape",
+  SPRING: "--ui-spring",
+  SPRING_FAST: "--ui-spring-fast",
+  EASE_EXIT: "--ui-motion-exit",
+  EASE_PANE: "--ui-motion-pane",
+  ROW_STAGGER: "--ui-row-stagger",
 } as const;
 
 /** A CSS time, `240ms` or `0.24s`, in milliseconds; anything else is none. */

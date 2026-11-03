@@ -11,9 +11,9 @@
 //   src/motion-tokens.ts        the same durations and sizes, as numbers
 //   src/provider-mark-paths.ts  SVG path data for the sign-in provider marks
 //   src/brand-palette.ts        the brand's colours as plain values
-//   ui/src/tokens/motion-tokens.css  the --luke-* motion tokens the shared
+//   ui/src/tokens/motion-tokens.css  the --ui-* motion tokens the shared
 //                               components read, imported by @luke/ui/tokens.css
-//   ui/src/tokens/brand.css     the brand's colours on the --luke-color-* roles
+//   ui/src/tokens/brand.css     the brand's colours on the --ui-color-* roles
 //
 // The React that traces the marks, and the rules that consume the tokens, stay
 // in each app: a shared component would pull desktop-only code into the web
@@ -134,7 +134,7 @@ function ms(value) {
   return `${value}ms`;
 }
 
-// Note that the motion vocabulary is @luke/ui's alone, under its --luke-*
+// Note that the motion vocabulary is @luke/ui's alone, under its --ui-*
 // names: every app that loads its tokens moves a spring, a duration, or a
 // delay alike, and there is no second set beside it.
 function uiMotionTokensCss() {
@@ -146,21 +146,21 @@ function uiMotionTokensCss() {
    @luke/ui/tokens.css moves them alike. motion.css answers reduced motion. */
 
 :root {
-  --luke-spring: ${linearCss(SPRING)};
-  --luke-spring-fast: ${linearCss(SPRING_FAST)};
-  --luke-duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};
-  --luke-duration-exit: ${ms(MOTION_DURATION_MS.EXIT)};
-  --luke-duration-quick: ${ms(MOTION_DURATION_MS.QUICK)};
-  --luke-duration-pane: ${ms(MOTION_DURATION_MS.PANE)};
-  --luke-duration-fast: ${ms(MOTION_DURATION_MS.FAST)};
-  --luke-duration-shape: ${ms(MOTION_DURATION_MS.SHAPE)};
-  --luke-motion-exit: ${MOTION_EXIT};
-  --luke-motion-pane: ${MOTION_PANE};
-  --luke-row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
-  --luke-hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
-  --luke-late-delay: ${ms(MOTION_DELAY_MS.LATE)};
-  --luke-confirm-delay: ${ms(MOTION_DELAY_MS.CONFIRM)};
-  --luke-settle-delay: ${ms(MOTION_DELAY_MS.SETTLE)};
+  --ui-spring: ${linearCss(SPRING)};
+  --ui-spring-fast: ${linearCss(SPRING_FAST)};
+  --ui-duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};
+  --ui-duration-exit: ${ms(MOTION_DURATION_MS.EXIT)};
+  --ui-duration-quick: ${ms(MOTION_DURATION_MS.QUICK)};
+  --ui-duration-pane: ${ms(MOTION_DURATION_MS.PANE)};
+  --ui-duration-fast: ${ms(MOTION_DURATION_MS.FAST)};
+  --ui-duration-shape: ${ms(MOTION_DURATION_MS.SHAPE)};
+  --ui-motion-exit: ${MOTION_EXIT};
+  --ui-motion-pane: ${MOTION_PANE};
+  --ui-row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
+  --ui-hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
+  --ui-late-delay: ${ms(MOTION_DELAY_MS.LATE)};
+  --ui-confirm-delay: ${ms(MOTION_DELAY_MS.CONFIRM)};
+  --ui-settle-delay: ${ms(MOTION_DELAY_MS.SETTLE)};
 }
 `;
 }
@@ -216,10 +216,10 @@ ${google}
 `;
 }
 
-// The brand's roles under their --luke-color-* names: the desktop writes each
+// The brand's roles under their --ui-color-* names: the desktop writes each
 // once as light-dark(), as palettes.css does, and the site a block per theme,
 // for browsers older than light-dark().
-const roleName = (key) => `--luke-color-${key.toLowerCase().replaceAll("_", "-")}`;
+const roleName = (key) => `--ui-color-${key.toLowerCase().replaceAll("_", "-")}`;
 
 function uiBrandCss() {
   const keys = Object.keys(BRAND.LIGHT);
@@ -234,16 +234,16 @@ function uiBrandCss() {
    The brand's colours on @luke/ui's roles, both profiles, both themes. The
    roles no brand changes are palettes.css's. */
 
-[data-luke-profile="desktop"] {
+[data-ui-profile="desktop"] {
 ${block(pair)}
 }
 
-[data-luke-profile="web"],
-[data-luke-profile="web"][data-luke-theme="light"] {
+[data-ui-profile="web"],
+[data-ui-profile="web"][data-ui-theme="light"] {
 ${block((key) => BRAND.LIGHT[key])}
 }
 
-[data-luke-profile="web"][data-luke-theme="dark"] {
+[data-ui-profile="web"][data-ui-theme="dark"] {
 ${block((key) => BRAND.DARK[key])}
 }
 `;

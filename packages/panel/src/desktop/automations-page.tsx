@@ -649,7 +649,7 @@ function ListPage({
         </ErrorState>
       ) : null}
       {groups.length === 0 ? (
-        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.luke-empty-state]:flex-none">
+        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.ui-empty-state]:flex-none">
           <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
         </div>
       ) : (

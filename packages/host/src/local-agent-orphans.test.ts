@@ -119,7 +119,7 @@ const following = (input: {
   readonly firstReadDies?: boolean;
 }) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-orphans-");
+    const root = yield* temporaryDirectoryScoped("agent-orphans-");
     const home = `${root}/home`;
     const stateRoot = `${root}/state`;
     for (const agentId of input.held) {

@@ -29,7 +29,7 @@ const MIGRATION = "20261025202554_inbox_item_channel";
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-channel-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-channel-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(MIGRATION) < 0,
   );
@@ -44,7 +44,7 @@ const BEFORE_RENAME = { table: "coding_agent", kind: "coding_agent" };
 const AFTER_RENAME = { table: "agent", kind: "agent" };
 
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
+  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
 
 /**
  * A task and its agent in the account's new workspace, written as the schema of then holds them,

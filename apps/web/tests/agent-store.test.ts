@@ -54,7 +54,7 @@ import { TestClock } from "effect/testing";
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -81,7 +81,7 @@ function start(
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    repository: "reviewstage/luke",
+    repository: "acme/web",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     ...overrides,
     ...brief,
@@ -125,7 +125,7 @@ const conversationKind = (conversationId: string) =>
 const PULL_REQUEST: AgentPullRequest = {
   number: 41,
   title: "Teammate invitations",
-  url: "https://github.com/reviewstage/luke/pull/41",
+  url: "https://github.com/acme/web/pull/41",
   state: PULL_REQUEST_STATE.DRAFT,
   checks: CHECK_SUMMARY.PENDING,
   additions: 120,
@@ -212,8 +212,8 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
             }),
             started,
           );
-        const published = yield* taskless("reviewstage/luke");
-        const quiet = yield* taskless("reviewstage/luke");
+        const published = yield* taskless("acme/web");
+        const quiet = yield* taskless("acme/web");
         yield* recordAgentPublished(userId, published.id, PULL_REQUEST);
 
         const rows = yield* listTasklessAgents(userId, { includeArchived: false });
@@ -450,7 +450,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
           ),
         );
         yield* TestClock.adjust("1 minute");
-        const source = { agentId: snapshotted.id, steps: 3, totalSteps: 5, branch: "luke/invite" };
+        const source = { agentId: snapshotted.id, steps: 3, totalSteps: 5, branch: "agent/invite" };
         const continued = started(
           yield* createAgent(
             userId,
@@ -475,7 +475,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
-            repository: "reviewstage/luke",
+            repository: "acme/web",
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
@@ -509,7 +509,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
               automationName: "Nightly triage",
               from: source,
               workspaceId,
-              repository: "reviewstage/luke",
+              repository: "acme/web",
             },
           ],
         );

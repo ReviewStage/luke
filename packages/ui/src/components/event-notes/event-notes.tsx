@@ -39,7 +39,7 @@ function NoteRow({ note }: { note: EventNote }): React.JSX.Element {
     </Text>
   );
   return (
-    <li className="flex min-w-0 flex-col gap-luke-4 border-t border-border pt-luke-8">
+    <li className="flex min-w-0 flex-col gap-ui-4 border-t border-border pt-ui-8">
       {note.glyph == null ? (
         where
       ) : (
@@ -65,14 +65,14 @@ export function EventNotes({ notes }: { notes: readonly EventNote[] }): React.JS
   const more = notes.slice(NOTES_SHOWN);
   if (notes.length === 0) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-luke-8 first:[&>ul:first-child>li:first-child]:border-t-0 first:[&>ul:first-child>li:first-child]:pt-0">
-      <ul className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
+    <div className="flex min-w-0 flex-col gap-ui-8 first:[&>ul:first-child>li:first-child]:border-t-0 first:[&>ul:first-child>li:first-child]:pt-0">
+      <ul className="m-0 flex min-w-0 list-none flex-col gap-ui-8 p-0">
         {notes.slice(0, NOTES_SHOWN).map((note) => (
           <NoteRow key={note.key} note={note} />
         ))}
       </ul>
       {more.length === 0 ? null : (
-        <ul ref={rest} className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
+        <ul ref={rest} className="m-0 flex min-w-0 list-none flex-col gap-ui-8 p-0">
           {more.map((note) => (
             <NoteRow key={note.key} note={note} />
           ))}

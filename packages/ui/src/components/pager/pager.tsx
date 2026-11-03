@@ -108,7 +108,7 @@ export function Pager({
   const words =
     place === undefined ? null : (
       <span
-        className={`luke-pager-count ${COUNT_PLACE[count]} whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums`}
+        className={`ui-pager-count ${COUNT_PLACE[count]} whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums`}
       >
         {place.noun === undefined
           ? `${place.at} of ${place.total}`
@@ -116,7 +116,7 @@ export function Pager({
       </span>
     );
   return (
-    <div className="luke-pager flex flex-none items-center">
+    <div className="ui-pager flex flex-none items-center">
       {count === PAGER_COUNT.LEAD ? words : null}
       <PagerArrow step={previous} icon={back} />
       {count === PAGER_COUNT.BETWEEN ? words : null}

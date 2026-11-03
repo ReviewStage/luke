@@ -249,7 +249,7 @@ function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
   const fold = [
     ...sidebar.querySelectorAll('nav[aria-label="Sections"] button[aria-expanded]'),
   ].find((each) => heardName(each) === title);
-  const found = fold?.closest<HTMLElement>(".luke-group-header-head");
+  const found = fold?.closest<HTMLElement>(".ui-group-header-head");
   return found ?? assert.fail(`no ${title} section`);
 }
 
@@ -277,14 +277,14 @@ function dialogButton(label: string): HTMLButtonElement {
 /** The names of the tasks drawn under the region labelled `label`. */
 function namesIn(sidebar: HTMLElement, label: string): string[] {
   const region = sidebar.querySelector(`nav[aria-label="${label}"]`);
-  return [...(region?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+  return [...(region?.querySelectorAll(".ui-list-row-title") ?? [])].map(
     (name) => name.firstChild?.textContent ?? "",
   );
 }
 
 /** The menu item named `label`, failing where none is drawn. */
 function item(label: string): HTMLElement {
-  const name = [...document.querySelectorAll(".luke-menu-item-label")].find(
+  const name = [...document.querySelectorAll(".ui-menu-item-label")].find(
     (each) => each.textContent === label,
   );
   const found = name?.closest<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]');
@@ -305,7 +305,7 @@ test("the column's task rows, a section's and Tasks', are one Tab stop that ↓ 
   const row = (name: string) => {
     const found = [
       ...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
-    ].find((each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === name);
+    ].find((each) => each.querySelector(".ui-list-row-title")?.firstChild?.textContent === name);
     return found ?? assert.fail(`no row for ${name}`);
   };
   const stops = () =>
@@ -357,7 +357,7 @@ test("a section folds on its title, aria-expanded following, counts its tasks fo
 test("a filter by person leaves out a section's task it would leave out of the list", async () => {
   const shared = { ...WORKSPACE, memberCount: 2 };
   window.localStorage.setItem(
-    "luke.sidebarTaskViews",
+    "app.sidebarTaskViews",
     JSON.stringify({
       [WORKSPACE.id]: { grouping: "repository", order: "updated", assignedTo: "user-ada" },
     }),
@@ -446,7 +446,7 @@ function openSectionMenu(sidebar: HTMLElement, title: string): void {
 
 /** The words of every item the open menus draw, in order. */
 function menuLabels(): string[] {
-  return [...document.querySelectorAll(".luke-menu-item-label")].map(
+  return [...document.querySelectorAll(".ui-menu-item-label")].map(
     (each) => each.textContent ?? "",
   );
 }
@@ -464,7 +464,7 @@ function openRowMenu(sidebar: HTMLElement, name: string): void {
 
 /** The sections' titles, in the order the sidebar draws them. */
 function sectionTitles(sidebar: HTMLElement): string[] {
-  const heads = sidebar.querySelectorAll('nav[aria-label="Sections"] .luke-group-header-head');
+  const heads = sidebar.querySelectorAll('nav[aria-label="Sections"] .ui-group-header-head');
   return [...heads].map((head) => heardName(head.querySelector("button[aria-expanded]") ?? head));
 }
 
@@ -495,7 +495,7 @@ test("deleting a section removes it at once with no dialog, and Undo brings it b
   assert.deepEqual(sectionTitles(sidebar), stood);
   assert.deepEqual(namesIn(sidebar, "Sections"), ["Invite expiry", "Retry audit"]);
   assert.deepEqual(namesIn(sidebar, "My tasks"), []);
-  const icon = sectionHeader(sidebar, "Launch").querySelector(".luke-group-header-icon");
+  const icon = sectionHeader(sidebar, "Launch").querySelector(".ui-group-header-icon");
   assert.equal(icon?.textContent, "🚀");
 });
 
@@ -652,7 +652,7 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
   assert.equal(rowOf(RETRIES.name).getAttribute("aria-description"), "Selected");
 
   openRowMenu(sidebar, RETRIES.name);
-  assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
+  assert.equal(document.querySelector(".ui-menu-heading")?.textContent, "2 tasks");
   act(() => {
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
@@ -664,7 +664,7 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
     assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the focused row answers S");
   });
   await act(async () => undefined);
-  assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
+  assert.equal(document.querySelector(".ui-menu-heading")?.textContent, "2 tasks");
   assert.ok(document.querySelector('[role="menu"][aria-label="Status"]'), "S opens Status");
   act(() => item("Done").click());
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
@@ -699,9 +699,9 @@ test("a section without an icon draws its title behind the fold's chevron alone,
   const sidebar = await mountSidebar([], ICONLESS);
 
   const toggle = sectionHeader(sidebar, "Someday").querySelector("button[aria-expanded]");
-  assert.ok(toggle?.querySelector(".luke-group-header-icon") === null, "no glyph is drawn");
-  assert.ok(toggle?.querySelector(".luke-group-header-chevron"), "the chevron stands at rest");
-  const launch = sectionHeader(sidebar, "Launch").querySelector(".luke-group-header-icon");
+  assert.ok(toggle?.querySelector(".ui-group-header-icon") === null, "no glyph is drawn");
+  assert.ok(toggle?.querySelector(".ui-group-header-chevron"), "the chevron stands at rest");
+  const launch = sectionHeader(sidebar, "Launch").querySelector(".ui-group-header-icon");
   assert.equal(launch?.textContent, "🚀");
 });
 
@@ -710,7 +710,7 @@ test("Move to section names a section without an icon with no glyph beside it", 
 
   openMoveToSection(sidebar, "Invite expiry");
 
-  assert.equal(item("Launch").querySelector(".luke-menu-item-glyph")?.textContent, "🚀");
+  assert.equal(item("Launch").querySelector(".ui-menu-item-glyph")?.textContent, "🚀");
 });
 
 /** Presses the Tasks head's New section, which names a section in place. */
@@ -905,7 +905,7 @@ interface Asked {
  */
 function layOutRows(): void {
   const slots = () => [
-    ...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-slot, .luke-drop-slot"),
+    ...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-slot, .ui-drop-slot"),
   ];
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const all = slots();
@@ -962,7 +962,7 @@ const pointer = (type: string, y: number) =>
 /** Presses the row named `name` at its middle and carries it a little way toward `y`, past where a press is a drag. */
 function lift(sidebar: HTMLElement, name: string, y: number): void {
   // Note that a row's name is its title's first words, before what only a screen reader hears of it.
-  const label = [...sidebar.querySelectorAll<HTMLElement>(".luke-list-row-title")].find(
+  const label = [...sidebar.querySelectorAll<HTMLElement>(".ui-list-row-title")].find(
     (each) => each.firstChild?.textContent === name,
   );
   const row = label?.closest("li") ?? assert.fail(`no ${name} in the sidebar`);
@@ -1076,7 +1076,7 @@ test("with nothing pinned Pinned stands nowhere, and a row lifted into a drag dr
   lift(sidebar, "Retry audit", 0);
 
   const zone = pinnedGroup(sidebar) ?? assert.fail("Pinned stands while a row is carried");
-  assert.ok(zone.querySelector(".luke-drop-slot"), "a slot to let it go in");
+  assert.ok(zone.querySelector(".ui-drop-slot"), "a slot to let it go in");
   assert.equal(zone.querySelector("[aria-expanded]"), null, "nothing to fold");
   assert.equal(zone.textContent, "Pinned", "no count, and no words beyond its name");
 
@@ -1401,7 +1401,7 @@ function longPress(target: HTMLElement): void {
 
 /** The words of every item of the menus standing. */
 function menuWords(): string[] {
-  return [...document.querySelectorAll(".luke-menu-item-label")].map(
+  return [...document.querySelectorAll(".ui-menu-item-label")].map(
     (each) => each.textContent ?? "",
   );
 }
@@ -1452,7 +1452,7 @@ test("with a mouse, a pin's menu offers its move too, with its chord", async () 
     menuWords().filter((words) => words === "Move up" || words === "Move down"),
     ["Move up"],
   );
-  assert.equal(item("Move up").querySelector(".luke-menu-item-hint")?.textContent, "⇧⌘↑");
+  assert.equal(item("Move up").querySelector(".ui-menu-item-hint")?.textContent, "⇧⌘↑");
 });
 
 test("under a finger, a section's menu moves it up among the sections", async () => {

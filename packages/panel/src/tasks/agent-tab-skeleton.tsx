@@ -30,7 +30,7 @@ const LOG_LINE_WIDTHS = ["72%", "88%", "64%", "40%"] as const;
 const MODEL_CHIP_WIDTH = "120px";
 
 /** A square control's width: the composer's + and every icon press, as tall as they are wide. */
-const SQUARE_CONTROL_WIDTH = "var(--luke-control-height)";
+const SQUARE_CONTROL_WIDTH = "var(--ui-control-height)";
 
 /** The log's last lines, standing at its foot where the newest lines draw, which `label` names to a reader. */
 export function TranscriptSkeleton({

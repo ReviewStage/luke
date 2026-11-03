@@ -60,8 +60,8 @@ beforeAll(() => {
       }) satisfies MediaQueryList,
   );
   // The page's own tags, as app.html writes them: the profile, and the chrome's tint.
-  document.documentElement.setAttribute("data-luke-profile", "web");
-  document.documentElement.setAttribute("data-luke-theme", "light");
+  document.documentElement.setAttribute("data-ui-profile", "web");
+  document.documentElement.setAttribute("data-ui-theme", "light");
   const meta = document.head.appendChild(document.createElement("meta"));
   meta.name = "theme-color";
   meta.content = GROUND.light;
@@ -79,9 +79,9 @@ afterAll(async () => {
 /** What the tab wears now: its root's theme, the chrome's tint, and the choice kept for the next load. */
 function worn() {
   return {
-    theme: document.documentElement.getAttribute("data-luke-theme"),
+    theme: document.documentElement.getAttribute("data-ui-theme"),
     chrome: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
-    kept: localStorage.getItem("luke.theme"),
+    kept: localStorage.getItem("app.theme"),
   };
 }
 

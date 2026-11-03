@@ -57,15 +57,15 @@ test("a badge that gives up its words in a narrow room still holds them for a re
 
 test("a label filled with its colour is read by its name, its words lifted to read on the dark ground", () => {
   const view = render(createElement(Badge, { fill: "#1d1d1f", children: "needs design" }));
-  const badge = view.querySelector<HTMLElement>(".luke-badge");
+  const badge = view.querySelector<HTMLElement>(".ui-badge");
   assert.equal(view.textContent, "needs design");
-  assert.equal(badge?.style.getPropertyValue("--luke-badge-fill-light"), "#1d1d1f");
-  assert.notEqual(badge?.style.getPropertyValue("--luke-badge-words-dark"), "#1d1d1f");
-  assert.equal(badge?.style.getPropertyValue("--luke-badge-words-light"), "#ffffff");
+  assert.equal(badge?.style.getPropertyValue("--ui-badge-fill-light"), "#1d1d1f");
+  assert.notEqual(badge?.style.getPropertyValue("--ui-badge-words-dark"), "#1d1d1f");
+  assert.equal(badge?.style.getPropertyValue("--ui-badge-words-light"), "#ffffff");
 });
 
 test("a fill the badge cannot paint draws it as a neutral badge", () => {
   const view = render(createElement(Badge, { fill: "not-a-colour", children: "imported" }));
-  const badge = view.querySelector<HTMLElement>(".luke-badge");
+  const badge = view.querySelector<HTMLElement>(".ui-badge");
   assert.equal(badge?.getAttribute("style"), null);
 });

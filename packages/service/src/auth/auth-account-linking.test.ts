@@ -26,7 +26,7 @@ import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./au
  */
 
 const BASE_URL = "http://127.0.0.1";
-const LUKE_EMAIL = "planner@luke.test";
+const LUKE_EMAIL = "planner@app.test";
 const GITHUB_ACCOUNT_ID = 5151;
 const DONE_URL = "/connect-github.html?done=1";
 const ERROR_URL = "/connect-github.html?error=1";

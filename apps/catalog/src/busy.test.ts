@@ -50,14 +50,14 @@ afterEach(() => {
 });
 
 /** The ring a busy button turns, which every kind draws as the one spinner. */
-const RING = ".luke-spinner-ring";
+const RING = ".ui-spinner-ring";
 
 /**
  * The busy buttons an example draws: what a reader is told is busy and a
  * person presses. Note that a Chip is no button kind of this shape, since it
  * is a filter that stands unavailable while its count loads, with no act to wait on.
  */
-const BUSY_BUTTON = "button[aria-busy='true']:not(.luke-chip)";
+const BUSY_BUTTON = "button[aria-busy='true']:not(.ui-chip)";
 
 /** What a button is called, by its label or its words. */
 function nameOf(button: HTMLElement): string {
@@ -66,10 +66,10 @@ function nameOf(button: HTMLElement): string {
 
 /** The kinds of button that take `busy`, each with the shared class its own markup wears. */
 const KINDS = [
-  ["SplitButton", ".luke-split-button"],
-  ["FoldingButton", ".luke-folding-button"],
-  ["ProviderButton", ".luke-provider-button"],
-  ["Button", ".luke-button"],
+  ["SplitButton", ".ui-split-button"],
+  ["FoldingButton", ".ui-folding-button"],
+  ["ProviderButton", ".ui-provider-button"],
+  ["Button", ".ui-button"],
 ] as const;
 
 /** Which kind of button `button` is, by the shared class on it or around it. */

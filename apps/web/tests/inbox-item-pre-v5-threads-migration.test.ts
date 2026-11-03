@@ -37,7 +37,7 @@ const foldersUpTo = (through: boolean) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-pre-v5-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-pre-v5-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter((name) =>
       through ? name.localeCompare(MIGRATION) <= 0 : name.localeCompare(MIGRATION) < 0,
     );
@@ -48,7 +48,7 @@ const foldersUpTo = (through: boolean) =>
   });
 
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
+  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
 
 it.effect(
   "an item from before version 5 reads as a thread its agent's message opens, its ask and answer on its messages",

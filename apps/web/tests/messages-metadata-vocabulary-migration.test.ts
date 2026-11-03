@@ -47,7 +47,7 @@ function foldersUpTo(last: string) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-vocabulary-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-vocabulary-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
       (name) => name.localeCompare(last) < 0,
     );
@@ -153,7 +153,7 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBefore);
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         const agentId = yield* openEarlierAgent(workspaceId);
@@ -280,7 +280,7 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersUpTo(STRAGGLERS));
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         const agentId = yield* openEarlierAgent(workspaceId);

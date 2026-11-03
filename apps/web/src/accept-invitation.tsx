@@ -22,7 +22,7 @@ import {
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
-import { openLukeFromMac } from "./open-luke";
+import { openAppFromMac } from "./open-app";
 import { WEB_APP_URL } from "./SiteChrome";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
@@ -107,7 +107,7 @@ const ROLE_WORDS = {
 
 /** The way into the workspace once in it: the Mac app on a Mac, else the web app. */
 function openTheWorkspace(): AuthAction {
-  return openLukeFromMac() ?? OPEN_ON_THE_WEB;
+  return openAppFromMac() ?? OPEN_ON_THE_WEB;
 }
 
 const SPENT: View = said(

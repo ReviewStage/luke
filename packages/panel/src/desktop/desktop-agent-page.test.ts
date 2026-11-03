@@ -752,7 +752,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   );
   assert.equal(
     panel.querySelector<HTMLIFrameElement>(".page-view iframe")?.getAttribute("src"),
-    `luke-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
+    `app-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
   );
 });
 
@@ -788,10 +788,10 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
   focusRestOn(chip);
   await settle();
 
-  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
+  const card = document.querySelector(".ui-tooltip-card [data-page-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, FUNNEL.title);
   assert.equal(
-    card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+    card?.querySelector(".ui-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ taskId: PAGE_TASK, pageId: FUNNEL.id, version: 2 }),
     "the preview is the task's page",
   );
@@ -855,10 +855,10 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
   assert.ok(add, "the panel offers its +");
   act(() => add.click());
   await settle();
-  const offered = [...document.querySelectorAll(".luke-searchable-menu [role='option']")].map(
+  const offered = [...document.querySelectorAll(".ui-searchable-menu [role='option']")].map(
     (each) => each.textContent,
   );
-  const headings = [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map(
+  const headings = [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map(
     (each) => each.getAttribute("aria-label"),
   );
   act(() => add.click());
@@ -989,7 +989,7 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   await settle();
   const chip = (name: string) =>
     [...container.querySelectorAll<HTMLButtonElement>(".agent-page [data-mention-ref]")].find(
-      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
+      (each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#2911");
@@ -1125,10 +1125,10 @@ test("until the agent is read, the page stands in an agent tab's own shape sayin
   assert.equal(wait?.textContent, "Reading the agent");
   assert.ok(wait.closest(".agent-tab"), "the wait stands in the tab's own frame");
   assert.ok(
-    page.querySelector(".agent-page .agent-tab-foot .luke-skeleton"),
+    page.querySelector(".agent-page .agent-tab-foot .ui-skeleton"),
     "the composer's card stands under the log",
   );
-  assert.equal(page.querySelector(".agent-page .luke-spinner-region"), null);
+  assert.equal(page.querySelector(".agent-page .ui-spinner-region"), null);
   assert.equal(page.querySelector("h1"), null);
   answerHeld();
   await settle();
@@ -1297,9 +1297,9 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   await settle();
 
   const sender = page.querySelector(
-    ".is-received:not(.agent-origin) .luke-message-head-sender [data-actor-ref]",
+    ".is-received:not(.agent-origin) .ui-message-head-sender [data-actor-ref]",
   );
-  assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
+  assert.equal(sender?.querySelector(".ui-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
 
@@ -1339,7 +1339,7 @@ function origin(page: HTMLElement): OpenedOrigin {
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
   const head = card.querySelector<HTMLElement>("[data-origin-plan] > summary");
   act(() => head?.click());
-  return { card, sender: card.querySelector<HTMLElement>(".luke-message-line-sender") };
+  return { card, sender: card.querySelector<HTMLElement>(".ui-message-line-sender") };
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
@@ -1430,8 +1430,8 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
   const chip = origin(page).sender?.querySelector<HTMLElement>("[data-mention-ref]");
   assert.deepEqual(
     [
-      chip?.querySelector(".luke-inline-ref-label")?.textContent,
-      chip?.querySelector(".luke-inline-ref-state")?.textContent,
+      chip?.querySelector(".ui-inline-ref-label")?.textContent,
+      chip?.querySelector(".ui-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
     ["#2905", "Open", PULL_REQUEST_STATE.OPEN],
@@ -1749,8 +1749,8 @@ it.effect(
       ];
       assert.deepEqual(
         rows.map((row) => [
-          row.querySelector(".luke-combobox-option-label")?.textContent,
-          row.querySelector(".luke-combobox-option-detail")?.textContent,
+          row.querySelector(".ui-combobox-option-label")?.textContent,
+          row.querySelector(".ui-combobox-option-detail")?.textContent,
         ]),
         [["Bill by seat", "Billing · Archived"]],
       );
@@ -1791,7 +1791,7 @@ it.effect(
         ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
       ];
       assert.deepEqual(
-        rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
+        rows.map((row) => row.querySelector(".ui-combobox-option-label")?.textContent),
         ["Bill by seat"],
       );
     }),
@@ -1821,7 +1821,7 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   assert.deepEqual(
     chips.map((chip) => [
       chip.dataset.kind,
-      chip.querySelector(".luke-inline-ref-label")?.textContent,
+      chip.querySelector(".ui-inline-ref-label")?.textContent,
     ]),
     [
       ["file", "store.ts"],
@@ -1831,11 +1831,11 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   const [fileChip, folderChip] = chips;
   assert.ok(fileChip && folderChip);
   restOn(fileChip);
-  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
-      card?.querySelector(".luke-hover-card-name")?.textContent,
-      card?.querySelector(".luke-hover-card-sub")?.textContent,
+      card?.querySelector(".ui-hover-card-name")?.textContent,
+      card?.querySelector(".ui-hover-card-sub")?.textContent,
     ],
     ["src/store.ts", "acme/relay"],
   );
@@ -1883,12 +1883,9 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
 
   for (const chip of chips) {
     restOn(chip);
-    const card = [...document.querySelectorAll(".luke-tooltip-card .luke-hover-card")].at(-1);
+    const card = [...document.querySelectorAll(".ui-tooltip-card .ui-hover-card")].at(-1);
     assert.equal(card?.hasAttribute("data-pull-request-card"), true, "the card is its tab's");
-    assert.equal(
-      card?.querySelector(".luke-hover-card-name")?.textContent,
-      "Await the payment mock",
-    );
+    assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Await the payment mock");
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });

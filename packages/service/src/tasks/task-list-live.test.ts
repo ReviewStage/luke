@@ -98,7 +98,7 @@ const NOW = Date.parse("2026-10-15T09:00:00Z");
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -493,7 +493,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           name: "Audit log export",
           origin: { actor: PLAN_ACTOR.NOTETAKER },
         });
-        // A child task, written as a row since no start names a parent yet.
+        // The follow-up made a child of the first plan.
         const db = yield* Database;
         yield* db.update(task).set({ parentTaskId: plan.id }).where(eq(task.id, followUp.id));
 

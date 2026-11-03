@@ -76,9 +76,9 @@ function keep(name: string, text: string): void {
 }
 
 test("the sidebar's folds are read from, and written back to, the names they were kept under", () => {
-  keep("luke.sidebarFoldedGroups", '["acme/app",null]');
-  keep("luke.sidebarPinnedFolded", "true");
-  keep("luke.sidebarFoldedSections", '["s1"]');
+  keep("app.sidebarFoldedGroups", '["acme/app",null]');
+  keep("app.sidebarPinnedFolded", "true");
+  keep("app.sidebarFoldedSections", '["s1"]');
   const folds = draw(() => useFoldedGroups(false));
   expect(folds.now().folded("acme/app")).toBe(true);
   expect(folds.now().folded(null)).toBe(true);
@@ -88,30 +88,30 @@ test("the sidebar's folds are read from, and written back to, the names they wer
   act(() => folds.now().toggle("acme/other"));
   act(() => folds.now().togglePinned());
   act(() => folds.now().toggleSection("s2"));
-  expect(kept("luke.sidebarFoldedGroups")).toBe('["acme/app",null,"acme/other"]');
-  expect(kept("luke.sidebarPinnedFolded")).toBe("false");
-  expect(kept("luke.sidebarFoldedSections")).toBe('["s1","s2"]');
+  expect(kept("app.sidebarFoldedGroups")).toBe('["acme/app",null,"acme/other"]');
+  expect(kept("app.sidebarPinnedFolded")).toBe("false");
+  expect(kept("app.sidebarFoldedSections")).toBe('["s1","s2"]');
 });
 
 test("a fixture run's folds keep nothing", () => {
   const folds = draw(() => useFoldedGroups(true));
   act(() => folds.now().toggle("acme/app"));
   expect(folds.now().folded("acme/app")).toBe(true);
-  expect(kept("luke.sidebarFoldedGroups")).toBeNull();
+  expect(kept("app.sidebarFoldedGroups")).toBeNull();
 });
 
 test("the Inbox's scope is read from a tab, or a button's press, kept before the scopes", () => {
-  keep("luke.inboxShow", '"needs-you"');
+  keep("app.inboxShow", '"needs-you"');
   expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
   act(() => root?.unmount());
-  keep("luke.inboxShow", '"open"');
+  keep("app.inboxShow", '"open"');
   expect(draw(() => useInboxViewChoices()).now().show).toBe("all");
   act(() => root?.unmount());
-  window.localStorage.removeItem("luke.inboxShow");
-  keep("luke.inboxWaitingOnly", "false");
+  window.localStorage.removeItem("app.inboxShow");
+  keep("app.inboxWaitingOnly", "false");
   expect(draw(() => useInboxViewChoices()).now().show).toBe("all");
   act(() => root?.unmount());
-  keep("luke.inboxWaitingOnly", "true");
+  keep("app.inboxWaitingOnly", "true");
   expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
   act(() => root?.unmount());
   window.localStorage.clear();
@@ -121,25 +121,25 @@ test("the Inbox's scope is read from a tab, or a button's press, kept before the
 });
 
 test("an Inbox scope kept as null reads the Needs you press kept beside it, as it did before", () => {
-  keep("luke.inboxShow", "null");
-  keep("luke.inboxWaitingOnly", "false");
+  keep("app.inboxShow", "null");
+  keep("app.inboxWaitingOnly", "false");
   expect(draw(() => useInboxViewChoices()).now().show).toBe("all");
 });
 
 test("the Inbox's choices are read as they were kept", () => {
-  keep("luke.inboxShow", '"all"');
-  keep("luke.inboxWhose", '{"kind":"person","userId":"u1","name":"Ana"}');
+  keep("app.inboxShow", '"all"');
+  keep("app.inboxWhose", '{"kind":"person","userId":"u1","name":"Ana"}');
   const choices = draw(() => useInboxViewChoices());
   expect(choices.now().show).toBe("all");
   expect(choices.now().whose).toEqual({ kind: "person", userId: "u1", name: "Ana" });
   act(() => choices.now().onShow("to-do"));
-  expect(kept("luke.inboxShow")).toBe('"to-do"');
+  expect(kept("app.inboxShow")).toBe('"to-do"');
 });
 
 test("the list, the file tree and the Runs panel stand at the widths they were kept at, held to their bounds", () => {
-  keep("luke.inboxListWidth", "9999");
-  keep("luke.fileTreeWidth", "1");
-  keep("luke.automationRunsPanel", '{"width":300,"open":false}');
+  keep("app.inboxListWidth", "9999");
+  keep("app.fileTreeWidth", "1");
+  keep("app.automationRunsPanel", '{"width":300,"open":false}');
   const drawn = draw(() => ({
     inbox: useInboxListWidth(),
     tree: useFileTreeWidth(),
@@ -150,20 +150,20 @@ test("the list, the file tree and the Runs panel stand at the widths they were k
   expect(drawn.now().runs).toMatchObject({ width: 300, open: false });
   act(() => drawn.now().inbox.onResize(350.4));
   act(() => drawn.now().runs.onShow());
-  expect(kept("luke.inboxListWidth")).toBe("350");
-  expect(kept("luke.automationRunsPanel")).toBe('{"width":300,"open":true}');
+  expect(kept("app.inboxListWidth")).toBe("350");
+  expect(kept("app.automationRunsPanel")).toBe('{"width":300,"open":true}');
 });
 
 test("the sidebar is folded and as wide as it was kept, and keeps a change under the same names", () => {
-  keep("luke.sidebar-collapsed", "true");
-  keep("luke.sidebar-width", "300");
+  keep("app.sidebar-collapsed", "true");
+  keep("app.sidebar-width", "300");
   const sidebar = draw(() => useSidebarCollapse(false, false));
   expect(sidebar.now().collapsed).toBe(true);
   expect(sidebar.now().width).toBe(300);
   act(() => sidebar.now().onToggle());
   act(() => sidebar.now().onResize(9999));
-  expect(kept("luke.sidebar-collapsed")).toBe("false");
-  expect(kept("luke.sidebar-width")).toBe(String(SIDEBAR_WIDTH.MAX));
+  expect(kept("app.sidebar-collapsed")).toBe("false");
+  expect(kept("app.sidebar-width")).toBe(String(SIDEBAR_WIDTH.MAX));
 });
 
 test("a sidebar never folded opens", () => {
@@ -172,7 +172,7 @@ test("a sidebar never folded opens", () => {
 
 test("a task list view an earlier build kept opens on the reader's own tasks, a grouping by person read as by repository, and Anyone chosen is kept", () => {
   keep(
-    "luke.sidebarTaskViews",
+    "app.sidebarTaskViews",
     '{"w1":{"grouping":"creator","order":"created","createdBy":"u1","assignedTo":"u2"},"w2":{"grouping":"none","order":"updated"}}',
   );
   const list = draw(() => ({
@@ -182,7 +182,7 @@ test("a task list view an earlier build kept opens on the reader's own tasks, a 
   expect(list.now().w1.view).toEqual({ grouping: "repository", assignedTo: { kind: "me" } });
   expect(list.now().w2.view).toEqual({ grouping: "none", assignedTo: { kind: "me" } });
   act(() => list.now().w2.onAssignedTo({ kind: "anyone" }));
-  expect(JSON.parse(kept("luke.sidebarTaskViews") ?? "{}")).toEqual({
+  expect(JSON.parse(kept("app.sidebarTaskViews") ?? "{}")).toEqual({
     w1: { grouping: "repository" },
     w2: { grouping: "none", assignee: { kind: "anyone" } },
   });
@@ -208,26 +208,26 @@ test("the chosen workspace is read from the id it was kept as", () => {
     role: WORKSPACE_ROLE.OWNER,
     github: null,
   });
-  keep("luke.chosenWorkspace", '"w2"');
+  keep("app.chosenWorkspace", '"w2"');
   const chosen = draw(() => useChosenWorkspace([workspace("w1"), workspace("w2")], false));
   expect(chosen.now().chosen?.id).toBe("w2");
   act(() => chosen.now().choose("w1"));
-  expect(kept("luke.chosenWorkspace")).toBe('"w1"');
+  expect(kept("app.chosenWorkspace")).toBe('"w1"');
 });
 
 test("the summary is pinned unless it was kept unpinned", () => {
   expect(draw(() => useSummaryPin(false)).now().pinned).toBe(true);
   act(() => root?.unmount());
-  keep("luke.summary-pinned", "false");
+  keep("app.summary-pinned", "false");
   const pin = draw(() => useSummaryPin(false));
   expect(pin.now().pinned).toBe(false);
   act(() => pin.now().onToggle());
-  expect(kept("luke.summary-pinned")).toBe("true");
+  expect(kept("app.summary-pinned")).toBe("true");
 });
 
 test("the conversation's filters and folds are read from the one record, and every other conversation draws a change at once", () => {
   keep(
-    "luke.conversation-filters",
+    "app.conversation-filters",
     '{"hideBots":true,"hideResolved":false,"descriptionOpen":false,"conversationOpen":true}',
   );
   const drawn = draw(() => ({ first: useConversationFilters(), second: useConversationFilters() }));
@@ -239,7 +239,7 @@ test("the conversation's filters and folds are read from the one record, and eve
   });
   act(() => drawn.now().first.change({ hideResolved: true }));
   expect(drawn.now().second.filters.hideResolved).toBe(true);
-  expect(JSON.parse(kept("luke.conversation-filters") ?? "{}")).toEqual({
+  expect(JSON.parse(kept("app.conversation-filters") ?? "{}")).toEqual({
     hideBots: true,
     hideResolved: true,
     descriptionOpen: false,

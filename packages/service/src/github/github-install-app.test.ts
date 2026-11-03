@@ -20,7 +20,7 @@ import { githubInstallApp } from "./github-install-app.js";
  * Synthetic key and secrets throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const INSTALLATION_ID = 777;
 const LANDING = "/github-installed.html?status=";
 

@@ -37,7 +37,7 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * It is drawn in Tailwind utilities over the theme, each tile's frame a
  * `Card` (shadcn/ui's), its shape the picture's own (`aspect-picture`, from
- * the `--luke-picture-ratio` its tile sets).
+ * the `--ui-picture-ratio` its tile sets).
  */
 
 /** How many pictures a set may hold and still stand in one captioned row. */
@@ -63,7 +63,7 @@ const PICTURE = { one: "picture", many: "pictures" } as const;
 
 /** A gone picture's glyph and words, in the caption's type, the words wrapping and clipped by the frame where a thumbnail is small. */
 const STAND_IN =
-  "luke-picture-stand-in flex min-w-0 items-center gap-control-gap text-caption text-muted-foreground wrap-anywhere [&>svg]:size-icon-16 [&>svg]:flex-none";
+  "ui-picture-stand-in flex min-w-0 items-center gap-control-gap text-caption text-muted-foreground wrap-anywhere [&>svg]:size-icon-16 [&>svg]:flex-none";
 
 /**
  * A tile's frame, filling the tile's room at the picture's shape, what stands
@@ -72,15 +72,15 @@ const STAND_IN =
  * out of the frame.
  */
 const FRAME =
-  "luke-picture-set-frame grid w-full place-items-center aspect-picture text-muted-foreground [&>.luke-picture-stand-in]:p-luke-8 [&>.luke-error-state]:p-luke-8 [&>.luke-error-state]:wrap-anywhere";
+  "ui-picture-set-frame grid w-full place-items-center aspect-picture text-muted-foreground [&>.ui-picture-stand-in]:p-ui-8 [&>.ui-error-state]:p-ui-8 [&>.ui-error-state]:wrap-anywhere";
 
 /**
  * A tile's room in the row: a few grow by their shape from a common height,
  * so the row stretched to the column keeps them one height; many keep one
  * height and wrap rather than stretching to the column.
  */
-const TILE = "luke-picture-set-tile flex min-w-0 max-w-full flex-col";
-const TILE_FEW = "shrink grow-[var(--luke-picture-ratio)] basis-picture-row";
+const TILE = "ui-picture-set-tile flex min-w-0 max-w-full flex-col";
+const TILE_FEW = "shrink grow-[var(--ui-picture-ratio)] basis-picture-row";
 const TILE_MANY = "w-picture-thumb flex-none";
 
 /** Where a tile stands in its set: among many, and how many more the set holds past it. */
@@ -170,7 +170,7 @@ function TileFace({
   }
   return (
     <img
-      className="luke-picture-set-image block size-full"
+      className="ui-picture-set-image block size-full"
       src={state.url}
       alt={words}
       decoding="async"
@@ -224,7 +224,7 @@ export function PictureSetTile({
       {/* Note that a failed tile wears no veil, because the veil would cover its Retry, and the words under the set still say how many it holds. */}
       {more > 0 && !failed ? (
         <span
-          className="luke-picture-set-more absolute inset-0 grid place-items-center bg-veil text-dialog font-dialog text-on-veil"
+          className="ui-picture-set-more absolute inset-0 grid place-items-center bg-veil text-dialog font-dialog text-on-veil"
           aria-hidden="true"
         >
           +{more}
@@ -241,10 +241,10 @@ export function PictureSetTile({
   return (
     <li
       className={`${TILE} ${many ? TILE_MANY : TILE_FEW}`}
-      style={cssCustomProperties({ "--luke-picture-ratio": ratio })}
+      style={cssCustomProperties({ "--ui-picture-ratio": ratio })}
     >
       {gone || failed || onOpen === undefined ? (
-        <span className="luke-picture-set-still flex w-full min-w-0 flex-col gap-luke-4">
+        <span className="ui-picture-set-still flex w-full min-w-0 flex-col gap-ui-4">
           {frame}
           {said}
         </span>
@@ -282,9 +282,9 @@ export function PictureSet({
   const many = thumbnails || count > SET_FEW;
   const tiles = Children.toArray(children);
   return (
-    <figure className="luke-picture-set ph-no-capture m-0 max-w-full" data-many={many}>
+    <figure className="ui-picture-set ph-no-capture m-0 max-w-full" data-many={many}>
       <ul
-        className="luke-picture-set-tiles m-0 flex list-none flex-wrap gap-item-gap p-0"
+        className="ui-picture-set-tiles m-0 flex list-none flex-wrap gap-item-gap p-0"
         aria-label={label}
       >
         {tiles.map((tile, index) => (

@@ -115,7 +115,7 @@ function hover(element: Element): void {
 
 /** The cards standing in the window, the first hung first. */
 function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".luke-tooltip-card:not([data-leaving])")];
+  return [...document.querySelectorAll<HTMLElement>(".ui-tooltip-card:not([data-leaving])")];
 }
 
 /** The agent named in a place of the workspace as Dean reads it, inside the window's own directory of the workspace too where `nested`, its card hung, and every automation page opened. */
@@ -157,10 +157,10 @@ async function agentCard(nested = false) {
 
 test("an agent an automation started says it was started by the automation, its clock and name, which a press opens the page of", async () => {
   const { card, opened } = await agentCard();
-  const starter = card.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]");
+  const starter = card.querySelector<HTMLElement>(".ui-hover-card-row [data-actor-ref]");
   assert.ok(starter, "the card names who started the agent");
   assert.match(
-    card.querySelector(".luke-hover-card-row-label")?.textContent ?? "",
+    card.querySelector(".ui-hover-card-row-label")?.textContent ?? "",
     /^Started by Morning Sentry triage · /u,
   );
   assert.equal(starter.dataset.kind, "automation");
@@ -175,7 +175,7 @@ test("an agent an automation started says it was started by the automation, its 
 test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, and how its last run went, with no Open automation, since the name is the way to its page", async () => {
   const { card, opened } = await agentCard();
   hover(
-    card.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+    card.querySelector(".ui-hover-card-row [data-actor-ref]") ??
       assert.fail("the automation is named"),
   );
   const standing = cards();
@@ -183,15 +183,15 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   const automation = standing[1]?.querySelector<HTMLElement>("[data-actor-card='automation']");
   assert.ok(automation, "the automation's card");
   assert.equal(
-    automation.querySelector(".luke-hover-card-name")?.textContent,
+    automation.querySelector(".ui-hover-card-name")?.textContent,
     "Morning Sentry triage",
   );
   assert.equal(
-    automation.querySelector(".luke-hover-card-sub")?.textContent,
+    automation.querySelector(".ui-hover-card-sub")?.textContent,
     "Weekdays at 9:00 AM · UTC · Acme",
   );
-  assert.equal(automation.querySelector(".luke-hover-card-corner"), null);
-  const notes = [...automation.querySelectorAll(".luke-hover-card-note")].map(
+  assert.equal(automation.querySelector(".ui-hover-card-corner"), null);
+  const notes = [...automation.querySelectorAll(".ui-hover-card-note")].map(
     (note) => note.textContent,
   );
   assert.equal(notes[0], "Not scheduled");
@@ -202,14 +202,14 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
     undefined,
     "the card offers nothing to press",
   );
-  act(() => card.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]")?.click());
+  act(() => card.querySelector<HTMLElement>(".ui-hover-card-row [data-actor-ref]")?.click());
   assert.deepEqual(opened, [TRIAGE.id]);
 });
 
 test("a place's directory inside the window's, of the same workspace, shares its read rather than asking for a second", async () => {
   const { card } = await agentCard(true);
   assert.equal(
-    card.querySelector(".luke-hover-card-row [data-actor-ref]")?.textContent,
+    card.querySelector(".ui-hover-card-row [data-actor-ref]")?.textContent,
     "Morning Sentry triage",
   );
   assert.deepEqual(listed, [WORKSPACE.id]);
@@ -228,12 +228,12 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   ];
   const { card } = await agentCard();
   hover(
-    card.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+    card.querySelector(".ui-hover-card-row [data-actor-ref]") ??
       assert.fail("the automation is named"),
   );
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
-    automation?.querySelector(".luke-hover-card-sub")?.textContent,
+    automation?.querySelector(".ui-hover-card-sub")?.textContent,
     "When a pull request by people is opened in acme/relay or acme/ledger · Acme",
   );
 });

@@ -864,7 +864,7 @@ function ScheduleRows({
                     />
                   ) : (
                     <span
-                      className={`${AUTOMATION_FIELD} automation-time-field [[data-luke-profile=web]_&]:w-automation-time`}
+                      className={`${AUTOMATION_FIELD} automation-time-field [[data-ui-profile=web]_&]:w-automation-time`}
                     >
                       <ClockField
                         inputRef={time}
@@ -944,7 +944,7 @@ const SKELETON_NAME = { TITLE: "160px" } as const;
 const SKELETON_ACTS = { STATUS: "34px", RUN_NOW: "100px", SAVE: "56px" } as const;
 
 /** An icon press's width, the ⋯'s and the Runs toggle's, as tall as it is wide. */
-const ICON_PRESS_WIDTH = "var(--luke-control-height)";
+const ICON_PRESS_WIDTH = "var(--ui-control-height)";
 
 /** What an automation's placeholder page says to a reader while the list is first read. */
 const READING_AUTOMATION = "Reading the automation…";
@@ -2486,7 +2486,7 @@ export function AutomationPageSkeleton({
 }
 
 /** The setup's own scrolling column, which a run with nothing of its own to open hands the keyboard. */
-const SETUP_COLUMN = ".luke-detail-page-main";
+const SETUP_COLUMN = ".ui-detail-page-main";
 
 /** An automation's page's two screens in a narrow room: its setup, toolbar and all, and its runs. */
 const EDITOR_SCREENS: NarrowColumns = {

@@ -36,7 +36,7 @@ import { LAUNCH_NOTE } from "./local-agent-first-lines.js";
 import { fakeClis } from "./testing/fake-clis.js";
 import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
 const DEVICE_ID = "2b7e1d4c-8a3f-4e95-b061-5c2d7f8e9a10";
 
@@ -88,8 +88,8 @@ const directMac = (unsavedWork: Script | undefined) => ({
   }),
   tools: {
     node: RUNNER,
-    claude: "/opt/luke/agent-tools/claude",
-    codex: "/opt/luke/agent-tools/codex",
+    claude: "/opt/agent/agent-tools/claude",
+    codex: "/opt/agent/agent-tools/codex",
   },
   clis: fakeClis(),
   formerlyDirect: true,
@@ -115,7 +115,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
  */
 const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
+    const root = yield* temporaryDirectoryScoped("agent-lines-");
     const home = path.join(root, "home");
     const fileSystem = yield* FileSystem.FileSystem;
     const folder = deviceAgentLayout(home, AGENT_ID).folder;
@@ -276,7 +276,7 @@ const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
  */
 const launching = (workStands: boolean) =>
   Effect.gen(function* () {
-    const root = yield* temporaryDirectoryScoped("luke-agent-launch-");
+    const root = yield* temporaryDirectoryScoped("agent-launch-");
     const home = path.join(root, "home");
     const layout = deviceAgentLayout(home, AGENT_ID);
     if (workStands) mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });

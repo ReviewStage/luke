@@ -26,7 +26,7 @@ const foldersBeforeMigration = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
   const folder = yield* fileSystem.makeTempDirectoryScoped({
-    prefix: "luke-before-installations-",
+    prefix: "before-installations-",
   });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name.localeCompare(MIGRATION) < 0,
@@ -80,7 +80,7 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBeforeMigration);
         yield* sql`insert into "user" (id, name, email, created_at, updated_at)
-          values ('ada', 'Ada', 'ada@luke.test', now(), now())`;
+          values ('ada', 'Ada', 'ada@app.test', now(), now())`;
         yield* sql`insert into organization (id, name, slug, created_at)
           values ('acme', 'Acme', 'acme', now()), ('zeta', 'Zeta', 'zeta', now())`;
         yield* sql`insert into member (id, organization_id, user_id, role, created_at)

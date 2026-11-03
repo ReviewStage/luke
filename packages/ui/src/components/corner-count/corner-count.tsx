@@ -25,10 +25,10 @@ export function CornerCount({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="luke-corner-count">
+    <span className="ui-corner-count">
       {children}
       {count > 0 ? (
-        <span className="luke-corner-count-mark" aria-hidden="true">
+        <span className="ui-corner-count-mark" aria-hidden="true">
           {count}
         </span>
       ) : null}
@@ -55,11 +55,11 @@ export function CornerDot({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="luke-corner-dot relative inline-flex" data-dot={shown ? "true" : undefined}>
+    <span className="ui-corner-dot relative inline-flex" data-dot={shown ? "true" : undefined}>
       {children}
       {shown ? (
         <span
-          className="luke-corner-dot-mark pointer-events-none absolute top-luke-4 right-luke-4 size-corner-dot rounded-disc bg-accent-ink"
+          className="ui-corner-dot-mark pointer-events-none absolute top-ui-4 right-ui-4 size-corner-dot rounded-disc bg-accent-ink"
           aria-hidden="true"
         />
       ) : null}
@@ -86,10 +86,10 @@ export function CornerBadge({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="luke-corner-badge relative inline-flex min-w-0">
+    <span className="ui-corner-badge relative inline-flex min-w-0">
       {children}
       <span
-        className="luke-corner-badge-mark pointer-events-none absolute -top-luke-6 -right-luke-6 inline-grid size-corner-badge place-items-center rounded-disc border border-border-strong bg-ground text-muted-foreground [&>svg]:size-corner-badge-glyph"
+        className="ui-corner-badge-mark pointer-events-none absolute -top-ui-6 -right-ui-6 inline-grid size-corner-badge place-items-center rounded-disc border border-border-strong bg-ground text-muted-foreground [&>svg]:size-corner-badge-glyph"
         aria-hidden="true"
       >
         {mark}

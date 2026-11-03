@@ -331,5 +331,5 @@ export function ResizeEdge({ edge }: { edge: ResizeEdgeHandle }): React.JSX.Elem
     // The width drawn, which the window may hold narrower than the one kept.
     "aria-valuenow": Math.min(kept, valueMax ?? kept),
   };
-  return <div ref={measure} className="luke-resize-edge" {...drawn} {...range} />;
+  return <div ref={measure} className="ui-resize-edge" {...drawn} {...range} />;
 }

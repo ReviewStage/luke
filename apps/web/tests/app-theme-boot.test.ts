@@ -37,8 +37,8 @@ beforeEach(() => {
       }) satisfies MediaQueryList,
   );
   // The page's head as app.html writes it: the profile, the light theme, and the light tint.
-  document.documentElement.setAttribute("data-luke-profile", "web");
-  document.documentElement.setAttribute("data-luke-theme", "light");
+  document.documentElement.setAttribute("data-ui-profile", "web");
+  document.documentElement.setAttribute("data-ui-theme", "light");
   const meta = document.head.appendChild(document.createElement("meta"));
   meta.name = "theme-color";
   meta.content = "#ffffff";
@@ -47,8 +47,8 @@ beforeEach(() => {
 
 afterEach(() => {
   document.head.replaceChildren();
-  document.documentElement.removeAttribute("data-luke-boot-sidebar");
-  document.documentElement.style.removeProperty("--luke-boot-sidebar-width");
+  document.documentElement.removeAttribute("data-ui-boot-sidebar");
+  document.documentElement.style.removeProperty("--ui-boot-sidebar-width");
   localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -58,11 +58,9 @@ function firstFrame() {
   // biome-ignore lint/security/noGlobalEval: the script under test is the site's own file, run as the page runs it.
   window.eval(BOOT);
   return {
-    theme: document.documentElement.getAttribute("data-luke-theme"),
+    theme: document.documentElement.getAttribute("data-ui-theme"),
     chrome: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
-    ground: getComputedStyle(document.documentElement)
-      .getPropertyValue("--luke-color-ground")
-      .trim(),
+    ground: getComputedStyle(document.documentElement).getPropertyValue("--ui-color-ground").trim(),
   };
 }
 
@@ -72,7 +70,7 @@ test("the first frame wears the theme chosen here, whatever the machine says", (
     ["light", true, "light"],
   ] as const) {
     machineDark = machine;
-    localStorage.setItem("luke.theme", chosen);
+    localStorage.setItem("app.theme", chosen);
 
     const frame = firstFrame();
 
@@ -85,7 +83,7 @@ test("with System chosen, or nothing yet, the first frame follows the machine", 
   for (const chosen of ["system", undefined]) {
     for (const machine of [true, false]) {
       machineDark = machine;
-      if (chosen !== undefined) localStorage.setItem("luke.theme", chosen);
+      if (chosen !== undefined) localStorage.setItem("app.theme", chosen);
 
       const frame = firstFrame();
 
@@ -101,8 +99,8 @@ function frameSidebar() {
   window.eval(BOOT);
   const root = document.documentElement;
   return {
-    pinned: root.getAttribute("data-luke-boot-sidebar") === "pinned",
-    width: root.style.getPropertyValue("--luke-boot-sidebar-width") || undefined,
+    pinned: root.getAttribute("data-ui-boot-sidebar") === "pinned",
+    width: root.style.getPropertyValue("--ui-boot-sidebar-width") || undefined,
   };
 }
 
@@ -114,11 +112,11 @@ test("the frame pins the sidebar as the shell last drew it here, at the width ke
     [undefined, undefined],
     ["wide", undefined],
   ] as const) {
-    localStorage.setItem("luke.signed-in-here", "true");
-    localStorage.setItem("luke.sidebar-collapsed", "false");
-    if (kept === undefined) localStorage.removeItem("luke.sidebar-width");
-    else localStorage.setItem("luke.sidebar-width", kept);
-    document.documentElement.style.removeProperty("--luke-boot-sidebar-width");
+    localStorage.setItem("app.signed-in-here", "true");
+    localStorage.setItem("app.sidebar-collapsed", "false");
+    if (kept === undefined) localStorage.removeItem("app.sidebar-width");
+    else localStorage.setItem("app.sidebar-width", kept);
+    document.documentElement.style.removeProperty("--ui-boot-sidebar-width");
 
     assert.deepEqual(frameSidebar(), { pinned: true, width }, `kept ${kept}`);
   }
@@ -131,9 +129,9 @@ test("a sidebar kept folded or never drawn, or a browser not signed in here, sta
     [undefined, "false"],
   ] as const) {
     localStorage.clear();
-    if (signedIn !== undefined) localStorage.setItem("luke.signed-in-here", signedIn);
-    if (collapsed !== undefined) localStorage.setItem("luke.sidebar-collapsed", collapsed);
-    localStorage.setItem("luke.sidebar-width", "300");
+    if (signedIn !== undefined) localStorage.setItem("app.signed-in-here", signedIn);
+    if (collapsed !== undefined) localStorage.setItem("app.sidebar-collapsed", collapsed);
+    localStorage.setItem("app.sidebar-width", "300");
 
     assert.deepEqual(
       frameSidebar(),

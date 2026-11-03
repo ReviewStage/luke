@@ -127,12 +127,12 @@ const AUTOMATION_REASON_LABEL = {
 const NO_REASON_LABEL = "No reason recorded";
 
 const AGENT_FAILURES_SERIES: readonly BreakdownSeries[] = [
-  { key: "count", label: "Failed runs", color: "var(--luke-color-danger)" },
+  { key: "count", label: "Failed runs", color: "var(--ui-color-danger)" },
 ];
 
 const AUTOMATION_REASONS_SERIES: readonly BreakdownSeries[] = [
-  { key: "skipped", label: "Skipped", color: "var(--luke-color-chart-1)" },
-  { key: "failed", label: "Failed", color: "var(--luke-color-danger)" },
+  { key: "skipped", label: "Skipped", color: "var(--ui-color-chart-1)" },
+  { key: "failed", label: "Failed", color: "var(--ui-color-danger)" },
 ];
 
 /** The model providers an account's own key is for, as a problem names them. */

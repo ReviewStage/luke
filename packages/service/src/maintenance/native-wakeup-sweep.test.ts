@@ -81,7 +81,7 @@ function sentText(message: EveMessage["message"]): string {
 const openAgent = Effect.gen(function* () {
   const db = yield* Database;
   const owner = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
+  yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@app.test` });
   yield* connectAgentApiKeys(owner);
   const task = yield* startTask(owner, { name: "Invitations" });
   const started = yield* createAgent(owner, {

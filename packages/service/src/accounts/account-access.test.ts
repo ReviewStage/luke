@@ -37,7 +37,7 @@ import { accountProcedures } from "./account-procedures.js";
  * Synthetic accounts and bearers throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const ACCESS_PATH = "/api/account/access";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
@@ -49,7 +49,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
-  eveDeploymentSecret: undefined,
 };
 
 interface Answer {
@@ -64,7 +63,7 @@ const openAccounts = () =>
     const db = yield* Database;
     const [admin, member] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
     for (const id of [admin, member]) {
-      yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+      yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
     }
     yield* db.update(user).set({ role: USER_ROLE.ADMIN }).where(eq(user.id, admin));
     const bearers = new Map([
@@ -77,7 +76,6 @@ const openAccounts = () =>
           Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
         ),
       // This suite deletes nothing, so it retires no session and reaches no eve.
-      eveOrigin: () => undefined,
       standingSessions: () => Effect.die(new Error("this suite deletes no account")),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,

@@ -99,7 +99,7 @@ import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integr
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 
-export const ORIGIN = "https://luke.test";
+export const ORIGIN = "https://app.test";
 export const TASK_AGENTS = "/api/plans/agents";
 export const AGENT_MESSAGES = "/api/agents/messages";
 export const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
@@ -111,7 +111,7 @@ export const WORKSPACE_STARTS = "/api/workspaces/agents";
 export const AGENT = "/api/agents/agent";
 export const AGENT_INBOX = "/api/agents/{id}/inbox";
 /** Our own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
-export const AGENT_LUKE_TOOLS = "/api/agents/luke-tools";
+export const AGENT_WORKSPACE_TOOLS = "/api/agents/workspace-tools";
 export const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
 export const AGENT_OVERVIEW = [
@@ -343,7 +343,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -383,7 +382,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
-  ["/api/agents/luke-tools", (id: string) => `/api/agents/${id}/luke-tools`],
+  ["/api/agents/workspace-tools", (id: string) => `/api/agents/${id}/workspace-tools`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
   ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
   ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],
@@ -446,7 +445,6 @@ export const standing = (
           (input) =>
             Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
         ),
-      eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
       // The deployment acting for an account, an agent's starter for another agent's message or the
       // account a cookie named, which the fake writes down apart from any bearer.
@@ -689,7 +687,7 @@ const otherAccount = (token: string | null | undefined) =>
     }
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     return userId;
   });
 

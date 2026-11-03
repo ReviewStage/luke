@@ -52,7 +52,7 @@ import {
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq, sql } from "drizzle-orm";
-import { Clock, type Context, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
@@ -111,7 +111,7 @@ const automationRunsPath = (automationId: string): string => `${automationPath(a
 /** What the routes counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 /**
  * The installations reaching the repository, one for each owner's workspace,
@@ -145,11 +145,6 @@ interface Answer {
 /** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
 function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
-}
-
-/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
-function deploymentFor(account: string): string {
-  return `deployment for ${account}`;
 }
 
 /** The automation procedures over the test's own database, GitHub, and a fake eve that writes down every session it opens and who opened it. */
@@ -203,9 +198,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
             (input) =>
               Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
           ),
-        eveOrigin: () => ORIGIN,
-        eve: (authorization) => sessionsAs(Redacted.value(authorization)),
-        eveAs: (account) => sessionsAs(deploymentFor(account)),
       }),
     });
     const ask = (

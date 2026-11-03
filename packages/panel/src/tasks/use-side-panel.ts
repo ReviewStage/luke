@@ -301,7 +301,7 @@ export const SIDE_PANEL_WIDTH = {
 } as const;
 
 /** Where the preference is kept in the renderer's storage. */
-const STORAGE_KEY = "luke.sidePanel";
+const STORAGE_KEY = "app.sidePanel";
 
 /**
  * How many tabs a task keeps as viewed, the latest viewed. Note that a tab

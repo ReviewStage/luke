@@ -24,9 +24,7 @@ import type { HostedEnvironment } from "../../environment.js";
 import { turnEndCounted } from "../../events/server-events.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { afterResponse } from "../../http/after-response.js";
-import { deploymentEveForAccounts } from "../deployment-eve.js";
-import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../eve-host/eve-sessions.js";
+import { routedSessions } from "./runtime-sessions.js";
 import { reportToStarter } from "./starter-report.js";
 
 /** The work run on the pool rather than on a transaction the settle ran inside, which has ended by the time the answer has left. */
@@ -56,10 +54,10 @@ export const settledTurnListener: Layer.Layer<
     const reported = (turn: SettledAgentTurn) =>
       afterResponse(
         "a started agent's final message",
-        Effect.flatMap(
-          deploymentEveForAccounts<EveTypedTurn>(deploymentEveOrigin(), EVE_MOUNT.CODER),
-          (eveFor) => reportToStarter(eveFor, turn),
-        ).pipe(Effect.provideContext(reach), outsideTransaction),
+        reportToStarter(routedSessions, turn).pipe(
+          Effect.provideContext(reach),
+          outsideTransaction,
+        ),
       );
     return {
       heard: (turn) => Effect.all([turnEndCounted(turn), reported(turn)], { discard: true }),

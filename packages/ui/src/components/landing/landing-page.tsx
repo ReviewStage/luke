@@ -55,7 +55,7 @@ function useFloating(): boolean {
 /** A rule across the page, a cross where it meets each rail. */
 function Rule(): React.JSX.Element {
   return (
-    <div className="luke-landing-rule" aria-hidden="true">
+    <div className="ui-landing-rule" aria-hidden="true">
       <i />
       <i />
     </div>
@@ -77,23 +77,23 @@ export function LandingSection({
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   const stage = (
-    <div className="luke-landing-stage" data-scene={scene}>
+    <div className="ui-landing-stage" data-scene={scene}>
       <LandingField pattern={SCENE_FIELD[scene]} />
       <LandingSceneView scene={scene} />
     </div>
   );
   return (
-    <section className="luke-landing-section" aria-labelledby={titleId}>
+    <section className="ui-landing-section" aria-labelledby={titleId}>
       <Rule />
-      <div className="luke-landing-section-body">
-        <h2 className="luke-landing-section-title" id={titleId}>
+      <div className="ui-landing-section-body">
+        <h2 className="ui-landing-section-title" id={titleId}>
           {title}
         </h2>
-        <p className="luke-landing-lead">{lead}</p>
+        <p className="ui-landing-lead">{lead}</p>
         {aside === undefined ? (
           stage
         ) : (
-          <div className="luke-landing-beside">
+          <div className="ui-landing-beside">
             {stage}
             {aside}
           </div>
@@ -110,9 +110,9 @@ export function LandingFacts({
   facts: readonly { readonly title: string; readonly detail: ReactNode }[];
 }): React.JSX.Element {
   return (
-    <dl className="luke-landing-facts">
+    <dl className="ui-landing-facts">
       {facts.map((fact) => (
-        <div key={fact.title} className="luke-landing-fact">
+        <div key={fact.title} className="ui-landing-fact">
           <dt>{fact.title}</dt>
           <dd>{fact.detail}</dd>
         </div>
@@ -151,40 +151,40 @@ export function LandingPage({
   const floating = useFloating();
   const closeId = `${useId()}close`;
   return (
-    <div className="luke-landing-page">
-      <div className="luke-landing-rails" aria-hidden="true" />
-      <header className="luke-landing-bar" data-floating={floating}>
-        <div className="luke-landing-bar-in">
+    <div className="ui-landing-page">
+      <div className="ui-landing-rails" aria-hidden="true" />
+      <header className="ui-landing-bar" data-floating={floating}>
+        <div className="ui-landing-bar-in">
           {bar}
-          {barCall === undefined ? null : <span className="luke-landing-bar-call">{barCall}</span>}
+          {barCall === undefined ? null : <span className="ui-landing-bar-call">{barCall}</span>}
         </div>
       </header>
       <main>
-        <div className="luke-landing-hero">
-          <div className="luke-landing-hero-words">
-            <h1 className="luke-landing-title">{title}</h1>
-            <p className="luke-landing-hero-lead">{lead}</p>
-            <div className="luke-landing-actions">{actions}</div>
+        <div className="ui-landing-hero">
+          <div className="ui-landing-hero-words">
+            <h1 className="ui-landing-title">{title}</h1>
+            <p className="ui-landing-hero-lead">{lead}</p>
+            <div className="ui-landing-actions">{actions}</div>
           </div>
-          <div className="luke-landing-hero-art">
+          <div className="ui-landing-hero-art">
             <MarkOrb />
           </div>
         </div>
         {children}
       </main>
-      <footer className="luke-landing-foot">
+      <footer className="ui-landing-foot">
         <Rule />
-        <section className="luke-landing-close" aria-labelledby={closeId}>
+        <section className="ui-landing-close" aria-labelledby={closeId}>
           <div>
-            <h2 className="luke-landing-section-title" id={closeId}>
+            <h2 className="ui-landing-section-title" id={closeId}>
               {close.title}
             </h2>
-            <p className="luke-landing-lead">{close.lead}</p>
+            <p className="ui-landing-lead">{close.lead}</p>
           </div>
-          <div className="luke-landing-actions">{close.actions}</div>
+          <div className="ui-landing-actions">{close.actions}</div>
         </section>
-        <div className="luke-landing-foot-links">{footer}</div>
-        <div className="luke-landing-foot-art">
+        <div className="ui-landing-foot-links">{footer}</div>
+        <div className="ui-landing-foot-art">
           <LandingWordmark />
         </div>
       </footer>

@@ -129,7 +129,7 @@ class StillResizeObserver {
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StillResizeObserver);
-  window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
 });
 
 afterEach(() => {
@@ -157,19 +157,19 @@ async function open(screen: Screen, status: number | undefined): Promise<HTMLEle
 
 /** The toolbar heading the page, inside the page's own landmark. */
 function toolbar(page: HTMLElement): HTMLElement {
-  const found = page.querySelector<HTMLElement>("main header.luke-toolbar");
+  const found = page.querySelector<HTMLElement>("main header.ui-toolbar");
   if (found === null) throw new Error("no toolbar heads the page");
   return found;
 }
 
 /** The toolbar's heading, its title or its way back and the page's name. */
 function heading(page: HTMLElement): string {
-  return toolbar(page).querySelector(".luke-toolbar-heading")?.textContent ?? "";
+  return toolbar(page).querySelector(".ui-toolbar-heading")?.textContent ?? "";
 }
 
 /** The toolbar's controls at its end: their words, and the names of those drawn as a glyph alone. */
 function controls(page: HTMLElement): string {
-  const actions = toolbar(page).querySelector(".luke-toolbar-actions");
+  const actions = toolbar(page).querySelector(".ui-toolbar-actions");
   const named = [...(actions?.querySelectorAll("[aria-label]") ?? [])].map(
     (each) => each.getAttribute("aria-label") ?? "",
   );

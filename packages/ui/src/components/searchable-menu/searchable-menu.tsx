@@ -244,17 +244,17 @@ const SUBMENU_GAP = 9;
 
 /**
  * Hung from its button, a menu is no taller than the room its side of the
- * button leaves (`--luke-popover-room`, measured against what is seen of the
+ * button leaves (`--ui-popover-room`, measured against what is seen of the
  * window), so a phone's keyboard or a short window never hides its last
  * rows: its list gives way and scrolls, under the search row that stays.
  * Embedded in a layer floated by a box in the words, it keeps to the room
  * that layer's side leaves it the same way.
  */
 const MENU =
-  "luke-searchable-menu relative [.luke-anchored-popover>&]:max-h-popover-room [.luke-rect-float>&]:max-h-popover-room";
+  "ui-searchable-menu relative [.ui-anchored-popover>&]:max-h-popover-room [.ui-rect-float>&]:max-h-popover-room";
 
 /** The rows pinned under the list, behind a hairline, where the scrolling cannot take them. */
-const FOOT = "luke-searchable-menu-foot block flex-none border-t border-border p-menu-inset";
+const FOOT = "ui-searchable-menu-foot block flex-none border-t border-border p-menu-inset";
 
 /**
  * One muted line under the pinned rows or a submenu's, inset as a row's
@@ -262,23 +262,23 @@ const FOOT = "luke-searchable-menu-foot block flex-none border-t border-border p
  * does, past the row's glyph slot.
  */
 const NOTE =
-  "luke-searchable-menu-note px-row-inset pt-luke-4 pb-0 [.luke-searchable-menu-submenu>&]:pb-menu-inset data-[aligned=true]:pl-menu-label";
+  "ui-searchable-menu-note px-row-inset pt-ui-4 pb-0 [.ui-searchable-menu-submenu>&]:pb-menu-inset data-[aligned=true]:pl-menu-label";
 
 /** A section's heading over rows drawn in place, inset as a row's words are. */
-const HEADING = "luke-searchable-menu-heading px-row-inset pt-luke-8 pb-luke-4";
+const HEADING = "ui-searchable-menu-heading px-row-inset pt-ui-8 pb-ui-4";
 
 /**
  * A submenu stands beside the row that opened it, its top level with that
  * row's and its near edge a gap off the menu's own; it turns to the menu's
  * other side where its room ends before it does, is pushed back over the
- * menu (`--luke-submenu-shift`) where neither side holds it, and stands up
+ * menu (`--ui-submenu-shift`) where neither side holds it, and stands up
  * from the row's foot where its room's bottom would cut it.
  */
 const SUBMENU =
-  "luke-searchable-menu-submenu absolute top-0 left-submenu-reach z-1 w-submenu data-[side=left]:right-submenu-reach data-[side=left]:left-auto data-[stand=up]:top-auto data-[stand=up]:bottom-0";
+  "ui-searchable-menu-submenu absolute top-0 left-submenu-reach z-1 w-submenu data-[side=left]:right-submenu-reach data-[side=left]:left-auto data-[stand=up]:top-auto data-[stand=up]:bottom-0";
 
 /** The row a submenu stands beside, which holds it. */
-const BRANCH = "luke-searchable-menu-branch relative";
+const BRANCH = "ui-searchable-menu-branch relative";
 
 /**
  * A listed row's submenu stands beside the row as the list scrolled it (the
@@ -286,7 +286,7 @@ const BRANCH = "luke-searchable-menu-branch relative";
  * rows under it stay the pointer's.
  */
 const ROW_BRANCH =
-  "luke-searchable-menu-branch luke-searchable-menu-row-branch pointer-events-none absolute right-0 left-0 [&>*]:pointer-events-auto";
+  "ui-searchable-menu-branch ui-searchable-menu-row-branch pointer-events-none absolute right-0 left-0 [&>*]:pointer-events-auto";
 
 /** The matching rows cut into runs that share a heading, in their order. */
 function sectionsOf<Row extends MenuRow>(rows: readonly Row[]): Section<Row>[] {
@@ -902,7 +902,7 @@ export function SearchableMenu(
       inset={MENU_SURFACE_INSET.NONE}
       data-side={place.side}
       data-stand={place.stand}
-      style={cssCustomProperties({ "--luke-submenu-shift": `${place.shift}px` })}
+      style={cssCustomProperties({ "--ui-submenu-shift": `${place.shift}px` })}
       onMouseDown={(event) => event.preventDefault()}
     >
       {submenuBody(shown)}

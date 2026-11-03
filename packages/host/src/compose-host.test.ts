@@ -102,7 +102,7 @@ describe("the host's platform concerns", () => {
     "left out, need no spawner, terminal socket or sign-in consent, and refuse their methods",
     () =>
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-host-browser-");
+        const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
         // Note that nothing here provides a `ChildProcessSpawner`, a
         // `TerminalSocket`, or a `SignInConsent`. The layer's type, narrowed to the concerns chosen,
         // asks for neither, and a build that reached for one anyway would die
@@ -130,7 +130,7 @@ describe("the host's platform concerns", () => {
 
   it.effect("all chosen, as the desktop chooses them, answer", () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-host-desktop-");
+      const stateRoot = yield* temporaryDirectoryScoped("host-desktop-");
       const desktop = hostStandingLayer.pipe(
         Layer.provideMerge(hostAssemblyLayer(ALL_HOST_PLATFORM_CONCERNS)),
         Layer.provide(
@@ -192,7 +192,7 @@ describe("the host's platform concerns", () => {
 describe("the host's account source", () => {
   it.effect("another source than the desktop's stands with no sign-in consent or cipher", () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-host-account-source-");
+      const stateRoot = yield* temporaryDirectoryScoped("host-account-source-");
       const account = {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",

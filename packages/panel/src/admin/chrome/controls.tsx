@@ -47,7 +47,7 @@ export function Refreshing({
 }): React.JSX.Element {
   const dimmed = (
     <div
-      className="transition-opacity duration-(--luke-duration-quick) ease-motion-exit data-[busy=true]:opacity-50"
+      className="transition-opacity duration-(--ui-duration-quick) ease-motion-exit data-[busy=true]:opacity-50"
       data-busy={refreshing}
       aria-busy={refreshing}
     >

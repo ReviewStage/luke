@@ -134,7 +134,7 @@ export function storedRemoteCall(
 
 /**
  * A native agent's call of a tool on an integration's own MCP server
- * (`../agents/luke-mcp/app.ts`), as the record keeps it: as eve's nested
+ * (`../agents/workspace-mcp/app.ts`), as the record keeps it: as eve's nested
  * call of the same tool is kept, under the integration's fixed name and its
  * envelope, the call standing as its own parent, since no
  * `connection_execute` wraps it; nothing for a server that is no

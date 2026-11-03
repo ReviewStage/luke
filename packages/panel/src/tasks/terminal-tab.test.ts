@@ -261,7 +261,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   document.head.innerHTML = "";
-  document.body.style.removeProperty("--luke-duration-pane");
+  document.body.style.removeProperty("--ui-duration-pane");
   vi.restoreAllMocks();
 });
 
@@ -354,7 +354,7 @@ async function mount(
     /** The shells as the list draws them: each one's name, what it says under it, whether it is shown, and whether it runs something. */
     rows: () =>
       [...container.querySelectorAll('[aria-label="Shell list"] > li')].map((row) => ({
-        name: row.querySelector(".luke-list-row-title")?.textContent,
+        name: row.querySelector(".ui-list-row-title")?.textContent,
         detail: row.querySelector(".terminal-shell-detail")?.textContent,
         shown: row.querySelector('[aria-current="true"]') !== null,
         running: row.querySelector(".terminal-shell-running") !== null,
@@ -370,7 +370,7 @@ async function mount(
     choose: async (name: string) => {
       const row = [
         ...container.querySelectorAll<HTMLButtonElement>('[aria-label="Shell list"] > li > button'),
-      ].find((each) => each.querySelector(".luke-list-row-title")?.textContent === name);
+      ].find((each) => each.querySelector(".ui-list-row-title")?.textContent === name);
       assert.ok(row, `a row for ${name}`);
       // A press takes the keyboard to the row first, as the window's does.
       row.focus();
@@ -428,7 +428,7 @@ test("the tab is left out of the screen recording, its screen and bar with it", 
   const tab = await mount();
   const screen = tab.container.querySelector(".terminal-tab-screen");
   assert.ok(screen?.closest(".ph-no-capture"));
-  assert.ok(tab.container.querySelector(".luke-pane-bar")?.closest(".ph-no-capture"));
+  assert.ok(tab.container.querySelector(".ui-pane-bar")?.closest(".ph-no-capture"));
 });
 
 test("shown, the tab lists the agent's shells and attaches to the oldest; hidden, it lets the port go and attaches nothing more", async () => {
@@ -1146,7 +1146,7 @@ test("a sandbox that stops under a connected shell is read again, and the list s
   main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
   port.say({ type: "state", state: "stopped" });
   await settle();
-  assert.equal(tab.container.querySelector(".luke-note-line")?.textContent, "No shells.");
+  assert.equal(tab.container.querySelector(".ui-note-line")?.textContent, "No shells.");
   assert.equal(
     tab.container.querySelector(".terminal-shells-foot")?.textContent,
     "Sandbox stopped",
@@ -1370,7 +1370,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
+  return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
 }
 
@@ -1438,7 +1438,7 @@ function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
 /** A panel too narrow for the shells beside the screen, the list closed. */
 async function narrowTab() {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   // Only the sheet that draws the toggles, since each style read weighs every rule laid.
   layContainersAt({ "side-panel": 400 }, { only: ["./tasks.css"] });
   return mount(true, false);

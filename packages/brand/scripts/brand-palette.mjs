@@ -4,7 +4,7 @@
 // and as plain values (BRAND_PALETTE); generate-brand-assets.mjs draws the
 // icons, the cards, and the buttons in them.
 
-// The brand's colours: every --luke-color-* role a change of brand changes,
+// The brand's colours: every --ui-color-* role a change of brand changes,
 // in the light theme and the dark, for the desktop and the site alike. The
 // roles a brand leaves alone (the fills and edges drawn as alphas of the ink,
 // shadows, the identity and chart hues, find's yellows) stay in @luke/ui's

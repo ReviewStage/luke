@@ -2,7 +2,7 @@
  * attention-mark.tsx -- the mark of something about a task that wants the developer's hand: a white exclamation on a disc of the attention orange.
  *
  * The orange alone is the window's word for a temporary state (`base.css`'s
- * `--luke-color-attention`), light in the dark and deep in the light, so a
+ * `--ui-color-attention`), light in the dark and deep in the light, so a
  * white glyph would not hold on it in the dark. The disc is the mark's own
  * orange instead, deep enough under the white in either appearance, so the
  * mark reads the same on the sidebar's ground and a banner's tint alike.
@@ -14,7 +14,7 @@
 export function AttentionMark(): React.JSX.Element {
   return (
     <span
-      className="attention-mark inline-grid size-attention-mark flex-none place-items-center rounded-disc bg-attention-fill text-on-attention [&_svg]:size-luke-12"
+      className="attention-mark inline-grid size-attention-mark flex-none place-items-center rounded-disc bg-attention-fill text-on-attention [&_svg]:size-ui-12"
       aria-hidden="true"
     >
       <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">

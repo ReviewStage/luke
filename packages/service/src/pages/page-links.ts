@@ -37,7 +37,6 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { PAGE_SANDBOX_ORIGIN } from "@luke/features/page-frame";
 import { PAGE_OWNER, type PageOwner, pageVersionNumberSchema } from "@luke/features/page-wire";
 import { Context, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
-import { EVE_HOST_ENVIRONMENT } from "../agents/eve-host/bounds.js";
 import {
   AUTH_DEPLOYMENT_ENVIRONMENT,
   AUTH_SECRET_ENVIRONMENT,
@@ -80,14 +79,13 @@ const PAGE_LINK_LIFETIME = Duration.minutes(1);
 const MINIMUM_SECRET_CHARACTERS = 32;
 
 /** What a link's signature is made over ahead of its claims, so no other MAC under the key could stand for one. */
-const PAGE_LINK_PURPOSE = "luke-page-link-v1";
+const PAGE_LINK_PURPOSE = "app-page-link-v1";
 
 /** The deployment's other secrets, none of whose values the link's key may hold. */
 const OTHER_SECRETS = [
   AUTH_SECRET_ENVIRONMENT.SESSION_SECRET,
   AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_SECRET,
   CRON_ENVIRONMENT.CRON_SECRET,
-  EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET,
 ] as const;
 
 /** Why the environment's sandbox is read as none, said once by the build, by the variables' names alone. */

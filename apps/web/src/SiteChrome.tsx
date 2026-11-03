@@ -29,7 +29,7 @@ export const WEB_APP_URL = PANEL_PATH;
  * (`@luke/ui`'s `tokens/display.css`): the site's banner and the admin's rail.
  */
 export const WORDMARK =
-  "font-brand text-(length:--luke-display-wordmark-size) font-(--luke-display-wordmark-weight) tracking-(--luke-display-wordmark-tracking)";
+  "font-brand text-(length:--ui-display-wordmark-size) font-(--ui-display-wordmark-weight) tracking-(--ui-display-wordmark-tracking)";
 
 /** The pages the site's chrome links to, by the path each is served at. */
 export const SITE_PAGE = {
@@ -82,7 +82,7 @@ export function SiteNavigation({
         height={TEXT_LINK_HEIGHT.CONTROL}
         current={currentOf(SITE_PAGE.HOME, current)}
       >
-        <span className={`inline-flex items-center gap-2 text-(--luke-color-text) ${WORDMARK}`}>
+        <span className={`inline-flex items-center gap-2 text-(--ui-color-text) ${WORDMARK}`}>
           <span className="inline-flex h-4.5 w-5 shrink-0">
             <ProductMark fill inherit />
           </span>
@@ -156,7 +156,7 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
       {/* The notice sits under its own rule at the foot of the column, the
             way stagereview.app closes its footer, so the link row above stays
             a row of links. */}
-      <p className="mt-8 border-t border-(--luke-color-border) pt-6">© 2026 Stage Inc.</p>
+      <p className="mt-8 border-t border-(--ui-color-border) pt-6">© 2026 Stage Inc.</p>
     </Text>
   );
 }

@@ -115,7 +115,7 @@ const BEATING_HOSTS = [
 ] as const;
 
 /** Where the staged install commands fetch their script. */
-const STAGED_INSTALL_SCRIPT = "https://luke.test/install.sh";
+const STAGED_INSTALL_SCRIPT = "https://app.test/install.sh";
 
 /** The page each Settings profile opens on, and the workspace it shows where that is not the sidebar's first. */
 const SETTINGS_LINKS: ReadonlyMap<string, SettingsLink> = new Map<string, SettingsLink>([

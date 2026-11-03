@@ -96,10 +96,10 @@ const RETIRED_MAIN_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_MA
 export type MainTab = AgentStripTab | DraftStripTab;
 
 /** Where the preference is kept in the renderer's storage. */
-const STORAGE_KEY = "luke.mainTabs";
+const STORAGE_KEY = "app.mainTabs";
 
 /** Where the side panel keeps its own, which held the agents' tabs before this column did. */
-const SIDE_PANEL_KEY = "luke.sidePanel";
+const SIDE_PANEL_KEY = "app.sidePanel";
 
 /**
  * How many agents whose tabs were closed are kept, the latest closed. Note

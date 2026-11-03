@@ -32,7 +32,7 @@ export function HarnessMark({ provider, codexArt }: HarnessMarkProps): React.JSX
   if (provider === MODEL_PROVIDER.OPENAI && codexArt !== undefined) {
     return (
       <img
-        className="luke-harness-mark"
+        className="ui-harness-mark"
         data-provider={provider}
         src={codexArt.oneX}
         srcSet={`${codexArt.oneX} 1x, ${codexArt.twoX} 2x, ${codexArt.threeX} 3x`}
@@ -43,7 +43,7 @@ export function HarnessMark({ provider, codexArt }: HarnessMarkProps): React.JSX
   }
   return (
     <svg
-      className="luke-harness-mark"
+      className="ui-harness-mark"
       data-provider={provider}
       viewBox="0 0 47 38"
       aria-hidden="true"

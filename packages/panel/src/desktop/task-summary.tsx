@@ -113,16 +113,16 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * thing to hidden the summary still has.
  */
 const KEPT = {
-  PINNED: keptKey("luke.summary-pinned", keptFlag),
+  PINNED: keptKey("app.summary-pinned", keptFlag),
   /** The headings the reader folded, one choice for every task's summary. */
-  FOLDED: keptKey("luke.summaryFoldedSections", Schema.fromJsonString(Schema.Array(Schema.String))),
+  FOLDED: keptKey("app.summaryFoldedSections", Schema.fromJsonString(Schema.Array(Schema.String))),
 } as const;
 
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
  * can stand pinned rather than as a rail: the document's measure and its page
- * insets either side (`@luke/ui`'s `--luke-page-measure`, 720, and
- * `--luke-page-inset`, 40) beside the column's own `--summary-width`, 240, so
+ * insets either side (`@luke/ui`'s `--ui-page-measure`, 720, and
+ * `--ui-page-inset`, 40) beside the column's own `--summary-width`, 240, so
  * making room for it never reads the document under its measure. Note that
  * the column is measured whole, the summary included, and the side panel
  * beside it is not, so an open panel narrows what is measured and the

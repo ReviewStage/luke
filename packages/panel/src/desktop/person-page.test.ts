@@ -384,7 +384,7 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [...section.querySelectorAll(".luke-list-row-title")].map((name) => name.textContent),
+      [...section.querySelectorAll(".ui-list-row-title")].map((name) => name.textContent),
     ]),
   );
 }
@@ -398,7 +398,7 @@ function said(element: Element): string {
 
 /** The page's header: its title, and the line under it. */
 function head(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".luke-page-header-heading > *")].map(said);
+  return [...page.querySelectorAll(".ui-page-header-heading > *")].map(said);
 }
 
 /** The page's headings of the first level. */
@@ -443,7 +443,7 @@ function mountLinked(userId: string) {
 function button(page: HTMLElement, text: string): HTMLButtonElement {
   // Note that a row is found by its title, since an Inbox item's row reads its task line first.
   const found = [...page.querySelectorAll("button")].find((each) =>
-    (each.querySelector(".luke-list-row-title") ?? each).textContent?.startsWith(text),
+    (each.querySelector(".ui-list-row-title") ?? each).textContent?.startsWith(text),
   );
   assert.ok(found, `${text} stands`);
   return found;
@@ -522,19 +522,15 @@ test("a waiting item is the Inbox's own row: its task named on a line of its own
 
   const row = button(page, "Retry 429s too?");
   assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
-  const lead = row.querySelector('.luke-list-row-lead[data-at="above"]');
+  const lead = row.querySelector('.ui-list-row-lead[data-at="above"]');
   assert.equal(lead?.textContent, RETRIES.name);
-  assert.equal(
-    lead?.closest(".luke-list-row-description"),
-    null,
-    "the task stands on its own line",
-  );
+  assert.equal(lead?.closest(".ui-list-row-description"), null, "the task stands on its own line");
   assert.equal(row.querySelector('.actor-mark[data-kind="agent"]'), null, "no agent's tile leads");
   assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
 
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-inbox-item-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, RETRY_429.title);
+  const card = document.querySelector(".ui-tooltip-card [data-inbox-item-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, RETRY_429.title);
 });
 
 test("an agent's row says its failure at its end and hangs the agent's card while rested on, as the sidebar's row does", async () => {
@@ -551,8 +547,8 @@ test("an agent's row says its failure at its end and hangs the agent's card whil
   assert.equal(button(page, "Jittered backoff").querySelector(".failed-mark"), null);
 
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Flaky retry");
+  const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Flaky retry");
 });
 
 test("an Inbox that could not be read says so and offers Retry, and never passes for an empty page", async () => {
@@ -597,7 +593,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
 
 /** The sidebar's views as this Mac keeps them, by workspace. */
 function keptViews(): Record<string, { assignee?: unknown }> {
-  return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
+  return JSON.parse(window.localStorage.getItem("app.sidebarTaskViews") ?? "{}");
 }
 
 test("Show their tasks in the sidebar lists the tasks assigned to them", async () => {
@@ -645,18 +641,18 @@ test("a person's task leads with its glyph as its sidebar row does, keeps its re
   await settle();
   const row = (name: string) =>
     [...page.querySelectorAll('section[aria-label="Created"] li')].find((each) =>
-      each.querySelector(".luke-list-row-title")?.textContent?.includes(name),
+      each.querySelector(".ui-list-row-title")?.textContent?.includes(name),
     ) ?? assert.fail(`${name} is listed`);
-  const lead = (name: string) => row(name).querySelector(".luke-list-row-leading > svg");
+  const lead = (name: string) => row(name).querySelector(".ui-list-row-leading > svg");
 
   assert.equal(lead(started.name)?.getAttribute("data-status"), TASK_STATUS.IN_PROGRESS);
   assert.equal(lead(RETRIES.name)?.getAttribute("class"), "icon-button-glyph");
   assert.equal(row(RETRIES.name).querySelector(".home-row-context")?.textContent, "acme/relay");
 
   restOn(row(RETRIES.name).querySelector("time") ?? assert.fail("the row says its time"));
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, RETRIES.name);
-  assert.equal(document.querySelector(".luke-tooltip:not(.luke-tooltip-card)"), null);
+  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, RETRIES.name);
+  assert.equal(document.querySelector(".ui-tooltip:not(.ui-tooltip-card)"), null);
 });
 
 test("a workspace of one offers no sidebar filter, since its sidebar filters by nobody", async () => {
@@ -671,14 +667,14 @@ test("the reader's own page offers nothing to edit: its header lists their tasks
   await settle();
 
   assert.deepEqual(
-    [...page.querySelectorAll(".luke-page-header-actions button")].map(
+    [...page.querySelectorAll(".ui-page-header-actions button")].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
     ["Show my tasks in the sidebar", "Person actions"],
   );
   // Note that a filter act is quiet: only a page's one primary act is filled.
   assert.equal(
-    page.querySelector(".luke-page-header-actions button")?.getAttribute("data-variant"),
+    page.querySelector(".ui-page-header-actions button")?.getAttribute("data-variant"),
     "quiet",
   );
 });
@@ -751,7 +747,7 @@ test("someone who left heads their page with their own picture", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  const face = page.querySelector<HTMLElement>(".luke-page-header .actor-mark");
+  const face = page.querySelector<HTMLElement>(".ui-page-header .actor-mark");
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });
 
@@ -772,7 +768,7 @@ test("an automation's row leads with its clock tile, ends with its failure and w
   assert.ok(row?.querySelector(".failed-mark"), "a failed newest run is marked at the end");
   assert.match(row?.textContent ?? "", /Next /u);
   restOn(row?.querySelector("button") ?? assert.fail("no press"));
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="automation"]');
+  const card = document.querySelector('.ui-tooltip-card [data-actor-card="automation"]');
   assert.match(card?.textContent ?? "", /Morning Sentry triage/u);
 });
 
@@ -814,7 +810,7 @@ test("while the Inbox and the automations are read, placeholder rows stand for e
   await settle();
 
   assert.deepEqual(waits(page), ["Reading your inbox…", "Reading their automations…"]);
-  assert.equal(page.querySelector(".luke-spinner"), null);
+  assert.equal(page.querySelector(".ui-spinner"), null);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
 

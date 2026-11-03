@@ -5,7 +5,7 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-luke_require_node
+app_require_node
 "$SCRIPT_DIRECTORY/repository-checks.sh"
 
 cd "$APP_REPO_ROOT"

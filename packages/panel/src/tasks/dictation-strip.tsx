@@ -116,13 +116,13 @@ function DictationWave({ analyser }: { analyser: AnalyserNode | undefined }): Re
 
   return (
     <span
-      className="flex h-luke-20 min-w-0 flex-1 items-center justify-end gap-list-gap overflow-clip"
+      className="flex h-ui-20 min-w-0 flex-1 items-center justify-end gap-list-gap overflow-clip"
       aria-hidden="true"
     >
       {BAR_INDEXES.map((index) => (
         <span
           key={index}
-          className="h-full w-luke-2 flex-none rounded-luke-full bg-current [transform:scaleY(0.08)]"
+          className="h-full w-ui-2 flex-none rounded-ui-full bg-current [transform:scaleY(0.08)]"
           ref={(element) => {
             bars.current[index] = element;
           }}

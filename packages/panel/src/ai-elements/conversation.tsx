@@ -380,7 +380,7 @@ export function ConversationContent({
       onScroll={onScroll}
       onClickCapture={onFold}
     >
-      <div className={cn("conversation-log px-content-inset pt-section-gap pb-luke-20", className)}>
+      <div className={cn("conversation-log px-content-inset pt-section-gap pb-ui-20", className)}>
         {children}
       </div>
     </ScrollArea>
@@ -470,9 +470,9 @@ export function ConversationScrollButton(): ReactNode {
   const { isAtBottom, scrollToBottom } = useConversation();
   if (isAtBottom) return null;
   return (
-    // Its ground is the button's own (`--luke-button-ground`), which the button's lit fill is laid over as a title bar's is.
+    // Its ground is the button's own (`--ui-button-ground`), which the button's lit fill is laid over as a title bar's is.
     <div
-      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-luke-16 flex bg-button-ground [--luke-button-ground:var(--luke-color-well)]`}
+      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-ui-16 flex bg-button-ground [--ui-button-ground:var(--ui-color-well)]`}
     >
       <Tooltip label={SCROLL_LABEL}>
         <IconButton

@@ -24,7 +24,7 @@ import { taskFilesProcedures } from "./task-files-procedures.js";
  * Synthetic accounts, bearers, workspaces, and tasks throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** The eight bytes every PNG begins with, as the `data:` URL the Mac sends a picture as. */
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
@@ -35,7 +35,7 @@ const ANALYTICS = recordingProductAnalytics();
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });

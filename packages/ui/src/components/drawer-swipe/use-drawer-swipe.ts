@@ -12,8 +12,8 @@ import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
  * never claimed, since a browser's own back swipe (Safari's) begins there.
  *
  * While the finger holds it, the drawer and the dimmed window under it
- * follow as one: the stage is marked `data-luke-drawer-drag`, and the share
- * the drawer is open, from 0 to 1, is written to `--luke-drawer-progress` on
+ * follow as one: the stage is marked `data-ui-drawer-drag`, and the share
+ * the drawer is open, from 0 to 1, is written to `--ui-drawer-progress` on
  * it, which the drawer's own `transform` and the scrim's `opacity` read with
  * their transitions off, so nothing plays under the finger and no render
  * runs per move. Let go, where the release lands is carried along the
@@ -49,8 +49,8 @@ const DRAWER_SWIPE = {
 } as const;
 
 /** The stage's mark while a finger holds the drawer, and the share open it carries. */
-const DRAG_ATTRIBUTE = "data-luke-drawer-drag";
-const PROGRESS_PROPERTY = "--luke-drawer-progress";
+const DRAG_ATTRIBUTE = "data-ui-drawer-drag";
+const PROGRESS_PROPERTY = "--ui-drawer-progress";
 
 /** Where a swipe stands: waiting to be read, or the drawer's. */
 const SWIPE_STATE = {

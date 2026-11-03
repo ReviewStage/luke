@@ -33,7 +33,7 @@ const RETENTION_FILL_CEILING_PERCENT = 60;
 const RETENTION_ROW_HEIGHT = "2.25rem";
 
 /** The room between the grid's rows and columns. */
-const RETENTION_GAP = "var(--luke-space-4)";
+const RETENTION_GAP = "var(--ui-space-4)";
 
 /**
  * How many weekly cohorts the grid stands, the service's
@@ -52,19 +52,19 @@ function retentionCellStyle(share: number): React.CSSProperties {
   );
   return {
     ...RETENTION_CELL_BOX,
-    backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
-    color: "var(--luke-color-text)",
+    backgroundColor: `color-mix(in oklab, var(--ui-color-chart-1) ${fill}%, transparent)`,
+    color: "var(--ui-color-text)",
   };
 }
 
 function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Element {
   const provisional = cell.inProgress
-    ? "border border-dashed border-(--luke-color-text-muted)/60"
+    ? "border border-dashed border-(--ui-color-text-muted)/60"
     : "";
   if (cell.share === null) {
     return (
       <div
-        className={`flex items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
+        className={`flex items-center justify-center rounded-sm text-(--ui-color-text-muted) ${provisional}`}
         style={RETENTION_CELL_BOX}
         title="No accounts in this cohort"
       >
@@ -79,7 +79,7 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   if (cell.share === 0) {
     return (
       <div
-        className={`flex items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
+        className={`flex items-center justify-center rounded-sm text-(--ui-color-text-muted) ${provisional}`}
         style={RETENTION_CELL_BOX}
         title={title}
       >
@@ -138,13 +138,13 @@ export function RetentionGrid({
       scrolled out of a narrow card should pass under its edge, not stop short of it.
       The inset comes back on the grid's own box, which stands as wide as the grid,
       so it pads both ends of the scroll; a swipe up or down over it moves the page. */}
-      <div className="-mx-(--luke-card-inset)">
+      <div className="-mx-(--ui-card-inset)">
         <ScrollArea
           axis={SCROLL_AXIS.HORIZONTAL}
           size={SCROLL_SIZE.CONTENT}
           overscroll={SCROLL_OVERSCROLL.CHAIN}
         >
-          <div className="w-fit min-w-full px-(--luke-card-inset)">
+          <div className="w-fit min-w-full px-(--ui-card-inset)">
             <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
               <div
                 className="grid min-w-160 tabular-nums"
@@ -167,7 +167,7 @@ export function RetentionGrid({
                 {retention.cohorts.map((cohort) => (
                   <Fragment key={cohort.weekStart}>
                     <div className="flex items-center">{formatDayTick(cohort.weekStart)}</div>
-                    <div className="flex items-center justify-end pr-(--luke-space-4) text-(--luke-color-text-muted)">
+                    <div className="flex items-center justify-end pr-(--ui-space-4) text-(--ui-color-text-muted)">
                       {formatCount(cohort.size)}
                     </div>
                     {offsets.map((offset) => {
@@ -198,7 +198,7 @@ export function RetentionGridSkeleton(): React.JSX.Element {
   return (
     <ChartFrame>
       <PlotBox
-        height={`calc(var(--luke-type-caption-leading) + ${RETENTION_SKELETON_WEEKS} * (${RETENTION_ROW_HEIGHT} + ${RETENTION_GAP}))`}
+        height={`calc(var(--ui-type-caption-leading) + ${RETENTION_SKELETON_WEEKS} * (${RETENTION_ROW_HEIGHT} + ${RETENTION_GAP}))`}
       >
         <Skeleton shape={SKELETON_SHAPE.BLOCK} />
       </PlotBox>

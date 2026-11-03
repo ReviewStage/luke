@@ -9,7 +9,7 @@
  * browser alone, so there is always a document to read.
  */
 
-const BAR_RADIUS_TOKEN = "--luke-radius-6";
+const BAR_RADIUS_TOKEN = "--ui-radius-6";
 
 let barRadiusPixels: number | undefined;
 

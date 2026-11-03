@@ -274,7 +274,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   for (const style of document.head.querySelectorAll("style")) style.remove();
-  document.body.style.removeProperty("--luke-duration-pane");
+  document.body.style.removeProperty("--ui-duration-pane");
 });
 
 /** The window's keymap with the Inbox's J offered, as the Inbox offers it while it stands, counting each run. */
@@ -557,7 +557,7 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
   );
 
   await redraw({ treeOpen: false });
-  const notice = [...document.querySelectorAll(".luke-tab-notice")].find((each) =>
+  const notice = [...document.querySelectorAll(".ui-tab-notice")].find((each) =>
     each.textContent?.includes("Only files whose path holds"),
   );
   assert.match(notice?.textContent ?? "", /BILLING/u);
@@ -698,7 +698,7 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
   await drawTab({ tree });
 
   const strip =
-    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    document.querySelector<HTMLElement>(".file-tree-strip .ui-mark-strip") ??
     assert.fail("a strip");
   assert.deepEqual(
     [...strip.children].map((mark) => [
@@ -898,8 +898,8 @@ test("? inside the view opens a sheet of its keys by group, which Escape or ? ag
   );
   const groups = [...sheet.querySelectorAll("section[aria-labelledby]")].map((section) => [
     document.getElementById(section.getAttribute("aria-labelledby") ?? "")?.textContent,
-    [...section.querySelectorAll(".luke-settings-row")].map((row) => [
-      row.querySelector(".luke-settings-row-label")?.textContent,
+    [...section.querySelectorAll(".ui-settings-row")].map((row) => [
+      row.querySelector(".ui-settings-row-label")?.textContent,
       row.querySelector("kbd")?.textContent,
     ]),
   ]);
@@ -1555,7 +1555,7 @@ const MARKED: AgentPullRequestViewedAnswerView = {
 /** What the bar's count of the files viewed says. */
 function viewedCount(): string {
   return (
-    document.querySelector(".luke-pane-bar .files-viewed")?.textContent ??
+    document.querySelector(".ui-pane-bar .files-viewed")?.textContent ??
     assert.fail("the bar counts the files viewed")
   );
 }
@@ -1649,8 +1649,8 @@ test("the bar leads with the count of files viewed in the crumbs' place, polite 
   files = [changed("src/billing/a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab({ treeOpen: true });
 
-  const bar = document.querySelector(".luke-pane-bar") ?? assert.fail("a bar");
-  assert.equal(bar.querySelector(".luke-breadcrumbs"), null, "no crumbs");
+  const bar = document.querySelector(".ui-pane-bar") ?? assert.fail("a bar");
+  assert.equal(bar.querySelector(".ui-breadcrumbs"), null, "no crumbs");
   assert.doesNotMatch(bar.textContent ?? "", /billing/u, "the bar names no file");
   const count = bar.querySelector(".files-viewed") ?? assert.fail("a count");
   assert.equal(count.hasAttribute("aria-live"), false, "it is said through the announcer");
@@ -2582,7 +2582,7 @@ function overToggle(): HTMLButtonElement {
 /** A narrow panel with the tree's toggle pressed, the pane's slide left to play out. */
 async function narrowTreeOpened(): Promise<void> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   layContainersAt({ "side-panel": 300 });
   files = [changed("a.ts"), changed("b.ts")];
   const { tree } = heldTree(false);
@@ -2596,7 +2596,7 @@ test("in a narrow panel the tree opens over the list, stays drawn through its ex
   await narrowTreeOpened();
   const pane = floatedTree() ?? assert.fail("the tree opens over the list");
   assert.equal(pane.getAttribute("data-state"), "open");
-  assert.equal(pane.classList.contains("luke-over-pane"), true);
+  assert.equal(pane.classList.contains("ui-over-pane"), true);
 
   act(() => overToggle().click());
   const leaving = floatedTree() ?? assert.fail("the tree stays through its exit");
@@ -2626,7 +2626,7 @@ test("the pointer leaving the strip for the tree it peeked keeps the tree, and l
   const { tree } = heldTree(false);
   await drawTab({ tree });
   const strip =
-    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    document.querySelector<HTMLElement>(".file-tree-strip .ui-mark-strip") ??
     assert.fail("a strip");
   const leave = (to: Element) =>
     act(() =>

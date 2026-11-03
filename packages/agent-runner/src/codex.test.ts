@@ -49,11 +49,11 @@ import {
   type Spawned,
 } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
-import { makeFakeLuke } from "./testing/fake-luke.js";
+import { makeFakeService } from "./testing/fake-service.js";
 import { UNREAD_PROC } from "./testing/fake-proc.js";
 
 const BEARER = "runner-bearer-for-tests";
-const EVENTS_URL = "https://luke.test/runner/events";
+const EVENTS_URL = "https://app.test/runner/events";
 const FIRST_SEQUENCE = 11;
 const THREAD = "00000000-0000-4000-8000-000000000002";
 
@@ -62,7 +62,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const apiKey = "openai-api-key-for-tests";
-      const luke = fakeLuke("sleep 600");
+      const luke = fakeService("sleep 600");
       // The launch knows no bundle: on its API key it asks no token.
       const { spawned, write, run } = yield* launch(
         [STOPPED],
@@ -104,7 +104,7 @@ it.effect(
     }),
 );
 
-const TOKEN_URL = "https://luke.test/api/agents/runner-token";
+const TOKEN_URL = "https://app.test/api/agents/runner-token";
 const SELF: RunnerSelf = {
   executable: "/usr/local/bin/node",
   script: "/opt/luke/agent-runner.mjs",
@@ -125,8 +125,8 @@ const CONFIG: CodexConfig = {
   developerInstructions: "You are a Vespin coding agent.",
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
-  mcpUrl: "https://luke.test/runner/mcp",
-  integrations: [{ name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" }],
+  mcpUrl: "https://app.test/runner/mcp",
+  integrations: [{ name: "linear", url: "https://app.test/runner/mcp/integrations/linear" }],
   tokenUrl: TOKEN_URL,
 };
 
@@ -186,7 +186,7 @@ function kinds(events: readonly RunnerEvent[]): string[] {
 /** One Codex launch over stdin lines the test writes, against scripted app-servers and a fake service. */
 function launch(
   scripts: readonly Script[],
-  luke: ReturnType<typeof makeFakeLuke>,
+  luke: ReturnType<typeof makeFakeService>,
   env: Record<string, string> = ENV,
   extra: { readonly self?: RunnerSelf; readonly http?: Layer.Layer<HttpClient.HttpClient> } = {
     self: SELF,
@@ -219,8 +219,8 @@ function launch(
   });
 }
 
-function fakeLuke(watchFor?: string) {
-  return makeFakeLuke({
+function fakeService(watchFor?: string) {
+  return makeFakeService({
     url: EVENTS_URL,
     firstSequence: FIRST_SEQUENCE,
     watchFor,
@@ -250,7 +250,7 @@ it.effect(
 
       const turn = (script: Script, installedSkills: string) =>
         Effect.gen(function* () {
-          const luke = fakeLuke("ci-watch");
+          const luke = fakeService("ci-watch");
           const { spawned, write, run } = yield* launch([script], luke);
           yield* write({ ...CONFIG, installedSkills });
           yield* write(message("The probe's first turn.", LINE.FIRST));
@@ -287,7 +287,7 @@ it.effect(
             ],
           },
         ],
-        fakeLuke(),
+        fakeService(),
       );
       yield* relaunched.write({ ...CONFIG, threadId: THREAD, installedSkills: folder });
       yield* relaunched.closeStdin;
@@ -311,7 +311,7 @@ it.effect(
       yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
       const checkout = join(folder, "repository");
       mkdirSync(checkout, { recursive: true });
-      const luke = fakeLuke("sleep 600");
+      const luke = fakeService("sleep 600");
       const { spawned, write, run } = yield* launch([STOPPED], luke);
       yield* write({ ...CONFIG, cwd: checkout, writableRoots: [folder] });
       yield* write(message("Run sleep 600.", LINE.FIRST));
@@ -346,7 +346,7 @@ it.effect(
   "starts app-server with the plan's provider, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
-      const luke = fakeLuke("ci-watch");
+      const luke = fakeService("ci-watch");
       const { spawned, write, run } = yield* launch([WORKFLOW], luke);
       yield* write(CONFIG);
       yield* write({
@@ -400,11 +400,11 @@ it.effect(
         'model_providers.openai_chatgpt_plan.wire_api="responses"',
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
-        'mcp_servers.luke.url="https://luke.test/runner/mcp"',
-        'mcp_servers.luke.bearer_token_env_var="APP_RUNNER_TOKEN"',
-        'mcp_servers.luke.default_tools_approval_mode="approve"',
-        "mcp_servers.luke.tool_timeout_sec=600.0",
-        'mcp_servers.linear.url="https://luke.test/runner/mcp/integrations/linear"',
+        'mcp_servers.workspace.url="https://app.test/runner/mcp"',
+        'mcp_servers.workspace.bearer_token_env_var="APP_RUNNER_TOKEN"',
+        'mcp_servers.workspace.default_tools_approval_mode="approve"',
+        "mcp_servers.workspace.tool_timeout_sec=600.0",
+        'mcp_servers.linear.url="https://app.test/runner/mcp/integrations/linear"',
         'mcp_servers.linear.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.linear.default_tools_approval_mode="approve"',
         "mcp_servers.linear.startup_timeout_sec=20.0",
@@ -463,7 +463,7 @@ it.effect(
   "keeps a warm launch up past its completed turn, posting IDLE, and ends it as idled on Vespin's retire",
   () =>
     Effect.gen(function* () {
-      const luke = fakeLuke();
+      const luke = fakeService();
       const { spawned, write, run } = yield* launch([WORKFLOW], luke);
       yield* write({ ...CONFIG, warm: true });
       yield* write(message("The probe's first turn.", LINE.FIRST));
@@ -492,7 +492,7 @@ it.effect(
 
 it.effect("interrupts the running turn on a stop and ends the launch as stopped", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke("sleep 600");
+    const luke = fakeService("sleep 600");
     const { spawned, write, run } = yield* launch([STOPPED], luke);
     yield* write(CONFIG);
     yield* write({ type: INPUT_LINE.MODEL, model: "gpt-5.5-codex", effort: CODEX_EFFORT.LOW });
@@ -521,7 +521,7 @@ it.effect(
   "resumes the thread it is given and sends a message the ended turn refused as the next turn",
   () =>
     Effect.gen(function* () {
-      const luke = fakeLuke("What exact line");
+      const luke = fakeService("What exact line");
       const script: Script = {
         exchanges: [
           ...RESUME,
@@ -593,7 +593,7 @@ function refusedSteer(error: NonNullable<RecordedMessage["error"]>, waits: boole
 
 it.effect("sends a steer refused by a turn that cannot be steered as the next turn", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke("What exact line");
+    const luke = fakeService("What exact line");
     const script = refusedSteer(
       {
         code: -32600,
@@ -624,7 +624,7 @@ it.effect("sends a steer refused by a turn that cannot be steered as the next tu
 
 it.effect("ends the launch as failed when app-server refuses a steer for any other reason", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke("What exact line");
+    const luke = fakeService("What exact line");
     const script = refusedSteer({ code: -32603, message: "failed to steer turn: boom" }, false);
     const { spawned, write, run } = yield* launch([script], luke);
     yield* write({ ...CONFIG, threadId: THREAD });
@@ -645,7 +645,7 @@ it.effect("ends the launch as failed when app-server refuses a steer for any oth
 
 it.effect("ends the launch as stopped when app-server never answers the stop's interrupt", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke("sleep 600");
+    const luke = fakeService("sleep 600");
     const hung: Script = {
       exchanges: [...OPEN, exchange(FIRST, 5), { method: "turn/interrupt", reply: [] }],
     };
@@ -669,7 +669,7 @@ it.effect("ends the launch as stopped when app-server never answers the stop's i
 
 it.effect("ends the launch as failed when app-server exits, its secrets taken out of why", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke();
+    const luke = fakeService();
     const { write, run } = yield* launch(
       [{ exchanges: [...OPEN, exchange(FIRST, 3)], exitWith: `panic: bad token ${BEARER}` }],
       luke,
@@ -688,7 +688,7 @@ it.effect("ends the launch as failed when app-server exits, its secrets taken ou
 
 it.effect("ends an idle launch at once on a stop, and on stdin closing, with no turn started", () =>
   Effect.gen(function* () {
-    const stoppedLuke = fakeLuke();
+    const stoppedLuke = fakeService();
     const stopped = yield* launch([{ exchanges: OPEN }], stoppedLuke);
     yield* stopped.write(CONFIG);
     yield* stopped.write({ type: INPUT_LINE.STOP });
@@ -696,7 +696,7 @@ it.effect("ends an idle launch at once on a stop, and on stdin closing, with no 
     assert.deepEqual(received(stopped.spawned[0], "turn/start"), []);
     assert.deepEqual(kinds(stoppedLuke.applied), [...notified(OPEN), RUNNER_EVENT.END]);
 
-    const closed = yield* launch([{ exchanges: OPEN }], fakeLuke());
+    const closed = yield* launch([{ exchanges: OPEN }], fakeService());
     yield* closed.write(CONFIG);
     yield* closed.closeStdin;
     assert.equal(yield* Fiber.join(closed.run), RUNNER_END.INPUT_CLOSED);
@@ -706,7 +706,7 @@ it.effect("ends an idle launch at once on a stop, and on stdin closing, with no 
 
 it.effect("starts the next turn for a message Vespin sent just before the turn completed", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke("turn/completed");
+    const luke = fakeService("turn/completed");
     const release = yield* Deferred.make<void>();
     const userMessage = RESUMED_TURN.reply.find((line) => line.method === "item/started");
     if (userMessage === undefined) throw new Error("the resumed turn has no user message");
@@ -789,7 +789,7 @@ it.effect(
   "on the plan, app-server takes its token from the runner's command, which a 401 mid-turn runs again, and the turn goes on to complete",
   () =>
     Effect.gen(function* () {
-      const luke = fakeLuke();
+      const luke = fakeService();
       const route = fakeTokenRoute();
       const http = fakeHttpClientLayer((url, init) =>
         url === TOKEN_URL ? route.respond(url, init) : luke.respond(url, init),
@@ -874,7 +874,7 @@ it.effect(
 
 it.effect("never starts app-server on the plan when it does not know its own bundle", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke();
+    const luke = fakeService();
     const { spawned, write, run } = yield* launch([WORKFLOW], luke, ENV, {});
     yield* write(CONFIG);
 
@@ -910,7 +910,7 @@ const REVERTED: Exchange = {
 
 it.effect("reverts a rewound thread to before the turn that took the line the rewind dropped", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke();
+    const luke = fakeService();
     const page = turnsPage([
       { id: "turn-3", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e09" },
       { id: "turn-2", line: LINE.STEERED },
@@ -932,7 +932,7 @@ it.effect("reverts a rewound thread to before the turn that took the line the re
 
 it.effect("resumes a thread whole where no turn took the line the rewind dropped", () =>
   Effect.gen(function* () {
-    const luke = fakeLuke();
+    const luke = fakeService();
     const page = turnsPage([{ id: "turn-1", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e08" }]);
     const script: Script = { exchanges: [...RESUME, page, RESUMED_TURN] };
     const { spawned, write, run } = yield* launch([script], luke);

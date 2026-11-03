@@ -536,7 +536,7 @@ export interface AutomationRanNow {
  * The automation run now, as the account asks, under the caller's key: a
  * manual firing recorded once per key and acted on at once, through the
  * same guards and the same start a scheduled run takes
- * (`automation-runs.ts`), reaching eve as `eveFor` reaches it; the same key
+ * (`automation-runs.ts`), reaching the agent's sessions as `eveFor` reaches them; the same key
  * again answers the run it made. The caller has read the automation as one
  * the account may run.
  */

@@ -124,11 +124,11 @@ it.effect("disconnects GitHub, answering the workspace with no GitHub account", 
   }),
 );
 
-const ADA = { userId: "user-ada", name: "Ada Lovelace", email: "ada@luke.test", role: "owner" };
+const ADA = { userId: "user-ada", name: "Ada Lovelace", email: "ada@app.test", role: "owner" };
 const GRACE = {
   userId: "user-grace",
   name: "Grace Hopper",
-  email: "grace@luke.test",
+  email: "grace@app.test",
   role: "member",
 };
 

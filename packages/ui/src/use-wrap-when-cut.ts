@@ -2,7 +2,7 @@
  * use-wrap-when-cut.ts -- whether a bar stands its title on a row of its own, because one row would cut it under the readable floor.
  *
  * A bar's title fades where the bar cuts it, as any title does, for as long
- * as what shows of it reads (`--luke-title-floor`); once one row would show
+ * as what shows of it reads (`--ui-title-floor`); once one row would show
  * less, and less than the whole title, the bar stands the title on a row of
  * its own, and goes back to one row only once it is again as wide as that
  * row then needed. The bar is read two frames after each render, each
@@ -25,7 +25,7 @@ export interface TitleSeat {
 }
 
 /** The custom property, registered as a length, that names how much of a title must show before it is moved. */
-const FLOOR_PROPERTY = "--luke-title-floor";
+const FLOOR_PROPERTY = "--ui-title-floor";
 
 /** How much of the title shows on one row: its words up to the room's edge. */
 function shownOf(bar: HTMLElement, seat: TitleSeat): { shown: number; whole: number } | undefined {

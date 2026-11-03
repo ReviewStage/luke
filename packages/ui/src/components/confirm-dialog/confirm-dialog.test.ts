@@ -251,7 +251,7 @@ test("an answer that lands holds the card until the check's motion finishes", as
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
     value(this: HTMLElement) {
-      return this.classList.contains("luke-button-done") ? [motion] : [];
+      return this.classList.contains("ui-button-done") ? [motion] : [];
     },
   });
   const { opener, settle } = asked();
@@ -277,7 +277,7 @@ test("a card whose check has been seen goes once its fade has run", async () => 
   vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
   const exits = holdExits(
     (element) =>
-      element.classList.contains("luke-button-done") || element.hasAttribute("data-ending-style"),
+      element.classList.contains("ui-button-done") || element.hasAttribute("data-ending-style"),
   );
   const { opener, settle } = asked();
   press("Delete");

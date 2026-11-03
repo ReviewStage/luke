@@ -165,7 +165,7 @@ const TASK_LOADING_LABEL = readingWords("the task");
 const ACTION_SKELETON_WIDTHS = { START: "104px" } as const;
 
 /** An icon press's width, the task's ⋯'s and the summary's toggle's, as tall as it is wide. */
-const ICON_PRESS_WIDTH = "var(--luke-control-height)";
+const ICON_PRESS_WIDTH = "var(--ui-control-height)";
 
 /**
  * The task's page as it and its placeholder stand it: the column, its
@@ -353,7 +353,7 @@ function shownTabGroups(shown: ShownTab | undefined, opener: HTMLElement): MenuE
     .groups(opener)
     .map((group) =>
       group.map((item) =>
-        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
+        "items" in item || "panel" in item ? item : { ...item, detail: item.detail ?? shown.label },
       ),
     );
 }

@@ -6,7 +6,7 @@
    draw under `data-edge-drag`. */
 
 @layer components {
-  .luke-resize-edge {
+  .ui-resize-edge {
     position: absolute;
     z-index: 2;
     top: 0;
@@ -14,22 +14,22 @@
     width: 6px;
     cursor: col-resize;
     outline: none; /* no ring: the edge fills in the focus colour */
-    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
+    transition: background-color var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  [data-luke-profile="desktop"] .luke-resize-edge {
+  [data-ui-profile="desktop"] .ui-resize-edge {
     -webkit-app-region: no-drag;
   }
 
-  .luke-resize-edge[data-side="left"] {
+  .ui-resize-edge[data-side="left"] {
     left: -3px;
   }
 
-  .luke-resize-edge[data-side="right"] {
+  .ui-resize-edge[data-side="right"] {
     right: -3px;
   }
 
-  .luke-resize-edge:is(:hover, :active, :focus-visible) {
-    background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
+  .ui-resize-edge:is(:hover, :active, :focus-visible) {
+    background: color-mix(in srgb, var(--ui-color-accent) 55%, transparent);
   }
 }

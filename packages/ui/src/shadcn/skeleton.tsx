@@ -12,8 +12,8 @@ import { cn } from "../cn.js";
  * rather than `muted`, the hover's wash, which reads as no block on a card;
  * its corner is the one its shape picks (`@luke/ui`'s `Skeleton`,
  * `components/skeleton/`) rather than `rounded-md`; and it breathes on
- * our own opacity loop, the `luke-skeleton` keyframes held still by
- * `--luke-loop-motion` (`components/skeleton/skeleton.css`), rather than on
+ * our own opacity loop, the `ui-skeleton` keyframes held still by
+ * `--ui-loop-motion` (`components/skeleton/skeleton.css`), rather than on
  * `animate-pulse`, whose loop runs on through reduced motion and a capture
  * run. It is named `SkeletonBlock` rather than `Skeleton`, because the
  * root lint rule `anti-slop/skeleton-through-components` holds a component

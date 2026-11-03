@@ -43,7 +43,7 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { deviceAgentsProcedures } from "./device-agents-procedures.js";
 import { hostsProcedures } from "./hosts-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const PATH = {
   DEVICES: "/api/device-agents/devices",
   PRESENCE: "/api/device-agents/presence",
@@ -71,7 +71,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
 };
@@ -150,7 +149,7 @@ const account = () =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     return userId;
   });
 

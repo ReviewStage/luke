@@ -56,7 +56,7 @@ test("a Google Maps link is a chip wearing Maps's pin and called by its place, i
   const container = await drawn(`Meet at ${PLACE}, via ${ROUTE}, or [the pier](${PLACE}).`);
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Ferry Building", "SFO → Ferry Building", "the pier"],
   );
 });
@@ -72,7 +72,7 @@ test("a Google Doc, a Meet, a YouTube video, and an X post each wear their own m
   );
   const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
   assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Google Docs", "abc-defg-hij", "YouTube", "Post by @acme"],
   );
 });

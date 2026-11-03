@@ -29,7 +29,7 @@ function foldersWhere(keep: (name: string) => boolean) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-action-kind-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "action-kind-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(keep);
     for (const name of names) {
       yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
@@ -52,7 +52,7 @@ it.effect.each([MIGRATION, STRAGGLERS])(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersWhere((name) => name.localeCompare(migration) < 0));
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         for (const [order, action] of BEFORE.entries()) {

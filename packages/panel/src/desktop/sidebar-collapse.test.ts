@@ -66,7 +66,7 @@ const SETTINGS: SettingsPanelProps = {
 };
 
 /** The sidebar fold the developer chose, as storage keeps it. */
-const KEPT_FOLD = "luke.sidebar-collapsed";
+const KEPT_FOLD = "app.sidebar-collapsed";
 
 let root: Root | undefined;
 

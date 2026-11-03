@@ -43,7 +43,7 @@ import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched, dispatchedBy } from "./support/platform-landing.js";
 
 /** The web runtime's layer names a database; nothing here queries it, so it is never dialled (`route-effect.test.ts`). */
-const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/app";
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
@@ -57,7 +57,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 /** The grouped function as it is deployed: the oRPC route under its key, which the fallback lands every other path on. */
 const ORPC_ROUTES = new Map([[ORPC_ROUTE_KEY, orpcRoute]]);
 

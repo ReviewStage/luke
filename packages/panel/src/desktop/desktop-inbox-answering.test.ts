@@ -133,7 +133,7 @@ function answeredOptions(page: HTMLElement): [string | null | undefined, boolean
       '[role="radio"], [role="checkbox"]',
     ),
   ].map((option) => [
-    option.querySelector(".luke-choice-label")?.textContent,
+    option.querySelector(".ui-choice-label")?.textContent,
     option.getAttribute("aria-checked") === "true",
   ]);
 }
@@ -159,7 +159,7 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   const sent = takenCloses();
   const ellipsis = () =>
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Inbox item actions"]',
+      '.ui-toolbar button[aria-label="Inbox item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
@@ -192,7 +192,7 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
 
   assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
   assert.equal(
-    wordsOf(itemPane(page).querySelector('[data-inbox-comment="closed"] .luke-comment-name')),
+    wordsOf(itemPane(page).querySelector('[data-inbox-comment="closed"] .ui-comment-name')),
     "You resolved this without an answer",
     "the thread says the reader resolved it, in a line of its own",
   );
@@ -292,13 +292,13 @@ test("an answer box whose editor bundle could not be loaded says so beside Retry
   });
   const { page } = mount([], { chosen: ON_THRESHOLD, bundles });
   await settle();
-  const note = page.querySelector(".luke-composer-foot-note");
+  const note = page.querySelector(".ui-composer-foot-note");
   assert.equal(note?.textContent, "The answer box could not be loaded.Retry");
 
   await act(async () => note?.querySelector("button")?.click());
   await settle();
 
-  assert.equal(page.querySelector(".luke-composer-foot-note"), null, "the note is gone");
+  assert.equal(page.querySelector(".ui-composer-foot-note"), null, "the note is gone");
 });
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
@@ -329,7 +329,7 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
   assert.deepEqual(
     openOptions(pane).map((option) => [
       option.getAttribute("role"),
-      option.querySelector(".luke-choice-control")?.getAttribute("data-shape"),
+      option.querySelector(".ui-choice-control")?.getAttribute("data-shape"),
       option.getAttribute("aria-keyshortcuts"),
     ]),
     [
@@ -408,7 +408,7 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
   const pane = itemPane(page);
   const boxes = () => openOptions(pane);
   assert.deepEqual(
-    boxes().map((box) => box.querySelector(".luke-choice-control")?.getAttribute("data-shape")),
+    boxes().map((box) => box.querySelector(".ui-choice-control")?.getAttribute("data-shape")),
     ["box", "box", "box"],
   );
   assert.equal(footWords(pane), "", "the foot says nothing of how many may be picked");
@@ -596,12 +596,12 @@ test("a teammate's answer names them by their disc and name, their pick checked 
   assert.deepEqual(answeredPicks(page), ["Retry 3 times over an hour"]);
   const reply =
     answeredControls(page).closest<HTMLElement>(".inbox-comment") ?? assert.fail("their answer");
-  assert.match(wordsOf(reply.querySelector(".luke-comment-head")) ?? "", /^Charles Pan/u);
-  assert.equal(faceKind(reply.querySelector(".luke-comment-face")), "person");
+  assert.match(wordsOf(reply.querySelector(".ui-comment-head")) ?? "", /^Charles Pan/u);
+  assert.equal(faceKind(reply.querySelector(".ui-comment-face")), "person");
 
   const answerer = reply.querySelector("[data-actor-ref]") ?? assert.fail("the answerer is named");
   restOn(answerer);
-  const card = document.querySelector(".luke-tooltip-card [data-actor-card='person']");
+  const card = document.querySelector(".ui-tooltip-card [data-actor-card='person']");
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
 
@@ -643,7 +643,7 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
     [...pane.querySelectorAll("[data-inbox-field]")].map((each) => [
       each.getAttribute("data-inbox-field"),
       each
-        .querySelector(".luke-field-label, .luke-checkbox-words")
+        .querySelector(".ui-field-label, .ui-checkbox-words")
         ?.textContent?.endsWith("Optional") === true,
     ]),
     [
@@ -665,7 +665,7 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   assert.ok(pane.querySelector('[data-inbox-field="text"] .inbox-field-composer .composer-editor'));
   const reason =
     pane.querySelector<HTMLElement>('[data-inbox-field="text"]') ?? assert.fail("no Reason");
-  act(() => reason.querySelector<HTMLElement>(".luke-field-label")?.click());
+  act(() => reason.querySelector<HTMLElement>(".ui-field-label")?.click());
   assert.equal(
     document.activeElement,
     composerEditor(reason),
@@ -687,11 +687,11 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
 function answeredFields(within: Element): (string | null | undefined)[][] {
   return [...within.querySelectorAll<HTMLElement>("[data-inbox-answered-field]")].map((field) => {
     const kind = field.dataset.inboxAnsweredField;
-    const name = field.querySelector(".luke-field-label, .luke-checkbox-words")?.firstChild
+    const name = field.querySelector(".ui-field-label, .ui-checkbox-words")?.firstChild
       ?.textContent;
     const box = field.querySelector<HTMLElement>('[role="checkbox"]');
     const words = field.querySelector('[role="textbox"]');
-    const pills = field.querySelector<HTMLElement>(".luke-choice-list");
+    const pills = field.querySelector<HTMLElement>(".ui-choice-list");
     if (box !== null) {
       assert.equal(box.getAttribute("aria-readonly"), "true");
       return [kind, name, box.getAttribute("aria-checked") === "true" ? "checked" : "unchecked"];
@@ -947,7 +947,7 @@ function answeredCard(reply: Element): string | null | undefined {
   if (card === null) return undefined;
   assert.equal(card.closest(".inbox-ask"), null, "no card stands around the controls");
   assert.ok(card.parentElement?.matches(".inbox-comment-body"), "they stand in the reply's body");
-  assert.equal(card.querySelector(".luke-card-head"), null, "they have no head");
+  assert.equal(card.querySelector(".ui-card-head"), null, "they have no head");
   return wordsOf(card);
 }
 
@@ -990,7 +990,7 @@ test("picking an option in the draft reply stands it picked and lights Send, the
   assert.ok(reply, "the reply lands");
   assert.equal(answeredCard(reply), "1 dayAs today.7 daysRecommendedWhat most teams use.30 days");
   assert.deepEqual(
-    [...reply.querySelectorAll('[role="radio"][aria-checked="true"] .luke-choice-label')].map(
+    [...reply.querySelectorAll('[role="radio"][aria-checked="true"] .ui-choice-label')].map(
       (label) => label.textContent,
     ),
     ["7 days"],
@@ -1328,7 +1328,7 @@ function threadLines(pane: Element): (readonly [string | null, string | null])[]
   return [...pane.querySelectorAll(".inbox-thread > li:not([data-inbox-comment='draft'])")].map(
     (line) => [
       line.getAttribute("data-inbox-comment"),
-      wordsOf(line.querySelector(".luke-comment-said"))?.trim() ?? null,
+      wordsOf(line.querySelector(".ui-comment-said"))?.trim() ?? null,
     ],
   );
 }
@@ -1409,7 +1409,7 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     "with why under it",
   );
   assert.equal(
-    wordsOf(pane.querySelector("[data-inbox-comment='closed'] .luke-comment-name")),
+    wordsOf(pane.querySelector("[data-inbox-comment='closed'] .ui-comment-name")),
     "Charles Pan resolved this without an answer",
     "and the close names who resolved it",
   );
@@ -1587,7 +1587,7 @@ test("an answered decide's card leaves the agent's message for the head of the r
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ?? assert.fail("the agent's message");
   assert.equal(asked.querySelector(".inbox-ask"), null, "the agent's message ends with its words");
   const reply = pane.querySelector(`[data-message-id="${ANSWER_ID}"]`) ?? assert.fail("the reply");
-  assert.equal(wordsOf(reply.querySelector(".luke-comment-name")), "You", "the answerer heads it");
+  assert.equal(wordsOf(reply.querySelector(".ui-comment-name")), "You", "the answerer heads it");
   const box = answeredBox(pane);
   const rows = [...box.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(
@@ -1603,7 +1603,7 @@ test("an answered decide's card leaves the agent's message for the head of the r
     ],
     "each row as offered, unnumbered, the pick checked and none pressable",
   );
-  assert.equal(box.querySelector<HTMLElement>(".luke-choice-list")?.dataset.readOnly, "true");
+  assert.equal(box.querySelector<HTMLElement>(".ui-choice-list")?.dataset.readOnly, "true");
   assert.equal(
     reply.querySelector("[data-inbox-stamp]"),
     null,
@@ -1731,7 +1731,7 @@ test("an answered form heads its reply with its fields, each holding what it was
     ["boolean", "Page on-call", "checked"],
   ]);
   assert.equal(
-    box.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    box.querySelector("[data-mention-ref] .ui-inline-ref-label")?.textContent,
     "rollout-store.ts",
   );
   assert.equal(box.querySelector(".inbox-ask-presses"), null, "no Submit stands");
@@ -1887,7 +1887,7 @@ test("an item's card shows a to-do naming no steps of its own its title as its o
   assert.deepEqual(
     [
       ...document.querySelectorAll(
-        '.luke-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
+        '.ui-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
       ),
     ].map((step) => step.textContent),
     ["Rotate the deployment key"],

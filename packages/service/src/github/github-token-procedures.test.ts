@@ -37,7 +37,7 @@ import { githubTokenProcedures } from "./github-token-procedures.js";
  * like a real one; the key-encryption key is fixed bytes written for this file.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const TOKEN_PATH = "/api/github/token";
 const RING = `1:${Buffer.alloc(32, 1).toString("base64")}`;
 const GITHUB_ID = 4242;
@@ -59,7 +59,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
 };
@@ -107,7 +106,7 @@ const openMembers = Effect.gen(function* () {
   const db = yield* Database;
   const owner = `user-${randomUUID()}`;
   for (const id of [owner]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   yield* db.insert(account).values({
     id: randomUUID(),

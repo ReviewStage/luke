@@ -98,7 +98,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-luke-12 [&_.luke-progress-count]:mr-icon-gap [&>.luke-time]:min-w-sidebar-row-age";
+  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-ui-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-ui-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-ui-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-ui-12 [&_.ui-progress-count]:mr-icon-gap [&>.ui-time]:min-w-sidebar-row-age";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
@@ -106,7 +106,7 @@ export const SIDEBAR_ROW_REPOSITORY =
 
 /** A pull request's mark on a card's row, at the glyph's size in the row's muted ink, its state's colour where it has one (`pull-request-mark.tsx`). */
 export const TASK_MARK_GLYPH =
-  "task-mark-glyph inline-block size-luke-12 flex-none text-muted-foreground";
+  "task-mark-glyph inline-block size-ui-12 flex-none text-muted-foreground";
 
 /**
  * The one icon at a task row's end, before its time: how its agents stand

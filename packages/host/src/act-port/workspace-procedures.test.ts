@@ -45,10 +45,10 @@ const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const INVITATION = {
   id: "inv-1",
-  email: "alan@luke.test",
+  email: "alan@app.test",
   role: WORKSPACE_ROLE.MEMBER,
   expiresAt: "2026-10-16T12:00:00.000Z",
-  acceptUrl: "https://luke.test/accept-invitation.html?id=inv-1",
+  acceptUrl: "https://app.test/accept-invitation.html?id=inv-1",
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 /** A workspace's photo as the window sends it: a WebP's `data:` URL. */
@@ -63,7 +63,7 @@ const ACME = {
 const GRACE = {
   userId: "user-grace",
   name: "Grace Hopper",
-  email: "grace@luke.test",
+  email: "grace@app.test",
   role: WORKSPACE_ROLE.MEMBER,
 };
 const ALAN = { userId: "user-alan", name: "Alan Turing" };

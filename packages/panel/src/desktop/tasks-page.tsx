@@ -146,13 +146,13 @@ function storedDisplayOf(view: TasksView) {
 
 /** Where the view shown last, the filters (each workspace's by its id), each view's display, and where each view stood scrolled when the reader left it, by the view's name, are kept on this Mac. */
 const KEPT = {
-  VIEW: keptKey("luke.tasksPageView", storedView),
-  FILTERS: keptKey("luke.tasksFilter", storedFilters),
+  VIEW: keptKey("app.tasksPageView", storedView),
+  FILTERS: keptKey("app.tasksFilter", storedFilters),
   DISPLAY: {
-    [TASKS_VIEW.LIST]: keptKey("luke.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
-    [TASKS_VIEW.BOARD]: keptKey("luke.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
+    [TASKS_VIEW.LIST]: keptKey("app.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
+    [TASKS_VIEW.BOARD]: keptKey("app.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
   },
-  SCROLLS: keptKey("luke.tasksScroll", storedScrolls),
+  SCROLLS: keptKey("app.tasksScroll", storedScrolls),
 } as const;
 
 /** The List | Columns switch beside the page's title. */
@@ -238,7 +238,7 @@ export function TasksPage({
           <Text
             as={TEXT_ELEMENT.H1}
             variant={TEXT_VARIANT.TOOLBAR_TITLE}
-            className="luke-toolbar-title"
+            className="ui-toolbar-title"
           >
             {TASKS}
           </Text>

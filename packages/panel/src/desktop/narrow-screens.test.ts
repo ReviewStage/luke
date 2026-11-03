@@ -341,9 +341,9 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
 
 test("a Settings page standing alone on a phone is named by its bar, opens a section's gap under the way back, and keeps the places bar with no place current", async () => {
   // Note that the stage wears the web's profile, whose tokens the gap is read in.
-  document.documentElement.dataset.lukeProfile = PROFILE.WEB;
+  document.documentElement.dataset.uiProfile = PROFILE.WEB;
   onTestFinished(() => {
-    delete document.documentElement.dataset.lukeProfile;
+    delete document.documentElement.dataset.uiProfile;
   });
   const page = await mount(PHONE, createElement(SettingsWindow, { link: undefined }));
   press(the(page, SETTINGS_COLUMNS.list), "Appearance");
@@ -352,10 +352,10 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
   assert.equal(bar.querySelector("h1")?.textContent, "Appearance", "the bar names the page");
   assert.equal(item.querySelectorAll("h1").length, 1, "the page draws no second heading");
 
-  const column = the(item, ".luke-settings-page-column");
+  const column = the(item, ".ui-settings-page-column");
   assert.equal(
     wayBackGap(bar, column),
-    pixelsOf(column, "var(--luke-section-gap)"),
+    pixelsOf(column, "var(--ui-section-gap)"),
     "the page's first line stands a section's gap under the way back",
   );
 
@@ -386,7 +386,7 @@ test("Settings on a stage wide enough for panes, but under the split's line by i
 });
 
 test("Settings' page list kept wider than its share moves from the width it is drawn at, at the first press of its edge", async () => {
-  window.localStorage.setItem("luke.sidebar-width", "400");
+  window.localStorage.setItem("app.sidebar-width", "400");
   const page = await mount(900, createElement(SettingsWindow, { link: undefined }));
   const edge = the(page, '[role="separator"][aria-label="Resize sidebar"]');
   act(() => {

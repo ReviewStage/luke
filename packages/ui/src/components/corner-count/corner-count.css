@@ -3,26 +3,26 @@
    over the glyph rather than cut into it. */
 
 @layer components {
-  .luke-corner-count {
+  .ui-corner-count {
     position: relative;
     display: inline-grid;
     place-items: center;
   }
 
-  .luke-corner-count-mark {
+  .ui-corner-count-mark {
     position: absolute;
-    top: calc(-1 * var(--luke-space-8));
-    inset-inline-start: calc(100% - var(--luke-space-6));
-    min-width: var(--luke-space-16);
-    padding: 0 var(--luke-space-4);
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-accent);
-    box-shadow: 0 0 0 2px var(--luke-color-ground);
-    color: var(--luke-color-on-accent);
-    font-size: var(--luke-type-caption-size);
+    top: calc(-1 * var(--ui-space-8));
+    inset-inline-start: calc(100% - var(--ui-space-6));
+    min-width: var(--ui-space-16);
+    padding: 0 var(--ui-space-4);
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-color-accent);
+    box-shadow: 0 0 0 2px var(--ui-color-ground);
+    color: var(--ui-color-on-accent);
+    font-size: var(--ui-type-caption-size);
     font-variant-numeric: tabular-nums;
-    font-weight: var(--luke-type-emphasis-weight);
-    line-height: var(--luke-space-16);
+    font-weight: var(--ui-type-emphasis-weight);
+    line-height: var(--ui-space-16);
     text-align: center;
   }
 }

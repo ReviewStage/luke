@@ -113,8 +113,14 @@ export const CODER = {
   COMPACTION_THRESHOLD_SHARE: 0.9,
   /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
-  /** The branches an agent works on; an instruction to the model, enforced by nothing. */
-  BRANCH_PREFIX: "luke/",
+  /** The branches an agent works on; an instruction to the model, enforced by nothing, and how a pull request is told as an agent's (`isAgentBranch`). */
+  BRANCH_PREFIX: "agent/",
+  /**
+   * The prefix agents worked on before `BRANCH_PREFIX`, still read as an
+   * agent's, because pull requests opened on it stand open and their
+   * reviews, comments, and checks must still wake their agents.
+   */
+  LEGACY_BRANCH_PREFIX: "luke/",
   /** The most times an agent fixes a failing check on its pull request and pushes again before it stops and says so; an instruction to the model, enforced by nothing. */
   CI_FIX_ROUNDS: 3,
   /** How long a transcript read is held open for a new message while the agent runs, inside the function's own duration. */
@@ -285,4 +291,9 @@ export type CoderRefusal = (typeof CODER_REFUSAL)[keyof typeof CODER_REFUSAL];
 export function sandboxVcpus(repository: string | null): number {
   if (repository === null) return CODER.SANDBOX_VCPUS;
   return CODER.SANDBOX_VCPUS_BY_REPOSITORY.get(repository.toLowerCase()) ?? CODER.SANDBOX_VCPUS;
+}
+
+/** Whether a branch is one an agent works on, under today's prefix or the one before it. */
+export function isAgentBranch(branch: string): boolean {
+  return branch.startsWith(CODER.BRANCH_PREFIX) || branch.startsWith(CODER.LEGACY_BRANCH_PREFIX);
 }

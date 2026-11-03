@@ -72,11 +72,11 @@ const MARK_WORDS = {
 
 /** The colour each part is drawn in, the panel's own, which the tree's shadow root inherits. */
 const PART_COLOUR = {
-  THREADS: "var(--luke-color-text-muted)",
-  ADDED: "var(--luke-color-complete)",
-  REMOVED: "var(--luke-color-danger-text)",
-  VIEWED: "var(--luke-color-complete)",
-  UNVIEWED: "var(--luke-color-text-muted)",
+  THREADS: "var(--ui-color-text-muted)",
+  ADDED: "var(--ui-color-complete)",
+  REMOVED: "var(--ui-color-danger-text)",
+  VIEWED: "var(--ui-color-complete)",
+  UNVIEWED: "var(--ui-color-text-muted)",
 } as const;
 
 /** Lucide's glyphs as masks, stroked as every Lucide glyph in the window is. */
@@ -138,22 +138,22 @@ const OPEN_ROW = '[data-type="item"][data-item-selected="true"]';
  * gutter from; and each file's run.
  */
 const SHEET = `
-${OPEN_ROW} { box-shadow: 0 0 0 1px var(--luke-color-border), 0 1px 2px var(--luke-color-shadow-soft); }
+${OPEN_ROW} { box-shadow: 0 0 0 1px var(--ui-color-border), 0 1px 2px var(--ui-color-shadow-soft); }
 ${HALVES} > div:first-child, ${FOLDERS} { flex: 0 1 max-content; min-width: 0; }
 ${HALVES} > div:last-child, ${FOLDERS}:last-child { flex: 0 999999 max-content; min-width: 0; }
 ${CUT}[data-truncate-container="fruncate"] [data-truncate-content] { direction: ltr; }
-${CUT_MARK} { right: 0; left: auto; width: var(--luke-label-fade); color: transparent; mask-image: linear-gradient(to right, transparent, #000); }
+${CUT_MARK} { right: 0; left: auto; width: var(--ui-label-fade); color: transparent; mask-image: linear-gradient(to right, transparent, #000); }
 ${CUT_MARK}::before, ${CUT_MARK}::after { content: none; }
 [data-file-tree-virtualized-scroll], [data-file-tree-scrollbar-measure] { scrollbar-width: thin; }
 ${LANE}:has(> span > span) { position: relative; overflow: visible; }
-${LANE}:has(> span > ${TICKED}) { min-width: calc(var(--luke-space-4) + var(--luke-space-12)); }
-${RUN} { flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; height: 1lh; column-gap: var(--luke-space-4); font-variant-numeric: tabular-nums; }
+${LANE}:has(> span > ${TICKED}) { min-width: calc(var(--ui-space-4) + var(--ui-space-12)); }
+${RUN} { flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; height: 1lh; column-gap: var(--ui-space-4); font-variant-numeric: tabular-nums; }
 ${RUN} > span { display: inline-flex; flex: none; height: 100%; align-items: center; }
 ${RUN} > span:empty { display: none; }
-${part(PART.SPEECH)}:has(+ span:not(:empty)) { display: inline-flex; margin-inline-end: calc(var(--luke-space-2) - var(--luke-space-4)); }
+${part(PART.SPEECH)}:has(+ span:not(:empty)) { display: inline-flex; margin-inline-end: calc(var(--ui-space-2) - var(--ui-space-4)); }
 ${part(PART.SPEECH)}::before { content: ""; width: 1em; height: 1em; background: currentColor; mask: ${maskOf(GLYPH.SPEECH)} center / contain no-repeat; }
-${part(PART.VIEWED)}, ${part(PART.VIEWED)}:empty { position: absolute; inset-block: 0; inset-inline-end: 0; display: none; padding-inline-start: var(--luke-space-4); background: ${ROW_GROUND}; font-size: 0; cursor: default; }
-${part(PART.VIEWED)}::before { content: ""; width: var(--luke-space-12); height: var(--luke-space-12); background: currentColor; mask: ${maskOf(GLYPH.CHECKED)} center / contain no-repeat; }
+${part(PART.VIEWED)}, ${part(PART.VIEWED)}:empty { position: absolute; inset-block: 0; inset-inline-end: 0; display: none; padding-inline-start: var(--ui-space-4); background: ${ROW_GROUND}; font-size: 0; cursor: default; }
+${part(PART.VIEWED)}::before { content: ""; width: var(--ui-space-12); height: var(--ui-space-12); background: currentColor; mask: ${maskOf(GLYPH.CHECKED)} center / contain no-repeat; }
 ${part(PART.VIEWED)}:empty::before { mask-image: ${maskOf(GLYPH.CIRCLE)}; }
 ${REACHED} > [data-item-section="decoration"] > span > ${TOGGLE}, ${RUN} > ${TICKED} { display: inline-flex; }
 ${REACHED} > [data-item-section="decoration"]:has(> span > ${TOGGLE}) > span > span:not(:nth-child(${PART.VIEWED + 1})), ${RUN}:has(> ${TICKED}) > span:not(:nth-child(${PART.VIEWED + 1})) { visibility: hidden; }

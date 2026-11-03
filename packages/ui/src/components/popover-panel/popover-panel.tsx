@@ -30,7 +30,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * while an input method composes. Focus moving anywhere outside the panel
  * is handed to the owner too, who closes unless that is still its own, the
  * button that opened it among them. A card's height is bounded by the room
- * its side of the button leaves (`--luke-popover-room`), and it scrolls
+ * its side of the button leaves (`--ui-popover-room`), and it scrolls
  * within; a menu scrolls its own list.
  *
  * Whether it stands is its owner's (`open`). As `open` falls it fades out
@@ -57,7 +57,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * not its square, lines up with the card's content.
  */
 const PANEL = [
-  "luke-popover-panel flex flex-col rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in focus-visible:outline-none *:shrink-0 data-ending-style:pointer-events-none data-ending-style:animate-menu-leave",
+  "ui-popover-panel flex flex-col rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in focus-visible:outline-none *:shrink-0 data-ending-style:pointer-events-none data-ending-style:animate-menu-leave",
   "data-[look=card]:max-h-popover-room data-[look=card]:gap-block-gap data-[look=card]:overflow-x-hidden data-[look=card]:overflow-y-auto data-[look=card]:overscroll-contain data-[look=card]:p-card-inset-snug data-[look=card]:text-caption",
 ].join(" ");
 const HEAD = "-mr-2 flex items-center justify-between gap-control-gap";
@@ -222,7 +222,7 @@ export function PopoverPanel({
           )}
         </div>
       ) : (
-        <h2 id={titleId} className="luke-visually-hidden">
+        <h2 id={titleId} className="ui-visually-hidden">
           {title}
         </h2>
       )}

@@ -146,7 +146,7 @@ interface Reading {
 
 /** The name of the option the keyboard is on, if any. */
 function focused(): string | undefined {
-  return document.activeElement?.querySelector(".luke-choice-bar-label")?.textContent ?? undefined;
+  return document.activeElement?.querySelector(".ui-choice-bar-label")?.textContent ?? undefined;
 }
 
 function pressKey(key: string, held: KeyboardEventInit = {}): void {
@@ -158,8 +158,7 @@ function pressKey(key: string, held: KeyboardEventInit = {}): void {
 }
 
 function reading(page: HTMLElement): Reading {
-  const name = (each: HTMLElement) =>
-    each.querySelector(".luke-choice-bar-label")?.textContent ?? "";
+  const name = (each: HTMLElement) => each.querySelector(".ui-choice-bar-label")?.textContent ?? "";
   return {
     chosen: options(page)
       .filter(
@@ -345,7 +344,7 @@ test("a bar folding together folds every option once their names no longer fit i
     document.querySelector('[data-fold="together"]')?.getAttribute("data-folded") === "true";
   const optionWidth = () => glyph + (folded() ? 0 : NAME);
   const optionsOf = (element: HTMLElement) => [
-    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
+    ...(element.parentElement?.querySelectorAll(".ui-choice-bar-option") ?? []),
   ];
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => room);
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(optionWidth);
@@ -357,7 +356,7 @@ test("a bar folding together folds every option once their names no longer fit i
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
-    if (this.classList.contains("luke-choice-bar-label")) return NAME;
+    if (this.classList.contains("ui-choice-bar-label")) return NAME;
     return Math.max(room, 3 * optionWidth());
   });
   const resize = (width: number) => {
@@ -408,7 +407,7 @@ test("a row cut short of its options scrolls the least that brings the chosen on
   const WIDE = 100;
   let scrolled = 0;
   const optionsOf = (element: HTMLElement) => [
-    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
+    ...(element.parentElement?.querySelectorAll(".ui-choice-bar-option") ?? []),
   ];
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => 150);
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => 3 * WIDE);
@@ -468,10 +467,10 @@ test("a bar folding together folds once a name grows past its width, though noth
   const folded = () =>
     document.querySelector('[data-fold="together"]')?.getAttribute("data-folded") === "true";
   const nameOf = (element: Element) =>
-    element.querySelector(".luke-choice-bar-label")?.textContent ?? "";
+    element.querySelector(".ui-choice-bar-label")?.textContent ?? "";
   const widthOf = (element: Element) => GLYPH + (folded() ? 0 : 10 * nameOf(element).length);
   const optionsOf = (element: HTMLElement) => [
-    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
+    ...(element.parentElement?.querySelectorAll(".ui-choice-bar-option") ?? []),
   ];
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => ROOM);
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
@@ -488,7 +487,7 @@ test("a bar folding together folds once a name grows past its width, though noth
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.classList.contains("luke-choice-bar-label")
+    return this.classList.contains("ui-choice-bar-label")
       ? 10 * (this.textContent?.length ?? 0)
       : ROOM;
   });
@@ -564,7 +563,7 @@ test("a bar a finger works names every option in words alone and draws none of t
   const words = render(bar(CHOICE_BAR_FOLD.WORDS));
   const together = render(bar(CHOICE_BAR_FOLD.TOGETHER));
   const named = (container: HTMLElement) =>
-    [...container.querySelectorAll(".luke-choice-bar-label")].map((label) => label.textContent);
+    [...container.querySelectorAll(".ui-choice-bar-label")].map((label) => label.textContent);
 
   assert.deepEqual(named(words), ["Conversation", "Checks", "Files"]);
   assert.equal(words.querySelectorAll("[data-glyph]").length, 0);

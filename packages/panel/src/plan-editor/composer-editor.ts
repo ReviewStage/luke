@@ -121,10 +121,10 @@ const EDITOR_CLASS = "composer-editor";
 const COMPOSING_KEY_CODE = 229;
 
 /** What a transaction from one of the handle's commands is tagged with, which read-only still takes. */
-const COMMAND_META = "luke-composer-command";
+const COMMAND_META = "composer-command";
 
 /** What a transaction that made chips of `/name` words is tagged with, so it makes none of its own. */
-const CHIPPED_META = "luke-composer-chipped";
+const CHIPPED_META = "composer-chipped";
 
 /** A character a skill's name is spelled in, which a pick replaces through to the word's end. */
 const NAME_CHARACTER = /[A-Za-z0-9-]/u;

@@ -120,7 +120,7 @@ const SIZE_CLASS = "attachment-viewer-size flex-none text-caption text-muted-for
 
 /** What the place opening the viewer says of the file, a plan's picture saying who last edited it, in the size's quiet ink, cut past the ring a press in it draws. */
 const NOTE_CLASS =
-  "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-caption text-muted-foreground";
+  "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)] text-caption text-muted-foreground";
 
 /** What the strip of the message's files is named. */
 const STRIP_LABEL = "Files";
@@ -253,7 +253,7 @@ function WalkButton({
   icon: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <span className="attachment-viewer-walk flex flex-none rounded-control bg-button-ground shadow-floating-edge [--luke-button-ground:var(--luke-color-well)]">
+    <span className="attachment-viewer-walk flex flex-none rounded-control bg-button-ground shadow-floating-edge [--ui-button-ground:var(--ui-color-well)]">
       <Tooltip label={label} chord={chord}>
         <IconButton icon={icon} label={label} onClick={onClick} />
       </Tooltip>
@@ -441,7 +441,7 @@ function AttachmentBody({
       {...DIALOG_VEIL}
     >
       <FileTypeIcon name={file.name} className="size-12" />
-      <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-luke-semibold wrap-anywhere">
+      <p className="mx-0 mt-item-gap mb-0 max-w-full text-section font-ui-semibold wrap-anywhere">
         {file.name}
       </p>
       <p className="mx-0 mt-0 mb-block-gap text-caption text-muted-foreground">
@@ -559,7 +559,7 @@ export function AttachmentViewer({
     >
       <div
         ref={viewer}
-        className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-luke-16"
+        className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-ui-16"
         data-view={view}
         data-opening={opening}
         data-hug={hug}
@@ -567,7 +567,7 @@ export function AttachmentViewer({
       >
         {/* The arrows stand on the dimmed window either side of the card, centred down it; a press on the room round them closes the viewer as one on the dimmed window does. */}
         <div
-          className="attachment-viewer-stage flex min-h-0 flex-auto items-center gap-luke-16"
+          className="attachment-viewer-stage flex min-h-0 flex-auto items-center gap-ui-16"
           {...DIALOG_VEIL}
         >
           {walking ? (
@@ -600,14 +600,14 @@ export function AttachmentViewer({
                         as={TEXT_ELEMENT.H2}
                         variant={TEXT_VARIANT.TOOLBAR_TITLE}
                         id={titleId}
-                        className={`luke-toolbar-title max-w-full ${TITLE_CLASS}`}
+                        className={`ui-toolbar-title max-w-full ${TITLE_CLASS}`}
                       >
                         <OneLine>{file.name}</OneLine>
                       </Text>
                       <span className="flex min-w-0 max-w-full">
                         <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
                         {note === undefined || note === null ? null : (
-                          <span className={`my-0 mr-0 ml-luke-8 ${NOTE_CLASS}`}>{note}</span>
+                          <span className={`my-0 mr-0 ml-ui-8 ${NOTE_CLASS}`}>{note}</span>
                         )}
                       </span>
                     </span>
@@ -635,7 +635,7 @@ export function AttachmentViewer({
                   }
                 />
               ) : (
-                <header className="flex flex-none items-center gap-tight-gap border-b border-border py-luke-4 pr-item-gap pl-list-inset">
+                <header className="flex flex-none items-center gap-tight-gap border-b border-border py-ui-4 pr-item-gap pl-list-inset">
                   <FileTypeIcon
                     name={file.name}
                     className="mr-tight-gap size-control-icon flex-none"

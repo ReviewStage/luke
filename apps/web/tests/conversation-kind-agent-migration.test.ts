@@ -30,7 +30,7 @@ const foldersBefore = (migration: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-kind-" });
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-kind-" });
     const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
       (name) => name.localeCompare(migration) < 0,
     );
@@ -57,7 +57,7 @@ it.effect.each(MIGRATIONS)(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBefore(migration));
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
         );
         for (const [order, [kind]] of KINDS.entries()) {
           yield* sql`insert into conversations (user_id, kind, created_at) values ('dean', ${kind}, ${new Date(order * 1000)})`;

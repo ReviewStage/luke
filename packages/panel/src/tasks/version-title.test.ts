@@ -66,11 +66,11 @@ test("a version names its task in the title role, as no heading, under the bar's
   roots.push(root);
   act(() => root.render(createElement(Version)));
 
-  const name = [...container.querySelectorAll(".task-title .luke-text")].map((title) => [
+  const name = [...container.querySelectorAll(".task-title .ui-text")].map((title) => [
     title.textContent,
     title.getAttribute("data-variant"),
   ]);
   assert.deepEqual(name, [[NAME, "title"]]);
   assert.equal(container.querySelectorAll("h1").length, 1);
-  assert.equal(container.querySelector('.luke-markdown-heading[data-level="1"]'), null);
+  assert.equal(container.querySelector('.ui-markdown-heading[data-level="1"]'), null);
 });

@@ -225,7 +225,7 @@ export function SidebarAgent({
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
-            <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-luke-16)]">
+            <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-ui-16)]">
               {tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
             </span>
           }

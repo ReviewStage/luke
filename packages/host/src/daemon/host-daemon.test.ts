@@ -27,7 +27,7 @@ import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js"
 import { connectHostDevice, HOST_CONNECT_OUTCOME, type HostPairingCode } from "./host-pairing.js";
 import { hostPlatform } from "./host-platform.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const VERSION = "0.1.0";
 const DEVICE_ID = "6bbcb1b9-6706-4c97-9197-374756ceee07";
 const AGENT_ID = "0b6f9a4e-1c1d-4d2e-9f3a-5b7c8d9e0f12";
@@ -98,7 +98,7 @@ const settled = (done: () => boolean) =>
 
 /** A box's state root and its home, under a folder of its own. */
 const box = Effect.gen(function* () {
-  const root = yield* temporaryDirectoryScoped("luke-host-daemon-");
+  const root = yield* temporaryDirectoryScoped("host-daemon-");
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
@@ -241,7 +241,7 @@ describe("a host's daemon", () => {
           XDG_CACHE_HOME: `${folder}/cache`,
           PNPM_HOME: `${folder}/home/.local/share/pnpm`,
           NPM_CONFIG_PREFIX: `${folder}/home/.npm-global`,
-          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
+          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/agent/agent-tools:/usr/bin:/bin`,
         });
         expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
         // Note that every agent's settings name the same folders under the host's state, outside any agent's folder.

@@ -32,7 +32,7 @@ import { tasksProcedures } from "./tasks-procedures.js";
  * Synthetic accounts and devices throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** The plans procedures over the test's store, each bearer answering for the account it maps to; GitHub is never asked. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
@@ -54,7 +54,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
         workspaces: yield* fakeWorkspaceSeams,

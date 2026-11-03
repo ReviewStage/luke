@@ -137,7 +137,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /** Who wrote a version, in the label's type, on its row and over its sections alike. */
 const VERSION_AUTHOR =
-  "version-row-author min-w-0 overflow-hidden whitespace-nowrap text-label font-luke-medium text-foreground";
+  "version-row-author min-w-0 overflow-hidden whitespace-nowrap text-label font-ui-medium text-foreground";
 
 /**
  * A pane of the track the versions and the sections of the one opened stand

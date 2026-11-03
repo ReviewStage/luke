@@ -1,21 +1,6 @@
 import { RUN_TURN_ORIGIN, type RunTurnOrigin, TURN_TRIGGER, type TurnTrigger } from "../../core.js";
 
-/**
- * The request headers a client names the conversation, the turn's kind, and
- * its sender's time zone with, and the one the deployment names the account
- * it acts for with, the last read only from a request the deployment's own
- * credential admitted, never from an account's bearer, whose account is the
- * bearer's.
- */
-export const EVE_HOST_HEADER = {
-  CONVERSATION: "x-luke-conversation",
-  TURN: "x-luke-turn",
-  ACCOUNT: "x-luke-account",
-  /** The sender's IANA time zone, which the turn its message opens reads the day in. */
-  TIME_ZONE: "x-luke-time-zone",
-} as const;
-
-/** What kind of turn a request opens, as the header names it. */
+/** What kind of turn a message opens. */
 export const EVE_HOST_TURN = {
   TYPED: "typed",
 } as const;
@@ -32,19 +17,6 @@ export const EVE_HOST_TURN_KIND = {
   EveHostTurn,
   { readonly origin: RunTurnOrigin; readonly trigger: TurnTrigger }
 >;
-
-/** The environment the host reads beside the names every hosted route already honours. */
-export const EVE_HOST_ENVIRONMENT = {
-  /** The origin native runners report to; unset, the deployment's own: its production domain, or its own host (`eve-origin.ts`). */
-  EVE_ORIGIN: "APP_EVE_ORIGIN",
-  /**
-   * The secret the deployment acts for an account under at eve's door, read on
-   * both sides of it: the web functions and the eve service send it, and the
-   * eve service admits it. It is never the cron's `CRON_SECRET`, so the bearer
-   * Vercel's scheduler holds opens no eve session.
-   */
-  DEPLOYMENT_SECRET: "EVE_DEPLOYMENT_SECRET",
-} as const;
 
 /** Why the host refused a request's standing, in words the model or a route can read. */
 export const EVE_HOST_REFUSAL = {

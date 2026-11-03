@@ -65,7 +65,7 @@ test("a note draws its headings as paragraphs at their level, its pictures as th
   });
   assert.equal(
     html,
-    '<div class="luke-markdown luke-prose"><p class="luke-markdown-heading" data-level="2">Goal</p>\n<p>a plan and &lt;b&gt;bold&lt;/b&gt;</p></div>',
+    '<div class="ui-markdown ui-prose"><p class="ui-markdown-heading" data-level="2">Goal</p>\n<p>a plan and &lt;b&gt;bold&lt;/b&gt;</p></div>',
   );
 });
 

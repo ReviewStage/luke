@@ -77,7 +77,7 @@ import { SqlClient } from "effect/sql";
  * Synthetic accounts, bearers, and plans throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const EDIT = (taskId: string) => `/api/plans/${taskId}/edit`;
 
 const commentsPath = (taskId: string) => `/api/plans/${taskId}/comments`;
@@ -97,7 +97,7 @@ const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
     return id;
   });
 
@@ -175,8 +175,6 @@ const commentsAnswer = (request: Request, clock: Clock.Clock, after?: Layer.Laye
     const handle = hostedFetch({
       planComments: planCommentsProcedures({
         resolveUserId,
-        eveOrigin: () => undefined,
-        eve: fakeEve,
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
@@ -196,7 +194,6 @@ const answer = (routes: "comments" | "plans", request: Request) =>
       plans: tasksProcedures({
         resolveUserId,
         workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
       }),

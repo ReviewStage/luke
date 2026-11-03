@@ -131,7 +131,7 @@ function subject(
     const composer = yield* composeTerminals({
       kernel: {
         runMode: { sendsNetwork: true },
-        hostedServiceBaseUrl: "https://tryluke.test",
+        hostedServiceBaseUrl: "https://tryapp.test",
         emit: (kind, payload) => void events.push({ kind, payload }),
       },
       account: {
@@ -141,7 +141,7 @@ function subject(
           accountBearer({
             readAccessToken: () => Effect.sync(() => bearers[0]),
             refreshAccount: () => Effect.sync(() => void bearers.shift()),
-            readAccountKey: () => Effect.succeed("developer@luke.test"),
+            readAccountKey: () => Effect.succeed("developer@app.test"),
           }),
       },
       client: service.client,
@@ -277,7 +277,7 @@ it.effect(
       const [open] = opened;
       assert.ok(open);
       const address = new URL(open.url);
-      assert.equal(address.origin, "wss://tryluke.test");
+      assert.equal(address.origin, "wss://tryapp.test");
       assert.deepEqual(Object.fromEntries(address.searchParams), {
         agent: AGENT_ID,
         terminal: SHELL_ID,
@@ -623,7 +623,7 @@ it.effect(
 
       assert.deepEqual(opened, [
         {
-          url: `wss://tryluke.test/api/browser/live?agent=${BROWSER_AGENT_ID}&tab=${TAB_ID}`,
+          url: `wss://tryapp.test/api/browser/live?agent=${BROWSER_AGENT_ID}&tab=${TAB_ID}`,
           headers: { authorization: "Bearer bearer-1" },
         },
       ]);

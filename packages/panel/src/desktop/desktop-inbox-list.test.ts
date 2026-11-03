@@ -99,7 +99,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** Where the window's Inbox kept its Needs you button's press before the tabs that stood before its scopes. */
-const EARLIER_SHOW_KEY = "luke.inboxWaitingOnly";
+const EARLIER_SHOW_KEY = "app.inboxWaitingOnly";
 
 /** What the row of the item so titled says of its task's status; none where it wears no status. */
 function rowStatus(page: HTMLElement, title: string): string | undefined {
@@ -148,14 +148,14 @@ function commandClick(page: HTMLElement, title: string): void {
 
 /** The titles of the rows the list holds chosen, in the order drawn. */
 function picked(page: HTMLElement): string[] {
-  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
+  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main")]
     .filter((row) => heardOf(row.getAttribute("aria-describedby")).startsWith("Selected, "))
     .map(titleOf);
 }
 
 /** The selection's bar under the list, or none while nothing is chosen. */
 function selectionBar(page: HTMLElement): HTMLElement | null {
-  return page.querySelector<HTMLElement>(".inbox-tasks .luke-selection-bar");
+  return page.querySelector<HTMLElement>(".inbox-tasks .ui-selection-bar");
 }
 
 /** The selection bar's button named `name`. */
@@ -171,7 +171,7 @@ function barButton(page: HTMLElement, name: string): HTMLButtonElement {
 
 /** Whether the row of the item so titled says to a reader that it is unread. */
 function rowUnread(page: HTMLElement, title: string): boolean {
-  return [...rowNamed(page, title).querySelectorAll(".luke-visually-hidden")].some(
+  return [...rowNamed(page, title).querySelectorAll(".ui-visually-hidden")].some(
     (each) => each.textContent === "Unread",
   );
 }
@@ -349,8 +349,8 @@ test("a plan main says changed is read again, so an item answered on another Mac
 /** The number the window's sidebar draws on its Inbox row; none where it draws none. */
 function sidebarInboxCount(page: HTMLElement): number | undefined {
   const row =
-    [...page.querySelectorAll<HTMLElement>(".sidebar-places .luke-nav-item")].find(
-      (each) => each.querySelector(".luke-nav-item-name")?.textContent === "Inbox",
+    [...page.querySelectorAll<HTMLElement>(".sidebar-places .ui-nav-item")].find(
+      (each) => each.querySelector(".ui-nav-item-name")?.textContent === "Inbox",
     ) ?? assert.fail("the sidebar draws its Inbox row");
   const count = row.textContent?.match(/\d+/u)?.[0];
   return count === undefined ? undefined : Number(count);
@@ -469,9 +469,9 @@ test("a task done or canceled keeps its items listed and counted as any other's,
   assert.equal(rowStatus(page, "Quarantine the flaky test?"), undefined);
 
   restOn(rowNamed(page, "Alert at 80%?"));
-  const card = document.querySelector(".luke-tooltip-card [data-inbox-item-card]");
+  const card = document.querySelector(".ui-tooltip-card [data-inbox-item-card]");
   assert.ok(
-    card?.querySelector('[data-holder-ref] .luke-task-status-mark[data-status="done"]'),
+    card?.querySelector('[data-holder-ref] .ui-task-status-mark[data-status="done"]'),
     "the card's task chip wears the task's status",
   );
 });
@@ -519,12 +519,12 @@ test("each row names its task on its first line with its time at that line's end
   const lines = () =>
     ["Alert at 80%?", "Expire after 7 days?"].map((title) => {
       const row = rowNamed(page, title);
-      const head = row.querySelector(".luke-list-row-head");
+      const head = row.querySelector(".ui-list-row-head");
       return {
-        task: head?.querySelector('.luke-list-row-lead[data-at="above"]')?.textContent,
+        task: head?.querySelector('.ui-list-row-lead[data-at="above"]')?.textContent,
         time: head?.querySelector(".home-row-meta time") !== null,
         titleOnFirstLine: head?.textContent?.includes(title),
-        preview: row.querySelector(".luke-list-row-description")?.textContent,
+        preview: row.querySelector(".ui-list-row-description")?.textContent,
       };
     });
   const expected = [
@@ -585,13 +585,13 @@ test("the list is resized from its edge between its bounds, and keeps its width 
 function emptyStateIn(page: HTMLElement, column: string): string | null {
   const shown = page.querySelector(column);
   assert.ok(shown, "the column is drawn");
-  const empty = shown.querySelector(".luke-empty-state-words");
+  const empty = shown.querySelector(".ui-empty-state-words");
   return empty === null || shown.hasAttribute("hidden") ? null : (empty.textContent ?? "");
 }
 
 /** The way on an empty state in `column` offers, by its words. */
 function emptyStateAction(page: HTMLElement, column: string): HTMLButtonElement | null {
-  return page.querySelector<HTMLButtonElement>(`${column} .luke-empty-state button`);
+  return page.querySelector<HTMLButtonElement>(`${column} .ui-empty-state button`);
 }
 
 test("an Inbox with nothing in it stands its empty state in the pane beside the list, and in the list itself once the list stands alone", async () => {
@@ -646,11 +646,11 @@ test("while the account's feed is first read, the list stands placeholder rows i
   const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
   assert.equal(wait?.textContent, "Reading your inbox…");
   assert.ok(
-    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    (wait?.querySelectorAll(".ui-list-row .ui-skeleton").length ?? 0) > 0,
     "placeholder rows stand in the items' place",
   );
   assert.deepEqual(listed(page), []);
-  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+  assert.equal(list.querySelector(".ui-spinner"), null, "no ring stands in the list's corner");
 
   reads.get(BILLING.id)?.settle({ items: [THRESHOLD, RETRY], cursor: "1" });
   reads.get(INVITES.id)?.settle({ items: [EXPIRY], cursor: "1" });
@@ -678,7 +678,7 @@ test("an Inbox opened before the account's task list is read stands placeholder 
     [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, null],
   );
-  assert.equal(page.querySelector(".luke-note-line"), null, "no line says nothing needs you");
+  assert.equal(page.querySelector(".ui-note-line"), null, "no line says nothing needs you");
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), null);
@@ -699,7 +699,7 @@ test("an Inbox opened before the account's task list is read stands placeholder 
 
 /** The list's empty state as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
 function listEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
-  const empty = page.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
+  const empty = page.querySelector(".inbox-tasks:not([hidden]) .ui-empty-state");
   if (empty === null) return null;
   return [
     empty.querySelector("h3")?.textContent,
@@ -731,7 +731,7 @@ test("with only settled items, read, Needs you lists no row, the item read still
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(listEmpty(page)?.[1], "Nothing needs you");
 
-  const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
+  const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .ui-empty-state button");
   assert.ok(showAll, "the empty state offers Show all");
   act(() => showAll.click());
   assert.equal(headTitle(page), "Inbox");
@@ -797,7 +797,7 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
   act(() => more().click());
   const options = [
     ...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'),
-  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === "View options");
+  ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === "View options");
   act(() => options?.click());
   act(() => viewItem("Open").click());
   rowNamed(page, "Expire after 7 days?").focus();
@@ -820,11 +820,11 @@ function playListMotions() {
   const motions = playMotions();
   const root = document.documentElement.style;
   const tokens = {
-    "--luke-duration-exit": "90ms",
-    "--luke-motion-exit": "ease",
-    "--luke-duration-shape": "460ms",
-    "--luke-spring": "ease-out",
-    "--luke-list-travel": "16px",
+    "--ui-duration-exit": "90ms",
+    "--ui-motion-exit": "ease",
+    "--ui-duration-shape": "460ms",
+    "--ui-spring": "ease-out",
+    "--ui-list-travel": "16px",
   };
   for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
   onTestFinished(() => {
@@ -971,12 +971,12 @@ test("no row draws the attention mark, which an open item nearly always would: t
   await settle();
   const ends = (title: string) => {
     const row = rowNamed(page, title);
-    const meta = row.querySelector(".luke-list-row-meta");
+    const meta = row.querySelector(".ui-list-row-meta");
     return {
       mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
-      said: meta?.querySelector(".luke-visually-hidden")?.textContent,
-      dot: row.querySelector(".luke-unread-dot") !== null,
+      said: meta?.querySelector(".ui-visually-hidden")?.textContent,
+      dot: row.querySelector(".ui-unread-dot") !== null,
       unread: row.closest("li")?.dataset.unread === "true",
     };
   };
@@ -1012,9 +1012,9 @@ test("no row draws the attention mark, which an open item nearly always would: t
 function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const row = rowNamed(page, title);
   const marks = [
-    row.querySelector(".luke-unread-gutter .luke-unread-dot") !== null,
+    row.querySelector(".ui-unread-gutter .ui-unread-dot") !== null,
     row.closest("li")?.dataset.unread === "true",
-    [...row.querySelectorAll(`${ROW_TITLE} .luke-visually-hidden`)].some(
+    [...row.querySelectorAll(`${ROW_TITLE} .ui-visually-hidden`)].some(
       (each) => each.textContent === "Unread",
     ),
   ];
@@ -1121,7 +1121,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
   await settle();
   assert.equal(unreadOf(page, retry), true);
   assert.equal(
-    page.querySelector('[aria-current="page"] .luke-list-row-title')?.textContent,
+    page.querySelector('[aria-current="page"] .ui-list-row-title')?.textContent,
     "Alert at 80%?",
     "a press on the mark opens nothing",
   );
@@ -1235,10 +1235,10 @@ test("Mark all as read sends one write and asks no task or agent again, since ea
 
 /** The chip over the list saying whose items it holds, as a reader meets it: its words and its ×'s name; none where none stands. */
 function whoseChip(page: HTMLElement): readonly (string | null | undefined)[] | null {
-  const chip = page.querySelector(".inbox-tasks-chips .luke-chip");
+  const chip = page.querySelector(".inbox-tasks-chips .ui-chip");
   if (chip === null) return null;
   return [
-    chip.querySelector(".luke-chip-name")?.textContent,
+    chip.querySelector(".ui-chip-name")?.textContent,
     chip.querySelector("button")?.getAttribute("aria-label"),
   ];
 }
@@ -1256,8 +1256,8 @@ test("Addressed to in the view's menu offers Anyone, the reader as Me, then each
   const whose = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].slice(-3);
   assert.deepEqual(
     whose.map((item) => [
-      item.querySelector(".luke-menu-item-label")?.textContent,
-      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      item.querySelector(".ui-menu-item-label")?.textContent,
+      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
       item.getAttribute("aria-checked"),
     ]),
     [
@@ -1272,7 +1272,7 @@ test("Addressed to in the view's menu offers Anyone, the reader as Me, then each
   );
   restOn(viewItem("Charles Pan"));
   assert.equal(
-    document.querySelector(".luke-tooltip-card [data-actor-card='person'] .luke-hover-card-name")
+    document.querySelector(".ui-tooltip-card [data-actor-card='person'] .ui-hover-card-name")
       ?.textContent,
     "Charles Pan",
     "a teammate's row hangs their card",
@@ -1288,7 +1288,7 @@ test("Addressed to in the view's menu offers Anyone, the reader as Me, then each
   await settle();
   assert.deepEqual(whoseChip(page), ["Charles Pan", "Show what's addressed to me"]);
 
-  const clear = page.querySelector<HTMLButtonElement>(".inbox-tasks-chips .luke-chip button");
+  const clear = page.querySelector<HTMLButtonElement>(".inbox-tasks-chips .ui-chip button");
   assert.ok(clear, "the chip offers its ×");
   act(() => clear.click());
   assert.equal(whoseChip(page), null, "the reader's own stand under no chip");
@@ -1300,9 +1300,9 @@ test("the Addressed to chip scales in as a teammate is chosen and out as its × 
   world.members = SHARED_MEMBERS;
   const played = playListMotions();
   // Note that a chip arriving rides the quick beat, which the list's tokens leave out.
-  document.documentElement.style.setProperty("--luke-duration-quick", "140ms");
+  document.documentElement.style.setProperty("--ui-duration-quick", "140ms");
   onTestFinished(() => {
-    document.documentElement.style.removeProperty("--luke-duration-quick");
+    document.documentElement.style.removeProperty("--ui-duration-quick");
   });
   const { page } = mount();
   await settle();
@@ -1324,7 +1324,7 @@ test("the Addressed to chip scales in as a teammate is chosen and out as its × 
   const leaving = page.querySelector("[data-motion-key='whose']");
   assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn on while it goes");
   assert.equal(leaving?.hasAttribute("inert"), true, "out of reach");
-  assert.equal(leaving?.querySelector(".luke-chip-name")?.textContent, "Charles Pan");
+  assert.equal(leaving?.querySelector(".ui-chip-name")?.textContent, "Charles Pan");
   assert.ok(scaledIn(leaving), "it scales out");
 
   act(() => {
@@ -1358,7 +1358,7 @@ test("a teammate chosen in Addressed to with nothing in the scope shown says so,
   chooseView(page, "Addressed to", "Charles Pan");
   assert.deepEqual(listed(page), []);
   assert.deepEqual(listEmpty(page), [undefined, "Nothing addressed to them", "Show mine"]);
-  const mine = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
+  const mine = page.querySelector<HTMLButtonElement>(".inbox-tasks .ui-empty-state button");
   act(() => mine?.click());
   assert.equal(whoseChip(page), null);
   assert.equal(listed(page).length, 3);
@@ -1407,7 +1407,7 @@ test("an item its agent withdrew wears the slashed circle on its row's card wher
   const settledGlyph = (title: string) => {
     hoveredCard(rowNamed(page, title), "[data-inbox-item-card]");
     const card =
-      document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
+      document.querySelector<HTMLElement>(".ui-tooltip-card [data-inbox-item-card]") ??
       assert.fail("the row's card is hung");
     return [
       card.querySelector("svg.lucide-circle-slash") !== null,
@@ -1523,7 +1523,7 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   assert.equal(needsYouMark(rowNamed(page, FIELDS.title)), "", "a teammate's ask needs them");
   assert.equal(
     rowNamed(page, FIELDS.title)
-      .querySelector(".luke-list-row-meta .actor-mark")
+      .querySelector(".ui-list-row-meta .actor-mark")
       ?.getAttribute("data-kind"),
     "person",
   );
@@ -1548,7 +1548,7 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   assert.deepEqual(
     [
       ...document.querySelectorAll(
-        '.luke-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
+        '.ui-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
       ),
     ].map((step) => step.getAttribute("data-done")),
     ["true", "true", "true"],
@@ -1579,7 +1579,7 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   await settle();
   const title = headTitle(page);
   const buttons = () =>
-    [...(page.querySelector(".inbox-tasks > .luke-toolbar")?.querySelectorAll("button") ?? [])].map(
+    [...(page.querySelector(".inbox-tasks > .ui-toolbar")?.querySelectorAll("button") ?? [])].map(
       (each) => each.getAttribute("aria-label"),
     );
   assert.deepEqual(buttons(), ["View options"]);

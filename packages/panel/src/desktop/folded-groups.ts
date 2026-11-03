@@ -45,18 +45,18 @@ import { keptKey, useKept } from "../use-kept.js";
 
 /** Where the folds are kept in the renderer's storage. */
 const STORAGE_KEY = {
-  GROUPS: "luke.sidebarFoldedGroups",
-  PINNED: "luke.sidebarPinnedFolded",
-  CHANNELS: "luke.sidebarChannelsFolded",
-  SECTIONS: "luke.sidebarFoldedSections",
-  OPENED_TASKS: "luke.sidebarOpenedTasks",
-  INBOX_SHOW: "luke.inboxShow",
+  GROUPS: "app.sidebarFoldedGroups",
+  PINNED: "app.sidebarPinnedFolded",
+  CHANNELS: "app.sidebarChannelsFolded",
+  SECTIONS: "app.sidebarFoldedSections",
+  OPENED_TASKS: "app.sidebarOpenedTasks",
+  INBOX_SHOW: "app.inboxShow",
   /** Where the Inbox's Needs you button kept its press, before its tabs, which stood before its scopes. */
-  INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
-  INBOX_WHOSE: "luke.inboxWhose",
-  INBOX_LIST_WIDTH: "luke.inboxListWidth",
-  RUNS_PANEL: "luke.automationRunsPanel",
-  FILE_TREE_WIDTH: "luke.fileTreeWidth",
+  INBOX_WAITING_ONLY: "app.inboxWaitingOnly",
+  INBOX_WHOSE: "app.inboxWhose",
+  INBOX_LIST_WIDTH: "app.inboxListWidth",
+  RUNS_PANEL: "app.automationRunsPanel",
+  FILE_TREE_WIDTH: "app.fileTreeWidth",
 } as const;
 
 /** How wide an automation's Runs panel may stand, as the side panel is bounded. */

@@ -9,7 +9,7 @@
  * the last the store applied of its conversation (`readNativeSequence`);
  * asks the token route for the plan's token, on Codex; is handed each
  * integration its starter's conversation is handed, as an MCP server of its
- * own beside ours (`../luke-mcp/app.ts`);
+ * own beside ours (`../workspace-mcp/app.ts`);
  * and runs under our coder instructions, worded for the harness, which
  * names the tools it owns by its own names (`instructions.ts`): Claude
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
@@ -19,13 +19,12 @@ import { type Agent, hasRepository } from "@luke/database/models/agent-store";
 import { readNativeSequence } from "@luke/database/models/native-projection-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { Effect, Layer, Option } from "effect";
+import { deploymentOrigin } from "../../deployment-origin.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
   type ConnectionDoorServices,
   nativeAgentConnections,
 } from "../../integrations/connection-door.js";
-import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
-import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
 import type { AgentMachine, MachineLayout } from "../machine/agent-machine.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import type { SandboxRunner } from "../machine/vercel-machine.js";
@@ -34,6 +33,7 @@ import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_LINES_PATH } from "../native-events/runner-lines-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
+import { WORKSPACE_MCP_PATH, workspaceIntegrationMcpUrl } from "../workspace-mcp/app.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { agentCiReadable, agentCoAuthor } from "./checkout.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
@@ -90,7 +90,7 @@ const nativeIntegrations = (userId: string, agent: Agent, origin: string) =>
       runtimeSessionId: undefined,
       timeZone: undefined,
     }),
-    (names) => names.map((name) => ({ name, url: lukeIntegrationMcpUrl(origin, name) })),
+    (names) => names.map((name) => ({ name, url: workspaceIntegrationMcpUrl(origin, name) })),
   );
 
 /** The native harnesses over the function's services, as above, each agent's runner on the machine its row names (`agent-machines.ts`): Vercel Sandbox, or its starter's Mac. */
@@ -105,7 +105,7 @@ export function nativeAgentSessionsLayer(
     NativeAgentSessions,
     Effect.gen(function* () {
       const context = yield* Effect.context<RunnerServices | ConnectionDoorServices>();
-      const originOf = options.origin ?? deploymentEveOrigin;
+      const originOf = options.origin ?? deploymentOrigin;
       /** What every harness's sessions are handed, for the account given and worded for the harness. */
       const optionsFor = (
         account: string,
@@ -115,7 +115,7 @@ export function nativeAgentSessionsLayer(
         userId: account,
         eventsUrl: new URL(RUNNER_EVENTS_PATH, origin).href,
         linesUrl: new URL(RUNNER_LINES_PATH, origin).href,
-        mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
+        mcpUrl: new URL(WORKSPACE_MCP_PATH, origin).href,
         integrations: (agent) =>
           nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),
         instructions: (agent, place) =>

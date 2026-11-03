@@ -168,7 +168,7 @@ function sections(container: HTMLElement) {
     group.getAttribute("aria-label"),
     [...group.querySelectorAll(".agent-servers-name")].map((name) => {
       // Note that a row names its account beside its provider, so the two read together as "Notion · Acme".
-      const account = name.nextElementSibling?.classList.contains("luke-account-words")
+      const account = name.nextElementSibling?.classList.contains("ui-account-words")
         ? name.nextElementSibling.textContent
         : undefined;
       return account ? `${name.textContent} · ${account}` : name.textContent;
@@ -181,7 +181,7 @@ function tools(container: HTMLElement) {
   return [...container.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
     (tool.querySelector(".integration-tool-id") ?? tool.querySelector(".integration-tool-title"))
       ?.textContent,
-    tool.querySelector(".luke-badge")?.textContent,
+    tool.querySelector(".ui-badge")?.textContent,
   ]);
 }
 
@@ -236,7 +236,7 @@ test("the servers stand under Connected and Not connected, each connected one wi
     ["Not connected", ["Mercury"]],
   ]);
   assert.deepEqual(
-    [...container.querySelectorAll(".agent-servers-list .luke-list-row-meta")].map(
+    [...container.querySelectorAll(".agent-servers-list .ui-list-row-meta")].map(
       (count) => count.textContent,
     ),
     ["1 tool", "4 tools"],
@@ -308,7 +308,7 @@ test("a server page's back is hinted \"Back to Integrations\", names no key sinc
   openVercel(container);
   const back =
     container.querySelector<HTMLButtonElement>(
-      ".agent-servers-page-head > .luke-folding-button button",
+      ".agent-servers-page-head > .ui-folding-button button",
     ) ?? assert.fail("no back on the page");
 
   restOn(back);
@@ -359,7 +359,7 @@ test("on a server's page the arrows move the highlight, and Enter opens the tool
     [...page.querySelectorAll(".integration-tool-hints li")].map((hint) => hint.textContent),
     ["Read-only", "Only Vercel's own data"],
   );
-  assert.equal(page.querySelector(".luke-markdown-heading")?.textContent, "Returns");
+  assert.equal(page.querySelector(".ui-markdown-heading")?.textContent, "Returns");
   assert.equal(
     page.querySelector(".integration-tool-description-whole code")?.textContent,
     "framework",
@@ -562,11 +562,11 @@ test("a server's own error is no part of its row's sentence, and stands quoted i
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
+  const card = [...document.querySelectorAll(".ui-tooltip-card > [data-server-card]")].at(-1);
 
   assert.equal(words, "Linear could not be reached.");
   assert.ok(
-    [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].some(
+    [...(card?.querySelectorAll(".ui-hover-card-note") ?? [])].some(
       (note) => note.textContent === "Linear said: “workspace is suspended”",
     ),
     "the server's card says the server's own words",
@@ -581,9 +581,9 @@ test("a server's row hangs the server's card beside it, and a tool a search foun
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Vercel");
-  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "4 tools");
+  const card = [...document.querySelectorAll(".ui-tooltip-card > [data-server-card]")].at(-1);
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Vercel");
+  assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "4 tools");
 
   type("get_deployment");
   restOn(
@@ -594,8 +594,8 @@ test("a server's row hangs the server's card beside it, and a tool a search foun
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const toolCard = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(toolCard?.querySelector(".luke-hover-card-name")?.textContent, "Vercel");
+  const toolCard = [...document.querySelectorAll(".ui-tooltip-card > [data-server-card]")].at(-1);
+  assert.equal(toolCard?.querySelector(".ui-hover-card-name")?.textContent, "Vercel");
   assert.equal(toolCard?.querySelectorAll('ul[aria-label$=" tools"] > li').length, 1);
 });
 
@@ -608,10 +608,10 @@ test("a server that is not connected hangs its card too, though its press is no 
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 
-  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Mercury");
+  const card = [...document.querySelectorAll(".ui-tooltip-card > [data-server-card]")].at(-1);
+  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Mercury");
   assert.equal(
-    container.querySelectorAll(".agent-servers-list .luke-list-row-chevron").length,
+    container.querySelectorAll(".agent-servers-list .ui-list-row-chevron").length,
     2,
     "only the two servers with tools say they open a page",
   );
@@ -825,7 +825,7 @@ test("a server that connects glides from Not connected into Connected, followed 
 test("with motion held still, a server that connects takes its place and nothing plays", async () => {
   const motions = playListMotions();
   try {
-    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+    for (const name of ["--ui-duration-exit", "--ui-duration-shape"]) {
       document.documentElement.style.setProperty(name, "0ms");
     }
     const { container, render } = await opened();

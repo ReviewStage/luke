@@ -11,6 +11,7 @@ import { dayAndTimeText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import {
   INVITATION_ROLE,
+  isInvitableEmail,
   type WorkspaceInvitation,
 } from "@luke/features/workspace-invitation-wire";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -28,7 +29,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
-  ALIGN,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -87,6 +87,7 @@ import {
   UserRoundIcon,
   XIcon,
 } from "@luke/ui/icons";
+import { inputProblem } from "@luke/ui/reported-failure";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useRef, useState } from "react";
@@ -202,6 +203,12 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 
 /** What the toast says once an invitation's accept link is on the clipboard. */
 const INVITE_LINK_COPIED = "Invite link copied";
+
+/** What the address field says of a refused invite: nothing typed, or no address the service invites. */
+const INVITE_EMAIL_PROBLEM = {
+  EMPTY: "Enter an email address.",
+  MALFORMED: "Enter an address like name@example.com.",
+} as const;
 
 /** What the invitations say where none is pending, with the one fact a reader cannot guess: the invitee is emailed their link. */
 const INVITATIONS_EMPTY = `No invitations. ${PRODUCT_NAME} emails each invitee their link, which you can also copy and send yourself.`;
@@ -690,7 +697,7 @@ function MemberLeave({
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
-        <ul className="leave-consequences m-0 pl-luke-16 text-body text-muted-foreground [&>li+li]:mt-luke-4">
+        <ul className="leave-consequences m-0 pl-ui-16 text-body text-muted-foreground [&>li+li]:mt-ui-4">
           <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}
@@ -1023,6 +1030,7 @@ function Invitations({
     setPendingState(next);
   };
   const [email, setEmail] = useState("");
+  const [emailProblem, setEmailProblem] = useState<string>();
   const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
@@ -1108,6 +1116,18 @@ function Invitations({
   // followed list then carries it as the service holds it.
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
+    // Note that the address is checked here, as the service reads it, because the browser never checks a form.
+    const problem =
+      email.trim() === ""
+        ? INVITE_EMAIL_PROBLEM.EMPTY
+        : isInvitableEmail(email)
+          ? undefined
+          : INVITE_EMAIL_PROBLEM.MALFORMED;
+    setEmailProblem(problem);
+    if (problem !== undefined) {
+      emailField.current?.focus();
+      return;
+    }
     write(
       INVITATION_WRITE.INVITE,
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
@@ -1150,42 +1170,40 @@ function Invitations({
     <>
       <Stack gap={GAP.NONE}>
         <div className="workspace-invite flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block">
-          <Inline
-            as={LAYOUT_ELEMENT.FORM}
-            align={ALIGN.END}
-            justify={JUSTIFY.END}
-            grow
-            growFirst
-            onSubmit={invite}
-          >
-            <FormField label="Email address">
+          {/* Note that the field's label stands over the whole row and its error under it, so Member and Invite keep the address's line. */}
+          <Inline as={LAYOUT_ELEMENT.FORM} grow growFirst onSubmit={invite}>
+            <FormField label="Email address" error={inputProblem(emailProblem)}>
               {(field) => (
-                <TextField
-                  ref={emailField}
-                  field={field}
-                  type={TEXT_FIELD_TYPE.EMAIL}
-                  required
-                  placeholder="name@example.com"
-                  autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-                  spellCheck={false}
-                  value={email}
-                  disabled={busy}
-                  // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
-                  onEscape={() => emailField.current?.blur()}
-                  onChange={setEmail}
-                />
+                <Inline justify={JUSTIFY.END} growFirst>
+                  <TextField
+                    ref={emailField}
+                    field={field}
+                    type={TEXT_FIELD_TYPE.EMAIL}
+                    placeholder="name@example.com"
+                    autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                    spellCheck={false}
+                    value={email}
+                    disabled={busy}
+                    // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+                    onEscape={() => emailField.current?.blur()}
+                    onChange={(typed) => {
+                      setEmail(typed);
+                      setEmailProblem(undefined);
+                    }}
+                  />
+                  <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
+                  <Button
+                    type={BUTTON_TYPE.SUBMIT}
+                    variant={BUTTON_VARIANT.PRIMARY}
+                    busy={writing === INVITATION_WRITE.INVITE}
+                    busyLabel="Inviting"
+                    disabled={writing === INVITATION_WRITE.CANCEL}
+                  >
+                    Invite
+                  </Button>
+                </Inline>
               )}
             </FormField>
-            <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-            <Button
-              type={BUTTON_TYPE.SUBMIT}
-              variant={BUTTON_VARIANT.PRIMARY}
-              busy={writing === INVITATION_WRITE.INVITE}
-              busyLabel="Inviting"
-              disabled={writing === INVITATION_WRITE.CANCEL}
-            >
-              Invite
-            </Button>
           </Inline>
         </div>
         {note === undefined ? null : (

@@ -46,7 +46,7 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-token-app.js";
 
 /**
@@ -62,7 +62,7 @@ import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-
  * agent or caller. Synthetic accounts and tokens throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const KEK = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 const MINUTE = 60 * 1000;
 
@@ -79,7 +79,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
 };
@@ -149,7 +148,7 @@ const agentOn = (
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
     const deviceId = randomUUID();
     if (onMac !== undefined) {
@@ -448,7 +447,7 @@ const openMember = Effect.gen(function* () {
   assert.ok(installation !== undefined, "more members than installations");
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, {
     name: "Teammate invitations",
     repository: `${RELAY.owner}/${RELAY.name}`,

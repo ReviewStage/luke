@@ -10,7 +10,7 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  *
  * Every tab's bar is this one (File, Changes, Page, Terminal, Browser, Pull
  * request) and a dock's head beside them, so a tab reads down from the strip
- * above it on one height (`--luke-pane-bar-height`): a control's, a tight
+ * above it on one height (`--ui-pane-bar-height`): a control's, a tight
  * gap over and under it, and the hairline it stands on, whether it holds
  * words alone, buttons, or nothing yet. Its words are in the caption's type.
  *
@@ -43,29 +43,29 @@ import { wholeWordsHint } from "../tooltip/hint.js";
 /**
  * The bar: one height whatever it holds, its words in the caption's type, its
  * groups a control's gap apart, on the hover's wash over a hairline. Each
- * part keeps its `luke-pane-bar-*` class, which the panel's sheets and tests
+ * part keeps its `ui-pane-bar-*` class, which the panel's sheets and tests
  * find it by.
  */
 const BAR =
-  "luke-pane-bar box-border flex min-h-pane-bar min-w-0 flex-none items-center gap-control-gap border-b border-border bg-muted px-list-inset py-tight-gap font-sans text-caption text-muted-foreground";
+  "ui-pane-bar box-border flex min-h-pane-bar min-w-0 flex-none items-center gap-control-gap border-b border-border bg-muted px-list-inset py-tight-gap font-sans text-caption text-muted-foreground";
 /** Words leading the bar start where a tab's glyph does, a row's inset in. */
 const LEAD =
-  "luke-pane-bar-lead flex min-w-0 flex-initial items-center gap-item-gap pl-row-inset whitespace-nowrap [.luke-pane-bar-start+&]:pl-0";
+  "ui-pane-bar-lead flex min-w-0 flex-initial items-center gap-item-gap pl-row-inset whitespace-nowrap [.ui-pane-bar-start+&]:pl-0";
 /** A pane's toggle at the bar's very start, the lead after it starting at the toggle rather than a row's inset. */
-const START = "luke-pane-bar-start flex flex-none items-center";
+const START = "ui-pane-bar-start flex flex-none items-center";
 /** A pane's toggle at the bar's very end, after the ⋯, its glyph as close as the actions'. */
-const END = "luke-pane-bar-end flex flex-none items-center";
-const MARK = "luke-pane-bar-mark flex flex-none items-center [&>svg]:size-control-icon";
-const MIDDLE = "luke-pane-bar-middle flex min-w-0 flex-auto items-center gap-control-gap";
+const END = "ui-pane-bar-end flex flex-none items-center";
+const MARK = "ui-pane-bar-mark flex flex-none items-center [&>svg]:size-control-icon";
+const MIDDLE = "ui-pane-bar-middle flex min-w-0 flex-auto items-center gap-control-gap";
 /** The actions at the end, their glyphs close. */
-const ACTIONS = "luke-pane-bar-actions ml-auto flex flex-none items-center gap-luke-2";
+const ACTIONS = "ui-pane-bar-actions ml-auto flex flex-none items-center gap-ui-2";
 /** A bar whose title has a row of its own lays its parts on two rows, the title's last. */
 const WRAPPED = "flex-wrap gap-y-0";
 /** The title's own row: the bar wide, a control high, its words where the lead's start. */
 const TITLE_ROW =
-  "luke-pane-bar-title-row order-last flex min-h-control min-w-0 basis-full items-center pl-row-inset";
+  "ui-pane-bar-title-row order-last flex min-h-control min-w-0 basis-full items-center pl-row-inset";
 /** Where the bar's title stands on one row: in its lead. */
-const TITLE_SEAT: TitleSeat = { room: ".luke-pane-bar-lead", words: ".luke-pane-bar-title" };
+const TITLE_SEAT: TitleSeat = { room: ".ui-pane-bar-lead", words: ".ui-pane-bar-title" };
 
 /** The bar's ⋯: what it and the menu it drops are called, and the menu's groups of items. */
 export interface PaneBarMenu {
@@ -132,7 +132,7 @@ export function PaneBar({
   const acts = said(actions) || menu !== undefined || said(end);
   const words = titled ? (
     <OneLine
-      className="luke-pane-bar-title flex-initial text-foreground"
+      className="ui-pane-bar-title flex-initial text-foreground"
       hint={wholeWordsHint(title)}
     >
       {title}
@@ -149,7 +149,7 @@ export function PaneBar({
         <div className={LEAD}>
           {said(mark) ? <span className={MARK}>{mark}</span> : null}
           {wrapped ? null : words}
-          {said(detail) ? <span className="luke-pane-bar-detail flex-none">{detail}</span> : null}
+          {said(detail) ? <span className="ui-pane-bar-detail flex-none">{detail}</span> : null}
         </div>
       ) : null}
       {wrapped ? <div className={TITLE_ROW}>{words}</div> : null}

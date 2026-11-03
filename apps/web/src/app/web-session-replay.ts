@@ -43,8 +43,8 @@ const OWN_PATH = /^\/(?![/*])\S*$/u;
  * counting too.
  */
 const RECORDING_STORAGE = {
-  persistence: "luke_app_replay",
-  consent: "luke_app_replay_consent",
+  persistence: "app_replay",
+  consent: "app_replay_consent",
 } as const;
 
 /** What may follow the origin in an address on it: its path, its query, or its fragment. */
@@ -54,7 +54,7 @@ const AFTER_ORIGIN = new Set(["/", "?", "#"]);
 const PRODUCTION_DEPLOYMENT = "production";
 
 /** Where the tabs of this browser tell each other about the recording. */
-const RECORDING_CHANNEL = "luke-session-replay";
+const RECORDING_CHANNEL = "app-session-replay";
 
 /** What one tab tells the others on `RECORDING_CHANNEL`. */
 const RECORDING_NOTICE = {

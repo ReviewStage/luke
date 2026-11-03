@@ -41,7 +41,7 @@ const MIGRATION = "20261102192712_eve_agents_archive";
 const foldersBut = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-but-eve-archive-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "but-eve-archive-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
     (name) => name !== MIGRATION,
   );
@@ -59,7 +59,7 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBut);
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "Dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "Dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         const { id: taskId } = yield* createTask("dean", { organizationId: workspaceId });

@@ -25,7 +25,7 @@ export const AGENT_USER = "agent";
  * the sandbox's default user and the CLI's own temp folder
  * (`/tmp/claude-<uid>`) is private to `agent`.
  */
-export const SHARED_FILES_DIRECTORY = "/tmp/luke";
+export const SHARED_FILES_DIRECTORY = "/tmp/shared";
 
 /**
  * Playwright as the image installs it, where every user of every machine
@@ -67,7 +67,7 @@ export const LUKE_BROWSER_PIN = {
 /** What every command a harness runs in the cloud is handed of the image's tools: each Playwright's browsers in its own package (`PLAYWRIGHT_PIN`). */
 export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: "0" } as const;
 
-/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
+/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. Note that it keeps its old name, because a persistent sandbox resumes from its own snapshot of the image it was made from, and a launch into one finds it there. */
 export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
 
 /**
@@ -75,7 +75,9 @@ export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
  * platform package carries (the SDK's own `claudeCodeVersion`), so
  * installing the one installs the other. Installed as root in a directory
  * only root writes; the binary is the Linux x86-64 build, the Vercel
- * sandbox's architecture.
+ * sandbox's architecture. Note that `DIRECTORY` keeps its old name, because
+ * a persistent sandbox resumes from its own snapshot of the image it was made
+ * from, and a launch into one runs the binary there.
  */
 export const CLAUDE_CODE_PIN = {
   SDK_VERSION: "0.3.304",
@@ -95,7 +97,8 @@ export const CLAUDE_EXECUTABLE = `${CLAUDE_CODE_PIN.DIRECTORY}/${CLAUDE_CODE_PIN
 /**
  * Codex, pinned exactly, installed as root under a prefix only root writes.
  * Its `CODEX_HOME` is in `agent`'s home, on the sandbox's persisted disk, so
- * the threads it keeps there outlive a stop.
+ * the threads it keeps there outlive a stop. Note that `DIRECTORY` keeps its
+ * old name, as `CLAUDE_CODE_PIN`'s does, for the sandboxes made before.
  */
 export const CODEX_PIN = {
   VERSION: "0.163.0",

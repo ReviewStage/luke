@@ -13,7 +13,8 @@ import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "re
  * well; as a text field is drawn (`INPUT`), on the input's own ground and edge, brightening once the caret is in it, where a form asks for words; or bare, no frame at all, where the card around it is the frame, as a
  * thread's first comment is. The note a box gives way to stands on the same
  * frame, so it stands where the box stood. It is a form where it sends and a
- * div where it does not (`COMPOSER_ELEMENT`).
+ * div where it does not (`COMPOSER_ELEMENT`); a form the browser never checks,
+ * so no browser bubble is drawn over it, and its owner says what is wrong.
  *
  * It is drawn in Tailwind utilities over the theme, each look's edge,
  * corner, and ground picked here; shadcn/ui has no composer.
@@ -47,7 +48,7 @@ const LOOK_CLASS: Record<ComposerLook, string> = {
   [COMPOSER_LOOK.CARD]: "rounded-dialog border border-border bg-surface shadow-composer",
   [COMPOSER_LOOK.FIELD]: "rounded-control border border-border bg-ground",
   [COMPOSER_LOOK.INPUT]:
-    "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit focus-within:bg-field-focus",
+    "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--ui-duration-hover) ease-motion-exit focus-within:bg-field-focus",
   [COMPOSER_LOOK.BARE]: "rounded-dialog border-0 bg-transparent",
 };
 
@@ -80,9 +81,10 @@ export function ComposerFrame({
     {
       ...rest,
       ref,
-      className: ["luke-composer-frame group/composer", LOOK_CLASS[look], DROPPING, className ?? ""]
+      className: ["ui-composer-frame group/composer", LOOK_CLASS[look], DROPPING, className ?? ""]
         .filter((part) => part !== "")
         .join(" "),
+      noValidate: Element === COMPOSER_ELEMENT.FORM ? true : undefined,
       "data-look": look,
       "data-dropping": dropping ? "true" : undefined,
     },

@@ -1,40 +1,40 @@
 /* prose.css -- written words read as a document: the rules the site's
-   generated documents and the window's Markdown share (`.luke-prose`), and
-   the site's document rhythm over them (`.luke-prose-document`). Every
+   generated documents and the window's Markdown share (`.ui-prose`), and
+   the site's document rhythm over them (`.ui-prose-document`). Every
    measure a run of words sets is in `em`, so a rule reads at the window's
    caption size and at the site's body size alike; a code span's tint is
-   `--luke-prose-tint`, which a surface whose ink is not the page's own, a
+   `--ui-prose-tint`, which a surface whose ink is not the page's own, a
    sent bubble's, mixes from its own colour.
 
-   Below them, a note's Markdown (`.luke-markdown`, `@luke/ui/markdown`):
+   Below them, a note's Markdown (`.ui-markdown`, `@luke/ui/markdown`):
    the plan, its versions, a comment, a file's note, and the caption. */
 
 @layer components {
   /* The shared rules. Note that a note draws its headings as paragraphs of
-     its own (`.luke-markdown-heading`), so only a document's real headings
+     its own (`.ui-markdown-heading`), so only a document's real headings
      take these. */
-  .luke-prose :is(h1, h2, h3) {
-    font-weight: var(--luke-type-section-weight);
-    letter-spacing: var(--luke-type-title-tracking);
+  .ui-prose :is(h1, h2, h3) {
+    font-weight: var(--ui-type-section-weight);
+    letter-spacing: var(--ui-type-title-tracking);
   }
 
   /* The user agent's markers, discs then circles down a nesting, which the
      site's reset strips from every list. */
-  .luke-prose :is(ul, ol) {
+  .ui-prose :is(ul, ol) {
     padding-left: 1.5em;
     list-style: revert;
   }
 
-  .luke-prose code {
+  .ui-prose code {
     padding: 0.1em 0.4em;
     border-radius: 0.4em;
-    background: var(--luke-prose-tint, var(--luke-color-fill-hover));
-    font-family: var(--luke-font-mono);
+    background: var(--ui-prose-tint, var(--ui-color-fill-hover));
+    font-family: var(--ui-font-mono);
     /* Mono runs wider than the words around it at equal size. */
     font-size: 0.9em;
   }
 
-  .luke-prose pre code {
+  .ui-prose pre code {
     padding: 0;
     border-radius: 0;
     background: transparent;
@@ -47,20 +47,20 @@
      at the inherited leading the cap would stretch its line taller than its
      neighbours. The raise is measured, not chosen: on the baseline the cap's
      box centres below the words' own, and `middle` still leaves it low. */
-  .luke-prose kbd {
+  .ui-prose kbd {
     display: inline-block;
     padding: 0.1em 0.45em;
-    border: 1px solid var(--luke-color-border);
+    border: 1px solid var(--ui-color-border);
     border-bottom-width: 2px;
-    border-radius: var(--luke-radius-6);
-    background: var(--luke-color-surface);
-    font-family: var(--luke-font-mono);
+    border-radius: var(--ui-radius-6);
+    background: var(--ui-color-surface);
+    font-family: var(--ui-font-mono);
     font-size: 0.8em;
     line-height: 1;
     vertical-align: 0.18em;
   }
 
-  .luke-prose kbd + kbd {
+  .ui-prose kbd + kbd {
     margin-left: 0.3em;
   }
 
@@ -72,18 +72,18 @@
      bubble's accent without a per-speaker override. Blocks are spaced by
      margin rather than a flex gap: the caption's root is an ordinary block
      whose wrapped height is measured. */
-  .luke-markdown {
-    --luke-markdown-tint: color-mix(in srgb, currentColor 13%, transparent);
-    --luke-markdown-edge: color-mix(in srgb, currentColor 28%, transparent);
-    --luke-prose-tint: var(--luke-markdown-tint);
+  .ui-markdown {
+    --ui-markdown-tint: color-mix(in srgb, currentColor 13%, transparent);
+    --ui-markdown-edge: color-mix(in srgb, currentColor 28%, transparent);
+    --ui-prose-tint: var(--ui-markdown-tint);
   }
 
-  .luke-markdown > * + *,
-  .luke-markdown li > * + * {
+  .ui-markdown > * + *,
+  .ui-markdown li > * + * {
     margin-top: 0.5em;
   }
 
-  .luke-markdown p {
+  .ui-markdown p {
     margin: 0;
     overflow-wrap: anywhere;
   }
@@ -91,48 +91,48 @@
   /* A tight list's item holds its words with no paragraph around them, so it
      breaks a long path or identifier at the column's edge as a paragraph
      does, rather than letting it run past the edge. */
-  .luke-markdown li {
+  .ui-markdown li {
     overflow-wrap: anywhere;
   }
 
-  .luke-markdown-heading {
-    font-weight: var(--luke-type-section-weight);
-    letter-spacing: var(--luke-type-title-tracking);
+  .ui-markdown-heading {
+    font-weight: var(--ui-type-section-weight);
+    letter-spacing: var(--ui-type-title-tracking);
   }
 
-  .luke-markdown-heading[data-level="1"] {
+  .ui-markdown-heading[data-level="1"] {
     font-size: 1.25em;
   }
 
-  .luke-markdown-heading[data-level="2"] {
+  .ui-markdown-heading[data-level="2"] {
     font-size: 1.15em;
   }
 
-  .luke-markdown-heading[data-level="3"] {
+  .ui-markdown-heading[data-level="3"] {
     font-size: 1.05em;
   }
 
   /* A code span is the prose one above, on the note's own tint, a step
      heavier because the thread's words are small. */
-  .luke-markdown code {
-    font-weight: var(--luke-type-label-weight);
+  .ui-markdown code {
+    font-weight: var(--ui-type-label-weight);
     letter-spacing: 0;
   }
 
   /* A link is drawn in the links' own ink, as a text link is, rather than
      the browser's blue, which follows no theme. */
-  .luke-markdown a {
-    color: var(--luke-color-accent-text);
+  .ui-markdown a {
+    color: var(--ui-color-accent-text);
   }
 
   /* Code keeps each source line whole and scrolls only sideways: a wrapped
      identifier reads as one the author never wrote. Left-aligned even inside
      the centred caption, because indentation is part of what code says. */
-  .luke-markdown pre {
+  .ui-markdown pre {
     margin: 0;
     padding: 0.6em 0.8em;
     border-radius: 0.7em;
-    background: var(--luke-markdown-tint);
+    background: var(--ui-markdown-tint);
     overflow-x: auto;
     /* A line's end is read by the same sideways swipe that pulls a thread;
        at the block's edge the swipe stays the block's. */
@@ -141,24 +141,24 @@
   }
 
   /* A fence's code drops the span's dress, as the prose's does above. */
-  .luke-markdown pre code {
+  .ui-markdown pre code {
     display: block;
-    font-weight: var(--luke-type-body-weight);
-    line-height: var(--luke-type-reading-leading);
+    font-weight: var(--ui-type-body-weight);
+    line-height: var(--ui-type-reading-leading);
     white-space: pre;
   }
 
   /* A list's gutter and markers are the prose's above. */
-  .luke-markdown :is(ul, ol) {
+  .ui-markdown :is(ul, ol) {
     margin: 0;
     text-align: left;
   }
 
-  .luke-markdown li + li {
+  .ui-markdown li + li {
     margin-top: 0.25em;
   }
 
-  .luke-markdown li::marker {
+  .ui-markdown li::marker {
     opacity: 0.7;
     font-variant-numeric: tabular-nums;
   }
@@ -171,12 +171,12 @@
      its box in the same place (the panel's `tasks.css`), so opening a
      section moves nothing. Note that the box takes the words' size, because
      a control's own is the browser's. */
-  .luke-markdown li.task-list-item {
+  .ui-markdown li.task-list-item {
     position: relative;
     list-style: none;
   }
 
-  .luke-markdown li.task-list-item input[type="checkbox"] {
+  .ui-markdown li.task-list-item input[type="checkbox"] {
     position: absolute;
     top: calc((1lh - 0.95em) / 2);
     left: -1.45em;
@@ -184,7 +184,7 @@
     height: 0.95em;
     margin: 0;
     font: inherit;
-    accent-color: var(--luke-color-accent);
+    accent-color: var(--ui-color-accent);
   }
 
   /* A note's box (`markdown-tasks.tsx`, a wordless `Checkbox`, read-only
@@ -192,7 +192,7 @@
      the words' size; on a coarse pointer its label takes a press a finger's
      width across and as tall, centred on the box (`checkbox.css`). The
      plan's editor gives its own label the same press. */
-  .luke-markdown li.task-list-item > .luke-markdown-task {
+  .ui-markdown li.task-list-item > .ui-markdown-task {
     position: absolute;
     top: calc((1lh - 0.95em) / 2);
     left: -1.45em;
@@ -201,7 +201,7 @@
     height: 0.95em;
   }
 
-  .luke-markdown li.task-list-item > .luke-markdown-task input[type="checkbox"] {
+  .ui-markdown li.task-list-item > .ui-markdown-task input[type="checkbox"] {
     position: static;
     display: block;
   }
@@ -215,7 +215,7 @@
      inline timeline, which stands only while the table overflows. Note that
      the table is no `ScrollArea` itself, because a table's own box is what
      scrolls. */
-  .luke-markdown table {
+  .ui-markdown table {
     display: block;
     max-width: 100%;
     border-collapse: collapse;
@@ -226,22 +226,22 @@
     mask-image: linear-gradient(
       to right,
       transparent,
-      #000 var(--luke-scroll-area-fade-start),
-      #000 calc(100% - var(--luke-scroll-area-fade-end)),
+      #000 var(--ui-scroll-area-fade-start),
+      #000 calc(100% - var(--ui-scroll-area-fade-end)),
       transparent
     );
-    animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
+    animation-name: ui-scroll-area-fade-start, ui-scroll-area-fade-end;
     animation-timing-function: linear;
     animation-fill-mode: both;
     animation-timeline: scroll(self inline), scroll(self inline);
     animation-range:
-      0 var(--luke-scroll-fade),
-      calc(100% - var(--luke-scroll-fade)) 100%;
+      0 var(--ui-scroll-fade),
+      calc(100% - var(--ui-scroll-fade)) 100%;
   }
 
-  .luke-markdown :is(th, td) {
+  .ui-markdown :is(th, td) {
     padding: 0.3em 0.7em 0.3em 0;
-    border-bottom: 1px solid var(--luke-markdown-edge);
+    border-bottom: 1px solid var(--ui-markdown-edge);
     vertical-align: top;
   }
 
@@ -249,24 +249,24 @@
      rather than splitting its words into letters. Note that it outranks the
      note's `p`, which an editor's cell holds its words in, and a list item
      around the table, whose words break anywhere. */
-  .luke-markdown :is(th, td),
-  .luke-markdown :is(th, td) > p {
+  .ui-markdown :is(th, td),
+  .ui-markdown :is(th, td) > p {
     overflow-wrap: normal;
   }
 
-  .luke-markdown th {
+  .ui-markdown th {
     opacity: 0.8;
-    font-weight: var(--luke-type-emphasis-weight);
+    font-weight: var(--ui-type-emphasis-weight);
   }
 
-  .luke-markdown tbody tr:last-child td {
+  .ui-markdown tbody tr:last-child td {
     border-bottom: 0;
   }
 
-  .luke-markdown hr {
+  .ui-markdown hr {
     margin: 0.3em 0;
     border: 0;
-    border-top: 1px solid var(--luke-markdown-edge);
+    border-top: 1px solid var(--ui-markdown-edge);
   }
 
   /* A chip stands with the punctuation written against it as one box no line
@@ -291,53 +291,53 @@
      copy around them: a clear step between heading levels and generous room
      after a paragraph. A document's first block opens flush, so a release's
      first line stands level with the version rail beside it. */
-  .luke-prose-document > :first-child {
+  .ui-prose-document > :first-child {
     margin-top: 0;
   }
 
-  .luke-prose-document h1 {
-    margin: 0 0 var(--luke-space-32);
-    font-size: var(--luke-type-title-size);
-    line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-type-title-weight);
-    letter-spacing: var(--luke-type-title-tracking);
+  .ui-prose-document h1 {
+    margin: 0 0 var(--ui-space-32);
+    font-size: var(--ui-type-title-size);
+    line-height: var(--ui-type-title-leading);
+    font-weight: var(--ui-type-title-weight);
+    letter-spacing: var(--ui-type-title-tracking);
   }
 
-  .luke-prose-document h2 {
-    margin: var(--luke-space-64) 0 var(--luke-space-16);
-    font-size: var(--luke-type-dialog-size);
-    line-height: var(--luke-type-dialog-leading);
+  .ui-prose-document h2 {
+    margin: var(--ui-space-64) 0 var(--ui-space-16);
+    font-size: var(--ui-type-dialog-size);
+    line-height: var(--ui-type-dialog-leading);
   }
 
-  .luke-prose-document h3 {
-    margin: var(--luke-space-32) 0 var(--luke-space-12);
-    font-size: var(--luke-type-section-size);
-    line-height: var(--luke-type-section-leading);
+  .ui-prose-document h3 {
+    margin: var(--ui-space-32) 0 var(--ui-space-12);
+    font-size: var(--ui-type-section-size);
+    line-height: var(--ui-type-section-leading);
   }
 
-  .luke-prose-document :is(p, ul, ol) {
-    margin: 0 0 var(--luke-space-16);
-    color: var(--luke-color-text-muted);
+  .ui-prose-document :is(p, ul, ol) {
+    margin: 0 0 var(--ui-space-16);
+    color: var(--ui-color-text-muted);
   }
 
-  .luke-prose-document li + li {
-    margin-top: var(--luke-space-8);
+  .ui-prose-document li + li {
+    margin-top: var(--ui-space-8);
   }
 
-  .luke-prose-document strong {
-    color: var(--luke-color-text);
+  .ui-prose-document strong {
+    color: var(--ui-color-text);
   }
 
-  .luke-prose-document a {
-    color: var(--luke-color-accent-text);
+  .ui-prose-document a {
+    color: var(--ui-color-accent-text);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
 
   /* A pull-request reference is a technical token, and mono is what the
      site reserves for those. */
-  .luke-prose-document a[href*="/pull/"] {
-    font-family: var(--luke-font-mono);
+  .ui-prose-document a[href*="/pull/"] {
+    font-family: var(--ui-font-mono);
     font-size: 0.8em;
   }
 
@@ -346,22 +346,22 @@
      full measure (2400 by 1591), so a close-up cut from one is the same
      height, only narrower, and centred in the column. Each is a link to its
      own full-size file, and the cursor is what says so. */
-  .luke-prose-document:has(img) {
+  .ui-prose-document:has(img) {
     container-type: inline-size;
   }
 
-  .luke-prose-document img {
+  .ui-prose-document img {
     display: block;
     width: auto;
     max-width: 100%;
     height: auto;
     max-height: calc(100cqi * 1591 / 2400);
-    margin: var(--luke-space-24) auto;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-radius-14);
+    margin: var(--ui-space-24) auto;
+    border: 1px solid var(--ui-color-border);
+    border-radius: var(--ui-radius-14);
   }
 
-  .luke-prose-document a > img {
+  .ui-prose-document a > img {
     cursor: zoom-in;
   }
 }
@@ -382,8 +382,8 @@
 .markdown-quote {
   margin: 0;
   padding-left: 0.8em;
-  border-left: 3px solid var(--luke-color-border-strong);
-  color: var(--luke-color-text-muted);
+  border-left: 3px solid var(--ui-color-border-strong);
+  color: var(--ui-color-text-muted);
   font-style: normal;
   text-align: left;
 }

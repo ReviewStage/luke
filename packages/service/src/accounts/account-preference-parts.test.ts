@@ -54,7 +54,7 @@ import { accountProcedures } from "./account-procedures.js";
  * Synthetic accounts and bearers throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const PREFERENCES_PATH = "/api/account/preferences";
 
 const OPUS: CatalogModel = {
@@ -80,7 +80,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -95,7 +94,7 @@ const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   }
   const bearers = new Map([
     [`Bearer ${owner}`, owner],
@@ -107,7 +106,6 @@ const openAccounts = Effect.gen(function* () {
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
       ),
     // This suite deletes nothing, so it retires no session and reaches no eve.
-    eveOrigin: () => undefined,
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,

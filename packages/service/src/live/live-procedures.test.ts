@@ -75,7 +75,7 @@ import { pollSealer } from "./poll-sealer.js";
  * Synthetic accounts and bearers throughout, over the test's own database.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const LIVE_INBOX = "/api/live/inbox";
 
 /** A live read's address, naming the account it is for where one is named (`LIVE_USER_QUERY`). */
@@ -125,7 +125,7 @@ const ask = (options: {
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   return userId;
 });
 
@@ -1093,7 +1093,7 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
         const db = yield* Database;
         const [owner, outsider] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
         for (const id of [owner, outsider]) {
-          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
         }
         const workspaceId = yield* openWorkspace(owner);
         const path = `/api/live/workspace-members?workspaceId=${workspaceId}`;
@@ -1130,7 +1130,7 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
         const teammate = `user-${randomUUID()}`;
         const outsider = `user-${randomUUID()}`;
         for (const id of [owner, teammate, outsider]) {
-          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
         }
         const workspaceId = yield* openWorkspace(owner);
         yield* joinWorkspace(workspaceId, teammate);

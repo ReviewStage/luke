@@ -108,5 +108,5 @@ test("a note line a hint wraps hangs the hint's card when tapped, found by its c
     }
   });
 
-  expect(document.querySelector(".luke-tooltip-card")?.textContent).toBe("Began at 9:14 AM");
+  expect(document.querySelector(".ui-tooltip-card")?.textContent).toBe("Began at 9:14 AM");
 });

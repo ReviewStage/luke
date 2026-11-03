@@ -12,7 +12,7 @@ import { test } from "vitest";
 import { markLineIndents } from "./line-indents.js";
 
 /** The custom property the look's sheet hangs a wrapped line by (`index.ts`'s `LOOK_CSS`). */
-const LINE_INDENT = "--luke-line-indent";
+const LINE_INDENT = "--ui-line-indent";
 
 /** A shadow root's code column as Pierre draws it, one row per line, at a tab width of two. */
 function drawnLines(texts: readonly string[]): HTMLElement {

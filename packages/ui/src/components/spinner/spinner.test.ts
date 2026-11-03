@@ -32,7 +32,7 @@ afterEach(() => {
 
 /** Whether a turning ring stands in `container`. */
 function ringIn(container: HTMLElement): boolean {
-  return container.querySelector(".luke-spinner-ring") !== null;
+  return container.querySelector(".ui-spinner-ring") !== null;
 }
 
 function render(element: ReactElement): HTMLElement {

@@ -83,7 +83,7 @@ export function MobileBar({
   };
   return (
     <nav
-      className="mobile-bar flex border-t border-border bg-ground px-luke-4 py-luke-2"
+      className="mobile-bar flex border-t border-border bg-ground px-ui-4 py-ui-2"
       aria-label="Places"
       {...MENU_KEEPS_CLEAR}
     >

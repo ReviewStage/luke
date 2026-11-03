@@ -23,9 +23,9 @@ const GIT_ENVIRONMENT = {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_TERMINAL_PROMPT: "0",
   GIT_AUTHOR_NAME: "Fixture",
-  GIT_AUTHOR_EMAIL: "fixture@luke.test",
+  GIT_AUTHOR_EMAIL: "fixture@app.test",
   GIT_COMMITTER_NAME: "Fixture",
-  GIT_COMMITTER_EMAIL: "fixture@luke.test",
+  GIT_COMMITTER_EMAIL: "fixture@app.test",
 };
 
 // Note that a test here runs real Git and bash, which a macOS runner has taken past vitest's 5s default.
@@ -37,14 +37,14 @@ function git(folder: string, args: readonly string[]): string {
 
 /** An origin with `main` and an agent's branch pushed to it, and the state root the app keeps its clone in. */
 async function fixture(t: Parameters<typeof temporaryDirectory>[0]) {
-  const scratch = await temporaryDirectory(t, "luke-open-on-mac-");
+  const scratch = await temporaryDirectory(t, "open-on-mac-");
   const origin = path.join(scratch, "origin");
   mkdirSync(origin);
   git(origin, ["init", "--quiet", "--initial-branch=main"]);
   writeFileSync(path.join(origin, "README.md"), "main\n");
   git(origin, ["add", "--all"]);
   git(origin, ["commit", "--quiet", "-m", "main"]);
-  git(origin, ["checkout", "--quiet", "-b", "luke/fix-relay"]);
+  git(origin, ["checkout", "--quiet", "-b", "agent/fix-relay"]);
   // Note that a clone filters blobs only from a server allowing it, as GitHub does; a local origin is asked to.
   git(origin, ["config", "uploadpack.allowFilter", "true"]);
   const push = (text: string) => {
@@ -89,12 +89,12 @@ test(
         repository: "acme/app",
         clone,
         worktree: path.join(scratch, "agents", "agent", "repository"),
-        branch: "luke/fix-relay",
+        branch: "agent/fix-relay",
         remotes: { https: path.join(scratch, "nowhere"), ssh: origin },
       }),
     );
 
-    assert.equal(git(clone, ["rev-parse", "refs/remotes/origin/luke/fix-relay"]), head);
+    assert.equal(git(clone, ["rev-parse", "refs/remotes/origin/agent/fix-relay"]), head);
   },
   GIT_DEADLINE,
 );
@@ -104,7 +104,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const relay = push("relay\n");
-    git(origin, ["checkout", "--quiet", "-b", "luke/other", "main"]);
+    git(origin, ["checkout", "--quiet", "-b", "agent/other", "main"]);
     writeFileSync(path.join(origin, "README.md"), "other\n");
     git(origin, ["commit", "--quiet", "-am", "other"]);
     const other = git(origin, ["rev-parse", "HEAD"]);
@@ -135,11 +135,11 @@ test(
     };
 
     const first = await Promise.all([
-      launching("luke/fix-relay", "one"),
-      launching("luke/other", "two"),
+      launching("agent/fix-relay", "one"),
+      launching("agent/other", "two"),
     ]);
     // Note that once the clone is made, six launches at once each fetch into it, which only the lock keeps from refusing each other.
-    const more = ["a", "b", "c", "d", "e", "f"].map((name) => `luke/more-${name}`);
+    const more = ["a", "b", "c", "d", "e", "f"].map((name) => `agent/more-${name}`);
     for (const branch of more) git(origin, ["branch", branch, "main"]);
     const then = await Promise.all(more.map((branch, index) => launching(branch, `more-${index}`)));
     const said = [...first, ...then].join("\n");
@@ -170,7 +170,7 @@ test(
         repository: "acme/app",
         clone,
         worktree: own,
-        branch: "luke/fix-relay",
+        branch: "agent/fix-relay",
         remotes: { https: origin, ssh: origin },
       }),
       { mode: 0o700 },
@@ -234,7 +234,7 @@ test(
         repository: "acme/app",
         clone,
         worktree: own,
-        branch: "luke/fix-relay",
+        branch: "agent/fix-relay",
         remotes: { https: origin, ssh: origin },
       }),
       { mode: 0o700 },
@@ -288,7 +288,7 @@ test(
         repository: "acme/app",
         clone,
         worktree,
-        branch: "luke/fix-relay",
+        branch: "agent/fix-relay",
         remotes: { https: origin, ssh: origin },
       });
 
@@ -324,7 +324,7 @@ test(
         repository: "acme/app",
         clone,
         worktree: own,
-        branch: "luke/fix-relay",
+        branch: "agent/fix-relay",
         remotes: { https: origin, ssh: origin },
       }),
     );
@@ -353,7 +353,7 @@ test(
         repository: "acme/app",
         clone: cloneFolder(state, "acme/app"),
         worktree,
-        branch: "luke/fix-relay",
+        branch: "agent/fix-relay",
         remotes: { https: origin, ssh: origin },
       }),
     );
@@ -376,12 +376,12 @@ test(
     git(worktree, ["commit", "--quiet", "-m", "notes"]);
     assert.match(found(), /no remote branch/u, "a commit on a detached head, on no upstream");
 
-    git(worktree, ["checkout", "--quiet", "--track", "-b", "mine", "origin/luke/fix-relay"]);
+    git(worktree, ["checkout", "--quiet", "--track", "-b", "mine", "origin/agent/fix-relay"]);
     assert.equal(found(), "", "a branch level with its upstream holds nothing");
     commit("ahead.md");
     assert.match(found(), /its upstream does not/u);
 
-    git(worktree, ["checkout", "--quiet", "-b", "unpublished", "origin/luke/fix-relay"]);
+    git(worktree, ["checkout", "--quiet", "-b", "unpublished", "origin/agent/fix-relay"]);
     git(worktree, ["branch", "--unset-upstream"]);
     assert.match(found(), /a branch with commits/u, "a branch left for another keeps its commits");
     git(worktree, ["branch", "--quiet", "-D", "mine"]);

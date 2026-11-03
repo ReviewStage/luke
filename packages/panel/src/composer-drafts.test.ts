@@ -240,10 +240,10 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
     /** Whether an agent's tab in the plan's column wears the Draft pencil. */
     tabDrafted: (label: string) => {
       const tab =
-        [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
-          (each) => each.querySelector(".luke-tab-label")?.textContent === label,
+        [...container.querySelectorAll<HTMLElement>(".ui-tab")].find(
+          (each) => each.querySelector(".ui-tab-label")?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`);
-      return tab.querySelector(`.luke-tab-end-mark [aria-label="${DRAFT_WORD}"]`) !== null;
+      return tab.querySelector(`.ui-tab-end-mark [aria-label="${DRAFT_WORD}"]`) !== null;
     },
   };
 }
@@ -296,7 +296,7 @@ const PAST_STORE_PAUSE = "300 millis";
 /** The words storage keeps, draft by draft. */
 function keptWords(): readonly string[] {
   const kept: { text: string }[] = JSON.parse(
-    window.localStorage.getItem("luke.composerDrafts") ?? "[]",
+    window.localStorage.getItem("app.composerDrafts") ?? "[]",
   );
   return kept.map((entry) => entry.text);
 }
@@ -311,7 +311,7 @@ function draftWrites(): () => readonly (readonly string[])[] {
     value: string,
   ) {
     write.call(this, key, value);
-    if (key === "luke.composerDrafts") writes.push(keptWords());
+    if (key === "app.composerDrafts") writes.push(keptWords());
   });
   return () => writes;
 }
@@ -462,7 +462,7 @@ test("past the most drafts kept, the oldest written goes, whosever it is, and th
     keptEntry(DEAN.id, `plan-${at}`, `agent-${at}`, `Draft ${at}`),
   );
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([
       keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire invites after a week"),
       ...filler,
@@ -487,7 +487,7 @@ test("past the most drafts kept, the oldest written goes, whosever it is, and th
 
 test("where an account kept a draft for one place under its id and a later one under its address, the later stands once both are its id's", async () => {
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([
       keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire after a month"),
       keptEntry(DEAN.email, INVITES.plan.id, INVITES.agent.id, "Expire invites after a week"),
@@ -607,9 +607,9 @@ test("where the id's own later words win a place its address held a picture at, 
   );
   leaveWindow();
   // Another window, already knowing the id, writes the same place later.
-  const kept = JSON.parse(window.localStorage.getItem("luke.composerDrafts") ?? "[]");
+  const kept = JSON.parse(window.localStorage.getItem("app.composerDrafts") ?? "[]");
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([...kept, { accountId: DEAN.id, place, text: "Send the new contract" }]),
   );
 
@@ -671,14 +671,14 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   return (name: string) =>
     (
       [...container.querySelectorAll<HTMLElement>("ul > li > button")].find(
-        (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent === name,
+        (row) => row.querySelector(".ui-list-row-title")?.firstChild?.textContent === name,
       ) ?? assert.fail(`the sidebar lists ${name}`)
     ).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
 }
 
 test("a task opened from a tab pinned to the sidebar is open still, so its row wears no Draft pencil", async () => {
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([
       { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
     ]),
@@ -716,7 +716,7 @@ async function newTaskDrafted(tasks: TasksControl): Promise<boolean> {
   await settle();
   const row =
     [...container.querySelectorAll<HTMLElement>("button")].find((button) =>
-      button.querySelector(".luke-nav-item-name")?.textContent?.startsWith("New task"),
+      button.querySelector(".ui-nav-item-name")?.textContent?.startsWith("New task"),
     ) ?? assert.fail("the sidebar draws New task");
   const drafted = row.querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
   for (const each of roots.splice(0)) act(() => each.unmount());
@@ -733,7 +733,7 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
     });
   assert.equal(await newTaskDrafted(inWorkspace()), false, "nothing is kept yet");
 
-  window.localStorage.setItem("luke.composerDrafts", JSON.stringify([newTaskEntry(WORKSPACE)]));
+  window.localStorage.setItem("app.composerDrafts", JSON.stringify([newTaskEntry(WORKSPACE)]));
   assert.equal(await newTaskDrafted(inWorkspace()), true, "the words wait while a task is open");
   assert.equal(
     await newTaskDrafted(inWorkspace({ open: true })),
@@ -762,7 +762,7 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
   );
 
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([newTaskEntry(WORKSPACE, "issue-invites")]),
   );
   assert.equal(
@@ -860,11 +860,11 @@ async function columnOn(
     rowDrafted: () => container.querySelector(`:scope > ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
-        [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
+        [...container.querySelectorAll<HTMLElement>(".ui-tab")].find(
           // Note that the label's own words are read apart from what follows them, the Inbox's count.
-          (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === label,
+          (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`)
-      ).querySelector(`.luke-tab-end-mark ${pencil}`) !== null,
+      ).querySelector(`.ui-tab-end-mark ${pencil}`) !== null,
     unmount: () => {
       for (const each of roots.splice(0)) act(() => each.unmount());
     },
@@ -873,7 +873,7 @@ async function columnOn(
 
 test("an inbox card's answer and a draft agent's first message mark their tabs while another is chosen, never their open task's row", async () => {
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([
       {
         accountId: null,
@@ -910,7 +910,7 @@ test("an inbox card's answer and a draft agent's first message mark their tabs w
 
 test("a draft agent's tab holding no words, and an Inbox whose only draft is a pick on an item since changed, wear no Draft pencil", async () => {
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([
       {
         accountId: null,
@@ -938,7 +938,7 @@ test("a draft agent's tab holding no words, and an Inbox whose only draft is a p
 
 test("a draft behind no open tab of its task's, or behind a failed agent's, leaves the task's row unmarked while it is open", async () => {
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([
       { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
     ]),
@@ -1029,7 +1029,7 @@ async function inboxOn(item: InboxItem) {
   await settle();
   // Note that the tab chooses nothing by itself, so the item is opened as a press on its row opens it.
   const row =
-    container.querySelector<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main") ??
+    container.querySelector<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main") ??
     assert.fail("the item's row");
   await act(async () => row.click());
   await settle();
@@ -1135,7 +1135,7 @@ test("an agent with no plan carries its own outdated answers' words to the item 
 test("a pick kept by a build that stored its revision in the place still stands on the item at that revision", async () => {
   const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([
       {
         accountId: null,
@@ -1243,11 +1243,11 @@ test("words another panel's window writes for a box reach this window's box as t
 
   // The other window's write, as storage hands it to this one.
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Fix logout")]),
   );
   act(() => {
-    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "app.composerDrafts" }));
   });
   await settle();
   assert.equal(app.box(), "Fix logout");
@@ -1289,11 +1289,11 @@ test("words another window writes for a box this window let go a moment before s
     ),
   );
   window.localStorage.setItem(
-    "luke.composerDrafts",
+    "app.composerDrafts",
     JSON.stringify([keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Fix logout")]),
   );
   act(() => {
-    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "app.composerDrafts" }));
   });
   await settle();
   assert.equal(box().box.draft.text, "Fix logout");
@@ -1322,9 +1322,9 @@ test("files attached in this window stay as its draft when another window lets t
 
   // The other window, where the developer went, let the words go, which is all of the draft storage holds.
   leaveWindow();
-  window.localStorage.setItem("luke.composerDrafts", JSON.stringify([]));
+  window.localStorage.setItem("app.composerDrafts", JSON.stringify([]));
   act(() => {
-    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "app.composerDrafts" }));
   });
   await settle();
   assert.deepEqual([box().draft, box().attachments], ["", [notes]]);

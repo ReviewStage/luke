@@ -89,7 +89,7 @@ export async function notarizeElectronBuilderApp(context) {
   if (!shouldNotarize()) return;
   const credentials = resolveNotaryCredentials(process.env);
   const appPath = path.join(context.appOutDir, "Vespin.app");
-  const submissionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-builder-notary-"));
+  const submissionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "builder-notary-"));
   try {
     const submissionPath = path.join(submissionDirectory, "Vespin.app.zip");
     execFileSync("ditto", ["-c", "-k", "--keepParent", appPath, submissionPath], {

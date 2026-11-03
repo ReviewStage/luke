@@ -9,7 +9,7 @@
  * left of it (`refreshChatGptAccess`, under the row's lock, so two runners of
  * one account never race its rotating refresh token).
  *
- * The bearer is admitted as the events route admits it (`../luke-mcp/bearer.ts`):
+ * The bearer is admitted as the events route admits it (`../workspace-mcp/bearer.ts`):
  * a bearer no standing coding agent's conversation holds, a retired one's
  * among them, is refused. So is one whose agent does not run on Codex on its
  * starter's ChatGPT plan, and one past the brake, which is kept per agent. A
@@ -88,7 +88,7 @@ import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { CODER_REFUSAL } from "../coder-host/bounds.js";
 import { agentRepositoryToken } from "../coder-host/checkout.js";
 import { CODEX_TOKEN_MARGIN } from "../coder-host/codex-sessions.js";
-import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
+import { admitRunnerBearer, presentedBearer } from "../workspace-mcp/bearer.js";
 
 /** What the route is handed of the deployment's. */
 export interface RunnerTokenSeams {

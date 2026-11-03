@@ -26,13 +26,13 @@ function render(element: React.ReactElement): HTMLElement {
 }
 
 test("the working mark is hidden from a reader", () => {
-  const mark = render(createElement(WorkingMark)).querySelector("svg.luke-working-mark");
+  const mark = render(createElement(WorkingMark)).querySelector("svg.ui-working-mark");
   assert.equal(mark?.getAttribute("aria-hidden"), "true");
 });
 
 test("a still working mark lights at least three cells, not one stacked dot", () => {
   const dots = render(createElement(WorkingMark)).querySelectorAll<SVGElement>(
-    ".luke-working-mark-dot",
+    ".ui-working-mark-dot",
   );
   // A capture that drops the animation leaves each dot on its resting transform.
   const cells = new Set([...dots].map((dot) => dot.style.transform));
@@ -41,7 +41,7 @@ test("a still working mark lights at least three cells, not one stacked dot", ()
 
 test("the shimmer says its words and passes props on", () => {
   const line = render(createElement(Shimmer, { children: "Working", "aria-live": "polite" }));
-  const span = line.querySelector(".luke-shimmer");
+  const span = line.querySelector(".ui-shimmer");
   assert.equal(span?.textContent, "Working");
   assert.equal(span?.getAttribute("aria-live"), "polite");
 });

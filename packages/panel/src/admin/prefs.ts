@@ -36,7 +36,7 @@ function rememberedFlag(key: string, absentMeans = false): RememberedFlag {
  * back with the session, or the next cookie earned elsewhere on the site would
  * open the dashboard on a consent the maintainer gave once and then withdrew.
  */
-export const SIGN_IN_CHOSEN = rememberedFlag("luke-admin-sign-in-chosen");
+export const SIGN_IN_CHOSEN = rememberedFlag("app-admin-sign-in-chosen");
 
 /**
  * Whether the sidebar was left hidden, remembered the way the sign-in press
@@ -44,19 +44,19 @@ export const SIGN_IN_CHOSEN = rememberedFlag("luke-admin-sign-in-chosen");
  * Note that the key is the one the old icon rail's fold was kept under, so a
  * sidebar left folded to its rail opens hidden.
  */
-export const SIDEBAR_HIDDEN = rememberedFlag("luke-admin-sidebar-collapsed");
+export const SIDEBAR_HIDDEN = rememberedFlag("app-admin-sidebar-collapsed");
 
 /**
  * Whether the "Hide admins" filter is on. The key marks the exception, so a
  * browser that refuses storage simply opens with admins hidden.
  */
-export const ADMINS_HIDDEN = rememberedFlag("luke-admin-hide-admins", true);
+export const ADMINS_HIDDEN = rememberedFlag("app-admin-hide-admins", true);
 
 /**
  * Whether the Workspaces table lists shared workspaces alone. The key marks
  * the exception, so a browser that refuses storage opens on shared ones.
  */
-export const WORKSPACES_SHARED_ONLY = rememberedFlag("luke-admin-workspaces-shared-only", true);
+export const WORKSPACES_SHARED_ONLY = rememberedFlag("app-admin-workspaces-shared-only", true);
 
 interface RememberedValue<T> {
   read(): T | undefined;
@@ -99,6 +99,6 @@ const storedAccountsSort = Schema.TemplateLiteralParser([
  * server's own order — rather than a guess at what an old build meant by it.
  */
 export const ACCOUNTS_SORT: RememberedValue<AccountsSort> = rememberedValue(
-  "luke-admin-users-sort",
+  "app-admin-users-sort",
   storedAccountsSort,
 );

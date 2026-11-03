@@ -258,7 +258,7 @@ export function sectionGlyph(icon: TaskSectionIcon | undefined): React.JSX.Eleme
 }
 
 /** Where this Mac keeps the icons it chose last, newest first. */
-const RECENT_KEY = "luke.recentSectionIcons";
+const RECENT_KEY = "app.recentSectionIcons";
 
 /** The icons kept as chosen last. */
 const keptRecent = Schema.fromJsonString(Schema.Array(taskSectionIconSchema));
@@ -602,7 +602,7 @@ function ColorChoices({
   );
   return (
     <fieldset
-      className="section-icon-colors m-0 flex flex-none gap-luke-4 border-0 p-0"
+      className="section-icon-colors m-0 flex flex-none gap-ui-4 border-0 p-0"
       onKeyDown={stepGrid}
       onFocus={standTabStop}
     >

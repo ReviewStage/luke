@@ -32,7 +32,7 @@ import { buildAdminDayDetail } from "./admin-day.js";
 import { type AdminProcedureSeams, adminProcedures } from "./admin-procedures.js";
 import { buildAdminUserList } from "./admin-users.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const ADMIN: AdminViewer = { userId: "admin-1", role: "admin" };
 const MEMBER: AdminViewer = { userId: "user-1", role: "user" };
 const JSON_TYPE = "application/json";

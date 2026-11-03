@@ -190,7 +190,7 @@ export function CommentEditor({
         }}
       >
         {block === undefined ? null : (
-          <div className="comment-editor-head absolute top-luke-2 right-luke-2">
+          <div className="comment-editor-head absolute top-ui-2 right-ui-2">
             <Tooltip label={COMMENT_EDITOR_WORDS.ADD_SUGGESTION}>
               <IconButton
                 icon={block.row.icon}

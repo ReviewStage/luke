@@ -173,7 +173,7 @@ export const AGENT_ACT_KIND = {
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
-  AGENTS_LUKE_TOOLS: "agents.lukeTools",
+  AGENTS_WORKSPACE_TOOLS: "agents.workspaceTools",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
@@ -604,7 +604,7 @@ export type PlatformPortActKind =
  * `REQUEST`, and the preload forwards it to main on `CHANNEL`.
  */
 export const ACT_PORT = {
-  REQUEST: "luke:act-port",
+  REQUEST: "app:act-port",
   CHANNEL: "app:act-port",
 } as const;
 

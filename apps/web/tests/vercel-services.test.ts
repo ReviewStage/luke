@@ -53,13 +53,15 @@ function deploys(branch: string): boolean {
   return !refused;
 }
 
-test("a GitHub merge-queue branch, a PR media branch, or an evidence branch is not deployed, and every other branch is", () => {
+test("a GitHub merge-queue branch, an agent's branch, a PR media branch, or an evidence branch is not deployed, and every other branch is", () => {
   for (const branch of [
     "gh-readonly-queue/main/pr-3551-d1c107a6f00dbb4b1e5bd2d1b8f3a5c7e9d01234",
     "gh-readonly-queue/release/1.2/pr-7-0123456789abcdef0123456789abcdef01234567",
+    "agent/fix-relay",
+    "luke/fix-relay",
     "pr-assets",
     "pr-assets-card-redesign",
-    "evidence/luke-267",
+    "evidence/app-267",
   ]) {
     assert.equal(deploys(branch), false, branch);
   }
@@ -79,7 +81,7 @@ test("regenerating vercel.json gives back the committed file byte for byte", asy
 });
 
 test("a vercel.json key the generator does not know refuses the generation rather than being dropped", async (t) => {
-  const root = await temporaryDirectory(t, "luke-vercel-config-");
+  const root = await temporaryDirectory(t, "vercel-config-");
   const web = join(root, "apps", "web");
   mkdirSync(web, { recursive: true });
   writeFileSync(join(root, "vercel.json"), JSON.stringify({ ...vercel, images: { sizes: [256] } }));
@@ -389,7 +391,7 @@ test("on any host but the sandbox's, a link's address reaches no route, and the 
   // A host that holds the sandbox's name within it is no spelling of the sandbox's.
   for (const host of [
     APP_HOST,
-    "luke-web-git-main-stage-review.vercel.app",
+    "vespin-web-git-main-stage-review.vercel.app",
     `www.${SANDBOX_HOST}`,
     `${SANDBOX_HOST}.example`,
     `${SANDBOX_HOST}s`,

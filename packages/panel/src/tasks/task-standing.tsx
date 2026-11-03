@@ -353,7 +353,7 @@ function PathLine({
   // Note that the menu hangs from the line rather than from its crumb, because the path clips what stands inside it,
   // and that the line is pulled back by a crumb's inset, so its first mark stands on the title's edge.
   return (
-    <div className="plan-task-path mb-luke-4">
+    <div className="plan-task-path mb-ui-4">
       <div className="relative -ms-breadcrumb-pill-inline flex min-w-0" ref={room}>
         <Breadcrumbs label={PATH_LABEL} crumbs={drawn} />
         {menu}

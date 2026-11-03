@@ -27,7 +27,7 @@ import { useToastSwipe } from "./toast-swipe.js";
  * itself is handed that hold as `countdown`, and drains a thin bar along its
  * foot over it, paused while it is held. It arrives on the pair every
  * arriving element rides and leaves
- * first, over `--luke-duration-exit`, once `leaving` says so; whoever owns
+ * first, over `--ui-duration-exit`, once `leaving` says so; whoever owns
  * its life holds it mounted through that.
  *
  * What it says aloud is the stack's (`ToastStack`), so the words here are
@@ -86,19 +86,19 @@ const GLYPH_INK = {
  * sideways drag on it is the toast's while its up and down stay the page's.
  */
 const TOAST_CARD =
-  "luke-toast relative flex items-start gap-icon-gap rounded-toast border border-border-strong bg-background px-list-inset py-row-inset shadow-toast data-[action=true]:touch-pan-y data-[action=true]:pr-toast-gap";
+  "ui-toast relative flex items-start gap-icon-gap rounded-toast border border-border-strong bg-background px-list-inset py-row-inset shadow-toast data-[action=true]:touch-pan-y data-[action=true]:pr-toast-gap";
 
 /** The one cell its glyphs share, centred on its first row, so a turn of tone crossfades them with the card unmoved. */
 const TOAST_GLYPH =
-  "luke-toast-glyph mt-toast-glyph-inset grid size-control-icon flex-none [&_svg]:size-full";
+  "ui-toast-glyph mt-toast-glyph-inset grid size-control-icon flex-none [&_svg]:size-full";
 
 /** Its words and the line under them, a title's step apart, the column standing as far below its last line as above its first. */
 const TOAST_TEXT =
-  "luke-toast-text flex min-w-0 flex-1 flex-col gap-toast-line-gap py-toast-text-inset";
+  "ui-toast-text flex min-w-0 flex-1 flex-col gap-toast-line-gap py-toast-text-inset";
 
 /** A bar along its foot, in the muted ink, faint, draining toward its start. */
 const TOAST_COUNTDOWN =
-  "luke-toast-countdown pointer-events-none absolute inset-x-toast-inset bottom-0 h-toast-line-gap origin-left rounded-full bg-muted-foreground opacity-40";
+  "ui-toast-countdown pointer-events-none absolute inset-x-toast-inset bottom-0 h-toast-line-gap origin-left rounded-full bg-muted-foreground opacity-40";
 
 /** The glyph a toast leads with: a check for what was done, an alert for what was refused, the Inbox's tray for an ask, and the spinner's ring for work under way. */
 function ToneGlyph({ tone }: { tone: ToastTone }): React.JSX.Element {
@@ -214,13 +214,13 @@ export function Toast({
         ))}
       </span>
       <span className={TOAST_TEXT} key={words}>
-        <span className="luke-toast-words line-clamp-2 wrap-anywhere">
+        <span className="ui-toast-words line-clamp-2 wrap-anywhere">
           <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
             {words}
           </Text>
         </span>
         {detail === undefined ? null : (
-          <span className="luke-toast-detail line-clamp-2 wrap-anywhere">
+          <span className="ui-toast-detail line-clamp-2 wrap-anywhere">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
               {detail}
             </Text>
@@ -233,8 +233,8 @@ export function Toast({
           className={TOAST_COUNTDOWN}
           aria-hidden="true"
           style={cssCustomProperties({
-            "--luke-toast-hold": `${countdown}ms`,
-            "--luke-toast-seconds": Math.max(1, Math.round(countdown / SECOND_MS)),
+            "--ui-toast-hold": `${countdown}ms`,
+            "--ui-toast-seconds": Math.max(1, Math.round(countdown / SECOND_MS)),
           })}
         />
       )}

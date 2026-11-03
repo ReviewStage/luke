@@ -23,13 +23,12 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { messagesProcedures } from "./messages-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const USER_ID = "user-1";
 const AGENT_ID = randomUUID();
 
 const handle = hostedFetch({
   messages: messagesProcedures({
-    eveOrigin: () => undefined,
     resolveUserId: (incoming) =>
       Effect.succeed(
         Option.fromNullishOr(

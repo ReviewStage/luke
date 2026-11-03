@@ -7,10 +7,8 @@ import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
+import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
-import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sweepNativeRepositorySnapshots } from "../agents/repository-snapshot.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
@@ -64,10 +62,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 > {
   const environment = yield* HostedEnvironment;
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
-  const eveFor: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
-    deploymentEveOrigin(),
-    EVE_MOUNT.CODER,
-  );
+  const eveFor: EveForAccount = routedSessions;
   const httpClient = yield* HttpClient.HttpClient;
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,

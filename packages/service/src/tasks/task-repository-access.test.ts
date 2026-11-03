@@ -42,7 +42,7 @@ import { tasksProcedures } from "./tasks-procedures.js";
  * tokens throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SIDE = { owner: "octo-member", name: "side" } as const;
 
 /** GitHub's `GET /repos/{owner}/{repo}` on any member's token: the repository, pushable; nothing else is reached. */
@@ -72,7 +72,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
         workspaces: yield* fakeWorkspaceSeams,

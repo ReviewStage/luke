@@ -1,5 +1,5 @@
 import { CODEX_ERROR_INFO, codexErrorKind } from "@luke/agent-runner/protocol";
-import { CODEX_LUKE_MCP_SERVER, CODEX_TOOL } from "@luke/features/agent-tools";
+import { CODEX_TOOL, WORKSPACE_MCP_SERVER_NAMES } from "@luke/features/agent-tools";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
@@ -267,12 +267,12 @@ interface Answered extends Call {
  * left out, so the JSON the tool answered reads whole; in any other server's
  * a stand-in takes the place of its bytes.
  */
-function mcpAnswerText(content: readonly WireValue[], lukeTool: boolean): string {
+function mcpAnswerText(content: readonly WireValue[], workspaceTool: boolean): string {
   return content
     .flatMap((block) =>
       Option.match(readTextBlock(block), {
         onSome: ({ text }) => [text],
-        onNone: () => (lukeTool ? [] : [PICTURE_STAND_IN]),
+        onNone: () => (workspaceTool ? [] : [PICTURE_STAND_IN]),
       }),
     )
     .join("\n");
@@ -288,7 +288,7 @@ function storedMcpCall(
   call: typeof McpToolCallSchema.Type,
   args: WireValue,
 ): { readonly name: string; readonly input: UnparsedWireValue } {
-  if (call.server === CODEX_LUKE_MCP_SERVER) return { name: call.tool, input: args };
+  if (WORKSPACE_MCP_SERVER_NAMES.has(call.server)) return { name: call.tool, input: args };
   return (
     storedServerCall(call.server, call.tool, args, call.id) ?? {
       name: CODEX_TOOL.MCP_TOOL_CALL,
@@ -300,17 +300,19 @@ function storedMcpCall(
 /** A call to an MCP server, stored as `storedMcpCall` names it. */
 function mcpCall(item: unknown): Option.Option<Answered> {
   return Option.map(readMcpToolCall(item), (call) => {
-    const lukeTool = call.server === CODEX_LUKE_MCP_SERVER;
+    const workspaceTool = WORKSPACE_MCP_SERVER_NAMES.has(call.server);
     const args = call.arguments ?? {};
     const text =
       call.error?.message ??
       (call.result === undefined || call.result === null
         ? ""
-        : mcpAnswerText(call.result.content, lukeTool));
+        : mcpAnswerText(call.result.content, workspaceTool));
     return {
       callId: call.id,
       ...storedMcpCall(call, args),
-      answer: lukeTool ? { lukeTool: true, text } : { lukeTool: false, text, output: text },
+      answer: workspaceTool
+        ? { workspaceTool: true, text }
+        : { workspaceTool: false, text, output: text },
       failed:
         call.error !== undefined && call.error !== null ? true : FAILED_STATUSES.has(call.status),
     };
@@ -328,7 +330,7 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
           name: CODEX_TOOL.COMMAND_EXECUTION,
           input: { command: command.command, cwd: command.cwd },
           answer: {
-            lukeTool: false,
+            workspaceTool: false,
             text: output,
             output: { output, exitCode: command.exitCode ?? null },
           },
@@ -340,7 +342,7 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
         callId: change.id,
         name: CODEX_TOOL.FILE_CHANGE,
         input: { changes: change.changes },
-        answer: { lukeTool: false, text: change.status, output: { status: change.status } },
+        answer: { workspaceTool: false, text: change.status, output: { status: change.status } },
         failed: FAILED_STATUSES.has(change.status),
       }));
     case ITEM.MCP_TOOL_CALL:
@@ -351,7 +353,7 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
         name: CODEX_TOOL.WEB_SEARCH,
         input: { query: search.query },
         answer: {
-          lukeTool: false,
+          workspaceTool: false,
           text: search.query,
           output: {
             query: search.query,
@@ -373,7 +375,7 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
           receiverThreadIds: call.receiverThreadIds ?? [],
         },
         answer: {
-          lukeTool: false,
+          workspaceTool: false,
           text: call.status,
           output: { status: call.status, agentsStates: call.agentsStates ?? {} },
         },
@@ -385,7 +387,7 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
         callId: view.id,
         name: CODEX_TOOL.IMAGE_VIEW,
         input: { path: view.path },
-        answer: { lukeTool: false, text: PICTURE_STAND_IN, output: PICTURE_STAND_IN },
+        answer: { workspaceTool: false, text: PICTURE_STAND_IN, output: PICTURE_STAND_IN },
         failed: false,
       }));
     default:
@@ -469,7 +471,7 @@ function childTurnMoments(threadId: string, params: unknown): readonly NativeMom
       kind: NATIVE_MOMENT.SUBAGENT_ENDED,
       key: threadId,
       settlement: toolAnswerSettlement(
-        { lukeTool: false, text, output: { status } },
+        { workspaceTool: false, text, output: { status } },
         status !== TURN_COMPLETED,
       ),
     },
@@ -540,7 +542,7 @@ function planMoments(params: unknown, sequence: number): readonly NativeMoment[]
         callId: `${CODEX_TOOL.TODO_LIST}:${sequence}`,
         name: CODEX_TOOL.TODO_LIST,
         input,
-        answer: { lukeTool: false, text: "", output: input },
+        answer: { workspaceTool: false, text: "", output: input },
         failed: false,
       });
     },

@@ -25,10 +25,10 @@ const BOOT = readFileSync(join(import.meta.dirname, "..", "public", "app-theme.j
 
 /** Whether the next load's frame stands the sidebar, as the head's script reads what this tab kept. */
 function nextFramePinsSidebar(): boolean {
-  document.documentElement.removeAttribute("data-luke-boot-sidebar");
+  document.documentElement.removeAttribute("data-ui-boot-sidebar");
   // biome-ignore lint/security/noGlobalEval: the script under test is the site's own file, run as the page runs it.
   window.eval(BOOT);
-  return document.documentElement.getAttribute("data-luke-boot-sidebar") === "pinned";
+  return document.documentElement.getAttribute("data-ui-boot-sidebar") === "pinned";
 }
 
 let app: WebApp | undefined;
@@ -41,14 +41,14 @@ function sessionReads(service: FakeService): number {
 afterEach(async () => {
   await app?.close();
   localStorage.clear();
-  document.documentElement.removeAttribute("data-luke-boot-sidebar");
+  document.documentElement.removeAttribute("data-ui-boot-sidebar");
 });
 
 test("signed out, the panel draws its sign-in; a return after another tab signed in opens the account's tasks", async () => {
   const service = fakeService({ signedIn: false });
   // An earlier load read someone signed in here, the sidebar open.
-  localStorage.setItem("luke.signed-in-here", "true");
-  localStorage.setItem("luke.sidebar-collapsed", "false");
+  localStorage.setItem("app.signed-in-here", "true");
+  localStorage.setItem("app.sidebar-collapsed", "false");
   const root = document.createElement("div");
   document.body.append(root);
 
@@ -59,7 +59,7 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() =>
-    assert.ok(root.querySelector("section.luke-auth-card") !== null, "the panel draws its sign-in"),
+    assert.ok(root.querySelector("section.ui-auth-card") !== null, "the panel draws its sign-in"),
   );
   const toMac = [...root.querySelectorAll("a")].find(
     (link) => link.textContent === "Open in the Mac app",
@@ -80,7 +80,7 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   service.setSession(true);
   await vi.waitFor(() => {
     window.dispatchEvent(new Event("focus"));
-    assert.ok(root.querySelector("section.luke-auth-card") === null, "the sign-in is gone");
+    assert.ok(root.querySelector("section.ui-auth-card") === null, "the sign-in is gone");
     assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
   }, 5_000);
   await vi.waitFor(() =>

@@ -33,7 +33,7 @@ function useFit(width: number) {
     watch.observe(box);
     return () => watch.disconnect();
   }, [width]);
-  return { ref, style: cssCustomProperties({ "--luke-landing-fit": scale }) };
+  return { ref, style: cssCustomProperties({ "--ui-landing-fit": scale }) };
 }
 
 /** A Mac window, 16:10, drawing `children` laid out at 1280 by 800. */
@@ -46,10 +46,10 @@ export function LandingWindow({
 }): React.JSX.Element {
   const fit = useFit(SCREEN.WINDOW.WIDTH);
   return (
-    <div className="luke-landing-window" role="img" aria-label={label}>
-      <div ref={fit.ref} className="luke-landing-window-fit" style={fit.style}>
-        <div className="luke-landing-window-screen" inert>
-          <span className="luke-landing-window-lights" aria-hidden="true">
+    <div className="ui-landing-window" role="img" aria-label={label}>
+      <div ref={fit.ref} className="ui-landing-window-fit" style={fit.style}>
+        <div className="ui-landing-window-screen" inert>
+          <span className="ui-landing-window-lights" aria-hidden="true">
             <i />
             <i />
             <i />
@@ -71,13 +71,13 @@ export function LandingPhone({
 }): React.JSX.Element {
   const fit = useFit(SCREEN.PHONE.WIDTH);
   return (
-    <div className="luke-landing-phone" role="img" aria-label={label}>
-      <div ref={fit.ref} className="luke-landing-phone-fit" style={fit.style}>
-        <div className="luke-landing-phone-screen" inert>
+    <div className="ui-landing-phone" role="img" aria-label={label}>
+      <div ref={fit.ref} className="ui-landing-phone-fit" style={fit.style}>
+        <div className="ui-landing-phone-screen" inert>
           {children}
         </div>
       </div>
-      <span className="luke-landing-phone-island" aria-hidden="true" />
+      <span className="ui-landing-phone-island" aria-hidden="true" />
     </div>
   );
 }

@@ -119,7 +119,7 @@ function CopyGlyph({ state, turns }: { state: CopyState; turns: number }): React
   return (
     <span
       key={turns}
-      className={`luke-copy-glyph inline-grid flex-none place-items-center${GLYPH_INK[state]}`}
+      className={`ui-copy-glyph inline-grid flex-none place-items-center${GLYPH_INK[state]}`}
       data-state={state}
       data-turned={turns > 0 || undefined}
       aria-hidden="true"
@@ -167,10 +167,10 @@ function ChipLead({
 }): React.JSX.Element {
   return (
     <span
-      className="luke-copy-lead inline-grid size-chip-chevron flex-none text-muted-foreground *:[grid-area:1/1] *:place-self-center *:transition-opacity *:duration-(--luke-duration-quick) *:ease-motion-exit [&_svg]:size-chip-chevron"
+      className="ui-copy-lead inline-grid size-chip-chevron flex-none text-muted-foreground *:[grid-area:1/1] *:place-self-center *:transition-opacity *:duration-(--ui-duration-quick) *:ease-motion-exit [&_svg]:size-chip-chevron"
       data-state={state}
     >
-      <span className="luke-copy-lead-mark" aria-hidden="true">
+      <span className="ui-copy-lead-mark" aria-hidden="true">
         <Lead />
       </span>
       <CopyGlyph state={state} turns={turns} />

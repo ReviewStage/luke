@@ -8,17 +8,17 @@ const PRODUCTION_ORIGIN = "https://vespin.dev";
 
 const PRODUCTION = {
   VERCEL_ENV: "production",
-  VERCEL_URL: "luke-abc123-stage-review.vercel.app",
+  VERCEL_URL: "vespin-abc123-stage-review.vercel.app",
   BETTER_AUTH_URL: PRODUCTION_ORIGIN,
 } as const;
 
-const PREVIEW_ORIGIN = "https://luke-def456-stage-review.vercel.app";
-const PREVIEW_BRANCH_ORIGIN = "https://luke-web-git-feature-stage-review.vercel.app";
+const PREVIEW_ORIGIN = "https://vespin-def456-stage-review.vercel.app";
+const PREVIEW_BRANCH_ORIGIN = "https://vespin-git-feature-stage-review.vercel.app";
 
 const PREVIEW = {
   VERCEL_ENV: "preview",
-  VERCEL_URL: "luke-def456-stage-review.vercel.app",
-  VERCEL_BRANCH_URL: "luke-web-git-feature-stage-review.vercel.app",
+  VERCEL_URL: "vespin-def456-stage-review.vercel.app",
+  VERCEL_BRANCH_URL: "vespin-git-feature-stage-review.vercel.app",
   BETTER_AUTH_URL: PRODUCTION_ORIGIN,
 } as const;
 

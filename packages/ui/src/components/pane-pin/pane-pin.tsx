@@ -48,7 +48,7 @@ export function PanePin({
     {
       ...rest,
       ref,
-      className: className === undefined ? "luke-pane-pin" : `luke-pane-pin ${className}`,
+      className: className === undefined ? "ui-pane-pin" : `ui-pane-pin ${className}`,
       onPointerDown: onPin === undefined ? undefined : () => onPin(),
     },
     children,

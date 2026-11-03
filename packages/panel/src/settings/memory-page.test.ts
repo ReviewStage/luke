@@ -238,7 +238,7 @@ test("what Vespin kept in the workspace is read for it and listed in the service
   );
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   const keeper = (memory: MemorySummary) =>
-    rowOf(page, memory).querySelector(".luke-comment-head")?.textContent ?? "";
+    rowOf(page, memory).querySelector(".ui-comment-head")?.textContent ?? "";
   assert.match(keeper(DEPLOYS), /^You/u);
   assert.match(keeper(TESTS), /^Dean/u);
   assert.ok(

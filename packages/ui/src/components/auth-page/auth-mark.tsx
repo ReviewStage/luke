@@ -51,7 +51,7 @@ export function AuthMark({
 }): React.JSX.Element {
   const Glyph = tone === undefined ? undefined : BADGE_GLYPH[tone];
   return (
-    <span className="luke-auth-ring relative inline-grid place-items-center size-auth-ring box-border border border-border rounded-luke-full bg-surface text-foreground">
+    <span className="ui-auth-ring relative inline-grid place-items-center size-auth-ring box-border border border-border rounded-ui-full bg-surface text-foreground">
       {provider === undefined ? (
         <ProductMark inherit />
       ) : (
@@ -59,7 +59,7 @@ export function AuthMark({
       )}
       {Glyph === undefined ? null : (
         <span
-          className={`luke-auth-badge absolute -right-luke-2 -bottom-luke-2 grid place-items-center size-luke-20 rounded-luke-full shadow-auth-badge ${tone === undefined ? "" : BADGE_TONE_CLASS[tone]}`}
+          className={`ui-auth-badge absolute -right-ui-2 -bottom-ui-2 grid place-items-center size-ui-20 rounded-ui-full shadow-auth-badge ${tone === undefined ? "" : BADGE_TONE_CLASS[tone]}`}
           data-tone={tone}
         >
           <Glyph />

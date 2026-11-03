@@ -65,7 +65,7 @@ const PANEL: ActSender = { sender: SENDER, panel: true };
 const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
@@ -687,7 +687,7 @@ it("the admin dashboard opens the service's own page in the browser, and an addr
 });
 
 it("the admin dashboard is refused, and nothing opens, where the service's origin is no web address", async () => {
-  for (const serviceBaseUrl of ["file:///srv/luke", "luke-evil://service", "not an address"]) {
+  for (const serviceBaseUrl of ["file:///srv/app", "evil://service", "not an address"]) {
     const { client, browsed } = windowPort(PANEL, { serviceBaseUrl });
 
     assert.deepEqual(await settled(client, TASKS_ACT_KIND.ADMIN_OPEN, undefined), {
@@ -743,7 +743,7 @@ it("a GitHub page the host names off the service's own origin is refused and not
 
   for (const page of [
     "file:///etc/passwd",
-    "luke-evil://connect",
+    "evil://connect",
     "https://evil.test/connect-github.html",
   ]) {
     script.connectPage = page;

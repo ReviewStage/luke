@@ -40,7 +40,7 @@ import { planCommentsProcedures } from "./plan-comments-procedures.js";
  * Synthetic accounts, plans, and comments throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** The hub's coalesce window: how long a woken watch gathers before it answers. */
 const COALESCE = Duration.millis(100);
@@ -52,7 +52,7 @@ const WORDS = "An admin invites a teammate by email.";
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
@@ -117,7 +117,6 @@ const onHub = Effect.gen(function* () {
         Effect.succeed(
           Option.fromNullishOr(asked.headers.get("authorization")?.replace("Bearer ", "")),
         ),
-      eveOrigin: () => undefined,
     }),
   });
   /** The plan's comments read as the account, past the cursor where one is named. */

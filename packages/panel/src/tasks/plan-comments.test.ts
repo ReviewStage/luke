@@ -345,7 +345,7 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   const { container, asked } = drawn("tab");
 
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
-  assert.ok(container.querySelector(".luke-pane-bar")?.textContent?.startsWith("Resolved"));
+  assert.ok(container.querySelector(".ui-pane-bar")?.textContent?.startsWith("Resolved"));
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="Reopen"]')?.click();
   });
@@ -357,9 +357,9 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
 
 test("the Comments tab opens on the list its reader last chose, Resolved until they show the open ones again", () => {
   const heading = (container: HTMLElement) =>
-    container.querySelector(".luke-pane-bar")?.textContent?.split(/\d/u)[0];
+    container.querySelector(".ui-pane-bar")?.textContent?.split(/\d/u)[0];
   const toggle = (container: HTMLElement) =>
-    container.querySelector<HTMLButtonElement>(".luke-pane-bar button[aria-pressed]")?.click();
+    container.querySelector<HTMLButtonElement>(".ui-pane-bar button[aria-pressed]")?.click();
 
   const first = drawn("tab");
   assert.equal(heading(first.container), "Open", "no choice kept lists the open threads");
@@ -388,7 +388,7 @@ test("the Comments tab's Resolved toggle starts the other list at its top", () =
   });
 
   act(() =>
-    container.querySelector<HTMLButtonElement>(".luke-pane-bar button[aria-pressed]")?.click(),
+    container.querySelector<HTMLButtonElement>(".ui-pane-bar button[aria-pressed]")?.click(),
   );
 
   assert.equal(top, 0);
@@ -417,10 +417,10 @@ test("the Comments tab draws a skeleton while its threads are read, then neither
     reading.container.querySelector('.comments-list [role="status"]')?.textContent ?? "",
     /Reading the comments/u,
   );
-  assert.equal(reading.container.querySelector(".comments-list .luke-empty-state"), null);
+  assert.equal(reading.container.querySelector(".comments-list .ui-empty-state"), null);
   assert.equal(reading.container.querySelector(".comments-list[data-empty]"), null);
   assert.ok(
-    reading.container.querySelectorAll('[role="status"] .comment-card .luke-skeleton').length > 0,
+    reading.container.querySelectorAll('[role="status"] .comment-card .ui-skeleton').length > 0,
     "the placeholder's blocks stand in a thread's own card, where the threads land",
   );
 });
@@ -434,7 +434,7 @@ test("a comment's time reads as a thread's does, a few letters, with the full mo
     { ...open, entries: [{ ...open.entries[0], at }], createdAt: at, updatedAt: at },
   ]);
 
-  const time = container.querySelector<HTMLElement>(".luke-comment-time time");
+  const time = container.querySelector<HTMLElement>(".ui-comment-time time");
   assert.equal(time?.textContent, "3h");
 
   restOn(time as HTMLElement);
@@ -690,7 +690,7 @@ test("a thread at rest opens from a press anywhere on its card", () => {
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
   assert.equal(card()?.dataset.open, "false");
 
-  act(() => card()?.querySelector<HTMLElement>(".luke-comment-head")?.click());
+  act(() => card()?.querySelector<HTMLElement>(".ui-comment-head")?.click());
   assert.equal(card()?.dataset.open, "true", "the card's head opens it");
 });
 
@@ -701,7 +701,7 @@ test("a press that opens a thread puts the caret in its reply, and a thread draw
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
   assert.equal(card()?.querySelector("textarea"), null, "a card at rest has no field");
 
-  act(() => card()?.querySelector<HTMLElement>(".luke-comment-head")?.click());
+  act(() => card()?.querySelector<HTMLElement>(".ui-comment-head")?.click());
 
   const reply = card()?.querySelector("textarea");
   assert.ok(reply, "the open thread's reply field");
@@ -735,7 +735,7 @@ test("a failed send says why in the foot under the box, and no note stands over 
   });
   await act(async () => undefined);
 
-  const foot = pending()?.querySelector(".luke-composer-foot-note");
+  const foot = pending()?.querySelector(".ui-composer-foot-note");
   assert.equal(foot?.textContent, "not in this test");
   assert.equal(foot?.querySelector("[role='alert']")?.textContent, "not in this test");
   assert.equal(pending()?.querySelector(".comment-note"), null);
@@ -752,7 +752,7 @@ test("a failed act on an open thread says why in its reply's foot", () => {
 
   const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
   assert.equal(
-    card?.querySelector(".luke-composer-foot-note")?.textContent,
+    card?.querySelector(".ui-composer-foot-note")?.textContent,
     "Could not resolve the thread.",
   );
 });
@@ -916,13 +916,13 @@ test("a reply pasted past the comment's cap is cut to the room left and the card
   const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
   assert.ok(card);
   const cap = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS;
-  const note = () => card.querySelector(".luke-composer-foot-note")?.textContent;
-  assert.equal(card.querySelector(".luke-length-counter"), null);
+  const note = () => card.querySelector(".ui-composer-foot-note")?.textContent;
+  assert.equal(card.querySelector(".ui-length-counter"), null);
 
   pasteInComposer(card, "x".repeat(cap + 100));
   assert.equal(note(), pasteCutWords(cap));
   assert.equal(
-    card.querySelector(".luke-length-counter")?.textContent,
+    card.querySelector(".ui-length-counter")?.textContent,
     `${formatCount(cap)}/${formatCount(cap)}`,
   );
 
@@ -982,7 +982,7 @@ test("a block a thread covers whole offers no button to start another, and one a
       return container.querySelector(".comment-block-button button");
     };
     const heading = (name: string) =>
-      [...container.querySelectorAll(".luke-markdown-heading")].find((h) => h.textContent === name);
+      [...container.querySelectorAll(".ui-markdown-heading")].find((h) => h.textContent === name);
     const paragraph = [...container.querySelectorAll("p")].find((p) =>
       p.textContent?.startsWith("Admins can withdraw"),
     );
@@ -1142,7 +1142,7 @@ test("on a plan's page a comment's field offers dictation, and the plain field n
 
   const dictate = (container: HTMLElement) =>
     container.querySelector(
-      `.comment-card[data-thread="${ID.OPEN}"] .luke-composer-foot button[aria-label^="Dictate"]`,
+      `.comment-card[data-thread="${ID.OPEN}"] .ui-composer-foot button[aria-label^="Dictate"]`,
     );
   assert.ok(dictate(withMentions.container), "the editor's field takes a dictation");
   assert.equal(dictate(plain.container), null, "the plain field does not");
@@ -1259,7 +1259,7 @@ test("replies sent before the first answers each stand as Sending and go one at 
   assert.deepEqual(sent(), ["Not for v1."], "the second waits on the first's answer");
   typeInto(field, "And a third?");
   const foot = (label: string) =>
-    card.querySelector<HTMLButtonElement>(`.luke-composer-foot button[aria-label="${label}"]`);
+    card.querySelector<HTMLButtonElement>(`.ui-composer-foot button[aria-label="${label}"]`);
   assert.equal(foot("Sending"), null);
   assert.equal(foot("Reply")?.disabled, false);
   assert.equal(foot("Attach files")?.disabled, false);
@@ -1365,13 +1365,13 @@ test("a thread's resolve reads as its writer's own line, drawn as a comment's he
     agents,
   );
 
-  assert.ok(container.querySelector(".luke-empty-state")?.textContent?.includes("No comments"));
+  assert.ok(container.querySelector(".ui-empty-state")?.textContent?.includes("No comments"));
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
   const events = [
     ...container.querySelectorAll<HTMLElement>(".comment-event[data-kind='resolved']"),
   ];
   assert.ok(
-    events[0]?.querySelector(":scope > .luke-comment > .luke-comment-head"),
+    events[0]?.querySelector(":scope > .ui-comment > .ui-comment-head"),
     "drawn as a comment's head",
   );
   const lines = events.map((event) => event.textContent ?? "");
@@ -1823,7 +1823,7 @@ function datedThread(by: { userId: string; name: string }): PlanCommentThread {
         id: `${ID.OPEN.slice(0, -4)}aaaa`,
         kind: PLAN_COMMENT_ENTRY.COMMENT,
         writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by },
-        words: "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
+        words: "Ship by [@Oct 23, 2026](mention://date/2026-10-23).",
         at: 1,
       },
     ],
@@ -1855,7 +1855,7 @@ test("the date chip in the reader's own comment opens its picker with no field o
       action: {
         action: PLAN_COMMENT_ACTION.EDIT,
         entry: `${ID.OPEN.slice(0, -4)}aaaa`,
-        words: "Ship by [@Oct 24, 2026](luke://date/2026-10-24).",
+        words: "Ship by [@Oct 24, 2026](mention://date/2026-10-24).",
       },
     },
   ]);
@@ -1880,7 +1880,7 @@ test("on the plan's page the date chip in the reader's own comment, its thread o
   await act(async () => undefined);
   act(() =>
     container
-      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .luke-comment-head`)
+      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .ui-comment-head`)
       ?.click(),
   );
 
@@ -1970,7 +1970,7 @@ test("an edit's words outlast Cancel and Esc, come back as Edit opens it again, 
   const { edit, field, press, asked } = ownComment();
 
   edit();
-  assert.equal(field()?.value, "Ship by [@Oct 23, 2026](luke://date/2026-10-23).");
+  assert.equal(field()?.value, "Ship by [@Oct 23, 2026](mention://date/2026-10-23).");
   typeInto(field(), "Ship by Friday.");
   press("Cancel");
   assert.ok(field() === null, "Cancel closes the field");
@@ -1993,7 +1993,7 @@ test("an edit's words outlast Cancel and Esc, come back as Edit opens it again, 
   edit();
   assert.equal(
     field()?.value,
-    "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
+    "Ship by [@Oct 23, 2026](mention://date/2026-10-23).",
     "saved, its draft is let go",
   );
 });
@@ -2012,9 +2012,9 @@ test("a comment's Save is busy from the press, shows its ring once the answer ha
       );
     act(() => save()?.click());
     assert.equal(save()?.getAttribute("aria-label"), "Saving");
-    assert.equal(save()?.querySelector(".luke-spinner-ring") != null, false);
+    assert.equal(save()?.querySelector(".ui-spinner-ring") != null, false);
     act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
-    assert.equal(save()?.querySelector(".luke-spinner-ring") != null, true);
+    assert.equal(save()?.querySelector(".ui-spinner-ring") != null, true);
 
     // A press while it is out asks nothing more.
     act(() => save()?.click());
@@ -2044,9 +2044,9 @@ test("a thread's check shows busy while its Resolve is out, and stops when the s
   try {
     act(() => check()?.click());
     assert.equal(check()?.getAttribute("aria-label"), "Resolving");
-    assert.equal(check()?.querySelector(".luke-spinner-ring") != null, false);
+    assert.equal(check()?.querySelector(".ui-spinner-ring") != null, false);
     act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
-    assert.equal(check()?.querySelector(".luke-spinner-ring") != null, true);
+    assert.equal(check()?.querySelector(".ui-spinner-ring") != null, true);
     act(() => check()?.click());
     assert.equal(asked.length, 1);
 

@@ -13,13 +13,13 @@ and daily series).
 - A component takes its data and its callbacks as props. A shared context
   lands only when three components need the same door, because a context is a
   second way in that every app has to provide.
-- Nothing here reaches an app: no `window.luke`, no `#shared/`, `#renderer/`,
+- Nothing here reaches an app: no `window.appBridge`, no `#shared/`, `#renderer/`,
   or `#main/` import. The desktop's bridge and the site's fetches stay in the
   app that mounts the component.
-- A component draws with its own `luke-*` classes over the `--luke-*` tokens,
+- A component draws with its own `ui-*` classes over the `--ui-*` tokens,
   or in Tailwind utilities over the one theme in `src/tailwind/theme.css`,
   whose every name (`bg-primary`, `text-muted-foreground`, `bg-switch-on`)
-  aliases a `--luke-*` role. An app takes that theme and never maps those
+  aliases a `--ui-*` role. An app takes that theme and never maps those
   names itself, and a role the theme lacks is added there, not spelled as a
   `-(--name)` shorthand at a call site, a motion duration's aside. The
   chart's frame is `src/chart/chart.css`.

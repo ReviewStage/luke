@@ -32,7 +32,7 @@ const USER_ID = "user-fixture";
 const MINTED_ID = "5f0c7a1e-2b3d-4e5f-8a9b-0c1d2e3f4a5b";
 const KEPT_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 const MACHINE_ID = "e".repeat(64);
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"c".repeat(43)}`;
 const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
 const SCRIPT = "#!/bin/sh\necho install\n";
@@ -167,7 +167,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
 /** The state folder with the record given written, as the install's host would have left it. */
 const recorded = (record: HostDevice) =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+    const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
     yield* writeHostDevice(stateRoot, record);
     return stateRoot;
   });
@@ -177,7 +177,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot);
         yield* until(() => mac.asked.length >= 2);
 
@@ -242,7 +242,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot, { failedInstalls: 1 });
         yield* until(() => mac.asked.length >= 2);
         yield* nudged(Duration.seconds(5));
@@ -290,7 +290,7 @@ it.effect.each([
     record: {
       deviceId: KEPT_ID,
       deviceSecret: OLD_SECRET,
-      serviceOrigin: "https://preview.luke.test",
+      serviceOrigin: "https://preview.app.test",
     },
     experiments: BRING_YOUR_OWN_HOST_ON,
   },

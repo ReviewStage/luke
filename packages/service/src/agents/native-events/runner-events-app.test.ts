@@ -62,7 +62,7 @@ import { titleAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { readNativeTurnHanded, recordNativeTurnHanded } from "../coder-host/turn-message.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
   type RunnerAlive,
@@ -82,7 +82,7 @@ import {
  * runner posts it. Synthetic accounts, words, and ids throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
@@ -152,7 +152,7 @@ const agentOn = (
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
     const started = yield* createAgent(userId, {
       taskId: task.id,
@@ -240,7 +240,7 @@ function workflowTurn(lineId: string): readonly RunnerEvent[] {
     { type: "system", subtype: "init", ...envelope },
     toolUse("toolu_Write", "Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }),
     toolResult("toolu_Write", "File created"),
-    toolUse("toolu_inbox", "mcp__luke__read_inbox", {}),
+    toolUse("toolu_inbox", "mcp__workspace__read_inbox", {}),
     toolResult("toolu_inbox", '{"status":"accepted","inbox":[]}'),
     toolUse("toolu_Bash", "Bash", {
       command: `sleep 45 && echo ${NONCE}`,
@@ -933,6 +933,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
                 {
                   type: "tool_use",
                   id: "toolu_look",
+                  // The server's name before its rename, which a stored transcript still holds, read as ours.
                   name: "mcp__luke__look_at_picture",
                   input: {},
                 },
@@ -1312,7 +1313,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         const inbox = {
           type: "mcpToolCall",
           id: "mcp_inbox",
-          server: "luke",
+          server: "workspace",
           tool: "read_inbox",
           status: "inProgress",
           arguments: {},

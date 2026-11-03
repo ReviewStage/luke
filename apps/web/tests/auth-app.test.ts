@@ -22,9 +22,9 @@ import { recordedResponse, settleResponseGolden } from "./support/response-golde
 const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/auth-route");
 
 /** The layer names a database and nothing here queries one, as in `web-runtime.test.ts`. */
-const PLACEHOLDER_DATABASE_URL = "postgresql://runtime:edge@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://runtime:edge@127.0.0.1:5432/app";
 
-const AUTH_ORIGIN = "https://luke.test";
+const AUTH_ORIGIN = "https://app.test";
 
 interface StubbedHandler {
   handle: WebRequestHandler;
@@ -85,7 +85,7 @@ const EXCHANGES: readonly Exchange[] = [
       new Request(`${AUTH_ORIGIN}/api/auth/sign-in/email`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: "developer@luke.test", password: "fixture" }),
+        body: JSON.stringify({ email: "developer@app.test", password: "fixture" }),
       }),
   },
   {

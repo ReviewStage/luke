@@ -56,7 +56,7 @@ import { dispatched } from "./support/platform-landing.js";
  * loads, and each test names it again below for the routes it builds itself.
  */
 const { OWN_ORIGIN } = vi.hoisted(() => {
-  const own = "https://luke.test";
+  const own = "https://app.test";
   vi.stubEnv("VERCEL_ENV", "production");
   vi.stubEnv("BETTER_AUTH_URL", own);
   return { OWN_ORIGIN: own };
@@ -66,7 +66,7 @@ const { OWN_ORIGIN } = vi.hoisted(() => {
  * The web runtime's layer names a database, so building it needs a
  * connection string; this one is never dialled, as in `route-effect.test.ts`.
  */
-const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke";
+const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/app";
 
 const FOREIGN_ORIGIN = "https://evil.example";
 const ACCOUNT_PATH = "/api/account-under-test";
@@ -99,7 +99,7 @@ const openSignedIn = Effect.gen(function* () {
   const plugin = yield* openWorkspacePlugin;
   const userId = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   ).pipe(Effect.provide(plugin.database));
   const resolveUserId: UserIdResolver = (request) =>
     requestUserId(request, () => Effect.succeed(undefined), plugin.resolveSessionUserId);

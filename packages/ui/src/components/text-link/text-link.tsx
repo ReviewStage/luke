@@ -63,7 +63,7 @@ export type TextLinkCurrent = (typeof TEXT_LINK_CURRENT)[keyof typeof TEXT_LINK_
 /** What an app's hint hands the link it wraps: when to show and go, and the words it describes it by. */
 /** What every link is drawn with: its corner, its words broken anywhere, its ink and underline easing under the pointer; the ↗'s group (`ArrowUpRightIcon`). */
 const LINK_BASE =
-  "luke-text-link group/text-link rounded-text-link wrap-anywhere transition-[color,text-decoration-color] duration-(--luke-duration-hover) ease-motion-exit";
+  "ui-text-link group/text-link rounded-text-link wrap-anywhere transition-[color,text-decoration-color] duration-(--ui-duration-hover) ease-motion-exit";
 
 /** Each look's ink at rest and, where `a` lifts under the pointer or where the reader is, lit: an underlined link keeps its words' ink, its line going full strength. */
 const LOOK_CLASS = {

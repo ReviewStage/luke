@@ -25,9 +25,9 @@ import type { ReactNode } from "react";
  * card around it insets both; hidden while it holds nothing drawn.
  */
 const FILES =
-  "luke-composer-files flex flex-wrap gap-tight-gap px-luke-12 pt-luke-12 pb-0 " +
-  "group-data-[look=field]/composer:px-luke-6 group-data-[look=field]/composer:pt-luke-6 " +
-  "group-data-[look=input]/composer:px-luke-6 group-data-[look=input]/composer:pt-luke-6 " +
+  "ui-composer-files flex flex-wrap gap-tight-gap px-ui-12 pt-ui-12 pb-0 " +
+  "group-data-[look=field]/composer:px-ui-6 group-data-[look=field]/composer:pt-ui-6 " +
+  "group-data-[look=input]/composer:px-ui-6 group-data-[look=input]/composer:pt-ui-6 " +
   "group-data-[look=bare]/composer:p-0 [&:not(:has(>:not([hidden])))]:hidden";
 
 /** A box's field, `children`, under the chips of the files handed to it, where it holds any. */

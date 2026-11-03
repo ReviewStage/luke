@@ -77,7 +77,7 @@ test("a batch's build is read as strictly as an event's, and is never a reason t
   assert.deepEqual(
     productEventBuildFromWire({
       events: [],
-      build: { app_version: "0.18.0", packaged: true, email: "me@luke.test" },
+      build: { app_version: "0.18.0", packaged: true, email: "me@app.test" },
     }),
     { app_version: "0.18.0", packaged: true },
   );

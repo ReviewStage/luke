@@ -47,36 +47,36 @@ test("a malformed instance name runs as the plain development instance", () => {
 });
 
 test("the run script names each instance as the app does", () => {
-  assert.equal(workspace("luke_app_names | head -n 1").stdout, development());
-  assert.equal(workspace("luke_instance_app_name preview").stdout, development("preview"));
+  assert.equal(workspace("app_app_names | head -n 1").stdout, development());
+  assert.equal(workspace("app_instance_app_name preview").stdout, development("preview"));
 });
 
 test("a preview run is named for its branch, or for the host given, in a name the app takes", () => {
   const cases = [
     {
-      branch: "luke/Task_Comments.Inbox",
-      address: "https://luke-git-x-acme.vercel.app/",
-      expected: "preview-luke-task-comments-inbox",
+      branch: "agent/Task_Comments.Inbox",
+      address: "https://vespin-git-x-acme.vercel.app/",
+      expected: "preview-agent-task-comments-inbox",
     },
     {
       branch: "",
-      address: "https://luke-abc123-acme.vercel.app",
-      expected: "preview-luke-abc123-acme",
+      address: "https://vespin-abc123-acme.vercel.app",
+      expected: "preview-vespin-abc123-acme",
     },
   ];
   for (const { branch, address, expected } of cases) {
-    const named = workspace(`luke_preview_instance "${address}" "${branch}"`).stdout;
+    const named = workspace(`app_preview_instance "${address}" "${branch}"`).stdout;
     assert.equal(named, expected);
     assert.equal(resolveInstance({ packaged: false, requested: named }), named);
   }
   const long = workspace(
-    `luke_preview_instance https://a.vercel.app "feature/${"long-branch-".repeat(8)}"`,
+    `app_preview_instance https://a.vercel.app "feature/${"long-branch-".repeat(8)}"`,
   ).stdout;
   assert.equal(resolveInstance({ packaged: false, requested: long }), long);
 });
 
 test("a named launch replaces only its own instance, and the plain launch never a named one", async (t) => {
-  const home = await temporaryDirectory(t, "luke-instances-");
+  const home = await temporaryDirectory(t, "instances-");
   // A lock held by a live process that is not the app, which the script reports rather than stops.
   const holdLock = (appName: string) => {
     const directory = join(home, "Library", "Application Support", appName);
@@ -85,13 +85,13 @@ test("a named launch replaces only its own instance, and the plain launch never 
   };
 
   holdLock(development());
-  assert.equal(workspace("luke_stop_running_app preview", home).status, 0);
-  assert.match(workspace("luke_stop_running_app", home).stderr, /holds the "Vespin Dev" lock/);
+  assert.equal(workspace("app_stop_running_app preview", home).status, 0);
+  assert.match(workspace("app_stop_running_app", home).stderr, /holds the "Vespin Dev" lock/);
 
   holdLock(development("preview"));
   assert.match(
-    workspace("luke_stop_running_app preview", home).stderr,
+    workspace("app_stop_running_app preview", home).stderr,
     /holds the "Vespin Dev preview" lock/,
   );
-  assert.equal(workspace("luke_stop_running_app other", home).status, 0);
+  assert.equal(workspace("app_stop_running_app other", home).status, 0);
 });

@@ -24,10 +24,10 @@ import { fitCanvas, paintLoop, roleChannels } from "../components/landing/landin
 
 /** The roles the ball's five tones are read from, darkest first; the deep copper is mixed between the first two. */
 const TONE_ROLES = [
-  "--luke-color-ground",
-  "--luke-color-accent",
-  "--luke-color-accent-text",
-  "--luke-color-ink",
+  "--ui-color-ground",
+  "--ui-color-accent",
+  "--ui-color-accent-text",
+  "--ui-color-ink",
 ] as const;
 
 /** How much of the ground the deep copper takes beside the accent. */
@@ -228,5 +228,5 @@ export function MarkOrb(): React.JSX.Element {
       window.removeEventListener("pointermove", onMove);
     };
   }, []);
-  return <canvas ref={ref} className="luke-landing-orb" />;
+  return <canvas ref={ref} className="ui-landing-orb" />;
 }

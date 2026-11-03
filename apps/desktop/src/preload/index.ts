@@ -33,7 +33,7 @@ function exposedBridge(): PreloadBridge {
   return bridge as unknown as PreloadBridge;
 }
 
-contextBridge.exposeInMainWorld("luke", exposedBridge());
+contextBridge.exposeInMainWorld("appBridge", exposedBridge());
 
 // An attached shell's port cannot cross the context bridge, so it is handed
 // into the page as Electron hands a port to an isolated world; the page reads

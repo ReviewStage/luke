@@ -65,7 +65,7 @@ const STATUS_MARK_TONE = {
 function Ring({ dashed }: { dashed: boolean }): React.JSX.Element {
   return (
     <circle
-      className="luke-task-mark-line"
+      className="ui-task-mark-line"
       cx="7"
       cy="7"
       r="5.5"
@@ -85,21 +85,21 @@ function statusBody(status: TaskStatus): React.JSX.Element {
       return (
         <>
           <Ring dashed={false} />
-          <path className="luke-task-mark-fill" d="M7 3.5a3.5 3.5 0 0 1 0 7Z" />
+          <path className="ui-task-mark-fill" d="M7 3.5a3.5 3.5 0 0 1 0 7Z" />
         </>
       );
     case TASK_STATUS.DONE:
       return (
         <>
-          <circle className="luke-task-mark-fill" cx="7" cy="7" r="6.25" />
-          <path className="luke-task-mark-cut" d="M4.4 7.2l1.8 1.8 3.5-3.6" />
+          <circle className="ui-task-mark-fill" cx="7" cy="7" r="6.25" />
+          <path className="ui-task-mark-cut" d="M4.4 7.2l1.8 1.8 3.5-3.6" />
         </>
       );
     case TASK_STATUS.CANCELED:
       return (
         <>
-          <circle className="luke-task-mark-fill" cx="7" cy="7" r="6.25" />
-          <path className="luke-task-mark-cut" d="M5 5l4 4M9 5l-4 4" />
+          <circle className="ui-task-mark-fill" cx="7" cy="7" r="6.25" />
+          <path className="ui-task-mark-cut" d="M5 5l4 4M9 5l-4 4" />
         </>
       );
   }
@@ -109,7 +109,7 @@ function statusBody(status: TaskStatus): React.JSX.Element {
 export function TaskStatusMark({ status }: { status: TaskStatus }): React.JSX.Element {
   return (
     <svg
-      className="luke-task-mark luke-task-status-mark"
+      className="ui-task-mark ui-task-status-mark"
       data-status={status}
       data-tone={STATUS_MARK_TONE[status]}
       viewBox="0 0 14 14"
@@ -126,14 +126,14 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
     return (
       <>
         <rect
-          className="luke-task-mark-fill"
+          className="ui-task-mark-fill"
           x={MARK_EDGE.start}
           y={MARK_EDGE.start}
           width={MARK_EDGE.end - MARK_EDGE.start}
           height={MARK_EDGE.end - MARK_EDGE.start}
           rx="2.5"
         />
-        <path className="luke-task-mark-cut" d="M7 4v3.6M7 9.6v.2" />
+        <path className="ui-task-mark-cut" d="M7 4v3.6M7 9.6v.2" />
       </>
     );
   }
@@ -143,7 +143,7 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
         {BARS.map(({ x }) => (
           <rect
             key={x}
-            className="luke-task-mark-fill"
+            className="ui-task-mark-fill"
             x={x}
             y="6.25"
             width={BAR_WIDTH}
@@ -160,7 +160,7 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
       {BARS.map(({ x, y, height }, index) => (
         <rect
           key={x}
-          className="luke-task-mark-fill"
+          className="ui-task-mark-fill"
           data-lit={index < lit}
           x={x}
           y={y}
@@ -177,7 +177,7 @@ function priorityBody(priority: TaskPriority): React.JSX.Element {
 export function TaskPriorityMark({ priority }: { priority: TaskPriority }): React.JSX.Element {
   return (
     <svg
-      className="luke-task-mark luke-task-priority-mark"
+      className="ui-task-mark ui-task-priority-mark"
       data-priority={priority}
       viewBox="0 0 14 14"
       aria-hidden="true"

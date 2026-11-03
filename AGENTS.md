@@ -218,7 +218,7 @@ pnpm check:affected                      # what changed since origin/main, from 
 - `[review]` These are not behavior, so no test asserts them: private state;
   call, render, or redraw counts; that a double was called; constants, token
   tables, getters, types, and re-exports; a Schema round-trip of a valid
-  value; class names, stylesheet declarations, `var(--luke-*)` values,
+  value; class names, stylesheet declarations, `var(--ui-*)` values,
   computed styles, and markup shape. Appearance is held by `@luke/ui`, its
   lint rules, and the catalog.
 - `[review]` Nothing is exported only so a test can reach it.
@@ -416,7 +416,7 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
   we X, because Y." Design comments sit above the function. No trivial
   comments.
 - UI draws with `@luke/ui` (`packages/ui/README.md`): its components, page
-  patterns and `--luke-*` tokens; no raw controls where a component exists,
+  patterns and `--ui-*` tokens; no raw controls where a component exists,
   no literal colours or sizes, no `className` on its controls. A missing
   variant is added to `@luke/ui` as an `as const` option. Third-party engines
   are the exception. `@luke/ui` is built on shadcn/ui over Base UI: its

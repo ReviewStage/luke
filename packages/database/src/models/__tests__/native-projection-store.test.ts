@@ -27,7 +27,7 @@ const openConversation = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   // Note that each agent's runner holds a digest of its own, which the store keeps unique.
   const digest = randomUUID();
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createAgent(userId, {
     taskId: task.id,

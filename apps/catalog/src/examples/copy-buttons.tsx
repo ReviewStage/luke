@@ -50,8 +50,8 @@ function CopyButtons(): React.JSX.Element {
           <CopyButton
             look={COPY_LOOK.CHIP}
             lead={GLYPH.BRANCH}
-            text="luke/copy-button-chip-look-for-the-branch-chips"
-            what="branch luke/copy-button-chip-look-for-the-branch-chips"
+            text="agent/copy-button-chip-look-for-the-branch-chips"
+            what="branch agent/copy-button-chip-look-for-the-branch-chips"
             copy={refuse}
           />
         </Inline>

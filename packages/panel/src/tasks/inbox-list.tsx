@@ -891,7 +891,7 @@ function ListHead({
             <Text
               as={TEXT_ELEMENT.H1}
               variant={TEXT_VARIANT.TOOLBAR_TITLE}
-              className="luke-toolbar-title"
+              className="ui-toolbar-title"
             >
               {title}
             </Text>
@@ -1263,7 +1263,7 @@ function useLaidOut(items: readonly InboxListed[]): readonly InboxListed[] {
 const ROW_ESTIMATE_PX = 72;
 
 /**
- * The room between two rows, in pixels: the tight gap (`--luke-tight-gap`),
+ * The room between two rows, in pixels: the tight gap (`--ui-tight-gap`),
  * a step further apart than a list's, because a row of three lines standing
  * clear on its ground is told from the next by the room between them alone.
  */

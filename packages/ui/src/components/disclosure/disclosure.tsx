@@ -336,7 +336,7 @@ export function Disclosure({
       <details
         {...props}
         {...details}
-        className="luke-disclosure min-w-0"
+        className="ui-disclosure min-w-0"
         data-look={framed ? undefined : skin}
         onToggle={(event) => {
           details.onToggle(event);
@@ -385,7 +385,7 @@ export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DIS
  * `hover:`, which only a fine pointer reaches.
  */
 const SUMMARY_ROW =
-  "flex min-h-control cursor-press list-none items-center gap-icon-gap rounded-control ps-luke-4 pe-luke-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--luke-duration-hover) ease-plain select-none [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.luke-disclosure-turn)]:min-w-0 [&>:not(svg,.luke-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
+  "flex min-h-control cursor-press list-none items-center gap-icon-gap rounded-control ps-ui-4 pe-ui-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--ui-duration-hover) ease-plain select-none [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.ui-disclosure-turn)]:min-w-0 [&>:not(svg,.ui-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
 
 /** Each look's classes over the quiet row's, a transcript's in place of them. */
 const SUMMARY_LOOK = {
@@ -393,17 +393,17 @@ const SUMMARY_LOOK = {
   // The file row: the text's own ink, a fixed height, and a rule under it while its fold is open.
   [DISCLOSURE_SUMMARY.ROW]: cn(
     SUMMARY_ROW,
-    "box-border h-disclosure-row min-h-disclosure-row gap-luke-8 rounded-none pe-luke-12 whitespace-nowrap text-foreground",
+    "box-border h-disclosure-row min-h-disclosure-row gap-ui-8 rounded-none pe-ui-12 whitespace-nowrap text-foreground",
   ),
   // A chip at the end of its row, as wide as what it says, on the surface inside a hairline.
   [DISCLOSURE_SUMMARY.CHIP]: cn(
     SUMMARY_ROW,
-    "ms-auto w-fit min-h-0 border border-border bg-surface py-luke-2 ps-luke-6 pe-luke-6 [&:hover]:bg-surface [&>svg]:size-luke-12",
+    "ms-auto w-fit min-h-0 border border-border bg-surface py-ui-2 ps-ui-6 pe-ui-6 [&:hover]:bg-surface [&>svg]:size-ui-12",
   ),
   // A card's head: a 32px line in the card's own ink, inset as its body is, its corners the card's clip; a finger's press is 44px tall.
   [DISCLOSURE_SUMMARY.HEAD]: cn(
     SUMMARY_ROW,
-    "h-luke-32 min-h-0 rounded-none ps-luke-12 pe-luke-12 text-inherit pointer-coarse:h-auto pointer-coarse:min-h-touch",
+    "h-ui-32 min-h-0 rounded-none ps-ui-12 pe-ui-12 text-inherit pointer-coarse:h-auto pointer-coarse:min-h-touch",
   ),
   // A transcript's line: only what makes it a summary pressed as a row is, no marker, no list's bullet, no selection, the platform's arrow; the rest is its fold's skin.
   [DISCLOSURE_SUMMARY.TRANSCRIPT]:
@@ -424,10 +424,10 @@ function summaryClass(
   const own = SUMMARY_LOOK[look];
   const ruled = look === DISCLOSURE_SUMMARY.ROW && open && frame === undefined;
   if (frame === undefined || look === DISCLOSURE_SUMMARY.TRANSCRIPT) {
-    return cn("luke-disclosure-summary", own, ruled && "border-b border-border");
+    return cn("ui-disclosure-summary", own, ruled && "border-b border-border");
   }
   return cn(
-    "luke-disclosure-summary",
+    "ui-disclosure-summary",
     own,
     "[&:hover]:bg-transparent",
     frame.lead && "ps-0",
@@ -522,7 +522,7 @@ function Frame({
   const cells = { lead: lead !== undefined, actions: actions !== undefined };
   return (
     <div
-      className="luke-disclosure-frame"
+      className="ui-disclosure-frame"
       data-look={look}
       data-fill={fill === DISCLOSURE_FILL.SUMMARY ? undefined : fill}
       onPointerDown={onPointerDown}
@@ -530,7 +530,7 @@ function Frame({
       {lead === undefined ? null : (
         // biome-ignore lint/a11y/noStaticElementInteractions: the cell's bare ground folds as the summary beside it does, for the pointer alone; the summary is the keyboard's.
         // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the cell leaves to the control.
-        <div className="luke-disclosure-lead" onClick={groundPress}>
+        <div className="ui-disclosure-lead" onClick={groundPress}>
           {lead}
         </div>
       )}
@@ -538,7 +538,7 @@ function Frame({
       {actions === undefined ? null : (
         // biome-ignore lint/a11y/noStaticElementInteractions: the cell's bare ground folds as the summary beside it does, for the pointer alone; the summary is the keyboard's.
         // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the cell leaves to the control.
-        <div className="luke-disclosure-actions" onClick={groundPress}>
+        <div className="ui-disclosure-actions" onClick={groundPress}>
           {actions}
         </div>
       )}
@@ -591,7 +591,7 @@ export function DisclosureChevron({ open: handed }: { open?: boolean }): React.J
   const open = handed ?? scoped?.open;
   if (open === undefined) throw new Error("A disclosure's chevron must be drawn inside one");
   return (
-    <span className="luke-disclosure-turn" data-open={open}>
+    <span className="ui-disclosure-turn" data-open={open}>
       <FoldChevronIcon />
     </span>
   );
@@ -605,8 +605,8 @@ export function DisclosureChevron({ open: handed }: { open?: boolean }): React.J
  * leaving stay in `disclosure.css`, keyframes being what a utility cannot say.
  */
 const BODY_INSET = {
-  [DISCLOSURE_BODY.INDENTED]: "flex flex-col gap-luke-4 pt-luke-4 ml-luke-24",
-  [DISCLOSURE_BODY.FLUSH]: "flex flex-col gap-luke-4 p-luke-4",
+  [DISCLOSURE_BODY.INDENTED]: "flex flex-col gap-ui-4 pt-ui-4 ml-ui-24",
+  [DISCLOSURE_BODY.FLUSH]: "flex flex-col gap-ui-4 p-ui-4",
   [DISCLOSURE_BODY.CARD]: "border-t border-border px-list-inset py-row-inset",
   [DISCLOSURE_BODY.NONE]: undefined,
 } as const satisfies Record<DisclosureBodyInset, string | undefined>;
@@ -625,7 +625,7 @@ export function DisclosureBody({
   return (
     <div
       ref={body}
-      className={cn("luke-disclosure-body", BODY_INSET[inset])}
+      className={cn("ui-disclosure-body", BODY_INSET[inset])}
       data-inset={inset}
       inert={leaving}
     >

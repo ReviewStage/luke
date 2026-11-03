@@ -66,7 +66,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
  */
 
 /** Where the tasks' marks are kept in the renderer's storage. */
-const STORAGE_KEY = { NOW: "luke.taskLooks", EARLIER: "luke.planLooks" } as const;
+const STORAGE_KEY = { NOW: "app.taskLooks", EARLIER: "app.planLooks" } as const;
 
 /**
  * One plan's look: the newest save it had when the developer last looked,
@@ -99,11 +99,11 @@ const encodeStored = Schema.encodeSync(storedLooks);
 /**
  * Where it is kept that the tasks listed before this Mac read any as unread
  * were marked as read. Note that the keys kept before agents' activity
- * counted (`luke.taskLooksSeeded`, `luke.planLooksSeeded`) no longer say so,
+ * counted (`app.taskLooksSeeded`, `app.planLooksSeeded`) no longer say so,
  * because the marks they seeded stand at saves alone, and every task an
  * agent worked on since would read unread at once.
  */
-const SEEDED_KEY = "luke.taskLooksSeededWithAgents";
+const SEEDED_KEY = "app.taskLooksSeededWithAgents";
 
 /** The marks as the window holds them, and whether the tasks from before were marked. */
 interface KeptLooks {

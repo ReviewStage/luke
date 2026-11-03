@@ -251,7 +251,7 @@ const QUOTE_CLASS =
  * out where it last stood as the cards below travel up (tasks.css).
  */
 const SLOT_CLASS =
-  "comment-slot absolute inset-x-0 top-0 data-[moves=true]:transition-transform data-[moves=true]:duration-(--luke-duration-shape)";
+  "comment-slot absolute inset-x-0 top-0 data-[moves=true]:transition-transform data-[moves=true]:duration-(--ui-duration-shape)";
 
 /** A slot that stands where a list lays it rather than where the margin measured it, arriving and leaving as a margin's card does. */
 const FLOW_SLOT_CLASS = "comment-slot";
@@ -372,7 +372,7 @@ function MarginSlot({
 /** The column's room a margin needs beside the reading width: the gap and the card, as `planning.css` spends them. */
 const MARGIN_ROOM = 48 + 288;
 
-/** The reading width, as `--luke-page-measure` spends it. */
+/** The reading width, as `--ui-page-measure` spends it. */
 const READING_WIDTH = 720;
 
 /** The class the words a thread is on wear in the read view (`markdown-message.tsx`'s comment mark). */
@@ -2478,7 +2478,7 @@ export function PlanCommentLayer({
     bubble === undefined ? null : (
       <MenuSurface
         flow={MENU_SURFACE_FLOW.TOOLBAR}
-        className="comment-bubble absolute z-3 -translate-y-[calc(100%+var(--luke-space-6))] data-below:translate-y-luke-16"
+        className="comment-bubble absolute z-3 -translate-y-[calc(100%+var(--ui-space-6))] data-below:translate-y-ui-16"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
@@ -2690,7 +2690,7 @@ type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
 /** The Comments tab's filter, kept on this Mac, one for every plan. */
 const KEPT = {
   FILTER: keptKey<CommentsFilter>(
-    "luke.commentsFilter",
+    "app.commentsFilter",
     Schema.fromJsonString(Schema.Literals(Object.values(COMMENTS_FILTER))),
   ),
 } as const;
@@ -2789,7 +2789,7 @@ function ThreadList({
   const none = !control.failed && listed.length === 0 && control.read && lead === undefined;
   return (
     <div
-      className="comments-list box-border px-luke-16 pt-luke-16 pb-luke-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
+      className="comments-list box-border px-ui-16 pt-ui-16 pb-ui-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
       data-empty={none ? "" : undefined}
     >
       {lead === undefined ? null : <CommentsRow>{lead}</CommentsRow>}
@@ -3051,7 +3051,7 @@ export function PageComments({
       <WordsDatePickerRoom>
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
           <div
-            className="comments-list box-border px-luke-16 pt-luke-16 pb-luke-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
+            className="comments-list box-border px-ui-16 pt-ui-16 pb-ui-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
             data-empty={none ? "" : undefined}
           >
             {control.failed ? (

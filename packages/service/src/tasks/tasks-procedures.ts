@@ -102,10 +102,9 @@ import { EXPERIMENT } from "@luke/settings";
 import { Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { LocalAgentRefused, taskRunsOnChoice } from "../agents/coder-host/agent-runtime-choice.js";
+import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import {
-  type EveReach,
-  eveFor,
   everyStoppedForGood,
   everyStopsForGood,
   idleStandingAgents,
@@ -151,7 +150,7 @@ import {
 import { type TaskParent, taskParentOf } from "./task-parent.js";
 import { moveTaskRelation, type TaskRelationRefused } from "./task-relation.js";
 
-export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
+export interface TasksProcedureSeams extends SandboxStopReach {
   resolveUserId: UserIdResolver;
   /** The plugin's write that makes an account's first workspace, the first time a start needs it. */
   workspaces: WorkspaceSeams;
@@ -297,14 +296,6 @@ const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /**
- * The agent a start asks for, started on the plan it just made through the
- * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
- * a refusal is answered beside the plan rather than in its place, since the
- * plan stands either way and the developer's words are theirs to try again.
- * A Start that failed after its agent was made answers that agent, since it
- * works all the same.
- */
-/**
  * The task as it stands once an agent started on it, which moved it into
  * progress (`beginTaskWork`), so the open document says what the list says;
  * the task as it was made where it cannot be read again just now.
@@ -315,9 +306,15 @@ const taskAfterStart = (userId: string, task: Task) =>
     Effect.catch((failure) => Effect.as(logStoreFailure(failure), task)),
   );
 
+/**
+ * The agent a start asks for, started on the plan it just made through the
+ * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
+ * a refusal is answered beside the plan rather than in its place, since the
+ * plan stands either way and the developer's words are theirs to try again.
+ * A Start that failed after its agent was made answers that agent, since it
+ * works all the same.
+ */
 const startedAgentOn = (
-  seams: TasksProcedureSeams,
-  request: Request,
   userId: string,
   stored: StoredTask,
   agent: TaskAgentStart,
@@ -325,7 +322,7 @@ const startedAgentOn = (
 ) => {
   const { task } = stored;
   return startRequestedAgent(
-    eveFor<EveTypedTurn>(seams, request, userId),
+    routedSessions<EveTypedTurn>(userId),
     userId,
     { taskId: task.id },
     agent,
@@ -561,8 +558,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * A plan started with an empty document, its repository confirmed, and,
      * where it names an agent, that agent started on it: a start naming an agent and no
      * repository is refused as an agent's Start on such a plan is, before
-     * anything is written, and the agent's session is opened as the
-     * request's own caller (`coder-host/stop.ts`'s `eveFor`); one whose
+     * anything is written, and the agent's session is opened for the account
+     * the request resolved to (`coder-host/runtime-sessions.ts`); one whose
      * agent's key already started an agent in the workspace answers that
      * agent's plan and the agent (`startedBefore`). A pilot task is refused,
      * also before anything is written, to an account without the Pilot
@@ -576,7 +573,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * own transaction (`createTaskRelated`), so one refused makes nothing.
      */
     create: plans.create.effect(function* ({ input, context }) {
-      const { userId, request } = context;
+      const { userId } = context;
       const { agent } = input;
       yield* modeAsked(userId, input.mode);
       const organizationId = yield* startingWorkspace(seams, userId, input.workspaceId);
@@ -630,7 +627,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      // A child takes its parent's assignee where the start names none.
       const assigneeId = input.assigneeId ?? parent?.assigneeId ?? undefined;
       const { task: stored, txid } = yield* createTaskRelated(
         userId,
@@ -678,8 +674,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         agent === undefined
           ? { plan: stored.task }
           : yield* startedAgentOn(
-              seams,
-              request,
               userId,
               stored,
               agent,
@@ -730,7 +724,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * archived (`task-store.ts`'s `updateTaskCommitted`).
      */
     update: plans.update.effect(function* ({ input, context }) {
-      const { userId, request } = context;
+      const { userId } = context;
       const taskId = yield* pathUuid(input.params.id);
       const changes = input.body;
       const organizationId =
@@ -783,7 +777,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         if (!(yield* everyStopsForGood(agents))) {
           return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
         }
-        yield* everyStoppedForGood(seams, writer, request, userId, agents);
+        yield* everyStoppedForGood(writer, userId, agents);
       }
       // Note that the archive stamp is never written, because a task is archived no longer: the request settles the task, or puts it back to work.
       const status =
@@ -909,27 +903,22 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * coming that no Stop can name yet, or an agent started while the others
      * were stopped, leaves the plan standing and refused.
      *
-     * The Stops and the retires reach eve as the request's own caller
-     * (`coder-host/stop.ts`'s `eveFor`): over the developer's bearer, or, for
-     * a browser's session cookie, as the deployment acting for the account
-     * the cookie named, which eve's door admits for a cancel and a retire on
-     * a session that account reaches. A cookie's delete on a deployment that
-     * cannot reach eve as itself is refused as unavailable before anything is
-     * stopped (`retiringReach`), where a bearer's goes on with its retires a
-     * courtesy.
+     * The Stops and the retires reach the agents' sessions for the account
+     * the request resolved to (`coder-host/runtime-sessions.ts`), the
+     * retires a courtesy the delete does not wait on.
      */
     delete: plans.delete.effect(function* ({ input, context }) {
-      const { userId, request } = context;
+      const { userId } = context;
       const taskId = yield* pathUuid(input.id);
-      const eveAt = yield* retiringReach(seams, request, userId);
+      const retiring = yield* retiringReach(userId);
       const agents = yield* hostedStoreOrUnavailable(
         listAgents(userId, taskId, { includeArchived: true }),
       );
-      yield* everyStoppedForGood(seams, writer, request, userId, agents);
+      yield* everyStoppedForGood(writer, userId, agents);
       // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on eve;
       // an agent started meanwhile is none of these, keeps its session, and refuses the delete below.
       yield* hostedStoreOrUnavailable(
-        retiredBeforeDelete(eveAt)(agents.map(({ conversationId }) => conversationId)),
+        retiredBeforeDelete(retiring)(agents.map(({ conversationId }) => conversationId)),
       );
       const stopped = new Set(agents.map(({ id }) => id));
       const deleted = yield* hostedStoreOrUnavailable(

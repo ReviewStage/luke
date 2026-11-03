@@ -3,23 +3,23 @@
    app's reset's, outside the dot, so it never stands for chosen. */
 
 @layer components {
-  .luke-swatch {
+  .ui-swatch {
     width: 18px;
     height: 18px;
     padding: 0;
-    border: 1px solid var(--luke-color-border);
+    border: 1px solid var(--ui-color-border);
     border-radius: 50%;
-    background: var(--luke-swatch);
-    cursor: var(--luke-cursor-press);
+    background: var(--ui-swatch);
+    cursor: var(--ui-cursor-press);
   }
 
-  .luke-swatch[data-none] {
+  .ui-swatch[data-none] {
     background: none;
     background-image: linear-gradient(
       135deg,
       transparent calc(50% - 0.75px),
-      var(--luke-color-text-muted) calc(50% - 0.75px),
-      var(--luke-color-text-muted) calc(50% + 0.75px),
+      var(--ui-color-text-muted) calc(50% - 0.75px),
+      var(--ui-color-text-muted) calc(50% + 0.75px),
       transparent calc(50% + 0.75px)
     );
   }
@@ -27,8 +27,8 @@
   /* Note that chosen is drawn on the dot's own edge and a gap inside it,
      never as an outline, because the outline is focus's: a chosen dot the
      keyboard reaches gains the ring around what it already wears. */
-  .luke-swatch[aria-pressed="true"] {
-    border-color: var(--luke-color-text);
-    box-shadow: inset 0 0 0 2px var(--luke-color-ground);
+  .ui-swatch[aria-pressed="true"] {
+    border-color: var(--ui-color-text);
+    box-shadow: inset 0 0 0 2px var(--ui-color-ground);
   }
 }

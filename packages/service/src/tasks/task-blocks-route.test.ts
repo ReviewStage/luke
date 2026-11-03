@@ -43,7 +43,7 @@ const PLAN_WRITE = {
 
 type PlanWrite = (typeof PLAN_WRITE)[keyof typeof PLAN_WRITE];
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** The plans procedures over the test's store, each bearer answering for the account it maps to; GitHub is never asked. */
 const blocking = (bearers: ReadonlyMap<string, string>) =>
@@ -65,7 +65,6 @@ const blocking = (bearers: ReadonlyMap<string, string>) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
         workspaces: yield* fakeWorkspaceSeams,

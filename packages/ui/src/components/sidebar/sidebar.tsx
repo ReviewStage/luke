@@ -36,9 +36,9 @@ export function SidebarIdentity({
   mark: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="sidebar-identity flex items-center gap-luke-12 px-row-inset pt-luke-2 pb-section-gap">
-      <span className="grid size-luke-40 flex-none place-items-center rounded-luke-14 bg-fill-strong">
-        <span className="grid size-luke-24">{mark}</span>
+    <div className="sidebar-identity flex items-center gap-ui-12 px-row-inset pt-ui-2 pb-section-gap">
+      <span className="grid size-ui-40 flex-none place-items-center rounded-ui-14 bg-fill-strong">
+        <span className="grid size-ui-24">{mark}</span>
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="text-dialog-size font-dialog tracking-identity">{name}</span>
@@ -127,7 +127,7 @@ export function SidebarFilters({
         <div
           ref={state.body}
           id={id}
-          className="luke-disclosure-body flex flex-col gap-list-gap"
+          className="ui-disclosure-body flex flex-col gap-list-gap"
           inert={state.leaving}
         >
           {children}
@@ -141,12 +141,12 @@ export function SidebarFilters({
 
 /** The hairline under the places that parts them from the list, at the rows' inset. */
 export function SidebarRule(): React.JSX.Element {
-  return <hr className="sidebar-rule mx-row-inset my-luke-8 h-px flex-none border-0 bg-border" />;
+  return <hr className="sidebar-rule mx-row-inset my-ui-8 h-px flex-none border-0 bg-border" />;
 }
 
 /** The foot of the column: what docks above the account's row, and the row. */
 export function SidebarFoot({ children }: { children?: ReactNode }): React.JSX.Element {
-  return <div className="sidebar-foot flex flex-col pt-luke-8">{children}</div>;
+  return <div className="sidebar-foot flex flex-col pt-ui-8">{children}</div>;
 }
 
 /**
@@ -156,7 +156,7 @@ export function SidebarFoot({ children }: { children?: ReactNode }): React.JSX.E
  */
 export function SidebarAccountRow({ children }: { children?: ReactNode }): React.JSX.Element {
   return (
-    <div className="sidebar-account-row @container/sidebar-foot flex items-center gap-luke-4">
+    <div className="sidebar-account-row @container/sidebar-foot flex items-center gap-ui-4">
       {children}
     </div>
   );

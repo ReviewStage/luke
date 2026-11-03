@@ -1,4 +1,4 @@
-import POLICY from "virtual:luke/privacy-policy";
+import POLICY from "virtual:site/privacy-policy";
 import { Prose, PublicPage, PublicSection } from "@luke/ui";
 import { SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 

@@ -8,10 +8,10 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * and a service's card ("Reviewed" and the pull request's chip) each head
  * what follows with one such line. Its subject is the reason the line is
  * there, so it is never held to the measure a mention keeps in prose
- * (`--luke-inline-ref-pill-width`, `inline-ref.tsx`): a pill here is as wide
+ * (`--ui-inline-ref-pill-width`, `inline-ref.tsx`): a pill here is as wide
  * as its name, and is cut, fading where it is, only where the line itself
  * runs out after the lead. A lead that leaves less of the line than a
- * title's readable floor (`--luke-title-floor`) stands the subject on a
+ * title's readable floor (`--ui-title-floor`) stands the subject on a
  * line of its own beneath it, and a lead wider than its line wraps, so a
  * long name before it never pushes the subject out of sight. Note that the
  * subject's cap is undone on whatever the caller hands as `children`, its

@@ -244,16 +244,16 @@ async function cardOf(chip: Element | null | undefined) {
   assert.ok(chip, "the mention is drawn as its chip");
   restOn(chip);
   await settle();
-  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
+  const card = [...document.querySelectorAll(".ui-tooltip-card > [data-server-card]")].at(-1);
   assert.ok(card, "the chip hangs the server's card");
   const look = {
-    name: card.querySelector(".luke-hover-card-name")?.textContent,
-    count: card.querySelector(".luke-hover-card-sub")?.textContent,
-    on: card.querySelector(".luke-hover-card-corner")?.textContent,
-    note: card.querySelector(".luke-hover-card-head + .luke-hover-card-note")?.textContent,
+    name: card.querySelector(".ui-hover-card-name")?.textContent,
+    count: card.querySelector(".ui-hover-card-sub")?.textContent,
+    on: card.querySelector(".ui-hover-card-corner")?.textContent,
+    note: card.querySelector(".ui-hover-card-head + .ui-hover-card-note")?.textContent,
     tools: [...card.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
-      tool.querySelector(".luke-hover-card-row-label")?.textContent,
-      tool.querySelector(".luke-hover-card-row-end")?.textContent,
+      tool.querySelector(".ui-hover-card-row-label")?.textContent,
+      tool.querySelector(".ui-hover-card-row-end")?.textContent,
     ]),
     presses: card.querySelectorAll("button, [role=switch]").length,
   };
@@ -391,7 +391,7 @@ test("off an agent, as in a plan's or Vespin's words, the server's row has no sw
   );
   await settle();
   assert.equal(
-    document.querySelector("[data-tool-card] .luke-hover-card-note")?.textContent,
+    document.querySelector("[data-tool-card] .ui-hover-card-note")?.textContent,
     "List the team's issues.",
     "the tool's one-line row hangs what it does",
   );
