@@ -7,6 +7,7 @@ import {
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import type { MentionLines } from "@repo/features/mention-link";
+import type { PagePlace } from "@repo/features/page-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -507,14 +508,19 @@ export function DesktopAgentPage({
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task,
   // and one to any other pull request of its repository a Pull request tab by its number.
   // Note that the three openers handed to the transcript stand while what they read does, because every link and chip in it is drawn again with each new one.
+  // A page of a task, or of another agent, opens beside the agent, read on its own place.
+  const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
+    sidePanel.onPreview({ page }, place),
+  );
   const { pullRequests, agentIds, heldIds } = control;
   const openHere = useMemo(
     () =>
       openPullRequestsHere(
-        { kind: HERE.AGENT, repository: agentRepository, pullRequests, agentIds, heldIds },
+        { kind: HERE.AGENT, agentId, repository: agentRepository, pullRequests, agentIds, heldIds },
         openPullRequest,
+        openPageBeside,
       ),
-    [pullRequests, agentIds, heldIds, openPullRequest, agentRepository],
+    [agentId, pullRequests, agentIds, heldIds, openPullRequest, openPageBeside, agentRepository],
   );
   // A link to the page's own agent, as a fork's chip opens its source, leaves the page's draft for the agent.
   const openLinkHere = useMemo(
@@ -803,6 +809,7 @@ export function DesktopAgentPage({
                           shown={tasks.shown}
                           focused={sideFocused}
                           onOpenTarget={openTarget}
+                          taskOfTab={tasks}
                           phone={
                             away === undefined || agent === undefined
                               ? undefined

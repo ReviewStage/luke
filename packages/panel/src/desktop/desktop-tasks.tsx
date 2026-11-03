@@ -1,6 +1,7 @@
 import type { AgentStatus } from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { MentionLines } from "@repo/features/mention-link";
+import type { PagePlace } from "@repo/features/page-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type {
   TaskBlockRequest,
@@ -649,6 +650,10 @@ function PlanDocument({
   const openTargetDoor = useSteadyDoor((target: ToolTarget) => openTarget(target, agentOfTab(tab)));
   const openDelegationDoor = useSteadyDoor(openDelegation);
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
+  // A page of another task, a subtask's among them, opens beside this one, read on its own task, so the reader stays here.
+  const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
+    sidePanel.onPreview({ page }, place),
+  );
   const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
   const openAgentTab = useSteadyDoor(openColumnTab);
   const agentLookDoor = useSteadyDoor(agentLook);
@@ -925,20 +930,23 @@ function PlanDocument({
   );
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
   // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
-  // pull request of the task's repository opens in a Pull request tab by its number.
+  // pull request of the task's repository opens in a Pull request tab by its number, and one to
+  // another task's page opens beside the task.
   const openHere = useMemo(
     () =>
       openPullRequestsHere(
         {
           kind: HERE.TASK,
+          taskId: openedId ?? "",
           repository: openedRepository,
           pullRequests: agents.pullRequests,
           agentIds: agents.agentIds,
           heldIds: agents.heldIds,
         },
         openPullRequestDoor,
+        openPageBeside,
       ),
-    [agents, openPullRequestDoor, openedRepository],
+    [agents, openPullRequestDoor, openPageBeside, openedRepository, openedId],
   );
   // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
   const { pages } = tasks;
@@ -1336,6 +1344,7 @@ function PlanDocument({
                         focused={sideFocused}
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
+                        taskOfTab={tasks}
                         activity={phone ? { onShown: setShownTab } : undefined}
                       />
                     ) : null}

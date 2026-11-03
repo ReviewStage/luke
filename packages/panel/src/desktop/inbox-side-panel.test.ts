@@ -59,8 +59,8 @@ import { DesktopInbox } from "./desktop-inbox.js";
  * its task's side panel draws opens in that panel beside the Inbox, the
  * Inbox still standing: a file of the task's repository, a page of the
  * task, and a pull request one of its agents opened. A page of another
- * task still leaves for that task. Synthetic workspace, plan, agent, page,
- * and pull request.
+ * task opens there too, and its Open task goes to that task with the page
+ * still chosen. Synthetic workspace, plan, agent, page, and pull request.
  */
 
 // A Markdown block is drawn once the parser has landed, as the panel lands it after its first paint.
@@ -87,6 +87,7 @@ const TASK: TaskSummary = {
   repository: REPOSITORY,
 };
 const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+const OTHER: TaskSummary = { ...TASK, id: OTHER_TASK, name: "Invitation funnel study" };
 
 const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -293,7 +294,7 @@ async function inbox(
       createElement(DesktopInbox, {
         tasks: tasksControl({
           workspace: ACME,
-          tasks: [TASK],
+          tasks: [TASK, OTHER],
           liveAgents: [ARCHIVED, AGENT],
           // Both agents' rows keep the pull request they opened, which the list carries beside them.
           listedPullRequests: [ARCHIVED, AGENT].map((agent) => ({
@@ -366,7 +367,7 @@ function panelTabs(container: HTMLElement): string[] | undefined {
   );
 }
 
-test("a pull request, a page, and a file the item names open one after another in the one preview tab of the panel beside the Inbox, which still stands, and a page of another plan leaves for that plan", async () => {
+test("a pull request, a page, and a file the item names open one after another in the one preview tab of the panel beside the Inbox, which still stands, and a page of another plan opens there too, its Open task going to that plan with the page chosen", async () => {
   const { container, left } = await inbox();
   assert.equal(panelTabs(container), undefined, "no panel stands until the item opens one");
 
@@ -379,11 +380,15 @@ test("a pull request, a page, and a file the item names open one after another i
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 
   await pressChip(container, "Old funnel");
-  assert.deepEqual(
-    left.links.map((link) => link.place),
-    [{ kind: "page", planId: OTHER_TASK, pageId: FUNNEL.id }],
+  assert.equal(left.links.length + left.tasks.length, 0, "the Inbox still stands");
+  const notice = container.querySelector('aside[aria-label="Panel"] .ui-tab-notice');
+  assert.equal(notice?.querySelector("p")?.textContent, OTHER.name, "the page's task named");
+  const open = [...(notice?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Open task",
   );
-  assert.equal(panelTabs(container)?.length, 1, "nothing of another plan opens in the panel");
+  assert.ok(open, "with Open task");
+  act(() => open.click());
+  assert.deepEqual(left.went, [`${OTHER_TASK} ${JSON.stringify({ page: FUNNEL.id })}`]);
 });
 
 test("a file opened on another task reads from that task in the panel standing for this one", async () => {

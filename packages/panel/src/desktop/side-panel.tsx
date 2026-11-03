@@ -14,6 +14,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
+  Button,
   CloseIcon,
   CollapseIcon,
   ExpandIcon,
@@ -36,6 +37,7 @@ import {
   SearchableMenu,
   SidePanelIcon,
   SpinnerRegion,
+  TabNotice,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -330,6 +332,32 @@ function placesBeside(tabs: readonly OpenPage[], own: PagePlace): readonly PageP
     }
   }
   return places.size === 0 ? NO_PLACES : [...places.values()];
+}
+
+/** What the line under the panel's bar says of a tab of another task than the one the panel stands for. */
+const BESIDE_WORDS = {
+  OPEN_TASK: "Open task",
+} as const;
+
+/** The tasks a tab of another task names, and the door to that task, the tab still chosen in its panel. */
+export interface TaskOfTab {
+  readonly tasks: readonly { readonly id: string; readonly name: string }[];
+  readonly onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
+}
+
+/** The task a page or a file of the panel's strip stands on, where it stands on one: a page's place, or the task a file reads through. */
+function tabTaskOf(
+  tab: SidePanelTab,
+  pages: readonly OpenPage[],
+  files: readonly OpenFile[],
+): string | undefined {
+  if (isPageTab(tab)) {
+    const place = pages.find((each) => sameTab(each, tab))?.place;
+    return place !== undefined && "taskId" in place ? place.taskId : undefined;
+  }
+  if (!isFileTab(tab)) return undefined;
+  const place = files.find((each) => each.path === tab.file)?.reads?.place;
+  return place !== undefined && "taskId" in place ? place.taskId : undefined;
 }
 
 /** A repository as the panel reads it where it stands for no task: the workspace whose installation reaches it, and the repository, `owner/name`. */
@@ -2323,6 +2351,7 @@ export function SidePanel({
   transcriptDoors,
   activity: taskActivity,
   phone,
+  taskOfTab,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -2391,6 +2420,8 @@ export function SidePanel({
    * ⋯ holding the list, the tab's own actions, and Close; none elsewhere.
    */
   phone?: { readonly back: string; readonly onBack: () => void } | undefined;
+  /** The tasks a page or a file of another task shown here is named by under the bar, with the door that opens it there; none where no such line stands. */
+  taskOfTab?: TaskOfTab | undefined;
 }): React.JSX.Element | null {
   // A phone's panel over a page other than a task's keeps its own Activity: whether it lists its tabs, and the tab shown.
   const [ownListed, setOwnListed] = useState(false);
@@ -2596,6 +2627,14 @@ export function SidePanel({
                   : isCloudBrowserTab(tab)
                     ? cloudBrowserLabel(tab.cloudBrowser)
                     : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+  // A page or a file of another task than the panel's own names that task under the bar, and Open task goes
+  // there with the tab still chosen, the panel standing as it is.
+  const ownTask = holder === SIDE_PANEL_HOLDER.AGENT || onAgent ? undefined : taskId;
+  const tabTask = tab === undefined ? undefined : tabTaskOf(tab, panel.pages, files);
+  const besideTask =
+    tabTask === undefined || tabTask === ownTask
+      ? undefined
+      : taskOfTab?.tasks.find((each) => each.id === tabTask);
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // Note that only one tab panel stands at a time, so the one pair of ids serves whichever tab is chosen.
   const tabId = useId();
@@ -2639,16 +2678,29 @@ export function SidePanel({
       banner={banner}
       switched={switched}
       head={
-        switched && ownActivity !== undefined && phone !== undefined ? (
-          <PanelPhoneHead
-            back={phone}
-            title={listing ? TABS : (label ?? PANEL_LABEL)}
-            listing={listing}
-            shown={ownShown}
-            onList={() => setOwnListed(true)}
-            onCloseShown={tab === undefined ? undefined : () => panel.onClose(tab)}
-          />
-        ) : undefined
+        <>
+          {switched && ownActivity !== undefined && phone !== undefined ? (
+            <PanelPhoneHead
+              back={phone}
+              title={listing ? TABS : (label ?? PANEL_LABEL)}
+              listing={listing}
+              shown={ownShown}
+              onList={() => setOwnListed(true)}
+              onCloseShown={tab === undefined ? undefined : () => panel.onClose(tab)}
+            />
+          ) : null}
+          {listing ||
+          tab === undefined ||
+          besideTask === undefined ||
+          taskOfTab === undefined ? null : (
+            <TabNotice>
+              <p>{besideTask.name}</p>
+              <Button onClick={() => taskOfTab.onShowPanelTab(besideTask.id, tab)}>
+                {BESIDE_WORDS.OPEN_TASK}
+              </Button>
+            </TabNotice>
+          )}
+        </>
       }
       tabs={
         <PanelTabs
@@ -2915,7 +2967,7 @@ function PanelFrame({
   banner?: React.ReactNode;
   /** Whether a phone's header stands for the bar, which is then not drawn (`task-pane-switcher.tsx`). */
   switched?: boolean;
-  /** A phone's header drawn in the bar's place, where the panel heads itself (`SidePanel`'s `phone`). */
+  /** Drawn under the row: a phone's header in the bar's place, where the panel heads itself (`SidePanel`'s `phone`), and the line naming the task of a tab of another task. */
   head?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {

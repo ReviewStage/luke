@@ -12,6 +12,7 @@ import {
   type MentionLines,
   pageRepositoryOf,
 } from "@repo/features/mention-link";
+import type { PagePlace } from "@repo/features/page-wire";
 import {
   listedPullRequestOf,
   type OpenedPullRequest,
@@ -38,8 +39,10 @@ import {
  * The table, by surface:
  *
  * - An Inbox item previews beside it what the panel standing for what holds
- *   it draws: a file of its repository, a page of its task or of the agent on
- *   no task that holds it, an archived agent's Changes, one of its task's
+ *   it draws: a file of any repository, read through the item's workspace
+ *   where it is not the item's own, a page of any task or agent on no
+ *   task, read on its own place where it is not the item's, an archived
+ *   agent's Changes, one of its task's
  *   agents' transcripts, at a message of it where the link names one, a
  *   review thread of one of its agents' pull requests, and a pull request
  *   one of its agents opened, or another of its task's repository by its
@@ -48,7 +51,9 @@ import {
  *   the item stands in, rather than in its task's Inbox tab.
  * - A task's page and an agent's page preview a pull request one of their
  *   agents opened, an archived one's among them, in its Pull request tab, and
- *   any other of their repository by its number in their first agent's.
+ *   any other of their repository by its number in their first agent's; and
+ *   a page of any other task or agent on no task, read on its own place,
+ *   their own pages being the window's to open as the panel's.
  * - The window goes to every place in the app, and to the Pull request tab of a
  *   pull request a listed task's or a listed agent on no task's agent opened;
  *   anything else leaves for the browser, as everything does outside the
@@ -139,7 +144,16 @@ export type Here =
       /** The agent on no task that holds the item, whose own pages open beside it; none for an item of a task. */
       readonly agentId: string | undefined;
     } & Holding)
-  | ({ readonly kind: typeof HERE.TASK | typeof HERE.AGENT } & Holding)
+  | ({
+      readonly kind: typeof HERE.TASK;
+      /** The task the page shows. */
+      readonly taskId: string;
+    } & Holding)
+  | ({
+      readonly kind: typeof HERE.AGENT;
+      /** The agent the page shows. */
+      readonly agentId: string;
+    } & Holding)
   | {
       readonly kind: typeof HERE.WINDOW;
       /** Whether the window opens a place at all; outside it, as in a test of one surface, an app link opens in the browser. */
@@ -177,8 +191,15 @@ export type Thing =
       readonly kind: typeof THING.FILE;
       readonly path: string;
       readonly lines: MentionLines | undefined;
+      /** The repository, `owner/name`, the file is read from, where it is not the surface's own; none for the surface's own. */
+      readonly repository?: string;
     }
-  | { readonly kind: typeof THING.PAGE; readonly pageId: string }
+  | {
+      readonly kind: typeof THING.PAGE;
+      readonly pageId: string;
+      /** The task or the agent on no task the page stands on, where it is not the surface's own; none for the surface's own page. */
+      readonly place?: PagePlace;
+    }
   | { readonly kind: typeof THING.CHANGES; readonly agentId: string }
   | {
       readonly kind: typeof THING.TRANSCRIPT;
@@ -239,6 +260,7 @@ export type OverviewPlace = Extract<
 type InboxItemHere = Extract<Here, { readonly kind: typeof HERE.INBOX_ITEM }>;
 type WindowHere = Extract<Here, { readonly kind: typeof HERE.WINDOW }>;
 type TasksTabHere = Extract<Here, { readonly kind: typeof HERE.TASKS_TAB }>;
+type AgentsHere = Extract<Here, { readonly kind: typeof HERE.TASK | typeof HERE.AGENT }>;
 
 const NOTHING: Route = { kind: ROUTE.NOTHING };
 
@@ -302,12 +324,18 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
   const at = link.place;
   switch (at.kind) {
     case LINK_PLACE.PAGE: {
-      // A page of the item's own task, or of the agent on no task that holds it, opens beside the item; another's is the window's to open.
+      // A page of the item's own task, or of the agent on no task that holds it, opens beside the item;
+      // another's opens there too, read on its own place, so the reader stays on the item.
       const own =
         "planId" in at
           ? at.planId === here.taskId
           : here.agentId !== undefined && at.agentId === here.agentId;
-      return own ? preview({ kind: THING.PAGE, pageId: at.pageId }) : NOTHING;
+      const place: PagePlace = "planId" in at ? { taskId: at.planId } : { agentId: at.agentId };
+      return preview(
+        own
+          ? { kind: THING.PAGE, pageId: at.pageId }
+          : { kind: THING.PAGE, pageId: at.pageId, place },
+      );
     }
     // An archived agent's Changes still opens beside the item, as its older link under the task did.
     case LINK_PLACE.CHANGES:
@@ -371,30 +399,46 @@ function besideItem(address: Address, here: InboxItemHere): Route {
         ? preview({ kind: THING.PULL_REQUEST, agentId: first, number: address.number })
         : NOTHING;
     }
-    // A file of the item's repository, which the panel reads through the task it stands for, or through the workspace and repository of an agent with none.
+    // A file of the item's repository, which the panel reads through the task it stands for, or through the workspace and repository of an agent with none;
+    // a file of another repository opens there too, read through the item's workspace.
     case ADDRESS.FILE: {
-      const own =
-        address.repository === undefined
-          ? here.repository !== null && here.repository !== undefined
-          : ofRepository(address.repository, here.repository);
-      return own
-        ? preview({ kind: THING.FILE, path: address.path, lines: address.lines })
-        : NOTHING;
+      const { path, lines, repository } = address;
+      if (repository === undefined) {
+        return here.repository !== null && here.repository !== undefined
+          ? preview({ kind: THING.FILE, path, lines })
+          : NOTHING;
+      }
+      return ofRepository(repository, here.repository)
+        ? preview({ kind: THING.FILE, path, lines })
+        : preview({ kind: THING.FILE, path, lines, repository });
     }
     case ADDRESS.WEB:
       return NOTHING;
   }
 }
 
+/** A page of another task, or of another agent on no task, than the one a task's or an agent's page shows, beside it, read on its own place; its own is the window's, which opens it as the panel's. */
+function pageBeside(at: LinkPlace, here: AgentsHere): Route {
+  if (at.kind !== LINK_PLACE.PAGE) return NOTHING;
+  const place: PagePlace = "planId" in at ? { taskId: at.planId } : { agentId: at.agentId };
+  const own =
+    here.kind === HERE.TASK
+      ? "planId" in at && at.planId === here.taskId
+      : "agentId" in at && at.agentId === here.agentId;
+  return own ? NOTHING : preview({ kind: THING.PAGE, pageId: at.pageId, place });
+}
+
 /**
  * An address pressed on a task's page or an agent's: a pull request one of
  * its agents opened, however its page is spelled, opens in that agent's Pull
  * request tab, and any other of its repository, such as one an agent opened
- * before moving to another branch, in its first agent's by its number; any
- * other address is the window's. An archived agent's pull request, merged or
- * not, opens its tab too.
+ * before moving to another branch, in its first agent's by its number; a
+ * page of another place beside it (`pageBeside`); any other address is the
+ * window's. An archived agent's pull request, merged or not, opens its tab
+ * too.
  */
-function besideAgents(address: Address, here: Holding): Route {
+function besideAgents(address: Address, here: AgentsHere): Route {
+  if (address.kind === ADDRESS.PLACE) return pageBeside(address.link.place, here);
   if (address.kind !== ADDRESS.PULL_REQUEST) return NOTHING;
   const opened = openedBy(here, here.heldIds ?? here.agentIds);
   const agentId = pullRequestAgentOf(address.href, opened);
