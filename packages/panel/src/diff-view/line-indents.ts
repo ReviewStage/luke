@@ -28,19 +28,38 @@ function indentColumns(text: string, tabSize: number): number {
   return columns;
 }
 
+/** The tab width each root's lines were measured by, read once for the root's life. */
+const TAB_SIZES = new WeakMap<ParentNode, number>();
+
+/**
+ * The tab width `root`'s lines are drawn at, read off `first` the first time
+ * and kept, since Pierre sets one width for every file it draws. Note that it
+ * is read once, because a computed style read after Pierre draws makes the
+ * window lay out its styles there and then, on every draw as a list scrolls.
+ */
+function tabSizeOf(root: ParentNode, first: HTMLElement): number {
+  const kept = TAB_SIZES.get(root);
+  if (kept !== undefined) return kept;
+  const tabSize = Number.parseInt(getComputedStyle(first).tabSize, 10) || DEFAULT_TAB_SIZE;
+  TAB_SIZES.set(root, tabSize);
+  return tabSize;
+}
+
 /**
  * Marks every line drawn in a file's shadow root with its indent, or takes
- * the mark off a line Pierre drew again with none. The tab width is read
- * once, off the first line, since Pierre sets one for the whole file.
+ * the mark off a line Pierre drew again with none. A line whose mark already
+ * stands is left as it is, so a draw that only added rows writes only theirs.
  */
 export function markLineIndents(root: ParentNode): void {
   const lines = root.querySelectorAll<HTMLElement>("[data-line]");
   const first = lines[0];
   if (first === undefined) return;
-  const tabSize = Number.parseInt(getComputedStyle(first).tabSize, 10) || DEFAULT_TAB_SIZE;
+  const tabSize = tabSizeOf(root, first);
   for (const line of lines) {
     const columns = indentColumns(line.textContent ?? "", tabSize);
-    if (columns === 0) line.style.removeProperty(LINE_INDENT_PROPERTY);
-    else line.style.setProperty(LINE_INDENT_PROPERTY, `${columns}ch`);
+    const mark = columns === 0 ? "" : `${columns}ch`;
+    if (line.style.getPropertyValue(LINE_INDENT_PROPERTY) === mark) continue;
+    if (mark === "") line.style.removeProperty(LINE_INDENT_PROPERTY);
+    else line.style.setProperty(LINE_INDENT_PROPERTY, mark);
   }
 }

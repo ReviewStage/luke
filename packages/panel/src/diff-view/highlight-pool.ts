@@ -45,12 +45,23 @@ const HIGHLIGHT_WORKERS = 2;
 
 /**
  * How many results the pool keeps on the window's thread, for each of its
- * file and diff caches (Pierre's `totalASTLRUCacheSize`, which defaults to
- * 100 of each). The list names every read under a counter of its own, so a
- * kept result is never asked for again; only the files drawn right now are
- * read back, so a few are all the cache is for.
+ * file and diff caches: Pierre's own `totalASTLRUCacheSize`. Note that a
+ * list's file scrolled out of view lets its colours go with its drawing, and
+ * one scrolled back takes them from this cache by its read's name, or is
+ * coloured anew, drawn plain and then again in colour, so a cache of a few
+ * files makes every scroll back up a long pull request colour it again.
  */
-const HIGHLIGHT_CACHE_ENTRIES = 16;
+export const HIGHLIGHT_CACHE_ENTRIES = 100;
+
+/**
+ * The most characters a diff or file may hold, both sides counted, to be
+ * coloured on the window's own thread rather than in a worker, where it
+ * colours with Highlights: Pierre's advice, since Highlights colours a file
+ * that size faster than a worker's round trip, and a file coloured at once
+ * is drawn once, rather than plain and then again in colour. Shiki's
+ * JavaScript engine colours every file in the workers.
+ */
+const MAIN_THREAD_MAX_CHARACTERS = 100_000;
 
 /**
  * What a list highlights with: the pool to hand Pierre, none for the
@@ -107,6 +118,9 @@ export function startHighlighting(
       workerFactory: startWorker,
       poolSize: HIGHLIGHT_WORKERS,
       totalASTLRUCacheSize: HIGHLIGHT_CACHE_ENTRIES,
+      ...(preferredHighlighter() === HIGHLIGHTER.HIGHLIGHTS
+        ? { mainThreadMaxCharacters: MAIN_THREAD_MAX_CHARACTERS }
+        : {}),
       // Note that a worker failing to start is no error of the window's, since the list then highlights on its own thread.
       onWorkerError: (event) => event.preventDefault(),
     },

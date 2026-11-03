@@ -56,7 +56,12 @@ import {
 } from "./contract.js";
 import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
-import { type Highlighting, preferredHighlighter, startHighlighting } from "./highlight-pool.js";
+import {
+  HIGHLIGHT_CACHE_ENTRIES,
+  type Highlighting,
+  preferredHighlighter,
+  startHighlighting,
+} from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { markLineIndents } from "./line-indents.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
@@ -563,9 +568,10 @@ function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
     ...sharedOptions(props.look),
     hunkSeparators: props.excerpt === true ? "simple" : "line-info-basic",
     disableFileHeader: true,
-    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by.
+    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by; lines that scroll sideways hang by none.
     onPostRender: (node: HTMLElement, _instance: unknown, phase: PostRenderPhase) => {
-      if (phase !== "unmount" && node.shadowRoot !== null) markLineIndents(node.shadowRoot);
+      if (phase !== "unmount" && node.shadowRoot !== null && props.look.wrap)
+        markLineIndents(node.shadowRoot);
     },
     ...(renderAnnotation === undefined
       ? {}
@@ -923,10 +929,12 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
   const dress = (element: HTMLElement, path: string, phase: PostRenderPhase) => {
     watchGaps(element, phase);
-    // Each note drawn anew is marked with the band of the line it stands under, and each line with its indent, as Pierre draws its rows again.
+    // Each note drawn anew is marked with the band of the line it stands under, and each line with its indent where lines wrap, as Pierre draws its rows again.
+    // Note that a file with no notes and lines that do not wrap is left unread, because Pierre draws again on every scroll that brings rows in, and a walk of every row then is what makes a long list stutter.
     if (phase !== "unmount" && element.shadowRoot !== null) {
-      markAnnotationBands(element.shadowRoot);
-      markLineIndents(element.shadowRoot);
+      if ((drawnFiles.get(path)?.file.annotations.length ?? 0) > 0)
+        markAnnotationBands(element.shadowRoot);
+      if (latest.look.wrap) markLineIndents(element.shadowRoot);
     }
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
@@ -1162,7 +1170,7 @@ const WHOLE_FILE_EDGE = 6;
  * (\`HIGHLIGHT_CACHE_ENTRIES\`), since a key past those names colours the pool
  * no longer holds, the oldest let go first.
  */
-const WHOLE_FILE_KEYS_KEPT = 16;
+const WHOLE_FILE_KEYS_KEPT = HIGHLIGHT_CACHE_ENTRIES;
 
 /** A whole file's key, kept with the text it was handed under its name at its revision. */
 interface WholeFileKey {
@@ -1303,8 +1311,8 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
     }
     drawnElement = element;
     quietGutter(element);
-    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by.
-    if (element.shadowRoot !== null) markLineIndents(element.shadowRoot);
+    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by; lines that scroll sideways hang by none.
+    if (element.shadowRoot !== null && latest.look.wrap) markLineIndents(element.shadowRoot);
     if (!dressed.has(element) && element.shadowRoot !== null) {
       dressed.add(element);
       element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
