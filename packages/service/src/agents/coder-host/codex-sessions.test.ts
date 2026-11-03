@@ -412,7 +412,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
           tokenUrl: TOKEN_URL,
-          installedSkills: "/opt/luke/installed-skills",
+          installedSkills: "/opt/agent/installed-skills",
           warm: true,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);

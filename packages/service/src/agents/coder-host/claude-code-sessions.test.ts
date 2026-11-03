@@ -569,7 +569,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
           allowedDomains: config.allowedDomains,
-          installedSkills: "/opt/luke/installed-skills",
+          installedSkills: "/opt/agent/installed-skills",
           warm: true,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);
@@ -703,10 +703,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const script = command.args[1] ?? "";
         assert.match(
           script,
-          /mv \/tmp\/luke-installed-skills \/opt\/luke\/installed-skills && chown -R root:root \/opt\/luke\/installed-skills && chmod -R u=rwX,go=rX/u,
+          /mv \/tmp\/luke-installed-skills \/opt\/agent\/installed-skills && chown -R root:root \/opt\/agent\/installed-skills && chmod -R u=rwX,go=rX/u,
         );
         const [config] = (yield* launchLines(command)) as [ClaudeCodeConfig];
-        assert.equal(config.installedSkills, "/opt/luke/installed-skills");
+        assert.equal(config.installedSkills, "/opt/agent/installed-skills");
 
         // An account with no installed skills uploads none, and the launch installs nothing.
         const bare = runnerSandboxApi();
