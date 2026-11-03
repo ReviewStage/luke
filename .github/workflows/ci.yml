@@ -120,7 +120,7 @@ jobs:
     timeout-minutes: 15
     env:
       DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
-      LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
+      APP_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
