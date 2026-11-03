@@ -39,9 +39,9 @@
     display: block;
   }
 
-  /* The footnote can hold a press (a wait's Cancel), and the way on is one,
-     which is no part of a window drag. */
-  [data-ui-profile="desktop"] :is(.ui-auth-footnote, .ui-auth-action) {
+  /* The footnote can hold a press (a wait's Cancel), and the way on and a
+     step's foot are presses, which are no part of a window drag. */
+  [data-ui-profile="desktop"] :is(.ui-auth-footnote, .ui-auth-action, .ui-auth-foot) {
     -webkit-app-region: no-drag;
   }
 }
