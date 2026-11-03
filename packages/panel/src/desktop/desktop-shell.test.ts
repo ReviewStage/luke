@@ -398,7 +398,7 @@ test("on a phone, while the account's access is read, Admin stands headed as it 
   assert.ok(page.querySelector('[role="radiogroup"][aria-label="Admin sections"]'));
 });
 
-test("with the sidebar folded, New plan stands beside its toggle over the welcome and the Inbox alike", () => {
+test("with the sidebar folded, New task stands beside its toggle over Home and the Inbox alike", () => {
   assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New task"]);
   act(() => root?.unmount());
   root = undefined;
@@ -460,10 +460,30 @@ function placeRow(page: HTMLElement, name: string): HTMLButtonElement | undefine
   return rowNamed(page.querySelector("aside.desktop-sidebar") ?? page, name);
 }
 
-test("the sidebar offers no Home row, the window resting on the Inbox with no task open", () => {
-  const page = mount(false);
-  assert.equal(placeRow(page, "Home"), undefined);
-  assert.ok(placeRow(page, "Inbox"), "the Inbox's row stands");
+/** The sidebar's Home row. */
+function homeRow(page: HTMLElement): HTMLButtonElement {
+  return placeRow(page, "Home") ?? assert.fail("the Home row stands");
+}
+
+test("the sidebar's Home row is the place shown on Home, and neither over the Inbox nor while a launch reopens a plan", () => {
+  assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
+  act(() => root?.unmount());
+  assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
+  act(() => root?.unmount());
+  assert.equal(homeRow(mount(false, true)).getAttribute("aria-current"), null);
+});
+
+test("Home, pressed or by its chord from Settings, brings the Tasks tab forward on Home", () => {
+  let home = 0;
+  const tabs: PanelTab[] = [];
+  mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  act(() => runAppCommand(APP_COMMAND.HOME));
+  assert.deepEqual([home, tabs], [1, [PANEL_TAB.TASKS]]);
+  act(() => root?.unmount());
+
+  const tasks = mount(false, false, { onGoHome: () => (home += 1) });
+  act(() => homeRow(tasks).click());
+  assert.equal(home, 2);
 });
 
 const ACME: Workspace = {
@@ -1041,7 +1061,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
 
 /** Every place in the window the developer can stand, as the shell is handed it. */
 const PLACE = {
-  HOME: "a new account's welcome",
+  HOME: "Home",
   OTHER_TASK: "another plan",
   INBOX: "the Inbox",
   AGENT_PAGE: "an agent's page",
@@ -1253,8 +1273,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     container.remove();
   }
   assert.deepEqual(found, {
-    // Note that the welcome holds only New task's composer, so it holds no words to find.
-    [PLACE.HOME]: false,
+    [PLACE.HOME]: true,
     [PLACE.OTHER_TASK]: true,
     [PLACE.INBOX]: true,
     // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
