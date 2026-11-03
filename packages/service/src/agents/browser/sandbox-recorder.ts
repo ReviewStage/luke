@@ -474,7 +474,7 @@ export const RECORDING_READ_EXIT = { NO_VIDEO: 3 } as const;
  * Reads the video back, up to the bytes given and one past them, as base64
  * on one line after the line naming its absolute path, with every
  * capability dropped as the sandbox's other file reads are
- * (`luke-mcp/sandbox-door.ts`); read its run with `recordingBytesOf`. Note
+ * (`workspace-mcp/sandbox-door.ts`); read its run with `recordingBytesOf`. Note
  * that the path is the sandbox user's home's, which the agent's own may not
  * be, as a native runner's is not, so the agent is answered it whole.
  */

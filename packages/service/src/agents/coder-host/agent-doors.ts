@@ -3,7 +3,7 @@
  *
  * eve's tool files reach them through the coder host (`host.ts`), and a
  * native harness's runner through our MCP server
- * (`../luke-mcp/tools.ts`), so both run one implementation, as the inbox's
+ * (`../workspace-mcp/tools.ts`), so both run one implementation, as the inbox's
  * own door does (`inbox-door.ts`). Nothing here imports eve's runtime,
  * because the web function that serves the MCP server bundles no sandbox:
  * a door that reads a file the agent names is handed the door to its
@@ -90,7 +90,7 @@ import { sessionsRouter } from "./runtime-sessions.js";
 import { runShowImage } from "./show-image.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-/** What the doors that reach an agent's session or the store's writer read of the deployment, as the web function serving the MCP server builds them (`../luke-mcp/door-seams.ts`). */
+/** What the doors that reach an agent's session or the store's writer read of the deployment, as the web function serving the MCP server builds them (`../workspace-mcp/door-seams.ts`). */
 export interface AgentDoorSeams {
   /** The writer over the coding agent's tool set, composed once per instance. */
   readonly writer: () => Effect.Effect<StoreWriter>;

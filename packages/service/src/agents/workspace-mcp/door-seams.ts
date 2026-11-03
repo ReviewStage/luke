@@ -17,8 +17,8 @@ import { productionSummaryModel } from "../coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 
 /** The doors' seams over the deployment's environment. */
-export const lukeMcpDoorSeams: Effect.Effect<AgentDoorSeams, never, HostedEnvironment> = Effect.gen(
-  function* () {
+export const workspaceMcpDoorSeams: Effect.Effect<AgentDoorSeams, never, HostedEnvironment> =
+  Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
     const writer = yield* Effect.cached(storeWriter({ tools: CODER_TOOL_SET }));
     return {
@@ -28,5 +28,4 @@ export const lukeMcpDoorSeams: Effect.Effect<AgentDoorSeams, never, HostedEnviro
           Effect.provideService(HostedEnvironment, environment),
         ),
     };
-  },
-);
+  });

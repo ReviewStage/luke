@@ -1,6 +1,6 @@
-import type { AgentLukeToolsAnswerView } from "@luke/features/agent-view";
-import { type RunOnMacReason, runOnMacReason } from "@luke/features/luke-tools-model";
-import type { LukeToolsAnswer } from "@luke/features/luke-tools-wire";
+import type { AgentWorkspaceToolsAnswerView } from "@luke/features/agent-view";
+import { type RunOnMacReason, runOnMacReason } from "@luke/features/workspace-tools-model";
+import type { WorkspaceToolsAnswer } from "@luke/features/workspace-tools-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@luke/settings";
 import * as Atom from "effect/reactivity/Atom";
@@ -9,7 +9,7 @@ import { useAct } from "../act.js";
 import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
 
 /**
- * agent-luke-tools.ts -- our own tools as an agent's MCP popover draws them: the ones the service says the agent is offered, and whether its `run_on_mac` is on and why not.
+ * agent-workspace-tools.ts -- our own tools as an agent's MCP popover draws them: the ones the service says the agent is offered, and whether its `run_on_mac` is on and why not.
  *
  * The service is asked as the popover opens and again whenever the window
  * is focused, which is how the developer comes back from Settings or from
@@ -21,16 +21,16 @@ import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
  */
 
 /** The agent whose built-in tools the popover draws, and whether its reader started it. */
-export interface LukeToolsDoor {
+export interface WorkspaceToolsDoor {
   readonly agentId: string;
   /** Whether the reader started the agent, so this Mac's setting is the one its commands meet. */
   readonly starterReading: boolean;
 }
 
 /** Our own tools as the popover draws them. */
-export interface LukeToolsRead {
+export interface WorkspaceToolsRead {
   /** The service's answer; nothing while it is read, or where it failed. */
-  readonly answer: LukeToolsAnswer | undefined;
+  readonly answer: WorkspaceToolsAnswer | undefined;
   /** Whether the last read failed. */
   readonly failed: boolean;
   /** Why `run_on_mac` is off for the agent; nothing where it is on or not yet known. */
@@ -44,9 +44,9 @@ const MAC_COMMANDS_NEVER = Atom.map(
 );
 
 /** The agent's built-in tools, read for as long as the caller is drawn; nothing is read for no agent. */
-export function useLukeTools(door: LukeToolsDoor | undefined): LukeToolsRead {
+export function useWorkspaceTools(door: WorkspaceToolsDoor | undefined): WorkspaceToolsRead {
   const { act } = useAct();
-  const [read, setRead] = useState<{ answer: LukeToolsAnswer } | { failed: true } | undefined>(
+  const [read, setRead] = useState<{ answer: WorkspaceToolsAnswer } | { failed: true } | undefined>(
     undefined,
   );
   const [focus, setFocus] = useState(0);
@@ -69,7 +69,7 @@ export function useLukeTools(door: LukeToolsDoor | undefined): LukeToolsRead {
     asked.current = { agentId, focus };
     asks.current += 1;
     const ask = asks.current;
-    const land = (answer: AgentLukeToolsAnswerView | undefined) => {
+    const land = (answer: AgentWorkspaceToolsAnswerView | undefined) => {
       if (asks.current !== ask) return;
       // Note that a read that fails keeps the answer before it, because a focus that could not ask again changed nothing.
       setRead((was) =>
@@ -80,7 +80,7 @@ export function useLukeTools(door: LukeToolsDoor | undefined): LukeToolsRead {
             : { failed: true },
       );
     };
-    act(ACT_KIND.AGENTS_LUKE_TOOLS, { agentId }).then(land, () => land(undefined));
+    act(ACT_KIND.AGENTS_WORKSPACE_TOOLS, { agentId }).then(land, () => land(undefined));
   });
 
   const answer = read !== undefined && "answer" in read ? read.answer : undefined;

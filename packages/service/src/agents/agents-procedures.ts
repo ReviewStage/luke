@@ -134,12 +134,12 @@ import {
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
-import { offeredLukeTools, runOnMacStanding } from "./luke-tools.js";
 import { memoryOnFor } from "./memory-tools.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
+import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
 
 export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
@@ -354,6 +354,28 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       ...(started.txid === undefined ? undefined : { txid: started.txid }),
     },
   });
+  // Which of our own tools the agent is offered, by the rules its runtime narrows them by, and whether its `run_on_mac` would run now.
+  const workspaceToolsOf = (userId: string, agentId: string) =>
+    Effect.gen(function* () {
+      const { agent, target } = yield* reachedAgentById(userId, agentId);
+      // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
+      const visible = yield* hostedStoreOrUnavailable(readVisibleAgentWorkspace(userId, agent.id));
+      if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const runtimes = yield* hostedStoreOrUnavailable(
+        nativeRuntimesOfReached([agent.conversationId]),
+      );
+      const memoryOn = yield* memoryOnFor(agent.userId);
+      const heard = yield* hostedStoreOrUnavailable(heardFromAnotherAccount(target));
+      return {
+        tools: offeredWorkspaceTools({
+          agent,
+          native: runtimes.has(agent.conversationId),
+          memoryOn,
+          heardFromAnotherAccount: heard,
+        }),
+        runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
+      };
+    });
   return {
     /**
      * A workspace's agents, on a task or with none, newest started first,
@@ -690,31 +712,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         }),
       );
     }),
-    /**
-     * Which of our own tools the agent is offered, by the rules its
-     * runtime narrows them by, and whether its `run_on_mac` would run now.
-     */
+    /** Which of our own tools the agent is offered, and whether its `run_on_mac` would run now. */
+    workspaceTools: signedIn.workspaceTools.effect(function* ({ input, context }) {
+      return yield* workspaceToolsOf(context.userId, input.id);
+    }),
+    /** `workspaceTools` under the path a desktop or host built before the rename still calls; goes once the releases after it are out. */
     lukeTools: signedIn.lukeTools.effect(function* ({ input, context }) {
-      const { agent, target } = yield* reachedAgentById(context.userId, input.id);
-      // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
-      const visible = yield* hostedStoreOrUnavailable(
-        readVisibleAgentWorkspace(context.userId, agent.id),
-      );
-      if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const runtimes = yield* hostedStoreOrUnavailable(
-        nativeRuntimesOfReached([agent.conversationId]),
-      );
-      const memoryOn = yield* memoryOnFor(agent.userId);
-      const heard = yield* hostedStoreOrUnavailable(heardFromAnotherAccount(target));
-      return {
-        tools: offeredLukeTools({
-          agent,
-          native: runtimes.has(agent.conversationId),
-          memoryOn,
-          heardFromAnotherAccount: heard,
-        }),
-        runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
-      };
+      return yield* workspaceToolsOf(context.userId, input.id);
     }),
     /** The agent's sandbox resumed from its snapshot, the developer's click and nothing else, answering where it stands after. */
     sandboxResume: signedIn.sandboxResume.effect(function* ({ input, context }) {

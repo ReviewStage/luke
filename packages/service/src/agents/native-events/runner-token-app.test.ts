@@ -46,7 +46,7 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-token-app.js";
 
 /**
