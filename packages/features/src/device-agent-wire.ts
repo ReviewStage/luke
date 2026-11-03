@@ -294,12 +294,22 @@ export interface DeviceAgentLayout {
   readonly temp: string;
 }
 
-/** The agent's folder and what stands in it, under the Mac's home folder given. */
-export function deviceAgentLayout(home: string, agentId: string): DeviceAgentLayout {
+/** The folder every local agent's folder stands in, under the Mac's home folder given, which its host registers (`agentsFolder`). */
+export function deviceAgentsFolder(home: string): string {
   let end = home.length;
   // Note that the trailing slashes are counted off by hand, because a regular expression anchored at the end runs in quadratic time on a home of many slashes.
   while (end > 1 && home[end - 1] === "/") end -= 1;
-  const folder = [home.slice(0, end), DEVICE_AGENT_FOLDER.ROOT, agentId].join("/");
+  return [home.slice(0, end), DEVICE_AGENT_FOLDER.ROOT].join("/");
+}
+
+/** The agent's folder and what stands in it, under the Mac's home folder given. */
+export function deviceAgentLayout(home: string, agentId: string): DeviceAgentLayout {
+  return deviceAgentLayoutIn(deviceAgentsFolder(home), agentId);
+}
+
+/** The agent's folder and what stands in it, under the folder of the Mac's local agents given (`deviceAgentsFolder`). */
+export function deviceAgentLayoutIn(agentsFolder: string, agentId: string): DeviceAgentLayout {
+  const folder = [agentsFolder, agentId].join("/");
   return {
     folder,
     checkoutPath: [folder, DEVICE_AGENT_FOLDER.REPOSITORY].join("/"),
@@ -459,6 +469,13 @@ const deviceField = { deviceId: wireUuidSchema };
  * secret, why; it names none once ready, so a service from before the
  * field, which refuses it, only misses a device it would never have listed.
  * It names the machine it runs on where it read it (`deviceMachineFields`).
+ * It names the folder its own layout puts its agents under
+ * (`deviceAgentsFolder`), absolute, so a launch is laid out where the device
+ * looks for it whichever build moved `DEVICE_AGENT_FOLDER.ROOT`; a device
+ * from before the field names none, and its agents are laid out under its
+ * home as this build's root puts them. Note that a device names it on every
+ * register, default or not, because only the device knows its own root; so
+ * a host build with it ships only after every service takes it.
  */
 export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
@@ -468,6 +485,7 @@ export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceMachineFields,
   isolation: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_ISOLATION))),
   home: macPath,
+  agentsFolder: EffectSchema.optionalKey(macPath),
   claudeExecutable: macPath,
   codexExecutable: EffectSchema.optionalKey(macPath),
   signedIn: EffectSchema.optionalKey(deviceSignedInSchema),

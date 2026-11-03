@@ -56,9 +56,10 @@ const DeviceSchema = Schema.Struct({
 
 export type Device = typeof DeviceSchema.Type;
 
-/** Where a Mac keeps what its local agents need: its home folder, the CLI it bundles, and the Codex it checked, none where it has none. */
+/** Where a Mac keeps what its local agents need: its home folder, the folder its agents stand in where its host named one, the CLI it bundles, and the Codex it checked, none where it has none. */
 const DeviceLayoutSchema = Schema.Struct({
   home: Schema.String,
+  agentsFolder: Schema.NullOr(Schema.String),
   claudeExecutable: Schema.String,
   codexExecutable: Schema.NullOr(Schema.String),
 });
@@ -96,12 +97,13 @@ export function machineColumns(machine: {
   };
 }
 
-/** What a Mac registers with beside its id and name: its platform and architecture, which machine it runs on where its host read it, how it runs its agents, its layout, its Codex where it checked one, which harnesses it is signed in to where it says, what its follower takes beyond the first lines, none where it names none, and where its setup stands and why it failed, none once it is ready. */
-export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> &
+/** What a Mac registers with beside its id and name: its platform and architecture, which machine it runs on where its host read it, how it runs its agents, its layout, the folder its agents stand in where its host names one, its Codex where it checked one, which harnesses it is signed in to where it says, what its follower takes beyond the first lines, none where it names none, and where its setup stands and why it failed, none once it is ready. */
+export type DeviceRegistration = Omit<DeviceLayout, "agentsFolder" | "codexExecutable"> &
   DeviceMachine & {
     readonly platform: DevicePlatform;
     readonly arch: DeviceArch;
     readonly isolation?: DeviceIsolation | undefined;
+    readonly agentsFolder?: string | undefined;
     readonly codexExecutable?: string | undefined;
     readonly signedIn?: DeviceSignedIn | undefined;
     readonly capabilities?: readonly DeviceCapability[] | undefined;
@@ -133,6 +135,7 @@ const upsertDevice = SqlSchema.findAll({
     model,
     isolation,
     home,
+    agentsFolder,
     claudeExecutable,
     codexExecutable,
     signedIn,
@@ -155,6 +158,7 @@ const upsertDevice = SqlSchema.findAll({
           ...machineColumns({ machineId, model }),
           isolation,
           home,
+          agentsFolder,
           claudeExecutable,
           codexExecutable,
           signedIn,
@@ -172,6 +176,7 @@ const upsertDevice = SqlSchema.findAll({
             ...machineColumns({ machineId, model }),
             isolation,
             home,
+            agentsFolder,
             claudeExecutable,
             codexExecutable,
             signedIn,
@@ -287,6 +292,7 @@ const findLayout = SqlSchema.findOneOption({
       db
         .select({
           home: device.home,
+          agentsFolder: device.agentsFolder,
           claudeExecutable: device.claudeExecutable,
           codexExecutable: device.codexExecutable,
           signedIn: device.signedIn,
@@ -321,6 +327,8 @@ export function registerDevice(
       upsertDevice({
         userId,
         ...registered,
+        // Note that a register naming no agents folder clears the last one, as a host moved back to a build from before the field names none.
+        agentsFolder: registered.agentsFolder ?? null,
         // Note that a register naming no Codex clears the last one, since the Mac checks it on every start.
         codexExecutable: registered.codexExecutable ?? null,
         // Likewise a register naming no isolation runs its agents bare, as every desktop from before the field does.
@@ -339,7 +347,7 @@ export function registerDevice(
   );
 }
 
-/** The account's Mac's home folder, bundled CLI, isolation, and the capabilities of its this build knows, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
+/** The account's Mac's home folder, the folder its agents stand in where its host named one, bundled CLI, isolation, and the capabilities of its this build knows, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
 export function deviceLayout(
   userId: string,
   id: string,
