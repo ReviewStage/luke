@@ -16,6 +16,18 @@
 // OKLCH hue, held there in the dark rather than lightened toward peach. Every
 // ink holds its contrast pair on the grounds it is drawn on, which
 // @repo/ui's brand-contrast.test.ts asserts.
+//
+// Note that there is one copper, and it means you: the brand, what you can
+// act on, and what waits on you (attention) are the same ink, so attention
+// names the accent's values rather than a second copper a step away. Work
+// under way is the one status that would otherwise share it, so it is a blue
+// of its own at 250 degrees, at the other status inks' lightness, and a
+// running agent reads apart from one that needs you.
+const COPPER = {
+  LIGHT: { FILL: "#a7611b", INK: "#8e5323" },
+  DARK: { FILL: "#cf7b26", INK: "#f19a4b" },
+};
+
 export const BRAND_PALETTES = {
   COPPER: {
     LIGHT: {
@@ -35,17 +47,18 @@ export const BRAND_PALETTES = {
       TEXT: "#171614",
       TEXT_BODY: "#282624",
       TEXT_MUTED: "#64615f",
-      ACCENT: "#a7611b",
+      ACCENT: COPPER.LIGHT.FILL,
       ON_ACCENT: "#ffffff",
       ON_ACCENT_MUTED: "#ffffff",
-      ACCENT_TEXT: "#8e5323",
-      FOCUS_RING: "#a7611b",
-      SWITCH_ON: "#a7611b",
+      ACCENT_TEXT: COPPER.LIGHT.INK,
+      FOCUS_RING: COPPER.LIGHT.FILL,
+      SWITCH_ON: COPPER.LIGHT.FILL,
       DANGER: "#e23242",
       DANGER_TEXT: "#b42e36",
       DANGER_FILL: "#db3643",
-      ATTENTION: "#925103",
-      ATTENTION_FILL: "#b16203",
+      ATTENTION: COPPER.LIGHT.INK,
+      ATTENTION_FILL: COPPER.LIGHT.FILL,
+      WORKING: "#1666aa",
       COMPLETE: "#067040",
       MERGED: "#744caf",
     },
@@ -66,17 +79,20 @@ export const BRAND_PALETTES = {
       TEXT: "#f4f1ef",
       TEXT_BODY: "#e0dddb",
       TEXT_MUTED: "#96918d",
-      ACCENT: "#cf7b26",
+      ACCENT: COPPER.DARK.FILL,
       ON_ACCENT: "#120f0d",
       ON_ACCENT_MUTED: "#120f0d",
-      ACCENT_TEXT: "#f19a4b",
-      FOCUS_RING: "#cf7b26",
-      SWITCH_ON: "#cf7b26",
+      ACCENT_TEXT: COPPER.DARK.INK,
+      FOCUS_RING: COPPER.DARK.FILL,
+      SWITCH_ON: COPPER.DARK.FILL,
       DANGER: "#fb817f",
       DANGER_TEXT: "#fe908d",
       DANGER_FILL: "#db3643",
-      ATTENTION: "#fd9836",
-      ATTENTION_FILL: "#b16203",
+      ATTENTION: COPPER.DARK.INK,
+      // White words sit on attention's fill in either theme, and the dark
+      // accent is too light to hold them, so the fill is the light one.
+      ATTENTION_FILL: COPPER.LIGHT.FILL,
+      WORKING: "#76bafe",
       COMPLETE: "#56d089",
       MERGED: "#c29fff",
     },

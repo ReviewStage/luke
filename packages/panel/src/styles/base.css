@@ -27,11 +27,11 @@
      sheet here asks the machine's appearance: a page drawn in a chosen theme
      draws every ink in it whatever the machine says. */
 
-  /* Whose voice is live, so a glance says who is talking. Your turn is the
-     palette's green (`--ui-color-complete`); the app answers in the working ink the
-     rest of the surface already uses for something live and in progress,
-     which is what a reply is. */
-  --voice-app: var(--ui-color-working);
+  /* The app's own voice in a document it writes (`document-frame.tsx`): its
+     caret, its writing ring, and the wash on what changed since the last look,
+     in the brand's copper, the links' ink, rather than the working blue a
+     status draws in. */
+  --voice-app: var(--ui-color-accent-text);
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--ui-focus-ring-*` (`tokens/profiles.css`). */
   /* The code on screen, in the inks of GitHub's themes on its ground
@@ -123,14 +123,15 @@
   /* The agent's pointer over a cloud Browser tab (`tasks/cloud-browser-cursor.tsx`),
      drawn over someone else's page rather than the window, so it follows the
      page under it rather than the theme: the light mode's accent, the dark
-     mode's brighter one over a dark page, a white edge and a small shadow that
-     hold it apart from any page, and a glow of its own amber while it types. */
-  --agent-pointer: #a7611b;
-  --agent-pointer-on-dark: #cf7b26;
+     mode's brighter one over a dark page (`brand.css`'s accent on either
+     ground), a white edge and a small shadow that hold it apart from any page,
+     and a glow of its own copper while it types. */
+  --agent-pointer: var(--ui-color-accent-on-light);
+  --agent-pointer-on-dark: var(--ui-color-accent-on-dark);
   --agent-pointer-edge: #ffffff;
   --agent-pointer-shadow: rgba(0, 0, 0, 0.35);
-  --agent-pointer-glow: rgba(167, 97, 27, 0.42);
-  --agent-pointer-glow-on-dark: rgba(207, 123, 38, 0.5);
+  --agent-pointer-glow: color-mix(in srgb, var(--agent-pointer) 42%, transparent);
+  --agent-pointer-glow-on-dark: color-mix(in srgb, var(--agent-pointer-on-dark) 50%, transparent);
 }
 
 /* Pierre's diff and file tree each ask for `color-scheme: light dark` in

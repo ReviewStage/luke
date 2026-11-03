@@ -246,6 +246,14 @@ ${block((key) => BRAND.LIGHT[key])}
 [data-ui-profile="web"][data-ui-theme="dark"] {
 ${block((key) => BRAND.DARK[key])}
 }
+
+/* The accent over a ground no theme chooses, someone else's page, where the
+   agent's pointer is drawn: the light theme's over a light page and the dark
+   theme's over a dark one, whatever the window's own theme. */
+[data-ui-profile] {
+  --ui-color-accent-on-light: ${BRAND.LIGHT.ACCENT};
+  --ui-color-accent-on-dark: ${BRAND.DARK.ACCENT};
+}
 `;
 }
 
