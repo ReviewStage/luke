@@ -3,6 +3,7 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   AuthMark,
   AuthPage,
+  AuthStepFoot,
   BUTTON_VARIANT,
   Button,
   FormField,
@@ -22,12 +23,16 @@ import { CatalogSection } from "../section";
  * auth-page.tsx -- the sign-in page with its provider choices, a landing's
  * ringed mark on its way, settled, and failed, with and
  * without its Open link, and a form with an error on a phone's width, each in a
- * frame the size of the screen it stands for. Every name and address is
+ * frame the size of the screen it stands for, and a step of several with its
+ * foot, on its first step and on one it can skip. Every name and address is
  * made up.
  */
 
 /** The Open link as a page offers it; the catalog goes nowhere. */
 const OPEN_APP = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
+
+/** A press the catalog answers with nothing. */
+const IGNORE = () => undefined;
 
 function Mark(): React.JSX.Element {
   return (
@@ -145,6 +150,45 @@ function AuthPages(): React.JSX.Element {
               title={`${PRODUCT_NAME} could not continue`}
               description="Start sign-in again."
             />
+          </div>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="auth-steps" title="A step of several, first and skippable">
+        <div className="catalog-screens">
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<Mark />}
+              title={`Welcome to ${PRODUCT_NAME}`}
+              foot={<AuthStepFoot at={1} total={4} next={{ label: "Continue", onPress: IGNORE }} />}
+            >
+              <ProviderChoices />
+            </AuthPage>
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<Mark />}
+              title="Connect GitHub"
+              foot={<AuthStepFoot at={3} total={4} onBack={IGNORE} onSkip={IGNORE} />}
+            >
+              <ProviderChoices />
+            </AuthPage>
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<Mark />}
+              title="Create a team workspace"
+              foot={
+                <AuthStepFoot
+                  at={2}
+                  total={5}
+                  onBack={IGNORE}
+                  onSkip={IGNORE}
+                  next={{ label: "Create", onPress: IGNORE }}
+                />
+              }
+            >
+              <EmailForm />
+            </AuthPage>
           </div>
         </div>
       </CatalogSection>

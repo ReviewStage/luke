@@ -5,12 +5,12 @@ import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure
 import {
   ANNOUNCE,
   AuthPage,
-  BUTTON_VARIANT,
-  Button,
   PROVIDER_BUTTON_SIZE,
   ProductMark,
   ProviderButton,
+  TEXT_BUTTON_TONE,
   TEXT_LINK_LOOK,
+  TextButton,
   TextLink,
 } from "@repo/ui";
 import { failureShown } from "./failure-report.js";
@@ -82,9 +82,9 @@ export function SignInGate({
             {waiting ? (
               <span>
                 {FINISH_IN_BROWSER}{" "}
-                <Button variant={BUTTON_VARIANT.QUIET} onClick={onCancel}>
+                <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={onCancel}>
                   Cancel
-                </Button>
+                </TextButton>
               </span>
             ) : null}
             {macAppLink === undefined ? null : (
