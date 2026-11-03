@@ -251,11 +251,6 @@ export const APP_SLICE = {
   WINDOW: sliceAtom("window"),
 } as const;
 
-/** Whether the first read has answered at all, which redraws its reader once, as it does. */
-export const APP_STATE_HELD: Atom.Atom<boolean> = appStateDerivedAtom(
-  (state) => state !== undefined,
-);
-
 /**
  * Whether the first read has answered with settings: nothing is drawn over
  * a document without them, and the window reports itself painted on the

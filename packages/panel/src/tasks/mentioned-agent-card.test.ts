@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentPullRequest,
@@ -16,7 +15,7 @@ import {
   mentionMarkdown,
 } from "@repo/features/mention-link";
 import type { TaskSummary } from "@repo/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
@@ -41,14 +40,14 @@ import { WordsWorkspace } from "./use-link-standing.js";
  * mentioned-agent-card.test.ts -- a chip of a coding agent the place has no
  * tab of, an agent on another task of the workspace or on none, in words
  * drawn off that task's page as the Inbox draws them, hangs the agent's
- * tab's own card: its name, its model, where it stands, who started it, and
- * the task it works on. A chip of an agent the window lists reads nothing
- * as it is drawn; one of an agent it lists not, an archived one say, takes
- * its card's read as it is drawn, so its mark wears its harness, and the
- * card hung after shares it: its task's agents once, or, for an agent on
- * no task, the workspace's agents its written name finds, then the newest,
- * and only then says it is not found. A read that answers nothing leaves
- * the chip's own card. Synthetic workspace, tasks, and agents.
+ * tab's own card: its name, its model, who started it, and the task it
+ * works on, drawn from the agents the task list carries, so neither drawing
+ * a chip nor hanging its card asks the service anything. A mark the window
+ * holds no model for wears the harness the list carries; an agent the list
+ * carries not keeps the chip's own card, and until the list first answers
+ * the card stands in its reading state. A pull request's chip hangs its Pull
+ * request tab's card from the pull request the list holds of its agent.
+ * Synthetic workspace, tasks, and agents.
  */
 
 const AT = 1_792_000_000_000;
@@ -99,21 +98,14 @@ const SWEEPER = agentOf("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", {
   startedBy: { userId: ME, name: "Dean Stratakos" },
 });
 
-/** An agent on no task the workspace's newest list, and no search, finds. */
+/** An agent on no task the task list carries not, one of a workspace the reader left say. */
 const AUDITOR = agentOf("2a1b0c9d-8e7f-4a6b-9c5d-4e3f2a1b0c9d", {
   planId: null,
   title: "Audit retries",
   status: AGENT_STATUS.COMPLETED,
 });
 
-/** An agent on no task older than the workspace's newest, renamed since its chip was written, found only by its id. */
-const ARCHIVIST = agentOf("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", {
-  planId: null,
-  title: "Archive stale branches",
-  status: AGENT_STATUS.COMPLETED,
-});
-
-/** Main's document holding the billing task, by which an agent of it names where it works. */
+/** Main's document holding the billing task, by which an agent of it names where it works, before the task list first answers live. */
 const STATE: AppStateSnapshot = (() => {
   const snapshot = signedInAs({ id: ME, email: "dean@example.com", name: "Dean Stratakos" });
   return {
@@ -124,9 +116,6 @@ const STATE: AppStateSnapshot = (() => {
 
 /** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
-
-/** Whether the service is still to answer every read, so each stands out for as long as a test looks. */
-let pending = false;
 
 /** The pull request the prorater opened, as its Pull request tab reads it. */
 const SEAT_PULL_REQUEST: AgentPullRequest = {
@@ -152,82 +141,57 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   told.length = 0;
-  pending = false;
 });
 
-/** What the main process answers: a task's agents, and the workspace's searched, on a task or none, or newest. */
-function answer(request: AnyAct): FakeActAnswer {
-  if (request.kind === ACT_KIND.AGENTS_LIST) {
-    const agents = request.payload.taskId === BILLING.id ? [PRORATE] : [];
-    return { status: FAKE_ANSWER.DONE, value: { agents } };
-  }
-  if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
-    const { words } = request.payload;
-    const agents =
-      words === undefined
-        ? [AUDITOR]
-        : [SWEEPER, AUDITOR, PRORATE].filter((agent) =>
-            agent.title?.toLowerCase().includes(words.toLowerCase()),
-          );
-    return { status: FAKE_ANSWER.DONE, value: { agents } };
-  }
-  if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) {
-    const opened = request.payload.agentId === PRORATE.id;
-    return {
-      status: FAKE_ANSWER.DONE,
-      value: {
-        repository: "acme/relay",
-        branch: opened ? "feat/prorate-seats" : null,
-        pullRequest: opened ? SEAT_PULL_REQUEST : null,
-      },
-    };
-  }
-  if (request.kind === ACT_KIND.AGENTS_PAGE) {
-    return request.payload.agentId === ARCHIVIST.id
-      ? {
-          status: FAKE_ANSWER.DONE,
-          value: {
-            agent: {
-              ...ARCHIVIST,
-              automationId: null,
-              workspaceId: ACME.id,
-              repository: "acme/relay",
-            },
-          },
-        }
-      : {
-          status: FAKE_ANSWER.DONE,
-          value: { failure: AGENT_CALL_FAILURE.NOT_FOUND },
-        };
-  }
-  return { status: FAKE_ANSWER.DONE, value: undefined };
-}
+/** An older pull request the prorater opened, which its row no longer keeps. */
+const OLDER_PULL_REQUEST = "https://github.com/acme/relay/pull/41";
 
-/** Main's document as `STATE`, its billing row naming the prorater and its agents with no task the sweeper, as the plan list carries them. */
-const LISTING_STATE: AppStateSnapshot = {
+/**
+ * Main's document as `STATE` once the task list has answered live: the
+ * prorater among its tasks' agents, though the billing row's few name it
+ * not, an archived one say, the sweeper on no task, the prorater's pull
+ * request as its row keeps it, and the billing row naming that one and an
+ * older one of the prorater's.
+ */
+const LISTED_STATE: AppStateSnapshot = {
   ...STATE,
   tasks: {
     ...STATE.tasks,
+    listStatus: TASKS_READ.READY,
     tasks: [
       {
         ...BILLING,
         agents: {
           total: 1,
-          working: 1,
-          agents: [
+          working: 0,
+          agents: [],
+          pullRequestTotal: 2,
+          pullRequests: [
             {
-              id: PRORATE.id,
-              title: PRORATE.title,
-              model: PRORATE.model,
-              effort: PRORATE.effort,
-              status: PRORATE.status,
+              number: SEAT_PULL_REQUEST.number,
+              title: SEAT_PULL_REQUEST.title,
+              state: SEAT_PULL_REQUEST.state,
+              checks: SEAT_PULL_REQUEST.checks,
+              additions: SEAT_PULL_REQUEST.additions,
+              deletions: SEAT_PULL_REQUEST.deletions,
+              url: SEAT_PULL_REQUEST.url,
+              agentId: PRORATE.id,
+            },
+            {
+              number: 41,
+              title: "Prorate seats on downgrade",
+              state: PULL_REQUEST_STATE.MERGED,
+              checks: CHECK_SUMMARY.PASSING,
+              additions: 30,
+              deletions: 2,
+              url: OLDER_PULL_REQUEST,
+              agentId: PRORATE.id,
             },
           ],
-          pullRequestTotal: 0,
-          pullRequests: [],
         },
       },
     ],
+    taskAgents: [PRORATE],
     tasklessAgents: [
       {
         ...SWEEPER,
@@ -236,6 +200,9 @@ const LISTING_STATE: AppStateSnapshot = {
         repository: "acme/relay",
         activityAt: AT,
       },
+    ],
+    agentPullRequests: [
+      { agentId: PRORATE.id, taskId: BILLING.id, pullRequest: SEAT_PULL_REQUEST },
     ],
   },
 };
@@ -255,9 +222,7 @@ async function drawnElement(
     requestAppState: () => Promise.resolve(state),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       told.push(request);
-      return pending
-        ? Promise.withResolvers<FakeActAnswer>().promise
-        : Promise.resolve(answer(request));
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -292,13 +257,14 @@ function mentionOf(agent: AgentSummary, name: string): string {
   return mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: agent.id }, name, PLACE);
 }
 
-/** The acts that read agents, as told. */
+/** The acts that read agents or their pull requests, as told. */
 function agentReads(): readonly AnyAct[] {
   return told.filter(
     (request) =>
       request.kind === ACT_KIND.AGENTS_LIST ||
       request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST ||
-      request.kind === ACT_KIND.AGENTS_PAGE,
+      request.kind === ACT_KIND.AGENTS_PAGE ||
+      request.kind === ACT_KIND.AGENTS_PULL_REQUEST,
   );
 }
 
@@ -328,34 +294,44 @@ async function cardOf(chip: Element | undefined) {
   return look;
 }
 
-test("chips of agents off their task's page that the window lists read nothing as they are drawn", async () => {
-  await drawn(
-    `${mentionOf(PRORATE, "Prorate seat changes")} and ${mentionOf(SWEEPER, "Sweep flaky tests")}`,
-    LISTING_STATE,
+test("chips of agents off their task's page read nothing, and hang their tab's card at once, on another task or on none; one the list carries not keeps the chip's own", async () => {
+  const container = await drawn(
+    [
+      mentionOf(PRORATE, "Prorate"),
+      mentionOf(SWEEPER, "Sweep flaky tests"),
+      mentionOf(AUDITOR, "The auditor"),
+    ].join(" "),
+    LISTED_STATE,
   );
+  const [onTask, onNone, unlisted] = container.querySelectorAll("[data-mention-ref]");
 
+  const prorate = await cardOf(onTask);
+  const sweeper = await cardOf(onNone);
+  const auditor = await cardOf(unlisted);
+
+  assert.deepEqual(
+    [prorate.agent, prorate.name, prorate.model, prorate.foot],
+    [true, "Prorate seat changes", "Opus 5.5 High", "On Billing by seat"],
+  );
+  assert.match(prorate.words ?? "", /Started by.*Sam Okafor/u);
+  assert.deepEqual(
+    [sweeper.agent, sweeper.name, sweeper.foot],
+    [true, "Sweep flaky tests", "On no task"],
+  );
+  assert.doesNotMatch(
+    sweeper.words ?? "",
+    /Started by/u,
+    "the reader's own agent names no starter",
+  );
+  assert.deepEqual(
+    [auditor.agent, auditor.reading, auditor.name],
+    [false, false, "The auditor"],
+    "an agent the list carries not keeps the chip's own card",
+  );
   assert.deepEqual(agentReads(), []);
 });
 
-test("a chip of an agent the window lists not reads the workspace's agents its name finds once as it is drawn, wearing its harness, and the card hung after reads nothing more", async () => {
-  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
-  const chip = container.querySelector("[data-mention-ref]") ?? undefined;
-
-  assert.ok(
-    chip?.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
-    "the chip wears its harness",
-  );
-  const card = await cardOf(chip);
-  assert.equal(card.name, "Prorate seat changes");
-  assert.deepEqual(agentReads(), [
-    {
-      kind: ACT_KIND.AGENTS_WORKSPACE_LIST,
-      payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
-    },
-  ]);
-});
-
-test("a mention of an agent the window lists not, laid in a message box as an Inbox answer's is, wears its harness", async () => {
+test("a mention of an agent on another task whose model no row names, laid in a message box as an Inbox answer's is, wears the harness the task list carries", async () => {
   // The box stands on another task's page, whose doors know only that task's agents.
   const container = await drawnElement(
     createElement(MentionNodeChip, {
@@ -380,6 +356,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
         }),
       },
     }),
+    LISTED_STATE,
   );
 
   assert.ok(
@@ -388,7 +365,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
   );
 });
 
-test("a mention of its own task's agent whose tile the page knows no harness of wears the harness read for it", async () => {
+test("a mention of its own task's agent whose tile the page knows no harness of wears the harness the task list carries", async () => {
   // The box stands on the agent's own task's page, whose agents are not yet read.
   const container = await drawnElement(
     createElement(MentionNodeChip, {
@@ -413,6 +390,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
         }),
       },
     }),
+    LISTED_STATE,
   );
 
   assert.ok(
@@ -421,151 +399,26 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
   );
 });
 
-test("an agent on another task hangs its tab's card, the workspace's agents its name finds read once as it is hung, naming the task it works on", async () => {
-  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
-
-  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
-
-  assert.equal(card.agent, true, "the card is the agent's tab's own");
-  assert.equal(card.name, "Prorate seat changes");
-  assert.equal(card.model, "Opus 5.5 High");
-  assert.doesNotMatch(card.corner ?? "", /Working/u, "the corner says no word of its work");
-  assert.equal(card.working, true, "the tile wears the working mark in its harness's place");
-  assert.match(card.words ?? "", /Started by.*Sam Okafor/u);
-  assert.equal(card.foot, "On Billing by seat");
-  assert.deepEqual(agentReads(), [
-    {
-      kind: ACT_KIND.AGENTS_WORKSPACE_LIST,
-      payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
-    },
-  ]);
-});
-
-test("an agent on no task is found by the name its chip was written with, else among the workspace's newest, else by its id, and is otherwise not found", async () => {
+test("a pull request's chip off its task's page hangs the card its Pull request tab hangs, from the pull request the list holds; one no listed agent opened, and an older one its row keeps not, keep the chip's own", async () => {
   const container = await drawn(
-    [
-      mentionOf(SWEEPER, "Sweep flaky tests"),
-      mentionOf(AUDITOR, "The auditor"),
-      mentionOf(ARCHIVIST, "The archiver"),
-      mentionOf(agentOf("0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c", { planId: null }), "Gone"),
-    ].join(" "),
+    `Lands in [@#42](${SEAT_PULL_REQUEST.url}) after [@#7](${OUTSIDE_PULL_REQUEST}) and [@#41](${OLDER_PULL_REQUEST}).`,
+    LISTED_STATE,
   );
-  const [searched, newest, byId, gone] = container.querySelectorAll("[data-mention-ref]");
-
-  const sweeper = await cardOf(searched);
-  const auditor = await cardOf(newest);
-  const archivist = await cardOf(byId);
-  const missing = await cardOf(gone);
-
-  assert.deepEqual(
-    [sweeper.name, sweeper.foot, auditor.name, auditor.foot],
-    ["Sweep flaky tests", "On no task", "Audit retries", "On no task"],
-  );
-  assert.doesNotMatch(
-    sweeper.words ?? "",
-    /Started by/u,
-    "the reader's own agent names no starter",
-  );
-  assert.deepEqual([archivist.name, archivist.foot], ["Archive stale branches", "On no task"]);
-  assert.equal(missing.corner, "Not found");
-  assert.equal(missing.foot, undefined, "an agent not found works nowhere the card can say");
-  // Note that each chip reads as it is drawn, so the four chains interleave and are compared whole.
-  const inOrder = (payloads: readonly unknown[]) =>
-    payloads.map((payload) => JSON.stringify(payload)).sort();
-  assert.deepEqual(
-    inOrder(agentReads().map((request) => ("payload" in request ? request.payload : undefined))),
-    inOrder([
-      { workspaceId: ACME.id, includeArchived: true, words: "Sweep flaky tests" },
-      { workspaceId: ACME.id, includeArchived: true, words: "The auditor" },
-      { workspaceId: ACME.id, includeArchived: true },
-      { workspaceId: ACME.id, includeArchived: true, words: "The archiver" },
-      { workspaceId: ACME.id, includeArchived: true },
-      { agentId: ARCHIVIST.id },
-      { workspaceId: ACME.id, includeArchived: true, words: "Gone" },
-      { workspaceId: ACME.id, includeArchived: true },
-      { agentId: "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c" },
-    ]),
-  );
-});
-
-test("two chips of one agent hung one after the other share its read", async () => {
-  const container = await drawn(
-    `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "Prorate")}.`,
-  );
-  const [first, second] = container.querySelectorAll("[data-mention-ref]");
-
-  restOn(first ?? assert.fail("the first chip is drawn"));
-  await settle();
-  const card = await cardOf(second);
-
-  assert.equal(card.name, "Prorate seat changes");
-  assert.equal(agentReads().length, 1);
-});
-
-/** Main's document as `STATE`, its billing row naming the pull request the prorater opened, as the plan list carries it. */
-const PULL_REQUEST_STATE_LISTED: AppStateSnapshot = {
-  ...STATE,
-  tasks: {
-    ...STATE.tasks,
-    tasks: [
-      {
-        ...BILLING,
-        agents: {
-          total: 1,
-          working: 1,
-          agents: [],
-          pullRequestTotal: 1,
-          pullRequests: [
-            {
-              number: SEAT_PULL_REQUEST.number,
-              title: SEAT_PULL_REQUEST.title,
-              state: SEAT_PULL_REQUEST.state,
-              checks: SEAT_PULL_REQUEST.checks,
-              additions: SEAT_PULL_REQUEST.additions,
-              deletions: SEAT_PULL_REQUEST.deletions,
-              url: SEAT_PULL_REQUEST.url,
-              agentId: PRORATE.id,
-            },
-          ],
-        },
-      },
-    ],
-  },
-};
-
-test("a pull request's chip off its task's page hangs the card its Pull request tab hangs, read as it is hung; one no listed agent opened keeps the chip's own", async () => {
-  const container = await drawn(
-    `Lands in [@#42](${SEAT_PULL_REQUEST.url}) after [@#7](${OUTSIDE_PULL_REQUEST}).`,
-    PULL_REQUEST_STATE_LISTED,
-  );
-  const [opened, outside] = container.querySelectorAll("[data-mention-ref]");
+  const [opened, outside, older] = container.querySelectorAll("[data-mention-ref]");
 
   const card = await cardOf(opened);
   assert.equal(card.pullRequest, true, "the chip hangs the pull request's card");
   assert.equal(card.name, "Prorate seats on upgrade");
-  assert.match(card.words ?? "", /in 3 files/u, "it says what the agent's read holds of it");
+  assert.match(card.words ?? "", /in 3 files/u, "it says what the list holds of it");
   assert.match(card.words ?? "", /By Prorate seat changes/u, "it names the agent whose it is");
   const other = await cardOf(outside);
   assert.deepEqual([other.pullRequest, other.reading], [false, false]);
+  const earlier = await cardOf(older);
+  assert.deepEqual([earlier.pullRequest, earlier.reading], [false, false]);
+  assert.deepEqual(agentReads(), []);
 });
 
-test("while what it shows is read, an agent's chip and a pull request's chip each hang the one reading state, wearing the chip's name", async () => {
-  pending = true;
-  const container = await drawn(
-    `${mentionOf(PRORATE, "Prorate")} opened [@#42](${SEAT_PULL_REQUEST.url}).`,
-    PULL_REQUEST_STATE_LISTED,
-  );
-  const [agent, pullRequest] = container.querySelectorAll("[data-mention-ref]");
-
-  const agentCard = await cardOf(agent);
-  const pullRequestCard = await cardOf(pullRequest);
-  assert.deepEqual(
-    [agentCard.reading, agentCard.name, pullRequestCard.reading, pullRequestCard.name],
-    [true, "Prorate", true, "#42"],
-  );
-});
-
-test("an agent named as an actor leads its card with its tile while its read is out, where its tab's card leads with it once read, so the head stands still", async () => {
+test("an agent named as an actor leads its card with its tile until the task list first answers, where its tab's card leads with it once listed, so the head stands still", async () => {
   const actor = createElement(ActorRef, {
     actor: {
       kind: ACTOR_KIND.AGENT,
@@ -576,7 +429,6 @@ test("an agent named as an actor leads its card with its tile while its read is 
       state: ACTOR_STATE.REST,
     },
   });
-  pending = true;
   const container = await drawnElement(actor);
 
   const card = await cardOf(container.querySelector("[data-actor-ref]") ?? undefined);
@@ -592,7 +444,7 @@ test("a chip of Vespin hangs Vespin's own card", async () => {
   assert.deepEqual([card.actor, card.name], [ACTOR_KIND.APP, "Vespin"]);
 });
 
-test("Vespin and an agent named as actors hang Vespin's card and the agent's tab's card, the agent's read as it is hung", async () => {
+test("Vespin and an agent named as actors hang Vespin's card and the agent's tab's card, as the task list carries the agent", async () => {
   const container = await drawnElement(
     createElement(
       "p",
@@ -609,6 +461,7 @@ test("Vespin and an agent named as actors hang Vespin's card and the agent's tab
         },
       }),
     ),
+    LISTED_STATE,
   );
   const [luke, agent] = container.querySelectorAll("[data-actor-ref]");
 

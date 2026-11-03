@@ -11,6 +11,7 @@ import {
 } from "@repo/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -32,6 +33,7 @@ import {
   fakeAppBridge,
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -76,7 +78,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 const SENDER_ID = "2f9e8d7c-6b5a-4c3d-9e8f-7a6b5c4d3e2f";
 const SENDER_TASK = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
 
-/** That agent as its task's agents, or its workspace's, are read now: renamed since it sent the line, and moved to another model. */
+/** That agent as the task list carries it now: renamed since it sent the line, and moved to another model. */
 const SENDER_NOW: AgentSummary = {
   id: SENDER_ID,
   planId: SENDER_TASK,
@@ -192,11 +194,10 @@ async function drawnFor(
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.AGENTS_LIST || request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
-            ? { status: FAKE_ANSWER.DONE, value: { agents: [SENDER_NOW] } }
-            : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
+          : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
   });
+  handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [SENDER_NOW] } });
   const control = agentsControl({
     agents: [agent],
     me: reader,

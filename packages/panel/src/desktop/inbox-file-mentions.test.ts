@@ -11,8 +11,8 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import type { CodeRef, TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { NO_EXPERIMENTS } from "@repo/settings";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -24,7 +24,6 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { useSidePanel } from "../tasks/use-side-panel.js";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
-  type AnyAct,
   FAKE_ANSWER,
   type FakeActAnswer,
   fakeActPort,
@@ -121,13 +120,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function answer(request: AnyAct): Promise<FakeActAnswer> {
-  if (request.kind === ACT_KIND.AGENTS_LIST) {
-    return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [AGENT] } });
-  }
-  return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
-}
-
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -141,9 +133,15 @@ async function inbox() {
   /** Each file asked for on a task, and each tab asked for on a task the window was to go to. */
   const went: string[] = [];
   fakeAppPlatform(QUIET_PANEL);
-  fakeActs({ act: answer });
+  fakeActs({
+    act: (): Promise<FakeActAnswer> =>
+      Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
   fakeActPort({ ...fakeActPortCalls() });
-  handState(NO_EXPERIMENTS);
+  // The task list carries the item's agent, as it carries every task's agents once it answers live.
+  handState(NO_EXPERIMENTS, {
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], taskAgents: [AGENT], workspaces: [ACME] },
+  });
   // The account's feed holds the task's one item, which the Inbox draws from.
   handInboxItems({
     rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: [ITEM] }, [INBOX_SCOPE_KIND.AGENT]: {} },

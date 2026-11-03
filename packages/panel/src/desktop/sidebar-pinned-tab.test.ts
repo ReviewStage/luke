@@ -9,6 +9,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -17,20 +18,19 @@ import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import { SIDE_PANEL_TAB, type SidebarPin } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 
 /**
- * sidebar-pinned-tab.test.ts -- an agent's pin in the sidebar reads the pull
- * request its agent opened only once its card shows: a pointer crossing the
- * row asks the service nothing, and a card hung again soon after shows what
- * the first read without asking again, while one hung after a read that
- * failed asks again. A Changes pin on the open task hangs the Changes tab's own card
- * from the pull request the tab reads, asking the service nothing, and keeps the
- * pin's own card for a pin of another task. The service is a script at the act
- * boundary; synthetic ids throughout.
+ * sidebar-pinned-tab.test.ts -- an agent's pin in the sidebar shows the pull
+ * request its agent opened as the task list holds it, so neither a pointer
+ * crossing the row nor its card asks the service anything. A Changes pin on
+ * the open task hangs the Changes tab's own card from the pull request the
+ * tab reads, and keeps the pin's own card for a pin of another task. The
+ * service is a script at the act boundary; synthetic ids throughout.
  */
 
 const TASK: TaskSummary = {
@@ -54,34 +54,13 @@ const PIN: SidebarPin = {
 
 /** Each pull request read the service was asked, by agent. */
 let reads: string[] = [];
-/** How many pull request reads the service refuses before it answers. */
-let refusing = 0;
 let root: Root | undefined;
 
 beforeEach(() => {
   reads = [];
-  refusing = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) {
-        reads.push(request.payload.agentId);
-        if (refusing > 0) {
-          refusing -= 1;
-          return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Unreachable." });
-        }
-        const pullRequest = {
-          number: 42,
-          title: "Expire invitations",
-          url: "https://github.com/acme/relay/pull/42",
-          state: PULL_REQUEST_STATE.OPEN,
-          checks: CHECK_SUMMARY.PASSING,
-          additions: 4,
-          deletions: 1,
-          changedFiles: 1,
-        };
-        const value = { repository: "acme/relay", branch: "luke/expiry", pullRequest };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
+      if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) reads.push(request.payload.agentId);
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
   });
@@ -157,44 +136,6 @@ test("a pointer crossing a pinned agent's row asks the service nothing", async (
   await settled();
   assert.equal(card(), null);
   assert.deepEqual(reads, []);
-});
-
-test("a pinned agent's card reads its pull request as it shows, and hung again soon after shows it without asking again", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
-  const press = drawPin();
-  restOn(press);
-  await settled();
-  assert.deepEqual(reads, [AGENT]);
-  assert.match(card()?.textContent ?? "", /Expire invitations/u);
-
-  leave(press);
-  act(() => {
-    vi.advanceTimersByTime(2 * MOTION_DELAY_MS.HINT);
-  });
-  assert.equal(card(), null, "the card has gone");
-  restOn(press);
-  await settled();
-  assert.match(card()?.textContent ?? "", /Expire invitations/u);
-  assert.deepEqual(reads, [AGENT], "one read for both cards");
-});
-
-test("a pinned agent's card hung again after its read failed asks again, and shows the pull request the service now answers", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
-  refusing = 1;
-  const press = drawPin();
-  restOn(press);
-  await settled();
-  assert.ok(card() !== null, "the card stands");
-  assert.doesNotMatch(card()?.textContent ?? "", /Expire invitations/u);
-
-  leave(press);
-  act(() => {
-    vi.advanceTimersByTime(2 * MOTION_DELAY_MS.HINT);
-  });
-  restOn(press);
-  await settled();
-  assert.deepEqual(reads, [AGENT, AGENT]);
-  assert.match(card()?.textContent ?? "", /Expire invitations/u);
 });
 
 test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the gray icon and pinned label where it holds none", () => {
@@ -391,13 +332,23 @@ describe("a pinned Changes tab's card", () => {
     assert.deepEqual(reads, []);
   });
 
-  test("is the pin's own card, reading the pull request as it shows, where the task is not open", async () => {
+  test("is the pin's own card, naming the pull request the task list holds without asking the service, where the task is not open", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    handState(
+      {},
+      {
+        tasks: {
+          ...IDLE_TASKS_VIEW,
+          tasks: [TASK],
+          agentPullRequests: [{ agentId: AGENT, taskId: TASK.id, pullRequest: read }],
+        },
+      },
+    );
     restOn(drawPin(pin));
     await settled();
-    assert.ok(card() !== null, "the pin's card stands");
+    assert.match(card()?.textContent ?? "", /Newer title/u);
     assert.equal(document.querySelector(".ui-tooltip-card [data-pull-request-card]"), null);
-    assert.deepEqual(reads, [AGENT]);
+    assert.deepEqual(reads, []);
   });
 
   test("is the pin's own card where the open task no longer holds the agent", async () => {
