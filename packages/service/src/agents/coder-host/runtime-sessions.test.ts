@@ -2173,7 +2173,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before, Codex running it on its fast tier",
+      "with the ChatGPT plan or API key selected a GPT fast version is offered beside its model, and a Start on one runs on Codex, which runs it on its fast tier",
       () =>
         Effect.gen(function* () {
           for (const forAgents of [true, false]) {
@@ -2205,28 +2205,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               ).pipe(Effect.provide(layers)),
             );
 
-            if (forAgents) {
-              assert.deepEqual(
-                gpt.map((model) => [model.id, model.fastWithheldByPlan]),
-                [
-                  ["openai/gpt-5.5", true],
-                  ["openai/gpt-6.1-sol", true],
-                ],
-              );
-              assert.ok(Result.isFailure(started));
-              assert.deepEqual([heard(eve), heard(codex)], [[], []]);
-            } else {
-              assert.deepEqual(
-                gpt.map((model) => [model.id, model.fastWithheldByPlan]),
-                [
-                  ["openai/gpt-5.5", undefined],
-                  ["openai/gpt-5.5-fast", undefined],
-                  ["openai/gpt-6.1-sol", undefined],
-                ],
-              );
-              assert.ok(Result.isSuccess(started));
-              assert.equal(started.success.agent.model, "openai/gpt-5.5-fast");
-            }
+            assert.deepEqual(
+              gpt.map((model) => model.id),
+              ["openai/gpt-5.5", "openai/gpt-5.5-fast", "openai/gpt-6.1-sol"],
+            );
+            assert.ok(Result.isSuccess(started), String(forAgents));
+            assert.equal(started.success.agent.model, "openai/gpt-5.5-fast");
+            assert.deepEqual(heard(eve), []);
+            assert.ok(heard(codex).length > 0, "Codex runs it");
           }
         }),
     );

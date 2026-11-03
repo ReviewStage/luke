@@ -96,12 +96,6 @@ export const catalogModelSchema = EffectSchema.Struct({
    */
   fastNotEnabled: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
-   * Whether this model's fast version is withheld because the plan that pays
-   * for the account's agents on it runs no fast mode (the ChatGPT plan, on
-   * Codex), so no Fast is drawn for it; absent otherwise.
-   */
-  fastWithheldByPlan: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /**
    * Whether no subscription or API key of the account's pays for this
    * model's provider, so a Start on it is refused until one is connected in
    * Settings › Agents; the menus draw it disabled. Absent otherwise, and

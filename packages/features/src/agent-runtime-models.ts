@@ -7,12 +7,12 @@
  * CLI, and no choice of context window, since the CLI manages its context
  * itself: Claude Code takes Claude models, a fast version among them, which
  * it runs as the base model with its own fast mode on; Codex takes GPT
- * models, a fast version among them only where the account's OpenAI API key
- * pays, which it runs as the base model on its `fast` service tier, since
- * Codex runs no fast mode on the ChatGPT plan or a Mac's own sign-in. A
- * runtime's rule is one row of `NATIVE_MODEL_RULE`, Codex's on an API key
- * its own (`CODEX_ON_API_KEY`); a runtime with no row is eve's, which offers
- * everything.
+ * models, a fast version among them where the account's ChatGPT plan or
+ * OpenAI API key pays, which it runs as the base model on its `fast` service
+ * tier; on a Mac's own sign-in, whatever it is signed in with, it runs none.
+ * A runtime's rule is one row of `NATIVE_MODEL_RULE`, Codex's where a payer
+ * that runs Fast pays its own (`CODEX_FAST`); a runtime with no row is eve's,
+ * which offers everything.
  * Start is not narrowed here: it offers every model, and what it starts on
  * decides the runtime (`agent-runtime-choice.ts`).
  */
@@ -55,12 +55,18 @@ const NATIVE_MODEL_RULE: Partial<Record<AgentRuntime, RuntimeModelRule>> = {
     fast: false,
     contextWindow: false,
     name: "Codex",
-    fastRefusal: "which runs a fast version on an OpenAI API key alone",
+    fastRefusal: "which runs a fast version on the ChatGPT plan or an OpenAI API key alone",
   },
 };
 
-/** Codex where the account's OpenAI API key pays: a GPT model's fast version runs on its `fast` service tier. */
-const CODEX_ON_API_KEY: RuntimeModelRule = {
+/** The payers Codex runs a fast version on, as the launch hands them its credential: not a Mac's own sign-in. */
+const CODEX_FAST_PAYERS: ReadonlySet<AgentPayer> = new Set([
+  AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  AGENT_PAYER.API_KEY,
+]);
+
+/** Codex where a payer that runs Fast pays: a GPT model's fast version runs on its `fast` service tier. */
+const CODEX_FAST: RuntimeModelRule = {
   provider: MODEL_PROVIDER.OPENAI,
   fast: true,
   contextWindow: false,
@@ -95,7 +101,14 @@ export function runtimeModelRule(
   runtime: AgentRuntime | undefined,
   payer?: AgentPayer | null | undefined,
 ): RuntimeModelRule {
-  if (runtime === AGENT_RUNTIME.CODEX && payer === AGENT_PAYER.API_KEY) return CODEX_ON_API_KEY;
+  if (
+    runtime === AGENT_RUNTIME.CODEX &&
+    payer !== null &&
+    payer !== undefined &&
+    CODEX_FAST_PAYERS.has(payer)
+  ) {
+    return CODEX_FAST;
+  }
   return (runtime === undefined ? undefined : NATIVE_MODEL_RULE[runtime]) ?? ANY_MODEL;
 }
 
