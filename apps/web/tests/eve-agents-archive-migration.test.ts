@@ -93,8 +93,9 @@ it.effect(
 
         const archivedBy = (agentId: string) =>
           Effect.map(readAgent("dean", agentId), (agent) => Option.getOrThrow(agent).archivedBy);
+        // Note that the migration stores the app as `luke`, its word then, which reads as the app's.
         const retired = {
-          by: "luke",
+          by: "app",
           userId: "dean",
           reason: "Its runtime was retired. Continue it in a new agent to go on from its work.",
         };
