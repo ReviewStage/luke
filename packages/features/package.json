@@ -120,6 +120,7 @@
     "./workspace-key": "./src/workspace-key.js",
     "./words": "./src/words.js",
     "./sign-in-provider": "./src/sign-in-provider.js",
+    "./oauth-consent": "./src/oauth-consent.js",
     "./skill-file": "./src/skill-file.js",
     "./skill-paste": "./src/skill-paste.js",
     "./connect-github-step": "./src/connect-github-step.js",

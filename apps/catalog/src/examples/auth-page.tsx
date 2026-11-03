@@ -1,4 +1,5 @@
 import { LANDING_TONE } from "@repo/features/landing-outcome";
+import { ON_THIS_COMPUTER, oauthScopeLines } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   AuthMark,
@@ -6,6 +7,8 @@ import {
   AuthStepFoot,
   BUTTON_VARIANT,
   Button,
+  CONSENT_ANSWER,
+  ConsentCard,
   FormField,
   MARK_PROVIDER,
   ProductMark,
@@ -23,9 +26,9 @@ import { CatalogSection } from "../section";
  * auth-page.tsx -- the sign-in page with its provider choices, a landing's
  * ringed mark on its way, settled, and failed, with and
  * without its Open link, and a form with an error on a phone's width, each in a
- * frame the size of the screen it stands for, and a step of several with its
- * foot, on its first step and on one it can skip. Every name and address is
- * made up.
+ * frame the size of the screen it stands for, a step of several with its
+ * foot, on its first step and on one it can skip, and an OAuth client's
+ * consent, asking and with Allow out. Every name and address is made up.
  */
 
 /** The Open link as a page offers it; the catalog goes nowhere. */
@@ -149,6 +152,30 @@ function AuthPages(): React.JSX.Element {
               mark={<AuthMark tone={LANDING_TONE.DANGER} />}
               title={`${PRODUCT_NAME} could not continue`}
               description="Start sign-in again."
+            />
+          </div>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="auth-consent" title="A client's consent, asking and allowing">
+        <div className="catalog-screens">
+          <div className="catalog-screen">
+            <ConsentCard
+              client="Acme Notes"
+              account="someone@acme-corporation.example"
+              abilities={oauthScopeLines("openid profile email offline_access acme:notes")}
+              destination="notes.acme-corporation.example"
+              answering={undefined}
+              onAnswer={IGNORE}
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <ConsentCard
+              client="Acme Desktop Assistant for Engineering Teams"
+              account="someone@acme-corporation.example"
+              abilities={oauthScopeLines("openid email")}
+              destination={ON_THIS_COMPUTER}
+              answering={CONSENT_ANSWER.ALLOW}
+              onAnswer={IGNORE}
             />
           </div>
         </div>
