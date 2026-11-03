@@ -462,7 +462,7 @@ hosted oRPC router (`src/orpc/`): one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
 (`@repo/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
-either as `request_too_large` before anything goes upstream; `keywords` are
+either as `request-too-large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the task's
 title, the paths it names), each on one line. `src/dictation/transcription.ts`
 sends the clip and the words to OpenAI's `gpt-transcribe` on the caller's own
@@ -552,7 +552,7 @@ without being sent anywhere. Saves are braked at ten an hour per account
 on each instance, so the endpoint is no oracle for keys that are not the
 caller's. Neither the key nor what the provider said of it is logged.
 
-A key is kept in `account_provider_key` (migration 0080), sealed by
+A key is kept in `account_provider_key` (migration `20261005002640_account_provider_key`), sealed by
 `packages/database/src/models/provider-key-seal.ts`: AES-256-GCM under a data key drawn
 for that save, the data key wrapped under the deployment's key-encryption
 key, with the account and provider bound as additional data on both seals
@@ -700,7 +700,7 @@ a provider is primary: the agents are told each by its label, and to ask
 which one where the developer has not said.
 A provider offers more than one account where its catalog entry names a
 `MULTIPLE_ACCOUNTS_VARIABLE` (Notion, Linear, Slack, Supabase, PostHog,
-Executor), unless that variable (`NOTION_MULTIPLE_ACCOUNTS`, …) is `off`,
+Executor, Gmail, Google Calendar, Google Drive), unless that variable (`NOTION_MULTIPLE_ACCOUNTS`, …) is `off`,
 `false`, or `0`, which switches it back to one at once where a provider
 turns out to revoke an earlier grant when a later one completes for the
 same user and client; at most `INTEGRATION_ACCOUNTS_MAX` (five) per provider,
@@ -1057,10 +1057,12 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
 `VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `vespin` project for
-production, preview, and development. The web and `dev` are services of that
-one project (the root `vercel.json`'s `services`), so its variables and the
-connector's link reach both, which matters because the agents read
-tokens too. Asking Connect about an arbitrary user id needs the deployment's
+production, preview, and development. The web is that project's one service
+(the root `vercel.json`'s `services`), so its variables and the connector's
+link reach every function, the agents' own MCP door among them
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/workspace-mcp/app.ts`),
+which reads the member's token on the service's side and never hands it to
+the agent (`src/integrations/connection-door.ts`). Asking Connect about an arbitrary user id needs the deployment's
 own Vercel OIDC token, which the SDK reads from the request
 (`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for the
 project. For local development, `vercel env pull` writes a
@@ -1865,7 +1867,7 @@ with its title, model, effort, status, since when, and the member who
 started it while their account stands, and the pull requests they opened,
 each number once and at most three, as GitHub last answered a read of them.
 Four statements answer the whole list: the agents of every task listed with
-`agent.published` (migration 0078), their newest turns, the lines
+`agent.published` (migration `20261004103320_coding_agent_published`), their newest turns, the lines
 awaiting a turn, and their starters' names; the list asks GitHub nothing.
 `packages/features/src/task-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
@@ -1972,7 +1974,7 @@ a task of a workspace the account is not in reads as an empty history and
 restores as `not-found`. `packages/features/src/task-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
-A task's repository is `task.repository` (migration 0063), the full name
+A task's repository is `task.repository` (migration `20260930133000_plan_repository`), the full name
 `owner/name` as GitHub spells it, or null for a task with none, which is
 where every task from before repositories stands and is no error. It is
 kept only once `workspaceRepository` on the `GitHubApp` confirms the
