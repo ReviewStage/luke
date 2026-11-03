@@ -388,7 +388,12 @@ test("a pull request, a page, and a file the item names open one after another i
   );
   assert.ok(open, "with Open task");
   act(() => open.click());
-  assert.deepEqual(left.went, [`${OTHER_TASK} ${JSON.stringify({ page: FUNNEL.id })}`]);
+  // The task's chip opens it as Open task does.
+  const chip = notice?.querySelector<HTMLElement>("p [data-inline-ref], p button, p a");
+  assert.ok(chip, "the task named by its chip");
+  act(() => chip.click());
+  const went = `${OTHER_TASK} ${JSON.stringify({ page: FUNNEL.id })}`;
+  assert.deepEqual(left.went, [went, went]);
 });
 
 test("a file opened on another task reads from that task in the panel standing for this one", async () => {

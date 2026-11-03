@@ -8,6 +8,7 @@ import {
 } from "@repo/features/agent-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
+import type { TaskStatus } from "@repo/features/task-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@repo/features/terminal-entry";
 import { readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -19,7 +20,11 @@ import {
   CollapseIcon,
   ExpandIcon,
   Fill,
+  HoverCard,
+  HoverCardHead,
   IconButton,
+  INLINE_REF_LOOK,
+  InlineRef,
   LIST_DENSITY,
   List,
   ListRow,
@@ -109,6 +114,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card.js";
 import { useAgentsElsewhere } from "../tasks/agents-elsewhere.js";
+import { TaskChipCard } from "../tasks/chip-cards.js";
 import {
   CloudBrowserDraftPane,
   type CloudBrowserOwner,
@@ -131,6 +137,7 @@ import {
   AgentGlyph,
   agentEndMark,
   type KindLook,
+  PlanGlyph,
   type PlanStanding,
   TAB_KIND,
   tabLook,
@@ -339,9 +346,13 @@ const BESIDE_WORDS = {
   OPEN_TASK: "Open task",
 } as const;
 
-/** The tasks a tab of another task names, and the door to that task, the tab still chosen in its panel. */
+/** The tasks a tab of another task names, by its chip, and the door to that task, the tab still chosen in its panel. */
 export interface TaskOfTab {
-  readonly tasks: readonly { readonly id: string; readonly name: string }[];
+  readonly tasks: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly status?: TaskStatus | undefined;
+  }[];
   readonly onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
 }
 
@@ -2694,7 +2705,27 @@ export function SidePanel({
           besideTask === undefined ||
           taskOfTab === undefined ? null : (
             <TabNotice>
-              <p>{besideTask.name}</p>
+              <p>
+                <InlineRef
+                  look={INLINE_REF_LOOK.PILL}
+                  glyph={<PlanGlyph status={besideTask.status} />}
+                  label={besideTask.name}
+                  card={
+                    <TaskChipCard
+                      taskId={besideTask.id}
+                      fallback={
+                        <HoverCard data-task-card="">
+                          <HoverCardHead
+                            glyph={<PlanGlyph status={besideTask.status} />}
+                            name={besideTask.name}
+                          />
+                        </HoverCard>
+                      }
+                    />
+                  }
+                  onPress={() => taskOfTab.onShowPanelTab(besideTask.id, tab)}
+                />
+              </p>
               <Button onClick={() => taskOfTab.onShowPanelTab(besideTask.id, tab)}>
                 {BESIDE_WORDS.OPEN_TASK}
               </Button>
