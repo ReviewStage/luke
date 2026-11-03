@@ -1,5 +1,6 @@
 /**
- * Turns one feedback submission into email to the founders.
+ * Turns one feedback submission into email to the founders, and a post in
+ * the team's Slack.
  *
  * This is the fixed endpoint the desktop app's composer posts to
  * (`packages/features/src/feedback/delivery.ts`), deployed with the landing page.
@@ -16,11 +17,17 @@
  * public repository, so the address cannot be scraped from source.
  * `FEEDBACK_FROM` may override the sender. Without either required value the
  * endpoint answers 503 and the composer reports the service unavailable;
- * nothing else about the app depends on it.
+ * nothing else about the app depends on it. `FEEDBACK_SLACK_WEBHOOK_URL`, a
+ * Slack incoming webhook, is optional: where it is set, a note the mail
+ * service took is also posted there, words and credit alone, its screenshots
+ * left to the email.
  */
 
 const RESEND_URL = "https://api.resend.com/emails";
 const DEFAULT_FROM = "Vespin <feedback@vespin.dev>";
+
+/** How long the Slack post may hold the answer, since the note is already delivered by mail. */
+const SLACK_TIMEOUT_MS = 5_000;
 
 /**
  * A best-effort brake on abuse: the endpoint is public and each accepted
@@ -256,12 +263,68 @@ function feedbackSubmission(value) {
 }
 
 /** @param {ReturnType<typeof feedbackSubmission> & object} submission */
+function creditLine(submission) {
+  return submission.name || submission.email
+    ? `From: ${[submission.name, submission.email].filter(Boolean).join(" — ")}`
+    : "From: unsigned";
+}
+
+/** @param {ReturnType<typeof feedbackSubmission> & object} submission */
 function emailBody(submission) {
-  const credit =
-    submission.name || submission.email
-      ? `From: ${[submission.name, submission.email].filter(Boolean).join(" — ")}`
-      : "From: unsigned";
-  return [submission.message, "", "—", credit, "Sent from the panel."].join("\n");
+  return [submission.message, "", "—", creditLine(submission), "Sent from the panel."].join("\n");
+}
+
+/**
+ * Slack reads `&`, `<`, and `>` as markup, so a note escapes them to be shown
+ * as typed rather than as a link or an `@channel`.
+ *
+ * @param {string} text
+ */
+function slackEscaped(text) {
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/**
+ * @param {ReturnType<typeof feedbackSubmission> & object} submission
+ * @param {string} topic
+ */
+function slackText(submission, topic) {
+  const quoted = submission.message
+    .split("\n")
+    .map((line) => `> ${slackEscaped(line)}`)
+    .join("\n");
+  const count = submission.images.length;
+  const screenshots =
+    count === 0 ? [] : [`_${count} screenshot${count === 1 ? "" : "s"} in the email._`];
+  return [
+    `*${slackEscaped(topic)}* · ${slackEscaped(creditLine(submission))}`,
+    quoted,
+    ...screenshots,
+  ].join("\n");
+}
+
+/**
+ * Posts a delivered note to the team's Slack, where a webhook is set. Best
+ * effort: the mail service already took the note, so a Slack that fails or is
+ * slow costs the post and never the answer.
+ *
+ * @param {ReturnType<typeof feedbackSubmission> & object} submission
+ * @param {string} topic
+ */
+async function postToSlack(submission, topic) {
+  const webhook = process.env.FEEDBACK_SLACK_WEBHOOK_URL?.trim();
+  if (!webhook) return;
+  try {
+    const response = await fetch(webhook, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: slackText(submission, topic) }),
+      signal: AbortSignal.timeout(SLACK_TIMEOUT_MS),
+    });
+    if (!response.ok) console.error(`Feedback Slack post failed with status ${response.status}`);
+  } catch {
+    console.error("Feedback Slack post did not reach Slack");
+  }
 }
 
 /**
@@ -337,5 +400,7 @@ export async function POST(request) {
     console.error(`Feedback forwarding failed with status ${response.status}`);
     return json(502, { reason: "The mail service refused this submission." });
   }
+  // Only once the mail is taken, so a retry after a refused send posts once.
+  await postToSlack(submission, topic);
   return json(200, { delivered: true });
 }

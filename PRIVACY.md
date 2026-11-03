@@ -1450,7 +1450,9 @@ your Mac the next time Vespin opens, without being read.
 **Feedback.** If you use the feedback form, we receive what you typed, any
 screenshots you attached, and — unless you untick "Include my name and email"
 — the name and email of the account you are signed in with; they reach us
-only when you press Send.
+only when you press Send. We read them by email and in our own team's Slack,
+where your words and that name and email are posted; the screenshots stay in
+the email.
 
 ## Who we send it to
 
@@ -1491,6 +1493,9 @@ only when you press Send.
   address and keeps it under its own policy. Nothing is emailed when an
   invitation is canceled. A feedback note you send also reaches us by email
   through Resend, with what it carries as described above.
+- Slack, for the feedback form. A feedback note's words, and the name and
+  email it carries unless you untick them, are posted to a channel in our
+  own team's Slack workspace, which Slack keeps under its own policy.
 - Anthropic, for a pull request's chapters. Pressing Generate chapters in a
   agent's Pull request tab sends the pull request's title, description,
   commit messages, and patches, except those of files a reader reads past, to
