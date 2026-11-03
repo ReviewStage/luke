@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "The workspace to list, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "Only the agents on this task, by the id a listed agent's task answered; leave it out for the whole workspace."
+    },
+    "words": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Only the agents whose title or task's name holds each of these words, whatever their case, to search the workspace by; leave it out for every agent."
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many of the matching agents to pass over: the nextOffset an earlier list answered, to read the next page; leave it out for the first."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

@@ -124,15 +124,16 @@ export function listedFilter(
 
 /**
  * A page of the workspace's agents, archived ones among them, narrowed as
- * the filter asks, the caller left out: the caller's starter and the agents
+ * the filter asks, the calling agent left out: its starter and the agents
  * it started first, then those on its task, then the rest, each newest
  * first, at most the list's bound from the filter's offset, and the next
- * page's offset where more stand.
+ * page's offset where more stand. A caller that is no agent, a member,
+ * leaves no one out and reads the whole list newest first.
  */
 export const workspaceAgentsOf = (
   userId: string,
   workspaceId: string,
-  caller: Agent,
+  caller: Agent | undefined,
   filter: AgentListFilter,
 ): Effect.Effect<WorkspaceAgents, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
@@ -140,12 +141,16 @@ export const workspaceAgentsOf = (
       ...(filter.taskId === undefined ? undefined : { taskId: filter.taskId }),
       ...(filter.words === undefined ? undefined : { words: filter.words }),
       includeArchived: true,
-      except: caller.id,
-      around: {
-        agentId: caller.id,
-        taskId: caller.taskId,
-        startedByAgentId: caller.startedByAgentId,
-      },
+      ...(caller === undefined
+        ? undefined
+        : {
+            except: caller.id,
+            around: {
+              agentId: caller.id,
+              taskId: caller.taskId,
+              startedByAgentId: caller.startedByAgentId,
+            },
+          }),
       offset: filter.offset,
       // One past the bound tells whether a next page stands, without a count of its own.
       limit: WORKSPACE_AGENTS_LIST_LIMIT + 1,
@@ -168,17 +173,18 @@ export const workspaceAgentsOf = (
 
 /**
  * The agent under the id where it is one of the workspace's, archived or
- * not, as the calling agent's tools name it; nothing for an agent of another
+ * not, as the caller's tools name it; nothing for an agent of another
  * workspace or none. Another agent is read as a member may read it
- * (`readVisibleAgent`), and the caller itself as it reads itself
+ * (`readVisibleAgent`), and a calling agent itself as it reads itself
  * (`readAgent`), so its own tools never lose it when its starter
- * loses sight of its task.
+ * loses sight of its task; a caller that is no agent, a member, names no
+ * `callerId`.
  */
 export const workspaceAgent = (
   userId: string,
   workspaceId: string,
   agentId: string,
-  callerId: string,
+  callerId: string | undefined,
 ): Effect.Effect<Option.Option<Agent>, StoreFailure, DatabaseServices> =>
   Effect.map(
     agentId === callerId ? readAgent(userId, agentId) : readVisibleAgent(userId, agentId),

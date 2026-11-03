@@ -26,6 +26,7 @@ import {
   type AgentCall,
   type AgentToolServices,
   agentToolRejected,
+  callerAgent,
   callerTask,
   callerUserId,
   callerWorkspace,
@@ -82,6 +83,8 @@ export const MESSAGE_AGENT_REFUSAL = {
     `Not sent: the text is ${length} characters, over the ${MAX_MESSAGE_WORDS_CHARS} one message ` +
     "may spell; cut it to fit, or send it in parts.",
   SELF: "Not sent: that id is your own; message another agent.",
+  /** A member's words reach an agent as their own line, which this tool, one agent's message to another, does not send. */
+  NOT_AGENT: "Not sent: only a coding agent messages another agent.",
   NO_AGENT: `Not sent: no agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
@@ -213,7 +216,10 @@ export function runMessageAgent(
   if (Result.isFailure(asked)) return Effect.succeed(agentToolRejected(asked.failure));
   const { agentId, text } = asked.success;
   const { caller } = call;
-  const sender = caller.agent;
+  const sender = callerAgent(caller);
+  if (sender === undefined) {
+    return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.NOT_AGENT));
+  }
   if (agentId === sender.id) return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.SELF));
   return orStoreRefusal(
     Effect.gen(function* () {
