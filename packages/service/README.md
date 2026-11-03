@@ -332,7 +332,8 @@ swallow every failure; never yield either inside a transaction.
 An automation with "Send the result to me on Slack" on (`automation.slack_delivery`)
 has each run's result sent to its owner by the bot as the run's agent's turn
 settles (`src/automations/automation-slack-delivery.ts`, heard through
-`SettledTurnListener`): the agent's final message as mrkdwn, or that the run
+`SettledTurnListener`): the agent's final message in a `markdown` block, which
+Slack draws as standard Markdown, or that the run
 failed or was stopped, with a link to the agent. The run is claimed first
 (`automation_run.slack_delivered_at`), so each run sends once.
 

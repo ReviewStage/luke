@@ -17,7 +17,8 @@ import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js
 /**
  * A thread an agent posts, written by our Slack bot to the member it waits
  * on, over a real store and a fake Slack: the DM goes to that member's
- * Slack user, says the thread's title and words, and links to the thread; a
+ * Slack user, says the thread's title and the agent's Markdown in a
+ * `markdown` block, a mention chip as a plain link, and links to the thread; a
  * follow-up that asks nothing new writes none; and an answer rewrites the
  * DM to say it was answered.
  *
@@ -104,7 +105,10 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
       assert.equal(posted[0]?.args.text, "Require a review on main");
       assert.deepEqual(blocksOf(posted[0]), [
         { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
-        { type: "section", text: { type: "plain_text", text: "Turn it on in settings." } },
+        {
+          type: "markdown",
+          text: "Turn it on in [settings](https://github.com/acme/relay/settings).",
+        },
         {
           type: "actions",
           elements: [

@@ -13,7 +13,10 @@
  * acted on once the answer has left (`slack-agent-starts.ts`); every other
  * event is acknowledged unread.
  *
- * A press (`block_actions`) is read for the option button's value, which
+ * A press (`block_actions`) is acknowledged at once with an empty answer,
+ * as Slack asks within its three seconds, and acted on once the answer has
+ * left, a failure logged by its kind alone. It is read for the option
+ * button's value, which
  * names the item, the message whose ask it answers, and the option
  * (`SlackChoice`, `thread-dms.ts`); a press with none, the Open button's
  * among them, is acknowledged and nothing else. The presser is found back as
@@ -30,6 +33,7 @@
 
 import { storeWriter } from "@repo/database/models/writer";
 import { INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
+import { causeKind } from "@repo/runtime/effect";
 import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { type ConnectWebhookVerifier, createConnectWebhookVerifier } from "@vercel/connect/chat";
@@ -210,10 +214,7 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
   // A refused answer to an ask still open leaves the DM's buttons standing.
   if (outcome === INBOX_ASK_ANSWER.REFUSED && status === INBOX_ASK_STATUS.OPEN) return;
   const said = outcome === INBOX_ASK_ANSWER.REPEATED ? line : settledLine(status);
-  yield* afterResponse(
-    "a pressed Slack DM",
-    rewriteThreadDm(dm, choice.item, { text: message?.text ?? "" }, said),
-  );
+  yield* rewriteThreadDm(dm, choice.item, { text: message?.text ?? "" }, said);
 });
 
 /** POST: one request Connect forwarded, its bearer confirmed before anything of it is read. */
@@ -241,7 +242,15 @@ const eventsEndpoint = (verify: ConnectWebhookVerifier) =>
       yield* Effect.logInfo("A Slack request was heard", {
         kind: SLACK_REQUEST_TYPE.BLOCK_ACTIONS,
       });
-      yield* answerPress(press.success);
+      // Slack is answered before the press is acted on, so the press never waits on the agent or on Slack.
+      yield* afterResponse(
+        "a Slack press",
+        answerPress(press.success).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("a Slack press was not acted on", { failure: causeKind(cause) }),
+          ),
+        ),
+      );
     } else yield* actOnSlackEvent(payload, request.headers[SLACK_RETRY_HEADER] !== undefined);
     return hostedJsonResponse(200, {});
   });
