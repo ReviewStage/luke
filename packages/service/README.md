@@ -470,7 +470,9 @@ answers the route over a scripted OpenAI at its HTTP door.
 
 `src/accounts/models-procedures.ts` answers `GET /api/models`, the first
 procedure of the hosted oRPC router (`src/orpc/`): the models an agent
-may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
+may run on, as `{ models: [{ id, name, provider, efforts, contextWindows?,
+fastNotEnabled?, fastWithheldByPlan?, credentialMissing? }], macs? }`
+(`@repo/features/models-wire`). The list is
 `src/providers/model-catalog.ts`'s read of AI Gateway's public catalog
 (`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
 boundary and kept to the Anthropic and OpenAI models whose tags carry both
@@ -491,10 +493,20 @@ choice is the window the context ring reads, nothing more. The read is the
 `ModelCatalog` service `src/runtime.ts`'s layer builds once per instance, cached
 for an hour on a success and for no time on a failure, so an outage at the
 gateway is retried on the next request rather than answered for the hour.
-The bearer is resolved before the read, as every hosted endpoint resolves
-it, though the catalog is public and the same for every account.
+The catalog is public and the same for every account, but the answer is the
+account's: the bearer is resolved before the read, and the offer is cut to
+it. `fastNotEnabled` marks a model whose fast versions are dropped because
+Anthropic never granted fast mode to the organization of the key the
+account's agents run on, `fastWithheldByPlan` every OpenAI model where the
+account's ChatGPT plan pays for its GPT agents, which have no fast mode
+there, and `credentialMissing` a model no subscription or key of the
+account's pays for, which a Start refuses and the menus draw disabled
+(`src/agents/coder-host/agent-runtime-choice.ts`). `macs` lists the Macs
+the account registered, newest heard from first, with the providers each
+offers, and is left out where there are none. A store the route could not
+read is `unavailable`.
 
-The same module holds the functions the agent routes and the coder
+`src/providers/model-catalog.ts` also holds the functions the agent routes and the coder
 host stand on: `acceptedModelChoice`, which reads the instance's catalog and,
 through `validateModelChoice`, accepts a `(model, effort)` only for an
 offered model at an effort it lists, keeping the standard window only for a
