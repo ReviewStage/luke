@@ -952,11 +952,12 @@ grant; what agents already changed in Sentry, and the record of it, stays, and
 a grant Vercel Connect could not revoke stays until you revoke Vespin in
 Sentry's own settings.
 
-**Slack, where it is offered.** Our service does not offer Slack yet:
-Settings › Integrations shows it as not available, it cannot be connected,
-and an agent's Slack call fails before any token is read, so nothing reaches
-Slack. Where a deployment of our service offers it, connecting Slack in
-Settings › Integrations signs you in to Slack in your browser through Vercel
+**Slack, where it is offered.** Slack is an integration like Linear, which a
+deployment of our service may offer to only some accounts, as ours does,
+because Vespin's Slack app works in its own Slack workspace alone. For any
+other account, Settings › Integrations shows no Slack to connect, and no
+agent of that account is handed Slack, so nothing reaches Slack. Where it is
+offered to you, connecting Slack in Settings › Integrations signs you in to Slack in your browser through Vercel
 Connect, which stores Slack's token for your account, encrypted, and renews
 it. While you are connected, the agents, as for Linear, can do whatever your
 Slack grant allows, without asking you first: search messages, files,
@@ -998,10 +999,13 @@ it; deleting the workspace does the same, and deleting your account deletes
 your Slack user id. Messages the bot already sent stay in Slack.
 
 When an agent posts a thread that waits on you, the bot messages you its
-title, the agent's words as plain text, and a link to the thread, and our
-service keeps that Slack message's conversation and timestamp beside the
-agent's message so it can rewrite it once the ask is answered, withdrawn, or
-replaced, then forgets them. Slack notifications, under the bot's row in
+title, the agent's words, and a link to the thread, and our service keeps
+that Slack message's conversation and timestamp, and which member it went
+to, beside the agent's message, so it can rewrite it once the ask is
+answered, withdrawn, or replaced, and post each later message of the agent's
+on that thread that waits on you as a reply in that Slack message's thread,
+kept the same way. Once rewritten, the record is marked settled rather than
+deleted, and it goes when the agent's message does. Slack notifications, under the bot's row in
 Settings › Workspace, turns these messages off for you in every workspace.
 Where the thread asks you to pick one option, the message carries a button
 for each, and pressing one answers the ask as you, as picking it in Vespin
@@ -1028,8 +1032,8 @@ with their Slack user ids, and the message's Slack link, so all of these
 reach the agent's prompt, the model, its transcript, and its traces, as
 anything you type to an agent does. Our service keeps which Slack
 conversation and thread each such agent was started from, so it can post the
-agent's final message, or that it failed or was stopped, back in that
-thread, where everyone in the conversation can read it; that record is
+final message of each of the agent's turns, or that it failed or was
+stopped, back in that thread, where everyone in the conversation can read it; that record is
 deleted with the agent, with the workspace's bot connection, or with your
 account. Messages the bot posted stay in Slack. An owner or admin sees the
 Slack workspace's public channels, and the private ones the bot is in, under
@@ -1613,9 +1617,14 @@ only when you press Send.
   Connect keeps Slack's token, and our service sends each Slack call, with its
   input, to Slack's MCP server, which keeps it under Slack's own policy.
 - Vercel Connect and Slack, if your workspace connects Vespin's Slack bot:
-  Vercel Connect keeps the bot's token, and our service sends Slack your
-  email address to find you there and each message the bot sends you, which
-  Slack keeps under its own policy.
+  Vercel Connect keeps the bot's token and passes our service every request
+  Slack sends the bot, of which our service reads only the messages addressed
+  to the bot and the buttons pressed on its messages, leaving every other
+  event unread. Our service sends Slack your email address to find you there,
+  each message the bot sends you, the final message of each turn of an agent
+  started from a Slack thread, posted in that thread, and a 👀 on each message
+  it acts on, and reads from Slack the earlier messages of that thread; Slack
+  keeps all of it under its own policy.
 - GitHub's MCP server, if you signed in with GitHub: our service sends each
   GitHub call, with its input and your Vespin GitHub App token, to GitHub's MCP
   server, which keeps it under GitHub's own policy.
@@ -1771,8 +1780,7 @@ and error, performance, and agent reports by Sentry.
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, your name on the memories
   Vespin's agents kept in your words (the memories themselves stay with their
-  workspace), Vespin's record of your
-  Linear, Notion, Sentry, and Slack connections, and everything earlier
+  workspace), Vespin's record of every integration you connected, and everything earlier
   versions left there — and asks PostHog to erase the person it holds for your
   account with its usage data and recordings, which PostHog queues and carries
   out shortly after rather than at once, and which does not reach a recording
