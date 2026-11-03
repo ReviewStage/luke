@@ -11,7 +11,7 @@ import { withPageHead } from "../src/page-head";
  * from another page's template (every changelog page and release, from
  * `changelog.html`) gets its route's own head too, its share image at the
  * size the image's own file says. The changelog's RSS feed is written beside
- * its pages.
+ * its pages, and the site's sitemap at the build's root.
  */
 const DIST = join(import.meta.dirname, "..", "dist");
 const SERVER_ENTRY = pathToFileURL(
@@ -22,7 +22,7 @@ const ROOT_TAG = '<div id="root"></div>';
 
 // SAFETY: dist-server/entry-server.js is the SSR build of src/entry-server.tsx, written by the
 // build step that runs immediately before this script, so its exports are that module's.
-const { renderChangelogFeed, renderPrerenderedPages } = (await import(
+const { renderChangelogFeed, renderPrerenderedPages, renderSitemap } = (await import(
   SERVER_ENTRY
 )) as typeof import("../src/entry-server");
 
@@ -71,3 +71,8 @@ await mkdir(dirname(join(DIST, feed.file)), { recursive: true });
 await writeFile(join(DIST, feed.file), feed.xml);
 // biome-ignore lint/suspicious/noConsole: a build script's output is its log — what it wrote, and how much of it.
 console.log(`wrote ${feed.file} (${feed.xml.length} chars)`);
+
+const sitemap = renderSitemap();
+await writeFile(join(DIST, sitemap.file), sitemap.xml);
+// biome-ignore lint/suspicious/noConsole: a build script's output is its log — what it wrote, and how much of it.
+console.log(`wrote ${sitemap.file} (${sitemap.xml.length} chars)`);

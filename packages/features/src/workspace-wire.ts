@@ -85,13 +85,14 @@ export const ASSIGNABLE_ROLE = {
 } as const;
 
 /**
- * The first steps of tryluke.dev's paths that are our own, now or likely
- * soon, which no workspace's slug may be: every page the web app serves
- * under its own name (the root `vercel.json`, `apps/web/vite.config.ts`),
- * the path PostHog's traffic is passed on from (`POSTHOG_PROXY.PATH`), and
- * the words a later page is likeliest to want.
+ * The first steps of our home's paths (`link-home.ts`) that are our own,
+ * now or likely soon, which no workspace's slug may be: every page the web
+ * app serves under its own name (the root `vercel.json`,
+ * `apps/web/vite.config.ts`), the path PostHog's traffic is passed on from
+ * (`POSTHOG_PROXY.PATH`), and the words a later page is likeliest to want.
  */
 export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
+  "404",
   "about",
   "accept-invitation",
   "account",
@@ -101,31 +102,47 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "app",
   "assets",
   "auth",
+  "billing",
   "blog",
+  "board",
   "changelog",
+  "cli",
   "connect",
   "connect-github",
   "consent",
+  "dashboard",
   "desktop-session",
   "docs",
   "download",
+  "downloads",
   "eve",
+  "feed",
   "github-installed",
   "help",
+  "home",
   "inbox",
+  "install",
   "integration-connected",
   "integrations",
   "invite",
+  "join",
   "k7x2",
+  "legal",
   "login",
   "logout",
+  "mac",
+  "mcp",
   "new",
+  "notifications",
   "oauth",
   "open",
+  "page-in-mac-app",
+  "pages",
   "plan",
   "plans",
   "pricing",
   "privacy",
+  "search",
   "security",
   "settings",
   "sign-in",
@@ -135,7 +152,10 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "support",
   "task",
   "tasks",
+  "team",
+  "teams",
   "terms",
+  "workspaces",
 ]);
 
 export const WORKSPACE_BOUNDS = {

@@ -217,7 +217,10 @@ function servedBy(path: string, host = APP_HOST): Served {
         ? { file, headers, named }
         : { file, forced: route.status, headers, named };
     }
-    return { status: route.status ?? 0, location: route.headers?.Location ?? "" };
+    return {
+      status: route.status ?? 0,
+      location: path.replace(pattern, route.headers?.Location ?? ""),
+    };
   }
   return { file: undefined, headers, named };
 }
@@ -276,6 +279,7 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
     "/acme/admin/user/user_9Fq2-x",
     "/acme/admin/day/2026-10-12",
     "/connect/BCDF-GHJK",
+    "/acme/settings/",
   ]) {
     assert.equal(servedFile(path), "/app.html", path);
   }
@@ -286,6 +290,18 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
   assert.equal(servedFile("/changelog"), "/changelog.html");
   assert.equal(servedFile("/changelog/page/2"), "/changelog/page/2.html");
   assert.equal(servedFile("/admin"), "/admin.html");
+  // A page of the site written with a slash after it is sent to its bare address for good, and the changelog's first page, which no file is built for, to the changelog.
+  for (const [path, location] of [
+    ["/about/", "/about"],
+    ["/privacy/", "/privacy"],
+    ["/changelog/", "/changelog"],
+    ["/changelog/page/2/", "/changelog/page/2"],
+    ["/changelog/0.24.0/", "/changelog/0.24.0"],
+    ["/changelog/page/1", "/changelog"],
+    ["/changelog/page/1/", "/changelog"],
+  ] as const) {
+    assert.deepEqual(servedBy(path), { status: 308, location }, path);
+  }
   // An API path still reaches the oRPC route with the whole path it names, and an exception its own route with the id.
   for (const path of [
     "/api/plans/x/revisions",
