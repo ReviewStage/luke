@@ -602,11 +602,14 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
   const expired = rowNamed(page, "Notion");
   const refused = rowNamed(page, "Slack");
 
-  assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired");
+  assert.equal(
+    expired.querySelector(".luke-settings-row-state")?.textContent,
+    "Sign-in expired · Reconnect",
+  );
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
   assert.equal(
     refused.querySelector(".luke-settings-row-state")?.textContent,
-    "Slack refused the sign-in.",
+    "Slack refused the sign-in. · Reconnect",
   );
   assert.deepEqual(rowButtons(refused), ["Reconnect"]);
   assert.deepEqual(menuOf(refused), { items: ["Disconnect"], heading: undefined });
@@ -629,7 +632,7 @@ test("a server's own error stands quoted on a plain line under our sentence, nev
   );
 
   assert.deepEqual(lines, [
-    ["Slack could not be reached.", "attention"],
+    ["Slack could not be reached. · Reconnect", "attention"],
     ["Slack said: “App is not enabled for Slack MCP server access”", "plain"],
   ]);
 });
@@ -699,7 +702,7 @@ test("the window's focus still reads for the surfaces left once the first one dr
 
   touched.set(GRANOLA, INTEGRATION_STATUS.EXPIRED);
   await focusWindow();
-  assert.equal(granolaRow(other).line, "Sign-in expired");
+  assert.equal(granolaRow(other).line, "Sign-in expired · Reconnect");
 });
 
 test("a sign-out leaves nothing of one account's integrations to the next account signed in", async () => {
@@ -743,12 +746,12 @@ test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Ret
   signInFailures = [{ provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED }];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "You cancelled connecting Granola.",
+    line: "You cancelled connecting Granola. · Retry",
     buttons: ["Retry"],
   });
   // The service names a failure once; the next read leaves the line as it stood.
   await focusWindow();
-  assert.equal(granolaRow(page).line, "You cancelled connecting Granola.");
+  assert.equal(granolaRow(page).line, "You cancelled connecting Granola. · Retry");
 });
 
 test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Retry", async () => {
@@ -765,7 +768,7 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
   ];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
+    line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
     buttons: ["Retry"],
   });
 
@@ -782,7 +785,7 @@ test("a sign-in the browser came back from without a grant says it could not con
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected: the sign-in came back without access.",
+    line: "Granola could not be connected: the sign-in came back without access. · Retry",
     buttons: ["Retry"],
   });
 
@@ -802,7 +805,7 @@ it.effect(
       yield* TestClock.adjust(SIGN_IN_WAIT);
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
-        line: "Sign-in didn't finish.",
+        line: "Sign-in didn't finish. · Retry",
         buttons: ["Retry"],
       });
 
@@ -833,7 +836,7 @@ it.effect(
 
       yield* TestClock.adjust("1 minute");
       yield* Effect.promise(settle);
-      assert.equal(granolaRow(page).line, "Sign-in didn't finish.");
+      assert.equal(granolaRow(page).line, "Sign-in didn't finish. · Retry");
     }),
 );
 
@@ -853,7 +856,7 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
     yield* TestClock.adjust("1 minute");
     yield* Effect.promise(settle);
     assert.deepEqual(granolaRow(page), {
-      line: "Sign-in didn't finish.",
+      line: "Sign-in didn't finish. · Retry",
       buttons: ["Retry"],
     });
     assert.ok(
@@ -876,7 +879,7 @@ it.effect(
       yield* TestClock.adjust(SIGN_IN_GRACE);
       yield* Effect.promise(settle);
       assert.deepEqual(granolaRow(page), {
-        line: "Sign-in didn't finish.",
+        line: "Sign-in didn't finish. · Retry",
         buttons: ["Retry"],
       });
     }),
@@ -1724,7 +1727,7 @@ test("a statuses read answered after a newer one still says why the sign-in it s
   await settle();
 
   assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected.\nGranola's sign-in said: “access_denied”",
+    line: "Granola could not be connected. · Retry\nGranola's sign-in said: “access_denied”",
     buttons: ["Retry"],
   });
 });
