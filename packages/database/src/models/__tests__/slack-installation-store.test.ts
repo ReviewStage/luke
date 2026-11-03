@@ -3,12 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
-import { organization, user } from "../../schemas/auth.js";
+import { member as memberTable, organization, user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   deleteSlackInstallation,
   linkSlackInstallation,
   recordSlackMemberLookup,
+  slackMemberByEmail,
   slackMemberLookup,
   slackMemberOf,
   workspaceSlackInstallation,
@@ -17,7 +18,7 @@ import {
 /**
  * The Slack team a workspace's bot is connected to, over a real dialect:
  * each workspace reads only its own installation and its own members' Slack
- * ids, and a Disconnect forgets the ids it kept.
+ * ids and emails, and a Disconnect forgets the ids it kept.
  *
  * Synthetic accounts, workspaces, and Slack ids throughout.
  */
@@ -47,6 +48,12 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
       const member = yield* openAccount;
       const ours = yield* openWorkspace;
       const theirs = yield* openWorkspace;
+      yield* (yield* Database).insert(memberTable).values({
+        id: randomUUID(),
+        organizationId: ours,
+        userId: member,
+        createdAt: yield* DateTime.nowAsDate,
+      });
 
       yield* linkSlackInstallation({
         organizationId: ours,
@@ -69,6 +76,9 @@ it.layer(getTestDB())("the Slack installation store", (it) => {
       assert.deepEqual(yield* slackMemberOf(ours, "T0001", "U0001"), Option.some(member));
       assert.equal(Option.isNone(yield* slackMemberOf(theirs, "T0001", "U0001")), true);
       assert.equal(Option.isNone(yield* slackMemberOf(ours, "T0002", "U0001")), true);
+      const email = `${member}@APP.test`;
+      assert.deepEqual(yield* slackMemberByEmail(ours, email), Option.some(member));
+      assert.equal(Option.isNone(yield* slackMemberByEmail(theirs, email)), true);
       assert.equal(yield* deleteSlackInstallation(theirs), false);
       assert.equal(Option.isSome(yield* workspaceSlackInstallation(ours)), true);
     }),

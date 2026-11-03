@@ -1006,6 +1006,26 @@ reads only the Slack user and Slack workspace who pressed it and the
 thread, message, and option the button names, finds you by the Slack user
 id it kept, and keeps nothing else of the press.
 
+When you mention @Vespin in a Slack channel the bot is in, or write to the
+bot directly, Slack sends that message through Vercel Connect to our
+service, which finds you as a member of a Vespin workspace connected to that
+Slack workspace: by the Slack user id it kept, or else by asking Slack for
+the email address on your Slack profile, matching it to your Vespin
+account's, and keeping the Slack user id from then on. A Slack user it finds
+no member for is told so in the thread, and nothing is started or kept. For
+a member, it starts a coding agent as you, or, in a thread an agent was
+already started from, sends the message to that agent as yours. The agent is
+handed your message, the earlier messages of the Slack thread it stands in,
+which our service reads from Slack and which other people may have written,
+with their Slack user ids, and the message's Slack link, so all of these
+reach the agent's prompt, the model, its transcript, and its traces, as
+anything you type to an agent does. Our service keeps which Slack
+conversation and thread each such agent was started from, so it can post the
+agent's final message, or that it failed or was stopped, back in that
+thread, where everyone in the conversation can read it; that record is
+deleted with the agent, with the workspace's bot connection, or with your
+account. Messages the bot posted stay in Slack.
+
 **Gmail, Google Calendar, and Google Drive, where they are offered.** Our
 service offers them only to the accounts of the organization it names, while
 Google's sign-in for them is limited to that organization's Google

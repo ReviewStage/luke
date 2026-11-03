@@ -1,15 +1,17 @@
 /**
- * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, the report to the agent's starter, and an automation run's result on Slack.
+ * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, the report to the agent's starter, an automation run's result on Slack, and the turn in the Slack thread its agent was started from.
  *
  * The writer tells its `SettledTurnListener` once the settle's transaction
  * is done (`@repo/database/models/writer`), whichever path settled the turn:
  * the relay's or a runner's own end, a Stop, a lost session's, or the
  * sweep's abandon. This is the one listener the deployment provides
- * (`../../runtime.ts`), and it does three things with each turn: counts it
+ * (`../../runtime.ts`), and it does four things with each turn: counts it
  * (`../../events/server-events.ts`), hands its final message to the agent
  * that started it, where one did (`starter-report.ts`), and sends an
  * automation run's result to its owner on Slack, where the run's automation
- * asks for it (`../../automations/automation-slack-delivery.ts`). Each runs
+ * asks for it (`../../automations/automation-slack-delivery.ts`), and posts
+ * the turn in the Slack thread its agent was started from, where one was
+ * (`../../slack/slack-agent-starts.ts`). Each runs
  * once the request has answered, where the runtime runs work past the
  * answer, since none is the settle's to wait on; and the report and the
  * Slack message run on the pool rather than on a transaction the settle may
@@ -27,6 +29,7 @@ import type { HostedEnvironment } from "../../environment.js";
 import { turnEndCounted } from "../../events/server-events.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { afterResponse } from "../../http/after-response.js";
+import { postTurnToSlackThreads } from "../../slack/slack-agent-starts.js";
 import type { SlackBot } from "../../slack/slack-bot.js";
 import { routedSessions } from "./runtime-sessions.js";
 import { reportToStarter } from "./starter-report.js";
@@ -70,9 +73,16 @@ export const settledTurnListener: Layer.Layer<
         "an automation run's result on Slack",
         deliverRunToSlack(turn).pipe(Effect.provideContext(reach), outsideTransaction),
       );
+    const posted = (turn: SettledAgentTurn) =>
+      afterResponse(
+        "an agent's turn in its Slack thread",
+        postTurnToSlackThreads(turn).pipe(Effect.provideContext(reach), outsideTransaction),
+      );
     return {
       heard: (turn) =>
-        Effect.all([turnEndCounted(turn), reported(turn), delivered(turn)], { discard: true }),
+        Effect.all([turnEndCounted(turn), reported(turn), delivered(turn), posted(turn)], {
+          discard: true,
+        }),
     };
   }),
 );

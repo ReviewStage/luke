@@ -336,6 +336,18 @@ settles (`src/automations/automation-slack-delivery.ts`, heard through
 failed or was stopped, with a link to the agent. The run is claimed first
 (`automation_run.slack_delivered_at`), so each run sends once.
 
+A member's @mention of the bot in a channel, or a direct message to it,
+reaches our Slack route (`/api/slack/events`) as an `app_mention` or
+`message.im` event and starts a coding agent as them on no task
+(`src/slack/slack-agent-starts.ts`), once the answer has left; Slack's
+retries (`x-slack-retry-num`) and bots' messages are dropped. The writer is
+found by the Slack id the bot kept, or else by the email Slack holds for them
+(`users.info`). The bot replies in the thread with the agent's link, the
+thread is kept against the agent in `slack_agent_thread`, a later mention in
+that thread is sent to the agent instead, and every settled turn of the agent
+is posted back in the thread once (`SettledTurnListener`). The Slack app must
+subscribe to the `app_mention` and `message.im` bot events.
+
 ## The admin resource
 
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted

@@ -14,7 +14,12 @@
  * time and keeps it, a miss included, which is asked again only after
  * `SLACK_MEMBER_MISS_LIFETIME`; a member with no match is written nothing.
  *
- * `dm` and `update` are best-effort: whatever fails, Slack, Connect, or the
+ * A member who writes to the bot is found by the email Slack holds for them
+ * (`users.info`); the bot replies in the thread they wrote in
+ * (`chat.postMessage` with `thread_ts`), reading the thread's earlier
+ * messages (`conversations.replies`) and its link (`chat.getPermalink`).
+ *
+ * `dm`, `update`, and those reads and replies are best-effort: whatever fails, Slack, Connect, or the
  * store, is logged by a fixed line and Slack's own error code, never Slack's
  * words or the token, and answers nothing. Note that neither is to be
  * yielded inside a transaction, because each waits on Slack.
@@ -47,6 +52,9 @@ const SLACK_METHOD = {
   USERS_LOOKUP_BY_EMAIL: "users.lookupByEmail",
   CHAT_POST_MESSAGE: "chat.postMessage",
   CHAT_UPDATE: "chat.update",
+  CHAT_GET_PERMALINK: "chat.getPermalink",
+  CONVERSATIONS_REPLIES: "conversations.replies",
+  USERS_INFO: "users.info",
 } as const;
 
 type SlackMethod = (typeof SLACK_METHOD)[keyof typeof SLACK_METHOD];
@@ -70,6 +78,14 @@ export interface SlackMessageContent {
 export interface SlackMessage {
   readonly channel: string;
   readonly ts: string;
+}
+
+/** One message of a Slack thread as the bot reads it: who wrote it, a member by user id or a bot, and its words. */
+export interface SlackThreadMessage {
+  readonly ts: string;
+  readonly user?: string;
+  readonly bot: boolean;
+  readonly text: string;
 }
 
 /** The Slack team the bot's token answers for. */
@@ -114,6 +130,21 @@ export interface SlackBotService {
     ts: string,
     content: SlackMessageContent,
   ) => Effect.Effect<void>;
+  /** Replies in the thread under the message `threadTs` names; nothing where it failed. */
+  readonly reply: (
+    channel: string,
+    threadTs: string,
+    content: SlackMessageContent,
+  ) => Effect.Effect<Option.Option<SlackMessage>>;
+  /** The thread's messages, oldest first, as far as Slack's first page holds them; none where the read failed. */
+  readonly threadMessages: (
+    channel: string,
+    threadTs: string,
+  ) => Effect.Effect<readonly SlackThreadMessage[]>;
+  /** The message's link in Slack; nothing where the read failed. */
+  readonly permalink: (channel: string, ts: string) => Effect.Effect<Option.Option<string>>;
+  /** The email Slack holds for the user; nothing where it holds none, or the read failed. */
+  readonly userEmail: (slackUserId: string) => Effect.Effect<Option.Option<string>>;
 }
 
 export class SlackBot extends Context.Service<SlackBot, SlackBotService>()("SlackBot") {}
@@ -126,6 +157,31 @@ const LookupSchema = Schema.Struct({ user: Schema.Struct({ id: Schema.String }) 
 
 /** `chat.postMessage`'s answer, as far as it is read. */
 const PostedSchema = Schema.Struct({ channel: Schema.String, ts: Schema.String });
+
+/** `conversations.replies`' answer, as far as it is read. */
+const RepliesSchema = Schema.Struct({
+  messages: Schema.Array(
+    Schema.Struct({
+      ts: Schema.String,
+      user: Schema.optional(Schema.String),
+      bot_id: Schema.optional(Schema.String),
+      text: Schema.optional(Schema.String),
+    }),
+  ),
+});
+
+/** `chat.getPermalink`'s answer, as far as it is read. */
+const PermalinkSchema = Schema.Struct({ permalink: Schema.String });
+
+/** `users.info`'s answer, as far as it is read. */
+const UserInfoSchema = Schema.Struct({
+  user: Schema.Struct({
+    profile: Schema.optional(Schema.Struct({ email: Schema.optional(Schema.String) })),
+  }),
+});
+
+/** The most of a thread's messages read; a thread longer than this is read by its first page. */
+const THREAD_MESSAGES_READ = "200";
 
 /** Any Web API answer: whether Slack did it, and its code where it did not. */
 const AnswerSchema = Schema.Struct({ ok: Schema.Boolean, error: Schema.optional(Schema.String) });
@@ -200,6 +256,10 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       team: Effect.fail(new SlackBotFailure({ method: SLACK_METHOD.AUTH_TEST })),
       dm: () => Effect.succeedNone,
       update: () => Effect.void,
+      reply: () => Effect.succeedNone,
+      threadMessages: () => Effect.succeed([]),
+      permalink: () => Effect.succeedNone,
+      userEmail: () => Effect.succeedNone,
     };
   }
   return {
@@ -228,6 +288,57 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
         Effect.asVoid,
         Effect.catch(swallowed<void>("update a message")),
         Effect.asVoid,
+      ),
+    reply: (channel, threadTs, content) =>
+      api(SLACK_METHOD.CHAT_POST_MESSAGE, {
+        channel,
+        thread_ts: threadTs,
+        ...contentArgs(content),
+      }).pipe(
+        Effect.flatMap((answer) =>
+          readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, answer),
+        ),
+        Effect.map((message) =>
+          Option.some<SlackMessage>({ channel: message.channel, ts: message.ts }),
+        ),
+        Effect.catch(swallowed<SlackMessage>("reply in a thread")),
+      ),
+    threadMessages: (channel, threadTs) =>
+      api(SLACK_METHOD.CONVERSATIONS_REPLIES, {
+        channel,
+        ts: threadTs,
+        limit: THREAD_MESSAGES_READ,
+      }).pipe(
+        Effect.flatMap((answer) =>
+          readAnswer(SLACK_METHOD.CONVERSATIONS_REPLIES, RepliesSchema, answer),
+        ),
+        Effect.map((answer) =>
+          answer.messages.map(
+            (message): SlackThreadMessage => ({
+              ts: message.ts,
+              ...(message.user === undefined ? undefined : { user: message.user }),
+              bot: message.bot_id !== undefined,
+              text: message.text ?? "",
+            }),
+          ),
+        ),
+        Effect.catch((cause) =>
+          Effect.as(Effect.logWarning("The Slack bot could not read a thread", cause.message), []),
+        ),
+      ),
+    permalink: (channel, ts) =>
+      api(SLACK_METHOD.CHAT_GET_PERMALINK, { channel, message_ts: ts }).pipe(
+        Effect.flatMap((answer) =>
+          readAnswer(SLACK_METHOD.CHAT_GET_PERMALINK, PermalinkSchema, answer),
+        ),
+        Effect.map((answer) => Option.some(answer.permalink)),
+        Effect.catch(swallowed<string>("read a message's link")),
+      ),
+    userEmail: (slackUserId) =>
+      api(SLACK_METHOD.USERS_INFO, { user: slackUserId }).pipe(
+        Effect.flatMap((answer) => readAnswer(SLACK_METHOD.USERS_INFO, UserInfoSchema, answer)),
+        Effect.map((answer) => Option.fromNullishOr(answer.user.profile?.email)),
+        Effect.catch(swallowed<string>("read a member's email")),
       ),
   };
 }

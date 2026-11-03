@@ -8,8 +8,10 @@
  * past its bounded bytes before that token holds
  * (`createConnectWebhookVerifier`, which fails closed off Vercel).
  * Interactivity arrives form-encoded, its JSON under `payload`; an event
- * arrives as JSON, and only Slack's URL check is answered, every other
- * event acknowledged unread until a feature reads one.
+ * arrives as JSON: Slack's URL check is answered, and a message a member
+ * addressed to the bot, a mention or a direct message, is acknowledged and
+ * acted on once the answer has left (`slack-agent-starts.ts`); every other
+ * event is acknowledged unread.
  *
  * A press (`block_actions`) is read for the option button's value, which
  * names the item, the message whose ask it answers, and the option
@@ -48,6 +50,7 @@ import {
 import { answerAsMember } from "../inbox/inbox-procedures.js";
 import { INBOX_ASK_ANSWER } from "../inbox/inbox-store.js";
 import { ANY_METHOD } from "../route.js";
+import { actOnSlackEvent } from "./slack-agent-starts.js";
 import type { SlackMessage } from "./slack-bot.js";
 import {
   chosenLine,
@@ -75,6 +78,9 @@ const SLACK_REQUEST_TYPE = {
   BLOCK_ACTIONS: "block_actions",
   URL_VERIFICATION: "url_verification",
 } as const;
+
+/** The header Slack marks its retry of an event with, which is dropped, since the first delivery was acted on. */
+const SLACK_RETRY_HEADER = "x-slack-retry-num";
 
 /** Where a verifier is told the request came, which it reads only for its headers. */
 const VERIFIED_ORIGIN = "https://slack.connect.invalid";
@@ -228,6 +234,7 @@ const eventsEndpoint = (verify: ConnectWebhookVerifier) =>
     }
     const press = readRequest(BlockActionsSchema, payload);
     if (Result.isSuccess(press)) yield* answerPress(press.success);
+    else yield* actOnSlackEvent(payload, request.headers[SLACK_RETRY_HEADER] !== undefined);
     return hostedJsonResponse(200, {});
   });
 

@@ -1,9 +1,11 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
+import { member, user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
-import { slackInstallation, slackMember } from "../schemas/slack-installation.js";
+import { slackAgentThread, slackInstallation, slackMember } from "../schemas/slack-installation.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
 /**
@@ -20,6 +22,14 @@ import type { TaskStoreEffect } from "./task-store.js";
  * turn it off, in every workspace alike. Whether the account may connect or
  * disconnect is the caller's to check. Every function is an effect over the
  * ambient `SqlClient`.
+ *
+ * A message to the bot is read against every workspace connected to its
+ * team, oldest connection first, and its writer found as a member by the
+ * email Slack holds for them (`slackMemberByEmail`); an agent it starts
+ * works in the repository the member's latest agent in the workspace worked
+ * in (`slackStartRepository`) unless the message names one. A thread an agent was
+ * started from is kept against it (`slackAgentThread`), and each of the
+ * agent's settled turns is claimed there once (`claimSlackThreadTurn`).
  */
 
 /** What linking names: the workspace, the Slack team the bot answers for, and the member connecting it. */
@@ -183,6 +193,139 @@ const findMemberBySlackId = SqlSchema.findOneOption({
     ),
 });
 
+/** The workspaces connected to the Slack team, the oldest connection first. */
+const findTeamWorkspaces = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: (teamId) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: slackInstallation.organizationId })
+        .from(slackInstallation)
+        .where(eq(slackInstallation.teamId, teamId))
+        .orderBy(asc(slackInstallation.createdAt), asc(slackInstallation.organizationId)),
+    ),
+});
+
+/** The member of the workspace whose account's email is the one given, whatever its case. */
+const findMemberByEmail = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, email: Schema.String }),
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: ({ organizationId, email }) =>
+    Database.use((db) =>
+      db
+        .select({ userId: member.userId })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(
+          and(
+            eq(member.organizationId, organizationId),
+            eq(sql`lower(${user.email})`, email.toLowerCase()),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/** The repository of the member's latest agent in the workspace that worked in one. */
+const findLatestRepository = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({ repository: Schema.String }),
+  execute: ({ organizationId, userId }) =>
+    Database.use((db) =>
+      db
+        .select({ repository: sql<string>`${agentTable.repository}` })
+        .from(agentTable)
+        .where(
+          and(
+            eq(agentTable.organizationId, organizationId),
+            eq(agentTable.userId, userId),
+            isNotNull(agentTable.repository),
+          ),
+        )
+        .orderBy(desc(agentTable.createdAt))
+        .limit(1),
+    ),
+});
+
+const SlackThreadSchema = Schema.Struct({
+  organizationId: Schema.String,
+  channelId: Schema.String,
+  threadTs: Schema.String,
+});
+
+/** A Slack thread an agent was started from: where it is, and the agent and member it was started for. */
+export type SlackAgentThread = typeof SlackThreadSchema.Type & {
+  readonly agentId: string;
+  readonly userId: string;
+};
+
+const insertAgentThread = SqlSchema.void({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    channelId: Schema.String,
+    threadTs: Schema.String,
+    agentId: Schema.String,
+    userId: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .insert(slackAgentThread)
+        .values({
+          organizationId: row.organizationId,
+          channelId: row.channelId,
+          threadTs: row.threadTs,
+          agentId: row.agentId,
+          userId: row.userId,
+          createdAt: row.now,
+        })
+        .onConflictDoNothing(),
+    ),
+});
+
+const findAgentThread = SqlSchema.findOneOption({
+  Request: SlackThreadSchema,
+  Result: Schema.Struct({ agentId: Schema.String, userId: Schema.String }),
+  execute: ({ organizationId, channelId, threadTs }) =>
+    Database.use((db) =>
+      db
+        .select({ agentId: slackAgentThread.agentId, userId: slackAgentThread.userId })
+        .from(slackAgentThread)
+        .where(
+          and(
+            eq(slackAgentThread.organizationId, organizationId),
+            eq(slackAgentThread.channelId, channelId),
+            eq(slackAgentThread.threadTs, threadTs),
+          ),
+        ),
+    ),
+});
+
+/** The agent's threads whose last posted turn is not this one, each marked as posting it, so a turn is posted once however often its settle is heard. */
+const claimThreadTurn = SqlSchema.findAll({
+  Request: Schema.Struct({ agentId: Schema.String, turnId: Schema.String }),
+  Result: SlackThreadSchema,
+  execute: ({ agentId, turnId }) =>
+    Database.use((db) =>
+      db
+        .update(slackAgentThread)
+        .set({ postedTurnId: turnId })
+        .where(
+          and(
+            eq(slackAgentThread.agentId, agentId),
+            sql`${slackAgentThread.postedTurnId} is distinct from ${turnId}`,
+          ),
+        )
+        .returning({
+          organizationId: slackAgentThread.organizationId,
+          channelId: slackAgentThread.channelId,
+          threadTs: slackAgentThread.threadTs,
+        }),
+    ),
+});
+
 /** A lookup kept, found or missed; the workspace's installation must stand, since the row is keyed under it. */
 const upsertMember = SqlSchema.void({
   Request: Schema.Struct({
@@ -280,4 +423,53 @@ export function slackNotificationsOn(userId: string): TaskStoreEffect<boolean> {
 /** Turns the member's switch on or off, every workspace's bot alike. */
 export function writeSlackNotifications(userId: string, on: boolean): TaskStoreEffect<void> {
   return upsertNotifications({ userId, on });
+}
+
+/** The workspaces connected to the Slack team, the oldest connection first; none where no workspace connected it. */
+export function slackTeamWorkspaces(teamId: string): TaskStoreEffect<readonly string[]> {
+  return Effect.map(findTeamWorkspaces(teamId), (rows) => rows.map((row) => row.organizationId));
+}
+
+/** The member of the workspace whose account's email is the one Slack holds for a user, whatever its case; nothing where none is. */
+export function slackMemberByEmail(
+  organizationId: string,
+  email: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findMemberByEmail({ organizationId, email }),
+    Option.map((row) => row.userId),
+  );
+}
+
+/** The repository an agent the member starts from Slack works in where the message names none: their latest agent's in the workspace; nothing where none worked in one. */
+export function slackStartRepository(
+  organizationId: string,
+  userId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findLatestRepository({ organizationId, userId }),
+    Option.map((row) => row.repository),
+  );
+}
+
+/** Keeps the thread as the one the agent was started from; a thread already kept keeps its first agent. */
+export function recordSlackAgentThread(thread: SlackAgentThread): TaskStoreEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) => insertAgentThread({ ...thread, now }));
+}
+
+/** The agent the thread was started from, and the member who started it; nothing for a thread no agent was started from. */
+export function slackAgentThreadAt(
+  organizationId: string,
+  channelId: string,
+  threadTs: string,
+): TaskStoreEffect<Option.Option<{ readonly agentId: string; readonly userId: string }>> {
+  return findAgentThread({ organizationId, channelId, threadTs });
+}
+
+/** The threads the agent was started from that have not yet been posted this turn, each claimed for it as it is read. */
+export function claimSlackThreadTurn(
+  agentId: string,
+  turnId: string,
+): TaskStoreEffect<readonly (typeof SlackThreadSchema.Type)[]> {
+  return claimThreadTurn({ agentId, turnId });
 }
