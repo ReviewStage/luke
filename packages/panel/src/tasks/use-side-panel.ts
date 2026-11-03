@@ -1674,10 +1674,14 @@ function carriedPin(pin: KeptPin): pin is CarriedPin {
   return "task" in pin && isAgentTab(pin.tab);
 }
 
-/** A kept pin of today's kinds as the hook holds it, on its holder; none for an agent's, or a retired kind's. */
+/**
+ * A kept pin of today's kinds as the hook holds it, on its holder; none for
+ * an agent's, a retired kind's, or the Inbox's, a task's or an agent's,
+ * since threads open in the window's Inbox and no panel draws its tab.
+ */
 function heldPin(pin: KeptPin): PinnedTab[] {
   const { tab } = pin;
-  if (isAgentTab(tab) || !currentPin(tab)) return [];
+  if (isAgentTab(tab) || !currentPin(tab) || tab === SIDE_PANEL_TAB.INBOX) return [];
   const { label, at, position } = pin;
   const fields = position === undefined ? { tab, label, at } : { tab, label, at, position };
   return ["task" in pin ? { ...fields, task: pin.task } : { ...fields, agent: pin.agent }];

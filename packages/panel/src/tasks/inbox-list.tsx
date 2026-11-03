@@ -189,8 +189,9 @@ import { cardTitle } from "./tool-call-model.js";
  * again. Open addressed to the developer is Needs you, the threads the
  * sidebar's Inbox row counts, where the Inbox opens. Each choice stands
  * checked, and every choice is kept across launches. An Inbox narrowed to one
- * task names it in a chip over the list too, before Addressed to's, its ×
- * listing every task's items again. Every row, in the window's Inbox and a
+ * task lists every item it holds, open and settled, addressed to anyone,
+ * with no view's menu, and names the task in a chip over the list, its ×
+ * listing every task's items again under the view kept. Every row, in the window's Inbox and a
  * task's own alike, names its task on its first line, over its title.
  * Where the scope leaves out every
  * item listed, the list says so in the Inbox's empty state, offering the
@@ -711,19 +712,22 @@ function FilterChipLine({
   readerId,
 }: {
   line: RefObject<HTMLDivElement | null>;
-  whose: InboxWhoseChoice;
+  whose: InboxWhoseChoice | undefined;
   task: InboxTaskHead | undefined;
   readerId: string | undefined;
 }): React.JSX.Element {
   const directory = useMemberDirectory();
-  const { whose: chosen, onWhose } = whose;
+  const chosen = whose?.whose;
+  const onWhose = whose?.onWhose;
   const taskName = task?.name;
   const onClearTask = task?.onClear;
   // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
   const listed = useMemo(
     () => [
       ...taskChipEntries(taskName, onClearTask),
-      ...whoseChipEntries({ whose: chosen, onWhose }, directory, readerId),
+      ...(chosen === undefined || onWhose === undefined
+        ? []
+        : whoseChipEntries({ whose: chosen, onWhose }, directory, readerId)),
     ],
     [taskName, onClearTask, chosen, onWhose, directory, readerId],
   );
@@ -765,7 +769,7 @@ function FilterChips({
   task,
   readerId,
 }: {
-  whose: InboxWhoseChoice;
+  whose: InboxWhoseChoice | undefined;
   task: InboxTaskHead | undefined;
   readerId: string | undefined;
 }): React.JSX.Element {
@@ -1002,7 +1006,7 @@ function ListHead({
           level={ANNOUNCE.ALERT}
           error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
         />
-        {view === undefined ? null : (
+        {view === undefined && head.task === undefined ? null : (
           <FilterChips whose={view} task={head.task} readerId={readerId} />
         )}
       </>
@@ -1030,7 +1034,7 @@ function ListHead({
     return (
       <>
         <ListSearch search={head.search} end={options} />
-        {view === undefined ? null : (
+        {view === undefined && head.task === undefined ? null : (
           <FilterChips whose={view} task={head.task} readerId={readerId} />
         )}
       </>
@@ -1056,7 +1060,7 @@ function ListHead({
         level={ANNOUNCE.ALERT}
         error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
       />
-      {view === undefined ? null : (
+      {view === undefined && head.task === undefined ? null : (
         <FilterChips whose={view} task={head.task} readerId={readerId} />
       )}
     </>

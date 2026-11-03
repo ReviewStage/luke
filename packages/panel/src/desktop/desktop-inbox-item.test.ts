@@ -999,6 +999,26 @@ test("an item whose box holds unsent words wears the Draft pencil on its row whi
   assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the list standing alone hides its box");
 });
 
+test("an item's unsent words outlast a reload of the window, its row marked while another is chosen, though its agent posted on it meanwhile", async () => {
+  const before = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  typeInComposer(itemPane(before.page), "Use 90% instead");
+  await settle();
+  act(() => world.root?.unmount());
+  world.root = undefined;
+
+  world.inboxes = new Map([
+    [BILLING.id, [{ ...THRESHOLD, revision: 2 }, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount([], { chosen: { taskId: INVITES.id, itemId: EXPIRY.id } });
+  await settle();
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the reloaded window marks the draft");
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90% instead");
+});
+
 test("files picked or dropped in an item's box are drawn as chips and go with its reply, standing for the developer's own words where they wrote none", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();

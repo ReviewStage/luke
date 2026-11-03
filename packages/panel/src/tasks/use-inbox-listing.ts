@@ -9,6 +9,7 @@ import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
+  EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -64,9 +65,14 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * in a channel stands in every channel and in the Inbox, and across a
  * launch. Its order, the latest first, is the Inbox's own.
  *
- * Narrowed to a task instead, it lists and counts that task's items alone
- * (`taskGroups`), under the Inbox's own view.
+ * Narrowed to a task instead, it lists and counts every item of that task
+ * alone (`taskGroups`), open and settled, addressed to anyone, as the
+ * task's own Inbox tab once listed them, whatever view the Inbox keeps,
+ * which it leaves as it stands (`TASK_LISTS`).
  */
+
+/** What an Inbox narrowed to a task lists: every item the task holds, open or settled, whoever it is addressed to. */
+const TASK_LISTS = { show: INBOX_SHOW.ALL, whose: EVERYONES } as const;
 
 /**
  * The tasks the list holds items of, in main's order: each holding one that
@@ -324,7 +330,8 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
   const [query, setQuery] = useState("");
   const search = useMemo(() => searchTokens(query), [query]);
   const me = tasks.me;
-  const { show, whose } = choices;
+  // Note that a task's items are listed whole, under no view (`TASK_LISTS`).
+  const { show, whose } = narrowedTask === undefined ? choices : TASK_LISTS;
   const counts = useMemo(() => inboxCounts(standing, me, whose), [standing, me, whose]);
   const filter = useMemo(() => ({ show, whose, search, readerId: me }), [show, whose, search, me]);
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,

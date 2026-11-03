@@ -1316,30 +1316,37 @@ test("a channel's view's menu narrows it as the Inbox's does, its scope standing
   );
 });
 
-test("a task chosen narrows the Inbox to its own items under a chip naming it, whose × lists every task's items again", async () => {
+test("a task chosen narrows the Inbox to every item of its own, open and settled, addressed to anyone, under a chip naming it and no view's menu, whose × lists every task's items under the view kept", async () => {
   world.inboxes = new Map([
-    [BILLING.id, [THRESHOLD, RETRY]],
+    [BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]],
     [INVITES.id, [EXPIRY]],
   ]);
   const { page } = mount();
   await settle();
-  showScope(page, "All");
+  showScope(page, "Open");
+  chooseView(page, "Addressed to", "Me");
   await settle();
 
   act(() => chooseInboxTask(BILLING.id));
   await settle();
   const narrowed = rowTitles(page).toSorted();
+  const menu = page.querySelector('button[aria-label="View options"]');
   const chip = page.querySelector<HTMLElement>('[aria-label="Show every task\'s items"]');
   const named = chip?.closest(".inbox-tasks-chips")?.textContent;
   await act(async () => chip?.click());
   await settle();
 
-  assert.deepEqual(narrowed, [RETRY.title, THRESHOLD.title].toSorted(), "Billing's items alone");
+  assert.deepEqual(
+    narrowed,
+    [RETRY.title, THRESHOLD.title].toSorted(),
+    "Billing's items, the settled one and the teammate's among them",
+  );
+  assert.equal(menu, null, "a task's items are listed whole, with no view's menu");
   assert.ok(named?.includes(BILLING.name), `the chip names the task: ${named}`);
   assert.deepEqual(
-    rowTitles(page).toSorted(),
-    [EXPIRY.title, RETRY.title, THRESHOLD.title].toSorted(),
-    "the × lists every task's items again",
+    rowTitles(page),
+    [EXPIRY.title],
+    "the × lists every task's items, Open and mine",
   );
 });
 
