@@ -1,9 +1,7 @@
-import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   BUTTON_VARIANT,
   ButtonLink,
   LANDING_SCENE,
-  LandingFacts,
   LandingPage,
   LandingSection,
   MARK_PROVIDER,
@@ -32,7 +30,7 @@ export function App(): React.JSX.Element {
       bar={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
       barCall={<SiteDownload />}
       title="An inbox for all your coding agents."
-      lead="Agents plan your tasks with you, build them in cloud sandboxes, and open the pull requests. When one needs a decision, a manual step, or your review, it posts to your Inbox."
+      lead="Agents work in cloud sandboxes, open pull requests, and post to your Inbox when they need you."
       actions={
         <>
           <SiteDownload />
@@ -60,46 +58,28 @@ export function App(): React.JSX.Element {
     >
       <LandingSection
         title="Answer from the Inbox."
-        lead="Pick an option, fill in a form, mark a step done, or reply. Your answer goes back to the agent that asked."
+        lead="Pick an option or reply, and the agent carries on."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
         title="Agents start other agents."
-        lead="An agent can hand part of its work to a new agent and message it. Agents also split tasks into sub-tasks and mark which tasks block others."
+        lead="They hand off work, message each other, and split tasks into sub-tasks."
         scene={LANDING_SCENE.AGENTS}
       />
       <LandingSection
         title="Automations start agents."
-        lead="Set a prompt and a repository, and an agent starts on a schedule, a GitHub event such as a failed check, a new Sentry issue, or a webhook call."
+        lead="On a schedule, a GitHub event, a Sentry issue, or a webhook."
         scene={LANDING_SCENE.AUTOMATIONS}
       />
       <LandingSection
         title="On your Mac and your phone."
-        lead="The Mac app and the web app show the same tasks and threads, and the web app runs in your phone's browser."
+        lead="The Mac app and the web app show the same tasks and threads."
         scene={LANDING_SCENE.DEVICES}
       />
       <LandingSection
         title="Your plan or your API key."
-        lead="Agents run on Claude Code with your Claude plan, Codex with your ChatGPT plan, or either with an Anthropic or OpenAI API key."
+        lead="Claude Code on your Claude plan, or Codex on your ChatGPT plan."
         scene={LANDING_SCENE.MODELS}
-        aside={
-          <LandingFacts
-            facts={[
-              {
-                title: "A model per agent",
-                detail: "Agents in one task can each run on a different model and effort.",
-              },
-              {
-                title: `Nothing billed by ${PRODUCT_NAME}`,
-                detail: "Anthropic or OpenAI bills your plan or key for model calls.",
-              },
-              {
-                title: "Settings › Agents",
-                detail: "Add your plan or API key there before you start an agent.",
-              },
-            ]}
-          />
-        }
       />
     </LandingPage>
   );

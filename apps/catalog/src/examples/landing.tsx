@@ -37,7 +37,7 @@ function Landing(): React.JSX.Element {
     <LandingPage
       bar={<Bar />}
       title="An inbox for all your coding agents."
-      lead="When an agent needs a decision, a manual step, or your review, it posts to your Inbox."
+      lead="Agents work in cloud sandboxes, open pull requests, and post to your Inbox when they need you."
       actions={<Button variant={BUTTON_VARIANT.PRIMARY}>Download for macOS</Button>}
       close={{
         title: "Free and open source.",
@@ -48,12 +48,12 @@ function Landing(): React.JSX.Element {
     >
       <LandingSection
         title="Answer from the Inbox."
-        lead="Your answer goes back to the agent that asked."
+        lead="Pick an option or reply, and the agent carries on."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
         title="Your plan or your API key."
-        lead="Agents run on your Claude or ChatGPT plan, or on an API key."
+        lead="Claude Code on your Claude plan, or Codex on your ChatGPT plan."
         scene={LANDING_SCENE.MODELS}
         aside={
           <LandingFacts
