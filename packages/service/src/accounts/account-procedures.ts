@@ -9,10 +9,11 @@
  * input is read, so an unsigned caller is refused as unsigned whatever it
  * sent.
  *
- * The preferences snapshot is five parts: the settings preferences the
- * desktop syncs, where the account's app links open, a synced setting of
- * its own part so a build that predates it neither refuses the snapshot nor
- * clears the choice by writing the shared part back whole, the coding
+ * The preferences snapshot is six parts: the settings preferences the
+ * desktop syncs, where the account's app links open and what Enter does in
+ * an agent's box while it works, synced settings each of its own part so a
+ * build that predates it neither refuses the snapshot nor clears the choice
+ * by writing the shared part back whole, the coding
  * agents' default model, effort, and context window, which Settings alone
  * writes and which reads, until it does, as the fallback a Start naming no
  * model runs on (`accountModelChoices`), the Claude model the account's Generate chapters

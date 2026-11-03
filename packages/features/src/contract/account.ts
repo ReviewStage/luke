@@ -1,8 +1,9 @@
 /**
  * account.ts -- the signed-in account's own reads and writes (`account-wire.ts`, `provider-key-wire.ts`), as procedures.
  *
- * Its deletion, its preferences snapshot, its access, and its own provider
- * keys, each on the path and method it has always answered on. A key is
+ * Its deletion, its preferences snapshot, its access, its own provider
+ * keys, its workspace's memories, and its ChatGPT credentials, each on the path
+ * and method it has always answered on. A key is
  * removed by the provider and the kind its query names, since a `DELETE`
  * carries no body. A JSON body is read whole, a key it does not name
  * refused (`exactInput`), but for the preferences write, whose parts the
