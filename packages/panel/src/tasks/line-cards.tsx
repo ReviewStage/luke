@@ -10,6 +10,7 @@ import {
   DISCLOSURE_FILL,
   type EventNote,
   EventNotes,
+  OneLine,
   type SubjectFit,
   SubjectLine,
 } from "@luke/ui";
@@ -119,9 +120,6 @@ const MARK_INK = {
 } as const;
 
 type MarkInk = (typeof MARK_INK)[keyof typeof MARK_INK];
-
-/** A chip's seat in a card's head: as wide as the chip, and no wider than the line, where the chip is cut. */
-const CHIP_SEAT = "inline-flex min-w-0 max-w-full *:min-w-0 *:max-w-full";
 
 /** A mark in a card's icon's seat, at the size and in the seat the Pull request tab's badge stands in. */
 function CardMark({ ink, children }: { ink: MarkInk; children: ReactNode }): React.JSX.Element {
@@ -288,18 +286,22 @@ export function GitHubLineCard({
       open={folds ? undefined : false}
       fill={DISCLOSURE_FILL.ACTIONS}
       actions={
-        // Note that a head too wide for its card wraps between its parts as a sentence does, what they did kept with the pull request's chip, rather than shrinking a chip under the words beside it; a chip still too wide for a line of its own is cut at its end.
-        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-list-gap py-list-gap">
-          {sender == null ? null : <span className={CHIP_SEAT}>{sender}</span>}
-          <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-tight-gap gap-y-list-gap">
-            <span className="min-w-0 text-muted-foreground">{head.does}</span>
-            <span className={CHIP_SEAT}>
+        // Note that a head too narrow for one line puts what was done on a line of its own under who did it, rather than shrinking a chip under the words beside it; there the count fades first, then the words, and the pull request's chip stays whole.
+        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-list-gap overflow-clip py-tight-gap">
+          {sender == null ? null : (
+            <span className="inline-flex min-w-0 max-w-full overflow-clip">{sender}</span>
+          )}
+          <span className="flex min-w-0 max-w-full flex-1 basis-auto items-center gap-tight-gap whitespace-nowrap">
+            <OneLine className="min-w-0 text-muted-foreground">{head.does}</OneLine>
+            <span className="inline-flex flex-none">
               <ChipOrLink href={pullRequestPage(line)} words={head.target} doors={doors} />
             </span>
+            {count === "" ? null : (
+              <OneLine className="ms-auto min-w-0 shrink-[1000] grow-0 basis-auto ps-tight-gap text-muted-foreground">
+                {count}
+              </OneLine>
+            )}
           </span>
-          {count === "" ? null : (
-            <span className="ms-auto whitespace-nowrap text-muted-foreground">{count}</span>
-          )}
         </span>
       }
     >
