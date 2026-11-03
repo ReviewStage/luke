@@ -16,8 +16,8 @@ import { bayerAt, fitCanvas, heldStill, paintLoop, roleChannels } from "./landin
  * Decorative: a canvas with no words of its own, which a reader passes over.
  */
 
-/** Cells across the foot, which a desktop's 1440px draws 6px apart, and across the 404's numerals; how much of its cell a dot fills; and each one's least cell, in CSS pixels, so a phone's numerals stay as coarse as the foot. */
-const GRID = { ACROSS: 240, NUMERAL_ACROSS: 140, DOT: 0.42, LEAST: 1.5, NUMERAL_LEAST: 4 } as const;
+/** Cells across the foot, which a desktop's 1440px draws 6px apart, and across the 404's numerals; and how much of its cell a dot fills. */
+const GRID = { ACROSS: 240, NUMERAL_ACROSS: 140, DOT: 0.42, LEAST: 1.5 } as const;
 
 /** How wide the wordmark runs across the foot, and how far down its top stands. */
 const FIT = { WIDTH: 0.94, TOP: 0.08 } as const;
@@ -113,7 +113,6 @@ function dotPainter(
   trail: TrailPoint[],
   shape: MaskShape,
   across: number,
-  least: number,
 ) {
   const copper = getComputedStyle(canvas).color;
   const chrome = CHROME_ROLES.map((role) => css(roleChannels(canvas, role)));
@@ -136,7 +135,7 @@ function dotPainter(
     }
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, width, height);
-    const cell = Math.max(least, width / across);
+    const cell = Math.max(GRID.LEAST, width / across);
     const dot = Math.max(1, cell * GRID.DOT);
     const reach = width * TRAIL.REACH;
     const band = ((t * 0.06) % 1.4) - 0.2;
@@ -162,19 +161,15 @@ function dotPainter(
   };
 }
 
-/** A canvas painting `shape` in dots, `across` cells wide but none finer than `least`, under a band of light and the pointer's trail. */
-function useDotArt(
-  shapeFor: (canvas: HTMLCanvasElement) => MaskShape,
-  across: number,
-  least: number,
-) {
+/** A canvas painting `shape` in dots, `across` cells wide at every width, under a band of light and the pointer's trail. */
+function useDotArt(shapeFor: (canvas: HTMLCanvasElement) => MaskShape, across: number) {
   const ref = useRef<HTMLCanvasElement>(null);
   const shapeRef = useRef(shapeFor);
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return undefined;
     const trail: TrailPoint[] = [];
-    const paint = dotPainter(canvas, trail, shapeRef.current(canvas), across, least);
+    const paint = dotPainter(canvas, trail, shapeRef.current(canvas), across);
     if (heldStill()) {
       // Note that a still canvas paints once more when the page's faces load, because a shape set in words draws nothing before then.
       let live = true;
@@ -200,13 +195,13 @@ function useDotArt(
       stop();
       canvas.removeEventListener("pointermove", onMove);
     };
-  }, [across, least]);
+  }, [across]);
   return ref;
 }
 
 /** The product's wordmark in dots across the foot of the page. */
 export function LandingWordmark(): React.JSX.Element {
-  const ref = useDotArt(() => wordmarkShape, GRID.ACROSS, GRID.LEAST);
+  const ref = useDotArt(() => wordmarkShape, GRID.ACROSS);
   return <canvas ref={ref} className="ui-landing-wordmark" />;
 }
 
@@ -215,7 +210,6 @@ export function LandingDotWords({ words }: { readonly words: string }): React.JS
   const ref = useDotArt(
     (canvas) => wordsShape(words, getComputedStyle(canvas).fontFamily),
     GRID.NUMERAL_ACROSS,
-    GRID.NUMERAL_LEAST,
   );
   return <canvas ref={ref} className="ui-landing-dot-words" />;
 }
