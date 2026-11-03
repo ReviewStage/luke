@@ -21,16 +21,27 @@
  * delivers them only once the transaction commits, and folds identical
  * payloads within one transaction into one.
  *
+ * A logged table's function also writes one row of the sync log
+ * (`../schemas/sync-log.ts`) per row written, naming the row by its key and
+ * carrying the write's topics and the transaction's id: every write, or,
+ * for `LOG.ROWS`, its inserts and deletes alone. An unlogged table's
+ * function renders exactly as it did before the log, so its migrated
+ * capture stands.
+ *
  * A migration that drops or renames a column a `WHEN` names would be refused
  * by Postgres while the update trigger stands, so a migration writes a
  * table's drops before its own statements and the creates after them
  * (`syncMigration`), all in the one transaction the migrator runs.
  */
+import { getTableConfig } from "drizzle-orm/pg-core";
+import { syncLog } from "../schemas/sync-log.js";
 import { SYNC_CHANNEL, SYNC_PAYLOAD_BYTES } from "./notification.js";
 import {
+  LOG,
   SYNC_OBJECT_PREFIX,
   type SyncColumnTopic,
   type SyncTable,
+  type SyncTableLog,
   type SyncTableLookup,
 } from "./sync-table.js";
 
@@ -108,6 +119,47 @@ function recordBlock(table: SyncTable, record: Record): string {
   ].join("\n");
 }
 
+/** The row's key before or after the write, as a log row names it: its primary-key columns by name. */
+function keyJson(key: readonly string[], record: Record): string {
+  const pairs = key.map(
+    (column) => `${quoteLiteral(column)}, ${record}.${quoteIdentifier(column)}`,
+  );
+  return `jsonb_build_object(${pairs.join(", ")})`;
+}
+
+/** The SQL names of the log's columns the capture writes, in the order its insert lists them. */
+function logColumns(): string {
+  const columns = [syncLog.txid, syncLog.tableName, syncLog.key, syncLog.topics];
+  return columns.map((column) => quoteIdentifier(column.name)).join(", ");
+}
+
+/** The statements logging the write: its keys, before and after, then one row naming each once, with its topics. */
+function logStatements(table: SyncTable, log: SyncTableLog): readonly string[] {
+  return [
+    "IF TG_OP <> 'INSERT' THEN",
+    `\tsync_keys := sync_keys || jsonb_build_array(${keyJson(log.key, RECORD.OLD)});`,
+    "END IF;",
+    "IF TG_OP <> 'DELETE' THEN",
+    `\tsync_keys := sync_keys || jsonb_build_array(${keyJson(log.key, RECORD.NEW)});`,
+    "END IF;",
+    `INSERT INTO ${quoteIdentifier(getTableConfig(syncLog).name)} (${logColumns()}) SELECT`,
+    `\tpg_current_xact_id()::text::bigint, ${quoteLiteral(table.name)},`,
+    `\t(SELECT jsonb_agg(DISTINCT "value") FROM jsonb_array_elements(sync_keys)),`,
+    `\tcoalesce((SELECT jsonb_agg(DISTINCT "value") FROM jsonb_array_elements(sync_topics) WHERE "value" ->> 1 IS NOT NULL), '[]');`,
+  ];
+}
+
+/** The block logging the write, around its statements only an update `LOG.ROWS` skips. */
+function logBlock(table: SyncTable, log: SyncTableLog): string {
+  const statements = logStatements(table, log);
+  if (log.writes === LOG.EVERY) return statements.map((line) => `\t${line}`).join("\n");
+  return [
+    "\tIF TG_OP <> 'UPDATE' THEN",
+    ...statements.map((line) => `\t\t${line}`),
+    "\tEND IF;",
+  ].join("\n");
+}
+
 /** The payload of the topics batched so far, as `SyncChangeSchema` reads it. */
 function payload(batch: string): string {
   return `'{"t":[' || ${batch} || '],"x":"' || sync_txid || '"}'`;
@@ -133,6 +185,7 @@ function notifyBlock(): string {
 }
 
 function functionStatement(table: SyncTable): string {
+  const log = table.log;
   return [
     `CREATE OR REPLACE FUNCTION ${quoteIdentifier(syncFunctionName(table))}() RETURNS trigger LANGUAGE plpgsql AS $app_sync$`,
     "DECLARE",
@@ -140,9 +193,11 @@ function functionStatement(table: SyncTable): string {
     "\tsync_topic jsonb;",
     "\tsync_batch text := '';",
     "\tsync_txid text := pg_current_xact_id()::text;",
+    ...(log === undefined ? [] : ["\tsync_keys jsonb := '[]';"]),
     "BEGIN",
     recordBlock(table, RECORD.OLD),
     recordBlock(table, RECORD.NEW),
+    ...(log === undefined ? [] : [logBlock(table, log)]),
     notifyBlock(),
     "\tRETURN NULL;",
     "END",
