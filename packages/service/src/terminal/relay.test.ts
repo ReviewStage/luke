@@ -290,7 +290,7 @@ it.effect(
       assert.equal(start.type, "start");
       assert.equal(start.command, "setpriv", "the shell attaches with every capability dropped");
       assert.ok(
-        start.args.includes(`=luke-${SHELL}`),
+        start.args.includes(`=terminal-${SHELL}`),
         "the start names the shell's session exactly",
       );
       assert.ok(

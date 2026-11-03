@@ -24,8 +24,8 @@ import {
 export const CODEX = {
   PACKAGE: "@openai/codex",
   VERSION: "0.163.0",
-  PREFIX: "/opt/luke-codex",
-  BIN: "/opt/luke-codex/bin/codex",
+  PREFIX: "/opt/agent-codex",
+  BIN: "/opt/agent-codex/bin/codex",
 } as const;
 
 /** The unprivileged user Codex runs as, and where its own state lives. */
@@ -45,16 +45,16 @@ export const CHATGPT_PROVIDER = {
 
 /**
  * Who the app-server says the client is. OpenAI's guide asks that the name
- * match the `agent_name_hint` the sign-in sent, so it is `Vespin` rather than
- * the plan's `luke`; P20 takes whichever Gate A2 settles.
+ * match the `agent_name_hint` the sign-in sent, so it is `Vespin`; P20 takes
+ * whichever Gate A2 settles.
  */
 export const CLIENT_INFO = { name: "Vespin", title: "Vespin", version: "0.19.0" } as const;
 
 /** The fake MCP server's name in Codex's config, and the one tool it serves. */
 export const PROBE_MCP = {
-  SERVER: "luke_probe",
+  SERVER: "agent_probe",
   TOOL: "echo",
-  SCRIPT: "/opt/luke-probe/mcp.mjs",
+  SCRIPT: "/opt/agent-probe/mcp.mjs",
 } as const;
 
 /** The JSON-RPC methods the probe sends, and the notifications it reads. */

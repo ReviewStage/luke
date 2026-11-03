@@ -10,7 +10,7 @@ set -euo pipefail
 # the same $APP_SHOT_SIZE points drawn with that many times the pixels: a
 # close-up's capture, sharp where a crop of a plain one would be enlarged.
 
-worktree=${SHOTS_WORKTREE:-$HOME/Developer/luke-changelog-shots}
+worktree=${SHOTS_WORKTREE:-$HOME/Developer/changelog-shots}
 main="$worktree/apps/desktop/dist/main.js"
 sed -i '' -E 's/const stateRoot = (import_node_path[0-9]*\.default\.join\([a-z0-9_]+\.getPath\("appData"\), appName\));/const stateRoot = process.argv.find((a) => a.startsWith("--user-data-dir="))?.slice(16) ?? \1;/' "$main"
 if ! grep -q 'startsWith("--user-data-dir=")' "$main"; then
@@ -22,5 +22,5 @@ if ! grep -q 'enableLargerThanScreen: true' "$main"; then
     sed -i '' -E 's/new (import_electron[0-9]*)\.BrowserWindow\(\{/new \1.BrowserWindow({ enableLargerThanScreen: true, /g' "$main"
     sed -i '' -E 's/new (import_electron[0-9]*)\.BrowserWindow\(([A-Za-z_$][A-Za-z_$0-9]*)\)/new \1.BrowserWindow({ ...\2, enableLargerThanScreen: true })/g' "$main"
 fi
-sed -i '' '/luke-changelog-focus/d' "$main"
-printf '%s\n' ';/* luke-changelog-focus */ { const e = require("electron"); const size = (process.env.APP_SHOT_SIZE || "").split("x").map(Number); e.app.whenReady().then(() => setTimeout(() => { e.app.focus({ steal: true }); const zoom = Number(process.env.APP_SHOT_ZOOM || 1); e.BrowserWindow.getAllWindows().forEach((w) => { if (size.length === 2 && size[0] > 0) { w.setSize(Math.round(size[0] * zoom), Math.round(size[1] * zoom)); w.webContents.setZoomFactor(zoom); w.center(); } w.focus(); }); }, 3500)); }' >>"$main"
+sed -i '' '/changelog-focus/d' "$main"
+printf '%s\n' ';/* changelog-focus */ { const e = require("electron"); const size = (process.env.APP_SHOT_SIZE || "").split("x").map(Number); e.app.whenReady().then(() => setTimeout(() => { e.app.focus({ steal: true }); const zoom = Number(process.env.APP_SHOT_ZOOM || 1); e.BrowserWindow.getAllWindows().forEach((w) => { if (size.length === 2 && size[0] > 0) { w.setSize(Math.round(size[0] * zoom), Math.round(size[1] * zoom)); w.webContents.setZoomFactor(zoom); w.center(); } w.focus(); }); }, 3500)); }' >>"$main"

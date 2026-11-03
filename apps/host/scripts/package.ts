@@ -1,5 +1,5 @@
 /**
- * package.ts -- one host release for the OS and architecture given: the daemon's and the runner's bundles, the `vespin-host` command, and the Node they run on, under one `luke-host/` folder, as a tarball beside its SHA-256.
+ * package.ts -- one host release for the OS and architecture given: the daemon's and the runner's bundles, the `vespin-host` command, and the Node they run on, under one `vespin-host/` folder, as a tarball beside its SHA-256.
  *
  * Run by CI for each Linux architecture and for an Apple silicon Mac
  * (`.github/workflows/release-host.yml`) once both bundles are built

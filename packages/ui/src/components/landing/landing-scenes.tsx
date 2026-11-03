@@ -58,7 +58,12 @@ import { MoreButton } from "../more-button/more-button.js";
 import { NOTE_LINE_LOOK, NoteLine } from "../note-line/note-line.js";
 import { PROGRESS_COUNT_LOOK, ProgressCount } from "../progress-ring/progress-ring.js";
 import { SearchField } from "../search-field/search-field.js";
-import { SettingsRow } from "../settings-row/settings-row.js";
+import {
+  SETTINGS_ROW_STATE,
+  SettingsRow,
+  SettingsRowMark,
+  SettingsRowStateLine,
+} from "../settings-row/settings-row.js";
 import { SETTINGS_SECTION_FRAME, SettingsSection } from "../settings-section/settings-section.js";
 import { Shimmer } from "../shimmer/shimmer.js";
 import { Switch } from "../switch/switch.js";
@@ -90,13 +95,13 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  * agent's question in the draft under it; a task's page shows its agent's
  * log, folded calls and all, starting another agent and trading messages
  * with it, the plan's sub-tasks beside it; an automation's page fires a run;
- * the phone holds the same Inbox; and three agents run on the models they
- * were started on. None is pressed: each plays its story on a clock that
+ * the phone holds the same Inbox; and Settings › Agents connects Claude on a
+ * subscription and Codex on an API key. None is pressed: each plays its story on a clock that
  * runs only while it is on screen (`landing-story.ts`).
  */
 
 /** How long each scene holds a step, in milliseconds. */
-const BEAT = { INBOX: 1900, AGENTS: 1800, RUNS: 1700, MODELS: 1500 } as const;
+const BEAT = { INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
 
 /** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
@@ -104,7 +109,7 @@ export const LANDING_SCENE = {
   AGENTS: "agents",
   AUTOMATIONS: "automations",
   DEVICES: "devices",
-  MODELS: "models",
+  KEYS: "keys",
 } as const;
 
 export type LandingScene = (typeof LANDING_SCENE)[keyof typeof LANDING_SCENE];
@@ -1064,88 +1069,73 @@ function DevicesScene(): React.JSX.Element {
   );
 }
 
-/** An agent at work on the harness and model it was started on, and the step of the story it finishes at. */
-type ModelAgent = {
+/** A harness's row in Settings › Agents: its mark, its name, how it is connected, and the step of the story it connects at. */
+type KeyRow = {
   readonly id: string;
   readonly name: string;
   readonly mark: ReactNode;
-  readonly model: string;
-  readonly done: number;
+  readonly connected: string;
+  readonly at: number;
 };
 
-const MODEL_AGENTS: readonly ModelAgent[] = [
+const KEY_ROWS: readonly KeyRow[] = [
   {
-    id: "emails",
-    name: INVITE_EMAILS,
+    id: "claude",
+    name: "Claude",
     mark: <HarnessMark provider={MODEL_PROVIDER.ANTHROPIC} />,
-    model: "Claude Code · Opus 5.5 · High",
-    done: 3,
+    connected: "Connected with a subscription",
+    at: 0,
   },
   {
-    id: "accept",
-    name: ACCEPT_PAGE,
+    id: "codex",
+    name: "Codex",
     mark: <ProviderMark provider={MARK_PROVIDER.CHATGPT} />,
-    model: "Codex · GPT-6.1 Sol · Medium",
-    done: 4,
-  },
-  {
-    id: "review",
-    name: "Review #229",
-    mark: <HarnessMark provider={MODEL_PROVIDER.ANTHROPIC} />,
-    model: "Claude Code · Sonnet 5.5 · Low",
-    done: 5,
+    connected: "Connected with an API key",
+    at: 2,
   },
 ];
 
 /**
- * Note that the list stands in no device, so it is made a picture here as a
- * device makes its screen one: a reader is told what it shows, and its rows
+ * Note that the section stands in no device, so it is made a picture here as
+ * a device makes its screen one: a reader is told what it shows, and its rows
  * are inert, since none of them is ever pressed.
  */
-function ModelsScene(): React.JSX.Element {
-  const [ref, step] = useStory(7, BEAT.MODELS);
+function KeysScene(): React.JSX.Element {
+  const [ref, step] = useStory(5, BEAT.KEYS);
   return (
     <div
       ref={ref}
-      className="ui-landing-scene ui-landing-models"
+      className="ui-landing-scene ui-landing-keys"
       role="img"
-      aria-label="Three agents at work, each on the model it was started on"
+      aria-label="Settings › Agents: Claude connected with a subscription, and Codex connecting with an API key"
       {...DESKTOP_SURFACE}
     >
       <div inert>
-        <List label="Agents" variant={LIST_VARIANT.CARD}>
-          {MODEL_AGENTS.map((agent) => (
-            <ListRow
-              key={agent.id}
-              motionKey={agent.id}
-              leading={
-                <Avatar
-                  name={agent.name}
-                  shape={AVATAR_SHAPE.SQUARE}
-                  size={AVATAR_SIZE.ROW}
-                  glyph={agent.mark}
-                  decorative
-                />
-              }
-              title={agent.name}
-              description={agent.model}
-              meta={
-                step >= agent.done ? (
-                  <span className="ui-landing-row-marks">
-                    <TaskStatusMark status={TASK_STATUS.DONE} />
-                    Done
-                  </span>
-                ) : (
-                  <span className="ui-landing-row-marks">
-                    <WorkingMark />
-                    <Shimmer>Working</Shimmer>
-                  </span>
-                )
-              }
-              onPress={still}
-            />
-          ))}
-        </List>
+        <SettingsSection title="Agents">
+          {KEY_ROWS.map((row) => {
+            const connected = step >= row.at;
+            return (
+              <SettingsRow
+                key={row.id}
+                leading={<SettingsRowMark>{row.mark}</SettingsRowMark>}
+                label={row.name}
+                description={
+                  connected ? (
+                    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+                      {row.connected}
+                    </SettingsRowStateLine>
+                  ) : undefined
+                }
+              >
+                {() => (
+                  <Button variant={BUTTON_VARIANT.OUTLINE} onClick={still}>
+                    {connected ? "Manage" : "Connect"}
+                  </Button>
+                )}
+              </SettingsRow>
+            );
+          })}
+        </SettingsSection>
       </div>
     </div>
   );
@@ -1156,7 +1146,7 @@ const SCENES: Readonly<Record<LandingScene, () => React.JSX.Element>> = {
   [LANDING_SCENE.AGENTS]: AgentsScene,
   [LANDING_SCENE.AUTOMATIONS]: AutomationsScene,
   [LANDING_SCENE.DEVICES]: DevicesScene,
-  [LANDING_SCENE.MODELS]: ModelsScene,
+  [LANDING_SCENE.KEYS]: KeysScene,
 };
 
 /** The scene that shows `scene`'s feature. */

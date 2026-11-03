@@ -19,7 +19,7 @@ import {
   saveProviderKey,
 } from "@repo/database/models/provider-key-store";
 import { readTask, updateTask } from "@repo/database/models/task-store";
-import { storeWriter } from "@repo/database/models/writer";
+import { SettledTurnListener, storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, messages, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
@@ -92,7 +92,9 @@ const ANALYTICS = recordingProductAnalytics();
 /** The route's group over the test's database, as a fetch. */
 const standingWith = (
   options: RunnerEventsOptions,
-  after: Layer.Layer<AfterResponse> = Layer.empty as Layer.Layer<AfterResponse>,
+  after:
+    | Layer.Layer<AfterResponse>
+    | Layer.Layer<SettledTurnListener> = Layer.empty as Layer.Layer<AfterResponse>,
 ) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -238,7 +240,7 @@ function workflowTurn(lineId: string): readonly RunnerEvent[] {
   const messagesOfTurn = [
     { type: RUNNER_EVENT.ACCEPTED, uuid: lineId },
     { type: "system", subtype: "init", ...envelope },
-    toolUse("toolu_Write", "Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }),
+    toolUse("toolu_Write", "Write", { file_path: `agent-probe/${NONCE}.txt`, content: NONCE }),
     toolResult("toolu_Write", "File created"),
     toolUse("toolu_inbox", "mcp__workspace__read_inbox", {}),
     toolResult("toolu_inbox", '{"status":"accepted","inbox":[]}'),
@@ -249,11 +251,11 @@ function workflowTurn(lineId: string): readonly RunnerEvent[] {
     toolUse("toolu_wake", "ScheduleWakeup", { delaySeconds: 60, reason: "wait" }),
     result(5, 7),
     { type: RUNNER_EVENT.WAITING, background_tasks: [], session_crons: [] },
-    partial("Background done. LUKE-PROBE-"),
+    partial("Background done. AGENT-PROBE-"),
     partial("TURN-1-DONE"),
     {
       type: "assistant",
-      message: { content: [{ type: "text", text: "Background done. LUKE-PROBE-TURN-1-DONE" }] },
+      message: { content: [{ type: "text", text: "Background done. AGENT-PROBE-TURN-1-DONE" }] },
       ...envelope,
     },
     result(3, 2),
@@ -351,7 +353,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
           ["tool-Bash", "output-available", UNANSWERED.ENDED],
           ["tool-ScheduleWakeup", "output-available", UNANSWERED.ENDED],
           ["step-start"],
-          ["text", "Background done. LUKE-PROBE-TURN-1-DONE"],
+          ["text", "Background done. AGENT-PROBE-TURN-1-DONE"],
         ]);
         assert.deepEqual(settled, [
           {
@@ -672,6 +674,44 @@ it.layer(getTestDB())("the runner events route", (it) => {
         assert.deepEqual(
           told.map((each) => [each.target, each.sequence]),
           [[agent.target, turn.length - 1]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a turn the batch settles is heard once its transaction is over, so what it said is committed",
+    () =>
+      Effect.gen(function* () {
+        const heard: { readonly turnId: string; readonly inTransaction: boolean }[] = [];
+        const listener = Layer.succeed(SettledTurnListener, {
+          heard: (turn) =>
+            Effect.flatMap(SqlClient.SqlClient, (client) =>
+              Effect.map(Effect.serviceOption(client.transactionService), (open) => {
+                heard.push({ turnId: turn.turnId, inTransaction: Option.isSome(open) });
+              }),
+            ),
+        });
+        const post = yield* standingWith({}, listener);
+        const agent = yield* agentWithBearer;
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        // SAFETY: each message below is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...envelope },
+          {
+            type: "assistant",
+            message: { content: [{ type: "text", text: "Edited the launch post." }] },
+            ...envelope,
+          },
+          { type: "result", subtype: "success", is_error: false, ...envelope },
+          { type: RUNNER_EVENT.IDLE },
+        ].map((message, sequence) => ({ sequence, message }) as RunnerEvent);
+
+        yield* post(agent.bearer, events);
+
+        assert.deepEqual(
+          heard.map((each) => each.inTransaction),
+          [false],
         );
       }),
   );
@@ -1178,21 +1218,21 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           [
             "tool-mcpToolCall",
             "output-available",
-            "luke-probe-echo:luke-probe-hermetic access_token_in_env=false",
+            "agent-probe-echo:agent-probe-hermetic access_token_in_env=false",
           ],
           ["step-start"],
           [
             "tool-commandExecution",
             "output-available",
             {
-              output: "checks pending (0s)\nall checks passed: luke-probe-hermetic-ci\n",
+              output: "checks pending (0s)\nall checks passed: agent-probe-hermetic-ci\n",
               exitCode: 0,
             },
           ],
           ["step-start"],
           ["tool-fileChange", "output-available", { status: "completed" }],
           ["step-start"],
-          ["text", "all checks passed: luke-probe-hermetic-ci"],
+          ["text", "all checks passed: agent-probe-hermetic-ci"],
         ]);
         assert.deepEqual(rows[5]?.parts.map(drawn), [
           ["step-start"],
@@ -1200,7 +1240,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         ]);
         assert.deepEqual(rows[6]?.parts.map(drawn), [
           ["step-start"],
-          ["text", "luke-probe-hermetic"],
+          ["text", "agent-probe-hermetic"],
         ]);
         // The resumed thread reports its total again before its turn: that meters nothing.
         assert.deepEqual(
@@ -1248,7 +1288,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
         ];
         const codex = yield* agentOn(HARNESS.CODEX, ["Look at the screenshot."]);
-        const view = { type: "imageView", id: "call_view", path: "/tmp/luke/home.png" };
+        const view = { type: "imageView", id: "call_view", path: "/tmp/shared/home.png" };
         const codexTurn: WireValue[] = [
           { type: RUNNER_EVENT.ACCEPTED, uuid: codex.lineId },
           notification("turn/started", { turn: { id: "turn-1" } }),
@@ -1280,7 +1320,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       const agent = yield* agentOn(HARNESS.CODEX, ["Write the probe file."]);
       const change = { type: "fileChange", id: "call_patch", status: "inProgress", changes: [] };
       const changes = [
-        { path: "luke-probe/a1b2.txt", kind: { type: "add" }, diff: "a1b2c3d4e5f6\n" },
+        { path: "agent-probe/a1b2.txt", kind: { type: "add" }, diff: "a1b2c3d4e5f6\n" },
       ];
       const messagesOfTurn: WireValue[] = [
         { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },

@@ -178,6 +178,7 @@ export const PRODUCT_SURFACE = {
   TASK: "task",
   VERSION_HISTORY: "version_history",
   INBOX: "inbox",
+  /** Removed with Channels, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CHANNEL: "channel",
   THREAD: "thread",
   AGENT: "agent",

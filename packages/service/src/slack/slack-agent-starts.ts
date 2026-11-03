@@ -17,7 +17,12 @@
  * says so in the thread and starts nothing.
  *
  * A message in a thread an agent was started from (`slack_agent_thread`) is
- * sent to that agent as the writer's own message (`steer.ts`); any other
+ * sent to that agent as the writer's own message (`steer.ts`), the agent
+ * brought back first where it stands archived, as a chat tool reopens a
+ * conversation. Where its session has ended for good (`AGENT_RETIRED`), a new
+ * agent continues it as Continue does, handed its work, a summary of its
+ * transcript, and the message, and the thread moves to it, with one line in
+ * the thread linking it; any other
  * starts an agent as the writer on no task, on the one path a Start takes
  * (`coder-host/start.ts`), keyed by Slack's event id. It works in the
  * repository the message names as `owner/name` where the workspace reaches
@@ -25,22 +30,38 @@
  * both as an owner or admin named them in Settings, else in the repository
  * of the writer's latest agent in the workspace, else in none. Its prompt is the writer's words, the thread's earlier
  * messages fenced as data, since anyone in the channel wrote them, and the
- * message's link; only the writer's own words hand it MCP servers. The bot
- * replies at once with a link to the agent, and the thread is kept as the
- * agent's.
+ * message's link; only the writer's own words hand it MCP servers. Its
+ * first line, and each message sent on, says Slack carried it, with the
+ * writer's words and the message's link (`slackLine`), which a window draws
+ * in place of the prompt the agent reads. The bot
+ * reacts to the message with 👀 at once, as other bots do, rather than
+ * replying, and the thread is kept as the agent's; a message sent on to an
+ * agent is marked the same way.
  *
  * Every turn of such an agent that settles is posted in its thread once
- * (`claimSlackThreadTurn`): its final message as mrkdwn, or that it failed
- * or was stopped, each with the agent's link. Slack's words reach the
+ * (`claimSlackThreadTurn`): its final message in a `markdown` block, which
+ * Slack draws as standard Markdown, or that it failed
+ * or was stopped, each with the agent's link. A turn that finished well then
+ * archives the agent under the rule an automation's "Archive finished runs"
+ * archives by (`archiveFinishedAgents`), so one with a pull request or an
+ * inbox item open stands, and the thread's next message brings it back. Slack's words reach the
  * agent's prompt, transcript, and traces, never a log line: a failure is
  * logged by its kind alone.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readAgentOfConversation, readVisibleAgent } from "@repo/database/models/agent-store";
+import {
+  type Agent,
+  agentConversationSeq,
+  readAgentOfConversation,
+  readVisibleAgent,
+  unarchiveAgentFrom,
+} from "@repo/database/models/agent-store";
+import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { readMessageByClientId } from "@repo/database/models/message-reads";
 import {
   claimSlackThreadTurn,
+  moveSlackAgentThread,
   recordSlackAgentThread,
   recordSlackMemberLookup,
   slackAgentThreadAt,
@@ -55,20 +76,34 @@ import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { causeKind } from "@repo/runtime/effect";
-import { EXCESS_KEYS, TURN_STATUS, type UnparsedWireValue } from "@repo/wire";
+import {
+  EXCESS_KEYS,
+  MESSAGE_CHANNEL,
+  SLACK_LINE_BOUNDS,
+  type SlackLineMetadata,
+  TURN_STATUS,
+  type UnparsedWireValue,
+} from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
+import {
+  productionSummaryModel,
+  type SummaryModelOf,
+} from "../agents/coder-host/replay-summary.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
-import { type StartServices, startAgent } from "../agents/coder-host/start.js";
+import { placeOfAgent, type StartServices, startAgent } from "../agents/coder-host/start.js";
 import { lastSaid } from "../agents/coder-host/starter-report.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import { workspaceStepOf } from "../agents/written-mentions.js";
+import { archiveFinishedAgents } from "../automations/automation-sweep.js";
+import { HostedEnvironment } from "../environment.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { afterResponse } from "../http/after-response.js";
+import { HOSTED_API_ERROR } from "../http/http.js";
 import { SlackBot, type SlackBotService, type SlackMessageContent } from "./slack-bot.js";
-import { slackEscaped, slackMrkdwn } from "./slack-mrkdwn.js";
+import { slackClipped, slackEscaped, slackMarkdownBlock } from "./slack-markdown.js";
 
 /** The events read: a mention of the bot in a channel, and a message in a conversation with it. */
 const SLACK_EVENT = { APP_MENTION: "app_mention", MESSAGE: "message" } as const;
@@ -94,11 +129,11 @@ const THREAD_FRAME_CHARS = 512;
 /** What the thread's messages end with where they were cut to fit. */
 const CUT_MARK = "\n… (cut to fit; read the rest in Slack)";
 
-/** The most of a final message one section holds, inside Slack's own bound of 3000 with room for the escapes. */
-const RESULT_CHARS = 2500;
+/** The most characters of a final message the notification's plain text says; the blocks hold more. */
+const NOTIFICATION_CHARS = 2500;
 
-/** What the cut end of a long final message says; the link reads the rest. */
-const RESULT_CUT_MARK = "…";
+/** The emoji the bot reacts with to a message it acted on: 👀, as Slack names it. */
+const HEARD_EMOJI = "eyes";
 
 /** What the bot says in a thread where it starts nothing. */
 const SLACK_REPLY = {
@@ -223,23 +258,6 @@ function plainReply(text: string): SlackMessageContent {
   };
 }
 
-/** The reply that says the agent started, with its link and where it works. */
-function startedReply(link: string, repository: string | null): SlackMessageContent {
-  const where = repository === null ? "" : ` in ${repository}`;
-  return {
-    text: `On it${where}: ${link}`,
-    blocks: [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `On it${slackEscaped(where)}. <${link}|Open the agent in ${PRODUCT_NAME}>`,
-        },
-      },
-    ],
-  };
-}
-
 /** A refusal in the words a reply says it with: one fixed slug, never anything a caller wrote. */
 function refusalReply(what: string, failure: unknown): SlackMessageContent {
   const slug =
@@ -327,24 +345,170 @@ function startPrompt(
   ].join("\n\n");
 }
 
+/**
+ * What the line says carried it, which a window draws in place of the prompt
+ * the agent reads: the member's own words and the message's link, never the
+ * thread's other messages or what the agent is told to do with them.
+ */
+function slackLine(
+  addressed: SlackAddressed,
+  permalink: Option.Option<string>,
+  /** Whether the prompt carries the thread's earlier messages anyone but the writer wrote, which `run_on_mac` reads; none for a message sent on alone. */
+  outside = false,
+): SlackLineMetadata {
+  const words = addressed.text.slice(0, SLACK_LINE_BOUNDS.WORDS_CHARS);
+  const url = Option.getOrUndefined(
+    Option.filter(permalink, (link) => link.length <= SLACK_LINE_BOUNDS.URL_CHARS),
+  );
+  return {
+    channel: MESSAGE_CHANNEL.SLACK,
+    words,
+    ...(url === undefined ? undefined : { url }),
+    ...(outside ? { outside_words: true } : undefined),
+  };
+}
+
+/**
+ * A later message in the agent's Slack thread as the agent reads it: the
+ * member's words, then that it came from the thread and that the turn's
+ * final message is posted back there, as the start's prompt says.
+ */
+function followUpPrompt(addressed: SlackAddressed, permalink: Option.Option<string>): string {
+  const where = Option.match(permalink, {
+    onNone: () => "the Slack thread",
+    onSome: (link) => `the Slack thread (${link})`,
+  });
+  return [
+    addressed.text.slice(0, PROMPT_BOUND / 2),
+    "---",
+    `A member wrote this in ${where} you were started from. Your final message is posted back in that thread, so make it stand on its own.`,
+  ].join("\n\n");
+}
+
 /** The agent's link in the workspace, as the member's other links name it. */
 const agentLink = (userId: string, organizationId: string, agentId: string) =>
   Effect.map(workspaceStepOf(userId, organizationId), (step) =>
     linkOf({ kind: LINK_PLACE.AGENT, agentId }, step),
   );
 
-/** A message in a thread an agent was started from, sent to that agent as the member's own; a refusal is said in the thread. */
+/** The words the bot links a continue with, said once in the thread: the earlier agent had stopped, and where its work goes on. */
+function continuedReply(link: string): SlackMessageContent {
+  const lead = "The earlier agent had stopped, so I continued its work in";
+  return {
+    text: `${lead} a new agent.`,
+    blocks: [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `${slackEscaped(lead)} <${link}|a new agent>.` },
+      },
+    ],
+  };
+}
+
+/**
+ * The thread's agent as it takes a message now: brought back where it stands
+ * archived, from the very archive read (`unarchiveAgentFrom`), as the Archive
+ * agent menu's undo brings it back; nothing where it is gone. Note that it is
+ * read again after, because one brought back by someone else meanwhile takes
+ * the message too, and one archived again since takes none.
+ */
+const agentTaking = Effect.fnUntraced(function* (userId: string, agentId: string) {
+  const agent = yield* readVisibleAgent(userId, agentId);
+  if (Option.isNone(agent) || agent.value.archivedAt === null) return agent;
+  yield* unarchiveAgentFrom(userId, agentId, agent.value.archivedAt);
+  const now = yield* readVisibleAgent(userId, agentId);
+  return Option.filter(now, (read) => read.archivedAt === null);
+});
+
+/**
+ * The ended agent continued in a new one as the member, as Continue and
+ * `start_agent`'s `from` continue it: handed its work and its transcript, the
+ * steps that do not fit summarized, with the member's message as its note.
+ * The thread moves to it, the message is marked heard, and one line in the
+ * thread links it; a refusal is said instead.
+ */
+const continueFromSlack = Effect.fnUntraced(function* (
+  bot: SlackBotService,
+  addressed: SlackAddressed,
+  organizationId: string,
+  userId: string,
+  source: Agent,
+  permalink: Option.Option<string>,
+) {
+  const thread = threadOf(addressed);
+  const place = placeOfAgent(source);
+  if (place === undefined) {
+    yield* bot.reply(
+      addressed.channel,
+      thread,
+      refusalReply("continue the agent", { error: HOSTED_API_ERROR.NO_REPOSITORY }),
+    );
+    return;
+  }
+  const outside = yield* heardFromAnotherAccount({
+    userId: source.userId,
+    conversationId: source.conversationId,
+  });
+  const environment = yield* HostedEnvironment;
+  const summaryModel: SummaryModelOf = (owner, chosen, effort) =>
+    productionSummaryModel(owner, chosen, effort).pipe(
+      Effect.provideService(HostedEnvironment, environment),
+    );
+  const started = yield* Effect.result(
+    startAgent(routedSessions(userId), userId, {
+      ...place,
+      idempotencyKey: addressed.eventId,
+      choice: undefined,
+      prompt: undefined,
+      note: followUpPrompt(addressed, permalink),
+      from: { agentId: source.id },
+      summaryModel,
+      // Note that the replay hands on whatever the source heard, so words another account put there stay outside words.
+      carried: slackLine(addressed, permalink, outside),
+      serverWords: addressed.text,
+    }),
+  );
+  if (Result.isFailure(started)) {
+    yield* bot.reply(
+      addressed.channel,
+      thread,
+      refusalReply("continue the agent", started.failure),
+    );
+    return;
+  }
+  const agentId = started.success.agent.id;
+  yield* moveSlackAgentThread({
+    organizationId,
+    channelId: addressed.channel,
+    threadTs: thread,
+    fromAgentId: source.id,
+    agentId,
+    userId,
+  });
+  yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
+  const link = yield* agentLink(userId, source.organizationId, agentId);
+  yield* bot.reply(addressed.channel, thread, continuedReply(link));
+});
+
+/**
+ * A message in a thread an agent was started from, sent to that agent as the
+ * member's own, the agent brought back first where it stands archived; one
+ * whose session ended for good is continued in a new agent instead, and any
+ * other refusal is said in the thread.
+ */
 const sendToAgent = Effect.fnUntraced(function* (
   bot: SlackBotService,
   addressed: SlackAddressed,
+  organizationId: string,
   userId: string,
   agentId: string,
 ) {
-  const agent = yield* readVisibleAgent(userId, agentId);
-  if (Option.isNone(agent) || agent.value.archivedAt !== null) {
+  const agent = yield* agentTaking(userId, agentId);
+  if (Option.isNone(agent)) {
     yield* bot.reply(addressed.channel, threadOf(addressed), plainReply("That agent is gone."));
     return;
   }
+  const permalink = yield* bot.permalink(addressed.channel, addressed.ts);
   const sent = yield* Effect.result(
     steerAgent(
       yield* routedSessions(userId),
@@ -352,22 +516,31 @@ const sendToAgent = Effect.fnUntraced(function* (
       userId,
       agent.value,
       {
-        text: addressed.text,
+        text: followUpPrompt(addressed, permalink),
+        // Only the member's own words hand the agent servers, never the note after them.
+        serverWords: addressed.text,
         clientKey: addressed.eventId,
         sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+        metadata: slackLine(addressed, permalink),
       },
     ),
   );
+  if (Result.isFailure(sent) && sent.failure.error === HOSTED_API_ERROR.AGENT_RETIRED) {
+    yield* continueFromSlack(bot, addressed, organizationId, userId, agent.value, permalink);
+    return;
+  }
   if (Result.isFailure(sent)) {
     yield* bot.reply(
       addressed.channel,
       threadOf(addressed),
       refusalReply("send that to the agent", sent.failure),
     );
+    return;
   }
+  yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
 });
 
-/** An agent started as the member from the message, the thread kept as its own, and its link said in the thread; a refusal is said instead. */
+/** An agent started as the member from the message, the thread kept as its own, and the message marked heard; a refusal is said instead. */
 const startFromSlack = Effect.fnUntraced(function* (
   bot: SlackBotService,
   addressed: SlackAddressed,
@@ -388,6 +561,12 @@ const startFromSlack = Effect.fnUntraced(function* (
       idempotencyKey: addressed.eventId,
       choice: undefined,
       prompt: startPrompt(addressed, earlier, permalink),
+      // Note that a thread's earlier message by anyone but the writer, a bot's among them, is words they did not write.
+      carried: slackLine(
+        addressed,
+        permalink,
+        earlier.some((message) => message.bot || message.user !== addressed.slackUserId),
+      ),
       // Only the member's own words hand the agent servers, never the thread's other messages.
       serverWords: addressed.text,
     }),
@@ -404,8 +583,8 @@ const startFromSlack = Effect.fnUntraced(function* (
     agentId,
     userId,
   });
-  const link = yield* agentLink(userId, organizationId, agentId);
-  yield* bot.reply(addressed.channel, thread, startedReply(link, repository));
+  // Note that a reaction says the message was heard, as other bots do; the agent's link comes with its reply.
+  yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
 });
 
 /**
@@ -433,7 +612,7 @@ const actOnAddressed = Effect.fnUntraced(function* (addressed: SlackAddressed) {
         yield* bot.reply(addressed.channel, thread, plainReply(SLACK_REPLY.NO_MEMBER));
         return;
       }
-      yield* sendToAgent(bot, addressed, member.value, kept.value.agentId);
+      yield* sendToAgent(bot, addressed, organizationId, member.value, kept.value.agentId);
       return;
     }
   }
@@ -454,7 +633,7 @@ const actOnAddressed = Effect.fnUntraced(function* (addressed: SlackAddressed) {
 export function actOnSlackEvent(
   payload: UnparsedWireValue,
   retried: boolean,
-): Effect.Effect<void, never, StartServices | SlackBot> {
+): Effect.Effect<void, never, StartServices | HostedEnvironment | SlackBot> {
   const callback = readEither(EventCallbackSchema, { excess: EXCESS_KEYS.DROP })(payload);
   if (Result.isFailure(callback)) return heardLine(SLACK_HEARD.OTHER, SLACK_DROP.UNREAD);
   const kind = heardKind(callback.success.event);
@@ -485,20 +664,46 @@ function turnOutcome(turn: SettledAgentTurn, words: string | undefined): SlackMe
   }
   if (turn.status === TURN_STATUS.CANCELLED) return plainReply("The agent was stopped.");
   if (words === undefined) return plainReply("The agent finished.");
-  const cut =
-    words.length > RESULT_CHARS
-      ? `${words.slice(0, RESULT_CHARS - RESULT_CUT_MARK.length)}${RESULT_CUT_MARK}`
-      : words;
-  return {
-    text: cut,
-    blocks: [{ type: "section", text: { type: "mrkdwn", text: slackMrkdwn(cut) } }],
-  };
+  return { text: slackClipped(words, NOTIFICATION_CHARS), blocks: [slackMarkdownBlock(words)] };
 }
 
 /**
+ * The agent put away once its turn finished well, under the rule an
+ * automation's "Archive finished runs" archives by, read from how far its
+ * lines had run before its standing is read; a failure is logged by its kind
+ * alone.
+ */
+const archivedWhenFinished = (agent: Agent) =>
+  Effect.gen(function* () {
+    const seq = yield* agentConversationSeq(agent.userId, agent.id);
+    if (Option.isNone(seq)) return;
+    const now = yield* Clock.currentTimeMillis;
+    yield* archiveFinishedAgents(
+      [
+        {
+          userId: agent.userId,
+          agentId: agent.id,
+          conversationId: agent.conversationId,
+          createdAt: agent.createdAt,
+          archivedAt: agent.archivedAt,
+          conversationSeq: seq.value,
+        },
+      ],
+      now,
+    );
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("a Slack agent that finished was not archived", {
+        failure: causeKind(cause),
+      }),
+    ),
+  );
+
+/**
  * Posts the settled turn in each Slack thread its agent was started from,
- * once per turn, with the agent's link; nothing for an agent no thread
- * started. A failure is logged by its kind alone, never answered.
+ * once per turn, with the agent's link, then archives the agent where the
+ * turn finished well; nothing for an agent no thread started. A failure is
+ * logged by its kind alone, never answered.
  */
 export function postTurnToSlackThreads(
   turn: SettledAgentTurn,
@@ -534,6 +739,7 @@ export function postTurnToSlackThreads(
       (thread) => bot.reply(thread.channelId, thread.threadTs, content),
       { discard: true },
     );
+    if (turn.status === TURN_STATUS.SETTLED) yield* archivedWhenFinished(agent.value);
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("an agent's turn was not posted in Slack", { failure: causeKind(cause) }),

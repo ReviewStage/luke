@@ -60,7 +60,12 @@ import { CODER } from "../agents/coder-host/bounds.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { retireWarmRunner } from "../agents/coder-host/runner-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { RUNNER_TAG, SANDBOX_NAME, taggedRunner } from "../agents/machine/vercel-machine.js";
+import {
+  runnerTag,
+  SANDBOX_NAME,
+  SANDBOX_NAME_BEFORE_RENAME,
+  taggedRunner,
+} from "../agents/machine/vercel-machine.js";
 import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
 import {
   COMMAND_GONE,
@@ -135,11 +140,15 @@ interface NativeSandbox {
 }
 
 function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
-  if (!sandbox.name.startsWith(SANDBOX_NAME)) return undefined;
+  if (
+    !sandbox.name.startsWith(SANDBOX_NAME) &&
+    !sandbox.name.startsWith(SANDBOX_NAME_BEFORE_RENAME)
+  )
+    return undefined;
   // A page may name a sandbox that stopped since it was asked for, as Vercel recovers overdue sessions.
   if (sandbox.status !== SANDBOX_STATUS.RUNNING || sandbox.currentSessionId === undefined)
     return undefined;
-  const agentId = sandbox.tags?.[RUNNER_TAG.AGENT];
+  const agentId = runnerTag(sandbox.tags, "AGENT");
   const sessionId = sandbox.tags?.[SESSION_TAG];
   if (agentId === undefined || sessionId === undefined) return undefined;
   return { sessionId, running: sandbox.currentSessionId, agentId };

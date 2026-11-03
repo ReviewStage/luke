@@ -173,7 +173,7 @@ fi
 # run's own on this Mac: `vespin-host run` built from this checkout, its state
 # the demo profile, enrolled by the seed as Dean's with every task running
 # on it. So neither it nor the app, for which Dean's Bring your own host
-# stays off, touches the Mac's own host (~/.local/state/luke-host).
+# stays off, touches the Mac's own host (~/.local/state/vespin-host).
 # The profile is cleared but for the CLIs that host fetched, and the
 # folders of the agents it ran go with it, so with a new database each run
 # starts from the same data. The secrets are made for the run, and each

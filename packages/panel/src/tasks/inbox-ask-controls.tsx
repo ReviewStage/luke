@@ -20,6 +20,7 @@ import {
   CHOICE_SELECT,
   Checkbox,
   ChoiceList,
+  CodeCard,
   type ChoiceOption,
   COMPOSER_LOOK,
   ComposerFrame,
@@ -38,6 +39,7 @@ import {
 } from "@repo/ui";
 import { isComposingKey } from "@repo/ui/composing-key";
 import { CheckIcon, Undo2Icon } from "@repo/ui/icons";
+import { copyThroughShell } from "../copy-feedback.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
@@ -51,6 +53,7 @@ import {
   type InboxDraft,
   RECOMMENDED,
   shownTicks,
+  stepParts,
   withDoPress,
   withStep,
   withValue,
@@ -548,13 +551,59 @@ function AskPress({
   );
 }
 
+/** What a step's card is headed where its fence names no language. */
+const STEP_CODE_TITLE = "code";
+
 /**
- * A to-do's step as its box's words: its inline Markdown drawn, bold, code,
- * and links among it, a list or a fence in it run into the line (`inline`),
+ * A to-do's step as its box and the box's words: its inline Markdown drawn,
+ * bold, code, and links among it, a list in it run into the line (`inline`),
  * and a link pressed opening its page without ticking the box (`TextLink`).
+ * Each fence standing in the step draws under the words as the window's one
+ * code card, its lines kept and its Copy taking them whole, outside the
+ * box's press (`stepParts`); a step of a fence alone is named by its place.
  */
-function StepWords({ step }: { step: string }): React.JSX.Element {
-  return <MarkdownMessage words={step} inline openLink={useOpenLink()} />;
+function StepBox({
+  step,
+  at,
+  checked,
+  disabled,
+  readOnly,
+  onChange,
+}: {
+  step: string;
+  at: number;
+  checked: boolean;
+  disabled?: boolean | undefined;
+  readOnly?: boolean | undefined;
+  onChange: () => void;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  const { say, fences } = stepParts(step);
+  const detail =
+    fences.length === 0 ? undefined : (
+      <Stack gap={GAP.CONTROL}>
+        {fences.map((fence, place) => (
+          // A step's fences have no key of their own, and are never reordered.
+          <CodeCard
+            key={place}
+            title={fence.lang ?? STEP_CODE_TITLE}
+            code={fence.code}
+            copy={copyThroughShell}
+          />
+        ))}
+      </Stack>
+    );
+  return (
+    <Checkbox
+      checked={checked}
+      disabled={disabled}
+      readOnly={readOnly}
+      onChange={onChange}
+      detail={detail}
+    >
+      {say === "" ? `Step ${at + 1}` : <MarkdownMessage words={say} inline openLink={openLink} />}
+    </Checkbox>
+  );
 }
 
 /** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
@@ -641,13 +690,13 @@ function OpenControls({
               {steps.map((step, at) => (
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
-                  <Checkbox
+                  <StepBox
+                    step={step}
+                    at={at}
                     checked={ticked.has(at)}
                     disabled={disabled}
                     onChange={() => onDraft(withStep(ask, draft, at))}
-                  >
-                    <StepWords step={step} />
-                  </Checkbox>
+                  />
                 </li>
               ))}
             </Stack>
@@ -768,9 +817,13 @@ function LeftControls({
               {steps.map((step, at) => (
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
-                  <Checkbox checked={ticked.has(at)} readOnly onChange={heldStill}>
-                    <StepWords step={step} />
-                  </Checkbox>
+                  <StepBox
+                    step={step}
+                    at={at}
+                    checked={ticked.has(at)}
+                    readOnly
+                    onChange={heldStill}
+                  />
                 </li>
               ))}
             </Stack>

@@ -21,7 +21,7 @@ import {
 import { agentPublished } from "../agents/coder-host/published.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
-import type { EveForAccount } from "../automations/automation-runs.js";
+import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
@@ -89,14 +89,14 @@ import { setInstallationStatus } from "./github-installations.js";
  * Every delivery is also read as an automation's trigger
  * (`packages/service/src/automations/automation-github.ts`): a pull request or issue opened or
  * labelled, a check suite that failed, or a push queues a run, under the
- * delivery's own id, for each automation on a task of the repository that
+ * delivery's own id, for each automation listing the repository that
  * listens for it, and the minute sweep starts each one's agent. And a
  * review, a comment on a pull request, or a check that failed on an
  * agent's branch is told to the agents on that pull request as a message
  * from GitHub (`agent-wakes.ts`), and so is every check on an agent's head
- * finished, to the agent at work waiting on them, through eve as the deployment acting for
- * each agent's owner, under the deployment's own eve secret an automation's
- * run reaches eve by; a deployment without it tells nobody.
+ * finished, to the agent at work waiting on them, each through the sessions
+ * of the harness its conversation runs on, acting for the agent's starter
+ * (`routedSessions`).
  */
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
@@ -454,12 +454,12 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     // because a wake tells only the agents whose row keeps the finished commit as their head.
     const wakes = [agentWakeOf(event, payload, now), checksCompletedWakeOf(event, payload, now)];
     // Each agent's sessions as the deployment acting for its owner, as an automation's run reaches them.
-    const eveForAccount: EveForAccount = routedSessions;
+    const sessionsForAccount: SessionsForAccount = routedSessions;
     const counts = yield* Effect.forEach(wakes, (wake) =>
       wake === undefined
         ? Effect.succeed(0)
         : wakeAgents(
-            eveForAccount,
+            sessionsForAccount,
             wake,
             request.headers[DELIVERY_HEADER.DELIVERY] ?? "",
             agentLogin,

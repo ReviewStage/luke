@@ -1,5 +1,5 @@
 /**
- * workspace-key.ts -- the key a window names a workspace's numbered thing by: its workspace's prefix and its number, as `ACME-42`; and the words that name a thing among other words, a task by its key and a channel by its name, `#app`.
+ * workspace-key.ts -- the key a window names a workspace's numbered thing by: its workspace's prefix and its number, as `ACME-42`; and a task's key found among other words.
  *
  * The prefix is read off the workspace's name rather than kept, so it
  * follows a rename: the initials of a name of several words, or the head of

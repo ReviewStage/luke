@@ -9,6 +9,7 @@ import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import type { GitHubTokenAccess } from "../github/github-app.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
+import { LINK_SANDBOX_STATE_FOLDER, SANDBOX_STATE_FOLDER } from "./sandbox-state-folder.js";
 
 /**
  * repository-shell.ts -- an agent's checkout of the task's GitHub repository in its session's sandbox: the clone, its deepening, and the commit identity set in it.
@@ -69,17 +70,28 @@ const COMMAND_ENVIRONMENT = {
  * own, moved into place once whole. Note that a checkout
  * another call of the same session finished first is kept and this one's
  * dropped, so two first calls racing (the brain's and its
- * worker's) end on one checkout; and that a checkout of another repository,
- * where the task's changed, is removed first.
+ * worker's) end on one checkout; that a checkout of another repository,
+ * where the task's changed, is removed first; and that a repository with no
+ * commits yet has no branch to clone, so where the remote names no HEAD it
+ * is cloned empty, its HEAD left on the branch asked for with nothing on it
+ * yet, while a branch missing from a repository that has commits still fails
+ * the clone in git's own words.
  */
 const CHECKOUT_SCRIPT = [
   "set -e",
+  LINK_SANDBOX_STATE_FOLDER,
   `if [ "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" != "$${SANDBOX_VARIABLE.REPOSITORY}" ]; then rm -rf repository; fi`,
   'partial="repository.$$"',
   'rm -rf "$partial"',
-  `git clone --quiet \${${SANDBOX_VARIABLE.DEPTH}:+--depth "$${SANDBOX_VARIABLE.DEPTH}"} --single-branch --branch "$${SANDBOX_VARIABLE.BRANCH}" "$${SANDBOX_VARIABLE.URL}" "$partial"`,
+  `if ! git clone --quiet \${${SANDBOX_VARIABLE.DEPTH}:+--depth "$${SANDBOX_VARIABLE.DEPTH}"} --single-branch --branch "$${SANDBOX_VARIABLE.BRANCH}" "$${SANDBOX_VARIABLE.URL}" "$partial"; then`,
+  `  head="$(git ls-remote "$${SANDBOX_VARIABLE.URL}" HEAD)"`,
+  '  test -z "$head"',
+  '  rm -rf "$partial"',
+  `  git clone --quiet "$${SANDBOX_VARIABLE.URL}" "$partial"`,
+  `  git -C "$partial" symbolic-ref HEAD "refs/heads/$${SANDBOX_VARIABLE.BRANCH}"`,
+  "fi",
   'if [ -d repository ]; then rm -rf "$partial"; else mv "$partial" repository; fi',
-  "mkdir -p .luke",
+  `mkdir -p ${SANDBOX_STATE_FOLDER}`,
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
 
@@ -90,21 +102,26 @@ const CHECKOUT_SCRIPT = [
  * fetched, and the record rewritten under the name the caller keeps. Note
  * that a checkout that is missing, or whose record names another repository
  * than the refresh variable, exits before any fetch, so a sandbox opened
- * from the wrong snapshot never reads GitHub on it.
+ * from the wrong snapshot never reads GitHub on it; and that the empty
+ * checkout of a repository with no commits yet, whose remote still names no
+ * HEAD, is already as GitHub has it, so its fetch of no branch is no failure.
  */
 const REFRESH_SCRIPT = [
   "set -e",
+  LINK_SANDBOX_STATE_FOLDER,
   "test -d repository/.git",
   `test "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" = "$${SANDBOX_VARIABLE.REFRESH}"`,
   "cd repository",
-  `git fetch --quiet origin "$${SANDBOX_VARIABLE.BRANCH}"`,
-  `git checkout --quiet -B "$${SANDBOX_VARIABLE.BRANCH}" FETCH_HEAD`,
+  `if git fetch --quiet origin "$${SANDBOX_VARIABLE.BRANCH}"; then`,
+  `  git checkout --quiet -B "$${SANDBOX_VARIABLE.BRANCH}" FETCH_HEAD`,
+  "else",
+  "  if git rev-parse --quiet --verify HEAD >/dev/null; then exit 1; fi",
+  '  head="$(git ls-remote origin HEAD)"',
+  '  test -z "$head"',
+  "fi",
   "cd ..",
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
-
-/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. Note that it and the deepen's lock keep the old folder `CHECKOUT_RECORD` keeps, which a persistent sandbox made before still holds. */
-const DEEPENED_RECORD = ".luke/deepened";
 
 /** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */
 const DEEPEN_LOCK_WAIT_SECONDS = 120;
@@ -120,17 +137,15 @@ const DEEPEN_LOCK_WAIT_SECONDS = 120;
  */
 const DEEPEN_SCRIPT = [
   "set -e",
-  "mkdir -p .luke",
-  "lock=.luke/deepening",
+  LINK_SANDBOX_STATE_FOLDER,
+  `mkdir -p ${SANDBOX_STATE_FOLDER}`,
+  `lock=${SANDBOX_STATE_FOLDER}/deepening`,
   "waited=0",
   `until mkdir "$lock" 2>/dev/null; do waited=$((waited + 1)); [ "$waited" -le ${DEEPEN_LOCK_WAIT_SECONDS} ] || break; sleep 1; done`,
   `trap 'rmdir "$lock" 2>/dev/null || true' EXIT`,
   "cd repository",
   `if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow; fi`,
 ].join("\n");
-
-/** The deepen's record written, once its every step is done. */
-const DEEPENED_MARK_SCRIPT = `mkdir -p .luke && touch ${DEEPENED_RECORD}`;
 
 /**
  * The sandbox as the shell reaches it: one command run, and, where the
@@ -380,14 +395,6 @@ export const deepenRepository = /* @__PURE__ */ Effect.fn("web/deepenRepository"
     }),
   );
   if (fetched.exitCode !== 0) return yield* gitRefusal(fetched);
-});
-
-/** The deepen's record written beside the checkout, once its every step is done. */
-export const markDeepened = /* @__PURE__ */ Effect.fn("web/markDeepened")(function* (
-  sandbox: RepositorySandbox,
-): Effect.fn.Return<void, RepositoryRefusal> {
-  const marked = yield* deepenStep(sandbox, DEEPENED_MARK_SCRIPT, DEEPEN_STEP.MARK);
-  if (marked.exitCode !== 0) return yield* gitRefusal(marked);
 });
 
 /**

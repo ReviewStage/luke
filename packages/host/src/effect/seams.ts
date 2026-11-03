@@ -247,7 +247,7 @@ export interface LocalAgentPlatformSeam {
   readonly formerlyDirect: boolean;
   /**
    * Whether the agents' folders under the device's home are this install's
-   * alone: a Linux host's are, its `luke-host` user's own, and a Mac's
+   * alone: a Linux host's are, and a Mac's
    * never, since This Mac and a standalone `vespin-host` share the member's.
    * On such a device the follower takes every agent with a folder there as
    * one it made as its gate opens, beside those its own state names.
@@ -269,7 +269,7 @@ export class LocalAgentPlatform extends Context.Service<
  * asks for it.
  */
 export interface ThisMacHostSeam {
-  /** The install's state folder, `~/.local/state/luke-host`, holding the record its host runs on. */
+  /** The install's state folder, `~/.local/state/vespin-host`, holding the record its host runs on. */
   readonly stateRoot: string;
   /** Whether this Mac can run the host: Apple silicon, on the oldest macOS the install script takes or later. */
   readonly runsHost: boolean;

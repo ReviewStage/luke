@@ -90,7 +90,7 @@ function vercel(
         const tmuxArgs = args.slice(scriptAt + 2);
         if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
         if (tmuxArgs[0] === "new-session") return commandStream(0);
-        const named = tmuxArgs.some((arg) => arg.startsWith(`=luke-${SHELL}`));
+        const named = tmuxArgs.some((arg) => arg.startsWith(`=terminal-${SHELL}`));
         // The shell check exits its own code for a session tmux does not hold, or what a tmux that would not start exits.
         if (args[scriptAt]?.includes("has-session"))
           return commandStream(named ? 0 : shellCheckExit);
@@ -132,7 +132,7 @@ function vercel(
 const field = (value: string) => Buffer.from(`${value}\n`).toString("base64");
 
 const listedShell = (id: string, title: string, command: string) =>
-  [`luke-${id}`, "100", field(title), field(command), field("/workspace/repository")].join(" ");
+  [`terminal-${id}`, "100", field(title), field(command), field("/workspace/repository")].join(" ");
 
 afterEach(() => {
   vi.unstubAllEnvs();

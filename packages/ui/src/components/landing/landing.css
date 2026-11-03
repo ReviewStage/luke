@@ -17,9 +17,13 @@
   }
 
   /* The page's two insets: where the rails stand, and where words start
-     inside them. */
+     inside them. The rails stand at most 1280px apart, so a window wider
+     than that centres the frame, the room outside it its margin, and the
+     bar's links, the hero, every section, and the foot keep to it. */
   .ui-landing-page > * {
-    --ui-landing-inset: 48px;
+    /* off-scale: 1376px, the rails' 1280px and an inset either side */
+    --ui-landing-margin: max(0px, (100cqw - 1376px) / 2);
+    --ui-landing-inset: calc(var(--ui-landing-margin) + 48px);
     --ui-landing-gutter: calc(var(--ui-landing-inset) + 32px);
   }
 
@@ -161,7 +165,7 @@
   .ui-landing-hero-words {
     position: relative;
     z-index: 1;
-    max-width: 600px;
+    max-width: calc(600px + 2 * var(--ui-landing-margin));
     padding: 0 var(--ui-landing-inset) 0 var(--ui-landing-gutter);
   }
 
@@ -193,7 +197,7 @@
   .ui-landing-hero-art {
     position: absolute;
     top: 40px;
-    right: 72px;
+    right: calc(var(--ui-landing-inset) + 24px);
     width: 580px;
     height: 580px;
   }
@@ -310,6 +314,7 @@
      the word as densely as a desktop, only smaller. */
   .ui-landing-foot-art {
     position: relative;
+    margin-inline: var(--ui-landing-margin);
     aspect-ratio: 24 / 5;
     overflow: hidden;
   }
@@ -966,7 +971,7 @@
     flex: 1;
   }
 
-  .ui-landing-models {
+  .ui-landing-keys {
     max-width: 520px;
     margin: 0 auto;
     background: transparent;

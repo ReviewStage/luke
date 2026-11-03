@@ -12,8 +12,8 @@ for variable_name in \
     fi
 done
 
-keychain_path="$RUNNER_TEMP/luke-release-${GITHUB_RUN_ID:-local}.keychain-db"
-certificate_path="$RUNNER_TEMP/luke-release-${GITHUB_RUN_ID:-local}.p12"
+keychain_path="$RUNNER_TEMP/vespin-release-${GITHUB_RUN_ID:-local}.keychain-db"
+certificate_path="$RUNNER_TEMP/vespin-release-${GITHUB_RUN_ID:-local}.p12"
 keychain_password=$(openssl rand -hex 24)
 
 printf 'APP_RELEASE_KEYCHAIN=%s\n' "$keychain_path" >> "$GITHUB_ENV"

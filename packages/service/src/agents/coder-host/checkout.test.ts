@@ -322,11 +322,10 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         assert.equal(sandbox.shallow, false);
         assert.equal(sandbox.deepened, 1);
         assert.deepEqual(sandbox.policiesDuringFetch, [APP_CREDENTIAL]);
-        assert.equal(sandbox.deepenMarked, true);
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
-        // The identity is the checkout's own, set once its history is whole, under the App's bot, and the record after it.
+        // The identity is the checkout's own, set once its history is whole, under the App's bot.
         assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
         const stepAt = (step: string) =>
           sandbox.runs.findIndex(
@@ -336,7 +335,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           (run) => run.env?.[CHECKOUT_IDENTITY_VARIABLE.NAME] !== undefined,
         );
         assert.ok(stepAt(DEEPEN_STEP.FETCH) >= 0 && identity > stepAt(DEEPEN_STEP.FETCH));
-        assert.ok(stepAt(DEEPEN_STEP.MARK) > identity);
         assert.equal(yield* authorOf(target.userId, agent), AGENT_AUTHOR.APP_NO_PUSH);
         // The write mint asked for exactly what a push and a pull request need.
         assert.deepEqual(repositoryMints(github.sent).at(-1), {

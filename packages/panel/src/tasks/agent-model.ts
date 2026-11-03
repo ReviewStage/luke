@@ -100,6 +100,7 @@ import {
   isWireString,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  type SlackLineMetadata,
   type ThreadLineMetadata,
   type UnparsedWireValue,
   USER_MESSAGE_METADATA,
@@ -337,6 +338,24 @@ export function lineSender(
         ? { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: sentBy.name }
         : personActor({ userId: sentBy.userId, name: sentBy.name }, members, readerId, former);
   }
+}
+
+/**
+ * Who sent a transcript line, as `lineSender` names them, a GitHub login
+ * wearing the avatar its line carries where GitHub named one (`by_avatar`),
+ * since an App's bot's picture lives at an address its login does not name.
+ */
+export function messageSender(
+  message: AgentTranscriptMessage,
+  readerId: string | undefined,
+  members: readonly WorkspaceMember[] | undefined,
+  former?: readonly FormerMember[] | undefined,
+): Actor | undefined {
+  const sender = lineSender(message.sentBy, readerId, members, former);
+  const avatarUrl = githubLineOf(message)?.by_avatar;
+  return sender?.kind === ACTOR_KIND.GITHUB && avatarUrl !== undefined
+    ? { ...sender, avatarUrl }
+    : sender;
 }
 
 /** The parts of the line a transcript ends on: its words, and whether it tells of a failure, which is drawn as one. */
@@ -1710,6 +1729,12 @@ export function commentLineWords(line: CommentLineMetadata): string {
     { kind: MESSAGE_BLOCK.QUOTE, words: line.quote },
     { kind: MESSAGE_BLOCK.WORDS, lines: words.split("\n") },
   ]);
+}
+
+/** What a member's message to the Slack bot carries for a window to draw it by, their own words and the message's link; nothing for any other line. */
+export function slackLineOf(message: AgentTranscriptMessage): SlackLineMetadata | undefined {
+  const read = userMetadataOf(message);
+  return read?.channel === MESSAGE_CHANNEL.SLACK ? read : undefined;
 }
 
 /** What GitHub said on the agent's pull request that a line steered into the agent carries; nothing for any other line. */

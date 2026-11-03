@@ -153,8 +153,8 @@ const UNUSABLE_SIGN_IN: ReadonlySet<string> = new Set([
 
 /**
  * The account's stored credentials of every kind, read once: what each
- * decision below is made from, so a request that makes several, such as a
- * Start's menu and its payer, reads them in one statement.
+ * decision below is made from, so a request that makes several, such as the
+ * models a start is offered and its payer, reads them in one statement.
  */
 export type AccountKeyRows = readonly ProviderKeyRow[];
 

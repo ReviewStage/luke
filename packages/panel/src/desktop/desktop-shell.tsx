@@ -577,7 +577,7 @@ function usePlaceCommands(
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
- * from or channel it is narrowed to; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
+ * from; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(

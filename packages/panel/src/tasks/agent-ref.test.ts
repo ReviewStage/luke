@@ -8,7 +8,7 @@ import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 /**
  * agent-ref.test.ts -- an Inbox thread's agent is named one way wherever
  * its messages are drawn: as the window's read of its task's agents holds
- * it, else as its channel thread was read with it, by its title on its
+ * it, else as its thread was read with it, by its title on its
  * harness's mark, never as an unnamed coding agent.
  */
 

@@ -378,11 +378,11 @@ test("an agent with no plan is handed a server's note, and nothing for a mention
   assert.ok(!part.includes("The plan's section"), part);
 });
 
-const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
 
 const ISSUE = mentionMarkdown(
   { kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL },
-  "LUKE-142/fix-the-thing",
+  "ACME-142/fix-the-thing",
   PLACE,
 );
 
@@ -390,7 +390,7 @@ test("a page of an integration's the words mention is handed as a note naming it
   const part = mentionedContext(`Fix ${ISSUE}, then ${ISSUE} again.`, TASK) ?? "";
 
   assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
-  assert.match(part, /pointed you at https:\/\/linear\.app\/acme\/issue\/LUKE-142\/fix-the-thing/u);
+  assert.match(part, /pointed you at https:\/\/linear\.app\/acme\/issue\/ACME-142\/fix-the-thing/u);
   assert.match(part, /the Linear MCP server \(connection `linear`\)/u);
   assert.deepEqual(mentionedServers(`Fix ${ISSUE}.`, TASK.repository), [
     INTEGRATION_PROVIDER.LINEAR,

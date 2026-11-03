@@ -763,7 +763,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     repositories: {
       installed: true,
       repositories: workspaceId === WORKSPACE.ACME ? ACME_REPOSITORIES : [],
-      installationUrl: "https://github.com/apps/luke/installations/new",
+      installationUrl: "https://github.com/apps/vespin-agent/installations/new",
     },
   }),
   [ACT_KIND.INSTALLED_SKILLS_LIST]: ({ workspaceId }) => ({ skills: skills(workspaceId) }),

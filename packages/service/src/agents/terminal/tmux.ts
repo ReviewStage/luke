@@ -34,10 +34,10 @@ import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const TMUX = {
-  /** What a Terminal tab's session names start with; the rest is the shell's id. Note that it and `SOCKET` keep their old names, because a running sandbox's shells are found again by them. */
-  SESSION_PREFIX: "luke-",
+  /** What a Terminal tab's session names start with; the rest is the shell's id. */
+  SESSION_PREFIX: "terminal-",
   /** The session option a developer-given name rides in. */
-  TITLE_OPTION: "@luke_title",
+  TITLE_OPTION: "@terminal_title",
   /** Where a new shell stands: the agent's checkout. */
   START_DIRECTORY: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /**
@@ -47,7 +47,7 @@ export const TMUX = {
    * would start each new shell with them; this one is only ever started
    * without, and the old one ends as its sandbox next stops.
    */
-  SOCKET: "luke-unprivileged",
+  SOCKET: "terminal",
 } as const;
 
 /**

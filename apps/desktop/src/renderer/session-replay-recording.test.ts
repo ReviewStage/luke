@@ -70,8 +70,8 @@ const WORDS = [
   "budget-2027.pdf",
   "workspace-71a2",
   "workspace-8c4d",
-  "channel-3f0e",
-  "channel-5a6b",
+  "task-3f0e",
+  "task-5a6b",
   // A diagram's class and a thread's id, in the sheets built from them.
   "launch-review",
   "thread-04aa",
@@ -122,7 +122,7 @@ function drawPage(): void {
     </main>`;
 }
 
-/** What `@repo/ui` draws over values a recording must not carry: a list picking a workspace, one picking channels, and a file picker. */
+/** What `@repo/ui` draws over values a recording must not carry: a list picking a workspace, one picking tasks, and a file picker. */
 function Controls(): React.JSX.Element {
   const picker = useFilePicker({ onFiles: () => undefined });
   return createElement(
@@ -139,11 +139,11 @@ function Controls(): React.JSX.Element {
       onChange: () => undefined,
     }),
     createElement(ChoiceList<string>, {
-      legend: "Channels",
+      legend: "Tasks",
       select: CHOICE_SELECT.MANY,
       options: [
-        { value: "channel-3f0e", label: "Folder" },
-        { value: "channel-5a6b", label: "roadmap" },
+        { value: "task-3f0e", label: "Folder" },
+        { value: "task-5a6b", label: "roadmap" },
       ],
       value: [],
       onChange: () => undefined,

@@ -267,10 +267,10 @@ async function mount(
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
     /** What the composer asks for while its box is empty. */
     placeholder: () => document.querySelector(".agent-composer-placeholder")?.textContent,
-    /** The round Start button, by its place at the foot's end, since an empty box names it for what ⌘Return does there. */
+    /** The round Start agent button, by its place at the foot's end, since an empty box names it for what ⌘Return does there. */
     startButton: () =>
       document.querySelector<HTMLButtonElement>('.ui-composer-foot button[type="submit"]') ??
-      assert.fail("the round Start button stands"),
+      assert.fail("the round Start agent button stands"),
     /** The card's buttons in order, as a reader meets them. */
     controls: () =>
       [...(dialog()?.querySelectorAll("button") ?? [])]

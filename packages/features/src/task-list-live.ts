@@ -16,6 +16,7 @@ import {
   agentArchiverSchema,
   agentOwnerOf,
   agentPullRequestSchema,
+  agentSourceSchema,
   agentSummarySchema,
   CONTEXT_WINDOW,
   NATIVE_AGENT_RUNTIMES,
@@ -155,6 +156,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   published: EffectSchema.NullOr(agentPullRequestSchema),
   /** The agent this one continues or forks, as its summary's `from` says it. */
   startedFrom: EffectSchema.NullOr(agentSummarySchema.fields.from.schema),
+  /** What outside the app the agent was started from, as its summary's `source` says it; absent from a statement before it was carried. */
+  source: EffectSchema.optionalKey(EffectSchema.NullOr(agentSourceSchema)),
   pinnedAt: EffectSchema.NullOr(countedNumber),
   pinPosition: EffectSchema.NullOr(EffectSchema.String),
   createdAt: countedNumber,
@@ -493,6 +496,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
     ...(startedByPilot === undefined ? undefined : { startedByPilot }),
     ...(row.automationId === null ? undefined : { automationId: row.automationId }),
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
+    ...(row.source == null ? undefined : { source: row.source }),
     ...(owner === undefined ? undefined : { owner }),
     ...(row.startedFrom === null ? undefined : { from: row.startedFrom }),
     ...(continuedBy === undefined ? undefined : { continuedBy }),

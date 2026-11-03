@@ -10,9 +10,11 @@ import {
   type AgentMachineKind,
   type AgentPayer,
   type AgentPullRequest,
+  type AgentSource,
   type AgentSubagentTitle,
   agentPayerSchema,
   agentPullRequestSchema,
+  agentSourceSchema,
   CONTEXT_WINDOW,
   type ContextWindow,
   contextWindowSchema,
@@ -20,6 +22,7 @@ import {
 } from "@repo/features/agent-wire";
 import { automationFiringSchema } from "@repo/features/automation-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
+import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import {
   integrationConnectionNameSchema,
   integrationConnectionOf,
@@ -39,6 +42,7 @@ import {
   isNull,
   lte,
   ne,
+  notExists,
   notInArray,
   or,
   type SQL,
@@ -60,6 +64,7 @@ import {
 } from "../schemas/agent.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
+import { inboxItem } from "../schemas/inbox.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import {
@@ -177,6 +182,8 @@ export interface Agent {
   readonly automationRunId: string | null;
   /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
   readonly startedFrom: StoredStartedFrom | null;
+  /** What outside the app the agent was started from, a Slack message; null for one started in the app, and absent where a caller built the agent without it. */
+  readonly source?: AgentSource | null;
   /** The account's coding agent whose `start_agent` started this one; null for any other starter, and once that agent's row is gone. */
   readonly startedByAgentId: string | null;
   readonly conversationId: string;
@@ -302,6 +309,8 @@ export type NewAgent = AgentPlace & {
   readonly automationRunId?: string | undefined;
   /** The agent of the same plan this one is started from, with its replay's counts; none for one started afresh. */
   readonly startedFrom?: StoredStartedFrom | undefined;
+  /** What outside the app starts the agent, a Slack message; none for a Start in the app. */
+  readonly source?: AgentSource | undefined;
   /** The coding agent whose `start_agent` starts this one; none for a Start by a member, the brain, or an automation. */
   readonly startedByAgentId?: string | undefined;
   /** The pilot this one continues, whose unarchived agents of the account now report to this one; none for any other Start. */
@@ -358,6 +367,7 @@ const AGENT_COLUMNS = {
   automationOrigin: agentTable.automationOrigin,
   automationRunId: agentTable.automationRunId,
   startedFrom: agentTable.startedFrom,
+  source: agentTable.source,
   startedByAgentId: agentTable.startedByAgentId,
   conversationId: agentTable.conversationId,
   model: agentTable.model,
@@ -397,6 +407,7 @@ const AGENT_LINE_COLUMNS = {
   automationName: agentAutomationNameSql(agentTable),
   automationRunId: agentTable.automationRunId,
   startedFrom: agentTable.startedFrom,
+  source: agentTable.source,
   startedByAgentId: agentTable.startedByAgentId,
   conversationId: agentTable.conversationId,
   model: agentTable.model,
@@ -495,6 +506,7 @@ const AgentRowSchema = Schema.Struct({
   automationOrigin: AutomationOriginColumnSchema,
   automationRunId: Schema.NullOr(Schema.String),
   startedFrom: StartedFromColumnSchema,
+  source: Schema.NullOr(agentSourceSchema),
   startedByAgentId: Schema.NullOr(Schema.String),
   conversationId: Schema.String,
   model: Schema.String,
@@ -758,6 +770,7 @@ const insertAgent = SqlSchema.findOne({
     automationOrigin: AutomationOriginColumnSchema,
     automationRunId: Schema.NullOr(Schema.String),
     startedFrom: StartedFromColumnSchema,
+    source: Schema.NullOr(agentSourceSchema),
     startedByAgentId: Schema.NullOr(Schema.String),
     title: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
@@ -790,6 +803,7 @@ const insertAgent = SqlSchema.findOne({
           automationOrigin: write.automationOrigin,
           automationRunId: write.automationRunId,
           startedFrom: write.startedFrom,
+          source: write.source,
           startedByAgentId: write.startedByAgentId,
           title: write.title,
           conversationId: write.conversationId,
@@ -1038,6 +1052,18 @@ export const noOpenPullRequest: SQL = notInArray(
   [PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.DRAFT],
 );
 
+/**
+ * An agent holding no inbox item open: what an archive the developer did not
+ * ask for waits on too, since an archive would settle the question or the
+ * notice the agent is waiting on.
+ */
+export const noOpenInboxItem: SQL = notExists(
+  queryBuilder
+    .select({ one: inboxItem.id })
+    .from(inboxItem)
+    .where(and(eq(inboxItem.agentId, agentTable.id), eq(inboxItem.status, INBOX_STATUS.OPEN))),
+);
+
 const updateUnmovedArchived = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1056,8 +1082,9 @@ const updateUnmovedArchived = SqlSchema.findAll({
           and(
             reachableAgent(userId, agentId),
             isNull(agentTable.archivedAt),
-            // Note that a pull request reopened since the read moves no line, so it is read again here.
+            // Note that a pull request reopened or an inbox item posted since the read moves no line, so both are read again here.
             noOpenPullRequest,
+            noOpenInboxItem,
             exists(
               queryBuilder
                 .select({ one: conversations.id })
@@ -2134,6 +2161,7 @@ export function createAgent(
           automationOrigin: started.automationOrigin ?? null,
           automationRunId: started.automationRunId ?? null,
           startedFrom: started.startedFrom ?? null,
+          source: started.source ?? null,
           startedByAgentId: yield* ownStarterOf(userId, started.startedByAgentId),
           title: started.title ?? null,
           idempotencyKey: started.idempotencyKey,
@@ -3107,8 +3135,8 @@ export function settledTurnAgent(
  * Archives the agent as `archiveAgent` does, but only where it stands
  * unarchived, its conversation's lines have run no further than the
  * `seenSeq` its reader saw, so an agent a message woke since stands, and it
- * has no pull request open (`noOpenPullRequest`); answers whether it was
- * archived.
+ * has no pull request open (`noOpenPullRequest`) and no inbox item open
+ * (`noOpenInboxItem`); answers whether it was archived.
  */
 export function archiveUnmovedAgent(
   userId: string,
@@ -3133,6 +3161,30 @@ export function archiveUnmovedAgent(
         return rows.length > 0;
       }),
     ),
+  );
+}
+
+const findConversationSeq = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ seq: conversations.nextMessageSeq })
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .where(reachableAgent(userId, agentId)),
+    ),
+});
+
+/** How far the agent's conversation's lines have run, as `archiveUnmovedAgent` is handed it; nothing for an agent the account cannot read. */
+export function agentConversationSeq(
+  userId: string,
+  agentId: string,
+): AgentStoreEffect<Option.Option<number>> {
+  return Effect.map(
+    findConversationSeq({ userId, agentId }),
+    Option.map((row) => row.seq),
   );
 }
 

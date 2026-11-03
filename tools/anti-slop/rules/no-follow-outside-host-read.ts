@@ -20,7 +20,7 @@ import {
  * each, and one that opens none fails, so the list only shrinks.
  */
 
-/** The follow kind a member expression names, where it names one: `ACT_KIND.CHANNELS_FOLLOW`. */
+/** The follow kind a member expression names, where it names one: `ACT_KIND.AUTOMATIONS_FOLLOW`. */
 function followKindNamed(node: ESTree.MemberExpression): string | undefined {
   const { object, property } = node;
   if (node.computed || object.type !== "Identifier" || property.type !== "Identifier") {

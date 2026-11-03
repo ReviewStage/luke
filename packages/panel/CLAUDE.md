@@ -66,7 +66,7 @@ it (the window under it is the shell's: `apps/desktop/src/renderer/AGENTS.md`):
 
 An act that cannot be undone asks first, over `@repo/ui/confirm-state`, its act in
 red (`CONFIRM_LOSS.IRREVERSIBLE`). One that can be undone but reaches someone else (a
-member removed, an invitation canceled, a shared channel archived, a teammate's working
+member removed, an invitation canceled, a teammate's working
 agent archived) still asks, its act in the accent (`CONFIRM_LOSS.AFFECTS_OTHERS`). One that
 can be undone and reaches only the reader asks nothing: it happens at once and offers
 Undo through `undoToast` (`toast.tsx`), whose Undo is the act's inverse. Three acts

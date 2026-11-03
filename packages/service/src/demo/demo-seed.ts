@@ -6,11 +6,19 @@ import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
+  type PlanCommentWriterRef,
   startPlanCommentThread,
 } from "@repo/database/models/plan-comments";
+import { writePage } from "@repo/database/models/plan-pages";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import { saveProviderKey, setProviderKeyForAgents } from "@repo/database/models/provider-key-store";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
+import {
+  addTaskBlock,
+  type TaskBlockAcrossWorkspaces,
+  type TaskBlockCycle,
+  type TaskBlockSelf,
+} from "@repo/database/models/task-block-store";
 import {
   createTaskOnce,
   savePlanText,
@@ -24,21 +32,24 @@ import { type WorkspaceSeams, workspaceSeams } from "@repo/database/models/works
 import { createWorkspace, ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import {
   type ConversationTarget,
+  type LineSender,
   type StoreWriter,
   storeWriter,
 } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_MACHINE, MESSAGE_SENDER } from "@repo/features/agent-wire";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { INBOX_REPLY, openAskOf } from "@repo/features/inbox-wire";
+import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
 } from "@repo/features/plan-comment-wire";
 import { type PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { TASK_STATUS } from "@repo/features/task-wire";
-import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
+import { PLAN_ACTOR, TASK_STATUS, type TaskOrigin } from "@repo/features/task-wire";
+import { ACTION_RESULT_STATUS, MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { betterAuth } from "better-auth";
 import { organization as organizationPlugin } from "better-auth/plugins";
@@ -47,6 +58,7 @@ import {
   agentRuntimeChoice,
   localAgentRuntimeChoice,
 } from "../agents/coder-host/agent-runtime-choice.js";
+import { agentLineSender } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import { ORGANIZATION_OPTIONS, USER_FIELDS } from "../auth/auth-policy.js";
@@ -63,6 +75,7 @@ import {
   TURN_TRIGGER,
 } from "../core.js";
 import {
+  acknowledgeInboxItem,
   answerInboxAsk,
   INBOX_ASK_ANSWER,
   type InboxAgent,
@@ -74,6 +87,7 @@ import {
 import { providerKeyHint } from "../providers/provider-key-check.js";
 import {
   DEMO_AGENTS,
+  DEMO_BLOCKS,
   DEMO_DEAN,
   DEMO_HOST,
   DEMO_ID_KIND,
@@ -85,11 +99,14 @@ import {
   DEMO_THREADS,
   DEMO_WORKSPACE_NAME,
   type DemoAgent,
-  type DemoComment,
+  type DemoCall,
+  type DemoCommentWords,
   type DemoIdKind,
+  type DemoPage,
   type DemoPerson,
   type DemoTask,
   type DemoThread,
+  type DemoToolCall,
   type DemoTurn,
   demoId,
 } from "./demo-world.js";
@@ -98,12 +115,14 @@ import {
  * demo-seed.ts -- the demo's seed: the acme world (`demo-world.ts`) written into a freshly migrated database through the store's own models, with Dean's model credential and his host on this Mac where the run hands them in.
  *
  * `run.sh --demo` signs in as `DEMO_DEAN` and opens on what this writes:
- * Dean's own workspace and acme beside it, with Dana, Jordan, Priya, and
- * Theo as members; #product, #engineering, and #design; seven tasks across
- * every status, each with a plan and comments on it; three finished coding
- * agents of Dean's with their transcripts, on his host where the run starts
- * one; and their threads, with an Inbox of asks waiting on Dean and one he
- * answered.
+ * Dean's own workspace and acme beside it, with seven teammates as
+ * members; twenty-one tasks across every status and priority, one broken
+ * into sub-tasks and some waiting on others, each with a plan and comments
+ * on it, open, answered, and resolved; eight finished coding agents of
+ * Dean's with their transcripts, a pilot and the agents it started among
+ * them, on his host where the run starts one, and the pages they showed;
+ * and their threads and his teammates', with an Inbox of ten waiting on
+ * Dean beside those he and they settled.
  *
  * How to run it: `DATABASE_URL=<a Postgres on loopback> pnpm --filter
  * @repo/web demo:seed` (`apps/web/server/demo-seed.ts`), once the database
@@ -117,20 +136,20 @@ import {
  * Mac for Dean (`APP_DEMO_HOST_STATE`), it is enrolled as his own under
  * `DEMO_HOST`'s id, and every task runs its agents there, with no Runs on
  * to pick, the seeded ones among them, so a follow-up to one runs on the
- * Mac. Note that Dean started all three agents, those on his teammates'
- * tasks too, because a host runs its owner's agents alone, and an agent on
- * a host takes words from its starter alone (`agent-reach.ts`'s
- * `controlsAgent`).
+ * Mac. Note that Dean started every agent, those on his teammates' tasks
+ * and those his pilot started too, because a host runs its owner's agents
+ * alone, and an agent on a host takes words from its starter alone
+ * (`agent-reach.ts`'s `controlsAgent`).
  *
  * Every write goes through the model a route writes through, so the seed
  * keeps up with the schema. Users are Better Auth's own rows, made by its
  * internal adapter, and workspaces and members its organization plugin's,
  * on a Better Auth of the seed's own (`demoAuth`) whose id generator counts
  * up from fixed ids, so two seeds of two fresh databases write the same
- * accounts, workspaces, members, and tasks. Note that the agents,
- * their messages, the threads, and the comments take the ids their models
- * mint, because no model takes one from its caller, and a demo run starts
- * from an empty profile that holds none of them.
+ * accounts, workspaces, members, and tasks. Note that the agents, their
+ * messages, the pages, the threads, and the comments take the ids their
+ * models mint, because no model takes one from its caller, and a demo run
+ * starts from an empty profile that holds none of them.
  *
  * Each write runs under a clock standing at its own instant, counted back
  * from the seed's start, since every model stamps its rows from the clock:
@@ -190,7 +209,10 @@ type DemoSeedEffect<A> = Effect.Effect<
   | Cause.UnknownError
   | StoreFailure
   | TaskAssigneeNotMember
-  | TaskTreeRepositoryLocked,
+  | TaskTreeRepositoryLocked
+  | TaskBlockSelf
+  | TaskBlockAcrossWorkspaces
+  | TaskBlockCycle,
   DatabaseServices
 >;
 
@@ -303,6 +325,25 @@ function clientKeys(): () => string {
   };
 }
 
+/** Every call an agent's steps made, in the order its transcript makes them. */
+function callsOf(agent: DemoAgent): readonly DemoCall[] {
+  return agent.turns.flatMap((turn) =>
+    turn.steps.flatMap((step) => (step.call === undefined ? [] : [step.call])),
+  );
+}
+
+/** The sub-tasks the agent made, as its steps make them. */
+function tasksMadeBy(agent: DemoAgent): readonly DemoTask[] {
+  return callsOf(agent).flatMap((call) => ("creates" in call ? [call.creates] : []));
+}
+
+/** The agent whose steps started this one, where another did; none for one Dean started himself. */
+function starterOf(agent: DemoAgent): DemoAgent | undefined {
+  return DEMO_AGENTS.find((other) =>
+    callsOf(other).some((call) => "starts" in call && call.starts === agent),
+  );
+}
+
 /* ----- The people and the workspaces ----- */
 
 /**
@@ -345,11 +386,20 @@ function threadOf(step: string, outcome: PlanCommentOutcome) {
   return Effect.succeed(outcome.answer.thread);
 }
 
-/** One comment thread on the task's plan, on the words it quotes, and the replies under it a minute apart. */
-function seedComment(task: DemoTask, comment: DemoComment, clock: SeedClock, key: () => string) {
+/**
+ * One comment thread on the task's plan, started by its writer on the words
+ * it quotes, the replies under it a minute apart, and resolved where it
+ * stands resolved.
+ */
+function seedComment(
+  task: DemoTask,
+  writer: PlanCommentWriterRef,
+  comment: DemoCommentWords,
+  clock: SeedClock,
+  key: () => string,
+) {
   return Effect.gen(function* () {
     const from = task.plan.indexOf(comment.quote);
-    const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: comment.by.id } as const;
     const started = yield* clock.ago(
       comment.ago,
       startPlanCommentThread(writer, task.id, {
@@ -362,34 +412,41 @@ function seedComment(task: DemoTask, comment: DemoComment, clock: SeedClock, key
       }),
     );
     const thread = yield* threadOf(`a comment on ${task.name}`, started);
+    const member = (person: DemoPerson) =>
+      ({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId: person.id }) as const;
     for (const [index, reply] of comment.replies.entries()) {
       const replied = yield* clock.ago(
         comment.ago - (index + 1) * DEMO_MINUTE,
-        actOnPlanCommentThread(
-          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: reply.by.id },
-          task.id,
-          thread.id,
-          {
-            action: PLAN_COMMENT_ACTION.REPLY,
-            clientKey: key(),
-            words: reply.words,
-          },
-        ),
+        actOnPlanCommentThread(member(reply.by), task.id, thread.id, {
+          action: PLAN_COMMENT_ACTION.REPLY,
+          clientKey: key(),
+          words: reply.words,
+        }),
       );
       yield* threadOf(`a reply on ${task.name}`, replied);
     }
+    if (comment.resolved === undefined) return;
+    const resolved = yield* clock.ago(
+      comment.resolved.ago,
+      actOnPlanCommentThread(member(comment.resolved.by), task.id, thread.id, {
+        action: PLAN_COMMENT_ACTION.RESOLVE,
+      }),
+    );
+    yield* threadOf(`a comment resolved on ${task.name}`, resolved);
   });
 }
 
 /**
- * The task under its fixed id, made by its maker and assigned, running its
- * agents where `runsOn` names, its plan saved, and the comments on it; one
- * that is done or canceled stands to do until it is moved there.
+ * The task under its fixed id, made by its maker, or by the agent named,
+ * under its parent and assigned, running its agents where `runsOn` names,
+ * its plan saved, and the comments on it; one that is done or canceled
+ * stands to do until it is moved there.
  */
 function seedTask(
   workspaceId: string,
   task: DemoTask,
   runsOn: TaskRunsOnWrite,
+  origin: TaskOrigin | undefined,
   clock: SeedClock,
   key: () => string,
 ) {
@@ -405,6 +462,8 @@ function seedTask(
         assigneeId: task.assignee.id,
         runsOn,
         text: "",
+        ...(task.parent === undefined ? undefined : { parentTaskId: task.parent.id }),
+        ...(origin === undefined ? undefined : { origin }),
       }),
     );
     yield* written(task.name, made);
@@ -413,7 +472,10 @@ function seedTask(
       savePlanText(task.creator.id, task.id, task.plan),
     );
     yield* written(`${task.name}'s plan`, saved);
-    for (const comment of task.comments) yield* seedComment(task, comment, clock, key);
+    for (const comment of task.comments) {
+      const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: comment.by.id } as const;
+      yield* seedComment(task, writer, comment, clock, key);
+    }
     if (task.settledAgo === undefined) return task.id;
     const settled = yield* clock.ago(
       task.settledAgo,
@@ -424,7 +486,82 @@ function seedTask(
   });
 }
 
+/** Every block between the tasks, added by the member who said so. */
+function seedBlocks(clock: SeedClock) {
+  return Effect.forEach(DEMO_BLOCKS, (block) =>
+    Effect.flatMap(
+      clock.ago(
+        block.ago,
+        addTaskBlock(block.by.id, {
+          blockerTaskId: block.blocker.id,
+          blockedTaskId: block.blocked.id,
+        }),
+      ),
+      (added) => written(`${block.blocker.name} blocking ${block.blocked.name}`, added),
+    ),
+  );
+}
+
 /* ----- The agents ----- */
+
+/** What the seed wrote that a transcript's calls name: each agent's row, and each page's id. */
+interface SeedWritten {
+  readonly agents: ReadonlyMap<DemoAgent, Agent>;
+  readonly pages: ReadonlyMap<DemoPage, string>;
+}
+
+/** A call of one of our workspace tools as it was answered, from what it wrote: a sub-task, an agent started, a page shown, or a thread posted. */
+function toolCallOf(call: DemoCall, seeded: SeedWritten): DemoToolCall {
+  const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED };
+  if ("creates" in call) {
+    const task = call.creates;
+    return {
+      name: AGENT_TOOL.CREATE_TASK,
+      input: {
+        name: task.name,
+        priority: task.priority,
+        ...(task.parent === undefined ? undefined : { parentTaskId: task.parent.id }),
+      },
+      output: { ...accepted, task: { id: task.id, name: task.name } },
+    };
+  }
+  if ("starts" in call) {
+    const agent = call.starts;
+    const row = seeded.agents.get(agent);
+    return {
+      name: AGENT_TOOL.START_AGENT,
+      input: {
+        taskId: agent.task.id,
+        title: agent.title,
+        prompt: agent.turns[0].line,
+        model: agent.model,
+        effort: agent.effort,
+      },
+      output: {
+        ...accepted,
+        agent: { ...(row === undefined ? undefined : { id: row.id }), title: agent.title },
+      },
+    };
+  }
+  if ("page" in call) {
+    const { title, path } = call.page;
+    const id = seeded.pages.get(call.page);
+    return {
+      name: AGENT_TOOL.SHOW_PAGE,
+      input: { title, path },
+      output: { ...accepted, page: { ...(id === undefined ? undefined : { id }), version: 1 } },
+    };
+  }
+  if ("posts" in call) {
+    const { key, title, body, ask } = call.posts;
+    return {
+      name: AGENT_TOOL.POST_THREAD,
+      input: { key, title, body, ...(ask === undefined ? undefined : { ask }) },
+      output: accepted,
+    };
+  }
+  return call;
+}
 
 /** A turn's events, as Claude Code's runner reports them: each step's words, then its tool call, and the turn's end and usage. */
 function turnEvents(
@@ -433,6 +570,7 @@ function turnEvents(
   turnIndex: number,
   conversationId: string,
   startedAt: number,
+  seeded: SeedWritten,
 ): RunEvent[] {
   const base = { conversationId: sessionKey(conversationId), turnId: turn.id };
   const bodies: RunEvent[] = [];
@@ -447,11 +585,11 @@ function turnEvents(
   for (const [index, step] of turn.steps.entries()) {
     const number = index + 1;
     add({ kind: RUN_EVENT.STEP_STARTED, step: number });
-    add({ kind: RUN_EVENT.TEXT_DRAFTED, step: number, text: step.text });
-    if (step.tool === undefined) continue;
+    if (step.text !== "") add({ kind: RUN_EVENT.TEXT_DRAFTED, step: number, text: step.text });
+    if (step.call === undefined) continue;
     const callId = demoId(DEMO_ID_KIND.TOOL_CALL, turnIndex * 100 + number);
-    const { name, input, output } = step.tool;
-    add({ kind: RUN_EVENT.TOOL_CALL_STARTED, callId, name, input: { ...input } });
+    const { name, input, output } = toolCallOf(step.call, seeded);
+    add({ kind: RUN_EVENT.TOOL_CALL_STARTED, callId, name, input });
     add({
       kind: RUN_EVENT.TOOL_CALL_SETTLED,
       callId,
@@ -483,23 +621,31 @@ function landed<A, E>(step: string, result: Result.Result<A, E>) {
 
 /**
  * One turn, as a Start's first line or a member's later one opens it: the
- * line written awaiting, the turn queued and taking it, and every event of
+ * line written awaiting, sent by its member or, for a Start's, by the
+ * agent that started it, the turn queued and taking it, and every event of
  * it written, ending settled, so the agent reads finished.
  */
 function seedTurn(
   agent: DemoAgent,
   [turnIndex, turn]: readonly [number, DemoTurn],
   writer: StoreWriter,
-  target: ConversationTarget,
+  row: Agent,
+  seeded: SeedWritten,
   clock: SeedClock,
 ) {
   const write = Effect.gen(function* () {
     const step = `${agent.title}'s turn ${turnIndex + 1}`;
+    const target: ConversationTarget = { userId: row.userId, conversationId: row.conversationId };
     const opening =
       turnIndex === 0
         ? { channel: MESSAGE_CHANNEL.START, brief: START_LINE_BRIEF.PROMPT }
         : undefined;
-    const sender = { kind: MESSAGE_SENDER.MEMBER, userId: turn.from.id } as const;
+    const starter = turnIndex === 0 ? starterOf(agent) : undefined;
+    const starterRow = starter === undefined ? undefined : seeded.agents.get(starter);
+    const sender: LineSender =
+      starterRow === undefined
+        ? { kind: MESSAGE_SENDER.MEMBER, userId: turn.from.id }
+        : agentLineSender(starterRow);
     const line = { text: turn.line, clientKey: turn.id, sender, metadata: opening };
     yield* landed(step, yield* writer.writeAwaitingLine(target, line, Effect.succeed(true)));
     const enqueue = {
@@ -518,6 +664,7 @@ function seedTurn(
       turnIndex,
       target.conversationId,
       clock.start - turn.startedAgo,
+      seeded,
     );
     for (const result of yield* writer.consumeAll(target, events)) yield* landed(step, result);
   });
@@ -544,14 +691,16 @@ function seededRuntime(userId: string, model: string, runsOn: TaskRunsOnWrite) {
 }
 
 /**
- * One finished agent on its task, started by whoever sent its first line,
- * with every turn of its transcript, running where its task runs its
- * agents and paid for as a Start there records it.
+ * One finished agent's row on its task, started by whoever sent its first
+ * line, and by the agent whose steps started it where one did, of its kind,
+ * running where its task runs its agents and paid for as a Start there
+ * records it. Its transcript is written once every agent stands, since a
+ * pilot's names the agents it started.
  */
 function seedAgent(
   agent: DemoAgent,
+  starter: Agent | undefined,
   runsOn: TaskRunsOnWrite,
-  writer: StoreWriter,
   clock: SeedClock,
 ) {
   return Effect.gen(function* () {
@@ -561,9 +710,11 @@ function seedAgent(
       first.startedAgo,
       createAgent(first.from.id, {
         taskId: agent.task.id,
+        ...(agent.kind === undefined ? undefined : { kind: agent.kind }),
         planSnapshot: null,
         prompt: first.line,
         idempotencyKey: agent.key,
+        startedByAgentId: starter?.id,
         model: agent.model,
         effort: agent.effort,
         repository: null,
@@ -575,9 +726,80 @@ function seedAgent(
       }),
     );
     const { agent: row } = yield* written(agent.title, started);
-    const target = { userId: row.userId, conversationId: row.conversationId };
-    for (const turn of agent.turns.entries()) yield* seedTurn(agent, turn, writer, target, clock);
     return row;
+  });
+}
+
+/**
+ * The pages the agent's steps showed, on its task as shown by it, each at
+ * the moment its turn reached it a minute apart; each page's id.
+ */
+function seedPages(agent: DemoAgent, row: Agent, clock: SeedClock) {
+  return Effect.gen(function* () {
+    const ids = new Map<DemoPage, string>();
+    for (const turn of agent.turns) {
+      for (const [index, step] of turn.steps.entries()) {
+        if (step.call === undefined || !("page" in step.call)) continue;
+        const { page } = step.call;
+        const shown = yield* clock.ago(
+          turn.startedAgo - (index + 1) * DEMO_MINUTE,
+          writePage(
+            row.userId,
+            { kind: PAGE_OWNER.TASK, taskId: agent.task.id },
+            { title: page.title, html: page.html },
+            { kind: PAGE_SHOWER.AGENT, agentId: row.id },
+          ),
+        );
+        ids.set(page, (yield* written(`${agent.title}'s page ${page.title}`, shown)).id);
+      }
+    }
+    return ids;
+  });
+}
+
+/**
+ * Every agent: its row, then the sub-tasks its steps made, under its id,
+ * so the agents started on them find them; then the blocks between the
+ * tasks, and each agent's pages and transcript, and the comments it
+ * started on its task's plan. Answers each agent's row and the sub-tasks'
+ * ids.
+ */
+function seedAgents(
+  workspaceId: string,
+  runsOn: TaskRunsOnWrite,
+  writer: StoreWriter,
+  clock: SeedClock,
+  key: () => string,
+) {
+  return Effect.gen(function* () {
+    const agents = new Map<DemoAgent, Agent>();
+    const madeIds: string[] = [];
+    for (const agent of DEMO_AGENTS) {
+      const starter = starterOf(agent);
+      const starterRow = starter === undefined ? undefined : agents.get(starter);
+      const row = yield* seedAgent(agent, starterRow, runsOn, clock);
+      agents.set(agent, row);
+      const origin = { actor: PLAN_ACTOR.AGENT, agentId: row.id } as const;
+      for (const task of tasksMadeBy(agent)) {
+        madeIds.push(yield* seedTask(workspaceId, task, runsOn, origin, clock, key));
+      }
+    }
+    yield* seedBlocks(clock);
+    const pages = new Map<DemoPage, string>();
+    for (const [agent, row] of agents) {
+      for (const [page, id] of yield* seedPages(agent, row, clock)) pages.set(page, id);
+    }
+    const seeded: SeedWritten = { agents, pages };
+    for (const [agent, row] of agents) {
+      for (const turn of agent.turns.entries()) {
+        yield* seedTurn(agent, turn, writer, row, seeded, clock);
+      }
+      const asAgent = { actor: PLAN_COMMENT_ACTOR.AGENT, userId: row.userId, agentId: row.id };
+      for (const comment of agent.comments ?? []) {
+        yield* seedComment(agent.task, asAgent, comment, clock, key);
+      }
+    }
+    return { agents, madeIds };
   });
 }
 
@@ -609,7 +831,12 @@ function seedAnswer(
   });
 }
 
-/** One thread the agent posted, the answer to its ask, its word after, and the members' replies. */
+/**
+ * One thread the agent posted, the answer to its ask, its word after, the
+ * members' replies, and the nod that settled it, where one did. Note that
+ * the nod names the revision the post left, since no message after it
+ * moves the revision on.
+ */
 function seedThread(thread: DemoThread, poster: InboxAgent, clock: SeedClock, key: () => string) {
   return Effect.gen(function* () {
     const posted = yield* clock.ago(
@@ -619,7 +846,7 @@ function seedThread(thread: DemoThread, poster: InboxAgent, clock: SeedClock, ke
         title: thread.title,
         body: thread.body,
         ask: thread.ask,
-        needsReply: thread.needsReply,
+        needsReply: thread.ask !== undefined,
         addresseeId: thread.addressee?.id,
       }),
     );
@@ -638,18 +865,24 @@ function seedThread(thread: DemoThread, poster: InboxAgent, clock: SeedClock, ke
       const replied = yield* clock.ago(reply.ago, postInboxMessage(reply.by.id, item.id, message));
       yield* written(`a reply on ${thread.title}`, replied);
     }
+    if (thread.acknowledged === undefined) return;
+    const { by, ago } = thread.acknowledged;
+    const nodded = yield* clock.ago(
+      ago,
+      acknowledgeInboxItem(by.id, item.id, item.revision, key()),
+    );
+    yield* written(`the nod on ${thread.title}`, nodded);
   });
 }
 
 /** Every agent's threads, and the threads members opened with an agent. */
-function seedThreads(
-  posters: ReadonlyMap<DemoAgent, InboxAgent>,
-  clock: SeedClock,
-  key: () => string,
-) {
+function seedThreads(agents: ReadonlyMap<DemoAgent, Agent>, clock: SeedClock, key: () => string) {
   return Effect.gen(function* () {
     const posterOf = (agent: DemoAgent) =>
-      written(`${agent.title}'s threads`, Option.fromNullishOr(posters.get(agent)));
+      Effect.map(
+        written(`${agent.title}'s threads`, Option.fromNullishOr(agents.get(agent))),
+        (row): InboxAgent => ({ userId: row.userId, taskId: agent.task.id, agentId: row.id }),
+      );
     for (const thread of DEMO_THREADS) {
       yield* seedThread(thread, yield* posterOf(thread.agent), clock, key);
     }
@@ -719,7 +952,7 @@ export function demoHostSecret(): MintedSecret {
  * hash of the secret its record holds, and kept as where he last ran a
  * task; where every task runs its agents. Note that Bring your own host is
  * left off for him, because with it on the app keeps the Mac's one account
- * install (~/.local/state/luke-host) running for the account signed in, and
+ * install (~/.local/state/vespin-host) running for the account signed in, and
  * would enroll a Mac with none with the run's server; and that the host is
  * enrolled at the service's floor, because its first call records the
  * version it runs.
@@ -752,7 +985,8 @@ function seedHost(host: DemoHost) {
  * --demo` throws its own away on every exit; the credential is sealed
  * first, so a ring that does not parse fails it before anything is
  * written, and saved before the agents, because each records the payer a
- * Start would by what Dean keeps.
+ * Start would by what Dean keeps. The tasks an agent made are written
+ * after it, under its id (`seedAgents`).
  */
 export function seedDemoWorld(
   auth: DemoAuth,
@@ -765,23 +999,21 @@ export function seedDemoWorld(
     const key = clientKeys();
     const { personalWorkspaceId, workspaceId, memberIds } = yield* seedPeople(auth, clock);
     const runsOn = Option.isSome(host) ? yield* seedHost(host.value) : TASK_RUNS_IN_CLOUD;
-    const taskIds = yield* Effect.forEach(DEMO_TASKS, (task) =>
-      seedTask(workspaceId, task, runsOn, clock, key),
+    const madeByAgents = new Set(DEMO_AGENTS.flatMap(tasksMadeBy));
+    const madeByMembers = DEMO_TASKS.filter((task) => !madeByAgents.has(task));
+    const taskIds = yield* Effect.forEach(madeByMembers, (task) =>
+      seedTask(workspaceId, task, runsOn, undefined, clock, key),
     );
     if (Option.isSome(sealed)) yield* seedCredential(sealed.value);
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    const posters = new Map<DemoAgent, InboxAgent>();
-    for (const agent of DEMO_AGENTS) {
-      const row: Agent = yield* seedAgent(agent, runsOn, writer, clock);
-      posters.set(agent, { userId: row.userId, taskId: agent.task.id, agentId: row.id });
-    }
-    yield* seedThreads(posters, clock, key);
+    const { agents, madeIds } = yield* seedAgents(workspaceId, runsOn, writer, clock, key);
+    yield* seedThreads(agents, clock, key);
     return {
       deanId: DEMO_DEAN.id,
       personalWorkspaceId,
       workspaceId,
       memberIds,
-      taskIds,
+      taskIds: [...taskIds, ...madeIds],
     };
   });
 }

@@ -83,6 +83,7 @@ const SLACK_METHOD = {
   CONVERSATIONS_LIST: "conversations.list",
   CONVERSATIONS_JOIN: "conversations.join",
   CONVERSATIONS_LEAVE: "conversations.leave",
+  REACTIONS_ADD: "reactions.add",
 } as const;
 
 type SlackMethod = (typeof SLACK_METHOD)[keyof typeof SLACK_METHOD];
@@ -160,11 +161,12 @@ export interface SlackBotService {
   readonly configured: boolean;
   /** The team the bot's token answers for, as `auth.test` says. */
   readonly team: Effect.Effect<SlackTeam, SlackBotFailure>;
-  /** Writes to the member directly, where the workspace's bot is connected and their email matches someone in its team; nothing otherwise, or where anything failed. */
+  /** Writes to the member directly, in the thread under the DM `thread` names where given, where the workspace's bot is connected and their email matches someone in its team; nothing otherwise, or where anything failed. */
   readonly dm: (
     organizationId: string,
     userId: string,
     content: SlackMessageContent,
+    thread?: SlackMessage,
   ) => Effect.Effect<Option.Option<SlackMessage>, never, DatabaseServices>;
   /** The member of the workspace a Slack user of its connected team is, by the id kept for them or through a Slack account a member connected themselves; nothing where neither finds one. */
   readonly memberOf: (
@@ -199,6 +201,8 @@ export interface SlackBotService {
   readonly join: (channel: string) => Effect.Effect<boolean>;
   /** Takes the bot out of a channel; false where Slack refused. */
   readonly leave: (channel: string) => Effect.Effect<boolean>;
+  /** Reacts to a message with the emoji Slack names `emoji`; a failure is logged and answers nothing. */
+  readonly react: (channel: string, ts: string, emoji: string) => Effect.Effect<void>;
 }
 
 export class SlackBot extends Context.Service<SlackBot, SlackBotService>()("SlackBot") {}
@@ -280,6 +284,15 @@ function readAnswer<A>(
 /** A message's arguments as the Web API takes them, its blocks as the JSON Slack reads them from. */
 function contentArgs(content: SlackMessageContent): Record<string, string> {
   return { text: content.text, blocks: JSON.stringify(content.blocks) };
+}
+
+/**
+ * A new message's arguments: its content, with Slack's link and media
+ * previews off. Note that we turn them off, because an agent's words name
+ * many pull requests, and a preview of each buries the message itself.
+ */
+function postArgs(content: SlackMessageContent): Record<string, string> {
+  return { ...contentArgs(content), unfurl_links: "false", unfurl_media: "false" };
 }
 
 /** Logs a failure by its fixed line, and answers nothing. */
@@ -415,6 +428,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       channels: Effect.succeedNone,
       join: () => Effect.succeed(false),
       leave: () => Effect.succeed(false),
+      react: () => Effect.void,
     };
   }
   return {
@@ -423,7 +437,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       Effect.flatMap((answer) => readAnswer(SLACK_METHOD.AUTH_TEST, AuthTestSchema, answer)),
       Effect.map((answer) => ({ id: answer.team_id, name: answer.team })),
     ),
-    dm: (organizationId, userId, content) =>
+    dm: (organizationId, userId, content, thread) =>
       Effect.gen(function* () {
         const installation = yield* workspaceSlackInstallation(organizationId);
         if (Option.isNone(installation)) return Option.none<SlackMessage>();
@@ -436,8 +450,10 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
         if (Option.isNone(slackId)) return Option.none<SlackMessage>();
         // Note that a user id as the channel writes to the bot's own conversation with them.
         const posted = yield* api(SLACK_METHOD.CHAT_POST_MESSAGE, {
-          channel: slackId.value,
-          ...contentArgs(content),
+          ...(thread === undefined
+            ? { channel: slackId.value }
+            : { channel: thread.channel, thread_ts: thread.ts }),
+          ...postArgs(content),
         });
         const message = yield* readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, posted);
         return Option.some<SlackMessage>({ channel: message.channel, ts: message.ts });
@@ -454,7 +470,7 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
       api(SLACK_METHOD.CHAT_POST_MESSAGE, {
         channel,
         thread_ts: threadTs,
-        ...contentArgs(content),
+        ...postArgs(content),
       }).pipe(
         Effect.flatMap((answer) =>
           readAnswer(SLACK_METHOD.CHAT_POST_MESSAGE, PostedSchema, answer),
@@ -542,6 +558,12 @@ export function slackBotOver(api: SlackWebApi | undefined): SlackBotService {
             false,
           ),
         ),
+      ),
+    react: (channel, ts, emoji) =>
+      api(SLACK_METHOD.REACTIONS_ADD, { channel, timestamp: ts, name: emoji }).pipe(
+        Effect.asVoid,
+        Effect.catch(swallowed<void>("react to a message")),
+        Effect.asVoid,
       ),
   };
 }

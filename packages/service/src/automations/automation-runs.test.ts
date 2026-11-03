@@ -157,7 +157,7 @@ function fakeEve() {
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
   });
-  return { opened, sent, eveFor: (account: string) => Effect.succeed(sessions(account)) };
+  return { opened, sent, sessionsFor: (account: string) => Effect.succeed(sessions(account)) };
 }
 
 /** What the runs counted, across the file; a case reads its own owner's. */
@@ -252,7 +252,7 @@ const ranTurn = (owner: string, agentId: string, status: TurnStatus) =>
 /** The run acted on now, answering the agent it started. */
 const startedNow = (eve: ReturnType<typeof fakeEve>, automation: Automation) =>
   Effect.gen(function* () {
-    const outcome = yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
+    const outcome = yield* executeAutomationRun(eve.sessionsFor, yield* runNow(automation)).pipe(
       Effect.provide(services),
     );
     assert.equal(outcome?.status, AUTOMATION_RUN_STATUS.STARTED);
@@ -339,8 +339,9 @@ const pullRequestRun = (automation: Automation, title: string) =>
 
 /** The run acted on, answering the agent it reached; none where it reached none. */
 const agentOfRun = (eve: ReturnType<typeof fakeEve>, run: AutomationRun) =>
-  Effect.map(executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)), (outcome) =>
-    outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "",
+  Effect.map(
+    executeAutomationRun(eve.sessionsFor, run).pipe(Effect.provide(services)),
+    (outcome) => (outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : ""),
   );
 
 /** The servers left for the agent's next turn to take, whatever its switches say. */
@@ -403,7 +404,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           eve,
           yield* pullRequestRun(
             automation,
-            "Fix [@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)",
+            "Fix [@ACME-142 Token refresh fails](https://linear.app/acme/issue/ACME-142)",
           ),
         );
 
@@ -488,7 +489,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const same = yield* toSameAgent(automation, first);
 
         const run = yield* runNow(same);
-        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
 
         assert.deepEqual(outcome, { status: AUTOMATION_RUN_STATUS.STARTED, agentId: first });
         assert.equal(eve.opened.length, 1, "no second agent was started");
@@ -605,7 +608,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           }),
         );
         const busy = yield* toSameAgent(fresh, first);
-        const waited = yield* executeAutomationRun(eve.eveFor, yield* runNow(busy)).pipe(
+        const waited = yield* executeAutomationRun(eve.sessionsFor, yield* runNow(busy)).pipe(
           Effect.provide(services),
         );
         assert.deepEqual(waited, {
@@ -737,7 +740,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* ranTurn(teammate, theirs.id, TURN_STATUS.SETTLED);
         const same = yield* toSameAgent(automation, theirs.id);
         const run = yield* runNow(same);
-        yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        yield* executeAutomationRun(eve.sessionsFor, run).pipe(Effect.provide(services));
         assert.ok(yield* sentLineStands(teammate, theirs.conversationId, sentLineId(run.id)));
         yield* Database.use((db) =>
           db
@@ -786,7 +789,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         );
         const same = yield* toSameAgent(automation, first);
         const delivered = yield* runNow(same);
-        yield* executeAutomationRun(eve.eveFor, delivered).pipe(Effect.provide(services));
+        yield* executeAutomationRun(eve.sessionsFor, delivered).pipe(Effect.provide(services));
         const lost = yield* runNow(same);
         // The automation turned to another agent of the workspace since: the run is still its claim's.
         const made = yield* createAgent(owner, {
@@ -820,7 +823,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           new Date("2026-10-15T12:00:00Z"),
         );
         yield* steerAgent(
-          yield* eve.eveFor(owner),
+          yield* eve.sessionsFor(owner),
           storeWriter({ tools: CODER_TOOL_SET }),
           owner,
           otherAgent,
@@ -922,7 +925,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           });
         yield* published(PULL_REQUEST_STATE.OPEN);
 
-        const swept = yield* sweepAutomations(eve.eveFor, archiving.now).pipe(
+        const swept = yield* sweepAutomations(eve.sessionsFor, archiving.now).pipe(
           Effect.provide(services),
         );
 
@@ -948,7 +951,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           "which-queue",
           "Settled it.",
         );
-        const later = yield* sweepAutomations(eve.eveFor, archiving.now + 3 * 86_400_000).pipe(
+        const later = yield* sweepAutomations(eve.sessionsFor, archiving.now + 3 * 86_400_000).pipe(
           Effect.provide(services),
         );
         assert.equal(later.archived, 2);
@@ -971,8 +974,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const { owner, automation, now, workspaceId } = yield* openAutomation();
         const eve = fakeEve();
 
-        const first = yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
-        const second = yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
+        const first = yield* sweepAutomations(eve.sessionsFor, now).pipe(Effect.provide(services));
+        const second = yield* sweepAutomations(eve.sessionsFor, now).pipe(Effect.provide(services));
 
         assert.ok(first.fired >= 1 && first.started >= 1);
         assert.equal(second.started, 0, "a sweep after starts nothing");
@@ -1016,7 +1019,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
       const eve = fakeEve();
       const execute = (automation: Automation) =>
         Effect.flatMap(runNow(automation), (run) =>
-          executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)),
+          executeAutomationRun(eve.sessionsFor, run).pipe(Effect.provide(services)),
         );
       const concurrent = yield* openAutomation({
         guards: { maxConcurrentRuns: 1, dailyRunCap: 10 },
@@ -1060,9 +1063,10 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const eve = fakeEve();
         yield* leaveWorkspace(workspaceId, owner);
 
-        const outcome = yield* executeAutomationRun(eve.eveFor, yield* runNow(automation)).pipe(
-          Effect.provide(services),
-        );
+        const outcome = yield* executeAutomationRun(
+          eve.sessionsFor,
+          yield* runNow(automation),
+        ).pipe(Effect.provide(services));
 
         assert.deepEqual(outcome, {
           status: AUTOMATION_RUN_STATUS.FAILED,
@@ -1119,7 +1123,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         );
         yield* updateAutomation(owner, automation.id, { enabled: false, nextRunAt: null });
 
-        yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
+        yield* sweepAutomations(eve.sessionsFor, now).pipe(Effect.provide(services));
 
         const runs = new Map(
           (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
@@ -1151,7 +1155,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           });
         }
 
-        yield* sweepAutomations(eve.eveFor, now).pipe(Effect.provide(services));
+        yield* sweepAutomations(eve.sessionsFor, now).pipe(Effect.provide(services));
 
         const runs = yield* listAutomationRuns(owner, automation.id);
         assert.deepEqual(runs.map((run) => [run.status, run.reason]).sort(), [
@@ -1170,7 +1174,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const { automation } = yield* openAutomation();
         const eve = fakeEve();
         const run = yield* runNow(automation);
-        yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        yield* executeAutomationRun(eve.sessionsFor, run).pipe(Effect.provide(services));
         // The first act mid-start: its claim stands and its agent is made, eve not yet answered.
         yield* Database.use((db) =>
           db
@@ -1179,7 +1183,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             .where(eq(automationRun.id, run.id)),
         );
 
-        const again = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const again = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
 
         assert.equal(again, undefined, "the claim is the other act's to settle");
         const [standing] = yield* Database.use((db) =>
@@ -1205,7 +1211,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
 
         const outcomes = yield* Effect.all(
           [first, second].map((run) =>
-            executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)),
+            executeAutomationRun(eve.sessionsFor, run).pipe(Effect.provide(services)),
           ),
           { concurrency: 2 },
         );
@@ -1225,7 +1231,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const { owner, automation } = yield* openAutomation();
         const eve = fakeEve();
         const started = yield* runNow(automation);
-        const outcome = yield* executeAutomationRun(eve.eveFor, started).pipe(
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, started).pipe(
           Effect.provide(services),
         );
         // Its session ran a turn, as eve opening it does.
@@ -1240,7 +1246,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           }),
         );
         const unopened = yield* runNow(automation);
-        yield* executeAutomationRun(eve.eveFor, unopened).pipe(Effect.provide(services));
+        yield* executeAutomationRun(eve.sessionsFor, unopened).pipe(Effect.provide(services));
         const orphan = yield* runNow(automation);
         // Both left as a function that died after its claim would leave them.
         yield* Database.use((db) =>
@@ -1295,7 +1301,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           }),
         );
 
-        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
 
         const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const task = Option.getOrThrow(yield* readAgent(owner, agentId)).prompt ?? "";
@@ -1329,7 +1337,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const eve = fakeEve();
         const run = yield* runNow(automation);
 
-        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
 
         const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const task = Option.getOrThrow(yield* readAgent(owner, agentId)).prompt ?? "";
@@ -1380,7 +1390,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           }),
         );
 
-        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
 
         const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
@@ -1405,7 +1417,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             firedAt: new Date(),
           }),
         );
-        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
         const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
 
         yield* deleteAutomation(owner, automation.id);
@@ -1443,7 +1457,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
                 firedAt: new Date(),
               }),
             );
-            const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(
+            const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
               Effect.provide(services),
             );
             const agentId =
@@ -1474,7 +1488,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             firedAt: new Date(),
           }),
         );
-        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
         const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
 
@@ -1498,7 +1514,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             firedAt: new Date(),
           }),
         );
-        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+          Effect.provide(services),
+        );
         const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
         const told = /<webhook-body>\n([\s\S]*?)\n<\/webhook-body>/u.exec(agent.prompt ?? "")?.[1];
@@ -1529,7 +1547,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
                 firedAt: new Date(),
               }),
             );
-            const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(
+            const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
               Effect.provide(services),
             );
             const agentId =
@@ -1589,7 +1607,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
               firedAt: new Date(),
             }),
             (run) =>
-              executeAutomationRun(eve.eveFor, Option.getOrThrow(run)).pipe(
+              executeAutomationRun(eve.sessionsFor, Option.getOrThrow(run)).pipe(
                 Effect.provide(services),
               ),
           );
@@ -1623,7 +1641,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         }),
       );
 
-      const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+      const outcome = yield* executeAutomationRun(eve.sessionsFor, run).pipe(
+        Effect.provide(services),
+      );
 
       assert.deepEqual(outcome, {
         status: AUTOMATION_RUN_STATUS.SKIPPED,
@@ -1645,7 +1665,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 4, subjectCooldownHours: 2 },
         });
         const act = (run: AutomationRun) =>
-          executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+          executeAutomationRun(eve.sessionsFor, run).pipe(Effect.provide(services));
 
         // The cooldown is timed from a run's start, so the first run fires and starts three hours before the rest.
         const long = yield* act(yield* sentryRun(automation, { id: "7" }));

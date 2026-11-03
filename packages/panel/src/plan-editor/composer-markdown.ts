@@ -4,7 +4,7 @@
  * A message is one string, so a mark leaves the box as the Markdown every
  * place that draws a message reads (`**bold**`, `*italic*`, `~~struck~~`,
  * `` `code` ``, `[words](address)`) and comes back from it, as a message
- * that did not go or a draft kept per channel is laid in again. Words that
+ * that did not go or a kept draft is laid in again. Words that
  * wear no mark are written exactly as they stand, never escaped, so a
  * message holding no mark reads out byte for byte as it did before the box
  * had any; what is read back there keeps every character it does not take

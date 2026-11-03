@@ -18,7 +18,7 @@
  */
 
 /** The Electron plugin's client id for the Mac, apart from its OAuth client id. */
-export const DESKTOP_SESSION_CLIENT_ID = "luke-desktop-session";
+export const DESKTOP_SESSION_CLIENT_ID = "desktop-session";
 
 /** The hand-off page, and the query the plugin's transfer reads from it. */
 const DESKTOP_SESSION_PAGE = {

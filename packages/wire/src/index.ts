@@ -76,6 +76,8 @@ export {
   MessageRoleSchema,
   OBSERVATION_SOURCE,
   type ObservationSource,
+  SLACK_LINE_BOUNDS,
+  type SlackLineMetadata,
   type SpokenAskMetadata,
   START_LINE_BRIEF,
   type StartLineMetadata,

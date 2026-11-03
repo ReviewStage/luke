@@ -561,7 +561,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           harness: RUNNER_HARNESS.CLAUDE_CODE,
           cwd: "/workspace/repository",
           executable:
-            "/opt/luke/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
+            "/opt/agent/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
           model: "claude-opus-5-5",
           effort: "high",
           append: INSTRUCTIONS,

@@ -55,7 +55,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
-import { type EveForAccount, executeAutomationRun } from "./automation-runs.js";
+import { executeAutomationRun, type SessionsForAccount } from "./automation-runs.js";
 
 /**
  * automation-writes.ts -- an automation made, changed, and deleted as an account asks, and read for the wire: one implementation for the automations routes and the agents' automation tools.
@@ -539,7 +539,7 @@ export interface AutomationRanNow {
  * The automation run now, as the account asks, under the caller's key: a
  * manual firing recorded once per key and acted on at once, through the
  * same guards and the same start a scheduled run takes
- * (`automation-runs.ts`), reaching the agent's sessions as `eveFor` reaches them; the same key
+ * (`automation-runs.ts`), reaching the agent's sessions as `sessionsFor` reaches them; the same key
  * again answers the run it made. The caller has read the automation as one
  * the account may run.
  */
@@ -547,7 +547,7 @@ export const runAutomationNowAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   automation: Automation,
   key: string,
-  eveFor: EveForAccount,
+  sessionsFor: SessionsForAccount,
 ): Effect.fn.Return<
   AutomationRanNow,
   HostedRefusal,
@@ -561,7 +561,7 @@ export const runAutomationNowAs = /* @__PURE__ */ Effect.fnUntraced(function* (
       firedAt,
     }),
   );
-  if (Option.isSome(recorded)) yield* executeAutomationRun(eveFor, recorded.value);
+  if (Option.isSome(recorded)) yield* executeAutomationRun(sessionsFor, recorded.value);
   const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, automation.id, key));
   if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const [summary] = yield* runSummaries(userId, [run.value]);

@@ -22,7 +22,6 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@repo/features/automation-wire";
-import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import type { SentryTriggerEvent, TriggerProvider } from "@repo/features/trigger-catalog";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import {
@@ -35,7 +34,6 @@ import {
   inArray,
   isNull,
   lte,
-  notExists,
   or,
   type SQL,
   sql,
@@ -47,9 +45,8 @@ import { Database, type DatabaseServices, queryBuilder } from "../core/query.js"
 import { agentTable } from "../schemas/agent.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
-import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
-import { noOpenPullRequest } from "./agent-store.js";
+import { noOpenInboxItem, noOpenPullRequest } from "./agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { AGENT_WORKSPACE, isWorkspaceMember } from "./workspace-store.js";
@@ -752,17 +749,7 @@ const findArchivableAgents = SqlSchema.findAll({
                   ),
                 ),
             ),
-            notExists(
-              queryBuilder
-                .select({ one: inboxItem.id })
-                .from(inboxItem)
-                .where(
-                  and(
-                    eq(inboxItem.agentId, agentTable.id),
-                    eq(inboxItem.status, INBOX_STATUS.OPEN),
-                  ),
-                ),
-            ),
+            noOpenInboxItem,
             // Note that an agent whose pull request is open or a draft still stands (`noOpenPullRequest`).
             noOpenPullRequest,
           ),

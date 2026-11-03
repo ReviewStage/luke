@@ -716,10 +716,6 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     workspaceTools: signedIn.workspaceTools.effect(function* ({ input, context }) {
       return yield* workspaceToolsOf(context.userId, input.id);
     }),
-    /** `workspaceTools` under the path a desktop or host built before the rename still calls; goes once the releases after it are out. */
-    lukeTools: signedIn.lukeTools.effect(function* ({ input, context }) {
-      return yield* workspaceToolsOf(context.userId, input.id);
-    }),
     /** The agent's sandbox resumed from its snapshot, the developer's click and nothing else, answering where it stands after. */
     sandboxResume: signedIn.sandboxResume.effect(function* ({ input, context }) {
       const { conversationId, sessionId } = yield* reachedAgentSession(context.userId, input.id);

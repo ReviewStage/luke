@@ -130,7 +130,7 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("a task with no agent tab draws a new agent's draft and no pane of start buttons", () => {
+test("a task with no agent tab draws a new agent's draft", () => {
   const DRAFT_ID = "draft-1";
   const drawn = () => {
     const page = document.createElement("div");
@@ -164,7 +164,6 @@ test("a task with no agent tab draws a new agent's draft and no pane of start bu
   };
   const page = drawn();
   assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
-  assert.equal(page.querySelector(".desktop-no-agent"), null);
 });
 
 /** The task's page with the side panel open on `tab`, as markup. */

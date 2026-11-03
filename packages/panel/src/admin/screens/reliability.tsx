@@ -228,7 +228,7 @@ function attentionColumns(
 /** The headline failure cards, in the order they stand. */
 const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
-    key: "luke-turns",
+    key: "app-turns",
     label: () => `${PRODUCT_NAME} turns failed`,
     value: ({ headline }) => formatPercent(share(headline.appTurns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.appTurns, "turns", windowDays),

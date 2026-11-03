@@ -176,19 +176,33 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     return agent;
   });
 
+/** How a native sandbox was named and tagged: as a launch tags one now, or as one made before the rename was. */
+const NAMING = {
+  TODAY: { name: "agent-sandbox-", agent: "agentId", runner: "agentRunner" },
+  BEFORE_RENAME: { name: "luke-agent-", agent: "lukeAgent", runner: "lukeRunner" },
+} as const;
+
 /** A running sandbox as we name a native agent's, tagged with its agent, and with the runner named where one was launched. */
-function nativeSandbox(agentId: string, commandId?: string): FakeSandbox {
+function nativeSandbox(
+  agentId: string,
+  commandId?: string,
+  naming: (typeof NAMING)[keyof typeof NAMING] = NAMING.TODAY,
+): FakeSandbox {
   const id = randomUUID();
   const running = `sbs_${id}`;
   const runner =
     commandId === undefined
       ? {}
-      : { lukeRunnerSession: running, lukeRunnerCommand: commandId, lukeRunnerLaunch: "7" };
+      : {
+          [`${naming.runner}Session`]: running,
+          [`${naming.runner}Command`]: commandId,
+          [`${naming.runner}Launch`]: "7",
+        };
   return {
-    name: `luke-agent-${id}`,
+    name: `${naming.name}${id}`,
     status: "running",
     currentSessionId: running,
-    tags: { sessionId: `luke-claude-code-${id}`, lukeAgent: agentId, ...runner },
+    tags: { sessionId: `claude-code-${id}`, [naming.agent]: agentId, ...runner },
   };
 }
 
@@ -338,7 +352,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           }),
         );
         // eve's sandbox, even tagged as an ended native agent's would be, is not ours to stop.
-        const eve = { ...eveSandbox(), tags: { sessionId: "wrun_eve", lukeAgent: ended.id } };
+        const eve = { ...eveSandbox(), tags: { sessionId: "wrun_eve", agentId: ended.id } };
         const eveOwn = eveSandbox();
         // A sandbox named as ours whose agent runs on eve is left to eve's own lifecycle.
         const misnamed = nativeSandbox(onEve.id);
@@ -535,37 +549,45 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
       assert.deepEqual(api.stopped, []);
     }),
   );
-  it.effect("a sandbox whose old runner exited or is gone is stopped", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = vercel();
-      const exited = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-        status: TURN_STATUS.SETTLED,
-        at: minutesBefore(10),
-      });
-      const vanished = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-        status: TURN_STATUS.SETTLED,
-        at: minutesBefore(10),
-      });
-      // Vercel has not recorded this exit yet, as no read waited for it: a plain read names none.
-      api.commands.set("cmd_exited", { id: "cmd_exited", exitCode: 0 });
-      const done = nativeSandbox(exited.id, "cmd_exited");
-      const gone = nativeSandbox(vanished.id, "cmd_unknown");
-      api.sandboxes.push(done, gone);
+  it.effect(
+    "a sandbox whose old runner exited or is gone is stopped, one made and tagged before the rename alike",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const exited = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        const vanished = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        const older = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        // Vercel has not recorded this exit yet, as no read waited for it: a plain read names none.
+        api.commands.set("cmd_exited", { id: "cmd_exited", exitCode: 0 });
+        const done = nativeSandbox(exited.id, "cmd_exited");
+        const gone = nativeSandbox(vanished.id, "cmd_unknown");
+        const beforeRename = nativeSandbox(older.id, "cmd_unknown", NAMING.BEFORE_RENAME);
+        api.sandboxes.push(done, gone, beforeRename);
 
-      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-      assert.deepEqual(outcome, {
-        stopped: 2,
-        retired: 0,
-        held: 0,
-        failed: 0,
-        deferred: 0,
-        lost: 0,
-      });
-      assert.equal(done.status, "stopped");
-      assert.equal(gone.status, "stopped");
-    }),
+        assert.deepEqual(outcome, {
+          stopped: 3,
+          retired: 0,
+          held: 0,
+          failed: 0,
+          deferred: 0,
+          lost: 0,
+        });
+        assert.equal(done.status, "stopped");
+        assert.equal(gone.status, "stopped");
+        assert.equal(beforeRename.status, "stopped");
+      }),
   );
 
   it.effect(

@@ -246,7 +246,7 @@ function workChecks(seen: Observations): readonly CheckResult[] {
     (item) => item.type === "mcpToolCall" && item.server === PROBE_MCP.SERVER,
   );
   const echoed = mcpCalls.find((item) =>
-    mcpResultText(item).includes(`luke-probe-echo:${seen.nonce}`),
+    mcpResultText(item).includes(`agent-probe-echo:${seen.nonce}`),
   );
   const firstTurn = turns.find((one) => one.phase === "first");
   const interrupted = turns.find((one) => one.turn.status === "interrupted");

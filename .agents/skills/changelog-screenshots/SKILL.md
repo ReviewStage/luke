@@ -21,10 +21,10 @@ Mac (`$S` below), and nothing syncs back.
 Without file sync (a Vespin coding agent's sandbox), files cross through scratch
 refs on GitHub, never a command line, which cannot carry a patch of pictures:
 the cloud commits the staged worktree and pushes it to
-`refs/luke-shots/<tag>`, and the Mac fetches it into its clone and diffs it
+`refs/release-shots/<tag>`, and the Mac fetches it into its clone and diffs it
 against the tag for `build.sh`; the Mac commits its previews and finished PNGs
 through a temporary index (`GIT_INDEX_FILE`, `hash-object` on absolute paths,
-`write-tree`, `commit-tree`) and pushes them to `refs/luke-shots/out`, which
+`write-tree`, `commit-tree`) and pushes them to `refs/release-shots/out`, which
 leaves the developer's checkout untouched. A ref outside `refs/heads` builds no
 Vercel Preview. Delete every scratch ref once the pictures land. The helpers
 run from a copy of `origin/main`'s skill (`git archive`), not the developer's
@@ -159,14 +159,14 @@ when the capture activates the window; reopen it from an interval or a
 
 The helpers in `scripts/` run on the Mac from the synced copy of this skill,
 through `bash`, since file sync drops the executable bit.
-`SHOTS_WORKTREE` (default `~/Developer/luke-changelog-shots`) is a throwaway
-worktree of the clone at `APP_REPO` (default `~/Developer/luke`); nothing
+`SHOTS_WORKTREE` (default `~/Developer/changelog-shots`) is a throwaway
+worktree of the clone at `APP_REPO` (default `~/Developer/vespin`); nothing
 touches the developer's own checkout or a running Vespin.
 
 ```sh
 S=<the workspace's synced copy on the Mac>
 bash $S/.agents/skills/changelog-screenshots/scripts/build.sh <commit> $S/.context/shots/staging.patch
-bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/luke-shots/<v>/call.png --profile shot-call
+bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/release-shots/<v>/call.png --profile shot-call
 ```
 
 `build.sh` checks the release out, applies the patch, installs, builds, and
@@ -195,8 +195,8 @@ is the staged web app in Safari on an iPhone simulator. Check out and install
 the release with its staging (`APP_SHOT_PATCH_DIST=0 build.sh`), then:
 
 ```sh
-bash $S/.agents/skills/changelog-screenshots/scripts/phone.sh ~/luke-shots/<v>/phone.png shot-<name>
-python3 $S/.agents/skills/changelog-screenshots/scripts/frame-phone.py ~/luke-shots/<v>/phone.png out/<name>.png
+bash $S/.agents/skills/changelog-screenshots/scripts/phone.sh ~/release-shots/<v>/phone.png shot-<name>
+python3 $S/.agents/skills/changelog-screenshots/scripts/frame-phone.py ~/release-shots/<v>/phone.png out/<name>.png
 ```
 
 `phone.sh` serves the worktree's web app, boots the simulator (iPhone 17, dark,
@@ -236,9 +236,9 @@ Both take `--zoom 2` for the 4x capture.
 Frame with the repository's own script, from the synced checkout:
 
 ```sh
-bash $S/scripts/changelog-screenshot.sh out/the-call-tab.png --from ~/luke-shots/<v>/call.png
-APP_SHOT_ZOOM=2 bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/luke-shots/<v>/skills.png --profile shot-skills
-bash $S/scripts/changelog-screenshot.sh out/skills.png --from ~/luke-shots/<v>/skills.png --crop 30,230,860,830 --zoom 2
+bash $S/scripts/changelog-screenshot.sh out/the-call-tab.png --from ~/release-shots/<v>/call.png
+APP_SHOT_ZOOM=2 bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/release-shots/<v>/skills.png --profile shot-skills
+bash $S/scripts/changelog-screenshot.sh out/skills.png --from ~/release-shots/<v>/skills.png --crop 30,230,860,830 --zoom 2
 ```
 
 Capture a close-up zoomed, so it is sharp: `APP_SHOT_ZOOM=2 window.sh …`

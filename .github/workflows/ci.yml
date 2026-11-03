@@ -119,8 +119,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
-      APP_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
+      DATABASE_URL_UNPOOLED: postgresql://vespin:vespin@localhost:5432/vespin
+      APP_STORE_TEST_DATABASE_URL: postgresql://vespin:vespin@localhost:5432/vespin
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
@@ -133,11 +133,11 @@ jobs:
               docker.io/library/postgres:18; do
               if docker pull --quiet "$image"; then
                 docker run --detach --name postgres \
-                  --env POSTGRES_USER=luke \
-                  --env POSTGRES_PASSWORD=luke \
-                  --env POSTGRES_DB=luke \
+                  --env POSTGRES_USER=vespin \
+                  --env POSTGRES_PASSWORD=vespin \
+                  --env POSTGRES_DB=vespin \
                   --publish 5432:5432 \
-                  --health-cmd "pg_isready -U luke" \
+                  --health-cmd "pg_isready -U vespin" \
                   --health-interval 5s \
                   --health-timeout 5s \
                   --health-retries 12 \

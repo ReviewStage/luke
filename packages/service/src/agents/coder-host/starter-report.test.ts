@@ -77,7 +77,7 @@ const openStarted = () =>
 const reporting = (eve: ReturnType<typeof recordingEve>) =>
   Layer.succeed(SettledTurnListener, {
     heard: (turn) =>
-      reportToStarter(eve.eveFor, turn).pipe(Effect.provide(githubReaching([]).layer)),
+      reportToStarter(eve.sessionsFor, turn).pipe(Effect.provide(githubReaching([]).layer)),
   });
 
 it.layer(getTestDB())("a started agent's final message handed to its starter", (it) => {
@@ -102,7 +102,7 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
         assert.ok(told.endsWith(agentMessageReplyLine(agent.id)), told);
 
         // The settle heard again, as a retried batch or a second listener would, sends nothing twice.
-        yield* reportToStarter(eve.eveFor, {
+        yield* reportToStarter(eve.sessionsFor, {
           userId: agent.userId,
           conversationId: agent.conversationId,
           turnId,

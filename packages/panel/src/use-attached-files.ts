@@ -8,7 +8,7 @@ import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { useRef, useState } from "react";
 import { reportShownFailure } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { ATTACH_TAKES, type AttachTakes, base64Of } from "./tasks/attached-files.js";
+import { base64Of } from "./tasks/attached-files.js";
 import { type FileDrop, useFileDrop } from "./use-file-drop.js";
 
 /**
@@ -39,7 +39,6 @@ import { type FileDrop, useFileDrop } from "./use-file-drop.js";
 /** Why a file did not come, in the words the box's note says. */
 const REFUSAL = {
   KIND: (name: string) => `${name} can't be attached. Attach images, PDFs, or text files.`,
-  NOT_IMAGE: (name: string) => `${name} can't be attached. Attach images.`,
   TOO_LARGE: (name: string) => `${name} is too large to attach.`,
   EMPTY: (name: string) => `${name} is empty.`,
   UNREADABLE: (name: string) => `${name} couldn't be read.`,
@@ -87,24 +86,6 @@ async function attachmentOf(file: File): Promise<FileRead> {
   if (!pdf && !spellsText(bytes)) return { refusal: REFUSAL.KIND(name) };
   const mediaType = pdf ? AGENT_ATTACHMENT_TYPE.PDF : AGENT_ATTACHMENT_TYPE.TEXT;
   return { attachment: { name, mediaType, data: base64Of(bytes) } };
-}
-
-/**
- * The files handed to a box that it reads at all, in order: every one where
- * it takes any file, and the pictures alone where it takes only those, the
- * first other file saying why it did not come before anything is read.
- */
-function filesTaken(
-  files: readonly File[],
-  takes: AttachTakes,
-): { readonly files: readonly File[]; readonly refusal: string | undefined } {
-  if (takes === ATTACH_TAKES.FILES) return { files, refusal: undefined };
-  const images = files.filter((file) => file.type.startsWith("image/"));
-  const other = files.find((file) => !images.includes(file));
-  return {
-    files: images,
-    refusal: other === undefined ? undefined : REFUSAL.NOT_IMAGE(other.name),
-  };
 }
 
 /** Files read: what the message may carry of them, in order, and why the first that cannot come did not. */
@@ -177,8 +158,6 @@ export interface AttachedFilesOptions {
   readonly onRefusal: (words: string | undefined) => void;
   /** Where the box keeps its files, its draft for one; the hook's own state where none is given. */
   readonly holder?: AttachedFilesHolder | undefined;
-  /** What the box carries; any file a message to an agent takes where none is given. */
-  readonly takes?: AttachTakes | undefined;
   /** The most files the box carries; a message to an agent's where none is given. */
   readonly most?: number | undefined;
   /** Whether the box takes no files now, as the agent box while a send holds it. */
@@ -222,22 +201,17 @@ export function useAttachedFiles(options: AttachedFilesOptions): AttachedFiles {
   const heldNow = () => latest.current.holder?.attachments ?? ownNow.current;
   const [reading, setReading] = useState(0);
 
-  const take = (refused: string | undefined, read: FilesRead) => {
+  const take = (read: FilesRead) => {
     const { most = AGENT_BOUNDS.MAX_ATTACHMENTS, onRefusal } = latest.current;
     const taken = withFiles(heldNow(), read, most);
     holderNow().update((now) => withFiles(now, read, most).attachments);
-    onRefusal(refused ?? taken.refusal);
+    onRefusal(taken.refusal);
   };
   const attach = (files: readonly File[]) => {
     if (files.length === 0 || latest.current.held === true) return;
-    const handed = filesTaken(files, latest.current.takes ?? ATTACH_TAKES.FILES);
-    if (handed.files.length === 0) {
-      latest.current.onRefusal(handed.refusal);
-      return;
-    }
     setReading((count) => count + 1);
-    void readFiles(handed.files)
-      .then((read) => take(handed.refusal, read))
+    void readFiles(files)
+      .then(take)
       .finally(() => setReading((count) => count - 1));
   };
   const drop = useFileDrop((files) => attach(Array.from(files)), { over: options.held !== true });

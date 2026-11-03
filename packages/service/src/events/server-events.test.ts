@@ -140,7 +140,7 @@ it.layer(getTestDB())("server events", (it) => {
                     $geoip_disable: true,
                     platform: "server",
                     environment: "preview",
-                    $lib: "luke-service",
+                    $lib: "vespin-service",
                   },
                 },
               ],

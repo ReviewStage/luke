@@ -53,7 +53,6 @@ import {
   GitPullRequestIcon,
   GLYPH,
 } from "@repo/ui/icons";
-import { useClipped } from "@repo/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import {
   createContext,
@@ -631,7 +630,6 @@ export function PullRequestTitle({
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false);
-  const [titleBox, titleClipped] = useClipped(`${title} ${number}`);
   const busy = writes.pending !== undefined;
   const end = ({ value }: InlineEditEnd) => {
     setEditing(false);
@@ -658,9 +656,7 @@ export function PullRequestTitle({
     // and one on the pencil is the pencil's; the header's ⋯ offers Open on GitHub to the keyboard.
     <CommandLink
       as={COMMAND_LINK_ELEMENT.H2}
-      ref={titleBox}
       className="pull-request-title pull-request-title-editable"
-      data-overflow={String(titleClipped)}
       onOpen={onOpen}
     >
       {title}

@@ -6,7 +6,7 @@ if [[ -z "${APP_RELEASE_KEYCHAIN:-}" ]]; then
     exit 0
 fi
 
-if [[ "$APP_RELEASE_KEYCHAIN" != */luke-release-*.keychain-db ]]; then
+if [[ "$APP_RELEASE_KEYCHAIN" != */vespin-release-*.keychain-db ]]; then
     printf 'error: refusing to delete an unexpected keychain path: %s\n' \
         "$APP_RELEASE_KEYCHAIN" >&2
     exit 1

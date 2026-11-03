@@ -211,7 +211,7 @@ export async function writeCredentialsFile(
   credentials: ChatGptCredentials,
   root = tmpdir(),
 ): Promise<string> {
-  const directory = await mkdtemp(path.join(root, "luke-codex-probe-"));
+  const directory = await mkdtemp(path.join(root, "agent-codex-probe-"));
   await chmod(directory, DIRECTORY_MODE);
   const file = path.join(directory, "credentials.json");
   await writeFile(file, credentialsJson(credentials), { mode: FILE_MODE, flag: "wx" });

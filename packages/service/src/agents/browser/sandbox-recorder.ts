@@ -34,6 +34,7 @@
 
 import { PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
+import { LINK_SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 import { SANDBOX_BROWSER } from "./sandbox-browser.js";
 
@@ -385,6 +386,7 @@ const RECORDER_ALIVE =
 const START_SCRIPT = [
   "set -u",
   'port="$1" state="$HOME/$2" max="$3" bytes="$4" width="$5" height="$6" source="$7"',
+  `(cd "$HOME" && ${LINK_SANDBOX_STATE_FOLDER})`,
   'dir="$state/recording"',
   RECORDER_ALIVE,
   'mkdir -p "$state" && chmod 700 "$state"',
@@ -416,6 +418,7 @@ const START_SCRIPT = [
 const STOP_SCRIPT = [
   "set -u",
   'dir="$HOME/$1/recording" tenths="$2"',
+  `(cd "$HOME" && ${LINK_SANDBOX_STATE_FOLDER})`,
   RECORDER_ALIVE,
   'if [ ! -e "$dir/done.json" ]; then',
   `  alive || { echo '{"ok":false,"reason":"${RECORDING_FAILURE.NONE}"}'; exit 0; }`,

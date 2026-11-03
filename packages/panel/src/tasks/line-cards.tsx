@@ -11,6 +11,7 @@ import {
   type EventNote,
   EventNotes,
   OneLine,
+  SUBJECT_FIT,
   type SubjectFit,
   SubjectLine,
 } from "@repo/ui";
@@ -22,6 +23,7 @@ import {
   type GitHubCheckConclusion,
   type GitHubLineMetadata,
   isFailingConclusion,
+  type SlackLineMetadata,
   type ThreadLineMetadata,
 } from "@repo/wire";
 import { createContext, type ReactNode, useContext } from "react";
@@ -41,7 +43,7 @@ import { useMentionDoors } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * line-cards.tsx -- a line steered into an agent drawn from what its metadata says carried it: a thread's line under its head, and GitHub's word as its card.
+ * line-cards.tsx -- a line steered into an agent drawn from what its metadata says carried it: a thread's, a comment's, or a Slack message's line under its head, and GitHub's word as its card.
  *
  * A member's reply, answer, or close on a thread reaches the agent as their
  * words under a header naming the item by its title and key, which is the
@@ -143,6 +145,40 @@ export function CommentLineHead({
   return (
     <SubjectLine lead={COMMENT_LINE_LEAD} fit={fit} data-comment-line="">
       {chip}
+    </SubjectLine>
+  );
+}
+
+/** What a Slack line leads with: after its sender's name, as GitHub's card says what its author did, or opening the line where it is the reader's own. */
+export const SLACK_LINE_LEAD = { AFTER_NAME: "wrote in", OWN: "Wrote in" } as const;
+
+/** What a Slack line's chip names: Slack, whose mark the chip wears for a link to it. */
+export const SLACK_LINE_SUBJECT = "Slack";
+
+/**
+ * The head of a member's message to the Slack bot, drawn in place of the
+ * prompt the agent was handed: that they wrote it in Slack, and Slack's
+ * chip, which opens the message there; Slack in words where Slack answered
+ * no link. Its chip takes its own width, so the head ends where the bubble
+ * under it does on the reader's own line.
+ */
+export function SlackLineHead({
+  line,
+  received,
+}: {
+  line: SlackLineMetadata;
+  /** Whether the line is another's, its head following their name (`MessageHead`); the reader's own opens with its lead. */
+  received: boolean;
+}): React.JSX.Element {
+  const doors = useMentionDoors();
+  const chip = line.url === undefined ? undefined : linkChip(line.url, SLACK_LINE_SUBJECT, doors);
+  return (
+    <SubjectLine
+      lead={received ? SLACK_LINE_LEAD.AFTER_NAME : SLACK_LINE_LEAD.OWN}
+      fit={SUBJECT_FIT.OWN}
+      data-slack-line=""
+    >
+      {chip ?? SLACK_LINE_SUBJECT}
     </SubjectLine>
   );
 }

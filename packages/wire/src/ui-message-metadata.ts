@@ -49,8 +49,8 @@ export const MESSAGE_AUTHOR = {
  * How a developer's ask arrived, or what else carried a line steered into a
  * coding agent: another coding agent's message, a thread's reply, answer or
  * close, a plan comment thread a member sent it, the brief a Start opened it
- * with, GitHub's word on its pull request, a line the service sent, or an
- * automation's run.
+ * with, GitHub's word on its pull request, a line the service sent, an
+ * automation's run, or a member's message to the Slack bot.
  */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
@@ -62,6 +62,7 @@ export const MESSAGE_CHANNEL = {
   GITHUB: "github",
   APP: "app",
   AUTOMATION: "automation",
+  SLACK: "slack",
 } as const;
 
 /** What a member did on a thread that a line steered into its agent carries. */
@@ -149,6 +150,16 @@ export const COMMENT_LINE_BOUNDS = {
   WORDS_CHARS: 8_000,
   QUOTE_CHARS: 2_000,
   TITLE_CHARS: 80,
+} as const;
+
+/**
+ * The most a Slack line's metadata holds: the member's words within the most
+ * Slack lets a message's text spell, and the message's link within a bound far
+ * past what Slack mints.
+ */
+export const SLACK_LINE_BOUNDS = {
+  WORDS_CHARS: 40_000,
+  URL_CHARS: 2_048,
 } as const;
 
 /**
@@ -341,8 +352,10 @@ const GITHUB_LINE_CHECK = EffectSchema.Struct({
  * the agent: a review with its verdict, words and inline comments, a comment
  * with its words, a failed check, or every check finished on a commit; the
  * repository, the pull request where GitHub named it, the page, and who
- * caused it, by their login. The words are the reviewer's, never the
- * developer's, and whether anyone but the agent's owner wrote them, which
+ * caused it, by their login and, where GitHub named one, the avatar its own
+ * avatar host serves for them (`by_avatar`), since an App's bot's picture
+ * lives at an address its login does not name. The words are the
+ * reviewer's, never the developer's, and whether anyone but the agent's owner wrote them, which
  * `run_on_mac` reads. A check line says whether a check failed, and every
  * check finished names each finished check; no output a check wrote rides
  * it. Each is absent from a line kept before it was said.
@@ -354,6 +367,7 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
   number: EffectSchema.optional(nonNegativeInteger),
   url: githubName(GITHUB_LINE_BOUNDS.URL_CHARS),
   by: githubName(GITHUB_LINE_BOUNDS.NAME_CHARS),
+  by_avatar: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.URL_CHARS)),
   verdict: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
   words: EffectSchema.optional(githubBody),
   comments: EffectSchema.optional(
@@ -397,6 +411,26 @@ const AUTOMATION_LINE_METADATA = EffectSchema.Struct({
 
 export type AutomationLineMetadata = EffectSchema.Schema.Type<typeof AUTOMATION_LINE_METADATA>;
 
+/**
+ * A Slack line is a member's message to the Slack bot, the one an agent was
+ * started from or a later one in its Slack thread: the member's own words,
+ * which a window draws in place of the prompt the agent read (the thread's
+ * earlier messages and what to do with them), and the message's link where
+ * Slack answered one; and whether the prompt carries the thread's earlier
+ * messages anyone but its writer wrote, which `run_on_mac` reads. Who wrote
+ * it is the row's sender.
+ */
+const SLACK_LINE_METADATA = EffectSchema.Struct({
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.SLACK),
+  words: EffectSchema.String.check(EffectSchema.isMaxLength(SLACK_LINE_BOUNDS.WORDS_CHARS)),
+  url: EffectSchema.optional(
+    trimmedText.check(EffectSchema.isMaxLength(SLACK_LINE_BOUNDS.URL_CHARS)),
+  ),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
+});
+
+export type SlackLineMetadata = EffectSchema.Schema.Type<typeof SLACK_LINE_METADATA>;
+
 /** A runtime note arrives on no channel: the runtime's own note of what opened the turn or what the host handed it. */
 const OBSERVATION_METADATA = EffectSchema.Struct({
   source: ObservationSourceSchema,
@@ -414,6 +448,7 @@ export type UserMessageMetadata =
   | GitHubLineMetadata
   | AppLineMetadata
   | AutomationLineMetadata
+  | SlackLineMetadata
   | ObservationMetadata;
 
 /** What a user row says about itself. */
@@ -427,6 +462,7 @@ export const USER_MESSAGE_METADATA = EffectSchema.Union([
   GITHUB_LINE_METADATA,
   APP_LINE_METADATA,
   AUTOMATION_LINE_METADATA,
+  SLACK_LINE_METADATA,
   OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 

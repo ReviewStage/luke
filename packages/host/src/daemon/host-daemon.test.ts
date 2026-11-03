@@ -55,9 +55,9 @@ const NEWER_RELEASE = {
   },
 };
 /** The Node the daemon runs on, which its runners run on too. */
-const NODE = "/opt/luke-host/node/bin/node";
+const NODE = "/opt/vespin-host/node/bin/node";
 /** The runner's bundle every OS runs: the release's own. */
-const RUNNER_BUNDLE = "/opt/luke-host/lib/agent-runner.mjs";
+const RUNNER_BUNDLE = "/opt/vespin-host/lib/agent-runner.mjs";
 const HTTP = {
   OK: 200,
   UNAUTHORIZED: 401,
@@ -77,7 +77,7 @@ const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", machine: () 
 const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
   hostPlatform({
     os,
-    installFolder: "/opt/luke-host",
+    installFolder: "/opt/vespin-host",
     arch: DEVICE_ARCH.X64,
     stateRoot,
     node: NODE,
@@ -439,13 +439,13 @@ describe("hostRuntime", () => {
       platform: "darwin",
       home: "/Users/ada",
       os: DARWIN_HOST,
-      stateRoot: "/Users/ada/.local/state/luke-host",
+      stateRoot: "/Users/ada/.local/state/vespin-host",
     },
     {
       platform: "linux",
-      home: "/var/lib/luke-host",
+      home: "/var/lib/vespin-host",
       os: LINUX_HOST,
-      stateRoot: "/var/lib/luke-host/state",
+      stateRoot: "/var/lib/vespin-host/state",
     },
   ])(
     "runs $platform as its own OS, with its state where its service keeps it",

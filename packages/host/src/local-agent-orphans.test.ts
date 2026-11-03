@@ -40,9 +40,9 @@ import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { fakeClis } from "./testing/fake-clis.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
-const RUNNER_FOLDER = "/opt/luke-host/lib";
+const RUNNER_FOLDER = "/opt/vespin-host/lib";
 /** The runner's own start on the box, as the platform launches it. */
-const RUNNER = "/opt/luke-host/node/bin/node";
+const RUNNER = "/opt/vespin-host/node/bin/node";
 const USER_ID = "user-fixture";
 /** The platform's check of a worktree, named so the scripted spawner answers it, the worktree after it. */
 const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";

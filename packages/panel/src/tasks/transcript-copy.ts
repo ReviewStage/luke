@@ -35,11 +35,17 @@ import {
   isDelegation,
   messageWords,
   placedMessages,
+  slackLineOf,
   threadLineOf,
   turnStretches,
   workerLines,
 } from "./agent-model.js";
-import { COMMENT_LINE_LEAD, commentLineSubject } from "./line-cards.js";
+import {
+  COMMENT_LINE_LEAD,
+  commentLineSubject,
+  SLACK_LINE_LEAD,
+  SLACK_LINE_SUBJECT,
+} from "./line-cards.js";
 import {
   leftOutLine,
   replayCount,
@@ -298,7 +304,8 @@ function developerTurn(message: AgentTranscriptMessage): CopiedTurn {
  * A line steered into the agent as its row draws it from its metadata,
  * rather than as the prompt the agent read: a thread's led by what the
  * member did, without the header naming the item; a comment's by what it
- * is on and its member's words; GitHub's as its card
+ * is on and its member's words; a Slack message's by Slack and its member's
+ * words alone; GitHub's as its card
  * (`githubLineWords`), without the instructions and the fence. Nothing for
  * any other line, whose words are its own.
  */
@@ -309,6 +316,8 @@ function sentLineWords(message: AgentTranscriptMessage): string | undefined {
   if (comment !== undefined) {
     return `${COMMENT_LINE_LEAD} ${commentLineSubject(comment)}\n\n${commentLineWords(comment)}`;
   }
+  const slack = slackLineOf(message);
+  if (slack !== undefined) return `${SLACK_LINE_LEAD.OWN} ${SLACK_LINE_SUBJECT}\n\n${slack.words}`;
   const thread = threadLineOf(message);
   if (thread === undefined) return undefined;
   return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]

@@ -11,6 +11,6 @@ test("an agent with no repository opens its sandbox at two vCPUs", () => {
 });
 
 test("Vespin's own repository asks for four vCPUs, however GitHub's name for it is cased", () => {
-  assert.equal(sandboxVcpus("reviewstage/luke"), 4);
-  assert.equal(sandboxVcpus("ReviewStage/luke"), 4);
+  assert.equal(sandboxVcpus("reviewstage/vespin"), 4);
+  assert.equal(sandboxVcpus("ReviewStage/vespin"), 4);
 });

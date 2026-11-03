@@ -47,7 +47,13 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { AGENT_USER, RUNNER_DIRECTORY, SHARED_FILES_DIRECTORY } from "@repo/agent-runner/pins";
+import {
+  AGENT_USER,
+  RUNNER_DIRECTORY,
+  SANDBOX_TOOLS_DIRECTORY,
+  SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
+  SHARED_FILES_DIRECTORY,
+} from "@repo/agent-runner/pins";
 import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
@@ -122,14 +128,12 @@ import {
  * The tags a sandbox we open carries beside its session's: its agent, and
  * the runner it runs, so a later call finds both. Note that Vercel refuses a
  * sandbox more than five tags, the session's among them, so a launch's
- * fingerprint rides in its launch tag rather than a tag of its own. And
- * note that the tags, and `SANDBOX_NAME`, keep their old names, because the
- * launch and the sweep find a persistent sandbox made before by them.
+ * fingerprint rides in its launch tag rather than a tag of its own.
  */
 export const RUNNER_TAG = {
-  AGENT: "lukeAgent",
-  SANDBOX_SESSION: "lukeRunnerSession",
-  COMMAND: "lukeRunnerCommand",
+  AGENT: "agentId",
+  SANDBOX_SESSION: "agentRunnerSession",
+  COMMAND: "agentRunnerCommand",
   /**
    * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
    * the launch was started with that a warm runner cannot take up later
@@ -139,8 +143,31 @@ export const RUNNER_TAG = {
    * without it as one whose stdin it writes, and is read here by no one:
    * no launch from before the read still ran as this deployment went out.
    */
-  LAUNCH: "lukeRunnerLaunch",
+  LAUNCH: "agentRunnerLaunch",
 } as const;
+
+/**
+ * The tags' names before the product's rename, read after `RUNNER_TAG`'s and
+ * never written. Note that each write replaces a sandbox's whole set of
+ * tags, so a sandbox carries one name of a tag or the other, and one made
+ * before carries the old names until its next launch or halt writes the
+ * new; they can go once Vercel lists no sandbox named
+ * `SANDBOX_NAME_BEFORE_RENAME`, since only such a sandbox can carry them.
+ */
+const RUNNER_TAG_BEFORE_RENAME = {
+  AGENT: "lukeAgent",
+  SANDBOX_SESSION: "lukeRunnerSession",
+  COMMAND: "lukeRunnerCommand",
+  LAUNCH: "lukeRunnerLaunch",
+} as const satisfies Record<keyof typeof RUNNER_TAG, string>;
+
+/** A runner tag of a sandbox, under its name or the one it had before the rename. */
+export function runnerTag(
+  tags: Readonly<Record<string, string>> | undefined,
+  tag: keyof typeof RUNNER_TAG,
+): string | undefined {
+  return tags?.[RUNNER_TAG[tag]] ?? tags?.[RUNNER_TAG_BEFORE_RENAME[tag]];
+}
 
 /** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
 const LAUNCH_FINGERPRINT_MARK = "-";
@@ -172,7 +199,16 @@ const SANDBOX_LAYOUT: MachineLayout = {
 };
 
 /** What a sandbox we open is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
-export const SANDBOX_NAME = "luke-agent-";
+export const SANDBOX_NAME = "agent-sandbox-";
+
+/**
+ * What a sandbox opened before the product's rename is named as, which the
+ * sweeps still find and nothing opens. Note that it can go only once Vercel
+ * lists no sandbox under it, because a sandbox in steady use resumes from
+ * its own snapshot, under its own name, for as long as it lives; one goes on
+ * a reset, on the first message after its snapshot lapsed, or at its purge.
+ */
+export const SANDBOX_NAME_BEFORE_RENAME = "luke-agent-";
 
 /**
  * Where the launch stands in the sandbox: the bundle as the file API uploads
@@ -187,6 +223,16 @@ const RUNNER_PATH = {
 
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
+
+/**
+ * The link a sandbox made before the product's rename is given on each
+ * launch, root's, from our tools' directory to the one its image put them
+ * in, so the runner's bundle and the Claude Code binary are found where the
+ * pins name them. Note that it can go only once Vercel lists no sandbox made
+ * before the rename (named `luke-agent-` and a UUID), because a sandbox in
+ * steady use resumes from its own snapshot for as long as it lives.
+ */
+const LINK_TOOLS_DIRECTORY = `if [ -d ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ] && [ ! -e ${SANDBOX_TOOLS_DIRECTORY} ] && [ ! -L ${SANDBOX_TOOLS_DIRECTORY} ]; then ln -s ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ${SANDBOX_TOOLS_DIRECTORY}; fi`;
 
 /**
  * The launch, run by bash as root: the uploaded bundle installed where only
@@ -205,6 +251,7 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
  */
 const LAUNCH_SCRIPT = [
   "set -euo pipefail",
+  LINK_TOOLS_DIRECTORY,
   `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
   `rm -f ${RUNNER_PATH.UPLOAD}`,
   `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
@@ -288,7 +335,7 @@ export interface TaggedRunner {
 
 /** The launch tag read: its first event number, and its fingerprint where it has one, of a launch that reads its lines, as every sandbox's does; none where the tag is missing or unreadable. */
 function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
-  const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
+  const [sequence = "", fingerprint] = (runnerTag(tags, "LAUNCH") ?? "").split(
     LAUNCH_FINGERPRINT_MARK,
   );
   const firstSequence = Number(sequence);
@@ -299,8 +346,8 @@ function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | unde
 /** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
 export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   const tags = sandbox.tags ?? {};
-  const sandboxSessionId = tags[RUNNER_TAG.SANDBOX_SESSION];
-  const commandId = tags[RUNNER_TAG.COMMAND];
+  const sandboxSessionId = runnerTag(tags, "SANDBOX_SESSION");
+  const commandId = runnerTag(tags, "COMMAND");
   const launch = taggedLaunch(tags);
   if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
     return undefined;
@@ -359,7 +406,7 @@ function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
   return {
     machine: AGENT_MACHINE.VERCEL,
     session,
-    agentId: tags[RUNNER_TAG.AGENT],
+    agentId: runnerTag(tags, "AGENT"),
     name: nameOfSandbox(sandbox.name),
     running,
     runner: runnerInSession(session, sandbox),

@@ -112,7 +112,7 @@ const POST_THREAD_WORDS =
   `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several, and recommended then takes a list of the labels you recommend; ` +
   "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
   "do (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, or testing by hand what you could not test yourself; " +
-  `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
+  `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, a command to run in a fenced block in its step, after the words saying where to run it, which they copy whole, and they tick each before they mark it done, or say they couldn't), ` +
   `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and required where it must be filled; ` +
   "or no fields for an answer in their own words); never end an answer with an optional free-text field, because the reply box under every ask already takes a note; " +
   "never ask for a credential or a secret in a form, since the answer reaches your transcript: " +

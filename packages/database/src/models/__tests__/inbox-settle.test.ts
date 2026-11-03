@@ -15,7 +15,6 @@ import { getTestDB, openInboxItem, openTaskAgent, openWorkspace } from "../../te
 import {
   archiveAgent,
   archiveIdleAgent,
-  archiveUnmovedAgent,
   readAgent,
   recordAgentPublished,
   unarchiveAgentFrom,
@@ -221,11 +220,6 @@ const ARCHIVES = [
       Effect.flatMap(archivedAtOf(userId, agentId), (archivedAt) =>
         unarchiveAgentFrom(userId, agentId, archivedAt),
       ),
-  },
-  {
-    name: "an archive of an agent nothing woke, undone by hand",
-    archive: (userId: string, agentId: string) => archiveUnmovedAgent(userId, agentId, 1),
-    unarchive: (userId: string, agentId: string) => archiveAgent(userId, agentId, false),
   },
 ] as const;
 

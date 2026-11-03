@@ -232,15 +232,21 @@ open. GitHub signs every delivery with the App's webhook secret,
 against the HMAC-SHA256 of the body's own bytes in constant time before it
 reads anything; a deployment without the secret answers every delivery
 `unavailable` (503), and a signature that does not hold is `invalid-token`
-(401). Only `pull_request` (opened, reopened, closed, edited, synchronize,
-ready_for_review, converted_to_draft), `check_suite`, a completed
-`check_run`, and `status` are read, for the repository's full name and the branches they
-name, and nothing of a delivery is kept or logged: the branch finds the agents
+(401). For what an agent published, only `pull_request` (opened, reopened,
+closed, edited, synchronize, ready_for_review, converted_to_draft, enqueued,
+dequeued), `check_suite`, a completed `check_run`, and `status` are read, for
+the repository's full name and the branches they name, and nothing of a
+delivery is kept or logged: the branch finds the agents
 whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
 task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
-A redelivery reads the same again. Before any of that, the repository a
+A redelivery reads the same again. Every delivery is also read as an
+automation's trigger (`src/automations/automation-github.ts`, "Automations"
+below), and a submitted review, a new comment on a pull request, or a check
+suite or status that failed on an agent's branch is told to the agents on
+that pull request as a message from GitHub, as is every check on an agent's
+head finished, to the agent at work waiting on them (`src/github/agent-wakes.ts`). Before any of that, the repository a
 delivery names is recorded by GitHub's id under the name it carries
 (`github_repository`, `@repo/database/models/github-repositories`); where
 GitHub gives the id another name than it was last seen under, every stored
@@ -257,8 +263,9 @@ before the service ever saw it is relabeled too. The App must subscribe to
 the Repository event for those, a setting of the App on GitHub; without it,
 the next reach of the old name, which GitHub answers with a redirect to the
 new one on whichever of the workspace's installations reaches it now
-(`github-app.ts`), does the same. GitHub's `ping` and any other event are answered and
-ignored. An `installation` delivery, which GitHub sends every
+(`github-app.ts`), does the same. GitHub's `ping` and
+`installation_repositories` are answered and ignored, as is any other event
+neither an automation nor an agent reads. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,
@@ -324,15 +331,20 @@ Vercel OIDC token can mint the app token, so the CLI cannot check it: check it
 on a Preview. An owner or admin connects the bot under Settings › Workspace
 (`src/slack/slack-bot-procedures.ts`), which calls `auth.test` and keeps the
 team in `slack_installation`, one per workspace; Disconnect deletes it.
-`SlackBot.dm` finds a member by their email (`users.lookupByEmail`) the first
-time and keeps the answer, a miss included, in `slack_member`
-(`@repo/database/models/slack-installation-store`). `dm` and `update` log and
+`SlackBot.dm` finds a member by the Slack id kept in `slack_member`
+(`@repo/database/models/slack-installation-store`), else through a Slack
+account the member connected for their agents whose `auth.test` answers the
+installed team, else by their email (`users.lookupByEmail`), and keeps the
+answer. An email miss is kept too, for a day
+(`SLACK_MEMBER_MISS_LIFETIME`), and a kept miss still tries the member's own
+accounts, so one who connects Slack after a miss is found at the next write. `dm` and `update` log and
 swallow every failure; never yield either inside a transaction.
 
 An automation with "Send the result to me on Slack" on (`automation.slack_delivery`)
 has each run's result sent to its owner by the bot as the run's agent's turn
 settles (`src/automations/automation-slack-delivery.ts`, heard through
-`SettledTurnListener`): the agent's final message as mrkdwn, or that the run
+`SettledTurnListener`): the agent's final message in a `markdown` block, which
+Slack draws as standard Markdown, or that the run
 failed or was stopped, with a link to the agent. The run is claimed first
 (`automation_run.slack_delivered_at`), so each run sends once.
 
@@ -341,11 +353,13 @@ reaches our Slack route (`/api/slack/events`) as an `app_mention` or
 `message.im` event and starts a coding agent as them on no task
 (`src/slack/slack-agent-starts.ts`), once the answer has left; Slack's
 retries (`x-slack-retry-num`) and bots' messages are dropped. The writer is
-found by the Slack id the bot kept, or else by the email Slack holds for them
-(`users.info`). The bot replies in the thread with the agent's link, the
+found by the Slack id the bot kept, else through the Slack accounts members
+connected that no kept id names yet, one `auth.test` each (`SlackBot.memberOf`),
+or else by the email Slack holds for them (`users.info`). The bot reacts to
+the message with 👀 (`eyes`), replying in the thread only to refuse, the
 thread is kept against the agent in `slack_agent_thread`, a later mention in
 that thread is sent to the agent instead, and every settled turn of the agent
-is posted back in the thread once (`SettledTurnListener`). The Slack app must
+is posted back in the thread once, with the agent's link (`SettledTurnListener`). The Slack app must
 subscribe to the `app_mention` and `message.im` bot events.
 
 An owner or admin names the repository a Slack start defaults to under
@@ -654,7 +668,8 @@ one account at a provider (two Notion workspaces), each its own row and its
 own grant. Connect keys a grant by connector and subject, so each row keeps
 the subject it asks under (`connect_subject`): the Vespin account's own user
 id for the first account at a provider, as every ask was before a second
-was possible, and a minted `luke_acct_…` id for another. Each row also keeps
+was possible, and a minted `app_acct_…` id for another (`luke_acct_…` on
+rows minted before the rename, which stay valid). Each row also keeps
 the one name the account goes by everywhere (`connection_name`): the
 provider's own for the first (`notion`), the provider and its place for
 another (`notion-2`), minted once (`mintIntegrationConnectionName` in
@@ -828,7 +843,7 @@ vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
 vercel connect create mcp.stripe.com --name stripe             # Stripe; asks for its scope below
 vercel connect create granola --name granola                   # Granola
-vercel connect create mcp.mercury.com --name luke-mercury      # Mercury, whose clients' names may not begin with "Mercury"
+vercel connect create mcp.mercury.com --name vespin-mercury    # Mercury, whose clients' names may not begin with "Mercury"
 # Neon: an OAuth connector over a client registered by hand, below
 vercel connect create posthog --name posthog                   # PostHog
 vercel connect create supabase --name supabase                 # Supabase
@@ -1029,7 +1044,7 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
-`VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
+`VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `vespin` project for
 production, preview, and development. The web and `dev` are services of that
 one project (the root `vercel.json`'s `services`), so its variables and the
 connector's link reach both, which matters because the agents read
@@ -1193,7 +1208,8 @@ own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
 transcript, as many entries as asked, to a bound; `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
-`taskId` that `list_tasks` answers, by the Start button's own path, telling
+`taskId` that `list_tasks` answers, by the one path every start takes
+(`src/agents/coder-host/start.ts`), telling
 it which agent started it; `stop_agent`, which stops the turn
 under way of an agent of the workspace, never itself or an archived one, by
 the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent
@@ -2162,7 +2178,7 @@ replacement each wake every watch, so its reader reads again.
 reconnects or where the deployment has no `DATABASE_URL_UNPOOLED`, every
 `next` waits its caller's own poll, as every held read did before Vespin Sync;
 a watch on no topics always does, and a runtime that provides no hub, as a
-test may, stands on the clock. The hub's metrics (`luke.sync.*`) count
+test may, stands on the clock. The hub's metrics (`app.sync.*`) count
 notifications, wakes, fallback wakes, reconnects, and the milliseconds the
 listener stood down, and gauge the notification queue's usage; none carries a
 topic, an id, or a transaction id.

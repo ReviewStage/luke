@@ -16,11 +16,11 @@ import {
  * How the functions become bundles, declared once so the build script and the
  * test bundle the same way. A grouped function's entry is generated here: it
  * imports each member route and hands them to `dispatchRoutes`. A standalone
- * function's entry is its route file. Workspace packages are inlined; the web
- * app's own declared runtime dependencies stay external, because those are
- * what Vercel's builder traces from `apps/web/node_modules`, and everything
- * else that resolves external is a dependency a bundled package reaches that
- * this app never declared.
+ * function's entry is its route file. Workspace packages and the web app's
+ * declared runtime dependencies are inlined alike, so nothing is left for
+ * Vercel's builder to trace; past Node's builtins and `INLINE_EXCEPTION`,
+ * anything that resolves external is a dependency a bundled package reaches
+ * that this app never declared.
  */
 
 const FUNCTION_BUNDLE_TARGET = "node24";

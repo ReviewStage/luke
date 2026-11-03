@@ -11,7 +11,7 @@ import { app } from "electron";
  *
  * The install lives under the member's own home, by the names the install
  * script gives it (`apps/web/install/install.sh`): its state, holding the
- * record its host runs on, in `~/.local/state/luke-host`, and its
+ * record its host runs on, in `~/.local/state/vespin-host`, and its
  * LaunchAgent, `dev.vespin.host.standalone`, which runs its host at login.
  * Every build of the app, a development run among them, acts on that one
  * install, never a state folder of its own. Stopping it boots the

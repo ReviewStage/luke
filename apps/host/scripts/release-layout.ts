@@ -1,26 +1,21 @@
 /**
  * release-layout.ts -- one host release's folder laid out from the files it carries, and packed as its tarball: everything of a release but the Node it runs on, which `package.ts` fetches at its pin.
  *
- * The folder is the tarball's one top folder, `luke-host/`, which a host's
+ * The folder is the tarball's one top folder, `vespin-host/`, which a host's
  * update and the install script both rename to `versions/<version>`, so no
- * person sees it; it and the tarball keep the name from before the rename
- * (`@repo/features/host-release`). Its command is `bin/vespin-host`, and `bin/luke-host` is a
- * relative link to it: a host through 0.6.0 switches to a release only once
- * its `bin/luke-host` is a file it may run whose `version` answers the
- * release's (`host-update.ts` as 0.6.0 shipped it), and the service an older
- * install wrote starts it by that name. Anything that resolves the link's
- * path finds `vespin-host`. The tarball is written by GNU tar, a Mac's
+ * person sees it (`@repo/features/host-release`). Its command is
+ * `bin/vespin-host`. The tarball is written by GNU tar, a Mac's
  * `gtar`, with every entry owned by root and stamped at one time, in name
  * order, so its digest is the contents' alone.
  */
 
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 
 /** The tarball's one top folder. */
-export const ROOT_FOLDER = "luke-host";
+export const ROOT_FOLDER = "vespin-host";
 
 /** One time every entry of the tarball is stamped with, so the same contents make the same bytes. */
 const STAMP = "2026-01-01T00:00:00Z";
@@ -49,10 +44,7 @@ const RELEASE_FILES = [
   { from: "notice", to: "NOTICE", mode: 0o644 },
 ] as const satisfies readonly { from: keyof ReleaseSources; to: string; mode: number }[];
 
-/** The links every release carries, by where each stands under the root folder and the path it names, relative to its own folder. */
-const RELEASE_LINKS = [{ at: "bin/luke-host", to: "vespin-host" }] as const;
-
-/** The release's files and links laid out under `root`, whatever stood there before removed. */
+/** The release's files laid out under `root`, whatever stood there before removed. */
 export function stagedRelease(root: string, sources: ReleaseSources): void {
   rmSync(root, { recursive: true, force: true });
   for (const file of RELEASE_FILES) {
@@ -60,7 +52,6 @@ export function stagedRelease(root: string, sources: ReleaseSources): void {
     copyFileSync(sources[file.from], join(root, file.to));
     chmodSync(join(root, file.to), file.mode);
   }
-  for (const link of RELEASE_LINKS) symlinkSync(link.to, join(root, link.at));
 }
 
 /** The root folder under `staging` packed whole as the tarball given. */

@@ -39,8 +39,8 @@ Mac once you allow it, and what it prints leaves your Mac (see "Commands
 agents run on your Mac"). Apart from that, nothing in Vespin reads an agent session, message history, file contents, or command output from your
 Mac's disk or from any other app, except a file you hand it to attach to a
 agent's message (see "Files you attach to an agent"). The only
-agents it lists are the ones started on a task from Vespin — its Start
-button, New agent, or another agent — which
+agents it lists are the ones started on a task from Vespin — from New task,
+New agent, or the terminal picker, or by another agent — which
 our service runs in sandboxes of their own (see "Who we send it to"), and
 the transcripts it shows, each an agent's or one of its workers', are
 read from our service. Each agent reads a task's repository in its
@@ -59,8 +59,10 @@ stay in memory only.
 None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Every agent can run any shell
-command on your Mac, as many at a time as you allow; the workers an agent hands work to cannot, and run their own commands in the agent's
-sandbox with no network at all. This holds whenever Vespin is open on the Mac and
+command on your Mac, as many at a time as you allow; the workers a Claude Code
+agent hands work to cannot, and run their own commands where the agent's own
+commands run: in its sandbox, with the same network, or, for a local agent, on
+your Mac or the host. This holds whenever Vespin is open on the Mac and
 signed in to your account, and Settings › This Mac is not on Never. It has
 three modes: Ask every time, the default, where you see a prompt and can deny
 the command; Always allow, which runs it at once; and Never. The mode is kept
@@ -325,10 +327,10 @@ on the same bounds as a file you attach. Any
 other file, and an image not kept that way, such as one past the transcript's
 200 MB of pictures, is stored in the transcript as sent, except that the
 prompt an agent is started on keeps a PDF, or an image not kept, by name
-alone. An agent that runs on Vespin's own agent has its images and PDFs copied
-into its sandbox too; one that runs on Claude Code or Codex is handed them in
-its messages and never as files in its sandbox. They go when the transcript
-does; the sandbox's snapshot and the agent's session history keep them on the
+alone. An agent is handed a PNG, JPEG, GIF, or WebP image in its message; any
+other file, a PDF among it, is written into its sandbox (for a local agent,
+into its folder on your Mac or the host), and the message tells it where.
+They go when the transcript does; the sandbox's snapshot and the agent's session history keep them on the
 terms under "Who we send it to".
 
 **Pictures in a tool's answer.** When a tool answers an agent
@@ -473,7 +475,7 @@ installs Vespin's host program, `vespin-host`, into your account on the Mac, as
 the install command in Settings › Hosts does: the app runs the install script
 our service serves, which puts the host under `~/.local` with a LaunchAgent
 that runs it at each login, whether the app is open or not, and the host keeps
-the secret it acts on in `~/.local/state/luke-host`, readable by you alone.
+the secret it acts on in `~/.local/state/vespin-host`, readable by you alone.
 Every copy of Vespin on your Mac drives that one host. Turning Bring your own
 host off stops it and keeps it from starting at the next login, with its files
 left in place; `vespin-host uninstall` removes it, with the folders of the
@@ -535,11 +537,10 @@ its enroll or its first call after you approve it, keeping none from the ask
 for a code, lists them only to your own account's apps, and keeps them for as
 long as it keeps the host, which goes with your account.
 
-**An agent that runs on Claude Code.** For the accounts in the early
-test of Claude plans, an agent your Claude plan pays for runs on
-Anthropic's Claude Code, and so does a Claude agent your own Anthropic
-API key pays for, in that agent's own Vercel Sandbox, rather than on
-Vespin's own agent. Its sandbox's disk holds the agent's checkout of the
+**An agent that runs on Claude Code.** Every Claude agent runs on
+Anthropic's Claude Code, whether your Claude plan or your own Anthropic API
+key pays for it, in that agent's own Vercel Sandbox unless it is a local
+agent, as above. Its sandbox's disk holds the agent's checkout of the
 repository and Claude Code's own session files: its record of the session,
 which it picks up again from there when the agent is next messaged. Both stay
 on that disk between turns and in the snapshot Vercel keeps when the sandbox
@@ -553,10 +554,9 @@ from there; a message the runner never took is handed to the agent's next launch
 within five minutes of your sending it, or not at all. A line is deleted once
 it is a day old and a later one is sent to that agent, and with the agent.
 
-**An agent that runs on Codex.** On the same terms, for the accounts in
-the early test of ChatGPT plans, an agent your ChatGPT plan pays for
-runs on OpenAI's Codex, in that agent's own Vercel Sandbox, and so does a GPT
-agent your own OpenAI API key pays for. Its sandbox's
+**An agent that runs on Codex.** On the same terms, every GPT agent runs
+on OpenAI's Codex, whether your ChatGPT plan or your own OpenAI API key pays
+for it. Its sandbox's
 disk holds the agent's checkout and Codex's own thread files (under its
 `CODEX_HOME`): its record of the thread, which it resumes from there when the
 agent is next messaged. Both stay on that disk between turns and in the
@@ -722,10 +722,13 @@ else.
 **Agents' working memory.** Each agent works
 from a session history of its own turns — the model's record of what it read,
 said, and did, folded into a written summary when it grows long — kept by
-Vercel Workflow for our service on the terms under "Who we send it to"; our
-database keeps the record of each turn described under "Your account", from
-which a new session picks up. None of it is held on your Mac, in memory or on
-disk.
+Claude Code or Codex as files on the agent's sandbox's disk, on the terms
+under "An agent that runs on Claude Code" and "An agent that runs on Codex",
+or, for a local agent, in its folder on your Mac or the host. Our database
+keeps the record of each turn described under "Your account"; a session that
+has ended does not pick up again from it, and the agent's next message starts
+a fresh one. Apart from a local agent's folder, none of it is held on your
+Mac, in memory or on disk.
 
 Earlier versions kept the conversation, Vespin's working memory, the things
 it remembered about you, and a search index over its workspace files in a
@@ -905,10 +908,8 @@ that mentions Linear, one of its tools, or one of its pages hands it Linear
 for the turn that message opens, or, sent while a turn is under way, for its
 next one, even while Linear is switched off for that agent, and leaves the
 switch as it is; a message from another agent or a reviewer hands it
-none. The workers are told to change
-something only when their subagent task asks for
-it. What Linear answers goes to the model that made the call, and each call,
-with its input and everything Linear answered, is written to the agent's
+none. The workers are told to use it only to read. What Linear answers goes
+to the model that made the call, and each call, with its input and everything Linear answered, is written to the agent's
 transcript like any other tool call. Disconnecting stops Vespin
 using it from each agent's next step, removes the connection's record, and
 asks Vercel Connect to revoke the grant; what agents already changed in
@@ -1145,7 +1146,7 @@ already changed on GitHub, and the record of it, stays.
 **Usage data.** We count how Vespin's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
 a fixed list. Among them is which kind of page or pane you opened (a task's
-plan, an agent, the Inbox, a channel, a pull request, a file, a terminal, a
+plan, an agent, the Inbox, a pull request, a file, a terminal, a
 browser, Settings, and the like, never which one) and whether Vespin's window
 was wide or narrow as you opened it. A count
 made before you sign in waits in Vespin's memory and is sent under your account
@@ -1198,8 +1199,7 @@ a member wrote on one (with whether it replied on a thread or started one), an
 automation run started (with what fired it: its schedule, GitHub, a webhook, an
 integration, or Run now), counted under the automation's owner, the GitHub App
 connected to a workspace, a Linux host or this Mac enrolled (with which), a
-box's pairing approved or denied and a host removed, a channel made, edited, or
-archived and a thread moved into one, a skill installed, turned on or off,
+box's pairing approved or denied and a host removed, a skill installed, turned on or off,
 updated, shared with a workspace, or removed (never which), a workspace memory
 forgotten (never what it held), a clip you dictated (with a rough length, never
 its words), and a terminal or a browser tab you opened in an agent's sandbox, a
@@ -1214,7 +1214,7 @@ with the rest of your usage data.
 Our service's counts are also grouped by workspace, so PostHog can count
 workspaces as well as people: a count of something done in a workspace (a
 task, an agent and its messages and turns, a pull request, a thread, a plan, an
-automation, an invitation, a member or workspace change, a channel, a memory, a
+automation, an invitation, a member or workspace change, a memory, a
 tool you opened for an agent, the GitHub App, or the workspace made) carries the
 workspace's id, and a count of your account's own setup and belongings (your
 first sign-in, a GitHub account or token, an integration, an API key, a pinned
@@ -1366,7 +1366,7 @@ report besides. Each carries where in Vespin the error was shown, its code, the
 name, code, HTTP status, and message of the error behind it, with every run
 shaped like a credential replaced and the message cut short, the ids of what
 it was about (such as the workspace, task, agent, conversation, inbox item,
-channel, automation, or pull request number), whether your Mac or browser was
+automation, or pull request number), whether your Mac or browser was
 online, whether you were signed in, and, while you were, your Vespin
 account's id, as every report described above does. It never carries what
 you typed, a
@@ -1377,9 +1377,8 @@ error notice's Copy details button puts the same facts on your clipboard, with
 the time, the app's version, and the ids Sentry gave the report, and sends
 nothing anywhere: they go only where you paste them.
 
-**Error, performance, and agent reports from our service.** Our service and
-Vespin's agents send Sentry reports so that we can find and fix failures. Our
-service's web functions send every error they did not handle or that ended
+**Error and performance reports from our service.** Our service sends Sentry
+reports so that we can find and fix failures. Our service's web functions send every error they did not handle or that ended
 work they run apart from a request (such as standing the terminal service),
 with its message, stack trace, and
 the lines of code around it; performance traces of a share of the requests
@@ -1392,28 +1391,15 @@ not send a request's headers or body, the values of local variables, or the IP
 address a request came from, except the trace id a request names in its
 `traceparent` header, which its trace, its errors, and its log lines carry, in
 Sentry and in our service's own logs alike, so the app's report of a request
-that failed and the service's record of the same request share one id. Vespin's agents send what Sentry's SDK collects by
-default, apart from request bodies and what a model is sent or answers: every
-error they did not handle or that ended work they started apart from a turn,
-with its message, stack trace, the lines of code around it, and the values of
-local variables, apart from a tool's refusal the agent was handed back to go
-on from, which its agent trace still shows; performance traces of each
-request they answer, each database query, and each request they make, with
-their headers, addresses, the names of their query parameters, and database
-query parameters, and the IP address a request came from; every line they
-log, with the values it was logged under; and Sentry's agent traces of each turn, which name the model and each
-tool called and say how long each call took, how many tokens it used, and
-whether it failed. Neither the agents nor the web functions send Sentry the
+that failed and the service's record of the same request share one id.
+An agent itself, and what it runs, sends our Sentry nothing, whether in its
+sandbox or as a local agent on your Mac or a host. The web functions do not send Sentry the
 instructions or messages sent to a model (the plan, the conversation, or what
 the agents read, such as code, a command's output from
 your Mac, or an integration's answer), a model's replies, or a tool call's
-arguments or result. The words of an error, a log line, or a local variable
-can still quote what an agent was working on, such as the path of a file a
-tool could not find. In what the agents send, Sentry replaces a value whose
-name looks like a credential (such as `auth`, `token`, `secret`, `password`,
-`key`, or `session`) before it leaves, but not a credential written in free
-text, such as a key in an error's words. In the address of a request
-that the web functions or the agents give on a trace, an error, a breadcrumb,
+arguments or result. The words of an error or a log line can still quote what
+an agent was working on, such as the path of a file a tool could not find. In
+the address of a request that the web functions give on a trace, an error, a breadcrumb,
 or a log line, the value of each query parameter and the fragment are replaced,
 and so is any part of its path shaped like a credential, such as a long token;
 the scheme, the host, the rest of the path, and the parameters' names are sent
@@ -1453,11 +1439,11 @@ only when you press Send.
 - Anthropic or OpenAI, for web search. An agent and its workers search
   the web with the search tool of the provider its model is on (Anthropic's
   for a Claude model, OpenAI's for a GPT one), inside that model call and on
-  your own key for that provider. A page an agent reads is fetched by our service itself,
-  from a public HTTPS address, with no cookie or credential, so the site sees
-  our service's address rather than your Mac's; up to a megabyte is read and
-  20,000 characters kept. The query, what the search found, and the page's
-  text are stored with the agent's transcript like any other tool call.
+  the plan or key that pays for the agent. A page an agent reads is fetched
+  by Claude Code or Codex where the agent runs, in its sandbox or, for a local
+  agent, on your Mac or the host, so the site sees that machine's address. The
+  query, what the search found, and what the agent read of the page are
+  stored with the agent's transcript like any other tool call.
 - OpenAI, for dictation. Pressing the microphone in a message box records it,
   in memory and never on disk, until you press ✓ or Enter (or for two minutes
   at most); ✕ or Escape discards the recording. It goes through our service,
@@ -1467,8 +1453,8 @@ only when you press Send.
   task is likely to contain — its repository's name, its title, and the file
   paths it names — so they are spelled right. Only the text comes back, into
   the box at the caret, and it goes nowhere until you send it. Our service
-  stores and logs neither the recording nor the text, apart from the reports to Sentry described under "Error, performance,
-  and agent reports from our service", and counts
+  stores and logs neither the recording nor the text, apart from the reports to Sentry described under "Error and
+  performance reports from our service", and counts
   only the clip and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app, screen
@@ -1478,8 +1464,8 @@ only when you press Send.
   recordings go from the Mac app to PostHog directly, and from your browser
   through vespin.dev, which passes them on to PostHog.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
-  reports, and our service's and Vespin's agents' error, performance, log, and
-  agent reports, described above.
+  reports, and our service's error, performance, and log reports, described
+  above.
 - Resend, for email. When an owner or admin of a workspace invites someone,
   our service sends Resend the invited address, the workspace's name, the
   inviter's name (or their email address where their account has none), and
@@ -1501,8 +1487,8 @@ only when you press Send.
 - Anthropic and OpenAI, for an agent. When you, or another
   agent, start one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
-  and whatever model it picks for each worker it hands work to, which may be
-  the other provider's: Anthropic for a Claude model, OpenAI for a GPT model,
+  and whatever model of the same provider it picks for each worker it hands
+  work to: Anthropic for a Claude model, OpenAI for a GPT model,
   on the subscription or API key you added for that provider, never ours; with
   neither, the agent does not start. A call on your own key is billed to you
   by the provider, and if our service can no longer read your key the agent
@@ -1511,9 +1497,11 @@ only when you press Send.
   grants that key fast mode. Each call carries the plan's text, the agent's
   conversation so far, any files you attached, and what it read of the
   repository, the web, your integrations, its skills, and your Mac; the
-  provider keeps it under its own retention policy. The agent's workers can
-  read the checkout, the web, and your integrations, but only the agent edits
-  the checkout, and only the agent reaches your Mac. The agent's transcript — its
+  provider keeps it under its own retention policy. The agent's workers are
+  told to only read the checkout, the web, and your integrations and to leave
+  every change to the agent, though nothing but those words holds them to it,
+  and a Claude Code agent's workers cannot run commands on your Mac as the
+  agent can. The agent's transcript — its
   words, reasoning summaries, and tool calls with their input (such as the few
   words it gives to describe a command) and output — is written to your
   account's conversation as described under "Your account". Archiving an agent
@@ -1548,8 +1536,7 @@ only when you press Send.
   key where you saved only that), never ours, for a short title, sending
   your first message (for an agent started on the plan, the plan's text), your
   latest one, and the agent's latest answer, as text alone cut to 2,000
-  characters each. A worker that an agent hands work to is
-  titled from the whole subagent task it was handed. Each title is stored with the agent or worker; Anthropic keeps the
+  characters each. Each title is stored with the agent; Anthropic keeps the
   request and its reply under its own retention policy.
 - GitHub, through the Vespin GitHub App, for an agent's work. The agent
   checks the repository out and pushes its branch with an installation token
@@ -1634,22 +1621,16 @@ only when you press Send.
   which keeps it under that service's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our
   database: everything our service keeps is stored with Neon and passes
-  through Vercel. Each agent and its workers also run as sessions on
-  Vercel Workflow, which keeps each
-  session's history (the messages, files, tool calls, and answers its model
-  works from) so the session can pick up where it stopped. Deleting a task or
-  your account asks Vercel Workflow to end each of its sessions for good, a
-  turn still running included; a session that could not be reached or did
-  not confirm in time is noted in our service's logs and left as it stood,
-  and the delete goes on without it, its history kept under Vercel's own
-  retention. When a session of Vespin's ends, Vercel deletes that history at
-  once, though the session's ids, status, and times may stay as long as
-  Vercel's own retention. This holds for a session started on or after
-  13 October 2026. For now, an agent's session keeps its history after
-  it ends for our hosting plan's Workflow retention period, so that we can
-  find out why a session stopped partway, and Vercel deletes it after that.
-  A session of Vespin's started before then, and the session of a worker
-  either one hands work to, keeps its history under Vercel's own retention.
+  through Vercel. Each agent's session history (the messages, files, tool
+  calls, and answers its model works from) is kept by Claude Code or Codex on
+  its sandbox's disk, as described under "Agents' working memory". Deleting a
+  task or your account ends each of its agents' sessions for good through
+  Claude Code or Codex, a turn still running included, and deletes each one's
+  sandbox; a session that could not be reached or did not confirm in time is
+  noted in our service's logs, and the delete goes on without it. Earlier
+  versions ran each agent and its workers as sessions on Vercel Workflow;
+  what Vercel still keeps of such a session stays under Vercel's own
+  retention.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Vespin
   opens, every four hours, and when you ask from Vespin's menu or Settings,
@@ -1741,7 +1722,7 @@ keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and an agent's changes are held in a Vercel Sandbox and
 its snapshot; usage counts and recordings are held by PostHog, and crash
-and error, performance, and agent reports by Sentry.
+and error and performance reports by Sentry.
 
 ## Your choices
 
@@ -1788,12 +1769,13 @@ and error, performance, and agent reports by Sentry.
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot
   be reached, the account is deleted anyway and a grant stays until you revoke
-  Vespin in that service's own settings. It asks Vercel Workflow to end every
-  session of yours, noting in our logs any it could not, and, shortly after,
-  deletes their sandboxes with the snapshots no other sandbox uses; the
-  session history Vercel Workflow keeps goes as described under "Who we send
-  it to", and anything stored only on
-  your Mac stays there until you remove it.
+  Vespin in that service's own settings. It ends every agent's session of
+  yours through Claude Code or Codex, noting in our logs any it could not, and
+  deletes their sandboxes, with the session history on their disks and the
+  snapshots no other sandbox uses, at once or shortly after; what Vercel
+  Workflow still keeps of an earlier version's session goes as described
+  under "Who we send it to", and anything stored only on your Mac stays there
+  until you remove it.
 
 ## Google user data
 

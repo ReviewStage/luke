@@ -92,9 +92,9 @@ test("the landing offers the web app beside the download, and nothing in its sce
     [],
   );
   assert.deepEqual(links(body), [
-    "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg",
+    "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Vespin.dmg",
     `or sign in on the web -> ${PANEL_PATH}`,
-    "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg",
+    "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Vespin.dmg",
     "View on GitHub -> https://github.com/ReviewStage/vespin",
   ]);
 });

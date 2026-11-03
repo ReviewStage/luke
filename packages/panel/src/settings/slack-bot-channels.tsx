@@ -7,15 +7,10 @@ import { ACT_KIND } from "@repo/host/acts";
 import {
   CONFIRM_LOSS,
   ConfirmDialog,
-  GAP,
-  IconButton,
-  Inline,
-  type MenuRow,
+  type MenuRow as MenuRowChoice,
   SETTINGS_ROW_INDENT,
   SettingsRow,
   SettingsRowMark,
-  Stack,
-  Tooltip,
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
@@ -24,42 +19,44 @@ import { useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
 import { repositoryMenuRow } from "../repository-row.js";
+import { AddMenuButton } from "./add-menu-button.js";
+import { MenuRow } from "./menu-row.js";
 import { Picker, PickerRow } from "./picker-row.js";
 
 /**
- * slack-bot-channels.tsx -- where an owner or admin sends the workspace's Slack starts: its default repository, the channels the bot is in, each with a repository of its own, and a public channel to add the bot to.
+ * slack-bot-channels.tsx -- where an owner or admin sends the workspace's Slack starts: the channels the bot is in, each with its repository, and the repository every other start works in.
  *
- * Under the Slack bot's row once it is connected, and to an owner or admin
- * alone, since the channel list is theirs: a Default repository picker,
- * then one row per channel the bot is in, inset under the bot's words as
- * GitHub's accounts are under GitHub's, named as Slack's sidebar names it,
- * its mark (a hash, or a lock for a private channel) saying its kind and
- * its name bare, each with its own repository picker
- * (the workspace's default where it names none) and a Remove that asks
- * first, since the bot leaves the channel for everyone in it; and last, an
- * Add to a channel picker over the public channels the bot is not in, its
- * why saying a private one is joined by `/invite`. A Slack start works in
- * the repository its message names, else its channel's, else this default.
- * Every write answers the bot as it then stands, which the rows redraw
- * from; a refusal is said under the row that asked.
+ * Drawn as GitHub's rows are on the same card: the bot's row holds Add
+ * channel (`AddSlackChannel`) beside its ⋯, as GitHub's holds Add
+ * repository, and under it, each a row of the card inset under the bot's
+ * words, the Default repository picker, then one row per channel the bot is
+ * in. A channel is named as Slack's sidebar names it, its mark (a hash, or a
+ * lock for a private channel) saying its kind; its row holds its repository
+ * picker, the default until one is chosen, and a ⋯ whose Remove from channel
+ * asks first, since the bot leaves the channel for everyone in it. Where the
+ * bot is in no channel, one row says so and how to add one, a private one by
+ * `/invite`. A Slack start works in the repository its message names, else
+ * its channel's, else the default. Every write answers the bot as it then
+ * stands, which the rows redraw from; a refusal is said under the row that
+ * asked.
  */
 
-/** The menu row that picks no repository: the workspace's default in a channel's menu, none in the default's. */
+/** The menu row that picks no repository: the default in a channel's menu, none in the default's. */
 const NONE_ROW = "none";
 
 /** What the rows say. */
 const WORDS = {
   DEFAULT_LABEL: "Default repository",
-  DEFAULT_DETAIL:
-    "Agents started from Slack work here unless the message or its channel names one.",
+  DEFAULT_DETAIL: "Used unless the message or its channel names another.",
   NONE: "None",
-  WORKSPACE_DEFAULT: "Workspace default",
+  DEFAULT: "Default",
   REPOSITORY_SEARCH: "Search repositories",
-  ADD_LABEL: "Add to a channel",
-  ADD_DETAIL: `Public channels. For a private channel, run /invite @${PRODUCT_NAME} in it.`,
-  ADD_VALUE: "Choose a channel",
+  ADD: "Add channel",
   CHANNEL_SEARCH: "Search channels",
-  NO_CHANNELS: "The bot is in every public channel.",
+  INVITE: `For a private channel, run /invite @${PRODUCT_NAME} in it.`,
+  ALL_PUBLIC: "The bot is in every public channel.",
+  NO_CHANNELS: "Not in any channels yet",
+  NO_CHANNELS_DETAIL: `Add a public channel here, or run /invite @${PRODUCT_NAME} in any channel.`,
   REMOVE: "Remove from channel",
 } as const;
 
@@ -67,7 +64,7 @@ const WORDS = {
 type RepositoryRows =
   | { readonly kind: "reading" }
   | { readonly kind: "failed" }
-  | { readonly kind: "read"; readonly rows: readonly MenuRow[] };
+  | { readonly kind: "read"; readonly rows: readonly MenuRowChoice[] };
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
@@ -111,7 +108,48 @@ function useRepositoryRows(workspaceId: string) {
   return { read, note, rows: rows.kind === "read" ? rows.rows : [] };
 }
 
-/** The workspace's default repository for Slack starts, named or cleared from its picker. */
+/**
+ * Add channel and its menu, on the bot's row: the public channels the bot
+ * is not in, one picked putting the bot in it, and where none is left, how
+ * a private one is joined. A refusal is handed to the row to say.
+ */
+export function AddSlackChannel({
+  workspaceId,
+  channels,
+  onChanged,
+  onRefused,
+}: {
+  workspaceId: string;
+  channels: readonly SlackBotChannel[];
+  onChanged: (slackBot: WorkspaceSlackBot) => void;
+  onRefused: (refusal: string | undefined) => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const addable = channels.filter((channel) => !channel.private && !channel.member);
+  const pick = (channelId: string) => {
+    onRefused(undefined);
+    act(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL, { workspaceId, channelId, member: true }).then(
+      onChanged,
+      (refused: Error) => onRefused(refused.message),
+    );
+  };
+  return (
+    <AddMenuButton
+      label={WORDS.ADD}
+      placeholder={WORDS.CHANNEL_SEARCH}
+      noMatch={noMatchWords(TERM.CHANNEL)}
+      rows={addable.map((channel) => ({
+        id: channel.id,
+        label: channel.name,
+        icon: <ChannelMark channel={channel} />,
+      }))}
+      note={addable.length === 0 ? `${WORDS.ALL_PUBLIC} ${WORDS.INVITE}` : undefined}
+      onPick={pick}
+    />
+  );
+}
+
+/** The workspace's default repository for Slack starts, inset under the bot's row, named or cleared from its picker. */
 function DefaultRepositoryRow({
   workspaceId,
   slackBot,
@@ -139,6 +177,7 @@ function DefaultRepositoryRow({
   };
   return (
     <PickerRow
+      indent={SETTINGS_ROW_INDENT.MARK}
       label={WORDS.DEFAULT_LABEL}
       detail={WORDS.DEFAULT_DETAIL}
       value={chosen ?? NONE_ROW}
@@ -156,8 +195,8 @@ function DefaultRepositoryRow({
 }
 
 /**
- * One channel the bot is in, inset under the bot's row: its name, whether
- * it is private, its repository picker, and Remove, which asks first.
+ * One channel the bot is in, inset under the bot's row: its mark and name,
+ * its repository picker, and a ⋯ whose Remove from channel asks first.
  */
 function ChannelRow({
   workspace,
@@ -198,28 +237,38 @@ function ChannelRow({
   };
   return (
     <>
-      <SettingsRow
-        indent={SETTINGS_ROW_INDENT.MARK}
-        leading={
-          <SettingsRowMark>
-            <ChannelMark channel={channel} />
-          </SettingsRowMark>
-        }
-        label={channel.name}
-        error={refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL)}
-      >
-        {(control) => (
-          <Inline gap={GAP.CONTROL}>
+      <MenuRow
+        thing={name}
+        actions={[
+          [
+            {
+              label: WORDS.REMOVE,
+              icon: <GLYPH.DISCONNECT />,
+              danger: true,
+              onSelect: () => remove.ask(),
+            },
+          ],
+        ]}
+        row={{
+          indent: SETTINGS_ROW_INDENT.MARK,
+          leading: (
+            <SettingsRowMark>
+              <ChannelMark channel={channel} />
+            </SettingsRowMark>
+          ),
+          label: channel.name,
+          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
+          describedControl: (control) => (
             <Picker
               label={`${name} repository`}
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}
               value={channel.repository ?? NONE_ROW}
-              valueLabel={channel.repository ?? WORDS.WORKSPACE_DEFAULT}
+              valueLabel={channel.repository ?? WORDS.DEFAULT}
               rows={[
                 {
                   id: NONE_ROW,
-                  label: WORDS.WORKSPACE_DEFAULT,
+                  label: WORDS.DEFAULT,
                   detail: slackBot.defaultRepository ?? WORDS.NONE,
                 },
                 ...repositories.rows,
@@ -230,16 +279,9 @@ function ChannelRow({
               onOpen={repositories.read}
               onPick={pick}
             />
-            <Tooltip label={WORDS.REMOVE}>
-              <IconButton
-                icon={<GLYPH.DISCONNECT />}
-                label={`${WORDS.REMOVE} ${name}`}
-                onClick={() => remove.ask()}
-              />
-            </Tooltip>
-          </Inline>
-        )}
-      </SettingsRow>
+          ),
+        }}
+      />
       <ConfirmDialog
         open
         confirm={remove}
@@ -255,52 +297,12 @@ function ChannelRow({
   );
 }
 
-/** The public channels the bot is not in, one picked putting the bot in it. */
-function AddChannelRow({
-  workspaceId,
-  channels,
-  onChanged,
-}: {
-  workspaceId: string;
-  channels: readonly SlackBotChannel[];
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
-}): React.JSX.Element {
-  const { act } = useAct();
-  const [refusal, setRefusal] = useState<string>();
-  const [saves, setSaves] = useState(0);
-  const addable = channels.filter((channel) => !channel.private && !channel.member);
-  const pick = (channelId: string) => {
-    setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL, { workspaceId, channelId, member: true }).then(
-      (now) => {
-        onChanged(now);
-        setSaves((count) => count + 1);
-      },
-      (refused: Error) => setRefusal(refused.message),
-    );
-  };
-  return (
-    <PickerRow
-      label={WORDS.ADD_LABEL}
-      detail={WORDS.ADD_DETAIL}
-      value={undefined}
-      valueLabel={WORDS.ADD_VALUE}
-      rows={addable.map((channel) => ({
-        id: channel.id,
-        label: channel.name,
-        icon: <ChannelMark channel={channel} />,
-      }))}
-      placeholder={WORDS.CHANNEL_SEARCH}
-      noMatch={noMatchWords(TERM.CHANNEL)}
-      note={addable.length === 0 ? WORDS.NO_CHANNELS : undefined}
-      onPick={pick}
-      saves={saves}
-      error={refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL)}
-    />
-  );
-}
-
-/** The rows above, under a connected bot's row, to an owner or admin; none where Slack's channels could not be read but the default. */
+/**
+ * The rows under a connected bot's row, to an owner or admin, each a row of
+ * the card: the default repository, then each channel the bot is in, or
+ * one row saying it is in none; where Slack's channels could not be read,
+ * the default alone.
+ */
 export function SlackBotChannelRows({
   workspace,
   slackBot,
@@ -310,24 +312,33 @@ export function SlackBotChannelRows({
   slackBot: WorkspaceSlackBot;
   onChanged: (slackBot: WorkspaceSlackBot) => void;
 }): React.JSX.Element {
-  const channels = slackBot.channels;
+  const joined = slackBot.channels?.filter((channel) => channel.member);
   return (
-    <Stack gap={GAP.NONE}>
+    <>
       <DefaultRepositoryRow workspaceId={workspace.id} slackBot={slackBot} onChanged={onChanged} />
-      {channels
-        ?.filter((channel) => channel.member)
-        .map((channel) => (
-          <ChannelRow
-            key={channel.id}
-            workspace={workspace}
-            channel={channel}
-            slackBot={slackBot}
-            onChanged={onChanged}
-          />
-        ))}
-      {channels === undefined ? null : (
-        <AddChannelRow workspaceId={workspace.id} channels={channels} onChanged={onChanged} />
-      )}
-    </Stack>
+      {joined?.map((channel) => (
+        <ChannelRow
+          key={channel.id}
+          workspace={workspace}
+          channel={channel}
+          slackBot={slackBot}
+          onChanged={onChanged}
+        />
+      ))}
+      {joined?.length === 0 ? (
+        <SettingsRow
+          indent={SETTINGS_ROW_INDENT.MARK}
+          leading={
+            <SettingsRowMark>
+              <GLYPH.CHANNEL />
+            </SettingsRowMark>
+          }
+          label={WORDS.NO_CHANNELS}
+          description={WORDS.NO_CHANNELS_DETAIL}
+        >
+          {() => null}
+        </SettingsRow>
+      ) : null}
+    </>
   );
 }
