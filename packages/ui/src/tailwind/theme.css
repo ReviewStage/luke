@@ -62,10 +62,6 @@
     280px,
     calc(100% - var(--document-reserve))
   ); /* off-scale: the panel's least width */
-  --spacing-side-panel-no-tabs: max(
-    var(--ui-space-16),
-    calc((100% - 300px) / 2 + var(--ui-space-16))
-  ); /* off-scale: the empty panel's 300px column */
   --spacing-half-container: 50cqi;
   --animate-card-grow-in:
     ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,

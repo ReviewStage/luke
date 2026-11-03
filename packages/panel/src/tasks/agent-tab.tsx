@@ -225,6 +225,7 @@ import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
 import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
+import { type AgentThreads, ThreadsDock } from "./threads-dock.js";
 import {
   calledAgent,
   cardTitle,
@@ -2598,6 +2599,7 @@ function AgentTabView({
   model,
   servers,
   published,
+  threads,
   doors,
   startedAt,
   counts,
@@ -2642,6 +2644,8 @@ function AgentTabView({
   servers: AgentServersControl;
   /** What the agent published, once the service has said; nothing before. */
   published: AgentPullRequestAnswer | undefined;
+  /** The threads the agent posted that wait on the developer (`ThreadsDock`). */
+  threads?: AgentThreads | undefined;
   doors: PublishedDoors;
   /** When the agent's run began, as its summary says, which the working line counts from where its lines say nothing. */
   startedAt: number | undefined;
@@ -2914,6 +2918,7 @@ function AgentTabView({
       <AgentTabFoot>
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
+        <ThreadsDock threads={threads} />
         <AgentPicturesProvider value={pictures}>
           <AgentQueueDock
             messages={queue.messages}
@@ -3002,6 +3007,8 @@ function AgentTabView({
 interface AgentTabDoors {
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: AgentOrigin | undefined;
+  /** The threads the agent posted that wait on the developer, docked over its box (`ThreadsDock`); none where nothing waits or none are read. */
+  threads?: AgentThreads | undefined;
   control: AgentsControl;
   /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
@@ -3136,6 +3143,7 @@ function AgentTabBody({
   onOpenTarget,
   cards,
   run,
+  threads,
 }: Omit<AgentTabDoors, "onHeld"> & {
   agent: AgentSummary;
   transcript: AgentTranscriptControl;
@@ -3271,6 +3279,7 @@ function AgentTabBody({
         model={model}
         servers={servers}
         published={published}
+        threads={threads}
         doors={{
           openGitHub,
           copy: copyWithToast,

@@ -105,11 +105,14 @@ export function RelatedTasks({
   tasks,
   label,
   rows,
+  onOpenTask,
 }: {
   tasks: TasksControl;
   label: string;
   /** The rows drawn, in order, those folded away left out. */
   rows: readonly RelatedTaskRow[];
+  /** Opens a row's task, as the surface the list stands on opens a task. */
+  onOpenTask: (taskId: string) => void;
 }): React.JSX.Element {
   const setStanding = useStandingDoor(tasks);
   const selection = useTasksSelection(tasks, new Set(rows.map((row) => row.task.id)));
@@ -143,7 +146,7 @@ export function RelatedTasks({
             subTasks={subTasks.get(task.id)}
             content={{ [TASK_ROW_CELL.RELATION]: relation }}
             chosen={selection.chosenOf(task.id)}
-            onOpen={() => tasks.onSelect(task.id)}
+            onOpen={() => onOpenTask(task.id)}
             onStanding={(standing) => setStanding(task, standing)}
             depth={depth}
             nest={nests[at]}

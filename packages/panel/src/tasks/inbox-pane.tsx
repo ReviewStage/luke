@@ -1008,6 +1008,8 @@ const NO_LEAD: readonly MenuAction[][] = [];
 export interface InboxPanePhone {
   /** Opens the side panel beside the item, which the title bar's toggle opens elsewhere; none while it is open or where there is none. */
   readonly onShowPanel: (() => void) | undefined;
+  /** The task the Inbox is narrowed to, by its name, which the head says the item stands in; none while it lists every task's. */
+  readonly narrowedTask?: string | undefined;
 }
 
 /**
@@ -1412,19 +1414,31 @@ function agentCrumb(by: ItemAgent, fixed = false): Crumb {
 /**
  * A phone's bar's name for the item: what holds it, its task as the wide
  * path leads with it, or its agent where no task holds it, each crumb
- * pressing where the wide path's does. Note that the bar never names the
- * item's title, because the thread's heading right under it already does.
+ * pressing where the wide path's does. Where the Inbox is narrowed to a
+ * task, the Inbox leads it, pressing back to that narrowed list, so the
+ * screen a thread's link lands on says the list it stands in. Note that the
+ * bar never names the item's title, because the thread's heading right
+ * under it already does.
  */
 function PhoneHolder({
   holder,
   by,
   doors,
+  narrowed,
 }: {
   holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
+  /** Goes back to the list narrowed to the task; none while it lists every task's. */
+  narrowed: (() => void) | undefined;
 }): React.JSX.Element {
-  return <Breadcrumbs label="Path" crumbs={[taskCrumb(holder, doors) ?? agentCrumb(by)]} />;
+  const holds = taskCrumb(holder, doors) ?? agentCrumb(by);
+  return (
+    <Breadcrumbs
+      label="Path"
+      crumbs={narrowed === undefined ? [holds] : [{ label: "Inbox", onPress: narrowed }, holds]}
+    />
+  );
 }
 
 /**
@@ -1573,8 +1587,21 @@ export function InboxPane({
       {phoneHead ? (
         <PhoneHead
           place="inbox-item"
-          start={<BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />}
-          title={<PhoneHolder holder={holder} by={by} doors={doors} />}
+          start={
+            <BackButton
+              label={phone.narrowedTask === undefined ? "Inbox" : `${phone.narrowedTask} · Inbox`}
+              place={INBOX_PLACE}
+              onBack={onBack}
+            />
+          }
+          title={
+            <PhoneHolder
+              holder={holder}
+              by={by}
+              doors={doors}
+              narrowed={phone.narrowedTask === undefined ? undefined : onBack}
+            />
+          }
           end={
             <InboxItemMenu
               key={item.id}

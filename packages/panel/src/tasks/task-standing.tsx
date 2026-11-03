@@ -15,7 +15,6 @@ import { taskKey } from "@repo/features/workspace-key";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
-  BREADCRUMB_POPUP,
   Breadcrumbs,
   CHIP_LOOK,
   CHIP_WIDTH,
@@ -373,7 +372,7 @@ function PathLine({
   );
 }
 
-/** The path led by the task's repository, whose crumb drops the repository's menu (`useRepositoryMenu`). */
+/** The path led by the task's repository as plain words, whose menu (`useRepositoryMenu`) opens only where the page asks, under the path: ⌘K's and a task row's Change repository. */
 function RepositoryPath({
   task,
   door,
@@ -391,15 +390,8 @@ function RepositoryPath({
     onAsked: door.onAsked,
     align: POPOVER_ALIGN.START,
   });
-  const repository: Crumb = {
-    label: menu.label,
-    glyph: menu.glyph,
-    hint: menu.open ? undefined : (task.repository ?? undefined),
-    card: menu.card,
-    popup: BREADCRUMB_POPUP.DIALOG,
-    expanded: menu.open,
-    onPress: menu.press,
-  };
+  // Note that the crumb is kept, because words that name the repository must not be folded away, yet it may still be cut short, so a long name never pushes the key out of the path.
+  const repository: Crumb = { label: menu.label, glyph: menu.glyph, kept: true };
   return (
     <PathLine crumbs={[repository, ...rest]} room={menu.room} menu={menu.menu} note={door.note} />
   );

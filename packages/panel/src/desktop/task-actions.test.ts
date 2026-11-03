@@ -23,6 +23,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -159,7 +160,7 @@ function mountPlanTab(tasks: TasksControl): HTMLButtonElement {
       tasks,
     }),
   );
-  const more = container.querySelector(".side-panel-bar .toolbar-tab-actions button");
+  const more = container.querySelector(".desktop-task-main .toolbar-tab-actions button");
   assert.ok(more instanceof HTMLButtonElement, "the Plan tab's ⋯ stands in the panel's bar");
   return more;
 }
@@ -294,7 +295,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
       ),
     );
   draw(tasks);
-  const more = container.querySelector(".side-panel-bar .toolbar-tab-actions button");
+  const more = container.querySelector(".desktop-task-main .toolbar-tab-actions button");
   assert.ok(more instanceof HTMLButtonElement);
   openMenu(more);
   choose("Permanently delete");
@@ -309,17 +310,16 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows the plan where the panel hides it, and the repository crumb in the plan opens its menu for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the plan's path, its repository plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
-  const asked = (open: boolean): TasksControl => ({
+  const asked = (overview: boolean): TasksControl => ({
     ...tasks,
     repositoryMenu: { taskId: TASK.id, request: 1 },
-    sidePanel: {
-      ...tasks.sidePanel,
-      open,
-      tab: open ? SIDE_PANEL_TAB.PLAN : SIDE_PANEL_TAB.COMMENTS,
-      onChoose: (tab) => told.push(`choose ${String(tab)}`),
+    mainTabs: {
+      ...tasks.mainTabs,
+      tab: overview ? MAIN_TAB.OVERVIEW : { draft: "draft-1" },
+      onChoose: (tab) => told.push(`choose ${JSON.stringify(tab)}`),
     },
   });
   const container = document.createElement("div");
@@ -333,28 +333,24 @@ test("⌘K's Change repository shows the plan where the panel hides it, and the 
       ),
     );
   draw(asked(false));
-  assert.deepEqual(told, [`choose ${SIDE_PANEL_TAB.PLAN}`], "the ask shows the plan first");
+  assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the plan first");
 
   draw(asked(true));
-  const chip = () =>
-    [...container.querySelectorAll<HTMLButtonElement>(".plan-task-path button")].find((each) =>
-      each.textContent?.includes("acme/app"),
-    );
+  const head = () => container.querySelector(".plan-task-path");
+  const menu = () => head()?.querySelector('[role="dialog"][aria-label="Repository"]') ?? null;
+  assert.ok(menu(), "the ask opens the repository's menu under the plan's path");
   assert.equal(
-    chip()?.getAttribute("aria-expanded"),
-    "true",
-    "the crumb opens its menu for the ask",
+    [...(head()?.querySelectorAll("button") ?? [])].some((each) =>
+      each.textContent?.includes("acme/app"),
+    ),
+    false,
+    "the crumb itself is words, not a press",
   );
 
-  // The crumb drawn afresh, as another tab and back would, opens nothing for the ask already answered.
-  draw(asked(true));
-  act(() => {
-    chip()?.click();
-  });
-  assert.equal(chip()?.getAttribute("aria-expanded"), "false");
+  // The head drawn afresh, as another tab and back would, opens nothing for the ask already answered.
   draw({ ...asked(true), region: { kind: DOCUMENT_REGION.READING } });
   draw(asked(true));
-  assert.equal(chip()?.getAttribute("aria-expanded"), "false", "no second opening");
+  assert.equal(menu(), null, "no second opening");
 });
 
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
@@ -924,9 +920,9 @@ test("a sidebar row's Task relation searches the workspace's tasks beside the me
 });
 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
-const CHIP_ITEMS = ["Status", "Priority", "Assignee", "Change repository"];
+const CHIP_ITEMS = ["Status", "Priority", "Assignee"];
 
-test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U, S, and P, which act on the focused row", () => {
+test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Status, Priority, and Assignee to the plan's chips, which a row keeps, and keeps Change repository, Choose a repository on a task with none; another task's row prints only U, S, and P, which act on the focused row", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountPlanTab(tasks));
@@ -943,14 +939,22 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves
     [],
     "the plan's chips stand for these",
   );
+  assert.ok(offered.includes("Change repository"), "the plan's repository is words, not a chip");
+
+  unmountAll();
+  openMenu(mountPlanTab(openTab().tasks));
+  assert.ok(
+    menuItems().map(itemLabel).includes("Choose a repository"),
+    "a task with no repository is offered the pick it still needs",
+  );
 
   unmountAll();
   const other: TaskSummary = { ...OTHER, ...STANDING };
   rightClick(mountSidebarTask(tasksControl({ tasks: [other] }), other, asked), 40, 60);
   const row = menuItems().map(itemLabel);
   assert.deepEqual(
-    CHIP_ITEMS.filter((item) => row.includes(item)),
-    CHIP_ITEMS,
+    [...CHIP_ITEMS, "Change repository"].filter((item) => row.includes(item)),
+    [...CHIP_ITEMS, "Change repository"],
     "a row draws no chips, so its menu keeps them",
   );
   assert.deepEqual(

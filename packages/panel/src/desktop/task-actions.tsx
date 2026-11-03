@@ -78,6 +78,7 @@ import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
+import { CHOOSE_LABEL } from "../tasks/repository-chip.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import {
   copyTaskLinkItem,
@@ -126,10 +127,11 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * elsewhere, and Delete last and alone, so a task in a list can be acted on
  * without being opened first. The Plan tab's is the task's document menu
  * (`TASK_MENU_SURFACE.DOCUMENT`): it leaves out the task's status, priority,
- * assignee, and repository, because the plan draws chips for them under its
- * title, and its Pin is the task's own, since the tab showing the task is
- * what stands for the task in the sidebar. A row's menu
- * (`TASK_MENU_SURFACE.ROW`) keeps them, since a row draws no chips: Status,
+ * and assignee, because the plan draws chips for them under its title, yet
+ * keeps Change repository, since the repository under the title is words
+ * whose menu opens only on that ask, and its Pin is the task's own, since
+ * the tab showing the task is what stands for the task in the sidebar. A
+ * row's menu (`TASK_MENU_SURFACE.ROW`) keeps them, since a row draws no chips: Status,
  * Priority, and Assignee as submenus listing what the chips list
  * (`standing-submenus.tsx`), as Linear's right-click has them, and Change
  * repository. The menu is the window's own (`action-menu.tsx`), so every door
@@ -405,7 +407,7 @@ function relationDoor(tasks: TasksControl, task: TaskSummary): TaskRelationDoor 
 export const TASK_MENU_SURFACE = {
   /** A row of the task, which draws no chips, so its menu keeps Status, Priority, Assignee, and Change repository. */
   ROW: "row",
-  /** The Plan tab, which shows the task under chips for its status, priority, assignee, and repository, so its menu leaves those out. */
+  /** The Plan tab, which shows the task under chips for its status, priority, and assignee, so its menu leaves those out, and its repository as words, so its menu keeps Change repository. */
   DOCUMENT: "document",
 } as const;
 
@@ -421,7 +423,8 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * workspace where the task may be moved; then the repository changed from
  * any row. The Plan tab's document menu leads with Copy plan, since Copy
  * formats the document drawn, and holds the same but for Status, Priority,
- * Assignee, and Change repository, which the plan's chips stand for.
+ * and Assignee, which the plan's chips stand for; its Change repository says
+ * Choose a repository on a task with none.
  * Permanently delete is last and alone on both. Only the open task's items
  * print their chords, since a chord acts on the open task alone.
  */
@@ -478,6 +481,9 @@ function taskActionGroups(
     () => tasks.onChangeRepository(taskId),
     drawn,
   );
+  // Note that the plan's own menu names the pick a task with no repository still needs, as its path does.
+  const repository: MenuAction =
+    task !== undefined && task.repository === null ? { ...change, label: CHOOSE_LABEL } : change;
   const move: MenuAction[] =
     doors.askMove === undefined
       ? []
@@ -493,6 +499,7 @@ function taskActionGroups(
           [rename, versions, ...read],
           [...relate, ...unparent],
           [...pinAction(tasks, task, lettered), ...section, ...move],
+          [repository],
           [remove],
         ]
       : [

@@ -28,6 +28,7 @@ import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
+import { chooseInboxTask } from "../tasks/use-inbox-task.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -64,6 +65,7 @@ import {
   QUARANTINE,
   READER,
   RETRY,
+  ROW_TITLE,
   readTitle,
   rowNamed,
   STRAY_AGENT,
@@ -1149,6 +1151,47 @@ function buttonSaying(words: string): HTMLButtonElement {
     ) ?? assert.fail(`a button says ${words}`)
   );
 }
+
+/** The rows the list draws, by their titles, in its order. */
+function rowTitles(page: HTMLElement): (string | null | undefined)[] {
+  return [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main"),
+  ].map((row) => row.querySelector(ROW_TITLE)?.textContent);
+}
+
+test("a task chosen narrows the Inbox to every item of its own, open and settled, addressed to anyone, under a chip naming it and no view's menu, whose × lists every task's items under the view kept", async () => {
+  world.inboxes = new Map([
+    [BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  showScope(page, "Open");
+  chooseView(page, "Addressed to", "Me");
+  await settle();
+
+  act(() => chooseInboxTask(BILLING.id));
+  await settle();
+  const narrowed = rowTitles(page).toSorted();
+  const menu = page.querySelector('button[aria-label="View options"]');
+  const chip = page.querySelector<HTMLElement>('[aria-label="Show every task\'s items"]');
+  const named = chip?.closest(".inbox-tasks-chips")?.textContent;
+  await act(async () => chip?.click());
+  await settle();
+
+  assert.deepEqual(
+    narrowed,
+    [RETRY.title, THRESHOLD.title].toSorted(),
+    "Billing's items, the settled one and the teammate's among them",
+  );
+  assert.equal(menu, null, "a task's items are listed whole, with no view's menu");
+  assert.ok(named?.includes(BILLING.name), `the chip names the task: ${named}`);
+  assert.deepEqual(
+    rowTitles(page),
+    [EXPIRY.title],
+    "the × lists every task's items, Open and mine",
+  );
+});
 
 test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent, which the Inbox then opens, the box a reply again", async () => {
   world.listedWorkspace = ACME;

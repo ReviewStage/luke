@@ -15,7 +15,7 @@ import { Tab, TabCard, Tabs, type TabsControls } from "./tabs.js";
  * into its own place, the strip's scroll alone; a dragged tab lands where
  * its place in the row says; the arrow keys, Home, and End move the focus
  * along, Delete closes the focused tab and hands focus to the one in its
- * place, a tab's × names its close in a hint, with ⌘W on the chosen tab alone,
+ * place, an anchored tab stands out of every move, a tab's × names its close in a hint, with ⌘W on the chosen tab alone,
  * and an owner's step moves the focused tab and says so; a preview
  * tab is kept by a double-click; and a switcher's card is picked on the
  * press, or on the click or Return from a Tab stop of its own, as asked. jsdom lays nothing out, so a test that
@@ -67,15 +67,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A strip of `count` tabs, opened on the one `opensOn` names, choosing the one pressed, each but the first closing, which may be moved. */
+/** A strip of `count` tabs, opened on the one `opensOn` names, choosing the one pressed, each but the first closing, which may be moved, the first anchored where `anchored` says. */
 function Strip({
   count,
   opensOn = 0,
   controls,
+  anchored = false,
 }: {
   count: number;
   opensOn?: number;
   controls?: { current: TabsControls | null };
+  anchored?: boolean;
 }): ReactNode {
   const [chosen, choose] = useState(opensOn);
   const [shown, setShown] = useState(() => Array.from({ length: count }, (_, at) => at));
@@ -89,6 +91,7 @@ function Strip({
         icon: createElement("svg"),
         label: `Tab ${at + 1}`,
         selected: at === chosen,
+        anchored: anchored && at === 0,
         onSelect: () => choose(at),
         onClose:
           at === 0
@@ -284,6 +287,19 @@ test("an owner's step moves the focused tab a place along, keeps focus on it, an
     count: 3,
     onMove: controls.current?.placeOf(tabOf(container, "Tab 3"))?.onMove,
   });
+});
+
+test("an anchored tab stands out of every move: it has no place, the tabs after it are counted from the first after it, and a step takes none before it", async () => {
+  const controls: { current: TabsControls | null } = { current: null };
+  const container = await render(createElement(Strip, { count: 3, controls, anchored: true }));
+  assert.equal(controls.current?.placeOf(tabOf(container, "Tab 1")), undefined);
+  const second = controls.current?.placeOf(tabOf(container, "Tab 2"));
+  assert.deepEqual([second?.at, second?.count], [0, 2]);
+  act(() => tabOf(container, "Tab 2").focus());
+  act(() => controls.current?.step(-1));
+  assert.deepEqual(moves, [], "nothing moves before the anchored tab");
+  act(() => controls.current?.step(1));
+  assert.deepEqual(moves, [[0, 1]]);
 });
 
 test("a preview tab wears its preview, and a double-click keeps it, while a tab of its own takes no keep", async () => {

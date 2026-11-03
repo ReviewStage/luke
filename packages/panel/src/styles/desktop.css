@@ -598,6 +598,7 @@ body,
 .desktop-agent .agent-log-skeleton,
 .desktop-agent .agent-todos-dock,
 .desktop-agent .agent-published-dock,
+.desktop-agent .agent-threads-dock,
 .desktop-agent .agent-queue-dock,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
@@ -1394,7 +1395,20 @@ body,
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
-[data-ui-profile="desktop"] .tab-add-anchor .ui-anchored-popover {
+/* Where no toggle is drawn, the side panel's "+" menu asked for with
+   nothing to show hangs from the window's top right, where the toggle would
+   stand (`side-panel.tsx`'s `ToggleOffers`). */
+.panel-offers-corner {
+  position: fixed;
+  z-index: var(--ui-z-menu);
+  top: var(--desktop-bar-height);
+  right: var(--panel-toggle-right);
+  width: 0;
+  height: 0;
+}
+
+[data-ui-profile="desktop"] .tab-add-anchor .ui-anchored-popover,
+[data-ui-profile="desktop"] .title-bar-controls .ui-anchored-popover {
   -webkit-app-region: no-drag;
 }
 
@@ -1431,6 +1445,7 @@ body,
 .side-panel-content .agent-log-skeleton,
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
+.side-panel-content .agent-threads-dock,
 .side-panel-content .agent-queue-dock,
 .side-panel-content .draft-fork-dock,
 .side-panel-content .agent-tab-foot .agent-composer {

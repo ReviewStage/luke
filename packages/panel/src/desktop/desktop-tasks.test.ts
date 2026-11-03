@@ -1,12 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  AGENT_CALL_FAILURE,
-  type AgentInboxAnswerParams,
-  type AgentInboxAnswerView,
-  INBOX_SCOPE_KIND,
-} from "@repo/features/agent-view";
+import { type AgentInboxAnswerView, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
@@ -24,6 +19,7 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@repo/features/inbox-wire";
+import type { ReadLink } from "@repo/features/link-grammar";
 import {
   PLAN_ACTOR,
   TASK_PRIORITY,
@@ -49,6 +45,8 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import {
   type FixedSidePanelTab,
   PULL_REQUEST_VIEW,
@@ -60,7 +58,6 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { holdFrames, settleFrames } from "../testing/frames.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
@@ -87,11 +84,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The side panel shown on the plan, as a task opens. */
+/** The side panel shown on the plan's comments beside it. */
 const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
   ...tasksControl().sidePanel,
   open: true,
-  tab: SIDE_PANEL_TAB.PLAN,
+  tab: SIDE_PANEL_TAB.COMMENTS,
 };
 
 test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
@@ -196,73 +193,6 @@ test("the panel's tab panel is labeled by its chosen tab, which controls it", ()
   assert.equal(others?.length, 0, "a tab with no panel standing names none");
 });
 
-test("a plan's Inbox tab whose read holds nothing says Nothing here under the Inbox's glyph, with no press, or under its list where the list stands alone, rather than standing blank", async () => {
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: () => ({
-      matches: false,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }),
-  });
-  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  // The account's feed holds nothing of the plan, which stands for its inbox whole.
-  handHostReads({
-    items: { rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: [] }, [INBOX_SCOPE_KIND.AGENT]: {} } },
-  });
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
-          looks: NO_LOOKS,
-          tasks: tasksControl({
-            page: TASKS_PAGE.DOCUMENT,
-            activeTaskId: TASK.id,
-            region: { kind: DOCUMENT_REGION.READY, task: TASK },
-            sidePanel: {
-              ...tasksControl().sidePanel,
-              open: true,
-              tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-              strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-              tab: SIDE_PANEL_TAB.INBOX,
-            },
-            agents: agentsControl({ agentIds: [agentId] }),
-          }),
-        }),
-      ),
-    ),
-  );
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
-  const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
-  assert.ok(tab, "the plan's Inbox tab");
-  assert.match(tab.textContent ?? "", /Nothing here/u);
-  assert.equal(tab.querySelector(".ui-empty-state button"), null, "it offers no press");
-  // Too narrow for the pane beside it, the list standing alone says so.
-  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ width: 700, height: 800 }),
-  );
-  act(() => relayout());
-  const shown = [...tab.querySelectorAll(".inbox-tasks, .inbox-view-items")].filter(
-    (column) => !column.hasAttribute("hidden"),
-  );
-  assert.match(shown.map((column) => column.textContent).join(""), /Nothing here/u);
-  assert.equal(
-    shown
-      .find((column) => column.classList.contains("inbox-tasks"))
-      ?.querySelector(".ui-empty-state")?.textContent,
-    "Nothing here",
-    "the list standing alone stands the Inbox's empty state",
-  );
-  act(() => root.unmount());
-  container.remove();
-});
-
 /** The agent's message opening an item's thread, by the item's id, asking `ask` where it asks. */
 function agentMessage(itemId: string, at: number, ask?: InboxMessage["ask"]): InboxMessage {
   return {
@@ -306,7 +236,7 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
 }
 
 /** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side, or as wide as given. */
-async function narrowTaskInbox(
+async function _narrowTaskInbox(
   items: readonly InboxItem[],
   width = 700,
   /** What is pushed after the first push, where a test settles it; else nothing is. */
@@ -428,20 +358,8 @@ async function narrowTaskInbox(
   };
 }
 
-test("a task's Inbox tab too narrow for its list and the item side by side opens on its list though it holds one item, whose row opens it under a way back to the list", async () => {
-  const inbox = await narrowTaskInbox([
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-  ]);
-  assert.deepEqual(inbox.standing(), ["list", ""], "it opens on its list of one");
-  act(() => inbox.row("Expire after 7 days?")?.click());
-  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
-  act(() => inbox.back()?.click());
-  assert.deepEqual(inbox.standing(), ["list", ""], "the way back stands the task's whole Inbox");
-  inbox.unmount();
-});
-
 /** An item of the plan's agent the developer approved, settled. */
-function approvedItem(id: string, title: string, at: number): InboxItem {
+function _approvedItem(id: string, title: string, at: number): InboxItem {
   return {
     ...approvalItem(id, title, at),
     status: INBOX_STATUS.ANSWERED,
@@ -458,63 +376,6 @@ function approvedItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-test("a task's Inbox heads its list with the Inbox's name, no view's menu, and no tab bar, and lists every item it holds, settled ones among them, the latest first", async () => {
-  const inbox = await narrowTaskInbox(
-    [
-      approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-      approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-    ],
-    1_200,
-  );
-  assert.equal(document.querySelector('.inbox-tasks [role="tab"]'), null, "no tab bar stands");
-  assert.deepEqual(inbox.head(), ["Inbox", false]);
-  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  inbox.unmount();
-});
-
-test("a task's Inbox stands the window's Inbox's search under its head, which narrows its list to the items saying every word typed and says when none does, the item shown keeping its place", async () => {
-  const items = [
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-  ];
-  const inbox = await narrowTaskInbox(items, 1_200);
-  const tab = document.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
-  assert.ok(tab, "the plan's Inbox tab");
-  const shown = inbox.title();
-  const field = tab.querySelector<HTMLInputElement>(
-    '.inbox-tasks input[aria-label="Search inbox"]',
-  );
-  assert.ok(field, "the search stands under the head");
-  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  const type = (words: string) =>
-    act(() => {
-      setValue?.call(field, words);
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-
-  type("bounce");
-  assert.deepEqual(inbox.rows(), ["Resend on bounce?"]);
-  assert.equal(inbox.title(), shown, "the item shown keeps its place");
-
-  type("zzz");
-  assert.deepEqual(inbox.rows(), []);
-  assert.ok(tab.querySelector(".inbox-tasks")?.textContent?.includes("No items match “zzz”."));
-  inbox.unmount();
-});
-
-test("one column wide, a task's Inbox pages through every item it lists, settled ones among them", async () => {
-  const inbox = await narrowTaskInbox([
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000003", "Alert at 80%?", 3_000),
-  ]);
-  assert.deepEqual(inbox.standing(), ["list", ""]);
-  act(() => inbox.row("Alert at 80%?")?.click());
-  assert.equal(inbox.pager(), "1 of 3");
-  inbox.unmount();
-});
-
 /** A read the test settles by hand: the promise the Inbox awaits, and what settles it. */
 interface HeldAnswer {
   readonly promise: Promise<AgentInboxAnswerView>;
@@ -522,7 +383,7 @@ interface HeldAnswer {
 }
 
 /** A read held open until the test settles it. */
-function heldAnswer(): HeldAnswer {
+function _heldAnswer(): HeldAnswer {
   let settle: (answer: AgentInboxAnswerView) => void = () => undefined;
   const promise = new Promise<AgentInboxAnswerView>((resolve) => {
     settle = resolve;
@@ -538,70 +399,7 @@ function heldAnswer(): HeldAnswer {
   };
 }
 
-test("while a task's Inbox is first read, its list stands placeholder rows under a status saying the inbox is being read, with no ring in its corner; once the read lands, the items stand", async () => {
-  const read = heldAnswer();
-  const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
-  const inbox = await narrowTaskInbox([], 1_200, undefined, read.promise);
-  const list = document.querySelector<HTMLElement>(".inbox-tasks");
-  assert.ok(list, "the list is drawn");
-  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
-  assert.equal(wait?.textContent, "Reading your inbox…");
-  assert.ok(
-    (wait?.querySelectorAll(".ui-list-row .ui-skeleton").length ?? 0) > 0,
-    "placeholder rows stand in the items' place",
-  );
-  assert.equal(list.querySelector(".ui-spinner"), null, "no ring stands in the list's corner");
-
-  await read.settle({ items: [asked], cursor: "1" });
-  assert.equal(list.querySelector('[aria-busy="true"]'), null);
-  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
-  inbox.unmount();
-});
-
-test("a task's Inbox whose own read failed keeps the rows the account's feed holds, drawn before the read answers, and says Could not refresh with Retry at their foot", async () => {
-  window.localStorage.clear();
-  const items = [
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-  ];
-  // The account's feed holds the task's items, which the tab draws first, while the task's own read is out.
-  const refresh = heldAnswer();
-  const inbox = await narrowTaskInbox(
-    [],
-    1_200,
-    undefined,
-    refresh.promise,
-    { me: undefined },
-    {
-      rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: items }, [INBOX_SCOPE_KIND.AGENT]: {} },
-    },
-  );
-  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  assert.deepEqual(inbox.refreshFailure(), [null, false], "nothing is said while the read stands");
-  await refresh.settle({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  assert.deepEqual(inbox.refreshFailure(), ["Could not refresh", true]);
-  window.localStorage.clear();
-  inbox.unmount();
-});
-
-test("a plan's Inbox tab too narrow for its list and the item side by side shows its list, whose rows open their items under a way back to the list", async () => {
-  const inbox = await narrowTaskInbox([
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-  ]);
-  assert.deepEqual(inbox.standing(), ["list", ""]);
-  act(() => inbox.row("Resend on bounce?")?.click());
-  assert.deepEqual(inbox.standing(), ["", "Resend on bounce?"]);
-  assert.equal(inbox.back()?.textContent, "Inbox");
-  act(() => inbox.back()?.click());
-  assert.deepEqual(inbox.standing(), ["list", ""]);
-  act(() => inbox.row("Expire after 7 days?")?.click());
-  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
-  inbox.unmount();
-});
-
-test("a plan's document opens on its path, then its title, with who created it and when it was last edited under the title, and no other crumb over it", () => {
+test("a plan's document opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -640,18 +438,80 @@ test("a plan's document opens on its path, then its title, with who created it a
     ),
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
+  // A task from before statuses draws no standing chip.
   const path = body?.firstElementChild;
-  // A task from before statuses draws no standing chip, and still its repository's crumb, over the title.
   const first = path?.nextElementSibling;
   const byline = first?.nextElementSibling;
 
-  assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
-  assert.equal(body?.previousElementSibling, null, "nothing stands over the document's path");
-  assert.ok(path?.classList.contains("plan-task-path"), "the task's path leads the document");
-  assert.match(path?.textContent ?? "", /acme\/web/u);
+  assert.equal(body?.previousElementSibling === null, true, "nothing stands over the document");
+  assert.equal(path?.classList.contains("plan-task-path"), true, "the path leads the document");
+  assert.match(path?.textContent ?? "", /acme\/web/u, "the path names the repository");
+  assert.equal(
+    [...(path?.querySelectorAll("button") ?? [])].some((each) =>
+      each.textContent?.includes("acme/web"),
+    ),
+    false,
+    "the repository is words, not a press",
+  );
   assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
   assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a sub-task's row opens the task where it was left, as a sidebar row does, never a link to its Overview", () => {
+  fakeAppPlatform(QUIET_PANEL);
+  fakeAppBridge({});
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]) });
+  const home = {
+    id: TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const child = {
+    ...TASK,
+    id: "task-child",
+    name: "Invite emails",
+    number: 2,
+    parentTaskId: TASK.id,
+  };
+  const selected: string[] = [];
+  const linked: ReadLink[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenLinkProvider,
+          { value: (link: ReadLink) => linked.push(link) },
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              tasks: [{ ...TASK, number: 1 }, child],
+              listRead: true,
+              activeTaskId: TASK.id,
+              region: { kind: DOCUMENT_REGION.READY, task: TASK },
+              workspaces: [home],
+              workspace: home,
+              sidePanel: DOCUMENT_PANEL,
+              onResume: (taskId) => selected.push(taskId),
+            }),
+          }),
+        ),
+      ),
+    ),
+  );
+  const row = container.querySelector<HTMLElement>(`[data-task-id='${child.id}']`);
+  act(() => row?.querySelector<HTMLButtonElement>("[data-card-press]")?.click());
+
+  assert.deepEqual(selected, [child.id], "the task opens on the tab it was left on");
+  assert.deepEqual(linked, [], "no link to its Overview is followed");
   act(() => root.unmount());
   container.remove();
 });
@@ -841,102 +701,11 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   container.remove();
 });
 
-test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
-  // Note that a mark on opening goes once the frame that drew the item has painted.
-  holdFrames();
-  const marked: string[] = [];
-  fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
-      marked.push(`${unread ? "unread" : "read"}:${itemId}`);
-      return Promise.resolve({ id: itemId, unread });
-    },
-  });
-  const SHIP = {
-    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a1", "Ship it?", 2),
-    unread: true,
-  };
-  const ROLL = {
-    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a2", "Roll back?", 1),
-    unread: true,
-  };
-  const inbox = await narrowTaskInbox([SHIP, ROLL], 1400);
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
-  assert.deepEqual(marked, [], "nothing is read before it is opened");
-  await act(async () => inbox.row("Ship it?")?.click());
-  assert.equal(inbox.title(), "Ship it?");
-  assert.deepEqual(marked, [], "the mark waits on the paint");
-  await settleFrames();
-  assert.deepEqual(marked, [`read:${SHIP.id}`]);
-  act(() => {
-    inbox
-      .row("Roll back?")
-      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-  });
-  const mark = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
-    each.textContent?.startsWith("Mark as read"),
-  );
-  assert.ok(mark, "an unread row's menu offers Mark as read");
-  await act(async () => mark.click());
-  assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
-  inbox.unmount();
-});
-
-test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
-  // Note that a nod on opening goes once the frame that drew the item has painted.
-  holdFrames();
-  // Note that the Inbox opens on All, since Needs you leaves the teammate's notice out.
-  window.localStorage.clear();
-  fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
-      Promise.resolve({ id: itemId, unread }),
-  });
-  const notice = (id: string, title: string, at: number): InboxItem => ({
-    ...approvalItem(id, title, at),
-    thread: [agentMessage(id, at)],
-    needsReply: false,
-    revision: 3,
-  });
-  const OWN = notice("a1b2c3d4-0000-4000-8000-0000000000b1", "The preview is up", 2);
-  const THEIRS = {
-    ...notice("a1b2c3d4-0000-4000-8000-0000000000b2", "The migration ran", 1),
-    startedBy: { userId: "user-teammate", name: "Charles Pan" },
-  };
-  const answered: AgentInboxAnswerParams[] = [];
-  const inbox = await narrowTaskInbox([OWN, THEIRS], 1400, undefined, undefined, {
-    me: "user-reader",
-    answerInbox: (params) => {
-      answered.push(params);
-      return new Promise(() => undefined);
-    },
-  });
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
-  assert.equal(answered.length, 0, "nothing is acknowledged before it is opened");
-  await act(async () => inbox.row("The preview is up")?.click());
-  assert.equal(inbox.title(), "The preview is up");
-  await settleFrames();
-  // Note that a nod carries its item, the revision shown, and the nod alone, under a key of the window's own.
-  const sent = () => answered.map(({ clientKey: _key, ...nod }) => nod);
-  assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
-
-  await act(async () => inbox.row("The migration ran")?.click());
-  assert.equal(inbox.title(), "The migration ran");
-  await settleFrames();
-  assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
-  window.localStorage.clear();
-  inbox.unmount();
-});
-
 /** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
 function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
-  const draw = (shown: SidePanelTab) =>
+  const draw = (shown: SidePanelTab, more: Partial<TasksControl> = {}) =>
     act(() =>
       root.render(
         onRegistry(
@@ -949,6 +718,7 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
               activeTaskId: TASK.id,
               region: { kind: DOCUMENT_REGION.READY, task: TASK },
               ...overrides,
+              ...more,
               sidePanel: { ...DOCUMENT_PANEL, ...overrides.sidePanel, tab: shown },
             }),
           }),
@@ -966,18 +736,28 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
   };
 }
 
-test("the plan stays drawn, hidden, while another tab of the side panel is shown, so an edit not yet saved outlives the switch", () => {
-  const page = panelPage(SIDE_PANEL_TAB.PLAN);
+test("the plan stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const column = (tab: MainTab): Partial<TasksControl> => ({
+    mainTabs: {
+      ...tasksControl().mainTabs,
+      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+      tab,
+      openAgents: [agentId],
+    },
+  });
+  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
   const document = page.container.querySelector(".desktop-document");
-  assert.ok(document, "the plan is drawn on its tab");
+  assert.ok(document, "the plan is drawn on Overview");
+  assert.equal(document.hasAttribute("hidden"), false);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS);
+  page.draw(SIDE_PANEL_TAB.COMMENTS, column({ agent: agentId }));
   assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
-  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), true);
+  assert.equal(document.hasAttribute("hidden"), true);
 
-  page.draw(SIDE_PANEL_TAB.PLAN);
+  page.draw(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
   assert.equal(page.container.querySelector(".desktop-document"), document);
-  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), false);
+  assert.equal(document.hasAttribute("hidden"), false);
   page.unmount();
 });
 
@@ -987,11 +767,11 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   );
   const closed: string[] = [];
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const page = panelPage(SIDE_PANEL_TAB.PLAN, {
+  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, {
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [{ agent: agentId }],
-      tab: undefined,
+      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+      tab: MAIN_TAB.OVERVIEW,
       onClose: () => closed.push("column"),
     },
     sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },

@@ -8,6 +8,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@repo/ui/history-adapter";
+import { isAgentTab, isDraftTab, isFileTab, isPageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -28,6 +29,7 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB } from "./panel-tabs.js";
 import { SHELL_ROOM } from "./shell-room.js";
+import { chooseInboxTask, leaveInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -823,12 +825,13 @@ const AGENT_A = { agent: "agent-a" };
 const AGENT_B = { agent: "agent-b" };
 const AGENT_C = { agent: "agent-c" };
 
-/** The task open on the column's tab and the side panel's tab given, its strips holding `agents`, every tab each strip is asked to show recorded in `shown`. */
+/** The task open on the column's tab and the side panel's tab given, or the panel shut, its strips holding `agents`, every tab each strip is asked to show recorded in `shown`, and the panel shut as `side:shut`; `opened` counts the things a link opened in the panel. */
 function onTabs(input: {
   column: typeof AGENT_A | undefined;
   side?: SidePanelTab | undefined;
   agents?: readonly (typeof AGENT_A)[];
   shown?: string[];
+  opened?: number;
 }): TasksControl {
   const base = tasksControl();
   const agents = input.agents ?? [AGENT_A, AGENT_B, AGENT_C];
@@ -842,13 +845,19 @@ function onTabs(input: {
       tab: input.column,
       openAgents: agents.map((tab) => tab.agent),
       onShow: (_taskId, tab) =>
-        input.shown?.push(`column:${"agent" in tab ? tab.agent : tab.draft}`),
+        input.shown?.push(
+          `column:${isAgentTab(tab) ? tab.agent : isDraftTab(tab) ? tab.draft : tab}`,
+        ),
     },
     sidePanel: {
       ...base.sidePanel,
       open: input.side !== undefined,
-      tab: input.side ?? SIDE_PANEL_TAB.PLAN,
-      onShow: (_taskId, tab) => input.shown?.push(`side:${String(tab)}`),
+      tab: input.side ?? SIDE_PANEL_TAB.INBOX,
+      opened: input.opened ?? 0,
+      onShow: (_taskId, tab) => input.shown?.push(`side:${isFileTab(tab) ? tab.file : tab}`),
+      onSetOpen: (open) => {
+        if (!open) input.shown?.push("side:shut");
+      },
     },
   });
 }
@@ -989,26 +998,84 @@ test("Back's list names a person's page by the name the workspace's members give
   assert.equal(window.history().steps.back[0]?.title?.label, "Lee Chen");
 });
 
-test("a tab chosen in the task's column or its side panel by a press is a step of its own, which Back goes back to on that tab", () => {
+test("a tab chosen in the task's column by a press is a step of its own, which Back goes back to on that tab, while one chosen in the side panel's strip takes the standing step in place", () => {
   const shown: string[] = [];
-  const window = mount(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.PLAN, shown }));
+  const notes = { file: "docs/notes.md" };
+  const beside = (column: typeof AGENT_A, side: SidePanelTab) => {
+    const tasks = onTabs({ column, side, shown });
+    return { ...tasks, sidePanel: { ...tasks.sidePanel, strip: [SIDE_PANEL_TAB.COMMENTS, notes] } };
+  };
+  const window = mount(beside(AGENT_A, SIDE_PANEL_TAB.COMMENTS));
   press();
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.PLAN, shown }));
+  window.stand(beside(AGENT_B, SIDE_PANEL_TAB.COMMENTS));
   press();
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.COMMENTS, shown }));
-  assert.equal(window.addresses().length, 3, "each tab chosen is a step");
+  window.stand(beside(AGENT_B, notes));
+  assert.equal(window.addresses().length, 2, "the column's tab is a step, the panel's is not");
 
   act(() => window.history().onBack());
-  assert.deepEqual(shown, ["column:agent-b", "side:plan"], "Back shows the panel's tab before");
-  act(() => window.history().onBack());
-  assert.deepEqual(shown.slice(2), ["column:agent-a", "side:plan"], "and then the column's");
+  assert.deepEqual(shown, ["column:agent-a", "side:comments"]);
   assert.equal(window.history().canGoBack, false);
   assert.equal(window.history().canGoForward, true);
 });
 
+test("a page a link opens in the side panel is one step, which Back undoes, shutting the panel it opened, and Forward opens again", () => {
+  const shown: string[] = [];
+  const notes = { file: "docs/notes.md" };
+  const window = mount(onTabs({ column: AGENT_A, shown }));
+  press();
+  window.stand(onTabs({ column: AGENT_A, side: notes, opened: 1, shown }));
+  assert.equal(window.addresses().length, 2);
+
+  act(() => window.history().onBack());
+  assert.deepEqual(shown, ["column:agent-a", "side:shut"]);
+  act(() => window.history().onForward());
+  assert.deepEqual(shown.slice(2), ["column:agent-a", "side:docs/notes.md"]);
+});
+
+test("an Inbox item's step holds the panel beside it, so Back from the next item opens it again on what a link opened there, and Back again stands the item shut", () => {
+  const OTHER_TASK = "7e8f9a0b-0000-4000-8000-0000000000c3";
+  const done: string[] = [];
+  const page = { page: "page-plan" };
+  const onItem = (taskId: string, itemId: string, side: SidePanelTab | undefined, opened = 0) => {
+    const base = tasksControl();
+    return tasksControl({
+      inboxView: {
+        ...base.inboxView,
+        open: true,
+        chosen: { itemId, taskId },
+        onChoose: (choice) => done.push(`item:${choice.itemId}`),
+      },
+      sidePanel: {
+        ...base.sidePanel,
+        open: side !== undefined,
+        tab: side,
+        opened,
+        onShow: (holder, tab) => done.push(`side:${holder}:${isPageTab(tab) ? tab.page : tab}`),
+        onSetOpen: (open) => done.push(open ? "side:open" : "side:shut"),
+      },
+    });
+  };
+  const window = mount(onItem(TASK_ID, "item-a", undefined));
+  press();
+  window.stand(onItem(TASK_ID, "item-a", page, 1));
+  press();
+  window.stand(onItem(OTHER_TASK, "item-b", undefined, 1));
+  assert.equal(
+    window.addresses().length,
+    3,
+    "the item, the page a link opened beside it, the next item",
+  );
+
+  act(() => window.history().onBack());
+  assert.deepEqual(done, ["item:item-a", `side:${TASK_ID}:page-plan`]);
+  window.stand(onItem(TASK_ID, "item-a", page, 2));
+  act(() => window.history().onBack());
+  assert.deepEqual(done.slice(2), ["item:item-a", "side:shut"]);
+});
+
 test("a tab the window chooses by itself, with no press leading to it, takes the step standing in place", () => {
-  const window = mount(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.PLAN }));
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.PLAN }));
+  const window = mount(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.INBOX }));
+  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.INBOX }));
   window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.COMMENTS }));
   assert.equal(
     window.addresses().length,
@@ -1042,7 +1109,7 @@ test("a step on a tab since closed is passed over by Back, which goes back to th
   window.stand(onTabs({ column: AGENT_C, agents: [AGENT_A, AGENT_C], shown }));
 
   act(() => window.history().onBack());
-  assert.deepEqual(shown, ["column:agent-a"], "B's step is passed over");
+  assert.deepEqual(shown, ["column:agent-a", "side:shut"], "B's step is passed over");
   assert.equal(window.history().canGoBack, false);
 });
 
@@ -1068,15 +1135,15 @@ test("an Inbox item chosen by a press where the Inbox splits is a step of its ow
   assert.deepEqual(chosen, ["item-2"]);
 });
 
-test("the side panel's tabs are steps though the task's agents are not read, as a task with none never reads them in a fixture run", () => {
+test("the side panel's tabs a link opens are steps though the task's agents are not read, as a task with none never reads them in a fixture run", () => {
   const shown: string[] = [];
-  const unread = (side: SidePanelTab) => {
-    const tasks = onTabs({ column: undefined, side, shown });
+  const unread = (side: SidePanelTab, opened: number) => {
+    const tasks = onTabs({ column: undefined, side, shown, opened });
     return { ...tasks, mainTabs: { ...tasks.mainTabs, tabs: [], openAgents: undefined } };
   };
-  const window = mount(unread(SIDE_PANEL_TAB.COMMENTS));
+  const window = mount(unread(SIDE_PANEL_TAB.COMMENTS, 0));
   press();
-  window.stand(unread(SIDE_PANEL_TAB.PLAN));
+  window.stand(unread({ file: "docs/notes.md" }, 1));
   assert.equal(window.addresses().length, 2);
 
   act(() => window.history().onBack());
@@ -1102,14 +1169,18 @@ test("a task opened again before its agents are read keeps the column it was las
   act(() => window.history().onBack());
   act(() => window.history().onBack());
   act(() => window.history().onBack());
-  assert.deepEqual(shown, ["column:agent-c", "column:agent-a"], "home, then C, then A past B");
+  assert.deepEqual(
+    shown,
+    ["column:agent-c", "side:shut", "column:agent-a", "side:shut"],
+    "home, then C, then A past B",
+  );
 });
 
 test("Back's and Forward's steps are listed the nearest first, each named as the window called it there, passing over a step it cannot reach, and a step listed is gone to at once", () => {
   const shown: string[] = [];
   const titled = (tasks: TasksControl): StepTitle | undefined => {
     const column = tasks.mainTabs.tab;
-    return column === undefined || !("agent" in column)
+    return column === undefined || !isAgentTab(column)
       ? { label: "Home" }
       : { label: "Auth refactor", detail: column.agent };
   };
@@ -1139,7 +1210,7 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
   const toA = listed[1]?.at;
   assert.ok(toA !== undefined);
   act(() => window.history().onGoTo(toA));
-  assert.deepEqual(shown, ["column:agent-a"], "the step listed is gone to at once");
+  assert.deepEqual(shown, ["column:agent-a", "side:shut"], "the step listed is gone to at once");
   assert.deepEqual(
     window.history().steps.forward.map((step) => step.title?.detail),
     ["agent-b", "agent-c"],
@@ -1152,6 +1223,47 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
     window.history().steps.forward.map((step) => step.title?.detail),
     ["agent-c"],
   );
+});
+
+/** Each step named as the window's root names the one it stands on. */
+function stepTitleOf(tasks: TasksControl): StepTitle | undefined {
+  return stepTitle(PANEL_TAB.TASKS, tasks);
+}
+
+test("a task the Inbox is narrowed to is a step linked by it, which Back leaves for the Inbox and Forward narrows to again", async () => {
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const taskId = "a1000001-0000-4000-8000-0000000000b1";
+  leaveInboxTask();
+  let narrowed: string | undefined;
+  const Reader = () => {
+    narrowed = useInboxTask();
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(Reader)));
+  const base = tasksControl();
+  const onInbox = tasksControl({
+    workspace,
+    workspaces: [workspace],
+    inboxView: { ...base.inboxView, open: true, onOpen: leaveInboxTask, onChoose: () => undefined },
+  });
+  const window = mount(onInbox, memoryHistory(), stepTitleOf);
+  await settle();
+  press();
+  act(() => chooseInboxTask(taskId));
+
+  assert.deepEqual(window.addresses(), ["/acme/inbox", `/acme/inbox/task/${taskId}`]);
+  act(() => window.history().onBack());
+  assert.equal(narrowed, undefined, "Back shows every task's items");
+  act(() => window.history().onForward());
+  assert.equal(narrowed, taskId, "Forward narrows to the task again");
 });
 
 test("each surface the window opens is counted once, by its kind and layout alone, and not again while it stands", () => {
@@ -1180,7 +1292,7 @@ test("each surface the window opens is counted once, by its kind and layout alon
   window.stand(tasksControl({ inboxView: { ...tasksControl().inboxView, open: true } }));
   assert.deepEqual(counted.slice(3), [opened("inbox")]);
 
-  // The plan in the side panel beside the plan in the column is a second pane, counted as one.
-  window.stand(onTabs({ column: undefined, side: SIDE_PANEL_TAB.PLAN }));
-  assert.deepEqual(counted.slice(4), [opened("task"), opened("task")]);
+  // The task's Overview in the column and its Inbox in the side panel are two panes, each counted.
+  window.stand(onTabs({ column: undefined, side: SIDE_PANEL_TAB.INBOX }));
+  assert.deepEqual(counted.slice(4), [opened("task"), opened("inbox")]);
 });

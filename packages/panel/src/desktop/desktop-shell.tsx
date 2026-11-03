@@ -76,7 +76,7 @@ import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneHead, phoneBar } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
-import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
+import { SidePanelChord, SidePanelToggle, usePanelToggleRoom } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
@@ -744,6 +744,8 @@ export function DesktopShell({
   });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
+  // The box the side panel's toggle stands in, which the panel's "+" menu hangs from where the toggle asks for it with nothing to show.
+  const setToggleRoom = usePanelToggleRoom();
   // Note that setup standing before the app holds the places' chords too, so none lands behind it.
   usePlaceCommands(!gated && setup === SETUP_GATE.NONE, tab, onTabChange, tasks, settings, history);
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
@@ -1115,7 +1117,7 @@ export function DesktopShell({
           disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
         />
       ) : panelToggle ? (
-        <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
+        <div ref={setToggleRoom} className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
             disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}

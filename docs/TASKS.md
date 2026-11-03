@@ -53,8 +53,8 @@ on any Settings page leaves Settings.
 
 - Opening a task, from the list or by starting one, makes it the host's one
   **active task**, and every panel's Tasks tab shows it on its document page.
-  It opens on the agent tab it last showed, or on its plan: the side panel
-  on its Plan tab beside a column that offers **New agent**.
+  It opens on the tab it last showed, or on its Overview, its plan, where
+  none stands, the column's "+" offering **New agent**.
 - A task stays open while the developer turns to Settings or closes the
   window.
 - A task is left by Back or Escape, by opening another task or page, or by
@@ -279,30 +279,40 @@ The open task's supporting views stand in a panel at the window's right,
 beside the document, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
-- **Tabs.** `Plan`, the task's document; `Inbox`, what its agents need of
-  the developer; and `Comments`, the plan's
-  threads. After them stand the workers
+- **Tabs.** `Comments`, the plan's threads. The plan's document is the
+  column's Overview ("Agent tabs" below), and a Plan tab an earlier version
+  kept or pinned opens it there. The task's Inbox tab of old is drawn and
+  offered nowhere: a link to a thread, or a call's row naming one, opens it
+  in the window's Inbox as it stands, its search, view, and channel kept,
+  and ⌘K's Inbox row, the summary's, and a call's row naming no thread open
+  the window's Inbox narrowed to the task (`/inbox/plan/<taskId>`). After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
   terminals, and browsers, as the "+" lists them. The plan's versions open in
   the whole window ("History" below). The agents themselves have tabs
   in the task's column beside the task's own ("Agent tabs" below). A file
-  named in place, by a mention, a code block of the task's Inbox, or ⌘K,
+  named in place, by a mention, a code block of an Inbox thread, or ⌘K,
   opens whole in a File tab, one per file, the lines named lit; opening a
   file already open chooses its tab and moves the lit lines. The file is read
   (`GET /api/plans/{id}/file`, `packages/service/src/tasks/task-file.ts`) from GitHub at the
   head of the default branch through the Vespin GitHub App, a `.env` file never
   read (`packages/service/src/tasks/shown-file.ts`); a file changed since is
   drawn as it is now, and one not on that branch, or not read at all, says so
-  in its place. A File tab opened from a code block of the task's Inbox is
+  in its place. A File tab opened from a code block of an Inbox thread is
   read at the commit the agent named instead. File tabs are kept nowhere.
   The strip scrolls where its tabs overflow it. Every tab closes, Plan,
   Inbox, and Comments among them, by its ×, Delete, ⌘W, or Close and Close
   others; the "+" opens one again, and closing the last shuts the panel.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
-  A closed panel opens on its own only for a page an agent shows
-  (`tasks/use-side-panel.ts`), and a subagent opened from an agent's
-  transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
-  sets that tab's label in semibold until it is shown. Its left edge
+  It opens only when the developer opens something into it (a tab from its
+  "+", a file, a page, a worker, or a pull request pressed elsewhere) or
+  presses its toggle, and a first launch leaves it shut. A tab standing in
+  the strip never opens it: a task left while the panel stood hidden by its
+  empty strip shuts it, and an agent's cloud browser adds no Browser tab by
+  itself, its tabs offered under the "+" instead. Reloading the web app
+  stands it as the history step held it, and a link opened from outside
+  the window opens the tab it names. An open panel keeps its tab, and an
+  arrival on another tab sets that tab's label in semibold until it is
+  shown. Its left edge
   drags it from 280 pixels wide to as wide as leaves the document its room
   (`--document-reserve`), with no greatest width of its own, and the arrow
   keys move it once it has the focus.
@@ -314,10 +324,11 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 ### Agent tabs
 
-Each agent started on the task has a tab of its own in the task's column
-(`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`, `tasks/agent-tab.tsx`,
-`tasks/use-agents.ts`), opened and selected the moment its start
-lands, and showing its transcript and its composer. The column's
+The task's column leads with its Overview, which shows the plan's
+document and never closes nor moves. Each agent started on the task has a
+tab of its own after it (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`,
+`tasks/agent-tab.tsx`, `tasks/use-agents.ts`), opened and selected the
+moment its start lands, and showing its transcript and its composer. The column's
 strip is the side panel's: tabs drag and step among themselves, close by ×,
 Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
 sidebar. A column whose last tab closes is back on a new agent's draft. The tab each
@@ -331,7 +342,9 @@ subagent's tab stays in the side panel.
   transcript yet, the composer focused, and the model chip on the account's
   default. Nothing reaches the service until the first message, which
   starts the agent with those words as its prompt; the agent's own tab then
-  takes the draft's place. Closing the draft lets it go.
+  takes the draft's place. Closing the draft lets it go, and so does leaving
+  it with nothing in its composer, for another tab, task, or place; a task
+  never opens a draft by itself.
 
 - **No head.** The tab has no head over its transcript
   (`tasks/agent-tab.tsx`): the model chip stands at the composer's foot, and

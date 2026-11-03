@@ -9,15 +9,18 @@ import {
   RowHint,
   RowHintOptions,
 } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
+import { NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { RunsOnPlace } from "../tasks/runs-on.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
+import type { MenuAction } from "./action-menu.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
@@ -26,7 +29,7 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * plan-agents.tsx -- the open task's agents at the head of its plan, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
  *
  * The agents stand under a group head, Agents and how many, which folds
- * them, folded where the page says nothing, the same shape every group of
+ * them, folded where the page asks, the same shape every group of
  * the head takes, a `GroupHeader` over a dense `List`. Each row is the
  * task's agent as its "+" row and the summary draw it (`agentEntries`): its
  * tab's glyph, which gives way to the working mark while it works, its
@@ -43,7 +46,27 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * tab; it is still a link to its page, so a right-click offers its address.
  * Those at work come first, then the newest started; an archived agent is
  * not listed, and a task with no agent draws no group at all.
+ *
+ * On a phone, Overview is the task's one page, with no strip, summary, or
+ * Inbox tab beside it (`task-pane-switcher.tsx`), so the group holds what
+ * those offer: New agent after the agents, as the strip's "+" offers it,
+ * the archived agents folded under them as the summary folds them
+ * (`ArchivedAgents`), and, after the group, the task's Inbox counting what
+ * waits on the developer, only while something does. The group stands then
+ * even on a task with no agent, for New agent.
  */
+
+/** A phone's additions to the group; see the module's head. */
+interface PlanAgentsPhone {
+  /** What the group offers after its agents: New agent, or the agents' read again (`phoneAgentStarts`). */
+  readonly starts: readonly MenuAction[];
+  /** The archived agents' fold (`ArchivedAgents`), which draws nothing while none is archived. */
+  readonly archived: React.ReactNode;
+  /** How many of the task's Inbox items wait on the developer. */
+  readonly waiting: number;
+  /** Opens the window's Inbox narrowed to the task. */
+  readonly onOpenInbox: () => void;
+}
 
 /** What the group is called, and its list for a reader moving between lists. */
 const AGENTS_LIST = "Agents";
@@ -138,9 +161,10 @@ export function PlanAgents({
   held,
   tab,
   runsOn,
-  folded = true,
+  folded,
   onOpenAgent,
   onOpenPullRequest,
+  phone,
 }: {
   agents: AgentsControl;
   /** What the tabs hold, which each row's card reads as its tab's does. */
@@ -149,10 +173,12 @@ export function PlanAgents({
   tab: MainTabsControl["tab"];
   /** Where the task's agents run, which every row says. */
   runsOn: TaskRunsOn | undefined;
-  /** Whether the group starts folded; folded unless the page says otherwise. */
-  folded?: boolean | undefined;
+  /** Whether the group starts folded. */
+  folded: boolean;
   onOpenAgent: (agentId: string) => void;
   onOpenPullRequest: (agentId: string) => void;
+  /** A phone's additions; none elsewhere. */
+  phone?: PlanAgentsPhone | undefined;
 }): React.JSX.Element | null {
   // Note that an entry's pick chooses its agent's tab, which a row hands the page as that agent's id.
   const entries = agentEntries(
@@ -165,34 +191,70 @@ export function PlanAgents({
     agents,
     held,
   );
-  if (entries.length === 0) return null;
+  const starts = phone?.starts ?? [];
+  // Note that a phone's group stands for its archived agents too, on a task whose every agent is archived, which starts none.
+  const archived = phone === undefined ? 0 : (agents.archived?.length ?? 0);
+  const grouped = entries.length > 0 || starts.length > 0 || archived > 0;
+  const waiting = phone !== undefined && phone.waiting > 0 ? phone : undefined;
+  if (!grouped && waiting === undefined) return null;
   return (
     // Note that the group is pulled out by a row's inset on each side, so its marks stand on the title's edge and its fills hang past it.
     <div className="plan-agents -mx-row-inset mb-block-gap">
-      <GroupHeader
-        heading={GROUP_HEADING.NONE}
-        label={AGENTS_LIST}
-        count={{
-          value: entries.length,
-          noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
-        }}
-        fold={{ defaultOpen: !folded }}
-      >
-        <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
-          {listedOrder(entries).map((entry) => (
-            <PlanAgentRow
-              key={entry.row.id}
-              entry={entry}
-              pullRequest={agents.pullRequests.get(entry.row.id)}
-              agents={agents}
-              held={held}
-              tab={tab}
-              runsOn={runsOn}
-              onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
-            />
-          ))}
+      {grouped ? (
+        <GroupHeader
+          heading={GROUP_HEADING.NONE}
+          label={AGENTS_LIST}
+          // Note that a phone's group over no agent, standing for New agent, counts none.
+          count={
+            entries.length === 0
+              ? undefined
+              : {
+                  value: entries.length,
+                  noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
+                }
+          }
+          fold={{ defaultOpen: !folded }}
+        >
+          {entries.length + starts.length === 0 ? null : (
+            <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
+              {listedOrder(entries).map((entry) => (
+                <PlanAgentRow
+                  key={entry.row.id}
+                  entry={entry}
+                  pullRequest={agents.pullRequests.get(entry.row.id)}
+                  agents={agents}
+                  held={held}
+                  tab={tab}
+                  runsOn={runsOn}
+                  onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
+                />
+              ))}
+              {starts.map((start) => (
+                <ListRow
+                  key={start.label}
+                  leading={start.icon ?? <GLYPH.ADD />}
+                  title={start.label}
+                  description={start.detail}
+                  disabled={start.disabled}
+                  chevron
+                  onPress={start.onSelect}
+                />
+              ))}
+            </List>
+          )}
+          {phone?.archived}
+        </GroupHeader>
+      ) : null}
+      {waiting === undefined ? null : (
+        <List label={NEEDS_YOU.LABEL} density={LIST_DENSITY.DENSE}>
+          <ListRow
+            leading={<GLYPH.INBOX />}
+            title={threadsWaitingWords(waiting.waiting)}
+            chevron
+            onPress={waiting.onOpenInbox}
+          />
         </List>
-      </GroupHeader>
+      )}
     </div>
   );
 }

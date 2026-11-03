@@ -18,6 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { ChipCards } from "../tasks/chip-cards.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
@@ -128,14 +129,16 @@ async function settle(): Promise<void> {
  * The task open on its own tab, a working agent's tab and a draft's beside
  * it, and the side panel open with the done agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
-async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise<HTMLElement> {
+async function mount(
+  shown: { body?: string; tab?: SidePanelTab; listed?: TaskSummary } = {},
+): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   const base = tasksControl();
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    tasks: [SUMMARY],
+    tasks: [shown.listed ?? SUMMARY],
     activeTaskId: TASK.id,
     region: {
       kind: DOCUMENT_REGION.READY,
@@ -143,8 +146,8 @@ async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise
     },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [{ agent: WORKING.id }, { draft: DRAFT }],
-      tab: undefined,
+      tabs: [MAIN_TAB.OVERVIEW, { agent: WORKING.id }, { draft: DRAFT }],
+      tab: MAIN_TAB.OVERVIEW,
       openAgents: [WORKING.id],
     },
     sidePanel: {
@@ -271,27 +274,23 @@ test("the side panel's + offers an agent's Pull request in the look its tab wear
   );
 });
 
-test("the side panel's Plan tab is named for the task and wears its status's mark, and its + offers it in that look", async () => {
-  const panel = (await mount()).querySelector(".side-panel-tabs");
+test("the column's strip leads with the task itself, named as the list names it now, and the side panel offers no Plan", async () => {
+  // Note that the list renamed the task before its document was read again, so the tab follows the list.
+  const container = await mount({ listed: { ...SUMMARY, name: "Expire invites after a week" } });
+  const column = container.querySelector(".main-tabs");
+  assert.ok(column, "the task's column's strip");
+  const first = column.querySelector<HTMLElement>('[role="tab"] .ui-tab-label');
+  assert.equal(first?.textContent, "Expire invites after a week", "the task leads the strip");
+  const panel = container.querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
-  const tabs = tabLooks(panel);
-  const rows = rowLooks(panel);
-  assert.ok(!tabs.has("Plan"), "no tab says Plan");
-  assert.ok(tabs.has(TASK.name), "the strip has a tab named for the task");
-  assert.match(
-    tabs.get(TASK.name)?.glyph ?? "",
-    /data-status="in-progress"/u,
-    "the Plan tab wears the task's status as the list holds it",
-  );
-  assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name), "the Plan looks the same in the +");
+  assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Plan"), "no Plan tab");
+  assert.ok(!rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Plan"), "nor a Plan row");
 });
 
-test("the side panel's Plan tab hangs the task's card, as its sidebar row does", async () => {
-  const panel = (await mount()).querySelector(".side-panel-tabs");
-  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".ui-tab-label")?.textContent === TASK.name,
-  );
-  assert.ok(tab, "the strip has the Plan tab");
+test("the column's first tab hangs the task's card, as its sidebar row does", async () => {
+  const column = (await mount()).querySelector(".main-tabs");
+  const tab = column?.querySelector<HTMLElement>('[role="tab"]');
+  assert.ok(tab, "the strip leads with the task's tab");
   restOn(tab);
   const card = document.querySelector(".ui-tooltip-card [data-task-card]");
   assert.ok(card, "the task's card is hung");
@@ -299,24 +298,10 @@ test("the side panel's Plan tab hangs the task's card, as its sidebar row does",
   assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
 });
 
-test("the side panel's Inbox tab hangs what waits on the developer, as the plan's summary row does", async () => {
-  const panel = (await mount()).querySelector(".side-panel-tabs");
-  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Inbox",
-  );
-  assert.ok(tab, "the strip has the Inbox tab");
-  restOn(tab);
-  const card = document.querySelector(".ui-tooltip-card [data-inbox-card]");
-  assert.ok(card, "the Inbox's card is hung");
-  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "Inbox");
-  assert.ok(card.querySelector(".ui-hover-card-corner")?.textContent, "it says how many wait");
-});
-
 test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {
   const url = "https://github.com/acme/relay/pull/42";
   const container = await mount({
     body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
-    tab: SIDE_PANEL_TAB.PLAN,
   });
   const tab = [...container.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === "#42 Expire invitations",

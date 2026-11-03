@@ -32,18 +32,25 @@
  * restore lands on the task as Back would, where the task stands behind.
  *
  * What a page shows within it is a step too: the tab the task's column
- * shows, the tab its side panel shows while open (a narrow room's panel
- * standing over the plan being a step of its own already), and the
- * Inbox's item, so Back goes back to what the window was
+ * shows, and the Inbox's item and the task it is narrowed to, so Back goes back to what the window was
  * just showing rather than past it to the page before. Such a choice is a
  * step only where a press or a key led to it: one the window makes by
  * itself, as a task's tabs arriving after it opens, an agent's tab shown as
  * it starts, or the tab shown in place of one closed, takes the standing
  * step in place. A tab or an item not yet known, as a task's tabs on their
- * way or an Inbox with nothing chosen, fills in the step it stands in, so
- * opening the side panel on its tab adds none. A step on a tab since closed
- * is passed over, as a deleted task is, as far as the window last saw that
- * task's strips.
+ * way or an Inbox with nothing chosen, fills in the step it stands in. A
+ * step on a column's tab since closed is passed over, as a deleted task is,
+ * as far as the window last saw that task's strip.
+ *
+ * The side panel belongs to the stop it was opened at, a task, an agent's
+ * page, or an Inbox item, so each such step holds it: the tab it shows, or
+ * shut (`null`), which a step taken before the panel was known holds as
+ * none. Going to a step stands the panel as the step held it, a tab since
+ * closed opened again. One press is one step: a page, a file, or a pull
+ * request a link, a pin, or a notification opens there is a step of its own
+ * (`SidePanelControl.opened`), which Back undoes, the panel shut where it
+ * was shut, while a tab chosen in its strip, its toggle, and its tabs
+ * arriving take the standing step in place.
  *
  * Each Automations page is a step of its own, the list and each automation's
  * page alike, so Back from an automation opened from the list returns to the
@@ -115,7 +122,8 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
-import type { MainTab } from "./tasks/use-main-tabs.js";
+import { standInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
+import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
 import type { HistorySpot } from "./tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
@@ -150,6 +158,9 @@ const PLACE_KIND = {
   ADMIN: "admin",
 } as const;
 
+/** The side panel as a step holds it: its tab shown while open, `null` while shut, and none where it was not yet known. */
+type SideStep = SidePanelTab | null | undefined;
+
 /** The side panel as a narrow room holds it: open over the plan, the whole pane, on the tab shown, or shut. */
 interface PanelStep {
   readonly open: boolean;
@@ -171,8 +182,8 @@ type Place =
       readonly panel?: PanelStep | undefined;
       /** The column's tab shown, in any room; none while the column shows no tab or its tabs are not yet the task's. */
       readonly column?: MainTab | undefined;
-      /** The side panel's tab shown while it is open, in a wide room (a narrow one keeps it in `panel`); none while it is shut or its tabs are not yet the task's. */
-      readonly side?: SidePanelTab | undefined;
+      /** The side panel's tab shown while it is open, in a wide room (a narrow one keeps it in `panel`), `null` while it is shut, and none while its tabs are not yet the task's. */
+      readonly side?: SideStep;
     }
   | {
       readonly kind: typeof PLACE_KIND.VERSION_HISTORY;
@@ -186,8 +197,17 @@ type Place =
       readonly listed?: boolean | undefined;
       /** The item standing alone, while one does. */
       readonly chosen?: InboxChoice | undefined;
+      /** The task the Inbox is narrowed to. */
+      readonly taskId?: string | undefined;
+      /** The side panel beside the item standing, as a task's step holds it; none while no item stands. */
+      readonly side?: SideStep;
     }
-  | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
+  | {
+      readonly kind: typeof PLACE_KIND.AGENT;
+      readonly agentId: string;
+      /** The side panel beside the page, as a task's step holds it. */
+      readonly side?: SideStep;
+    }
   | {
       readonly kind: typeof PLACE_KIND.PERSON;
       readonly userId: string;
@@ -215,12 +235,6 @@ type Place =
       readonly listed?: boolean | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.ADMIN; readonly view: AdminView };
-
-/** The tabs a task's strips stood with as the window last stood on it: its column's once its agents were read, and its side panel's. */
-interface KnownStrips {
-  readonly column: ReadonlySet<string> | undefined;
-  readonly side: ReadonlySet<string>;
-}
 
 /** What a step is called where the trail is listed: what stood in the window, and what it showed there, such as a task and its tabs. */
 export interface StepTitle {
@@ -260,7 +274,8 @@ function namedStepOf(place: Place): NamedStep | undefined {
       return { kind: NAMED_STEP.VERSION_HISTORY, taskId: place.taskId };
     case PLACE_KIND.INBOX: {
       const { chosen } = place;
-      const taskId = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
+      // Note that an Inbox narrowed to a task is named by it, as every item it shows is that task's.
+      const taskId = chosen !== undefined && "taskId" in chosen ? chosen.taskId : place.taskId;
       return { kind: NAMED_STEP.INBOX, taskId };
     }
     case PLACE_KIND.PERSON:
@@ -329,14 +344,16 @@ function sameSubStep(one: Place, other: Place): boolean {
   return mine === undefined || theirs === undefined || mine === theirs;
 }
 
+/** The task an Inbox item stands on, or for an agent with no task its agent, whose side panel stands beside it. */
+function choiceHolder(choice: InboxChoice): string | undefined {
+  if ("taskId" in choice) return choice.taskId;
+  return "agentId" in choice ? choice.agentId : undefined;
+}
+
 /** Whether two Inbox items are the same item of the same holder. */
 function sameInboxChoice(one: InboxChoice | undefined, other: InboxChoice | undefined): boolean {
   if (one === undefined || other === undefined) return one === other;
-  const holder = (choice: InboxChoice) => {
-    if ("taskId" in choice) return choice.taskId;
-    return "agentId" in choice ? choice.agentId : undefined;
-  };
-  return one.itemId === other.itemId && holder(one) === holder(other);
+  return one.itemId === other.itemId && choiceHolder(one) === choiceHolder(other);
 }
 
 /** Whether two side panels stand on the same tab, or none. */
@@ -396,22 +413,47 @@ function sameOrUnknownTab(one: StripTab | undefined, other: StripTab | undefined
   return one === undefined || other === undefined || sameTab(one, other);
 }
 
+/** Whether two side panels stand alike: shut both, or on one tab. */
+function sameSide(one: SideStep, other: SideStep): boolean {
+  return one == null || other == null ? one === other : sameTab(one, other);
+}
+
+/** The side panel a place shows within its page: a narrow room's while it stands over the plan, whose opening is a sub-step of its own, else the step's own. */
+function sideOf(place: Place): SideStep {
+  if (place.kind === PLACE_KIND.TASK) {
+    return place.panel === undefined ? place.side : openPanelTab(place.panel);
+  }
+  return place.kind === PLACE_KIND.INBOX || place.kind === PLACE_KIND.AGENT
+    ? place.side
+    : undefined;
+}
+
+/** Whether two places of one page show one side panel, or either one not yet known, which fills in the step it stands in. */
+function sameShownSide(one: Place, other: Place): boolean {
+  const mine = sideOf(one);
+  const theirs = sideOf(other);
+  return mine === undefined || theirs === undefined || sameSide(mine, theirs);
+}
+
 /**
  * Whether two places of one page show one thing in it: the same tabs of a
- * task's column and side panel, the same Inbox item.
+ * task's column and side panel, the same Inbox item and the panel beside it.
  * Either side showing none, as a task whose tabs are on their way or an
  * Inbox with no item chosen yet, is the same, so what arrives fills in the
  * step it stands in.
  */
 function sameShown(one: Place, other: Place): boolean {
+  return sameChosen(one, other) && sameShownSide(one, other);
+}
+
+/** Whether two places of one page stand on one thing chosen in it, whatever their side panels show: the same tab of a task's column, the same Inbox item. */
+function sameChosen(one: Place, other: Place): boolean {
   if (one.kind === PLACE_KIND.TASK && other.kind === PLACE_KIND.TASK) {
-    return (
-      sameOrUnknownTab(one.column, other.column) &&
-      sameOrUnknownTab(one.side, other.side) &&
-      sameOrUnknownTab(openPanelTab(one.panel), openPanelTab(other.panel))
-    );
+    return sameOrUnknownTab(one.column, other.column);
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
+    // Note that the Inbox and each task it is narrowed to are steps of their own, so moving between them is a visit rather than filling in the step.
+    if (one.taskId !== other.taskId) return false;
     return one.chosen === undefined || other.chosen === undefined
       ? true
       : sameInboxChoice(one.chosen, other.chosen);
@@ -426,11 +468,22 @@ function sameStep(one: Place | undefined, other: Place): boolean {
   );
 }
 
-/** Whether two places are one step but for what each shows in its page: the move between them chooses another tab or Inbox item on the page standing. */
+/** Whether two places are one step but for what each shows in its page: the move between them chooses another tab or Inbox item on the page standing, or stands its side panel otherwise. */
 function choosesWithin(one: Place | undefined, other: Place): boolean {
   return (
     one !== undefined && samePage(one, other) && sameSubStep(one, other) && !sameShown(one, other)
   );
+}
+
+/**
+ * Whether a move within one page was the developer's own, so a step of its
+ * own: another tab or item chosen where a press or a key led to it
+ * (`pressed`), or the side panel standing otherwise where a door naming a
+ * thing opened it there (`opened`), a tab chosen in its strip or its
+ * toggle being no such door.
+ */
+function ledWithin(one: Place, other: Place, pressed: boolean, opened: boolean): boolean {
+  return (pressed && !sameChosen(one, other)) || (opened && !sameShownSide(one, other));
 }
 
 /** The surface a tab of a task's column or side panel shows, which a task's own fixed tabs name by the task; `side` marks one of the side panel's, which stands beside the column's of the same kind. */
@@ -445,7 +498,7 @@ function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
   if (isTerminalTab(tab)) return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
   if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of, side };
   if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of, side };
-  // A word of the side panel's own: the plan, the task's Inbox, or its comments.
+  // A word of a strip's own: the column's Overview, which shows the task, the task's Inbox, or its comments.
   if (tab === SIDE_PANEL_TAB.INBOX) return { surface: PRODUCT_SURFACE.INBOX, of: taskId, side };
   if (tab === SIDE_PANEL_TAB.COMMENTS) {
     return { surface: PRODUCT_SURFACE.COMMENTS, of: taskId, side };
@@ -475,7 +528,7 @@ function surfacesOf(
       const sideSurface = side === undefined ? [] : [tabSurface(place.taskId, side, true)];
       if (place.panel?.open === true) return sideSurface;
       const column = columnKnown
-        ? [tabSurface(place.taskId, place.column ?? SIDE_PANEL_TAB.PLAN, false)]
+        ? [tabSurface(place.taskId, place.column ?? MAIN_TAB.OVERVIEW, false)]
         : [];
       return [...column, ...sideSurface];
     }
@@ -517,11 +570,18 @@ function samePlace(one: Place, other: Place): boolean {
     return (
       samePanelTab(one.panel, other.panel) &&
       sameTabOrNone(one.column, other.column) &&
-      sameTabOrNone(one.side, other.side)
+      sameSide(one.side, other.side)
     );
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
-    return sameInboxChoice(one.chosen, other.chosen);
+    return (
+      one.taskId === other.taskId &&
+      sameInboxChoice(one.chosen, other.chosen) &&
+      sameSide(one.side, other.side)
+    );
+  }
+  if (one.kind === PLACE_KIND.AGENT && other.kind === PLACE_KIND.AGENT) {
+    return sameSide(one.side, other.side);
   }
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
     return one.workspaceId === other.workspaceId && sameAutomationsOpening(one.page, other.page);
@@ -565,10 +625,12 @@ function addressOf(link: ReadLink | undefined): string {
  * it, and so does `up`, a list a narrow screen went up to from its item where
  * the list was no step behind. A tab or an Inbox item chosen
  * within the page standing is a visit only where a press or a key led to it
- * (`pressed`): one the window chose by itself, as a task's tabs arriving
- * after it opens, an agent's tab shown as it starts, or the tab chosen in
- * place of one closed, takes the standing step in place. Any other place is
- * a visit, whichever door opened it.
+ * (`pressed`), and the side panel standing otherwise only where a door
+ * naming a thing opened it (`opened`): one the window chose by itself, as a
+ * task's tabs arriving after it opens, an agent's tab shown as it starts, or
+ * the tab chosen in place of one closed, takes the standing step in place,
+ * and so does a tab chosen in the panel's strip or its toggle. Any other
+ * place is a visit, whichever door opened it.
  */
 function visit(
   history: HistoryAdapter<Place>,
@@ -576,13 +638,17 @@ function visit(
   address: string,
   up: Place | undefined,
   pressed: boolean,
+  opened: boolean,
 ): void {
   const trail = history.current();
   const standing = trail.entries[trail.at];
   const entry: HistoryEntry<Place> = { address, state: place };
   const wentUp = up !== undefined && sameStep(up, place);
-  // A tab, an item, or a place chosen within the page standing that no press or key led to is the window settling, not a visit.
-  const settling = !pressed && choosesWithin(standing?.state, place);
+  // A tab, an item, or a side panel stood within the page standing that the developer did not lead to is the window settling, not a visit.
+  const settling =
+    standing !== undefined &&
+    choosesWithin(standing.state, place) &&
+    !ledWithin(standing.state, place, pressed, opened);
   if (standing !== undefined && (wentUp || settling || madeFromNew(standing.state, place))) {
     history.replace(entry);
     return;
@@ -611,9 +677,10 @@ function afterVisit(
   address: string,
   up: Place | undefined,
   pressed: boolean,
+  opened: boolean,
 ): Trail {
   const written = memoryHistory<Place>(HISTORY_LIMIT, trail);
-  visit(written, place, address, up, pressed);
+  visit(written, place, address, up, pressed, opened);
   return written.current();
 }
 
@@ -945,6 +1012,8 @@ function useHistory(input: {
   go: (place: Place) => void;
   /** Asks first, while a page holds unsaved work, before a step moves the trail at all. */
   guard: LeaveGuard["guard"];
+  /** How many times a door naming a thing opened it in the side panel (`SidePanelControl.opened`). */
+  opened: number;
 }): NavigationHistory & {
   backTo: (place: Place) => boolean;
   upTo: (place: Place, stand: () => void) => void;
@@ -955,21 +1024,23 @@ function useHistory(input: {
   /** Goes back to that step, answering whether one stood there to go to. */
   stepAway: () => boolean;
 } {
-  const { place, address, reachable, named, guard } = input;
+  const { place, address, reachable, named, guard, opened } = input;
   const history = windowHistory();
   // Note that the presses read the trail from the adapter as they land, because a
   // key can land between a move and the render that shows it, and the latest
   // `place`, `reachable`, `go`, and `guard` through a ref, so a press stays the same
   // function across renders.
-  const latest = useRef({ place, reachable, go: input.go, guard });
+  const latest = useRef({ place, reachable, go: input.go, guard, opened });
   useLayoutEffect(() => {
-    latest.current = { place, reachable, go: input.go, guard };
+    latest.current = { place, reachable, go: input.go, guard, opened };
   });
   // The list a narrow screen went up to with no step behind, which the next visit takes in place.
   const wentUp = useRef<Place | undefined>(undefined);
   // How many presses and keys the window has heard, and how many it had as it last wrote the trail.
   const presses = useRef(0);
   const pressesWritten = useRef(0);
+  // How many opens the side panel had as the window last wrote the trail.
+  const openedWritten = useRef(opened);
   useEffect(() => {
     const heard = () => {
       presses.current += 1;
@@ -1002,7 +1073,8 @@ function useHistory(input: {
       moved &&
       (standing.current !== undefined || standingOf(held) === undefined);
     const pressed = presses.current !== pressesWritten.current;
-    const trail = writes ? afterVisit(held, place, address, wentUp.current, pressed) : held;
+    const opens = opened !== openedWritten.current;
+    const trail = writes ? afterVisit(held, place, address, wentUp.current, pressed, opens) : held;
     const next = readingOf(trail, reachable, named);
     if (drawn.current === undefined || !sameReading(drawn.current, next)) drawn.current = next;
     return drawn.current;
@@ -1018,6 +1090,7 @@ function useHistory(input: {
         writing.current = false;
       }
       pressesWritten.current = presses.current;
+      openedWritten.current = latest.current.opened;
       standing.current = standingOf(history.current());
     },
     [history],
@@ -1035,7 +1108,8 @@ function useHistory(input: {
       return;
     }
     const pressed = presses.current !== pressesWritten.current;
-    own(() => visit(history, place, address, up, pressed));
+    const opens = latest.current.opened !== openedWritten.current;
+    own(() => visit(history, place, address, up, pressed, opens));
   }, [history, place, address, own]);
 
   useEffect(() => {
@@ -1203,6 +1277,7 @@ export function useWindowHistory(input: {
     | "onGoHome"
     | "history"
     | "inboxView"
+    | "onShowInbox"
     | "agentView"
     | "personView"
     | "workspace"
@@ -1229,6 +1304,9 @@ export function useWindowHistory(input: {
   // The item chosen is a step of its own wherever it shows: alone in one column, or beside the list where the Inbox splits.
   const inboxChosen = tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxChosen === undefined : undefined;
+  // A task chosen narrows the Inbox to its items, a step of its own.
+  const narrowedTask = useInboxTask();
+  const inboxTask = inboxOpen ? narrowedTask : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
@@ -1239,16 +1317,14 @@ export function useWindowHistory(input: {
   const columnTab = columnKnown ? tasks.mainTabs.tab : undefined;
   // A narrow room holds the side panel as a pane of its own over the plan (`panel`), whose tab its step keeps as it always has.
   const sideTab = stripsKnown && !narrow ? panelTab : undefined;
-  // The tabs each task's strips stood with as the window last stood on it, so a step on a tab since closed is passed over.
-  const knownStrips = useRef(new Map<string, KnownStrips>()).current;
-  if (stripsKnown && !inboxOpen && !historyOpen) {
-    knownStrips.set(boundFor, {
-      // Note that a task reopened before its agents are read keeps the column it was last seen with.
-      column: columnKnown
-        ? new Set(tasks.mainTabs.tabs.map(tabKey))
-        : knownStrips.get(boundFor)?.column,
-      side: new Set(tasks.sidePanel.strip.map(tabKey)),
-    });
+  // The side panel as the stop standing holds it: its tab while open, and shut otherwise.
+  const sideHeld = panelTab ?? null;
+  const taskSide = stripsKnown && !narrow ? sideHeld : undefined;
+  // The tabs each task's column stood with as the window last stood on it, so a step on a tab since closed is passed over.
+  // Note that a task reopened before its agents are read keeps the column it was last seen with.
+  const knownColumns = useRef(new Map<string, ReadonlySet<string>>()).current;
+  if (columnKnown && !inboxOpen && !historyOpen) {
+    knownColumns.set(boundFor, new Set(tasks.mainTabs.tabs.map(tabKey)));
   }
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
@@ -1292,9 +1368,16 @@ export function useWindowHistory(input: {
       };
     }
     if (inboxOpen) {
-      return { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen };
+      const inbox = {
+        kind: PLACE_KIND.INBOX,
+        listed: inboxListed,
+        chosen: inboxChosen,
+        side: inboxChosen === undefined ? undefined : sideHeld,
+      } as const;
+      return inboxTask === undefined ? inbox : { ...inbox, taskId: inboxTask };
     }
-    if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
+    if (pageAgent !== undefined)
+      return { kind: PLACE_KIND.AGENT, agentId: pageAgent, side: sideHeld };
     if (pagePerson !== undefined) {
       return {
         kind: PLACE_KIND.PERSON,
@@ -1321,7 +1404,7 @@ export function useWindowHistory(input: {
           taskId: boundFor,
           panel: narrow ? { open: panelOpen, tab: panelTab } : undefined,
           column: columnTab,
-          side: sideTab,
+          side: taskSide,
         };
   }, [
     known,
@@ -1337,10 +1420,12 @@ export function useWindowHistory(input: {
     panelOpen,
     panelTab,
     columnTab,
-    sideTab,
+    taskSide,
+    sideHeld,
     inboxOpen,
     inboxListed,
     inboxChosen,
+    inboxTask,
     pageAgent,
     pagePerson,
     personName,
@@ -1363,20 +1448,21 @@ export function useWindowHistory(input: {
     }, [untitled, columnKnown, sideTab, boundFor]),
     input.room,
   );
+  // An Inbox narrowed to a task is named by the task, every item it shows being that task's.
+  const inboxTaskName =
+    inboxTask === undefined ? undefined : tasks.tasks.find((task) => task.id === inboxTask)?.name;
   const place = useMemo((): Titled | undefined => {
     if (untitled === undefined || titleLabel === undefined) return untitled;
-    const label = { label: titleLabel, detail: titleDetail };
+    const label = { label: titleLabel, detail: titleDetail ?? inboxTaskName };
     const panes = { column: titleColumn, side: titleSide };
     const unnamed = titleColumn === undefined && titleSide === undefined;
     return { ...untitled, title: unnamed ? label : { ...label, panes } };
-  }, [untitled, titleLabel, titleDetail, titleColumn, titleSide]);
-  // Whether the tabs a task's step showed still stand on its strips, as far as the window last saw them; a task not seen since is taken to.
+  }, [untitled, titleLabel, titleDetail, titleColumn, titleSide, inboxTaskName]);
+  // Whether the column's tab a task's step showed still stands on its strip, as far as the window last saw it; a task not seen since is taken to.
+  // Note that the side panel's tab is not asked after, because going to the step opens it again, as a link opens a preview another took the place of.
   const tabsStand = (to: Extract<Place, { kind: typeof PLACE_KIND.TASK }>) => {
-    const strips = knownStrips.get(to.taskId);
-    if (strips === undefined) return true;
-    const stands = (tab: StripTab | undefined, strip: ReadonlySet<string> | undefined) =>
-      tab === undefined || strip === undefined || strip.has(tabKey(tab));
-    return stands(to.column, strips.column) && stands(to.side, strips.side);
+    const column = knownColumns.get(to.taskId);
+    return to.column === undefined || column === undefined || column.has(tabKey(to.column));
   };
   const reachable = (to: Place) => {
     // The Admin place is an admin's alone, so back and forward pass over it for an account that is no admin.
@@ -1393,7 +1479,8 @@ export function useWindowHistory(input: {
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (to.kind === PLACE_KIND.TASK && !tabsStand(to)) return false;
-    if (!("taskId" in to) || to.taskId === boundFor) return true;
+    // Note that an Inbox narrowed to a task is passed over once the task is deleted, as the task's own step is.
+    if (!("taskId" in to) || to.taskId === undefined || to.taskId === boundFor) return true;
     return (
       tasks.listFailed ||
       !everListed.has(to.taskId) ||
@@ -1411,12 +1498,20 @@ export function useWindowHistory(input: {
     const historyStanding = tab === PANEL_TAB.TASKS && historyOpen && spot !== undefined;
     if (tab !== PANEL_TAB.TASKS) input.onTabChange(PANEL_TAB.TASKS);
     if (to.kind === PLACE_KIND.INBOX) {
-      tasks.inboxView.onOpen();
+      // Note that a task's step holding no item opens it afresh, so no item chosen in a later step stands over it.
+      if (to.taskId !== undefined && to.chosen === undefined) {
+        tasks.onShowInbox({ taskId: to.taskId });
+      } else {
+        tasks.inboxView.onOpen();
+      }
+      standInboxTask(to.taskId);
       if (to.chosen !== undefined) tasks.inboxView.onChoose(to.chosen);
+      standSide(to.chosen === undefined ? undefined : choiceHolder(to.chosen), to.side);
       return;
     }
     if (to.kind === PLACE_KIND.AGENT) {
       tasks.agentView.onOpen(to.agentId);
+      standSide(to.agentId, to.side);
       return;
     }
     if (to.kind === PLACE_KIND.PERSON) {
@@ -1481,10 +1576,13 @@ export function useWindowHistory(input: {
       tasks.mainTabs.onShow(to.taskId, to.column);
     }
     if (to.kind === PLACE_KIND.TASK && to.panel !== undefined) standPanel(to.taskId, to.panel);
-    else if (to.kind === PLACE_KIND.TASK && to.side !== undefined) {
-      tasks.sidePanel.onShow(to.taskId, to.side);
-    }
+    else if (to.kind === PLACE_KIND.TASK) standSide(to.taskId, to.side);
     if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) tasks.onLeaveTask();
+  };
+  // The side panel as a wide step, an Inbox item's, or an agent page's held it: shut, or open on its tab, on the stop's own task or agent; one not yet known is left as it stands.
+  const standSide = (holder: string | undefined, side: SideStep) => {
+    if (side === null) tasks.sidePanel.onSetOpen(false);
+    else if (side !== undefined && holder !== undefined) tasks.sidePanel.onShow(holder, side);
   };
   // The side panel as a narrow room's step held it: shut, or open on its tab.
   const standPanel = (taskId: string, panel: PanelStep) => {
@@ -1512,6 +1610,7 @@ export function useWindowHistory(input: {
     named,
     go,
     guard: tasks.leaveGuard.guard,
+    opened: tasks.sidePanel.opened,
   });
   // Note that only a narrow room holds a list as a step of its own, so a wide one only stands it.
   const up = (to: Place, stand: () => void) => (narrow ? upTo(to, stand) : stand());
@@ -1537,13 +1636,21 @@ export function useWindowHistory(input: {
         () => tasks.automationsView.onRuns(false),
       ),
     // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
+    // Note that the list stepped back to is under the task the Inbox stands narrowed to, as its step is.
     inbox: () => {
       const stand = () => tasks.inboxView.onClear();
-      if (inboxSingle) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
+      const list = { kind: PLACE_KIND.INBOX, listed: true } as const;
+      const narrowed = inboxTask === undefined ? list : { ...list, taskId: inboxTask };
+      if (inboxSingle) upTo(narrowed, stand);
       else stand();
     },
     panel: () => {
       const shut = () => tasks.sidePanel.onSetOpen(false);
+      // Note that a phone's panel a link opened over an Inbox item or an agent's page steps back to it shut, where that is the step behind.
+      if (untitled?.kind === PLACE_KIND.INBOX || untitled?.kind === PLACE_KIND.AGENT) {
+        if (!narrow || !backTo({ ...untitled, side: null })) shut();
+        return;
+      }
       if (boundFor === undefined) {
         shut();
         return;

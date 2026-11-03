@@ -8,6 +8,7 @@ import { afterPaint } from "../after-paint.js";
 import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
+  EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -16,6 +17,7 @@ import {
   inboxAgentOf,
   inboxCounts,
   listedItems,
+  taskGroups,
 } from "./inbox-model.js";
 import { useAgents } from "./use-agents.js";
 import { useHeldInboxList } from "./use-held-inbox-list.js";
@@ -56,7 +58,15 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * to the window once that frame has painted (`useChoiceFirst`), so the
  * sidebar, the side panel, and the window's history, which follow the
  * window's choice, draw it a frame later rather than holding up the thread.
+ *
+ * Narrowed to a task, it lists and counts every item of that task alone
+ * (`taskGroups`), open and settled, addressed to anyone, as the task's own
+ * Inbox tab once listed them, whatever view the Inbox keeps, which it
+ * leaves as it stands (`TASK_LISTS`).
  */
+
+/** What an Inbox narrowed to a task lists: every item the task holds, open or settled, whoever it is addressed to. */
+const TASK_LISTS = { show: INBOX_SHOW.ALL, whose: EVERYONES } as const;
 
 /**
  * The tasks the list holds items of, in main's order: each holding one that
@@ -147,10 +157,11 @@ function useChoiceFirst(
 }
 
 /**
- * The window's Inbox as it is read and listed, and its chosen item; see the module's head, its list
+ * The window's Inbox as it is read and listed, narrowed to `narrowedTask`
+ * where one is given, and its chosen item; see the module's head, its list
  * held still while it is shown (`use-held-inbox-list.ts`).
  */
-export function useInboxListing(tasks: TasksControl) {
+export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
   const view = tasks.inboxView;
   const { act } = useAct();
   const choices = useInboxViewChoices();
@@ -282,7 +293,7 @@ export function useInboxListing(tasks: TasksControl) {
   // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@repo/host`'s `inbox-collections.ts`).
   const everyTask = tasks.tasks;
   const listedWorkspace = tasks.workspace?.id;
-  const standing: readonly InboxGroup[] = useMemo(
+  const everyItem: readonly InboxGroup[] = useMemo(
     () =>
       inboxGroups(held, {
         tasks: holdings,
@@ -292,13 +303,18 @@ export function useInboxListing(tasks: TasksControl) {
       }),
     [held, holdings, everyTask, holdingAgents, listedWorkspace],
   );
+  const standing = useMemo(
+    () => (narrowedTask === undefined ? everyItem : taskGroups(everyItem, narrowedTask)),
+    [everyItem, narrowedTask],
+  );
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // The list's search, which narrows what it lists, never what it counts.
   const [query, setQuery] = useState("");
   const search = useMemo(() => searchTokens(query), [query]);
   const me = tasks.me;
-  const { show, whose } = choices;
+  // Note that a task's items are listed whole, under no view (`TASK_LISTS`).
+  const { show, whose } = narrowedTask === undefined ? choices : TASK_LISTS;
   const counts = useMemo(() => inboxCounts(standing, me, whose), [standing, me, whose]);
   const filter = useMemo(() => ({ show, whose, search, readerId: me }), [show, whose, search, me]);
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,

@@ -18,7 +18,8 @@ import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
+import { useInboxTask } from "./tasks/use-inbox-task.js";
+import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 
 /**
@@ -55,6 +56,9 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  * its own width, in a room still wide), Settings' page list, whose link
  * names no page, and the Admin
  * place's section list, whose link names no view.
+ *
+ * An Inbox narrowed to a task has the task's Inbox link,
+ * `/inbox/task/<taskId>`, in the Inbox's.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -111,6 +115,8 @@ export interface WindowAt {
   readonly pageWorkspace?: PageWorkspace | undefined;
   /** Whether the room is narrow, showing one pane at a time. */
   readonly narrow?: boolean;
+  /** The task the Inbox is narrowed to. */
+  readonly inboxTask?: string | undefined;
 }
 
 const PageWorkspaceContext = createContext<(held: PageWorkspace | undefined) => void>(
@@ -129,7 +135,8 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
 /**
  * The place a tab of the side panel shows, on the task or the agent's page
  * that holds the panel; none for a tab whose thing has no link of its own:
- * a file's, the board, the code, the Inbox, a terminal, a pull request
+ * a file's, the Inbox, the comments, a terminal, the plan's of old,
+ * whose task is the column's Overview and linked as the task, a pull request
  * the agent did not open, and a worker of the app's own, which is drawn
  * nowhere a link opens. Note that a Changes or a
  * worker's tab is the agent's, so it is linked by the agent alone, on a
@@ -140,9 +147,6 @@ export function panelTabPlace(
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  if (tab === SIDE_PANEL_TAB.PLAN) {
-    return "taskId" in holder ? { kind: LINK_PLACE.TASK, planId: holder.taskId } : undefined;
-  }
   if (isPageTab(tab)) {
     return "taskId" in holder
       ? { kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: tab.page }
@@ -208,6 +212,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
           task,
         ];
   }
+  // Note that the column's Overview is the task itself, so it adds no link past the task's.
   const shown = tasks.mainTabs.tab;
   const agentId = shown !== undefined && isAgentTab(shown) ? shown.agent : undefined;
   const agent: LinkAtHand | undefined =
@@ -287,16 +292,18 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
   }
   if (tasks.inboxView.open) {
-    const inbox = at_({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX);
+    // An Inbox narrowed to a task is linked by it, so a copied link or a reload opens it narrowed again.
+    const inboxPlace: LinkPlace =
+      at.inboxTask === undefined
+        ? { kind: LINK_PLACE.INBOX }
+        : { kind: LINK_PLACE.INBOX, planId: at.inboxTask };
+    const inbox = at_(inboxPlace, LINK_THING.INBOX);
     const { chosen } = tasks.inboxView;
     if (chosen === undefined) return [inbox];
     const item = inboxItemPlace(chosen);
     // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
     if (at.narrow === true || tasks.inboxView.single === true) {
-      return [
-        at_(item, LINK_THING.INBOX_ITEM),
-        within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),
-      ];
+      return [at_(item, LINK_THING.INBOX_ITEM), within(inboxPlace, LINK_THING.INBOX)];
     }
     return [within(item, LINK_THING.INBOX_ITEM), inbox];
   }
@@ -380,12 +387,14 @@ export function useCopyLink(
   const copy = (held: LinkAtHand) =>
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
   const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
+  const inboxTask = useInboxTask();
   const linksAt = (sidePanelFocused: boolean) =>
     linksAtHand(tasks, {
       settings,
       sidePanelFocused,
       pageWorkspace,
       narrow: room === SHELL_ROOM.NARROW,
+      inboxTask,
     });
   useAppCommand(
     APP_COMMAND.COPY_LINK,
