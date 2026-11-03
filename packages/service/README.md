@@ -331,9 +331,13 @@ Vercel OIDC token can mint the app token, so the CLI cannot check it: check it
 on a Preview. An owner or admin connects the bot under Settings › Workspace
 (`src/slack/slack-bot-procedures.ts`), which calls `auth.test` and keeps the
 team in `slack_installation`, one per workspace; Disconnect deletes it.
-`SlackBot.dm` finds a member by their email (`users.lookupByEmail`) the first
-time and keeps the answer, a miss included, in `slack_member`
-(`@repo/database/models/slack-installation-store`). `dm` and `update` log and
+`SlackBot.dm` finds a member by the Slack id kept in `slack_member`
+(`@repo/database/models/slack-installation-store`), else through a Slack
+account the member connected for their agents whose `auth.test` answers the
+installed team, else by their email (`users.lookupByEmail`), and keeps the
+answer. An email miss is kept too, for a day
+(`SLACK_MEMBER_MISS_LIFETIME`), and a kept miss still tries the member's own
+accounts, so one who connects Slack after a miss is found at the next write. `dm` and `update` log and
 swallow every failure; never yield either inside a transaction.
 
 An automation with "Send the result to me on Slack" on (`automation.slack_delivery`)
@@ -349,11 +353,13 @@ reaches our Slack route (`/api/slack/events`) as an `app_mention` or
 `message.im` event and starts a coding agent as them on no task
 (`src/slack/slack-agent-starts.ts`), once the answer has left; Slack's
 retries (`x-slack-retry-num`) and bots' messages are dropped. The writer is
-found by the Slack id the bot kept, or else by the email Slack holds for them
-(`users.info`). The bot replies in the thread with the agent's link, the
+found by the Slack id the bot kept, else through the Slack accounts members
+connected that no kept id names yet, one `auth.test` each (`SlackBot.memberOf`),
+or else by the email Slack holds for them (`users.info`). The bot reacts to
+the message with 👀 (`eyes`), replying in the thread only to refuse, the
 thread is kept against the agent in `slack_agent_thread`, a later mention in
 that thread is sent to the agent instead, and every settled turn of the agent
-is posted back in the thread once (`SettledTurnListener`). The Slack app must
+is posted back in the thread once, with the agent's link (`SettledTurnListener`). The Slack app must
 subscribe to the `app_mention` and `message.im` bot events.
 
 An owner or admin names the repository a Slack start defaults to under
