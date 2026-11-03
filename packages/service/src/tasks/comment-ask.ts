@@ -37,7 +37,10 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * drawn from the one the member's client made for the comment, so a comment
  * sent again is handed over once. A comment in a thread no agent is in
  * that mentions none hands nothing to anyone, an \`@\` of the app's own name
- * among it, and an agent's own reply never does.
+ * among it, and an agent's own reply never does. The line keeps beside
+ * the text what a window draws it by, the member's words, what the thread is
+ * on, and the plan or page, so a transcript shows the comment rather than
+ * the words the model is handed.
  *
  * A thread on one of the task's pages is handed over the same way, the
  * page's writer in it from the start, in words that name the page, the
@@ -160,9 +163,15 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly threadId: string;
     /** The asking member's own words, whose servers and links alone the agent's next turn takes up, never another writer's in the thread. */
     readonly words: string;
+    /** What a window draws the line by in place of the text: the task, what the thread is on, and the page where it is on one. */
+    readonly line: {
+      readonly taskId: string;
+      readonly quote: string | undefined;
+      readonly page: { readonly id: string; readonly title: string } | undefined;
+    };
   },
 ) {
-  const { userId, to, clientKey, text, threadId, words } = input;
+  const { userId, to, clientKey, text, threadId, words, line } = input;
   const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   yield* steerAgent(eve, writer, userId, to, {
@@ -173,6 +182,12 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     metadata: {
       channel: MESSAGE_CHANNEL.COMMENT,
       thread_id: threadId,
+      task_id: line.taskId,
+      ...(line.quote === undefined ? undefined : { quote: line.quote }),
+      words,
+      ...(line.page === undefined
+        ? undefined
+        : { page_id: line.page.id, page_title: line.page.title }),
     },
   });
 });

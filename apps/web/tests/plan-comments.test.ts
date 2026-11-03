@@ -431,7 +431,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
 
 it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   it.effect(
-    "a thread started with an agent mentioned hands it the thread as the member's message, kept as the comment thread's line, and the thread says who asked it",
+    "a thread started with an agent mentioned hands it the thread as the member's message, kept as the comment thread's line with what a window draws it by, and the thread says who asked it",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -464,7 +464,15 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         );
         assert.deepEqual(
           lines.map((line) => line.metadata),
-          [{ channel: "comment", thread_id: thread.id }],
+          [
+            {
+              channel: "comment",
+              thread_id: thread.id,
+              task_id: taskId,
+              quote: WORDS,
+              words: `${agentLink(taskId, agentId)} is withdrawing in v1?`,
+            },
+          ],
         );
         const [after] = threadsIn(
           yield* answer("comments", request(commentsPath(taskId), teammate, {})),

@@ -15,6 +15,7 @@ import {
 } from "@luke/ui";
 import { CircleCheckIcon, CircleSlashIcon, GLYPH } from "@luke/ui/icons";
 import {
+  type CommentLineMetadata,
   GITHUB_CHECK_CONCLUSION,
   GITHUB_LINE_EVENT,
   type GitHubCheckConclusion,
@@ -94,6 +95,52 @@ export function ThreadLineHead({
       : linkChip(href, threadLineTitle(words, line.event) ?? href, doors);
   return (
     <SubjectLine lead={THREAD_LINE_LEAD[line.event]} fit={fit} data-thread-line="">
+      {chip}
+    </SubjectLine>
+  );
+}
+
+/** What a comment line leads with, as a thread's leads with what its member did. */
+export const COMMENT_LINE_LEAD = "Comment on";
+
+/** What a comment line's chip names where no page does: the plan of the task it is on. */
+const PLAN_WORDS = "the plan";
+
+/** The link a comment line's chip is read from: the page it is on, or its task's plan; none where no task or workspace names it. */
+function commentLink(line: CommentLineMetadata, doors: MentionDoors): string | undefined {
+  if (line.task_id === undefined || doors.place.workspace === "") return undefined;
+  return line.page_id === undefined
+    ? linkOf({ kind: LINK_PLACE.TASK, planId: line.task_id }, doors.place.workspace)
+    : linkOf(
+        { kind: LINK_PLACE.PAGE, planId: line.task_id, pageId: line.page_id },
+        doors.place.workspace,
+      );
+}
+
+/** What a comment line's head names: the page by its title, or the plan. */
+export function commentLineSubject(line: CommentLineMetadata): string {
+  return line.page_title ?? PLAN_WORDS;
+}
+
+/**
+ * The head of a comment thread that reached the agent, drawn in place of the
+ * instructions it was handed in, as a thread's line is headed: that it is a
+ * comment, and the chip of the plan or page it is on.
+ */
+export function CommentLineHead({
+  line,
+  fit,
+}: {
+  line: CommentLineMetadata;
+  /** How much of the line the chip takes: the rest of it alone, or its own width beside its sender (`MessageHead`). */
+  fit?: SubjectFit | undefined;
+}): React.JSX.Element {
+  const doors = useMentionDoors();
+  const href = commentLink(line, doors);
+  const chip =
+    href === undefined ? commentLineSubject(line) : linkChip(href, commentLineSubject(line), doors);
+  return (
+    <SubjectLine lead={COMMENT_LINE_LEAD} fit={fit} data-comment-line="">
       {chip}
     </SubjectLine>
   );
