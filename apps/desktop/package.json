@@ -1,7 +1,7 @@
 {
   "name": "@repo/desktop",
   "productName": "Vespin",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "private": true,
   "description": "Vespin desktop application",
   "main": "dist/main.js",
