@@ -32,7 +32,7 @@ export function App(): React.JSX.Element {
       bar={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
       barCall={<SiteDownload />}
       title="An inbox for all your coding agents."
-      lead="Agents post to your Inbox when they need a decision, a manual step, or your eyes on something, and you answer them there. They work in cloud sandboxes on your own Claude or ChatGPT subscription or API key."
+      lead="Agents plan your tasks with you, build them in cloud sandboxes, and open the pull requests. When one needs a decision, a manual step, or your review, it posts to your Inbox."
       actions={
         <>
           <SiteDownload />
@@ -59,45 +59,43 @@ export function App(): React.JSX.Element {
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
     >
       <LandingSection
-        title="One inbox for every agent."
-        lead="Agents post only when something needs you: a decision, a to-do, or something to look at. Answer in the thread, and they carry on."
+        title="Answer from the Inbox."
+        lead="Pick an option, fill in a form, mark a step done, or reply. Your answer goes back to the agent that asked."
         scene={LANDING_SCENE.INBOX}
       />
       <LandingSection
-        title="Agents work together."
-        lead="They start other agents, message each other, and keep your board current, while you get on with something else."
+        title="Agents start other agents."
+        lead="An agent can hand part of its work to a new agent and message it. Agents also split tasks into sub-tasks and mark which tasks block others."
         scene={LANDING_SCENE.AGENTS}
       />
       <LandingSection
-        title="Start agents from your tools."
-        lead="A schedule, a GitHub event, a Sentry issue, or a webhook starts an agent on a task of its own, with the prompt and repository you set."
+        title="Automations start agents."
+        lead="Set a prompt and a repository, and an agent starts on a schedule, a GitHub event such as a failed check, a new Sentry issue, or a webhook call."
         scene={LANDING_SCENE.AUTOMATIONS}
       />
       <LandingSection
-        title="On every device."
-        lead="The Mac app, your browser, and your phone show the same tasks and threads."
+        title="On your Mac and your phone."
+        lead="The Mac app and the web app show the same tasks and threads, and the web app runs in your phone's browser."
         scene={LANDING_SCENE.DEVICES}
       />
       <LandingSection
-        title="Bring your own subscription."
-        lead="Agents run on Claude Code or Codex, on your Claude or ChatGPT plan or your own API key. Pick the model and effort for each agent."
+        title="Your plan or your API key."
+        lead="Agents run on Claude Code with your Claude plan, Codex with your ChatGPT plan, or either with an Anthropic or OpenAI API key."
         scene={LANDING_SCENE.MODELS}
         aside={
           <LandingFacts
             facts={[
               {
-                title: "Your plan or your key",
-                detail:
-                  "Claude Code runs on your Claude plan, Codex on your ChatGPT plan, or either on an API key.",
+                title: "A model per agent",
+                detail: "Agents in one task can each run on a different model and effort.",
               },
               {
-                title: "No tokens billed by us",
-                detail: `${PRODUCT_NAME} pays for no model calls, and charges for none.`,
+                title: `Nothing billed by ${PRODUCT_NAME}`,
+                detail: "Anthropic or OpenAI bills your plan or key for model calls.",
               },
               {
-                title: "Per agent",
-                detail:
-                  "Mix them in one task: each agent runs on the model and effort you pick for it.",
+                title: "Settings › Agents",
+                detail: "Add your plan or API key there before you start an agent.",
               },
             ]}
           />
