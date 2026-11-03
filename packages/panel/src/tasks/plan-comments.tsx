@@ -251,6 +251,9 @@ const QUOTE_CLASS =
 const SLOT_CLASS =
   "comment-slot absolute inset-x-0 top-0 data-[moves=true]:transition-transform data-[moves=true]:duration-(--luke-duration-shape)";
 
+/** A slot that stands where a list lays it rather than where the margin measured it, arriving and leaving as a margin's card does. */
+const FLOW_SLOT_CLASS = "comment-slot";
+
 /** A card in the margin as it was last drawn: its thread or the thread being started, where it stood, and whether it stood open. */
 interface MarginCard {
   readonly id: string;
@@ -320,18 +323,24 @@ function useMarginCards(
   };
 }
 
-/** A card's place in the margin, held drawn through its fade once it leaves, and let go once that is done. */
+/**
+ * A card's place in the margin, held drawn through its fade once it leaves,
+ * and let go once that is done; or, where it `flows`, a row of a list that
+ * arrives and leaves the same way, standing where the list lays it.
+ */
 function MarginSlot({
   card,
   moves,
   slotRef,
   onGone,
+  flows = false,
   children,
 }: {
   card: DrawnCard;
   moves: boolean;
   slotRef: (element: HTMLDivElement | null) => void;
   onGone: (id: string) => void;
+  flows?: boolean;
   children: ReactNode;
 }): React.JSX.Element | null {
   const shown = useDisclosure(!card.leaving);
@@ -347,11 +356,11 @@ function MarginSlot({
         // Note that a card leaving is no longer measured, so the cards below take its room as it fades.
         slotRef(card.leaving ? null : element);
       }}
-      className={SLOT_CLASS}
+      className={flows ? FLOW_SLOT_CLASS : SLOT_CLASS}
       data-moves={moves && !card.leaving}
       data-leaving={card.leaving ? "true" : undefined}
       inert={card.leaving}
-      style={{ transform: `translateY(${card.top}px)` }}
+      style={flows ? undefined : { transform: `translateY(${card.top}px)` }}
     >
       {children}
     </div>
@@ -2968,6 +2977,15 @@ export function ownWordsIn(text: string): boolean {
   );
 }
 
+/** Where a thread stands in a page's column: open ones before resolved ones, each by when it was started. */
+function listedRank(thread: PlanCommentThread | undefined): number {
+  if (thread === undefined) return Number.POSITIVE_INFINITY;
+  return (openThread(thread) ? 0 : Number.MAX_SAFE_INTEGER / 2) + thread.createdAt;
+}
+
+/** No measure of a row a list lays out, which the margin's slots take and a list's need not. */
+const NO_SLOT = () => undefined;
+
 /**
  * A page's comments in a column beside it, as the plan's margin draws its
  * own: each thread's card at rest, open ones first and the resolved under a
@@ -2975,7 +2993,9 @@ export function ownWordsIn(text: string): boolean {
  * with its field, its element outlined on the page, and a press anywhere
  * but a card, or in the page, closes it, as a press away closes a plan's.
  * A thread opened from its pin on the page opens here while the column
- * stands, brought into the column's view.
+ * stands, brought into the column's view. A thread arrives and leaves the
+ * column as a card arrives in and leaves the plan's margin, fading in its
+ * slot.
  */
 export function PageComments({
   control,
@@ -2998,6 +3018,21 @@ export function PageComments({
   const full = { ...doors, control };
   const none = !control.failed && control.read && control.threads.length === 0;
   const list = useRef<HTMLDivElement>(null);
+  // Note that a row leaving keeps its place among the others as it fades, as it stood when last drawn: open ones first, each group by when it was started.
+  const held = useMarginCards(
+    listed.map((thread) => ({
+      id: thread.id,
+      thread,
+      pending: undefined,
+      top: 0,
+      open: open?.includes(thread.id) === true,
+    })),
+    true,
+  );
+  const rows = {
+    drawn: [...held.drawn].sort((a, b) => listedRank(a.thread) - listedRank(b.thread)),
+    gone: held.gone,
+  };
   usePressAway(NO_LAYER, () => undefined, {
     onPressAway: open === undefined ? undefined : () => onOpen(undefined),
     holds: keepsPageCardOpen,
@@ -3032,18 +3067,29 @@ export function PageComments({
             ) : !control.read ? (
               <CommentsSkeleton />
             ) : (
-              listed.map((thread) => (
-                <CommentsRow key={thread.id}>
-                  <ThreadCard
-                    thread={thread}
-                    open={open?.includes(thread.id) === true}
-                    place={THREAD_PLACE.MARGIN}
-                    doors={full}
-                    onOpen={() => onOpen(thread)}
-                    onClose={() => onOpen(undefined)}
-                  />
-                </CommentsRow>
-              ))
+              rows.drawn.map((card) =>
+                card.thread === undefined ? null : (
+                  <MarginSlot
+                    key={card.id}
+                    card={card}
+                    moves={false}
+                    slotRef={NO_SLOT}
+                    onGone={rows.gone}
+                    flows
+                  >
+                    <CommentsRow>
+                      <ThreadCard
+                        thread={card.thread}
+                        open={open?.includes(card.id) === true}
+                        place={THREAD_PLACE.MARGIN}
+                        doors={full}
+                        onOpen={() => card.thread !== undefined && onOpen(card.thread)}
+                        onClose={() => onOpen(undefined)}
+                      />
+                    </CommentsRow>
+                  </MarginSlot>
+                ),
+              )
             )}
             {resolved.length === 0 ? null : (
               <CommentsRow>
