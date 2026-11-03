@@ -44,8 +44,16 @@ write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
 because a workspace is adopted by its slug, and a session free to create an
 organization or rename its own could take a team's slug first. That covers
 create, update, delete, check-slug, set-active, member removal, role changes,
-leave, every invitation endpoint (Vespin sends no invitation mail), and the
-team and role endpoints this deployment does not mount. `disabledPaths` is
+leave, every invitation endpoint but the invitee's own `get-invitation` and
+`accept-invitation`, which the plugin answers only to an account whose
+provider verified the invited address
+(`requireEmailVerificationOnInvitation`), and the
+team and role endpoints this deployment does not mount. An owner or admin
+makes, lists, and cancels invitations through Vespin's own procedures
+(`src/accounts/workspace-invitations-procedures.ts`), which call the plugin
+server-side and mail the invitee the link through Resend where
+`RESEND_API_KEY` and `INVITE_FROM` are set (`src/accounts/invitation-mail.ts`),
+or leave the owner to copy it where they are not. `disabledPaths` is
 read by the HTTP router alone, so the server-only `auth.api` calls a hosted
 route makes still run, and a create that names a `userId` and carries no
 session passes the creation rule as a system action.
@@ -407,12 +415,12 @@ none.
 
 `src/auth/bearer.ts` answers effects. `hostedUserId(request, userInfo)`
 and `userIdForAuthorization(authorization, userInfo)` each answer
-`Effect<string | undefined>`, and a `UserInfoEndpoint` answers
-`Effect<OAuthUserInfo | undefined, UnknownException>`: the auth service's own
+`Effect<Option<string>, Cause.UnknownError>`, and a `UserInfoEndpoint` answers
+`Effect<OAuthUserInfo | undefined, Cause.UnknownError>`: the auth service's own
 `oauth2UserInfo` is a promise of Better Auth's, so it is wrapped with
-`Effect.tryPromise` once where an endpoint is constructed —
-`hostedUserInfo` in `src/auth/bearer.ts` itself
-and the events group's inline one — and nowhere else. What that
+`Effect.tryPromise` once, in `src/auth/bearer.ts` itself, beneath
+`hostedUserInfo`, and nowhere else; the events group reads the bearer
+through the same `accountMiddleware` every other group does. What that
 call throws is still one indistinguishable nothing: the resolution recovers
 it, so a missing header, an expired token, and a refusing auth service are
 the same 401 they always were, and no route repeats the recovery.
@@ -436,8 +444,10 @@ whether a bearer or a cookie named it (`src/agents/coder-host/runtime-sessions.t
 `routedSessions`): a coding agent's session is answered by the harness its
 conversation runs on, and one that ran on eve is refused as ended. What acts for
 one device rather than the account takes the bearer alone: the Mac's
-commands (`resolveHostedBearerUserId`), as the terminal relay
-resolves with `userIdForAuthorization`. Because a tab opened on a byte route now
+commands (`resolveHostedBearerUserId`). The terminal relay and the Browser
+tab's live view resolve with `resolveRelayUserId`, which takes the desktop's
+bearer where the upgrade carries no `Origin`, and the page's session cookie
+where it carries one of the deployment's own (`src/http/relay-upgrade.ts`). Because a tab opened on a byte route now
 carries the cookie, every byte a member, an agent, or GitHub wrote is served
 under `HOSTED_BYTES_HEADERS` (`src/http/http-effect.ts`), whose sandboxed
 policy keeps an SVG's script from running as this origin.
