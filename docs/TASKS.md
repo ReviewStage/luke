@@ -121,9 +121,13 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   them; ⌘K offers Pin agent or Unpin agent on the agent's own page. An
   archived agent offers no pin.
 - Clicking a row opens that task on the document page.
-- `New task` at the head of the list leaves any open task for the new-task
-  page and focuses its name field. It is drawn as a row of the list, and is
-  the selected row whenever the new-task page shows.
+- `New task`, the first of the sidebar's rows (`NewTaskButton` in
+  `desktop/desktop-sidebar.tsx`), or ⌘N, opens New task in a dialog over the
+  window (`tasks/new-task-dialog.tsx`), leaving whatever stands open in
+  place, with the focus in its composer; on Home, which holds the same
+  composer, it hands that composer the focus instead. Escape, or a press on
+  the dimmed window, puts the dialog away, its words and files kept as New
+  task's draft, which Home's composer shares.
 - A pinned task stands under **Pinned**, a section above Tasks drawn only
   while any task is pinned, which no view filters. A
   pinned agent with no task stands there among the pinned tasks, ordered the
@@ -683,8 +687,8 @@ Copy copies the new document.
   keeps showing the last saved document.
 - **Repository.** A failed or incomplete read is reported to the agent as
   such, so it never describes unread code as read. If access is revoked, the
-  reads fail the same way. Starting a new task shows the reason on the
-  new-task page.
+  reads fail the same way. Starting a new task shows the reason under New
+  task's composer, which stays open.
 - **Loading a task.** The document region shows the failure and `Try again`.
 - **Start.** The service refuses to start an agent on a task with no
   repository (`no-repository`, 409), on one the Vespin GitHub App no longer
