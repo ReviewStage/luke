@@ -89,7 +89,10 @@ export interface ServerRow {
   readonly account?: IntegrationAccount;
   /** How many accounts the signed-in account holds at the provider. */
   readonly accounts: number;
+  /** The provider's name and the account's together, as a sentence or a card names the server. */
   readonly name: string;
+  /** The account's name the row draws beside its provider's, where it shows one (`serverAccountName`). */
+  readonly accountName?: string;
   readonly kind: ServerRowKind;
   /** Whether the agent has it on; a row with no switch has it on only by default, which is never drawn. */
   readonly on: boolean;
@@ -161,23 +164,32 @@ function wordsOf(
 }
 
 /**
- * A server's name as its row and card say it: its provider's, and the
- * account's name after it where the provider holds more than one account, or
- * where its one account carries a label (a name the provider gave it, its
- * email, or the developer's own), never "Account 1" for an account alone.
+ * The account's name a server's row says beside its provider's: shown where
+ * the provider holds more than one account, or where its one account
+ * carries a label (a name the provider gave it, its email, or the
+ * developer's own), never "Account 1" for an account alone.
  */
+export function serverAccountName(
+  connection: string,
+  accounts: readonly IntegrationAccount[],
+): string | undefined {
+  const named = integrationAccountNames(accounts).get(connection);
+  const labelled = accounts.some(
+    (account) => account.connection === connection && (account.label ?? "").trim() !== "",
+  );
+  return named !== undefined && (accounts.length > 1 || labelled) ? named : undefined;
+}
+
+/** A server's name as its card and a call's row say it: its provider's, and the account's name after it where `serverAccountName` shows one. */
 export function serverName(
   provider: IntegrationProvider,
   connection: string,
   accounts: readonly IntegrationAccount[],
 ): string {
-  const named = integrationAccountNames(accounts).get(connection);
-  const labelled = accounts.some(
-    (account) => account.connection === connection && (account.label ?? "").trim() !== "",
-  );
-  return named !== undefined && (accounts.length > 1 || labelled)
-    ? `${INTEGRATION_NAME[provider]} · ${named}`
-    : INTEGRATION_NAME[provider];
+  const accountName = serverAccountName(connection, accounts);
+  return accountName === undefined
+    ? INTEGRATION_NAME[provider]
+    : `${INTEGRATION_NAME[provider]} · ${accountName}`;
 }
 
 /**
@@ -209,12 +221,14 @@ export function serverRows(input: {
       const health = input.healthOf(connection);
       const signIn = input.signInOf(connection);
       const connected = status === INTEGRATION_STATUS.CONNECTED;
+      const accountName = serverAccountName(connection, accounts);
       return {
         provider,
         connection,
         ...(account !== undefined ? { account } : undefined),
         accounts: accounts.length,
         name: serverName(provider, connection, accounts),
+        ...(accountName !== undefined ? { accountName } : undefined),
         kind: kindOf(status, health, signIn, input.readFailed),
         on: !input.disabled.includes(connection),
         ...(connected && health.kind === CONNECTION_HEALTH.WORKING

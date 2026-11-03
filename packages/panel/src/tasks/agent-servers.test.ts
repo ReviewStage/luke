@@ -166,7 +166,13 @@ async function opened(standing: IntegrationStatuses = statuses) {
 function sections(container: HTMLElement) {
   return [...container.querySelectorAll(".agent-servers-list ul")].map((group) => [
     group.getAttribute("aria-label"),
-    [...group.querySelectorAll(".agent-servers-name")].map((name) => name.textContent),
+    [...group.querySelectorAll(".agent-servers-name")].map((name) => {
+      // Note that a row names its account beside its provider, so the two read together as "Notion · Acme".
+      const account = name.nextElementSibling?.classList.contains("luke-account-words")
+        ? name.nextElementSibling.textContent
+        : undefined;
+      return account ? `${name.textContent} · ${account}` : name.textContent;
+    }),
   ]);
 }
 

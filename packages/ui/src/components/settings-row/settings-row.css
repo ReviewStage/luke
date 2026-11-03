@@ -102,6 +102,22 @@
       white-space: nowrap;
       mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
     }
+
+    /* Note that a name an account's words follow (`AccountWords`) is a
+       provider's, short, so it stays whole and the account's words fade
+       instead, a short step off it, rather than past the name's own fade. */
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-title:has(> .luke-account-words) {
+      column-gap: var(--luke-space-6);
+    }
+
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-title:has(> .luke-account-words)
+      > .luke-settings-row-label {
+      flex: none;
+      padding-inline-end: 0;
+      mask-image: none;
+    }
   }
 
   /* A row whose words label its switch is pressed whole under a finger: the

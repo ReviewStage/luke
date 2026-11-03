@@ -31,6 +31,7 @@ import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  AccountWords,
   ANNOUNCE,
   BUTTON_VARIANT,
   Button,
@@ -591,7 +592,7 @@ function IntegrationRow({
 }): React.JSX.Element {
   const panelId = useId();
   const { act } = useAct();
-  const { provider, connection, name, account } = row;
+  const { provider, connection, name, account, accountName } = row;
   const { cancelSignIn } = statuses;
   const grant = useIntegrationGrant(statuses);
   const bySignIn = grantedBySignIn(provider);
@@ -708,18 +709,23 @@ function IntegrationRow({
               <ProviderMark provider={provider} />
             </SettingsRowMark>
           ),
-          label: (
-            <InlineEdit
-              value={account === undefined ? name : integrationAccountLabel(account)}
-              label={`${name} account name`}
-              editing={editing && account !== undefined}
-              maxLength={INTEGRATION_LABEL_MAX}
-              look={INLINE_EDIT_LOOK.INPUT}
-              onEnd={renamed}
-            >
-              <Highlighted text={name} tokens={tools.tokens} />
-            </InlineEdit>
-          ),
+          label: <Highlighted text={INTEGRATION_NAME[provider]} tokens={tools.tokens} />,
+          // Note that a rename edits the account's words in their place beside the provider's name, since the account is what it names.
+          adornment:
+            accountName === undefined ? undefined : (
+              <InlineEdit
+                value={account === undefined ? accountName : integrationAccountLabel(account)}
+                label={`${name} account name`}
+                editing={editing && account !== undefined}
+                maxLength={INTEGRATION_LABEL_MAX}
+                look={INLINE_EDIT_LOOK.INPUT}
+                onEnd={renamed}
+              >
+                <AccountWords words={accountName}>
+                  <Highlighted text={accountName} tokens={tools.tokens} />
+                </AccountWords>
+              </InlineEdit>
+            ),
           description:
             connected && tools.all.length > 0 ? (
               <ToolsLine name={name} panelId={panelId} tools={tools} />
