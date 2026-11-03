@@ -14,15 +14,7 @@
 import { Schema } from "effect";
 
 /** The channel every synced table notifies and every listener listens on. */
-export const SYNC_CHANNEL = "luke_sync";
-
-/**
- * The channel the capture moves to next, which a listener hears beside
- * `SYNC_CHANNEL`. Note that a build migrates while the deployment before it
- * still serves, so the deployment serving as the capture moves must already
- * hear the channel it moves to; this goes once the capture notifies on it alone.
- */
-export const SYNC_CHANNEL_NEXT = "app_sync";
+export const SYNC_CHANNEL = "app_sync";
 
 /**
  * Postgres refuses a payload of 8000 bytes or more (`NOTIFY`'s default
