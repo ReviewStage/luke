@@ -705,6 +705,8 @@ function fakeService(tasks: Task[]): FakeService {
       slackBotConnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
       slackBotDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
       slackBotNotifications: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      slackBotChannel: () => Effect.succeed(UNANSWERED_WORKSPACE),
       people: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`members:${workspaceId}`);

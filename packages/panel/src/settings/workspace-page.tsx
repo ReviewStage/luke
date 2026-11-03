@@ -112,6 +112,7 @@ import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
+import { SlackBotChannelRows } from "./slack-bot-channels.js";
 import { SwitchRow } from "./switch-row.js";
 import { useWorkspaceRead } from "./use-workspace-read.js";
 import {
@@ -1781,7 +1782,7 @@ function SlackNotificationsRow({
   );
 }
 
-/** The bot's row, and under it the reader's own switch where the bot is connected. */
+/** The bot's row, and under it, where the bot is connected, an owner's or admin's repositories and channels (`slack-bot-channels.tsx`) and the reader's own switch. */
 function SlackBotRows({
   workspace,
   slackBot,
@@ -1802,6 +1803,9 @@ function SlackBotRows({
   return (
     <Stack gap={GAP.NONE}>
       {row}
+      {managesWorkspace(workspace) ? (
+        <SlackBotChannelRows workspace={workspace} slackBot={slackBot} onChanged={onChanged} />
+      ) : null}
       <SlackNotificationsRow
         workspaceId={workspace.id}
         on={slackBot.notifications}

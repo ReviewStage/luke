@@ -503,6 +503,8 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SLACK_BOT_CONNECT: "workspace.slackBotConnect",
   WORKSPACE_SLACK_BOT_DISCONNECT: "workspace.slackBotDisconnect",
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: "workspace.slackBotNotifications",
+  WORKSPACE_SLACK_BOT_REPOSITORY: "workspace.slackBotRepository",
+  WORKSPACE_SLACK_BOT_CHANNEL: "workspace.slackBotChannel",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**

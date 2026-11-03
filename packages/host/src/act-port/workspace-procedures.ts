@@ -21,7 +21,9 @@ import type {
   TasksWorkspaceSentryAnswer,
   TasksWorkspaceSentryDisconnectParams,
   TasksWorkspaceSlackBotAnswer,
+  TasksWorkspaceSlackBotChannelParams,
   TasksWorkspaceSlackBotNotificationsParams,
+  TasksWorkspaceSlackBotRepositoryParams,
   TasksWorkspaceSlugSetParams,
   TasksWorkspaceTokenRepositoriesAnswer,
   TasksWorkspaceTokenRepositoriesParams,
@@ -84,6 +86,12 @@ export interface WorkspaceProceduresDependencies {
     ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
     workspaceSlackBotNotifications(
       params: TasksWorkspaceSlackBotNotificationsParams,
+    ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+    workspaceSlackBotRepository(
+      params: TasksWorkspaceSlackBotRepositoryParams,
+    ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+    workspaceSlackBotChannel(
+      params: TasksWorkspaceSlackBotChannelParams,
     ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
     workspaceMembers(
       params: TasksWorkspaceMembersParams,
@@ -338,6 +346,22 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const answer = yield* host.workspaceSlackBotNotifications(input);
+      if ("slackBot" in answer) return answer.slackBot;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_REPOSITORY]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_REPOSITORY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceSlackBotRepository(input);
+      if ("slackBot" in answer) return answer.slackBot;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceSlackBotChannel(input);
       if ("slackBot" in answer) return answer.slackBot;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),

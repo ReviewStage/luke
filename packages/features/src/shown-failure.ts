@@ -210,8 +210,10 @@ export const FAILURE_SURFACE = {
   WORKSPACE_SENTRY_DISCONNECT: "workspace_sentry.disconnect",
   WORKSPACE_SENTRY_READ: "workspace_sentry.read",
   WORKSPACE_SLACK_BOT: "workspace.slack_bot",
+  WORKSPACE_SLACK_BOT_CHANNEL: "workspace_slack_bot.channel",
   WORKSPACE_SLACK_BOT_DISCONNECT: "workspace_slack_bot.disconnect",
   WORKSPACE_SLACK_BOT_READ: "workspace_slack_bot.read",
+  WORKSPACE_SLACK_BOT_REPOSITORY: "workspace_slack_bot.repository",
   WORKSPACE_TRANSFER: "workspace.transfer",
   WORKSPACE_WRITE: "workspace.write",
 } as const;
