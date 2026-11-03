@@ -46,7 +46,8 @@ the transcripts it shows, each an agent's or one of its workers', are
 read from our service. Each agent reads a task's repository in its
 sandbox on our service. No part of an agent runs on this Mac, so no
 transcript, working memory, or inbox of one is held here on disk, and in
-memory only the tabs described next. On disk, under its application data, Vespin keeps only
+memory only the tabs described next and the content they showed that never
+changes once read. On disk, under its application data, Vespin keeps only
 the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (an agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
@@ -107,7 +108,12 @@ and output, and the lines said on calls an earlier version took) for its tab, as
 opening one of its workers reads that worker's whole session for its own
 tab. All of this is held in Vespin's memory, never on disk, goes when you leave
 the task or quit Vespin, and is left out of the screen recording (see "Screen
-recordings"). Your default model, effort, and
+recordings"). The content that never changes once read is the exception: up
+to 32 MB in all of the pictures and attachments you opened, an agent's, an
+inbox item's, a plan's, or a pull request's, with the pages' HTML and the
+files read at a commit, stays in Vespin's memory, never on disk, until you
+sign out or quit Vespin, or in a browser until its tab closes or reloads, so
+that showing one again asks our service nothing. Your default model, effort, and
 context size for an agent are kept with your account preferences on our
 service, set in Settings › Agents or by the model you last started
 with. The Claude model your Generate chapters runs on is kept with them too,
@@ -592,7 +598,8 @@ read and never sent to your Mac, logged, or kept. It never reads a file named
 `.env` or starting with `.env`, and a link, a folder, a file over a megabyte,
 or one that is not text is refused. The file is read 500 lines at a time as you scroll, is
 not stored by our service, and is held by Vespin only while its tab is open,
-never on disk, except that copying or downloading it reads it whole (up to
+or, read at a commit, among the 32 MB it keeps until you sign out or quit (see
+"Your conversations with agents"), never on disk, except that copying or downloading it reads it whole (up to
 that megabyte, lines uncut) and a download is written where you save it. The
 File tab's tree lists the repository's folders and file names the same way,
 through our service, which does not store them, and Vespin holds them in memory
@@ -701,7 +708,9 @@ characters of it, is then sent to that agent's model as part of its
 conversation. Vespin
 on your Mac reads a page's HTML from our service only to draw it, in its tab
 or in the card over its tab, its row, or a chip naming it, holds it in
-memory only, and never passes it to the rest of the panel. Vespin in a
+memory only, each version it drew among the 32 MB it keeps until you sign out
+or quit (see "Your conversations with agents"), and never passes it to the
+rest of the panel. Vespin in a
 browser draws a page in the same places, loading it from vespin.page, a
 domain of ours kept apart from the app's own so that a page never shares a
 site with your account. As the page loads, our service makes a link to it for

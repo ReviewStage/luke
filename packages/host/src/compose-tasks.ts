@@ -165,6 +165,13 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostKernel } from "./host-kernel.js";
+import {
+  FileAtCommitKey,
+  type KeptContent,
+  keptOfTask,
+  PageVersionKey,
+  PlanPictureKey,
+} from "./kept-content.js";
 import { type HeldAnswers, heldSlice, ROW_GONE, type RowWrite } from "./live-collection.js";
 import {
   confirmWrite,
@@ -204,7 +211,9 @@ import {
  * The pages agents wrote for a task, or for an agent on no task, are held
  * for the windows that draw them, the open task's among them, by title and
  * newest version alone, and told on the app state (`LIVE_READ.PAGES`); a
- * page's HTML is answered to the frame that draws it and held nowhere here.
+ * page's HTML is answered to the frame that draws it and kept in this
+ * process's memory by its version (`kept-content.ts`), never in the view, as
+ * a plan's pictures and a file read at a commit are.
  *
  * The workspaces the account is a member of are carried on the view beside
  * the tasks and followed apart from them over Neon Realtime, so the tasks
@@ -412,6 +421,8 @@ export interface TasksDependencies {
   client: TasksClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
+  /** The content this host keeps under keys it never changes under, which a picture's, a page version's, and a file's read at a commit answer from (`kept-content.ts`). */
+  kept: KeptContent;
 }
 
 export interface TasksComposer extends Composer {
@@ -494,7 +505,7 @@ type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
 ): Effect.fn.Return<TasksComposer, never, Scope.Scope | HttpClient.HttpClient> {
-  const { kernel, account, client } = dependencies;
+  const { kernel, account, client, kept } = dependencies;
   const http = yield* HttpClient.HttpClient;
   /** One ask of the service, over the host's own HTTP client. */
   const served = <Answer, Failure>(call: Effect.Effect<Answer, Failure, HttpClient.HttpClient>) =>
@@ -918,8 +929,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       );
       // A follow gone mid-way was refused as signed out by a poll, which no read mends either.
       const gone = yield* Stream.runForEach(moves, (workspaces) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           const drawn = new Map(view.workspaces.map((each) => [each.id, JSON.stringify(each)]));
+          const listed = new Set(workspaces.map((each) => each.id));
+          // Note that a workspace leaving the list lets go of all content kept, since what was read in it is no longer the account's to read.
+          if ([...drawn.keys()].some((id) => !listed.has(id))) yield* kept.clear;
           for (const each of workspaces) {
             if (drawn.get(each.id) === JSON.stringify(each)) continue;
             workspaceMoves.set(each.id, (workspaceMoves.get(each.id) ?? 0) + 1);
@@ -1723,11 +1737,30 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           ...(raw === undefined ? undefined : { raw }),
           ...(ref === undefined ? undefined : { ref }),
         };
-        const answer = yield* served(
+        const asked = served(
           "taskId" in read
             ? client.readFile(read.taskId, window)
             : client.readRepositoryFile(read, window),
         );
+        // A file read at a commit never changes, so it is kept; one read at the head of a branch is asked each time.
+        const answer = yield* ref === undefined
+          ? asked
+          : kept.answer(
+              new FileAtCommitKey({
+                taskId: "taskId" in read ? read.taskId : undefined,
+                workspaceId: "taskId" in read ? undefined : read.workspaceId,
+                repository: "taskId" in read ? undefined : read.repository,
+                path,
+                ref,
+                raw: raw === true,
+                firstLine: raw === true ? undefined : firstLine,
+                lastLine: raw === true ? undefined : lastLine,
+              }),
+              dependencies.accountId,
+              asked,
+              (file) =>
+                file !== undefined && ("file" in file || "text" in file) ? file : undefined,
+            );
         return carried<TasksFileAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A folder's listing is answered to the tree that asked and held nowhere:
@@ -1886,8 +1919,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           revision === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { revision },
         );
       }),
-    // A page's version is answered to the frame that asked and held nowhere,
-    // so its HTML never enters the view every window is told.
+    // A page's version is answered to the frame that asked and kept by its
+    // version, which is never written again, so its HTML never enters the view
+    // every window is told.
     [GATEWAY_METHOD.TASKS_PAGE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -1900,10 +1934,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksPageAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { pageId, version } = read;
         const place = "taskId" in read ? { taskId: read.taskId } : { agentId: read.agentId };
-        const page = yield* served(client.readPageVersion(place, pageId, version));
-        return carried<TasksPageAnswer>(
-          page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
+        const owner = pageOwnerOf(read);
+        const answer = yield* kept.answer(
+          new PageVersionKey({ ownerKind: owner.kind, ownerId: owner.id, pageId, version }),
+          dependencies.accountId,
+          Effect.map(
+            served(client.readPageVersion(place, pageId, version)),
+            (page): TasksPageAnswer =>
+              page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
+          ),
+          (page) => ("page" in page ? page : undefined),
         );
+        return carried<TasksPageAnswer>(answer);
       }),
     // A plan's pages are answered to the Inbox that asked and held nowhere,
     // since the view holds the active plan's alone.
@@ -1989,8 +2031,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(pageHolds, pageOwnerOf(read));
         return {};
       }),
-    // A picture's bytes are answered to the window that asked and held
-    // nowhere, so they never enter the view every window is told.
+    // A picture's bytes are answered to the window that asked and kept by
+    // its id, which no other upload is given, so they never enter the view
+    // every window is told.
     [GATEWAY_METHOD.TASKS_PICTURE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2001,7 +2044,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) {
           return carried<TasksPictureAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const picture = yield* served(client.readPicture(read.planId, read.attachmentId));
+        const picture = yield* kept.answer(
+          new PlanPictureKey({ planId: read.planId, attachmentId: read.attachmentId }),
+          dependencies.accountId,
+          served(client.readPicture(read.planId, read.attachmentId)),
+          (answer) => ("base64" in answer ? answer : undefined),
+        );
         return carried<TasksPictureAnswer>(picture);
       }),
     // A plan's comments are read past the window's cursor, held by the service while nothing changed.
@@ -2172,6 +2220,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
             if (deleted === undefined) return [{ deleted: false }, undefined] as const;
+            yield* kept.forget(keptOfTask(taskId));
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(recordFollow);
               const { activeTaskId: _deleted, ...rest } = view;
