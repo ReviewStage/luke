@@ -93,6 +93,7 @@ import {
   localAgentRefused,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import { LocalDemo } from "../../local/local-demo.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
@@ -513,7 +514,7 @@ const freshKindOn = Effect.fnUntraced(function* (
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** The task read as the account, its repository required unless the Start is blank or the local demo runs, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -563,7 +564,11 @@ const landingOf = Effect.fnUntraced(function* (
       place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
     };
   }
-  if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  // A task with no repository is handed to an agent only in the local demo, which the Start then
+  // holds to an agent on a host once it knows where the agent runs (`repositorylessOnHost`).
+  if (task.repository === null && !(yield* LocalDemo).on) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  }
   const handed = yield* handedOf(brief ?? planMarkdown(task), place, fitter, noteFiles);
   return {
     startedFrom: handed.startedFrom,
@@ -1075,6 +1080,23 @@ const machineOfStart = Effect.fnUntraced(function* (
   return { asked: { machine: AGENT_MACHINE.DEVICE, deviceId: device.id } };
 });
 
+/**
+ * Whether a Start that landed on a task with no repository may go on where
+ * its agent runs: a blank one anywhere, as ever, and one handed the plan or a
+ * prompt, which only the local demo lands (`landingOf`), on a host alone,
+ * where the host starts it in an empty folder of its own; never in the cloud,
+ * whose sandbox is a checkout of a repository. A Start with no task, or on a
+ * task with a repository, goes on as it landed.
+ */
+function repositorylessOnHost(
+  ask: Pick<StartAsk, "blank">,
+  landing: Pick<StartLanding, "task" | "repository">,
+  where: StartMachine,
+): boolean {
+  if (landing.task === undefined || landing.repository !== null || ask.blank === true) return true;
+  return where.asked.machine === AGENT_MACHINE.DEVICE;
+}
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* (
   eve: Effect.Effect<
@@ -1196,6 +1218,9 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       : undefined;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the starter's account, its source or task, and its model, and never change.
   const where = yield* machineOfStart(userId, from?.source, landing.task);
+  if (!repositorylessOnHost(ask, landing, where)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  }
   const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime);
   const started = yield* hostedStoreOrUnavailable(

@@ -2291,6 +2291,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             ? {
                 admin: payload.admin,
                 ...(payload.pending === true ? { pending: true } : undefined),
+                ...(payload.startsWithoutRepository === true
+                  ? { startsWithoutRepository: true }
+                  : undefined),
               }
             : undefined,
         listener,

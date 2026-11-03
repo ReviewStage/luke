@@ -49,8 +49,15 @@ export const accountDeleteAnswerSchema = EffectSchema.Struct({
 /**
  * What the signed-in account may open in the app's clients (GET): whether it
  * is an admin, and nothing of any other account. A client draws by it and
- * authorizes nothing: the admin dashboard's own gate decides every read.
+ * authorizes nothing: the admin dashboard's own gate decides every read, and
+ * the Start route every Start.
  */
 export const accountAccessAnswerSchema = EffectSchema.Struct({
   admin: EffectSchema.Boolean,
+  /**
+   * True where a Start on a task that names no repository runs, as it does
+   * in the local demo alone, where the task's agents run on a host; absent
+   * everywhere else, and from a service older than it.
+   */
+  startsWithoutRepository: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });

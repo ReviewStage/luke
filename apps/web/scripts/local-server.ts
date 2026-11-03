@@ -6,11 +6,14 @@
  *     pnpm --filter @luke/web local-server --port 5173
  *
  * It refuses to start beside any `VERCEL*` variable or over a database off
- * this machine's loopback (`server/local-server-guard.ts`), and it imports
- * no route until it has, because the auth service reads the environment as
- * it loads (`@luke/service/auth/auth`). Where `BETTER_AUTH_URL` names no
- * address, the server names its own there first, so Better Auth's base URL
- * and the cookie origin guard both call it by the address it listens at.
+ * this machine's loopback (`@luke/service/local/local-server-guard`), and it
+ * imports no route until it has, because the auth service reads the
+ * environment as it loads (`@luke/service/auth/auth`). Where
+ * `BETTER_AUTH_URL` names no address, the server names its own there first,
+ * so Better Auth's base URL and the cookie origin guard both call it by the
+ * address it listens at. It turns the local demo on for the routes it mounts
+ * (`@luke/service/local/local-demo`), which the service honours only behind
+ * the same guard.
  *
  * Every path a rewrite of the committed table takes is the deployment's,
  * answered by the function the rewrite lands it on
@@ -34,6 +37,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeHttpServerRequest, NodeRuntime } from "@effect/platform-node";
 import { AUTH_DEPLOYMENT_ENVIRONMENT } from "@luke/service/auth/auth-deployment";
+import { LOCAL_DEMO_ENVIRONMENT, LOCAL_DEMO_ON } from "@luke/service/local/local-demo";
+import { localServerRefusal } from "@luke/service/local/local-server-guard";
 import {
   CRON_ENVIRONMENT,
   MAINTENANCE_SWEEP,
@@ -54,7 +59,6 @@ import {
 import { HttpEffect, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { createServer as createViteServer, type InlineConfig, type ViteDevServer } from "vite";
 import type { LocalDeployment } from "../server/local-deployment.js";
-import { localServerRefusal } from "../server/local-server-guard.js";
 
 const WEB = join(import.meta.dirname, "..");
 
@@ -212,9 +216,10 @@ const program = Effect.gen(function* () {
   const port = yield* Config.Port(ENV.PORT).pipe(Config.withDefault(DEFAULT_PORT));
   const cronSecret = yield* Config.option(Config.Redacted(ENV.CRON_SECRET));
   const origin = `http://${LOOPBACK}:${port}`;
-  // Note that the address is settled before any route is imported, because the auth service reads it as it loads.
+  // Note that the address and the demo are settled before any route is imported, because the services read the environment as they are built.
   yield* Effect.sync(() => {
     if (!process.env[ENV.AUTH_URL]?.trim()) process.env[ENV.AUTH_URL] = origin;
+    process.env[LOCAL_DEMO_ENVIRONMENT.FLAG] = LOCAL_DEMO_ON;
   });
   yield* Effect.sync(answerRawImports);
   const { localDeployment, localPages } = yield* Effect.promise(

@@ -19,6 +19,7 @@ import { USER_ROLE } from "../admin/admin-access.js";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { LocalDemo, type LocalDemoShape } from "../local/local-demo.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
@@ -30,7 +31,8 @@ import { accountProcedures } from "./account-procedures.js";
  * is one, any other account reads that it is not, and a caller no bearer
  * names is refused. The bearer names the account and nothing else does, so
  * a query naming another account changes nothing of the answer, and the
- * answer is never kept by a cache.
+ * answer is never kept by a cache. Only in the local demo does it say that a
+ * Start on a task with no repository runs.
  *
  * Synthetic accounts and bearers throughout.
  */
@@ -86,8 +88,11 @@ const openAccounts = () =>
     return {
       admin,
       member,
-      ask: (request: Request, environment: HostedEnvironmentValues = NO_ENVIRONMENT) =>
-        answer(procedures, request, environment),
+      ask: (
+        request: Request,
+        environment: HostedEnvironmentValues = NO_ENVIRONMENT,
+        demo: LocalDemoShape = { on: false },
+      ) => answer(procedures, request, environment, demo),
     };
   });
 
@@ -95,6 +100,7 @@ const answer = (
   procedures: ReturnType<typeof accountProcedures>,
   request: Request,
   environment: HostedEnvironmentValues,
+  demo: LocalDemoShape,
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -104,6 +110,7 @@ const answer = (
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, environment),
+      Layer.succeed(LocalDemo, demo),
       noNetwork,
       modelCatalogOf([]),
       // Only a delete asks Connect anything, and this suite deletes nothing.
@@ -141,6 +148,18 @@ it.layer(getTestDB())("the account's access", (it) => {
       assert.deepEqual(yield* ask(request(admin)), granted(true));
       assert.deepEqual(yield* ask(request(member)), granted(false));
     }),
+  );
+
+  it.effect(
+    "in the local demo a member reads that a Start on a task with no repository runs, which nowhere else is said",
+    () =>
+      Effect.gen(function* () {
+        const { member, ask } = yield* openAccounts();
+        assert.deepEqual(yield* ask(request(member), NO_ENVIRONMENT, { on: true }), {
+          ...granted(false),
+          body: { admin: false, startsWithoutRepository: true },
+        });
+      }),
   );
 
   it.effect("names the bearer's own account, whatever the query names", () =>
