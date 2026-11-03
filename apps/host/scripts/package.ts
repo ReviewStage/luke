@@ -15,10 +15,8 @@
  * not carried: the daemon fetches each at its pin on the box
  * (`@luke/host/daemon`). The release is laid out and packed as
  * `release-layout.ts` says. It lands in `dist/release/`, named as the release
- * names it (`@luke/features/host-release`), and from the rename on again
- * under the name a host through 0.6.0 fetches it by, the same bytes, each
- * with a `.sha256` beside it in `sha256sum`'s own format, which the install
- * script's digest is read off.
+ * names it (`@luke/features/host-release`), with a `.sha256` beside it in
+ * `sha256sum`'s own format, which the install script's digest is read off.
  */
 
 import { execFileSync } from "node:child_process";
@@ -36,7 +34,7 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { type AgentToolPin, NODE_LINUX_PINS, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import { DEVICE_ARCH, DEVICE_PLATFORM, type DeviceArch } from "@luke/features/device-agent-wire";
-import { HOST_TARGET, type HostTarget, hostTarballNames } from "@luke/features/host-release";
+import { HOST_TARGET, type HostTarget, hostTarballName } from "@luke/features/host-release";
 import {
   packedRelease,
   type ReleaseSources,
@@ -122,12 +120,12 @@ async function stage(root: string, node: AgentToolPin): Promise<void> {
   rmSync(scratch, { recursive: true, force: true });
 }
 
-/** The target's tarball, on the Node given, under every name it is published by, each with its `.sha256`, in `dist/release/`. */
+/** The target's tarball, on the Node given, and its `.sha256`, in `dist/release/`. */
 async function packageTarball(target: HostTarget, node: AgentToolPin): Promise<void> {
   const { version } = JSON.parse(readFileSync(join(APP, "package.json"), "utf8")) as {
     version: string;
   };
-  const [name, ...copies] = hostTarballNames(version, target);
+  const name = hostTarballName(version, target);
   const staging = join(RELEASE, target);
   rmSync(staging, { recursive: true, force: true });
   await stage(join(staging, ROOT_FOLDER), node);
@@ -135,11 +133,8 @@ async function packageTarball(target: HostTarget, node: AgentToolPin): Promise<v
   packedRelease(staging, tarball);
   rmSync(staging, { recursive: true, force: true });
   const digest = sha256(readFileSync(tarball));
-  for (const copy of copies) copyFileSync(tarball, join(RELEASE, copy));
-  for (const each of [name, ...copies]) {
-    writeFileSync(join(RELEASE, `${each}.sha256`), `${digest}  ${each}\n`);
-    process.stdout.write(`${each} ${digest}\n`);
-  }
+  writeFileSync(`${tarball}.sha256`, `${digest}  ${name}\n`);
+  process.stdout.write(`${name} ${digest}\n`);
 }
 
 async function main(): Promise<void> {

@@ -3,7 +3,8 @@
  *
  * The folder is the tarball's one top folder, `luke-host/`, which a host's
  * update and the install script both rename to `versions/<version>`, so no
- * person sees it. Its command is `bin/vespin-host`, and `bin/luke-host` is a
+ * person sees it; it and the tarball keep the name from before the rename
+ * (`@luke/features/host-release`). Its command is `bin/vespin-host`, and `bin/luke-host` is a
  * relative link to it: a host through 0.6.0 switches to a release only once
  * its `bin/luke-host` is a file it may run whose `version` answers the
  * release's (`host-update.ts` as 0.6.0 shipped it), and the service an older

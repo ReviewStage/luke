@@ -12,26 +12,10 @@
  * anything of it is installed. A release moves `HOST_RELEASE` whole, its
  * digests read off the release CI published, as a tool's pin moves
  * (`@luke/agent-runner/pins`).
- *
- * The host's program was named `luke-host` through 0.6.0 and is
- * `vespin-host` from `HOST_RENAMED_IN` on, its tarballs among it. A host
- * through 0.6.0 updates itself with the code it shipped with, which fetches a
- * release by the old name, unpacks its one `luke-host/` folder, and runs its
- * `bin/luke-host`, so every release from the rename on keeps all three
- * (`apps/host/scripts/package.ts`) until the host floor passes 0.6.0.
  */
 
 /** The repository whose releases carry the host's tarballs. */
 const RELEASE_REPOSITORY = "ReviewStage/vespin";
-
-/** The first release whose program, command, and tarballs are named `vespin-host` rather than `luke-host`. */
-export const HOST_RENAMED_IN = "0.7.0";
-
-/** What a release's tarballs are named by, before the rename and from it on. */
-const TARBALL_PREFIX = { BEFORE_RENAME: "luke-host", RENAMED: "vespin-host" } as const;
-
-/** A daemon's version, as `MAJOR.MINOR.PATCH` with no leading zeros. */
-const HOST_VERSION = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/u;
 
 /** Each platform and architecture the host is released for, as its tarball's name spells it. */
 export const HOST_TARGET = {
@@ -69,53 +53,14 @@ export const HOST_RELEASE: HostRelease | undefined = {
   },
 };
 
-/** A daemon's version as its three numbers, or nothing where it is not `MAJOR.MINOR.PATCH`. */
-export function readHostVersion(version: string): readonly [number, number, number] | undefined {
-  const parts = HOST_VERSION.exec(version.trim());
-  if (parts === null) return undefined;
-  return [Number(parts[1]), Number(parts[2]), Number(parts[3])];
-}
-
-/** Whether the version given is at or past the floor given, both `MAJOR.MINOR.PATCH`; a version that does not read is below any floor. */
-export function hostVersionMeets(version: string, floor: string): boolean {
-  const read = readHostVersion(version);
-  const wanted = readHostVersion(floor);
-  if (read === undefined || wanted === undefined) return false;
-  for (let place = 0; place < 3; place += 1) {
-    const [have, need] = [read[place] ?? 0, wanted[place] ?? 0];
-    if (have !== need) return have > need;
-  }
-  return true;
-}
-
-/** Whether the release of the version given names its program `vespin-host`. */
-export function hostRenamed(version: string): boolean {
-  return hostVersionMeets(version, HOST_RENAMED_IN);
-}
-
 /** The release's tag, apart from the desktop's `v<version>`. */
 export function hostReleaseTag(version: string): string {
   return `host-v${version}`;
 }
 
-/** One target's tarball, by the file name a host fetches it by (`hostTarballUrl`): `vespin-host-…` from `HOST_RENAMED_IN` on and `luke-host-…` before. Its one top folder is `luke-host` either way. */
-function hostTarballName(version: string, target: HostTarget): string {
-  const prefix = hostRenamed(version) ? TARBALL_PREFIX.RENAMED : TARBALL_PREFIX.BEFORE_RENAME;
-  return `${prefix}-${version}-${target}.tar.gz`;
-}
-
-/**
- * Every name one target's tarball is published under: its own
- * (`hostTarballName`), and from the rename on a byte-identical copy under the
- * old name, which a host through 0.6.0 fetches it by.
- */
-export function hostTarballNames(
-  version: string,
-  target: HostTarget,
-): readonly [string, ...string[]] {
-  const named = hostTarballName(version, target);
-  const before = `${TARBALL_PREFIX.BEFORE_RENAME}-${version}-${target}.tar.gz`;
-  return named === before ? [named] : [named, before];
+/** One target's tarball, by its file name, whose one top folder is `luke-host`. Note that both keep the old name though the program is `vespin-host` from 0.7.0 on, since a host through 0.6.0 fetches and unpacks its update by them. */
+export function hostTarballName(version: string, target: HostTarget): string {
+  return `luke-host-${version}-${target}.tar.gz`;
 }
 
 /** Where the release keeps one target's tarball. */

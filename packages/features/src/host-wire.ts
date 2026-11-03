@@ -8,7 +8,7 @@ import {
   HOST_UPDATE_FAILURE_MAX_CHARS,
   hostUpdateSchema,
 } from "./device-agent-wire.js";
-import { HOST_RELEASE, HOST_RENAMED_IN, hostRenamed } from "./host-release.js";
+import { HOST_RELEASE } from "./host-release.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -82,6 +82,28 @@ export function shownHostUserCode(code: string): string {
 /** The path of the page that approves the code given, on the service's own origin. */
 export function hostConnectPath(code: string): string {
   return `${HOST_WIRE.CONNECT_PATH}/${shownHostUserCode(code)}`;
+}
+
+/** A daemon's version, as `MAJOR.MINOR.PATCH` with no leading zeros. */
+const HOST_VERSION = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/u;
+
+/** A daemon's version as its three numbers, or nothing where it is not `MAJOR.MINOR.PATCH`. */
+export function readHostVersion(version: string): readonly [number, number, number] | undefined {
+  const parts = HOST_VERSION.exec(version.trim());
+  if (parts === null) return undefined;
+  return [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+}
+
+/** Whether the version given is at or past the floor given, both `MAJOR.MINOR.PATCH`; a version that does not read is below any floor. */
+export function hostVersionMeets(version: string, floor: string): boolean {
+  const read = readHostVersion(version);
+  const wanted = readHostVersion(floor);
+  if (read === undefined || wanted === undefined) return false;
+  for (let place = 0; place < 3; place += 1) {
+    const [have, need] = [read[place] ?? 0, wanted[place] ?? 0];
+    if (have !== need) return have > need;
+  }
+  return true;
 }
 
 /**
@@ -368,6 +390,9 @@ export function hostUpgradeCommand(installScriptUrl: string): string {
 /** The host's command as the install command set it up in an account, by its link (`apps/web/install/install.sh`), which a person's shell expands. Note that it is named by its path, since the account's PATH may not hold `~/.local/bin`. */
 export const HOST_COMMAND = "~/.local/bin/vespin-host";
 
+/** The first release whose program and command are named `vespin-host` rather than `luke-host`. Note that its tarballs, their one top folder, and a `bin/luke-host` link keep the old name, which a host through 0.6.0 updates itself by (`apps/host/scripts/release-layout.ts`). */
+const HOST_RENAMED_IN = "0.7.0";
+
 /** The command's link as an install of a release before `HOST_RENAMED_IN` made it, which stays where it was made, since an older app's Remove names it. */
 const HOST_COMMAND_BEFORE_RENAME = "~/.local/bin/luke-host";
 
@@ -381,5 +406,6 @@ const HOST_COMMAND_BEFORE_RENAME = "~/.local/bin/luke-host";
  */
 export function hostUninstallCommand(version: string | null): string {
   const running = version ?? HOST_RELEASE?.VERSION ?? HOST_RENAMED_IN;
-  return `${hostRenamed(running) ? HOST_COMMAND : HOST_COMMAND_BEFORE_RENAME} uninstall`;
+  const renamed = hostVersionMeets(running, HOST_RENAMED_IN);
+  return `${renamed ? HOST_COMMAND : HOST_COMMAND_BEFORE_RENAME} uninstall`;
 }

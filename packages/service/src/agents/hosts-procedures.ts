@@ -42,8 +42,7 @@ import {
   readHostPairing,
 } from "@luke/database/models/host-pairing-store";
 import { hostAgentConversations, hostsOf, removeHost } from "@luke/database/models/host-store";
-import { hostVersionMeets } from "@luke/features/host-release";
-import { HOST_WIRE, hostUserCodeOf } from "@luke/features/host-wire";
+import { HOST_WIRE, hostUserCodeOf, hostVersionMeets } from "@luke/features/host-wire";
 import { Clock, Effect } from "effect";
 import { HOST_VERSION } from "../auth/device-secret.js";
 import {

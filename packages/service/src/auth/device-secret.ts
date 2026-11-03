@@ -1,8 +1,12 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { hostBySecret, recordHostVersion } from "@luke/database/models/host-store";
-import { hostVersionMeets, readHostVersion } from "@luke/features/host-release";
-import { HOST_USER_CODE, HOST_WIRE } from "@luke/features/host-wire";
+import {
+  HOST_USER_CODE,
+  HOST_WIRE,
+  hostVersionMeets,
+  readHostVersion,
+} from "@luke/features/host-wire";
 import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,
