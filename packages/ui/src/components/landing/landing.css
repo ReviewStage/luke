@@ -328,10 +328,11 @@
   }
 
   /* The wordmark's foot keeps one shape at every width, so a phone draws
-     the word as densely as a desktop, only smaller. */
+     the word as densely as a desktop, only smaller. It stands between the
+     rails, as every section does, so the word never runs past them. */
   .ui-landing-foot-art {
     position: relative;
-    margin-inline: var(--ui-landing-margin);
+    margin-inline: var(--ui-landing-inset);
     aspect-ratio: 24 / 5;
     overflow: hidden;
   }
