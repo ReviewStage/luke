@@ -27,7 +27,7 @@ const SIGNED_IN_USER = {
   lastLoginMethod: "github",
 } as const;
 
-/** One task the fake lists, as the plan list summarises it. */
+/** One task the fake lists, as the plan list summarizes it. */
 export const LISTED_TASK = {
   id: "4f0b6a0e-6f3c-4a43-9d0f-0d6a4e0b1c21",
   workspaceId: "workspace-ada",

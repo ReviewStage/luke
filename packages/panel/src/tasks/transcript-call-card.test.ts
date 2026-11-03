@@ -190,7 +190,7 @@ test.each([
     shown: undefined,
   },
   {
-    reads: "a true under a key of its own is an answer, not an acknowledgement",
+    reads: "a true under a key of its own is an answer, not an acknowledgment",
     output: { kind: TOOL_BLOCK.JSON, text: JSON.stringify({ exists: true }) },
     shown: "exists: true",
   },

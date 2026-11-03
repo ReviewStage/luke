@@ -887,7 +887,7 @@ function choose<R>(page: Page, cursor: BrowserCursor<R> | undefined, ref: string
           )
           .join(", ");
         return yield* failed(
-          `${ref} has no option labelled or valued ${JSON.stringify(wanted)}; its options are ${labels === "" ? "none" : labels}`,
+          `${ref} has no option labeled or valued ${JSON.stringify(wanted)}; its options are ${labels === "" ? "none" : labels}`,
         );
       }
       case CHOICE.DISABLED:

@@ -69,7 +69,7 @@ Every token is a `--ui-*` custom property under `src/tokens/`.
   roles stand, so a finger meets 44px controls and fields never under 16px,
   which iOS would zoom into. `--ui-touch-target` is the least a press is
   taken across on a coarse pointer: a `Button` or `IconButton` drawn smaller
-  takes the press in a box that size centred on it (`button.css`), its glyph
+  takes the press in a box that size centered on it (`button.css`), its glyph
   and its place unchanged.
 
   **One weight to a type role**, set once in `profiles.css` as
@@ -106,10 +106,10 @@ Every token is a `--ui-*` custom property under `src/tokens/`.
   The settings-row, card, dialog, and menu roles beside them (`--ui-settings-row-*`,
   `--ui-card-*`, `--ui-dialog-*`, `--ui-menu-*`) are set the same way, both profiles setting
   one set of names.
-- **Palette** (`palettes.css`): semantic colours, `--ui-color-*` (`text`,
+- **Palette** (`palettes.css`): semantic colors, `--ui-color-*` (`text`,
   `text-muted`, `ground`, `surface`, `overlay`, `fill-*`, `border*`, `accent*`,
   `danger*`, `focus-ring`, …), set by both profiles in both themes. The
-  brand's own colours among them (the grounds, the inks, the accent, the status
+  brand's own colors among them (the grounds, the inks, the accent, the status
   inks) are `brand.css`, generated from the brand table in `@repo/brand`'s
   `scripts/brand-palette.mjs`, so a rebrand or a second theme is that table;
   `tokens/brand-contrast.test.ts` holds its inks to WCAG AA.
@@ -161,7 +161,7 @@ The text entries and form pieces, `TextField`, `TextArea`,
 `SearchField`, `AddressField`, `FormField`, `InlineEdit`, and
 `LengthCounter`, stand on shadcn's Input, Textarea, Label, and Field. A name the
 theme adds that tailwind-merge cannot read as a size is listed in `cn.ts`, or
-`cn` drops it as a second colour.
+`cn` drops it as a second color.
 
 The overlays: `Dialog` and `ConfirmDialog` stand on shadcn's dialog, and
 `TooltipPill` and `TooltipCard` on its tooltip and hover card, placed by
@@ -404,7 +404,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 
 | Rule | Refuses | How to fix one |
 | --- | --- | --- |
-| `literal-colour` | A hex, `rgb()`, `hsl()`, `oklch()`, or `color()` colour, or a palette utility | Read the palette role (`--ui-color-*`, `bg-primary`); a colour the palette lacks is added to `palettes.css`. A provider mark's brand ink (`.integration-mark-*`), a mask's alpha, and a terminal's or code theme's ink (`--terminal-*`, `--code-*`, `--integration-ink-*`) pass |
+| `literal-color` | A hex, `rgb()`, `hsl()`, `oklch()`, or `color()` color, or a palette utility | Read the palette role (`--ui-color-*`, `bg-primary`); a color the palette lacks is added to `palettes.css`. A provider mark's brand ink (`.integration-mark-*`), a mask's alpha, and a terminal's or code theme's ink (`--terminal-*`, `--code-*`, `--integration-ink-*`) pass |
 | `literal-type` | A literal `font-size`, `font-weight`, or `font`, or `text-sm`, `font-medium`, `text-[13px]` | Draw the words with `Text`, or read a type role (`--ui-type-*-size`, `--ui-weight-*`, `text-body`) |
 | `literal-radius` | A literal corner, `50%` among them, or `rounded`, `rounded-md` | Read a radius role (`--ui-control-radius`, `--ui-radius-full`, `rounded-menu`); a factor of a role (`calc(var(--ui-control-height) / 2)`) passes |
 | `ellipsis` | `text-overflow: ellipsis`, `truncate`, `text-ellipsis` | A cut line fades rather than ending in "…": mask the end it is cut at, `mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade))`, as `Chip` and `ListRow` do |
@@ -416,7 +416,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `crumb-width` | A `min-width` above zero on a path's crumb (`.ui-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
 | `has-over-any` | A `:has()` on an ancestor or an earlier sibling of a subject that is any element (`> *`, `> :not(.a)`) | Say the state on the subject's parent, or by an attribute the component sets: a `:has()` over any element restyles the whole window for every element added under it |
 | `bar-corner` | A corner radius on a bar's own box (`.ui-pane-bar`, `.ui-toolbar`), in a stylesheet or as a `rounded-*` beside its class | Nothing: a bar standing at a sheet's top takes the sheet's radius from the one rule in `packages/panel/src/styles/shell.css` ("The sheet's top"). Where a bar there runs square, fix how that rule reads the sheet's top (a layout laying columns side by side joins its split list), never the page |
-| `grid-columns` | A block grid that places its items (`place-items-*`, `justify-items-*`, `place-items: center`) and names no columns | Name them, `grid-cols-1` (`minmax(0, 1fr)`), under the grid's own variants (`sm:grid-cols-1` leaves a phone's column `auto`, as `grid-cols-none` and `[auto]` do everywhere), so the column is the box's width: an `auto` column grows to its item's widest line, and a card or a sheet whose width is a share of it (`min(520px, 100%)`) then centres in a column wider than the screen and stands off its edge on a phone, as New task's Relation sheet did. A grid drawn inline (`inline-grid`) is sized by what it holds and passes |
+| `grid-columns` | A block grid that places its items (`place-items-*`, `justify-items-*`, `place-items: center`) and names no columns | Name them, `grid-cols-1` (`minmax(0, 1fr)`), under the grid's own variants (`sm:grid-cols-1` leaves a phone's column `auto`, as `grid-cols-none` and `[auto]` do everywhere), so the column is the box's width: an `auto` column grows to its item's widest line, and a card or a sheet whose width is a share of it (`min(520px, 100%)`) then centers in a column wider than the screen and stands off its edge on a phone, as New task's Relation sheet did. A grid drawn inline (`inline-grid`) is sized by what it holds and passes |
 
 No comment silences it, and it refuses one that asks to
 (`style-guard-disable`). A rule that had places left when it landed starts

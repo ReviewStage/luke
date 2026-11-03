@@ -63,12 +63,12 @@ const swept = Effect.gen(function* () {
 });
 
 /**
- * The clock's own watches, signalling once a wait opens one on the
+ * The clock's own watches, signaling once a wait opens one on the
  * account's topic, as a read of its agent's runner's exit does
  * (`device-machine.ts`'s `runnerExit`): the retire then holds the agent's
  * lease and has read that its runner took nothing since its turn ended.
  */
-const signalledOn = (userId: string, opened: Deferred.Deferred<void>): SyncShape => ({
+const signaledOn = (userId: string, opened: Deferred.Deferred<void>): SyncShape => ({
   watch: (topics, fallback) =>
     Effect.as(
       topics.some(([kind, id]) => kind === TOPIC.ACCOUNT && id === userId)
@@ -174,7 +174,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           const now = yield* DateTime.nowAsDate;
           const sweep = yield* forkClockDriven(
             sweepDeviceWarmRunners(now).pipe(
-              Effect.provideService(Sync, signalledOn(raced.userId, reading)),
+              Effect.provideService(Sync, signaledOn(raced.userId, reading)),
             ),
           );
           yield* Effect.raceFirst(Deferred.await(reading), driven(sweep, MAC_MACHINE.POLL));

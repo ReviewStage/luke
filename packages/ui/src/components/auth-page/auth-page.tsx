@@ -4,7 +4,7 @@ import { BUTTON_SIZE, BUTTON_VARIANT, ButtonLink } from "../button/button.js";
 import { FailureCopy } from "../failure-copy/failure-copy.js";
 
 /**
- * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centred in the window, with nothing else on the page.
+ * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centered in the window, with nothing else on the page.
  *
  * The card holds, one under another, the artwork it opens with, its title,
  * what the title means, the form or the provider choices the page is for,
@@ -14,7 +14,7 @@ import { FailureCopy } from "../failure-copy/failure-copy.js";
  * to a narrow window rather than overflowing it: its inset narrows under a
  * phone's width, and what it holds stretches to the card's inner width, so a
  * provider's button or a form's field is never wider than the screen. The way
- * on is a link drawn as an outline button, centred under the words. A caller
+ * on is a link drawn as an outline button, centered under the words. A caller
  * hands it words and controls, never a class.
  *
  * The artwork is decoration, hidden from a reader, since the title says what

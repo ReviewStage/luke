@@ -22,7 +22,7 @@ import {
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
- * folding-button.tsx -- a toolbar's labelled button whose words a narrow toolbar folds away, leaving its glyph, named by its hint.
+ * folding-button.tsx -- a toolbar's labeled button whose words a narrow toolbar folds away, leaving its glyph, named by its hint.
  *
  * A toolbar too narrow for every act's words folds them by a container query
  * of its own, which sets `--ui-fold: folded` on an element holding its
@@ -191,7 +191,7 @@ function FoldingBox({
   );
 }
 
-/** A labelled toolbar button, its glyph then its words, the words folding away where its toolbar says so. */
+/** A labeled toolbar button, its glyph then its words, the words folding away where its toolbar says so. */
 export function FoldingButton({
   label,
   icon,

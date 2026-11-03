@@ -880,7 +880,7 @@ export function mount(
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
       : inbox;
   }
-  function Panelled({ at }: { at: ShellRoom }) {
+  function Paneled({ at }: { at: ShellRoom }) {
     const sidePanel = useSidePanel(
       undefined,
       { id: undefined, holds: {}, bare: true },
@@ -899,7 +899,7 @@ export function mount(
   const inbox =
     room === undefined || panel !== undefined
       ? createElement(Page, { sidePanel: panel })
-      : createElement(Panelled, { at: room });
+      : createElement(Paneled, { at: room });
   const shown = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   const page = bundles === undefined ? shown : onSideBundles(bundles, shown);
   act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));

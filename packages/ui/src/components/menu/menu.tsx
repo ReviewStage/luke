@@ -644,7 +644,7 @@ function keyedEntryOf(
 /**
  * Whether a press landed on the card an item of one of `menus` hangs, or on
  * a card hung from a control on that card, as a person named on an agent's
- * card hangs their own. Each card stands apart from the menu, portalled to
+ * card hangs their own. Each card stands apart from the menu, portaled to
  * the body, so it is traced back through the control it hangs from
  * (`hintedControlOf`), card by card, until one stands in a menu.
  */
@@ -1563,7 +1563,7 @@ function FloatingMenu({
       return;
     }
     // Note that Tab hands focus back before the browser moves it, because
-    // the browser's own move then goes on from the opener to its neighbour.
+    // the browser's own move then goes on from the opener to its neighbor.
     if (event.key === "Tab") {
       event.stopPropagation();
       onClose(true);

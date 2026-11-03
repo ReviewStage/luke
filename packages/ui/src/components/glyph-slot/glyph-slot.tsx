@@ -5,16 +5,16 @@ import { ICON_SIZE, type IconSize } from "../../icons/icon-size.js";
  * glyph-slot.tsx -- the seat a glyph stands in before a line's words: a square a row's glyph fills, so every line's words start on one edge whatever glyph leads them.
  *
  * A slot is a glyph's footprint, 16px where nothing says otherwise, its
- * glyph (an svg, a picture, or a mark of the app's) centred in it and
+ * glyph (an svg, a picture, or a mark of the app's) centered in it and
  * filling it. Its size is `--ui-glyph-size` where a component's own glyph
  * slot or the app's container sets it, the one placement hook a slot reads,
  * so a note's face stands at the note's face size and a tab's glyph at the
  * tab's. Before words that may wrap, it stands as tall as their first line
- * (`line`) and centred on it, rather than on the whole of them.
+ * (`line`) and centered on it, rather than on the whole of them.
  *
  * Its ink says how the glyph reads beside its words: muted, as a call's or
  * a list's glyph is; the full ink, for the one that stands out; the ink its
- * holder sets; or the app's own blue, the colour its voice and face answer in.
+ * holder sets; or the app's own blue, the color its voice and face answer in.
  * A glyph that only repeats its words is hidden from a reader; one that says
  * something its words do not is named by `label`.
  *
@@ -55,7 +55,7 @@ export const GLYPH_ARRIVAL = {
 
 export type GlyphArrival = (typeof GLYPH_ARRIVAL)[keyof typeof GLYPH_ARRIVAL];
 
-/** The slot's square, or a line's height before words that may wrap, its glyph centred in it. */
+/** The slot's square, or a line's height before words that may wrap, its glyph centered in it. */
 const SLOT_BASE = "ui-glyph-slot inline-flex flex-none items-center justify-center";
 
 /** How the glyph stands in its slot: filling it, or a step inside it. */
@@ -111,7 +111,7 @@ export function GlyphSlot({
   ink?: GlyphInk;
   /** The seat it stands in, one of `ICON_SIZE`; none leaves the size to its container. */
   size?: IconSize | undefined;
-  /** Whether it stands as tall as the line it leads, centred on its first line, rather than square. */
+  /** Whether it stands as tall as the line it leads, centered on its first line, rather than square. */
   line?: boolean | undefined;
   /** Whether its glyph stands a step inside the slot rather than filling it, so an outline reads as large as a round mark. */
   inset?: boolean | undefined;

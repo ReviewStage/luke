@@ -9,10 +9,10 @@ import {
   plainCodeLines,
   type TaskCodeProcess,
   type TaskCodeProcessListeners,
-  taskCodeProcessColouring,
+  taskCodeProcessColoring,
 } from "./task-code-remote.js";
 
-/** The colouring process's side, run in a real Node child as the desktop runs it in a utility process. */
+/** The coloring process's side, run in a real Node child as the desktop runs it in a utility process. */
 const CHILD = fileURLToPath(new URL("./testing/task-code-child.mjs", import.meta.url));
 
 /** A child is started with tsx's loader and builds the highlighter, which takes a second or two. */
@@ -24,7 +24,7 @@ const BLOCKS = [
   { language: "cobol", code: "DISPLAY 'HELLO'." },
 ] as const;
 
-/** A Node child running the colouring process's side, and `afterSend` run on it after each block it is sent. */
+/** A Node child running the coloring process's side, and `afterSend` run on it after each block it is sent. */
 function forkChild(
   listeners: TaskCodeProcessListeners,
   afterSend: (child: ChildProcess) => void = () => undefined,
@@ -46,20 +46,20 @@ function forkChild(
 }
 
 it.effect(
-  "a block coloured through the process answers the lines this process colours it as",
+  "a block colored through the process answers the lines this process colors it as",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const colour = yield* taskCodeProcessColouring((listeners) => forkChild(listeners));
-        // Note that each side colours every block once first: Shiki stops a line's colouring past its
+        const color = yield* taskCodeProcessColoring((listeners) => forkChild(listeners));
+        // Note that each side colors every block once first: Shiki stops a line's coloring past its
         // time limit, and a grammar's first use compiles it, which a loaded runner can push past that.
         for (const { language, code } of BLOCKS) {
-          yield* colour(language, code);
+          yield* color(language, code);
           yield* highlightSnippet(language, code);
         }
 
         for (const { language, code } of BLOCKS) {
-          assert.deepEqual(yield* colour(language, code), yield* highlightSnippet(language, code));
+          assert.deepEqual(yield* color(language, code), yield* highlightSnippet(language, code));
         }
       }),
     ),
@@ -67,12 +67,12 @@ it.effect(
 );
 
 it.effect(
-  "a process that dies holding a block answers it plain, and the next block is coloured by a new process",
+  "a process that dies holding a block answers it plain, and the next block is colored by a new process",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         let spawned = 0;
-        const colour = yield* taskCodeProcessColouring((listeners) => {
+        const color = yield* taskCodeProcessColoring((listeners) => {
           spawned += 1;
           // The first process is killed the moment it is handed its block, as a crash would end it.
           return spawned === 1
@@ -81,16 +81,16 @@ it.effect(
         });
         const [block] = BLOCKS;
 
-        assert.deepEqual(yield* colour(block.language, block.code), plainCodeLines(block.code));
-        const coloured = yield* colour(block.language, block.code);
+        assert.deepEqual(yield* color(block.language, block.code), plainCodeLines(block.code));
+        const colored = yield* color(block.language, block.code);
 
         assert.deepEqual(
-          coloured.map((line) => line.map((run) => run.text).join("")),
+          colored.map((line) => line.map((run) => run.text).join("")),
           block.code.split("\n"),
         );
         assert.ok(
-          coloured.some((line) => line.some((run) => run.color !== undefined)),
-          "the new process colours the block",
+          colored.some((line) => line.some((run) => run.color !== undefined)),
+          "the new process colors the block",
         );
       }),
     ),
@@ -98,16 +98,16 @@ it.effect(
 );
 
 it.effect(
-  "a process that dies while idle is replaced before the next block, which is coloured rather than drawn plain",
+  "a process that dies while idle is replaced before the next block, which is colored rather than drawn plain",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const children: ChildProcess[] = [];
-        const colour = yield* taskCodeProcessColouring((listeners) =>
+        const color = yield* taskCodeProcessColoring((listeners) =>
           forkChild(listeners, undefined, (child) => children.push(child)),
         );
         const [block] = BLOCKS;
-        yield* colour(block.language, block.code);
+        yield* color(block.language, block.code);
 
         // The first process crashes after answering, with no block in its hands.
         const [first] = children;
@@ -115,11 +115,11 @@ it.effect(
         const exited = once(first, "exit");
         first.kill("SIGKILL");
         yield* Effect.promise(() => exited);
-        const coloured = yield* colour(block.language, block.code);
+        const colored = yield* color(block.language, block.code);
 
         assert.ok(
-          coloured.some((line) => line.some((run) => run.color !== undefined)),
-          "the block after an idle crash is coloured",
+          colored.some((line) => line.some((run) => run.color !== undefined)),
+          "the block after an idle crash is colored",
         );
       }),
     ),

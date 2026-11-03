@@ -72,7 +72,7 @@ import {
   replyToReviewThread,
   setAutoMerge,
   setFileViewed,
-  setLabelled,
+  setLabeled,
   setPullRequestDescription,
   setPullRequestDraft,
   setPullRequestOpen,
@@ -410,7 +410,7 @@ export function actionWrite(
         );
       case PULL_REQUEST_ACTION.ADD_LABEL:
       case PULL_REQUEST_ACTION.REMOVE_LABEL:
-        return setLabelled(
+        return setLabeled(
           token,
           repository,
           number,

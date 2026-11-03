@@ -9,7 +9,7 @@ import { terminal } from "./index.js";
 /**
  * The terminal bundle, through the one door a Terminal tab mounts it by
  * (its entry's `terminal`): which keys reach the shell, which pass to the
- * window, and a palette colour drawn by its class rather than a style
+ * window, and a palette color drawn by its class rather than a style
  * attribute.
  */
 
@@ -140,7 +140,7 @@ test("Escape and Control chords are the shell's, and Escape never reaches the wi
   assert.deepEqual(terminal.heard, []);
 });
 
-test("without WebGL a palette colour is drawn by its class, never by a style attribute the panel's policy refuses", async () => {
+test("without WebGL a palette color is drawn by its class, never by a style attribute the panel's policy refuses", async () => {
   const terminal = mountTerminal();
   terminal.done();
   // The default palette's black on its black ground, a pair that falls short of any contrast asked for.

@@ -8,7 +8,7 @@ export {
   chatGptSignIn,
 } from "./chatgpt-sign-in.js";
 export {
-  LOOPBACK_CONSENT_CANCELLED,
+  LOOPBACK_CONSENT_CANCELED,
   type LoopbackConsentOptions,
   type OpenConsent,
 } from "./consent.js";

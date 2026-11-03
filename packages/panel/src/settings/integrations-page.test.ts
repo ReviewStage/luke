@@ -109,7 +109,7 @@ let holdReads = false;
 /** The statuses reads held, each let go by its own call, in the order they were sent. */
 const heldReads: (() => void)[] = [];
 /** Where a Cancel leaves an account the service holds by connection name, past a provider's own word. */
-const cancelled = new Map<string, IntegrationStatus>();
+const canceled = new Map<string, IntegrationStatus>();
 
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
@@ -148,7 +148,7 @@ beforeEach(() => {
   listed.clear();
   signInFailures = [];
   addedConnection = "notion-3";
-  cancelled.clear();
+  canceled.clear();
   holdReads = false;
   heldReads.length = 0;
   accounts = [];
@@ -186,7 +186,7 @@ beforeEach(() => {
     [ACT_KIND.INTEGRATIONS_CANCEL]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_CANCEL, payload });
       const { provider } = payload;
-      const account = cancelled.get(payload.connection ?? provider);
+      const account = canceled.get(payload.connection ?? provider);
       if (account !== undefined) return Promise.resolve({ status: account });
       if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
         touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
@@ -738,7 +738,7 @@ test("a Cancel that lands after the sign-in finished leaves the provider connect
   assert.equal(granolaRow(page).line, "Connected · 1 tool");
 });
 
-test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Retry", async () => {
+test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
 
@@ -746,12 +746,12 @@ test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Ret
   signInFailures = [{ provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED }];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "You cancelled connecting Granola. · Retry",
+    line: "You canceled connecting Granola. · Retry",
     buttons: ["Retry"],
   });
   // The service names a failure once; the next read leaves the line as it stood.
   await focusWindow();
-  assert.equal(granolaRow(page).line, "You cancelled connecting Granola. · Retry");
+  assert.equal(granolaRow(page).line, "You canceled connecting Granola. · Retry");
 });
 
 test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Retry", async () => {
@@ -1599,11 +1599,11 @@ test("an account added under the provider's own name, beside one that stands, wa
   );
 });
 
-test("an added account whose first sign-in is cancelled leaves its row, so the next one is added rather than reopened", async () => {
+test("an added account whose first sign-in is canceled leaves its row, so the next one is added rather than reopened", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   addable = [notion];
-  cancelled.set("notion-2", INTEGRATION_STATUS.DISCONNECTED);
+  canceled.set("notion-2", INTEGRATION_STATUS.DISCONNECTED);
   accounts = [
     {
       provider: notion,
@@ -1622,7 +1622,7 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
     [...page.querySelectorAll(".ui-settings-row")].find(
       (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 2",
     ) ?? assert.fail("the pending account has a row");
-  // The service deletes the cancelled first sign-in's account, so its next read lists Acme alone.
+  // The service deletes the canceled first sign-in's account, so its next read lists Acme alone.
   accounts = accounts.slice(0, 1);
   act(() =>
     (
@@ -1640,10 +1640,10 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
   );
 });
 
-test("a cancelled sign-in that held a provider's last place frees it at once, offering Add another account again", async () => {
+test("a canceled sign-in that held a provider's last place frees it at once, offering Add another account again", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
-  cancelled.set("notion-5", INTEGRATION_STATUS.DISCONNECTED);
+  canceled.set("notion-5", INTEGRATION_STATUS.DISCONNECTED);
   accounts = [1, 2, 3, 4, 5].map((place) => ({
     provider: notion,
     connection: place === 1 ? notion : `notion-${place}`,

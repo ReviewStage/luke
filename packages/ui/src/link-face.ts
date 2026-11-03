@@ -109,7 +109,7 @@ export function siteName(href: string): string | undefined {
   return new URL(href).hostname.replace(/^www\./u, "");
 }
 
-/** What a link to `href` labelled `words` says: its address cut short where the words are the address, its label otherwise. */
+/** What a link to `href` labeled `words` says: its address cut short where the words are the address, its label otherwise. */
 export function linkFace(href: string, words: string): LinkFace {
   const short = saysOwnAddress(href, words) ? shortUrl(href) : undefined;
   return short === undefined ? { words, shortened: false } : { words: short, shortened: true };

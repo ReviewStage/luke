@@ -74,7 +74,7 @@ interface ErrorBoundaryState {
 
 /**
  * Draws `children`, or, once one of them has thrown while drawing, the
- * centred `failure` with Reload, which runs `onReload` and draws them again.
+ * centered `failure` with Reload, which runs `onReload` and draws them again.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   override state: ErrorBoundaryState = { failed: false };

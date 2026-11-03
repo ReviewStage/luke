@@ -63,7 +63,7 @@ function within(bounds: Rectangle, area: Rectangle): Rectangle {
  * The window as it stands, to be kept: its normal frame, zoomed or full
  * screen over it. Note that a window moved to another display while full
  * screen keeps its normal frame on the display it left, so that frame is
- * centred on the display the window now fills instead, where it would open.
+ * centered on the display the window now fills instead, where it would open.
  */
 export function placementOf(window: {
   normal: Rectangle;

@@ -23,7 +23,7 @@ void React;
  * the ring, its mark at about two thirds of it on the card's surface inside
  * a hairline edge, and the badge on the ring's lower right, where its edge
  * crosses the diagonal, cut out of the card by a ring of the card's own
- * colour. The sizes of the glyphs inside, which other components draw, are
+ * color. The sizes of the glyphs inside, which other components draw, are
  * `auth-page.css`'s.
  */
 

@@ -655,7 +655,7 @@ function usageGrowth(before: Usage | undefined, total: Usage): RunUsage | undefi
   return counts.some((count) => count > 0) ? grown : undefined;
 }
 
-/** The turn's status by how its launch ended: done, unless its last model turn failed; stopped is cancelled. */
+/** The turn's status by how its launch ended: done, unless its last model turn failed; stopped is canceled. */
 function statusOf(
   ending: (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING],
   failure: string | undefined,
@@ -664,7 +664,7 @@ function statusOf(
     case NATIVE_ENDING.DONE:
       return failure === undefined ? RUN_STATUS.SUCCEEDED : RUN_STATUS.FAILED;
     case NATIVE_ENDING.STOPPED:
-      return RUN_STATUS.CANCELLED;
+      return RUN_STATUS.CANCELED;
     case NATIVE_ENDING.FAILED:
       return RUN_STATUS.FAILED;
   }

@@ -28,7 +28,7 @@ import { cn } from "../cn.js";
  *   place its thumb.
  * - No `ScrollBar`, thumb, or corner: the Mac's overlay scroll bar and its
  *   momentum and the browser's on the web are what an area scrolls with.
- * - The viewport's `rounded-[inherit]`, `size-full`, colour transition, and
+ * - The viewport's `rounded-[inherit]`, `size-full`, color transition, and
  *   outline and ring utilities are dropped: the area draws nothing of its
  *   own, sizes as its caller's `size` says, and leaves the keyboard's ring to
  *   the window (`anti-slop/no-shadcn-focus-ring`).

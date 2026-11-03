@@ -12,7 +12,7 @@ import type {
  * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch, one for a list of files, and one for a whole file with no diff, and the handles the view redraws them through.
  *
  * A changed file's patch is drawn by Pierre's diffs (`@pierre/diffs`), with
- * Shiki colouring it, which is too large for the bundle every window parses,
+ * Shiki coloring it, which is too large for the bundle every window parses,
  * so it ships as a bundle of its own (`diff-view.js`, built from
  * `./index.ts`) that the view loads the first time a diff is shown, as a File
  * tab loads its tree. That bundle exports one module, `diffView`, and
@@ -26,7 +26,7 @@ import type {
  * How a diff is drawn, every setting of a review tool's diff: its layout,
  * how a changed line is marked and what of it, whether changed lines are
  * tinted, the File tabs' numbers and wrap, the theme each appearance is
- * coloured in, and its type.
+ * colored in, and its type.
  */
 export interface DiffLook {
   readonly layout: DiffLayout;
@@ -112,7 +112,7 @@ export interface DiffViewProps {
   /** The element each note is drawn in, by its key, which the view keeps and fills; asked only for a note `annotations` names. */
   readonly renderAnnotation?: ((key: string) => HTMLElement) | undefined;
   /**
-   * Whether the patch is coloured in the kept pool's workers, off the
+   * Whether the patch is colored in the kept pool's workers, off the
    * window's thread, as a list's files are, where many patches are drawn at
    * once, an Inbox's code cards; on the window's thread where absent. Read once,
    * as the patch is mounted.
@@ -238,7 +238,7 @@ export function sameFileLines(a: FileLineRange | undefined, b: FileLineRange | u
  * tab, a page's source, or a text file opened over the window draws one:
  * its name, which its grammar is read from; its text, every line of it;
  * the revision the text was read at, which names it in the pool's cache, so
- * the same file at the same revision opened again takes its colours at
+ * the same file at the same revision opened again takes its colors at
  * once; how to draw it, the diff's own look less what only a diff draws;
  * the lines lit, the ones a snippet pointed at or a note's under the
  * pointer; and its notes, each drawn under its line in the element the view
@@ -369,7 +369,7 @@ export interface DiffViewModule {
   /**
    * Draws a whole file under `host`, which is its scroller, in a shadow root
    * the tab's find reads, only the lines near the view drawn at all, and
-   * coloured off the window's thread where the pool's workers run.
+   * colored off the window's thread where the pool's workers run.
    */
   readonly mountFile: (host: HTMLElement, props: FileViewProps) => FileViewHandle;
 }

@@ -1,17 +1,17 @@
-/* palettes.css -- the semantic colours of each app, in its dark and its light theme.
+/* palettes.css -- the semantic colors of each app, in its dark and its light theme.
 
    A theme is an attribute beside the profile (`data-ui-theme`): `dark`,
    `light`, or, on the desktop, `system`, which follows the Mac's appearance
    (the app's own Theme setting drives it through `nativeTheme.themeSource`).
    Every role is set by both profiles in both themes.
 
-   The brand's own colours (the grounds, the inks, the accent, and the
+   The brand's own colors (the grounds, the inks, the accent, and the
    status inks tuned against them) are not written here: they are generated
    into `brand.css` from the brand table in `@repo/brand`'s
    `generate-surface-shared.mjs`, so a change of brand, or a second theme, is
    a change of that one table. What stays here is what no brand changes: the
    fills and edges drawn as alphas of the ink, the tints mixed from the
-   tones, shadows, and the identity, chart, and find colours.
+   tones, shadows, and the identity, chart, and find colors.
 
    The desktop writes each role once, as `light-dark()`, and a theme is only
    its `color-scheme`: `system` answers `prefers-color-scheme` on the frame the
@@ -19,7 +19,7 @@
    that a media query would need. The site writes each theme as a block of
    its own, because it is read by browsers older than `light-dark()`.
 
-   A colour belongs here when a shared component draws with it or the
+   A color belongs here when a shared component draws with it or the
    window's own frame does (its sidebar, its wells). One that only one surface
    spends (a terminal's sixteen inks, a file icon's) stays in that app's
    stylesheet.
@@ -51,10 +51,10 @@
 }
 
 [data-ui-profile="desktop"] {
-  /* Words on a fill of the text's own ink, which read in the ground's colour. */
+  /* Words on a fill of the text's own ink, which read in the ground's color. */
   --ui-color-ink-inverse: var(--ui-color-ground);
 
-  /* The code's own words, where its highlighter left a run uncoloured: GitHub's too. */
+  /* The code's own words, where its highlighter left a run uncolored: GitHub's too. */
   --ui-color-code-text: light-dark(#1f2328, #e6edf3);
   --ui-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
   --ui-color-fill-strong: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.09));
@@ -113,7 +113,7 @@
   --ui-color-shadow-soft: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
   --ui-color-shadow: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
   --ui-color-shadow-deep: light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.6));
-  /* The system's own switch lifts a white thumb off a grey track in the light, and draws none in the dark. */
+  /* The system's own switch lifts a white thumb off a gray track in the light, and draws none in the dark. */
   --ui-shadow-switch-thumb:
     0 1px 2px light-dark(rgba(0, 0, 0, 0.25), transparent),
     0 0 0 0.5px light-dark(rgba(0, 0, 0, 0.08), transparent);
@@ -137,7 +137,7 @@
   --ui-color-chart-5: #868b94;
 }
 
-/* The site's light theme, drawn in the brand's light colours (`brand.css`).
+/* The site's light theme, drawn in the brand's light colors (`brand.css`).
    A page without a theme of its own is this one. */
 [data-ui-profile="web"],
 [data-ui-profile="web"][data-ui-theme="light"] {

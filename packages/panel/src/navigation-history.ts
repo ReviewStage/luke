@@ -918,7 +918,7 @@ function standingOf(trail: Trail): HistoryEntry<Place> | undefined {
  * adapter. `place` is nothing until the window knows where it is, so a
  * launch records no page it never showed. `reachable` says whether a place
  * can still be gone to — a deleted task cannot — and `go` takes the window
- * there; the move's own arrival is then recognised as the place the history
+ * there; the move's own arrival is then recognized as the place the history
  * already stands on, and records nothing.
  *
  * The adapter may move by itself, as a browser's Back and Forward move it,
@@ -1088,7 +1088,7 @@ function useHistory(input: {
   }, [history, own]);
 
   // Note that the whole step is what asks, the trail's move with the window's, so a step
-  // cancelled at the ask leaves the trail standing where the window still stands. It
+  // canceled at the ask leaves the trail standing where the window still stands. It
   // answers whether a step stood there, asked about or taken.
   const goTo = useCallback(
     (at: number | undefined): boolean => {
@@ -1571,7 +1571,7 @@ export function useWindowHistory(input: {
 /**
  * The mouse's own back and forward buttons, the fourth and fifth, answered
  * while `enabled` as a browser answers them. Note that each press it answers
- * is cancelled, because Chromium takes a Back or Forward of its own on that
+ * is canceled, because Chromium takes a Back or Forward of its own on that
  * same release unless the page cancels it, and in a browser tab that would be
  * a second step after the window's.
  */

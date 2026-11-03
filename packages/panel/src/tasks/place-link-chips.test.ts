@@ -33,7 +33,7 @@ import { OpenLinkProvider } from "./use-open-link.js";
  * called by the name the window already holds for the place: the task's
  * title for a bare task link, the agent's, the page's, the item's, the
  * member's; by its kind where the window holds none; and by the words it
- * was labelled with where it was. A press opens the place in the window.
+ * was labeled with where it was. A press opens the place in the window.
  * Nothing is read for a name. Synthetic workspace, task, and people.
  */
 
@@ -229,7 +229,7 @@ test("a bare link to a place the window knows is called by its name, the task's 
   );
 });
 
-test("a place the window holds no name for is called by its kind, or by its label where it was labelled, and a labelled place it holds a name for by that name now", async () => {
+test("a place the window holds no name for is called by its kind, or by its label where it was labeled, and a labeled place it holds a name for by that name now", async () => {
   const container = await drawn(
     [
       `${HOME}/plan/${TASK_ID}/agent/${UNNAMED_AGENT}`,

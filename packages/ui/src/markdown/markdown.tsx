@@ -12,7 +12,7 @@
  *   words (styled, never announced), a picture is its alternative words, raw
  *   HTML is text, and only the elements a place hands in are drawn its way.
  * - A transcript (`MARKDOWN_LOOK.TRANSCRIPT`) is Streamdown whole, read block
- *   by block while it streams, its HTML parsed and sanitised, its root and
+ *   by block while it streams, its HTML parsed and sanitized, its root and
  *   components the place's.
  * - A transcript's line (`MARKDOWN_LOOK.TRANSCRIPT_LINE`) is a transcript
  *   read as one block, its blocks' words run together into one line, its
@@ -28,7 +28,7 @@
  *
  * Exported at `@repo/ui/markdown` alone, so the parser rides into no bundle
  * behind the barrel. Whatever a place knows better than this package, a
- * mention's chip, a coloured code block, a diagram, arrives as a component
+ * mention's chip, a colored code block, a diagram, arrives as a component
  * or a step, so nothing here reaches an app.
  */
 

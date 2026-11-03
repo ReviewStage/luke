@@ -11,7 +11,7 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * title opens, sizes, and wraps one way on every document, and a page never
  * draws a second `h1` of its own.
  *
- * The acts are centred on the title's first line, whatever a control's
+ * The acts are centered on the title's first line, whatever a control's
  * height is beside the title's leading. They share the title's line while
  * the title keeps a least width beside them, a long title wrapping inside
  * its column rather than sending them to a row of their own; where not even

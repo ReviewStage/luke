@@ -210,7 +210,7 @@ function gitUsername(access: GitHubTokenAccess): string {
 /**
  * The firewall for the clone: open internet, and the token as GitHub's
  * header on requests under the one repository's git endpoint alone, so a
- * request for a neighbouring repository, or for the repository's pages
+ * request for a neighboring repository, or for the repository's pages
  * outside git, carries nothing.
  */
 function cloneNetworkPolicy(

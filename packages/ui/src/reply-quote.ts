@@ -84,7 +84,7 @@ function quoteEnd(lines: readonly string[], at: number): number | undefined {
 
 /**
  * A message read as its blocks: each quote, the blank lines that only part
- * it from its neighbours left out, and the developer's lines between, as
+ * it from its neighbors left out, and the developer's lines between, as
  * they stand. Words with no quote are one block of their lines, and no
  * words at all are one empty line.
  */
@@ -116,7 +116,7 @@ export function messageBlocks(text: string): readonly MessageBlock[] {
   return blocks;
 }
 
-/** A message written from its blocks: each quote a blockquote, the developer's lines as they stand, a blank line between a quote and its neighbours. */
+/** A message written from its blocks: each quote a blockquote, the developer's lines as they stand, a blank line between a quote and its neighbors. */
 export function messageText(blocks: readonly MessageBlock[]): string {
   return blocks
     .map((block) =>

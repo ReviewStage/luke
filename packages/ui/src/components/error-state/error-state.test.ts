@@ -51,7 +51,7 @@ function mountAlert(element: ReactElement): HTMLElement {
   return alert;
 }
 
-for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CENTRED]) {
+for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CENTERED]) {
   test(`a ${placement} failure is one alert with its sentence and Retry, whose press tries again`, () => {
     const pressed: string[] = [];
     const alert = mountAlert(
@@ -92,7 +92,7 @@ test("a failure with no Retry says its sentence alone, and offers Copy details a
   ]);
 });
 
-for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CENTRED]) {
+for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CENTERED]) {
   test(`a ${placement} failure's glyph marks it without saying anything to a reader`, () => {
     const alert = mountAlert(
       createElement(ErrorState, { placement, failure: FAILURE, children: LINE }),

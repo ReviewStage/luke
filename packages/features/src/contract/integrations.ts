@@ -2,7 +2,7 @@
  * integrations.ts -- the account's integrations (`integration-wire.ts`), as procedures.
  *
  * Where every provider stands, read or settled, and the five calls about one
- * account at a provider: a sign-in begun or cancelled, a connection ended,
+ * account at a provider: a sign-in begun or canceled, a connection ended,
  * the tools its server offers, and its name. Vercel Connect's return to the
  * browser (`/api/account/integrations/connected`) is a redirect, not a
  * procedure, and stays on its own route.

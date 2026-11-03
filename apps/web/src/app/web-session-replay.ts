@@ -10,7 +10,7 @@
  * is, and what the other tabs of this browser say.
  *
  * Each tab runs a host of its own, so an account deleted in one tab is
- * nothing its neighbours' hosts hear of until their next read finds the
+ * nothing its neighbors' hosts hear of until their next read finds the
  * session gone, and each records under the deleted account until then. The
  * tab that deleted it says so on `RECORDING_CHANNEL`, and every other tab stands its recording
  * down for the rest of its life, as the deleting tab's host does for its

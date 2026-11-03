@@ -157,7 +157,7 @@
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
-  /* How far a wash bleeds past a name's box, by a ring of its own colour. */
+  /* How far a wash bleeds past a name's box, by a ring of its own color. */
   --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
 
   --ui-dialog-confirm-width: 400px;
@@ -263,7 +263,7 @@
   --ui-scroll-band: var(--ui-space-32);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
-     edge; its colour is the palette's `--ui-color-focus-ring`. The reach is
+     edge; its color is the palette's `--ui-color-focus-ring`. The reach is
      how far the ring stands past the control's edge: a scroller pads by it,
      so the ring of a row laid edge to edge in it is not clipped. A box that
      clips what it holds keeps the ring whole one of two ways. One whose clip
@@ -415,7 +415,7 @@
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
-  /* How far a wash bleeds past a name's box, by a ring of its own colour. */
+  /* How far a wash bleeds past a name's box, by a ring of its own color. */
   --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
 
   --ui-dialog-confirm-width: 400px;
@@ -520,7 +520,7 @@
   --ui-scroll-band: var(--ui-space-32);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
-     edge; its colour is the palette's `--ui-color-focus-ring`. The reach is
+     edge; its color is the palette's `--ui-color-focus-ring`. The reach is
      how far the ring stands past the control's edge: a scroller pads by it,
      so the ring of a row laid edge to edge in it is not clipped. A box that
      clips what it holds keeps the ring whole one of two ways. One whose clip

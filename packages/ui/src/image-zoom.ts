@@ -2,11 +2,11 @@
  * image-zoom.ts -- a picture opened over the window, magnified and moved about as Preview's is: how far it is zoomed over the size that fits the window, where it stands, and what a pinch, a scroll, a drag, a press, or a key makes of that.
  *
  * The picture is first drawn fitted to its frame (`FITTED_VIEW`). A view is
- * a scale over that fitted size and the offset of the picture's centre from
+ * a scale over that fitted size and the offset of the picture's center from
  * the frame's, in the page's own pixels. A zoom keeps the point under the
  * pointer where it stands, as a pinch does on every Mac. A picture is never
  * moved further than to bring its edge to the frame's, so it cannot be lost
- * off a side, and one narrower than its frame along an axis stays centred
+ * off a side, and one narrower than its frame along an axis stays centered
  * along it. Nothing here reads the page: the place drawing the picture
  * measures the frame and hands it in.
  */
@@ -23,24 +23,24 @@ export interface ImageFrame {
   readonly fitted: ImageSize;
 }
 
-/** A point measured from the frame's centre, rightward and downward. */
+/** A point measured from the frame's center, rightward and downward. */
 export interface FramePoint {
   readonly x: number;
   readonly y: number;
 }
 
-/** How far the picture is zoomed over its fitted size, and how far its centre stands from the frame's. */
+/** How far the picture is zoomed over its fitted size, and how far its center stands from the frame's. */
 export interface ImageView {
   readonly scale: number;
   readonly x: number;
   readonly y: number;
 }
 
-/** The picture fitted to its frame and centred in it, as it opens. */
+/** The picture fitted to its frame and centered in it, as it opens. */
 export const FITTED_VIEW: ImageView = { scale: 1, x: 0, y: 0 };
 
-/** The frame's centre, where a key's or a button's zoom is taken about. */
-export const FRAME_CENTRE: FramePoint = { x: 0, y: 0 };
+/** The frame's center, where a key's or a button's zoom is taken about. */
+export const FRAME_CENTER: FramePoint = { x: 0, y: 0 };
 
 /** How far each way of zooming goes. */
 export const IMAGE_ZOOM = {
@@ -59,12 +59,12 @@ export const IMAGE_ZOOM = {
 /** Note that a scale this close to fitted is fitted, because an exponential pinch out never quite lands on one. */
 const FITTED_SLACK = 0.01;
 
-/** `value` held between `least` and `most`, with no negative zero, so a centred picture's offset reads 0. */
+/** `value` held between `least` and `most`, with no negative zero, so a centered picture's offset reads 0. */
 function clamp(value: number, least: number, most: number): number {
   return Math.min(most, Math.max(least, value)) + 0;
 }
 
-/** How far the picture's centre may stand from the frame's along one axis at `scale`: none where it fits. */
+/** How far the picture's center may stand from the frame's along one axis at `scale`: none where it fits. */
 function slack(fitted: number, frame: number, scale: number): number {
   return Math.max(0, (fitted * scale - frame) / 2);
 }
@@ -108,9 +108,9 @@ export function zoomedByWheel(
   return zoomedTo(view, frame, view.scale * Math.exp(-counted * IMAGE_ZOOM.PER_WHEEL_PIXEL), at);
 }
 
-/** `view` zoomed one step in (`1`) or out (`-1`) about the frame's centre. */
+/** `view` zoomed one step in (`1`) or out (`-1`) about the frame's center. */
 export function zoomedByStep(view: ImageView, frame: ImageFrame, direction: 1 | -1): ImageView {
-  return zoomedTo(view, frame, view.scale * IMAGE_ZOOM.STEP ** direction, FRAME_CENTRE);
+  return zoomedTo(view, frame, view.scale * IMAGE_ZOOM.STEP ** direction, FRAME_CENTER);
 }
 
 /** `view` moved by `dx` and `dy` pixels, as a drag or a two-finger scroll moves it, no further than its edges. */

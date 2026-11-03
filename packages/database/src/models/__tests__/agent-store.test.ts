@@ -2142,9 +2142,9 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
 
         const beforeAnyTurn = yield* readNativeRunStanding(claude.id);
         yield* turnOf(claude.conversationId, TURN_STATUS.SETTLED, settledAt);
-        yield* turnOf(codex.conversationId, TURN_STATUS.CANCELLED, settledAt);
+        yield* turnOf(codex.conversationId, TURN_STATUS.CANCELED, settledAt);
         const ended = yield* readNativeRunStanding(claude.id);
-        const cancelled = yield* readNativeRunStanding(codex.id);
+        const canceled = yield* readNativeRunStanding(codex.id);
         yield* turnOf(
           claude.conversationId,
           TURN_STATUS.RUNNING,
@@ -2162,7 +2162,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           userId: starter,
           endedAt: settledAt,
         });
-        assert.deepEqual(Option.getOrThrow(cancelled), {
+        assert.deepEqual(Option.getOrThrow(canceled), {
           conversationId: codex.conversationId,
           userId: starter,
           endedAt: settledAt,

@@ -1,5 +1,5 @@
 /**
- * diff-view.ts -- the words every diff is drawn by: its layout, how a changed line is marked and what of it, the type it is set in and how tall, and the syntax themes it may be coloured in, each with the name a control shows it by.
+ * diff-view.ts -- the words every diff is drawn by: its layout, how a changed line is marked and what of it, the type it is set in and how tall, and the syntax themes it may be colored in, each with the name a control shows it by.
  *
  * Settings stores each as an app setting (`schema.ts`), and the desktop's
  * diff bundle draws by them, so they stand here, in a door that imports
@@ -50,7 +50,7 @@ export const DIFF_LINE_HEIGHT = {
 } as const;
 
 /**
- * The syntax themes a diff may be coloured in, by Shiki's name and its own,
+ * The syntax themes a diff may be colored in, by Shiki's name and its own,
  * each appearance's apart, as Shiki's bundled themes and Pierre's two are;
  * the bundle fetches the one chosen as a chunk of its own.
  */

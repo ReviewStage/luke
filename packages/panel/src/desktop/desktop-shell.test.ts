@@ -369,7 +369,7 @@ function mountLoadingNarrow(
   return { page: container, went };
 }
 
-test("on a phone, while Settings is still loading, its list and its page stand headed as they will be: the way out or back, and the title centred", () => {
+test("on a phone, while Settings is still loading, its list and its page stand headed as they will be: the way out or back, and the title centered", () => {
   const list = mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, true);
   assert.deepEqual(readPhoneHead(list.page, "settings-pages"), {
     start: ["Back"],
@@ -386,7 +386,7 @@ test("on a phone, while Settings is still loading, its list and its page stand h
   assert.deepEqual(page.went, ["list"]);
 });
 
-test("on a phone, while the account's access is read, Admin stands headed as it will be, its name centred over the bar of its sections", () => {
+test("on a phone, while the account's access is read, Admin stands headed as it will be, its name centered over the bar of its sections", () => {
   handState({}, { access: { admin: false, pending: true } });
   const adminView = { ...tasksControl().adminView, open: true };
   const { page } = mountLoadingNarrow(PANEL_TAB.TASKS, { adminView }, true);

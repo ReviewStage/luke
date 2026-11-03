@@ -9,7 +9,7 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
-import { selectableListBehaviour } from "@repo/ui/testing/selectable-list";
+import { selectableListBehavior } from "@repo/ui/testing/selectable-list";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -121,4 +121,4 @@ function mount() {
   };
 }
 
-selectableListBehaviour("INBOX", { mount });
+selectableListBehavior("INBOX", { mount });

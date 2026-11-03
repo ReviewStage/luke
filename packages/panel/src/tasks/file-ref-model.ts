@@ -44,7 +44,7 @@ export function copiedLines(code: SnippetLines): string {
   return kept.join("\n");
 }
 
-/** A file's name, the last part of its path, as its tab is labelled. */
+/** A file's name, the last part of its path, as its tab is labeled. */
 export function fileName(path: string): string {
   return path.split("/").at(-1) ?? path;
 }

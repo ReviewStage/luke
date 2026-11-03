@@ -14,7 +14,7 @@ import {
 import { pullRequestNumberLabel, pullRequestPillLabel } from "./agent-model.js";
 
 /**
- * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's colour for it, whatever its checks say.
+ * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's color for it, whatever its checks say.
  *
  * A pull request is drawn on a sidebar task's row and its card, on the
  * row pinned over its agent's box, and on its Changes tab's card. Each
@@ -23,16 +23,16 @@ import { pullRequestNumberLabel, pullRequestPillLabel } from "./agent-model.js";
  * muted ink, merged in the merged purple, and closed in the danger red. An
  * open one GitHub holds in its merge queue is drawn as its Pull request
  * tab's pill draws it: the merge's glyph in the attention orange, said queued,
- * so its words, not its colour alone, tell it from a merged one.
- * Its checks never change its colour: failed checks are said in its words
+ * so its words, not its color alone, tell it from a merged one.
+ * Its checks never change its color: failed checks are said in its words
  * for a reader who cannot see it, and drawn where the checks themselves
  * are. Its glyph is `@repo/ui`'s (`pull-request-glyph.ts`), which a task's
- * status icon draws too. The colour is the stylesheet's, keyed on
+ * status icon draws too. The color is the stylesheet's, keyed on
  * `data-pull-request-state` (`tasks.css`); a chip naming the pull request
  * says the same in the shared palette's tone for it (`PULL_REQUEST_TONE`).
  */
 
-/** The chip tone a pull request is named in for where it stands: GitHub's colour for it, in the shared palette. */
+/** The chip tone a pull request is named in for where it stands: GitHub's color for it, in the shared palette. */
 export const PULL_REQUEST_TONE = {
   [PULL_REQUEST_STATE.OPEN]: STATUS_TONE.COMPLETE,
   [PULL_REQUEST_STATE.DRAFT]: STATUS_TONE.NEUTRAL,
@@ -56,7 +56,7 @@ function pullRequestMarkLabel(pullRequest: PullRequestMarked): string {
   return `${standing}${failing ? CHECKS_FAILING_WORDS : ""}`;
 }
 
-/** A pull request's mark: its glyph for where it stands, coloured for it alone, and named for a reader who cannot see it. */
+/** A pull request's mark: its glyph for where it stands, colored for it alone, and named for a reader who cannot see it. */
 export function PullRequestMark({
   pullRequest,
   className,

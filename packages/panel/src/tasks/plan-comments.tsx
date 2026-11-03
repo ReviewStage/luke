@@ -155,7 +155,7 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { centreWithin } from "../scroll-within.js";
+import { centerWithin } from "../scroll-within.js";
 import { type SendQueue, useSendQueue } from "../send-queue.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { useAttachedFiles } from "../use-attached-files.js";
@@ -1898,7 +1898,7 @@ function topIn(body: HTMLElement, element: Element): number {
 
 /**
  * Where the middle of the first line `element`'s words stand on, in the plan
- * body's own box: a count or a block's button stands centred on it, so it
+ * body's own box: a count or a block's button stands centered on it, so it
  * reads as that line's whether the words go on past it or not. Note that the
  * element holding the first words is measured: an inline one by the first
  * of its line boxes, and a block by its top and half its line, because a
@@ -2023,7 +2023,7 @@ export function PlanCommentLayer({
   const [cardRoom, setCardRoom] = useState<number | undefined>(undefined);
   // Where each thread's words stand, which a fold's counts stand level with.
   const [anchors, setAnchors] = useState<ReadonlyMap<string, number>>(new Map());
-  // The middle of the first line each thread's words stand on, which its count is centred on.
+  // The middle of the first line each thread's words stand on, which its count is centered on.
   const [lines, setLines] = useState<ReadonlyMap<string, number>>(new Map());
   const [hovered, setHovered] = useState<
     { top: number; middle: number; start: () => void } | undefined
@@ -2067,7 +2067,7 @@ export function PlanCommentLayer({
     wide,
   );
 
-  // The margin folds where the scroller has no room for it beside the reading width. Note that the column stands centred, so the margin's room must stand on both its sides, or the card runs past the scroller's edge.
+  // The margin folds where the scroller has no room for it beside the reading width. Note that the column stands centered, so the margin's room must stand on both its sides, or the card runs past the scroller's edge.
   useEffect(() => {
     const element = scroller.current;
     if (element === null) return;
@@ -2799,7 +2799,7 @@ function ThreadList({
       {control.failed ? (
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
-          placement={ERROR_STATE_PLACEMENT.CENTRED}
+          placement={ERROR_STATE_PLACEMENT.CENTERED}
           onRetry={control.onRetry}
         >
           The comments could not be read.
@@ -3047,7 +3047,7 @@ export function PageComments({
   useLayoutEffect(() => {
     const card = list.current?.querySelector<HTMLElement>(`.comment-card[data-thread="${first}"]`);
     if (first === undefined || list.current === null || card === null || card === undefined) return;
-    centreWithin(list.current, card);
+    centerWithin(list.current, card);
   }, [first]);
   return (
     <Fill className="page-comments relative h-full">
@@ -3060,7 +3060,7 @@ export function PageComments({
             {control.failed ? (
               <ErrorState
                 failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
-                placement={ERROR_STATE_PLACEMENT.CENTRED}
+                placement={ERROR_STATE_PLACEMENT.CENTERED}
                 onRetry={control.onRetry}
               >
                 The comments could not be read.

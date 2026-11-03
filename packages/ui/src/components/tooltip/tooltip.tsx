@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent } from "../../shadcn/tooltip.js";
 /**
  * tooltip.tsx -- a hover hint as it is drawn: a small dark pill naming a control and its shortcut, or a light card saying more, hung beside the control it names.
  *
- * A pill hangs centred below its control and turns above it where the
+ * A pill hangs centered below its control and turns above it where the
  * window ends, so it never covers what it names; a card hangs from the
  * control's start the same way, or beside it, past its end or before its
  * start where the window ends, as a list row's card hangs so it covers none

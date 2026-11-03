@@ -27,7 +27,7 @@ declare global {
 interface Idle {
   readonly run: () => void;
   readonly timeout: number | undefined;
-  cancelled: boolean;
+  canceled: boolean;
 }
 
 let idle: Idle[] = [];
@@ -44,13 +44,13 @@ beforeEach(() => {
   vi.stubGlobal(
     "requestIdleCallback",
     (run: () => void, options?: { timeout?: number }): number => {
-      idle.push({ run, timeout: options?.timeout, cancelled: false });
+      idle.push({ run, timeout: options?.timeout, canceled: false });
       return idle.length - 1;
     },
   );
   vi.stubGlobal("cancelIdleCallback", (handle: number) => {
     const each = idle[handle];
-    if (each) each.cancelled = true;
+    if (each) each.canceled = true;
   });
   // SAFETY: only the capability under test is answered; nothing here reads another.
   uninstall = installAppPlatform({
@@ -105,7 +105,7 @@ function delivery(sessionReplay: AppStateSnapshot["sessionReplay"]): AppStateSna
 /** The renderer going idle: every callback standing runs. */
 function goIdle(): void {
   act(() => {
-    for (const each of idle.filter((one) => !one.cancelled)) each.run();
+    for (const each of idle.filter((one) => !one.canceled)) each.run();
   });
 }
 
@@ -166,7 +166,7 @@ test("leaving before the renderer is idle starts nothing", () => {
 
   assert.deepEqual(heard, []);
   assert.equal(editorImports, 0);
-  assert.ok(idle.length > 0 && idle.every((each) => each.cancelled));
+  assert.ok(idle.length > 0 && idle.every((each) => each.canceled));
 });
 
 test("a browser with no requestIdleCallback starts the work after a frame has painted, or at once in a hidden tab", async () => {

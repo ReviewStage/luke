@@ -378,7 +378,7 @@ export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
   return refusedAs(unparsedWire(refusal), START_REFUSALS);
 }
 
-/** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried travelled as. */
+/** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried traveled as. */
 const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
 /** A served file's bytes in base64 under its type: a picture, a recording, or a file an inbox answer carried or a queued message holds; unanswered under any other type. */
@@ -429,7 +429,7 @@ function pullRequestRead(agentId: string, number: number | undefined) {
 /**
  * The refusal a hosted failure is, where it is one the caller names, with
  * the fields that refusal carries; unanswered for everything else, with the
- * failure beneath it and the trace its call travelled under, which the
+ * failure beneath it and the trace its call traveled under, which the
  * window reports and never draws.
  */
 function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {

@@ -81,7 +81,7 @@ const INVITE_PATH = "src/members/invite.ts";
 /** The line of `invite.ts` the decision is about. */
 const TTL_LINE = 6;
 
-/** The colours the host's highlighter gives TypeScript, in GitHub's dark and light themes. */
+/** The colors the host's highlighter gives TypeScript, in GitHub's dark and light themes. */
 const KEYWORD = { color: "#ff7b72", lightColor: "#cf222e" } as const;
 const FUNCTION = { color: "#d2a8ff", lightColor: "#8250df" } as const;
 const STRING = { color: "#a5d6ff", lightColor: "#0a3069" } as const;
@@ -93,12 +93,12 @@ function line(...runs: readonly (string | CodeToken)[]): CodeToken[] {
   return runs.map((part) => (typeof part === "string" ? { text: part } : part));
 }
 
-/** One coloured run. */
-function run(text: string, colours: Omit<CodeToken, "text">): CodeToken {
-  return { text, ...colours };
+/** One colored run. */
+function run(text: string, colors: Omit<CodeToken, "text">): CodeToken {
+  return { text, ...colors };
 }
 
-/** `src/members/invite.ts` as it stood at {@link INVITE_SHA}, every line coloured. */
+/** `src/members/invite.ts` as it stood at {@link INVITE_SHA}, every line colored. */
 const INVITE_FILE: readonly CodeToken[][] = [
   line(run("import", KEYWORD), " { db } ", run("from", KEYWORD), " ", run('"../db"', STRING), ";"),
   line(

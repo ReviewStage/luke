@@ -16,7 +16,7 @@ import { Kbd, KbdGroup } from "../../shadcn/kbd.js";
  * chord reads the same wherever it is met. A place says only how big and how
  * loud (`--ui-shortcut-text`, `--ui-shortcut-ink`), never draws it some
  * other way. Each key is a glyph of its own (`ui-shortcut-glyph`), so the
- * stylesheet can set a modifier and a letter on one line and centre the
+ * stylesheet can set a modifier and a letter on one line and center the
  * chord on the words beside it. Where the window's command key is Ctrl, in a
  * browser on Windows or Linux (`COMMAND_KEY`), the modifiers are words, and
  * words set tight would run together, so the chord says so (`data-words`)

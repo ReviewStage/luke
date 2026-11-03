@@ -5,7 +5,7 @@ import type { FileMark } from "./contract.js";
  * row-marks.ts -- what a pull request's file row says at its end, past what became of it: its review threads, the lines it adds and removes, and its Viewed toggle, as stage-cli's tree draws them; and the sheet the tree draws them by.
  *
  * Pierre draws one decoration in each row's lane, a run of words in the
- * colours given, so a file's are drawn as one run of five parts in a fixed
+ * colors given, so a file's are drawn as one run of five parts in a fixed
  * order (`PART`): a speech mark and the count of the threads standing on
  * it; the lines it adds; the lines it removes; and its Viewed toggle. A
  * part with nothing to say holds no words, and the sheet draws no room for
@@ -35,7 +35,7 @@ import type { FileMark } from "./contract.js";
  * folder first, the same way.
  *
  * The toggle is a control a reader can find and press: Pierre draws each
- * part as a bare span with only its colour, so the tree names every toggle
+ * part as a bare span with only its color, so the tree names every toggle
  * after each drawing, as a checkbox named Viewed, checked once the file is
  * viewed (`nameToggles`), and a press on it, a reader's own among them, is
  * heard by the tree (`pressedToggle`).
@@ -70,8 +70,8 @@ const MARK_WORDS = {
     `${additions} ${additions === 1 ? "line" : "lines"} added, ${deletions} removed`,
 } as const;
 
-/** The colour each part is drawn in, the panel's own, which the tree's shadow root inherits. */
-const PART_COLOUR = {
+/** The color each part is drawn in, the panel's own, which the tree's shadow root inherits. */
+const PART_COLOR = {
   THREADS: "var(--ui-color-text-muted)",
   ADDED: "var(--ui-color-complete)",
   REMOVED: "var(--ui-color-danger-text)",
@@ -132,7 +132,7 @@ const OPEN_ROW = '[data-type="item"][data-item-selected="true"]';
 /**
  * The rules the tree draws by: the open file's row lifted by a hairline and
  * a soft shadow over the ground the host gives it, as `@repo/ui`'s ListRow
- * draws a list's open row; a cut name's fade at its end; the window's thin scrollbar, whose colour
+ * draws a list's open row; a cut name's fade at its end; the window's thin scrollbar, whose color
  * inherits into Pierre's shadow root and whose width does not, so it is set
  * here on the scroller and on the box Pierre measures that scroller's
  * gutter from; and each file's run.
@@ -235,15 +235,15 @@ export function rowDecoration(mark: FileMark | undefined): FileTreeRowDecoration
   const deletions = mark.lines?.deletions ?? 0;
   // Note that the speech mark holds no words: the sheet draws it beside a count.
   const parts = [
-    { text: "", color: PART_COLOUR.THREADS },
-    { text: counted(threads, ""), color: PART_COLOUR.THREADS },
-    { text: counted(additions, "+"), color: PART_COLOUR.ADDED },
-    { text: counted(deletions, "−"), color: PART_COLOUR.REMOVED },
+    { text: "", color: PART_COLOR.THREADS },
+    { text: counted(threads, ""), color: PART_COLOR.THREADS },
+    { text: counted(additions, "+"), color: PART_COLOR.ADDED },
+    { text: counted(deletions, "−"), color: PART_COLOR.REMOVED },
   ];
   if (viewed !== undefined) {
     parts.push({
       text: viewed ? MARK_WORDS.VIEWED : "",
-      color: viewed ? PART_COLOUR.VIEWED : PART_COLOUR.UNVIEWED,
+      color: viewed ? PART_COLOR.VIEWED : PART_COLOR.UNVIEWED,
     });
   }
   const said = [

@@ -78,7 +78,7 @@ function patchLines(mark: string, words: string | undefined): readonly string[] 
   return lines.map((line) => `${mark}${line}`);
 }
 
-/** A change to one file as `apply_patch` spells it, which the edit renderer reads its file and its coloured lines from. */
+/** A change to one file as `apply_patch` spells it, which the edit renderer reads its file and its colored lines from. */
 function patchOf(path: string, hunk: string, removed: readonly string[], added: readonly string[]) {
   return [`*** Update File: ${path}`, hunk, ...removed, ...added].join("\n");
 }
@@ -253,7 +253,7 @@ function codexFilePatch(change: WireValue): readonly string[] {
   ];
 }
 
-/** A Codex file change's files as one `apply_patch`, which the edit renderer reads each file and its coloured lines from. */
+/** A Codex file change's files as one `apply_patch`, which the edit renderer reads each file and its colored lines from. */
 function codexPatch(input: WireValue | undefined): WireValue | undefined {
   const changes = isRecord(input) ? input.changes : undefined;
   if (!Array.isArray(changes)) return input;

@@ -62,7 +62,7 @@ import { CODER } from "./bounds.js";
  * a task's are.
  * So does the newest run of each of the account's own automations that
  * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
- * is what its owner is told of whichever plan is open; a run ageing out of
+ * is what its owner is told of whichever plan is open; a run aging out of
  * that window is a change no write makes, so it shows at the hold's end.
  * An agent's inbox is held on the agent's topic as a task's is on the
  * task's (`agentInboxLive`).

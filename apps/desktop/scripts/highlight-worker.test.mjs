@@ -9,7 +9,7 @@ import { test } from "vitest";
 /**
  * Pierre's worker is handed every grammar and theme it highlights with by
  * the window's thread, yet bundled as written it carried all of Shiki's
- * grammars and every theme catalogue, 10.5 MB, as text inside the diff
+ * grammars and every theme catalog, 10.5 MB, as text inside the diff
  * bundle, which the window parsed the first time a diff was drawn. This
  * bundles the worker as the build table says and reads what it was made of.
  */

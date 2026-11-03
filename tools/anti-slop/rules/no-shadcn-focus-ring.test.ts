@@ -25,7 +25,7 @@ tester.run("no-shadcn-focus-ring", noShadcnFocusRingRule, {
       code: 'const box = "h-control rounded-control border-input bg-transparent";',
       filename: SHADCN_FILE,
     },
-    // A ring's colour or offset alone draws no ring, and a name merely holding the words is no utility.
+    // A ring's color or offset alone draws no ring, and a name merely holding the words is no utility.
     {
       code: 'const box = "ring-offset-background focus-visible:ring-offset-2 my-ring-1x";',
       filename: SHADCN_FILE,

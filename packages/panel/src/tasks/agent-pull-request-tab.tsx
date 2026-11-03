@@ -297,7 +297,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * while some files are viewed (`linesOf`); who opened it and when, as the Changes tab
  * names them (`pull-request-people.tsx`), with its reviewers' first faces
  * wearing where each stands, the reviewer and label pickers, and its labels
- * in their GitHub colours (`pull-request-labels.tsx`) at the line's end, so
+ * in their GitHub colors (`pull-request-labels.tsx`) at the line's end, so
  * a pull request with no labels spends no line on them. Under it, a row of
  * tabs ending in Review, merged or closed too, as GitHub takes a review
  * then (`pull-request-review.tsx`), each tab its glyph, its name, and a quiet
@@ -309,7 +309,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * and any other drawn as its link, as ReviewStage/stage draws them; Checks, its head's deployments, the newest of each
  * environment, each opening the address it serves, over every check on its
  * head, those that failed first, then those still running, each opening
- * its page, counted in the colour of how they went; Chapters
+ * its page, counted in the color of how they went; Chapters
  * (`agent-chapters-tab.tsx`), its diff told as chapters to review in order,
  * each over its own hunks in Files changed's list, its count saying
  * where they stand: being made, failed, out of date, or how many, and how
@@ -511,7 +511,7 @@ const CHECK_ORDER: readonly CheckState[] = [
 const CHECK_AVATAR_PIXELS = 16;
 const CHECK_AVATAR_DENSITY = 2;
 
-/** The least a check must have run to say how long: a skipped or neutral check, or one cancelled before it began, ran for none. */
+/** The least a check must have run to say how long: a skipped or neutral check, or one canceled before it began, ran for none. */
 const RAN_AT_LEAST_MS = 1_000;
 
 /** How long a check ran, as a working count says it ("42s", "3m 5s", "1h 2m"); none for one still running, never timed, or that ran for no time. */
@@ -2068,7 +2068,7 @@ const SUMMARY_TONES = {
   [CHECK_SUMMARY.NONE]: STATUS_TONE.NEUTRAL,
 } as const satisfies Record<CheckSummary, StatusTone>;
 
-/** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
+/** What the Checks tab counts: how they went in its color from the first frame, and how many once read; nothing where neither stands. */
 function checksCount(
   summary: CheckSummary,
   count: number | undefined,
@@ -2566,12 +2566,12 @@ interface ThreadJump {
 /**
  * A card brought into sight in the Conversation's own scroller, never by
  * `scrollIntoView`, which would scroll every box around it (panel
- * AGENTS.md): centred in the room under the heading stuck at the scroller's
+ * AGENTS.md): centered in the room under the heading stuck at the scroller's
  * top and the fade beneath it, which the scroller's own scroll padding
  * clears, and, where it is taller than that room, its top standing just
  * under them rather than behind the heading.
  */
-function centreCard(card: HTMLElement): void {
+function centerCard(card: HTMLElement): void {
   const scroller = scrollerOf(card);
   if (scroller === undefined) return;
   const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
@@ -2579,8 +2579,8 @@ function centreCard(card: HTMLElement): void {
   const box = scroller.getBoundingClientRect();
   const at = card.getBoundingClientRect();
   const top = box.top + clear;
-  const centred = at.top + at.height / 2 - (top + (box.height - clear) / 2);
-  scroller.scrollTop += Math.min(centred, at.top - top);
+  const centered = at.top + at.height / 2 - (top + (box.height - clear) / 2);
+  scroller.scrollTop += Math.min(centered, at.top - top);
 }
 
 /**
@@ -2666,7 +2666,7 @@ function useThreadJumps(input: {
       ? {
           target: target.id,
           ask: jump.ask,
-          scroll: centreCard,
+          scroll: centerCard,
           onLanded: letGo,
           onFaded: () => undefined,
         }
@@ -2755,7 +2755,7 @@ function useConversationAnchors(input: {
       : {
           target: entry.url,
           ask: entry.ask,
-          scroll: centreCard,
+          scroll: centerCard,
           onLanded: (ask: number) => setEntry((was) => (was?.ask === ask ? undefined : was)),
           onFaded: () => undefined,
         };

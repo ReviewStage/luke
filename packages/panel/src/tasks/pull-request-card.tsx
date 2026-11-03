@@ -61,7 +61,7 @@ import {
  * one. One note says its size and checks, `+120 −14 in 3 files · Checks
  * passing · 7 comments · 1 commit`, each piece where known; its branches
  * stand as inline code, `main ← fix`, and every label as a badge wearing
- * a dot of its own colour, since GitHub lets a label be any colour, a
+ * a dot of its own color, since GitHub lets a label be any color, a
  * dark one among them, which the card's words could not be read in. Who
  * opened it is the provenance row every card draws, their face as its glyph,
  * "Opened by octo-dev · 3d ago", and where one of the window's agents

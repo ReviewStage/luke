@@ -37,14 +37,14 @@ import {
  *
  * Beside the model chip stands a small ring, the way Claude Code and
  * Cursor draw one, filled with the share of the window the agent's newest
- * step read and coloured by how near eve's compaction that is
+ * step read and colored by how near eve's compaction that is
  * (`agent-context-model.ts`); its hover says the share in words. A press
  * opens a popover right above the ring, the model menu's width, from the
  * ring's trailing edge as the model menu hangs from its chip, since both
  * stand at the foot's right (`@repo/ui`'s `AnchoredPopover` and
  * `PopoverPanel`). It says the
  * share and the total, draws the parts on one segmented bar, names each
- * part with its count beside a square of its colour, and under them the
+ * part with its count beside a square of its color, and under them the
  * cache, the step's answer, where eve compacts, and when it last did. The
  * ring stands only once a step has ended, since there is nothing to fill
  * it before. The popover closes on its ×, on Escape, which stops there so
@@ -62,7 +62,7 @@ const LEVEL_TONE = {
   [CONTEXT_LEVEL.OVER]: PROGRESS_RING_TONE.DANGER,
 } as const satisfies Record<ContextLevel, ProgressRingTone>;
 
-/** Each part of the context's one colour, on the bar and on its legend row's square. */
+/** Each part of the context's one color, on the bar and on its legend row's square. */
 const PART_GROUND = {
   [CONTEXT_PART.SYSTEM_PROMPT]: "bg-chart-2",
   [CONTEXT_PART.TOOL_DEFINITIONS]: "bg-chart-1",

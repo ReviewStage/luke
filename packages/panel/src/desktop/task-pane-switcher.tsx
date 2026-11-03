@@ -30,7 +30,7 @@ import { PhoneHead } from "./phone-head.js";
  * The row is a phone's standard header and holds nothing else: the way back,
  * its glyph alone, is named for where it goes, the list the task was opened
  * from on the task's own views, or Activity on a tab chosen there; the
- * title, centred between the two corners, names the task, or the tab shown;
+ * title, centered between the two corners, names the task, or the tab shown;
  * and the ⋯ holds the views as a checked group, then the menu of what is on
  * screen: the task's own on the Plan view (`task-actions.tsx`), the chosen
  * agent's on Agents (`agent-actions.tsx`), and the tab's on one chosen from
@@ -111,7 +111,7 @@ interface TaskHeadRename {
 /**
  * The row heading a task on a phone; see the module's head. It is a phone's
  * header (`phone-head.tsx`): the way back at its start, the ⋯ at its end,
- * and the title centred between them.
+ * and the title centered between them.
  */
 export function TaskHead({
   back,

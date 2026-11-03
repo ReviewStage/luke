@@ -630,7 +630,7 @@ function workspaceTaskRows(
 }
 
 /**
- * Each agent's row as every agent menu draws it (`agentMenuRow`), labelled
+ * Each agent's row as every agent menu draws it (`agentMenuRow`), labeled
  * and found by its task: the plan's own agents first, then the workspace's
  * others in the order read, each once, an archived one only once a word is
  * typed, and the agent whose box it is left out.
@@ -745,7 +745,7 @@ function threadRows(
 
 /**
  * Each of the place's pull requests' rows, its task's or its agent's on no
- * task, by its number and title, wearing its mark, labelled by the agent
+ * task, by its number and title, wearing its mark, labeled by the agent
  * that published it: a pick writes its GitHub address, as a pull request's
  * link pasted is written.
  */

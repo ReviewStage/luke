@@ -162,7 +162,7 @@ export const githubPullRequestSummarySchema = EffectSchema.Struct({
   /** The branch it merges into, and the branch it merges from. */
   baseRef: EffectSchema.optionalKey(EffectSchema.String),
   headRef: EffectSchema.optionalKey(EffectSchema.String),
-  /** Its labels, each by its name and its colour as GitHub's six hex digits with no `#`. */
+  /** Its labels, each by its name and its color as GitHub's six hex digits with no `#`. */
   labels: EffectSchema.optionalKey(
     EffectSchema.Array(
       EffectSchema.Struct({ name: EffectSchema.String, color: EffectSchema.String }),
@@ -192,7 +192,7 @@ export type GitHubRepositoryPullRequestAnswer = typeof githubRepositoryPullReque
 /**
  * Where an issue stands, as GitHub draws its mark: open, closed as done,
  * or closed as not planned, which a duplicate is closed as too, under the
- * same grey mark.
+ * same gray mark.
  */
 export const ISSUE_STATE = {
   OPEN: "open",

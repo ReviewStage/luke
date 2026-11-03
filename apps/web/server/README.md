@@ -401,7 +401,7 @@ sweep is called in process on the cron's cadence under `CRON_SECRET`.
 It refuses to start beside any `VERCEL*` variable or over a database host off
 the loopback (`@repo/service/local/local-server-guard`), and imports no route
 until it has, because the auth service reads the environment as it loads. It
-sets `APP_LOCAL_DEMO` for the routes it mounts, which the service honours only
+sets `APP_LOCAL_DEMO` for the routes it mounts, which the service honors only
 where the same guard passes over its own environment
 (`@repo/service/local/local-demo`): there a Start on a task with no repository
 runs where its agents run on a host. Where
@@ -779,7 +779,7 @@ answers the plugin's profile-return endpoint (`/callback/:id/oauth-proxy`),
 which creates a session from any profile encrypted with that secret, so the
 secret every Preview holds can mint production sessions; and production relays
 a profile and its provider tokens to whatever return the encrypted proxy state
-names. Both were accepted on 2026-10-13 in favour of running the
+names. Both were accepted on 2026-10-13 in favor of running the
 plugin as Better Auth prescribes. Treat the proxy secret as sensitive everywhere
 it is stored, especially in Preview.
 
@@ -818,7 +818,7 @@ goes. It is a private endpoint, so it takes a personal key rather than the proje
 token, and `POSTHOG_API_HOST` overrides *its* host, which is not the ingestion
 host. Without that pair the delete simply has no erasure seam to run. Every
 forwarded event carries `$geoip_disable`, without which an event arriving with
-no address resolves to the data centre's own location and the privacy claim in
+no address resolves to the data center's own location and the privacy claim in
 `PRIVACY.md` becomes false; the project's IP-capture setting should be set to
 discard as well, so the guarantee does not rest on one property in one file.
 

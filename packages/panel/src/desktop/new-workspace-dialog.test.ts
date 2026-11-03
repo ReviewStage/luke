@@ -8,7 +8,7 @@ import { type NewWorkspaceAsk, useNewWorkspaceDialog } from "./new-workspace-dia
 
 /**
  * new-workspace-dialog.test.ts -- New workspace is a form, not a confirm: a
- * dialog whose one field is labelled, whose Create workspace waits on a name,
+ * dialog whose one field is labeled, whose Create workspace waits on a name,
  * and which Enter submits and Escape cancels.
  */
 
@@ -66,7 +66,7 @@ function press(element: Element, key: string): void {
   });
 }
 
-test("New workspace is a labelled form whose Create waits on a name, and Enter submits it", async () => {
+test("New workspace is a labeled form whose Create waits on a name, and Enter submits it", async () => {
   const created: string[] = [];
   mounted(created)();
   assert.equal(card()?.getAttribute("role"), "dialog", "a form is a dialog, not an alert");

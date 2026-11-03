@@ -56,7 +56,7 @@ import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js"
  * saying Queued and its place, as stage-cli's does, one with auto-merge on
  * no chip of its own, Disable auto-merge saying it is on, and one held up by
  * its checks alone no chip, since the Checks tab under the
- * header says how they went in its glyph and its colour. A narrow header draws the chip's glyph alone,
+ * header says how they went in its glyph and its color. A narrow header draws the chip's glyph alone,
  * its word still read.
  *
  * The press is the one thing that may be done from where the pull request

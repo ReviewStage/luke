@@ -75,7 +75,7 @@ async function opened(
   cut: { cuts: boolean; takes?: string | undefined } = { cuts: false },
 ) {
   const ended: { words: string; files: readonly AgentAttachment[] }[] = [];
-  let cancelled = 0;
+  let canceled = 0;
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -95,7 +95,7 @@ async function opened(
               doors: { openGitHub: () => undefined, copy: () => undefined },
               ...cut,
               onCancel: () => {
-                cancelled += 1;
+                canceled += 1;
               },
               onSend: (words, files) => ended.push({ words, files }),
             },
@@ -110,7 +110,7 @@ async function opened(
       (each) => each.textContent === name || each.getAttribute("aria-label") === name,
     );
   const close = () => act(() => root.unmount());
-  return { container, ended, cancelled: () => cancelled, button, close };
+  return { container, ended, canceled: () => canceled, button, close };
 }
 
 test("it opens on the line's words and the file it carried, and Send hands on what it then holds", async () => {
@@ -137,7 +137,7 @@ test("Cancel and Escape close it and send nothing", async () => {
   act(() => cancel.click());
   pressInComposer(box.container, "Escape");
 
-  assert.equal(box.cancelled(), 2);
+  assert.equal(box.canceled(), 2);
   assert.deepEqual(box.ended, []);
 });
 
@@ -146,7 +146,7 @@ test("what was written is there again when Edit opens the line after an Escape, 
   const first = await opened(LINE, undefined, "Also email the inviter.", registry);
   typeInComposer(first.container, " Use their address.");
   pressInComposer(first.container, "Escape");
-  assert.equal(first.cancelled(), 1);
+  assert.equal(first.canceled(), 1);
   first.close();
 
   const again = await opened(LINE, undefined, "Also email the inviter.", registry);

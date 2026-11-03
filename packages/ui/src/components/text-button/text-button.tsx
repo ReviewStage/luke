@@ -76,7 +76,7 @@ const TEXT =
  * How many lines the words take. One is cut with an ellipsis; two wrap
  * and cut a third short, a card's name; whole, too short to want cutting
  * (a time), takes on a coarse pointer a press a finger's height, and at
- * least as wide, centred on the words, as a Button's is, its clip lifted
+ * least as wide, centered on the words, as a Button's is, its clip lifted
  * so it does not clip the press.
  */
 const TEXT_LINES = {

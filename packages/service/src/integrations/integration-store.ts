@@ -337,7 +337,7 @@ const FillSchema = Schema.Struct({
   at: Schema.Date,
 });
 
-const updateUnlabelled = SqlSchema.void({
+const updateUnlabeled = SqlSchema.void({
   Request: FillSchema,
   execute: ({ at, label, connectSubject, ...account }) =>
     Database.use((db) =>
@@ -369,7 +369,7 @@ export function fillIntegrationLabel(
 ): IntegrationStoreEffect<void> {
   const { userId, connectionName, connectSubject } = account;
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
-    updateUnlabelled({ userId, connectionName, connectSubject, label, at }),
+    updateUnlabeled({ userId, connectionName, connectSubject, label, at }),
   );
 }
 

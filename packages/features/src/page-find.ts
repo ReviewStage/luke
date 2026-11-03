@@ -91,10 +91,10 @@ export const pageFindAnswerSchema = EffectSchema.Union([
  * The script the frame runs, ahead of the page's own. It is plain JavaScript in
  * a string because it runs in the page, apart from every bundle of ours.
  * A match is the query found in the page's text read as one string, case
- * aside, where an inline element runs on into its neighbours and any other
+ * aside, where an inline element runs on into its neighbors and any other
  * sets its text apart, as the panel's own find reads a tab; what is hidden
  * (`display: none`, `hidden`) or no words (scripts, styles) is not read. The
- * tints are the panel's find colours (`palettes.css`), set by a stylesheet
+ * tints are the panel's find colors (`palettes.css`), set by a stylesheet
  * the document adopts rather than an element added to it.
  */
 const PAGE_FIND_SCRIPT = `(() => {

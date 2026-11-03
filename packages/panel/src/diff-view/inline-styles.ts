@@ -13,8 +13,8 @@ import { styleElementSheets, touchesStyle } from "../style-element-sheets.js";
  * Pierre draws a diff by writing its tree of elements as an HTML string
  * (`hast-util-to-html`'s `toHtml`) set into its shadow root, and writes
  * both: an inline style on each column (its `grid-row` span, without which
- * the gutter and the code fall out of step) and on each coloured token, and
- * a `<style>` element of the theme's colours.
+ * the gutter and the code fall out of step) and on each colored token, and
+ * a `<style>` element of the theme's colors.
  *
  * So the diff bundle answers Pierre's import of `toHtml` with this file's
  * (`scripts/build.mjs`), which writes each `style` as

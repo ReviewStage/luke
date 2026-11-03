@@ -281,7 +281,7 @@ const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function
 /**
  * The attempt as the developer, where the agent writes as them, on their
  * own token; nothing for an agent that writes as the App. A sign-in that
- * yields no token is one GitHub no longer honours, and is refused as their
+ * yields no token is one GitHub no longer honors, and is refused as their
  * token would be; any other failure to read it, the store or GitHub's
  * refresh not answering, refuses the call to be made again, so a passing
  * outage never writes the developer out of their agent. Note that the

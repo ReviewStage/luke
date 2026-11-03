@@ -82,19 +82,19 @@ export function DictateButton({
 }
 
 /** The voice as it is heard: one bar per slice of time, the newest at the right. */
-function DictationWave({ analyser }: { analyser: AnalyserNode | undefined }): React.JSX.Element {
+function DictationWave({ analyzer }: { analyzer: AnalyserNode | undefined }): React.JSX.Element {
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
   const reduced = useMotionHeld();
 
   useEffect(() => {
-    if (analyser === undefined || reduced) return;
-    const samples = new Uint8Array(analyser.fftSize);
+    if (analyzer === undefined || reduced) return;
+    const samples = new Uint8Array(analyzer.fftSize);
     const levels = Array.from({ length: BAR_COUNT }, () => 0);
     let frame = 0;
     let loudest = 0;
     let animationFrame = 0;
     const draw = () => {
-      analyser.getByteTimeDomainData(samples);
+      analyzer.getByteTimeDomainData(samples);
       loudest = Math.max(loudest, frameLevel(samples));
       frame += 1;
       if (frame % FRAMES_PER_BAR === 0) {
@@ -112,7 +112,7 @@ function DictationWave({ analyser }: { analyser: AnalyserNode | undefined }): Re
     };
     animationFrame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animationFrame);
-  }, [analyser, reduced]);
+  }, [analyzer, reduced]);
 
   return (
     <span
@@ -178,7 +178,7 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
         </span>
       ) : (
         <>
-          <DictationWave analyser={dictation.analyser} />
+          <DictationWave analyzer={dictation.analyzer} />
           <DictationClock startedAt={dictation.startedAt} />
         </>
       )}

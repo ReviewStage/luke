@@ -787,7 +787,7 @@ test("a line's count stands every thread on the line under it, the first open", 
   );
 });
 
-test("a line's count stands centred on the first line its words stand on, though they wrap onto the next", () => {
+test("a line's count stands centered on the first line its words stand on, though they wrap onto the next", () => {
   // Note that jsdom lays nothing out, so the marked words are given two line boxes 22px apart, the body at the page's top.
   const lines = Object.getOwnPropertyDescriptor(Element.prototype, "getClientRects");
   Element.prototype.getClientRects = function (this: Element) {
@@ -2083,7 +2083,7 @@ test("an edit emptied and saved asks to delete the comment, and only the confirm
   ]);
 });
 
-test("a scroller with room for the reading width and one margin, but not one on each side of the centred column, folds its threads to counts rather than running a card past its edge", () => {
+test("a scroller with room for the reading width and one margin, but not one on each side of the centered column, folds its threads to counts rather than running a card past its edge", () => {
   const { container } = wide(() => drawn("page"), 1200);
 
   assert.ok(container.querySelector(".comment-count"), "the threads are counted at their lines");

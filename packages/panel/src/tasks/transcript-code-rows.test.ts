@@ -31,7 +31,7 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 const roots: Root[] = [];
 
 beforeEach(() => {
-  // A fenced block with a language asks main for its colours; refused, it is drawn plain.
+  // A fenced block with a language asks main for its colors; refused, it is drawn plain.
   fakeAppBridge({});
 });
 

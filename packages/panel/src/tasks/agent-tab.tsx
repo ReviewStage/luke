@@ -904,7 +904,7 @@ function TargetCallView({
 const UNTITLED_PAGE = "Page";
 
 /**
- * What the chip of what a call made is labelled with until the window
+ * What the chip of what a call made is labeled with until the window
  * holds its name: the call's own title, a page's or a thread's or a task's;
  * and the link bare for the plan and a pull request, which the chip then
  * calls by the plan's name and the pull request's number.
@@ -1415,7 +1415,7 @@ const NO_ARRIVED: readonly ArrivedLine[] = [];
 function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
   if (workedFor === null && copy === null) return null;
   return (
-    // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centring them would push the words down.
+    // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centering them would push the words down.
     <div className="agent-turn-foot mt-tight-gap" data-turn-foot="">
       <MessageLine
         align={MESSAGE_LINE_ALIGN.START}
@@ -1769,7 +1769,7 @@ const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
 
 /**
  * The end line's row: the line, then the press it ends on (Continue in new
- * agent), on one row, centred on the line's words, which wraps the press
+ * agent), on one row, centered on the line's words, which wraps the press
  * under them only where the column is too narrow for both.
  */
 /**
@@ -1793,7 +1793,7 @@ function AgentEndRow({
   onOpenApiKeys,
   about,
   press,
-  centred = false,
+  centered = false,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
@@ -1801,13 +1801,13 @@ function AgentEndRow({
   onOpenApiKeys: (() => void) | undefined;
   about: FailureAbout;
   press: ReactNode;
-  /** Whether it stands in the empty state's own centred column, centred as its column is. */
-  centred?: boolean;
+  /** Whether it stands in the empty state's own centered column, centered as its column is. */
+  centered?: boolean;
 }): React.JSX.Element {
   // Note that the line is one flex item, so a failure too long to share the row takes it whole and the press wraps under it, never between its words.
   return (
     <div
-      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centred ? " justify-center" : ""}`}
+      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centered ? " justify-center" : ""}`}
     >
       <AgentEndLine
         ended={ended}
@@ -2549,7 +2549,7 @@ function AgentTranscriptView({
           about: { agentId },
         })}
         onRetry={onRetry}
-        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        placement={ERROR_STATE_PLACEMENT.CENTERED}
       >
         {TRANSCRIPT_FAILED_LINE}
       </ErrorState>
@@ -2557,7 +2557,7 @@ function AgentTranscriptView({
   }
   // The log's first page, and what stands around it, wait in the tab's own placeholder, which it opened on (`AgentTab`).
   if (holding || (reading && ended === undefined)) return <TranscriptSkeleton />;
-  // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
+  // Note that the centered column is wider than the empty state's own, so a one-line failure stays one line.
   return (
     <ConversationEmptyState wide>
       {
@@ -2572,7 +2572,7 @@ function AgentTranscriptView({
               onOpenApiKeys={onOpenApiKeys}
               about={failureAbout ?? { agentId, taskId }}
               press={endPress}
-              centred
+              centered
             />
           )}
           {endTrail}

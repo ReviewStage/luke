@@ -258,7 +258,7 @@ function mount(
     assert.ok(found, `Activity offers to close ${name}`);
     act(() => found.click());
   };
-  const labelled = (label: string) =>
+  const labeled = (label: string) =>
     [...container.querySelectorAll("button")].some(
       (each) => each.getAttribute("aria-label") === label,
     );
@@ -279,7 +279,7 @@ function mount(
     row,
     close,
     draw,
-    labelled,
+    labeled,
     renameFromPalette,
   };
 }
@@ -295,9 +295,9 @@ test("on a phone a task is headed by one row, the way back named for the page it
     page.container.querySelector(".side-panel[data-pane-switch]"),
     "the panel's bar gives way to the row",
   );
-  assert.equal(page.labelled("Title actions"), false, "the plan's title draws no second ⋯");
+  assert.equal(page.labeled("Title actions"), false, "the plan's title draws no second ⋯");
   assert.equal(
-    page.labelled(`${TASK.name} actions`),
+    page.labeled(`${TASK.name} actions`),
     false,
     "the panel draws no ⋯ of the plan's tab",
   );
@@ -437,8 +437,8 @@ test("on a phone, which has no ⌘F to press, the ⋯'s Find opens the find bar 
 test("a wide window keeps the panel's strip and the column's toolbar, the task's ⋯ the Plan tab's, and draws no row of a phone's", () => {
   const page = mount(SHELL_ROOM.WIDE);
   assert.equal(page.container.querySelector(".task-head"), null);
-  assert.ok(page.labelled(`${TASK.name} actions`), "the Plan tab keeps the task's ⋯");
-  assert.equal(page.labelled("Task actions"), false, "the column's toolbar draws none");
+  assert.ok(page.labeled(`${TASK.name} actions`), "the Plan tab keeps the task's ⋯");
+  assert.equal(page.labeled("Task actions"), false, "the column's toolbar draws none");
 });
 
 test("on a phone a task still read, or one that cannot be, is headed by its way back alone, as the task's own head will lead", () => {

@@ -190,7 +190,7 @@ export interface TaskArchivedAgent {
 }
 
 /** One save a coding agent made, with the agent named as its row names it now. */
-export interface LabelledAgentEdit extends PlanAgentEdit {
+export interface LabeledAgentEdit extends PlanAgentEdit {
   readonly label: string;
 }
 
@@ -203,7 +203,7 @@ export interface StoredTask {
   readonly githubAccess: GitHubAccess;
   /** The plan's whole text. */
   readonly text: string;
-  readonly agentEdits: readonly LabelledAgentEdit[];
+  readonly agentEdits: readonly LabeledAgentEdit[];
   /** Whether the text was ever saved since the task started: false while nobody has written it. */
   readonly saved: boolean;
   /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
@@ -539,7 +539,7 @@ function sectionEditOf(
  * whose history has not begun: an agent's save made before it is the newest
  * thing the service can name a writer for.
  */
-function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
+function journaledEdit(edit: LabeledAgentEdit): PlanLastEdit {
   return {
     actor: PLAN_ACTOR.AGENT,
     label: edit.label,

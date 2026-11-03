@@ -93,7 +93,7 @@ export const ownedByTaskAlone = (table: {
  * The bytes stand in the row itself, as every owner's did: this deployment
  * keeps no blob store, and each owner holds its bytes to its own bound, a
  * check on the column. The media type is what the service sniffed a
- * picture's bytes to be, or the type a file travelled as, which the bytes
+ * picture's bytes to be, or the type a file traveled as, which the bytes
  * are served under.
  */
 export const attachment = pgTable(
@@ -126,9 +126,9 @@ export const attachment = pgTable(
     kind: text("kind").$type<InboxAttachmentKind>(),
     /** A file's own name, never a path, such as `trace.txt`; null for a picture, whose words are its block's alt. */
     name: text("name"),
-    /** A file's place among the files it travelled with, from zero, in the order they were attached; null for a picture. */
+    /** A file's place among the files it traveled with, from zero, in the order they were attached; null for a picture. */
     position: integer("position"),
-    /** The media type the bytes were sniffed to be, or travelled as: what they are served under. A conversation's, an inbox message's, or a plan's may be a WebM an agent recorded, which no other owner's is. */
+    /** The media type the bytes were sniffed to be, or traveled as: what they are served under. A conversation's, an inbox message's, or a plan's may be a WebM an agent recorded, which no other owner's is. */
     contentType: text("content_type")
       .$type<AgentAttachmentType | ConversationMediaType>()
       .notNull(),

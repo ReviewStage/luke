@@ -26,7 +26,7 @@ const PRODUCT_EVENT_DEFAULTS = {
   FLUSH_INTERVAL_MS: 60_000,
   /**
    * How many events wait for a network at most. Past this the oldest go: a
-   * long stretch offline should keep recent behaviour, and the one event that
+   * long stretch offline should keep recent behavior, and the one event that
    * would hurt to lose — the day marker — is recorded again the next day
    * anyway.
    */
@@ -195,7 +195,7 @@ export class ProductEventSender {
    * The queue dropped, which is the whole of a quit's stop: what it has to
    * guarantee is that nothing further is sent, never that a request already
    * under way has ended. The cadence ends with the scope the sender was built
-   * in, for the same reason cancelling a timer never awaited one.
+   * in, for the same reason canceling a timer never awaited one.
    */
   readonly drop: Effect.Effect<void> = Effect.sync(() => {
     this.#queue.length = 0;

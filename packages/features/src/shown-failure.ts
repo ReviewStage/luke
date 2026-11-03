@@ -14,7 +14,7 @@
  * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
  * cause's own message, every string read from the cause with each
  * credential-shaped run replaced (`credential-redaction.ts`) and cut at a
- * bound, but the trace a hosted call travelled under, read only in a trace
+ * bound, but the trace a hosted call traveled under, read only in a trace
  * id's shape, which the service's log lines for that call carry. There is
  * no field for what
  * a person typed, a transcript, a plan, or a file. Note that a cause's
@@ -369,7 +369,7 @@ const FAILURE_ATTRIBUTE = {
   ONLINE: "app.online",
   ACCOUNT: "app.account",
   LIVE: "app.live",
-  /** The trace the hosted call that failed travelled under, which the service's log lines for it carry. */
+  /** The trace the hosted call that failed traveled under, which the service's log lines for it carry. */
   HOSTED_TRACE: "hosted.trace_id",
 } as const;
 
@@ -515,7 +515,7 @@ function aboutAttributes(about: FailureAbout): FailureAttributes {
 }
 
 /**
- * The trace a hosted call travelled under, the first down the chain that
+ * The trace a hosted call traveled under, the first down the chain that
  * names one (`failure-facts.ts`), so the report and the service's log lines
  * for that call share it. Note that it is read outside the redaction, which
  * takes any run of 32 characters for a credential, and only in a trace id's

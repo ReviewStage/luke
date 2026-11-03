@@ -8,25 +8,25 @@ import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js"
 /**
  * badge.tsx -- a short word saying where something stands, in the state palette: working, needing you, done, merged, failed, or nothing in particular.
  *
- * The words are the badge, and the colour says them again: a badge is never
- * a coloured dot alone, so a reader, a screenshot in grey, and an eye that
+ * The words are the badge, and the color says them again: a badge is never
+ * a colored dot alone, so a reader, a screenshot in gray, and an eye that
  * cannot tell the inks apart all read the same state. A glyph may stand
  * before the words where one says the state too, in the tone's ink; a badge
  * in a tone without one leads its words with a dot of it. The badge stands
  * on the chip's own opaque face, its words in the text's ink, so they hold
  * their contrast on any ground behind it.
  *
- * A badge naming something a provider colours, a GitHub label, wears that
- * colour as a dot before its words (`swatch`) rather than on them, because a
- * provider lets its colour be anything, a dark one among them, which the
- * badge's words could not be read in. The colour is six hex digits, the
+ * A badge naming something a provider colors, a GitHub label, wears that
+ * color as a dot before its words (`swatch`) rather than on them, because a
+ * provider lets its color be anything, a dark one among them, which the
+ * badge's words could not be read in. The color is six hex digits, the
  * spelling GitHub and Linear answer; any other is drawn in the muted ink.
- * Where the colour is how a reader tells one from another, a pull request's
+ * Where the color is how a reader tells one from another, a pull request's
  * labels in its header, the badge is filled with it instead (`fill`), as
  * GitHub draws a label: a solid fill in the light appearance, its words dark
  * or white by how light the fill reads (Rec. 709, at GitHub's own threshold),
  * edged a shade darker so a white label still stands on a white ground; and
- * in the dark a tint of the colour, its words in the colour itself, lifted
+ * in the dark a tint of the color, its words in the color itself, lifted
  * toward white where it is too dark to read. A filled badge keeps its words
  * on one line, fading them out at their end where the row cuts them short,
  * in their own direction (`<bdi>`), and any other spelling draws it neutral.
@@ -43,17 +43,17 @@ import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js"
  * filled label's fade.
  */
 
-/** The one spelling of a provider's colour a swatch paints: six hex digits, with or without its `#`. */
-const SWATCH_COLOUR = /^#?([0-9a-f]{6})$/iu;
+/** The one spelling of a provider's color a swatch paints: six hex digits, with or without its `#`. */
+const SWATCH_COLOR = /^#?([0-9a-f]{6})$/iu;
 
-/** The face a badge stands on: the chip's own, a provider's colour, or the ink. */
+/** The face a badge stands on: the chip's own, a provider's color, or the ink. */
 const BADGE_FACE = {
   PLAIN: "plain",
   FILLED: "filled",
   LIT: "lit",
 } as const;
 
-/** A provider's colour as a dot before the words, in the muted ink until the badge names one it can paint. */
+/** A provider's color as a dot before the words, in the muted ink until the badge names one it can paint. */
 const SWATCH = "ui-badge-swatch size-badge-swatch flex-none rounded-full bg-muted-foreground";
 
 /** How light a fill reads, past which GitHub writes on it in dark words rather than white. */
@@ -63,7 +63,7 @@ const LIGHT_FILL = 0.453;
 const DARK_WORDS = "#24292f";
 const LIGHT_WORDS = "#ffffff";
 
-/** How light a filled badge's words must read on the dark ground; a darker colour is lifted toward white until they do. */
+/** How light a filled badge's words must read on the dark ground; a darker color is lifted toward white until they do. */
 const DARK_GROUND_WORDS = 0.6;
 
 /** How much darker a light fill's edge is than its fill. */
@@ -75,33 +75,33 @@ const EDGE_ALPHA = "40";
 
 type Rgb = readonly [number, number, number];
 
-/** A provider's colour as its three channels; none for any spelling but six hex digits. */
-function channelsOf(colour: string): Rgb | undefined {
-  const hex = SWATCH_COLOUR.exec(colour.trim())?.[1];
+/** A provider's color as its three channels; none for any spelling but six hex digits. */
+function channelsOf(color: string): Rgb | undefined {
+  const hex = SWATCH_COLOR.exec(color.trim())?.[1];
   if (hex === undefined) return undefined;
   const channel = (at: number) => Number.parseInt(hex.slice(at, at + 2), 16);
   return [channel(0), channel(2), channel(4)];
 }
 
-/** How light a colour reads, from nought to one. */
+/** How light a color reads, from nought to one. */
 function lightnessOf([red, green, blue]: Rgb): number {
   return (red * 0.2126 + green * 0.7152 + blue * 0.0722) / 255;
 }
 
-/** A colour moved toward `toward` (0 or 255) by `by`, from nought to one. */
+/** A color moved toward `toward` (0 or 255) by `by`, from nought to one. */
 function mixed([red, green, blue]: Rgb, toward: number, by: number): Rgb {
   const move = (channel: number) => Math.round(channel + (toward - channel) * by);
   return [move(red), move(green), move(blue)];
 }
 
-/** A colour spelled as six hex digits after a `#`. */
+/** A color spelled as six hex digits after a `#`. */
 function hexOf(rgb: Rgb): string {
   return `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
-/** The fill, edge, and words a filled badge is drawn in, in each appearance; none for a colour it cannot paint. */
-function fillColours(colour: string): CSSProperties | undefined {
-  const rgb = channelsOf(colour);
+/** The fill, edge, and words a filled badge is drawn in, in each appearance; none for a color it cannot paint. */
+function fillColors(color: string): CSSProperties | undefined {
+  const rgb = channelsOf(color);
   if (rgb === undefined) return undefined;
   const fill = hexOf(rgb);
   const lightness = lightnessOf(rgb);
@@ -147,9 +147,9 @@ export function Badge({
   tone?: StatusTone;
   /** A glyph before the words, saying the state again. */
   icon?: ReactNode;
-  /** A provider's colour for what the badge names, drawn as a dot before its words; any colour but six hex digits is drawn muted. */
+  /** A provider's color for what the badge names, drawn as a dot before its words; any color but six hex digits is drawn muted. */
   swatch?: string | undefined;
-  /** A provider's colour the badge is filled with, its words on one line; any colour but six hex digits draws it neutral. */
+  /** A provider's color the badge is filled with, its words on one line; any color but six hex digits draws it neutral. */
   fill?: string | undefined;
   /** Whether a muted dot leads the words, as a marker of something standing open. */
   dot?: boolean;
@@ -157,11 +157,11 @@ export function Badge({
   lit?: boolean;
   /** Give the words up, to a reader alone, once the room around the badge (a `ui-room` container) is narrower than this step; kept drawn where no `icon`, `swatch`, or dot says the state in their place. */
   hideWordsUnder?: VisuallyHiddenUnder | undefined;
-  /** The state's words, which the colour only repeats; a filled badge's are one string. */
+  /** The state's words, which the color only repeats; a filled badge's are one string. */
   children: ReactNode;
 }): React.JSX.Element {
-  const colour = swatch === undefined ? undefined : SWATCH_COLOUR.exec(swatch)?.[1];
-  const filled = fill === undefined ? undefined : fillColours(fill);
+  const color = swatch === undefined ? undefined : SWATCH_COLOR.exec(swatch)?.[1];
+  const filled = fill === undefined ? undefined : fillColors(fill);
   const marked = icon != null || swatch !== undefined || dot || tone !== STATUS_TONE.NEUTRAL;
   // Note that the tone's dot stands only where the words stand alone, because a glyph, a swatch, or a marker dot already says the state.
   const toneDot = tone !== STATUS_TONE.NEUTRAL && icon == null && swatch === undefined && !dot;
@@ -181,7 +181,7 @@ export function Badge({
         <span
           className={SWATCH}
           aria-hidden="true"
-          style={colour === undefined ? undefined : { background: `#${colour}` }}
+          style={color === undefined ? undefined : { background: `#${color}` }}
         />
       )}
       {dot ? <span className={SWATCH} aria-hidden="true" /> : null}

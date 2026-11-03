@@ -33,7 +33,7 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, which is
  * the task's and so every row's alike, the failed mark at its end once its
  * turn failed, and the card its tab hangs. Its pull request, where it opened
- * one, stands after it as a chip of GitHub's mark in GitHub's colour for
+ * one, stands after it as a chip of GitHub's mark in GitHub's color for
  * where it stands and its number (`pull-request-chip.tsx`), hanging the
  * pull request's one card as its Pull request tab does, the agent whose it
  * is and who it names among what the card says (`pull-request-card.tsx`).

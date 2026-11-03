@@ -15,7 +15,7 @@ import {
   Stream,
 } from "effect";
 import {
-  LOOPBACK_CONSENT_CANCELLED,
+  LOOPBACK_CONSENT_CANCELED,
   type LoopbackConsent,
   type LoopbackConsentOutcome,
   type LoopbackExchange,
@@ -96,7 +96,7 @@ interface AccountSessionStore {
 }
 
 /** A sign-in the developer withdrew, or a later attempt took the generation from: an ordinary end, never reported. */
-class SignInCancelled extends Data.TaggedError("SignInCancelled") {}
+class SignInCanceled extends Data.TaggedError("SignInCanceled") {}
 
 /**
  * A sign-in that could not be completed: `failure` is the key the panel says
@@ -461,7 +461,7 @@ export class AccountSessionManager {
     return Effect.gen(function* () {
       const outcome = yield* Effect.scoped(consent.signInEffect());
       if (!("reason" in outcome)) return true;
-      if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return false;
+      if (outcome.reason === LOOPBACK_CONSENT_CANCELED) return false;
       return yield* Effect.fail(signInFailed(outcome));
     }).pipe(
       Effect.ensuring(
@@ -493,7 +493,7 @@ export class AccountSessionManager {
       // A withdrawn sign-in — the developer's own press, or a later attempt
       // taking the generation out from under this one — is an ordinary end.
       // Anything else is a failure the panel has to be able to report.
-      if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return this.#account;
+      if (outcome.reason === LOOPBACK_CONSENT_CANCELED) return this.#account;
       return yield* Effect.fail(signInFailed(outcome));
     }).pipe(
       Effect.ensuring(
@@ -522,7 +522,7 @@ export class AccountSessionManager {
           (yield* this.#startSession(this.#generation, (url) => this.#options.openExternal(url)));
         const outcome = yield* restore(Fiber.join(fiber));
         if (!("reason" in outcome)) return true;
-        if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return false;
+        if (outcome.reason === LOOPBACK_CONSENT_CANCELED) return false;
         return yield* Effect.fail(signInFailed(outcome));
       }),
     );
@@ -639,7 +639,7 @@ export class AccountSessionManager {
         "Refused account session sign-out failed",
         this.#options.report,
       );
-      return { reason: ours ? LOOPBACK_CONSENT_CANCELLED : OTHER_BROWSER_ACCOUNT };
+      return { reason: ours ? LOOPBACK_CONSENT_CANCELED : OTHER_BROWSER_ACCOUNT };
     }).pipe(Effect.catch((error) => Effect.succeed({ reason: error.message })));
   }
 
@@ -693,7 +693,7 @@ export class AccountSessionManager {
         Effect.gen({ self: this }, function* () {
           const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
           const replaced = options.again ? yield* this.#options.store.readAccount() : undefined;
-          if (!this.#isCurrent(generation)) return yield* Effect.fail(new SignInCancelled());
+          if (!this.#isCurrent(generation)) return yield* Effect.fail(new SignInCanceled());
           if (replaced !== undefined && !sameAccount(replaced, identity)) {
             return yield* Effect.fail(
               new SignInFailed({ failure: SIGN_IN_FAILURE.UNFINISHED, message: OTHER_ACCOUNT }),
@@ -706,7 +706,7 @@ export class AccountSessionManager {
           // only the OAuth grant.
           const session = replaced?.sessionToken ? { sessionToken: replaced.sessionToken } : {};
           if (!(yield* this.#storeCurrent(current, { ...tokens, ...identity, ...session }))) {
-            return yield* Effect.fail(new SignInCancelled());
+            return yield* Effect.fail(new SignInCanceled());
           }
           if (replaced?.refreshToken) {
             yield* reportingFailure(
@@ -716,7 +716,7 @@ export class AccountSessionManager {
             );
           }
           yield* this.#options.startCapabilities;
-          if (!this.#isCurrent(current)) return yield* Effect.fail(new SignInCancelled());
+          if (!this.#isCurrent(current)) return yield* Effect.fail(new SignInCanceled());
           return this.#account;
         }),
       revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
@@ -724,8 +724,8 @@ export class AccountSessionManager {
         this.#options.report(`Rejected account token revocation failed: ${error.message}`);
       },
     }).pipe(
-      Effect.catchTag("SignInCancelled", () =>
-        Effect.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }),
+      Effect.catchTag("SignInCanceled", () =>
+        Effect.succeed({ reason: LOOPBACK_CONSENT_CANCELED }),
       ),
       Effect.catch((error) => Effect.succeed({ reason: error.message })),
     );

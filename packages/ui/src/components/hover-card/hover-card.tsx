@@ -146,7 +146,7 @@ export function HoverCard({
  * A card's head: its glyph where it wears one, its name and the line under
  * it, and its corner. A card about someone or somewhere leads instead with
  * their `mark` at a card's size, a face or a workspace's tile, the head
- * beside it and centred on it, as a profile card leads with its picture.
+ * beside it and centered on it, as a profile card leads with its picture.
  */
 export function HoverCardHead({
   mark,

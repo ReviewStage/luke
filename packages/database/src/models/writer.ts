@@ -497,8 +497,8 @@ function turnStatusOf(status: RunStatus): TurnStatus {
   switch (status) {
     case RUN_STATUS.SUCCEEDED:
       return TURN_STATUS.SETTLED;
-    case RUN_STATUS.CANCELLED:
-      return TURN_STATUS.CANCELLED;
+    case RUN_STATUS.CANCELED:
+      return TURN_STATUS.CANCELED;
     case RUN_STATUS.FAILED:
     case RUN_STATUS.TIMED_OUT:
     case RUN_STATUS.INTERRUPTED:
@@ -513,7 +513,7 @@ const TURN_FAILURE_DETAIL = { CHARS: 500 } as const;
 
 const TERMINAL_TURN_STATUSES: ReadonlySet<TurnStatus> = new Set([
   TURN_STATUS.SETTLED,
-  TURN_STATUS.CANCELLED,
+  TURN_STATUS.CANCELED,
   TURN_STATUS.FAILED,
 ]);
 
@@ -971,11 +971,11 @@ function pendingToolPart(name: string, callId: string, input: UnparsedWireValue)
 
 /**
  * Why the record settled a call nothing answered: its turn ended or was
- * cancelled first, or eve ran the step that asked for it again.
+ * canceled first, or eve ran the step that asked for it again.
  */
 const UNANSWERED_REASON = {
   ENDED: "The turn ended before the call answered; it may have run.",
-  CANCELLED: "The turn was cancelled before the call answered; it may have run.",
+  CANCELED: "The turn was canceled before the call answered; it may have run.",
   RETRIED:
     "The step that asked for the call was run again before the call answered; it may have run.",
 } as const;
@@ -1386,7 +1386,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   if (Option.isSome(open) && open.value.finishedAt === null) {
     const reason =
-      event.status === RUN_STATUS.CANCELLED ? UNANSWERED_REASON.CANCELLED : UNANSWERED_REASON.ENDED;
+      event.status === RUN_STATUS.CANCELED ? UNANSWERED_REASON.CANCELED : UNANSWERED_REASON.ENDED;
     const keepsWords = context.kind === CONVERSATION_KIND.AGENT;
     const parts = open.value.parts.flatMap((part): Parts => {
       if (part.type === UI_PART_TYPE.TEXT) return keepsWords ? [part] : [];

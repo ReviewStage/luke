@@ -386,7 +386,7 @@ export function endLineParts(
   ranDirectly?: { readonly folder: string },
 ): EndLineParts | undefined {
   switch (status) {
-    case AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.CANCELED:
       return { words: "Stopped", failed: false };
     case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
@@ -446,7 +446,7 @@ export function agentGlyphState(status: AgentStatus): GlyphState {
 
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: AgentStatus): string | undefined {
-  return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELLED);
+  return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELED);
 }
 
 /** Why a Start cannot run, said on the "+" menu's New agent: the task names no repository yet. */
@@ -1570,7 +1570,7 @@ export function effortFor(
   return below?.effort ?? ranked[0]?.effort ?? efforts[0];
 }
 
-/** The catalog's effort names a sentence-case label does not spell by capitalising. */
+/** The catalog's effort names a sentence-case label does not spell by capitalizing. */
 const EFFORT_LABEL: ReadonlyMap<string, string> = new Map([["xhigh", "Extra high"]]);
 
 /** The catalog's effort names are lowercase words; a menu and a segment read them in sentence case. */
@@ -1763,7 +1763,7 @@ export const CONCLUSION_WORDS = {
   [GITHUB_CHECK_CONCLUSION.SUCCESS]: "Passed",
   [GITHUB_CHECK_CONCLUSION.FAILURE]: "Failed",
   [GITHUB_CHECK_CONCLUSION.NEUTRAL]: "Neutral",
-  [GITHUB_CHECK_CONCLUSION.CANCELLED]: "Cancelled",
+  [GITHUB_CHECK_CONCLUSION.CANCELED]: "Canceled",
   [GITHUB_CHECK_CONCLUSION.SKIPPED]: "Skipped",
   [GITHUB_CHECK_CONCLUSION.TIMED_OUT]: "Timed out",
   [GITHUB_CHECK_CONCLUSION.ACTION_REQUIRED]: "Needs action",
@@ -2483,7 +2483,7 @@ export function workerToolState(status: AgentStatus): ToolState {
     case AGENT_STATUS.FAILED:
       return TOOL_STATE.OUTPUT_ERROR;
     case AGENT_STATUS.COMPLETED:
-    case AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.CANCELED:
       return TOOL_STATE.OUTPUT_AVAILABLE;
   }
 }
@@ -2718,7 +2718,7 @@ export const AGENT_STATUS_TONE = {
   [AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
   [AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
   [AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
-  [AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
+  [AGENT_STATUS.CANCELED]: STATUS_TONE.NEUTRAL,
 } as const satisfies Record<AgentStatus, StatusTone>;
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */

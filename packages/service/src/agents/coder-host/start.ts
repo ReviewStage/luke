@@ -152,7 +152,7 @@ import {
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { agentSummary, summaryAccounts, summaryDevices } from "./status.js";
 import { agentLineSender } from "./steer.js";
-import { cancelledTurn, summaryOf } from "./stop.js";
+import { canceledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -730,7 +730,7 @@ function continuedTitle(source: string | null): string | undefined {
 
 /**
  * The source of a continue stopped as a Stop stops it, over the eve the
- * Start reached: a turn it still runs cancelled and stamped, and nothing
+ * Start reached: a turn it still runs canceled and stamped, and nothing
  * where it runs none or a Stop already stands on it. Its sandbox is
  * stopped by its own turn's end, as a Stop leaves it. Answers whether the
  * stop held, false where the source could not be stopped, which is logged,
@@ -746,7 +746,7 @@ const stoppedSource = (
   /** The coding agent whose `start_agent` continues the source; none for a member's Continue. */
   by: string | undefined,
 ) =>
-  cancelledTurn(
+  canceledTurn(
     eve,
     storeWriter({ tools: CODER_TOOL_SET }),
     source,

@@ -1,6 +1,6 @@
 /**
  * How the Gateway leaves at an explicit quit, in a fixed order: the door
- * closes to new work, everything under way is cancelled, and the host waits
+ * closes to new work, everything under way is canceled, and the host waits
  * a bounded time for it to settle. What has not settled by then is persisted
  * as unresolved for the next launch's recovery and reported as such: a
  * shutdown never fabricates a completion for work it cut off, and an effect
@@ -29,7 +29,7 @@ export interface GatewayShutdownOptions {
 export interface GatewayShutdownReport {
   /** Whether every run under way settled before the deadline. */
   settled: boolean;
-  cancelled: readonly string[];
+  canceled: readonly string[];
   /** How many records were persisted unresolved for recovery. */
   unresolved: number;
 }
@@ -56,16 +56,16 @@ export function shutdownGatewayEffect(
   const deadlineMs = options.deadlineMs ?? GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS;
   return Effect.gen(function* () {
     yield* steps.closeAdmissions;
-    const cancelledRef = yield* Ref.make<readonly string[]>([]);
+    const canceledRef = yield* Ref.make<readonly string[]>([]);
     const settledRef = yield* Ref.make(false);
     const work = Effect.gen(function* () {
       // A step that died is the coordinator's to absorb rather than to carry
       // out of the quit: a cancellation nobody counted and a settling nobody
       // saw are what the report already says of a step the deadline cut.
-      const cancelled = yield* steps.cancelActive.pipe(
+      const canceled = yield* steps.cancelActive.pipe(
         Effect.catchDefect(() => Effect.succeed<readonly string[]>([])),
       );
-      yield* Ref.set(cancelledRef, cancelled);
+      yield* Ref.set(canceledRef, canceled);
       const settled = yield* steps.awaitSettled.pipe(
         Effect.as(true),
         Effect.catchDefect(() => Effect.succeed(false)),
@@ -79,9 +79,9 @@ export function shutdownGatewayEffect(
         orElse: () => Effect.succeed(true),
       }),
     );
-    const cancelled = yield* Ref.get(cancelledRef);
+    const canceled = yield* Ref.get(canceledRef);
     const settled = timedOut ? false : yield* Ref.get(settledRef);
     const unresolved = yield* steps.persistUnresolved;
-    return { settled, cancelled, unresolved };
+    return { settled, canceled, unresolved };
   });
 }

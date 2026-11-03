@@ -34,7 +34,7 @@
  * beside it. Alone in a region it would have filled, a tab or a page, it is that region's empty state (`EmptyState`):
  * the glyph large and faint over the sentence, and Retry under it, standing
  * a little above the room's middle. The container places it and lends it no
- * colour of its own. Where what failed is the drawing of the place itself,
+ * color of its own. Where what failed is the drawing of the place itself,
  * the place stands the product's own `ReloadState` instead (`ErrorBoundary`).
  *
  * A row that is itself the press, a list's foot such as "Show older
@@ -76,7 +76,7 @@ import { Tooltip } from "../tooltip/hint.js";
 export const ERROR_STATE_PLACEMENT = {
   INLINE: "inline",
   ROWS: "rows",
-  CENTRED: "centred",
+  CENTERED: "centered",
   TOOLBAR: "toolbar",
 } as const;
 
@@ -123,7 +123,7 @@ type Placed =
       children: string;
     })
   | {
-      placement: typeof ERROR_STATE_PLACEMENT.CENTRED;
+      placement: typeof ERROR_STATE_PLACEMENT.CENTERED;
       /** The way out of the place the failure left empty, under Retry. */
       exit?: ErrorStateRemedy | undefined;
       children: ReactNode;
@@ -159,7 +159,7 @@ const LINE = {
     actions: "max-w-full flex-none flex-nowrap justify-end ms-0",
   },
 } as const satisfies Record<
-  Exclude<ErrorStatePlacement, typeof ERROR_STATE_PLACEMENT.CENTRED>,
+  Exclude<ErrorStatePlacement, typeof ERROR_STATE_PLACEMENT.CENTERED>,
   { line: string; words: string; actions: string }
 >;
 
@@ -187,14 +187,14 @@ export function ErrorState(
   const { onRetry, remedy, onRemove, onDismiss, failure, children } = props;
   const Line = props.as ?? ERROR_STATE_ELEMENT.PARAGRAPH;
   const placement = props.placement ?? ERROR_STATE_PLACEMENT.INLINE;
-  if (placement === ERROR_STATE_PLACEMENT.CENTRED) {
+  if (placement === ERROR_STATE_PLACEMENT.CENTERED) {
     const again = onRetry === undefined ? undefined : { label: WORDS.RETRY, onClick: onRetry };
     return (
       <EmptyState
         icon={<AlertIcon />}
         alert
         action={again === undefined ? undefined : { ...again, icon: <RetryIcon />, turns: true }}
-        secondary={props.placement === ERROR_STATE_PLACEMENT.CENTRED ? props.exit : undefined}
+        secondary={props.placement === ERROR_STATE_PLACEMENT.CENTERED ? props.exit : undefined}
         beside={<FailureCopy failure={failure} />}
       >
         {children}

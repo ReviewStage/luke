@@ -1007,7 +1007,7 @@ function workspaceReads(): unknown[] {
     .map((each) => each.payload);
 }
 
-test("an @ offers the workspace's agents after the task's own, each labelled by its task, and no archived one before a word is typed", async () => {
+test("an @ offers the workspace's agents after the task's own, each labeled by its task, and no archived one before a word is typed", async () => {
   const { container } = await workspaceBox();
 
   typeInComposer(container, "See @");
@@ -1726,7 +1726,7 @@ function pullRequestsListed(container: HTMLElement): [string, string, string | n
   ]);
 }
 
-test("an @ on a task's page offers the pull requests its agents published, each once, by its number and title, labelled by its first agent", async () => {
+test("an @ on a task's page offers the pull requests its agents published, each once, by its number and title, labeled by its first agent", async () => {
   const { container } = await box(publishedPage());
 
   typeInComposer(container, "See @");

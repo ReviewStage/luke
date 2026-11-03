@@ -89,7 +89,7 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * where the column has room to keep the document at its measure beside it,
  * side panel open or shut, it stands pinned at the column's right, as
  * Cursor's does: borderless on the column's own ground, the document or the
- * agent's transcript, centred again in the room it leaves, with a chevron at its top right, shown while the
+ * agent's transcript, centered again in the room it leaves, with a chevron at its top right, shown while the
  * pointer or the keys are on it, that collapses it from the very spot the
  * rail's expands it. Collapsed, or where the column has no such room, it is
  * a rail of the panel's kinds alone, each naming itself in its hint, under a
@@ -876,7 +876,7 @@ export function SummarySkeleton({ mode }: { mode: SummaryMode }): React.JSX.Elem
  * The summary in the plan's column, pinned or as its rail, or nothing where
  * the column spares no rail, and the card while it hangs. The rail lists the panel's kinds alone, one glyph after
  * another under its chevron at one even step, since a glyph tells an agent,
- * a subagent, or a file from its neighbours by nothing a reader could tell
+ * a subagent, or a file from its neighbors by nothing a reader could tell
  * at a glance.
  */
 export function TaskSummary({

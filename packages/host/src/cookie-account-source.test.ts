@@ -931,7 +931,7 @@ describe("the cookie account source", () => {
   );
 
   it.effect(
-    "keeps the tab where it is when the sign-in is cancelled while the service answers",
+    "keeps the tab where it is when the sign-in is canceled while the service answers",
     () =>
       Effect.gen(function* () {
         const { held, release } = heldAnswer();

@@ -200,7 +200,7 @@ export const workspaceSchema = EffectSchema.Struct({
   name: EffectSchema.String,
   /**
    * The first step of the workspace's links' paths, unique among workspaces;
-   * absent from a service before slugs travelled, which the desktop reads
+   * absent from a service before slugs traveled, which the desktop reads
    * past, since a link is found by its task's id alone.
    */
   slug: EffectSchema.optionalKey(EffectSchema.String),

@@ -9,10 +9,10 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
  * the complete tone with a glyph before it, and its lines are two, the lines
  * it adds and the lines it removes. A part is quiet unless it says a state,
  * and a glyph that says one carries the words a reader who cannot see it
- * hears, so a state is never colour and shape alone. A diff's line counts
- * always carry colour, its additions in the complete tone and its deletions
+ * hears, so a state is never color and shape alone. A diff's line counts
+ * always carry color, its additions in the complete tone and its deletions
  * in the danger tone, chosen or not and in every look, so they are built
- * one way (`linesCount`) and no caller can draw them grey. A part that
+ * one way (`linesCount`) and no caller can draw them gray. A part that
  * `folds` is words a bar leaves unseen once it folds its options to their
  * glyphs, on every option glyphed, the chosen one too, so the counts read
  * alike: "viewed" after "1/4", still read aloud.

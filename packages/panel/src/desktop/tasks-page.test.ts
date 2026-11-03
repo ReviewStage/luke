@@ -585,7 +585,7 @@ test("in Columns the view options group the columns under Group by", async () =>
   assert.ok(!labels.includes("Columns"), "no submenu is called Columns");
 });
 
-test("on a phone the page is headed by New task and one ⋯, its title centred between them, and the ⋯ chooses Columns and opens the Filter's and View options' own menus, so nothing is lost", async () => {
+test("on a phone the page is headed by New task and one ⋯, its title centered between them, and the ⋯ chooses Columns and opens the Filter's and View options' own menus, so nothing is lost", async () => {
   const page = await mountPage(TASKS, SHELL_ROOM.NARROW);
   assert.deepEqual(
     [...page.querySelectorAll(".tasks-head button")].map((each) => each.getAttribute("aria-label")),

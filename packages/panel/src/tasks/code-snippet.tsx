@@ -19,8 +19,8 @@ import { PierreDiff, useDiffLook } from "./file-diff.js";
  * theme, the type, wrap and the numbers, drawn unified with no marks and no
  * tints, so the lines read as the file's own (`code-snippet-model.ts`). A
  * snippet is mounted as it comes near the view, a list of many cards
- * mounting only those read, and coloured off the window's thread in the
- * pool its diffs share (`pooled`), plain until the colours land.
+ * mounting only those read, and colored off the window's thread in the
+ * pool its diffs share (`pooled`), plain until the colors land.
  */
 
 /** How far past the view a snippet is mounted, so it is drawn by the time it is scrolled to. */

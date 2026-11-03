@@ -9,7 +9,7 @@
  * what was saved since the last one rather than a stale copy.
  */
 
-import type { LabelledAgentEdit, StoredTask } from "@repo/database/models/task-store";
+import type { LabeledAgentEdit, StoredTask } from "@repo/database/models/task-store";
 import { dateLabel } from "@repo/features/date-mention";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
@@ -50,7 +50,7 @@ function agentNoteLine(note: PlanAgentEdit["notes"][number]): string {
 }
 
 /** The newest saves coding agents made, one line each, newest first; nothing where none has. */
-function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] {
+function agentEditsText(edits: readonly LabeledAgentEdit[]): readonly string[] {
   if (edits.length === 0) return [];
   const recent = edits.slice(-RECENT_AGENT_EDITS).reverse();
   return [

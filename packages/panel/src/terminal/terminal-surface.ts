@@ -17,7 +17,7 @@ import { TERMINAL_KEY, terminalKey } from "./terminal-keys.js";
 import { terminalFindTints, terminalTheme } from "./terminal-theme.js";
 
 /**
- * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, coloured from the window's tokens, its keys sorted between the shell and the window.
+ * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, colored from the window's tokens, its keys sorted between the shell and the window.
  *
  * It draws with WebGL, and with xterm's DOM renderer where WebGL is not to be
  * had, the DOM renderer's rules reaching the page as adopted sheets
@@ -41,7 +41,7 @@ const FALLBACK_FONT = "monospace";
 
 /**
  * How the terminal draws and keeps its lines: the code's size and leading,
- * a block cursor that holds still, and colours held legible on either
+ * a block cursor that holds still, and colors held legible on either
  * appearance's ground, as VS Code's terminal holds them. Option types the
  * character the layout gives it rather than acting as Meta, and Option held
  * while dragging selects text even where a program such as tmux takes the
@@ -85,10 +85,10 @@ function loadWebgl(terminal: Terminal): WebglAddon | undefined {
 
 /**
  * Draws with WebGL, on a fresh context whenever the GPU process loses one.
- * Where none can be made the DOM renderer draws instead, its colours held to
- * the palette: it writes a 24-bit colour, or one it adjusted for contrast,
+ * Where none can be made the DOM renderer draws instead, its colors held to
+ * the palette: it writes a 24-bit color, or one it adjusted for contrast,
  * as a style attribute, which the panel's policy refuses, so a cell left to
- * it would lose its colour altogether, where a palette colour reaches it as
+ * it would lose its color altogether, where a palette color reaches it as
  * a class (`./adopted-styles.ts`).
  */
 function drawWithWebgl(terminal: Terminal): void {
@@ -227,7 +227,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   }
 
   // The tokens' values flip with the appearance, and the canvas holds the old ones until told.
-  // Note that a dimmed screen is dimmed in its colours, never by the box's opacity, which would dim the notes the terminal prints as well, and its contrast floor is lifted, because the floor would lift the output back out of its dimming.
+  // Note that a dimmed screen is dimmed in its colors, never by the box's opacity, which would dim the notes the terminal prints as well, and its contrast floor is lifted, because the floor would lift the output back out of its dimming.
   const retheme = () => {
     const dim = isDim(host);
     terminal.options.theme = terminalTheme(host, dim);

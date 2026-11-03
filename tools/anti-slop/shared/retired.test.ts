@@ -24,7 +24,7 @@ describe("a retired file", () => {
   it.each([
     ["no JSON", "{ classes: [] "],
     ["no `instead`", JSON.stringify({ classes: [] })],
-    ["a field the schema does not know", JSON.stringify({ ...VALID, colours: [] })],
+    ["a field the schema does not know", JSON.stringify({ ...VALID, colors: [] })],
     ["an entry missing its `allow`", JSON.stringify({ instead: "x", glyphs: [{ glyph: "Bot" }] })],
     [
       "a misspelt entry field",

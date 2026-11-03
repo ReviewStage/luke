@@ -28,7 +28,7 @@ import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
  * (`settleEndedSessionTurn`), whether eve said so refusing a message or
  * announcing the session's end (`settleEndedSession`), since eve's word is
  * final where the sweep's bound is only a guess. A turn a Stop was asked of is settled sooner, and
- * as cancelled: eve confirms a cancel within seconds by ending the turn, so
+ * as canceled: eve confirms a cancel within seconds by ending the turn, so
  * a Stop still unconfirmed past its bound is one whose session is gone, as
  * a session that died in a deploy is, and the turn ends as the Stop asked
  * rather than standing running until the abandonment bound.
@@ -53,7 +53,7 @@ export const TURN_ABANDON = {
   AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
   /**
    * How long a turn may stand running after a Stop was asked of it before
-   * the sweep settles it as cancelled. eve's own cancel ends the turn within
+   * the sweep settles it as canceled. eve's own cancel ends the turn within
    * seconds, so a Stop still unconfirmed this long found no session to
    * stop, whatever eve answered it.
    */
@@ -160,9 +160,9 @@ const endedSessionTurns = SqlSchema.findAll({
     ),
 });
 
-/** How a lost turn ends: cancelled where its Stop went unconfirmed, failed for the reason given otherwise. */
+/** How a lost turn ends: canceled where its Stop went unconfirmed, failed for the reason given otherwise. */
 type LostTurnEnd =
-  | { readonly status: typeof RUN_STATUS.CANCELLED }
+  | { readonly status: typeof RUN_STATUS.CANCELED }
   | {
       readonly status: typeof RUN_STATUS.FAILED;
       readonly failure: typeof TURN_FAILURE.ABANDONED | typeof TURN_FAILURE.SESSION_ENDED;
@@ -265,7 +265,7 @@ function abandonedSaid(turn: LostTurn, startedAt: Date | null, now: number) {
 
 /**
  * Settles every running turn whose Stop went unconfirmed past its bound as
- * cancelled, and every other one started more than its kind's bound ago as
+ * canceled, and every other one started more than its kind's bound ago as
  * failed for abandonment, each of those logged and reported; answers how many
  * it settled. The turn a native
  * agent's projection holds is dropped with it, as a lost runner's is, so a
@@ -286,19 +286,19 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
   const cancelRequestedBefore = options.now - TURN_ABANDON.CANCEL_AFTER_MS;
   for (const { cancelRequestedAt, startedAt, ...turn } of turns) {
     // Note that a Stop past its bound wins over abandonment, because the turn ends as the developer asked.
-    const cancelled =
+    const canceled =
       cancelRequestedAt !== null && cancelRequestedAt.getTime() < cancelRequestedBefore;
     const written = yield* settledLost(
       store.writer,
       turn,
-      cancelled
-        ? { status: RUN_STATUS.CANCELLED }
+      canceled
+        ? { status: RUN_STATUS.CANCELED }
         : { status: RUN_STATUS.FAILED, failure: TURN_FAILURE.ABANDONED },
       options.now,
     );
     if (!written) continue;
     settled += 1;
-    if (!cancelled) yield* abandonedSaid(turn, startedAt, options.now);
+    if (!canceled) yield* abandonedSaid(turn, startedAt, options.now);
     yield* dropNativeProjectionTurns(turn.conversationId, [turn.id]);
   }
   return settled;
@@ -337,7 +337,7 @@ export interface EndedSessionOptions {
 /**
  * Settles every turn still queued or running of the coding agent's
  * conversation that records the runtime session eve said ended; answers how
- * many this call settled. A turn a Stop was asked of is settled cancelled,
+ * many this call settled. A turn a Stop was asked of is settled canceled,
  * as the developer asked and as the sweep would settle it, and every other
  * one failed for its session's end, keeping why eve said it failed where it
  * said, and logged with its ids. A session no standing coding agent's
@@ -374,7 +374,7 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
               failure: TURN_FAILURE.SESSION_ENDED,
               ...(failureDetail !== undefined ? { failureDetail } : undefined),
             }
-          : { status: RUN_STATUS.CANCELLED },
+          : { status: RUN_STATUS.CANCELED },
         options.now,
       );
       if (!written) continue;
@@ -397,9 +397,9 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
 /**
  * Settles every turn still queued or running of the native coding agent's
  * conversation as failed, its runner gone with no end told, as a runner's
- * own failed end settles one, or as cancelled where a Stop was asked of it, so the agent reads failed and offers Continue
+ * own failed end settles one, or as canceled where a Stop was asked of it, so the agent reads failed and offers Continue
  * rather than running for a day; answers the ids of the turns this call
- * settled as failed, so a caller logs and reports those and no cancelled
+ * settled as failed, so a caller logs and reports those and no canceled
  * one or one the writer refused. The
  * turn the native projection holds is dropped with them, so the next
  * launch's events open a turn of their own rather than one already ended.
@@ -429,7 +429,7 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
         turn,
         cancelRequestedAt === null
           ? { status: RUN_STATUS.FAILED, failure, failureDetail: detail }
-          : { status: RUN_STATUS.CANCELLED },
+          : { status: RUN_STATUS.CANCELED },
         now,
       );
       if (written && cancelRequestedAt === null) failed.push(turn.id);

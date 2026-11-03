@@ -904,7 +904,7 @@ test("a link to someone who left whom only the former members read names opens t
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
 });
 
-test("on a phone the page is headed by its way back's glyph, their name centred, and one ⋯ holding the sidebar's filter beside the page's own actions", async () => {
+test("on a phone the page is headed by its way back's glyph, their name centered, and one ⋯ holding the sidebar's filter beside the page's own actions", async () => {
   const left: string[] = [];
   const { page } = mountWith({}, CHARLES.userId, undefined, MEMBERS.length, {
     label: "Inbox",

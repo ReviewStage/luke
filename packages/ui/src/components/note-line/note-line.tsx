@@ -7,8 +7,8 @@ import { GlyphSlot } from "../glyph-slot/glyph-slot.js";
  *
  * A whole tab, pane, or page that stands empty is an `EmptyState`; what is
  * said among other things, with no way on of its own, is a note line. It
- * stands centred in the room the rows would have filled at a body's size
- * (`CENTRED`, a combobox's "Nothing matches"), or at the start of that room
+ * stands centered in the room the rows would have filled at a body's size
+ * (`CENTERED`, a combobox's "Nothing matches"), or at the start of that room
  * in a caption's size and the faintest ink (`LIST`, a section's "Drag tasks
  * here"), or the same words unpadded for a container that insets them
  * (`INSET`, a sidebar section's, set at its rows' inset, or a transcript's
@@ -31,7 +31,7 @@ import { GlyphSlot } from "../glyph-slot/glyph-slot.js";
 
 /** Where a note stands in its room. */
 export const NOTE_LINE_LOOK = {
-  CENTRED: "centred",
+  CENTERED: "centered",
   LIST: "list",
   INSET: "inset",
   ROWS: "rows",
@@ -58,7 +58,7 @@ type DataMarks = { [mark: `data-${string}`]: string | undefined };
 
 /** One line of words: `children`, said as `look` asks, led by `glyph` on a trail, announced where `status` is set. */
 export function NoteLine({
-  look = NOTE_LINE_LOOK.CENTRED,
+  look = NOTE_LINE_LOOK.CENTERED,
   status = false,
   fill = false,
   selectable = false,

@@ -33,7 +33,7 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-test("a labelled bar is a progress bar a reader hears by its label and its share", () => {
+test("a labeled bar is a progress bar a reader hears by its label and its share", () => {
   const view = render(createElement(Progress, { value: 42.4, label: "Downloading the update" }));
   const bar = view.querySelector('[role="progressbar"]') ?? assert.fail("a progress bar");
   assert.equal(bar.getAttribute("aria-label"), "Downloading the update");

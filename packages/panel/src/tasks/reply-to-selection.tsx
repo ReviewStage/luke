@@ -176,9 +176,9 @@ export function pressPlace(box: {
   const finger =
     coarsePointerNow() && box.bottom + FINGER_SELECTION_GAP + PRESS_ROOM <= seen.bottom;
   const below = finger || box.top - seen.top < PRESS_ROOM;
-  const centre = (box.left + box.right) / 2;
+  const center = (box.left + box.right) / 2;
   return {
-    left: Math.min(Math.max(centre, seen.left + PRESS_MARGIN), seen.right - PRESS_MARGIN),
+    left: Math.min(Math.max(center, seen.left + PRESS_MARGIN), seen.right - PRESS_MARGIN),
     top: below ? box.bottom + (finger ? FINGER_SELECTION_GAP : PRESS_GAP) : box.top - PRESS_GAP,
     below,
   };

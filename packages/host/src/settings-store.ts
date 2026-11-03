@@ -172,7 +172,7 @@ function storedAccount(value: UnparsedWireValue): PersistedAccount | undefined {
 /**
  * The stored settings, each read through its own guard, so an entry the
  * build's own table does not list is dropped: a file written by another
- * build may pair an agent with a model this one does not know, and honouring
+ * build may pair an agent with a model this one does not know, and honoring
  * it would send a value no documented endpoint takes. A guard answers a value
  * on both branches, the default where it refuses, so every field decodes.
  */

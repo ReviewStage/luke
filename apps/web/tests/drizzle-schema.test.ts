@@ -50,7 +50,7 @@ const UNDECLARED_TABLES: ReadonlySet<string> = new Set([
  * The Postgres types this comparison is exact for: for each, the string
  * Drizzle's own `getSQLType()` emits is the string `information_schema` reads
  * the column back as, so the two sides compare without a mapping table
- * standing between them. A parameterised type is deliberately not among them
+ * standing between them. A parameterized type is deliberately not among them
  * — Drizzle spells one `varchar(50)` or `numeric(10, 2)` where
  * `information_schema` answers `character varying` and a separate precision —
  * so a module that adds one fails here and has to settle how it is compared

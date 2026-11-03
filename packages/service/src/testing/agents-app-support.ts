@@ -253,18 +253,18 @@ export function fakeEve(
     /** What eve looks at as it is asked to retire a session, written down beside the retire. */
     readonly resetSees?: Effect.Effect<boolean>;
     /** What happens while a cancel is out, before eve answers it, as a turn's end racing the Stop does. */
-    readonly cancelling?: Effect.Effect<void>;
+    readonly canceling?: Effect.Effect<void>;
   } = {},
 ) {
   const together = Latch.makeUnsafe(options.cancelsTogether === undefined);
   const opened: Opened[] = [];
   const sent: Sent[] = [];
-  const cancelled: (readonly [string, string])[] = [];
+  const canceled: (readonly [string, string])[] = [];
   /** Who asked each cancel, in order: the request's bearer, or the deployment acting for an account. */
-  const cancelledAs: string[] = [];
+  const canceledAs: string[] = [];
   /** Every session eve was asked to retire, in order. */
   const reset: string[] = [];
-  /** Who asked each retire, in order, as `cancelledAs` writes it. */
+  /** Who asked each retire, in order, as `canceledAs` writes it. */
   const resetAs: string[] = [];
   /** What `resetSees` saw at each retire, in order. */
   const resetSaw: boolean[] = [];
@@ -312,11 +312,11 @@ export function fakeEve(
       }),
     cancel: (sessionId, eveTurnId) =>
       Effect.suspend(() => {
-        cancelled.push([sessionId, eveTurnId]);
-        cancelledAs.push(authorization);
-        if (cancelled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
+        canceled.push([sessionId, eveTurnId]);
+        canceledAs.push(authorization);
+        if (canceled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
         return Effect.as(
-          Effect.andThen(together.await, options.cancelling ?? Effect.void),
+          Effect.andThen(together.await, options.canceling ?? Effect.void),
           options.cancels === false
             ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
             : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
@@ -332,7 +332,7 @@ export function fakeEve(
         }),
       ),
   });
-  return { eve, opened, sent, cancelled, cancelledAs, reset, resetAs, resetSaw };
+  return { eve, opened, sent, canceled, canceledAs, reset, resetAs, resetSaw };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */

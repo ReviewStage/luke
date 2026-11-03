@@ -62,7 +62,7 @@ export const GAP = {
 
 export type Gap = (typeof GAP)[keyof typeof GAP];
 
-/** Where items stand across the arrangement: at its start, its centre, its end, on one baseline, or filling it. */
+/** Where items stand across the arrangement: at its start, its center, its end, on one baseline, or filling it. */
 export const ALIGN = {
   START: "start",
   CENTER: "center",

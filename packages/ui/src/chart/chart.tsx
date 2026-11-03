@@ -21,7 +21,7 @@ import { cn } from "../cn.js";
 import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css.js";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
-// A dark series colour applies where the page is drawn in the dark theme
+// A dark series color applies where the page is drawn in the dark theme
 // (`data-ui-theme`, `@repo/ui`'s `tokens/surface.ts`).
 const THEMES = { light: "", dark: '[data-ui-theme="dark"]' } as const;
 
@@ -181,7 +181,7 @@ function ChartTooltipSwatch({ color }: { color: string | undefined }) {
 /**
  * A tooltip for a chart that is not recharts', one it places itself: the
  * same floating card as `ChartTooltipContent`, over `label`, with one row per
- * series under it, each its colour's swatch, its name, and its value.
+ * series under it, each its color's swatch, its name, and its value.
  */
 function ChartTooltipFrame({
   label,

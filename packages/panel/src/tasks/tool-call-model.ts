@@ -108,7 +108,7 @@ export interface ToolCallView {
   readonly connection?: string;
 }
 
-/** The escape every terminal colour and cursor sequence starts with. */
+/** The escape every terminal color and cursor sequence starts with. */
 const ESCAPE = String.fromCharCode(27);
 
 /** A control sequence (`ESC [ … m`) or an operating-system command (`ESC ] … BEL`), which a terminal would have eaten. */

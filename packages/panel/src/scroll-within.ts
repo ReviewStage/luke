@@ -9,10 +9,10 @@ import { askScroll } from "@repo/ui/scroll-asked";
  * is not `scrollIntoView`, because that scrolls every box around the line as
  * well, and the panel often arrives sliding in from past the window's edge,
  * so the window's own layout would be scrolled sideways after it. The
- * scroll is asked for (`askScroll`), so a log it centres a line in leaves
+ * scroll is asked for (`askScroll`), so a log it centers a line in leaves
  * its newest line for it.
  */
-export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
+export function centerWithin(lines: HTMLElement, target: HTMLElement): void {
   const box = lines.getBoundingClientRect();
   const line = target.getBoundingClientRect();
   askScroll(lines);

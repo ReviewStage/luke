@@ -12,21 +12,21 @@
 
 /** Runs `work` once the frame being drawn now has painted; answers what cancels it, which does nothing once it has run. */
 export function afterPaint(work: () => void): () => void {
-  let cancelled = false;
+  let canceled = false;
   const go = () => {
-    if (!cancelled) work();
+    if (!canceled) work();
   };
   if (document.visibilityState === "hidden") {
     queueMicrotask(go);
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }
   let frame = globalThis.requestAnimationFrame(() => {
     frame = globalThis.requestAnimationFrame(go);
   });
   return () => {
-    cancelled = true;
+    canceled = true;
     globalThis.cancelAnimationFrame(frame);
   };
 }

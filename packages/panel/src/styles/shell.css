@@ -24,7 +24,7 @@
 
    The panel's sheets read the narrow room off one attribute, the document's
    root's `data-ui-room` (`stage-room.ts`), which a dialog or a toast
-   portalled out of the shell answers alike. Note that it is written
+   portaled out of the shell answers alike. Note that it is written
    `:where(:root)[data-ui-room="narrow"] .desktop-shell`, whose weight is
    that of the `.desktop-shell[data-room]` it replaced, so no rule changes
    which one wins. The shell's own `data-room` stays for `@repo/ui`'s
@@ -618,7 +618,7 @@
   display: none;
 }
 
-/* Beside the traffic lights, centred on them, the sidebar toggle in the same
+/* Beside the traffic lights, centered on them, the sidebar toggle in the same
    place whichever way the sidebar is and New plan after it while folded;
    and
    level with them at the window's other edge, as far in from it as these are
@@ -626,7 +626,7 @@
    the panel is.
 
    A pane slides beneath them as it opens and shuts, so nothing may show
-   through them on its way past. `--title-bar-ground` is the colour of the bar
+   through them on its way past. `--title-bar-ground` is the color of the bar
    each cluster rests on, and a button under the pointer draws its translucent fill
    over that ground rather than over the pane: at rest it looks no different,
    and in motion it is opaque. The panel's tab row passes beneath the toggle

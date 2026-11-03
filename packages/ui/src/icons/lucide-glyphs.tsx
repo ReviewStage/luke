@@ -80,7 +80,7 @@ export const WaveformIcon = lucideGlyph(AudioLines, "icon-button-glyph");
 /**
  * The worker's robot in the muted ink: an agent whose harness is not known
  * yet, until the harness's mark takes its place. Note that it is muted,
- * because beside the harnesses' coloured marks a robot in the full ink would
+ * because beside the harnesses' colored marks a robot in the full ink would
  * read as the agent's own mark rather than a stand-in for one.
  */
 export const AgentPlaceholderIcon = lucideGlyph(Bot, "settings-icon text-muted-foreground");

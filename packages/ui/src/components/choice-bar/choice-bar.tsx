@@ -4,7 +4,7 @@
  * What it says to a reader follows from what it does, never from how it
  * looks. A bar handed `panels` switches what is shown: it is a tablist,
  * each tab selected while its view is shown and controlling that view's
- * panel, which the caller draws labelled by its tab. A bar without sets a
+ * panel, which the caller draws labeled by its tab. A bar without sets a
  * value: it is a radio group, each option checked while it is the value.
  * Either is one tab stop on the chosen option (the first while none is),
  * the arrows (and ↑/↓ for a radio group) moving along it and choosing as
@@ -301,7 +301,7 @@ const ICON =
   "ui-choice-bar-icon inline-flex [--ui-glyph-size:var(--ui-control-icon)] [&>svg]:size-control-icon";
 
 /**
- * The count lays its parts out as a row centred on the option rather than
+ * The count lays its parts out as a row centered on the option rather than
  * as words on a line, because a part is an inline box whose baseline is its
  * glyph's bottom edge, which set it a pixel or two above the option's name;
  * the gap stands for the space between parts, which a row drops.

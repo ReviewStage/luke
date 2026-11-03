@@ -541,13 +541,13 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         });
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
-        const cancelled = yield* sessions.cancel(
+        const canceled = yield* sessions.cancel(
           opened.sessionId,
           yield* turnUnderWay(userId, agent),
         );
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+        assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
         const lines = (yield* launchLines(api.commands[0])).slice(2) as InputLine[];
         assert.deepEqual(lines[0], {
           type: INPUT_LINE.MODEL,

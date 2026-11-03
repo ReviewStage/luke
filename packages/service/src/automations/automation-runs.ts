@@ -144,10 +144,10 @@ export type SessionsForAccount = (
 /** Each GitHub event as the agent's prompt names it. */
 const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED]: "a pull request was opened",
-  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: "a pull request was labelled",
+  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: "a pull request was labeled",
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED]: "a pull request was opened or pushed to",
   [GITHUB_TRIGGER_EVENT.ISSUE_OPENED]: "an issue was opened",
-  [GITHUB_TRIGGER_EVENT.ISSUE_LABELED]: "an issue was labelled",
+  [GITHUB_TRIGGER_EVENT.ISSUE_LABELED]: "an issue was labeled",
   [GITHUB_TRIGGER_EVENT.CHECK_FAILED]: "a check suite failed",
   [GITHUB_TRIGGER_EVENT.PUSH]: "commits were pushed",
 } as const satisfies Record<GitHubTriggerEvent, string>;

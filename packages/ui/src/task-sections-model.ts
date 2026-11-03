@@ -133,7 +133,7 @@ export function entryMoveWrites(
  * among the rows it draws, `order`, the row left out of the count, from
  * another section or from none; a row already among them is moved within
  * it. The row's own write comes first, so it stands in the section before
- * any neighbour is given a new place beside it. A row new to the section
+ * any neighbor is given a new place beside it. A row new to the section
  * dropped on top needs no place, since one never dragged stands on top.
  */
 export function placeWrites(
@@ -181,7 +181,7 @@ export function placeAllWrites(
       const position = positions.get(each);
       return position === undefined ? each : { ...each, position };
     });
-    // The moving row stands first in the answer, so its own write goes ahead of its neighbours'.
+    // The moving row stands first in the answer, so its own write goes ahead of its neighbors'.
     for (const [each, position] of positions) {
       writes.push(placeWrite(memberOf(each), sectionId, position));
     }

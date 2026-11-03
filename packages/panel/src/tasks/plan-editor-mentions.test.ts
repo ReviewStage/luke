@@ -311,7 +311,7 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
   );
 });
 
-test("on the plan's page an @ typed in the plan offers the workspace's other agents after its own, each labelled by its task", async () => {
+test("on the plan's page an @ typed in the plan offers the workspace's other agents after its own, each labeled by its task", async () => {
   const agent = (id: string, name: string) => ({
     id,
     name,

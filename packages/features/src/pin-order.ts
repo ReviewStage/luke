@@ -92,7 +92,7 @@ export function inPinOrder<Row>(rows: readonly Row[], placeOf: (row: Row) => Pin
 
 /**
  * The positions that stand `after`, the pins in the order a drop leaves
- * them, as drawn: `moved`'s, between its neighbours', and any other pin's
+ * them, as drawn: `moved`'s, between its neighbors', and any other pin's
  * that holds none or no longer sorts after the one before it, so every pin
  * holds a position and the positions run in the order drawn. A pin whose
  * position stands is not in the answer, so a drop between two positioned

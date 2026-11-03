@@ -14,7 +14,7 @@ import {
  * its dimmed arrow so the others do not shift, and is hidden from a reader,
  * for whom it is not there. The current page is no link: it is held,
  * announced as `aria-current="page"`. Past a handful of pages the numbers
- * elide to the first, the last, and the current page's neighbours, so the
+ * elide to the first, the last, and the current page's neighbors, so the
  * row stays one short line however many pages there are. Without numbers
  * the two steps stand at either end of the row, each saying where it goes.
  * The row and its elision are shadcn/ui's (`../../shadcn/pagination.tsx`);

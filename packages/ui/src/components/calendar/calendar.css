@@ -4,7 +4,7 @@
 
 @layer components {
   /* Note that a day draws the keyboard's ring inside itself, because its
-     neighbours stand against it on every side. */
+     neighbors stand against it on every side. */
   .ui-calendar-day {
     outline-offset: var(--ui-focus-ring-inset);
   }

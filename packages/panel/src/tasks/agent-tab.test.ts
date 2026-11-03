@@ -445,7 +445,7 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
     agents: [listedAgent("agent-7", "Invoice export")],
     archived: [
       listedAgent("agent-8", "Retry audit", {
-        status: AGENT_STATUS.CANCELLED,
+        status: AGENT_STATUS.CANCELED,
         archivedAt: 2,
       }),
     ],

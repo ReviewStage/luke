@@ -67,7 +67,7 @@ const STAND_IN =
 
 /**
  * A tile's frame, filling the tile's room at the picture's shape, what stands
- * in for the picture centred in it: a gone one's words, or a failed one's
+ * in for the picture centered in it: a gone one's words, or a failed one's
  * sentence and Retry, inset, a file's long name wrapping rather than running
  * out of the frame.
  */

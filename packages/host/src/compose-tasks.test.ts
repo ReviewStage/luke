@@ -1250,7 +1250,7 @@ it.effect(
 );
 
 it.effect(
-  "a window of a File tab's file is answered as the service read it, its lines plain, since the panel colours code itself",
+  "a window of a File tab's file is answered as the service read it, its lines plain, since the panel colors code itself",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);

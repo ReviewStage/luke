@@ -39,7 +39,7 @@ import {
 /**
  * How a coding agent's turn whose end is never coming is settled, over a
  * real dialect: by the sweep once it ran past its bound, by the sweep as
- * cancelled once a Stop eve never confirmed is past its own, and at once when
+ * canceled once a Stop eve never confirmed is past its own, and at once when
  * eve said its session ended for good.
  *
  * Synthetic accounts, conversations, and turns throughout.
@@ -150,7 +150,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* lose(idle), []);
         assert.deepEqual(yield* newestTurnOf(idle), [TURN_STATUS.SETTLED, null]);
 
-        // A turn a Stop was asked of ends cancelled, as the Stop asked, and is no failure the settle answers.
+        // A turn a Stop was asked of ends canceled, as the Stop asked, and is no failure the settle answers.
         const stopped = yield* openAgentConversation;
         const stoppedTurn = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
         yield* writer.requestTurnCancel(stopped, {
@@ -158,7 +158,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           at: new Date(STARTED_AT + 5),
         });
         assert.deepEqual(yield* lose(stopped), []);
-        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
+        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELED, null]);
 
         const brain = yield* openConversation(CONVERSATION_KIND.MAIN);
         yield* turnIn(writer, brain, TURN_STATUS.RUNNING);
@@ -246,7 +246,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
   );
 
   it.effect(
-    "the end of a session settles a turn a Stop was asked of as cancelled, and reads on past one batch until every open turn is settled",
+    "the end of a session settles a turn a Stop was asked of as canceled, and reads on past one batch until every open turn is settled",
     () =>
       Effect.gen(function* () {
         const writer = yield* storeWriter({ tools: {} });
@@ -259,7 +259,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           yield* settleEndedSession(writer, stoppedSession, { now: STARTED_AT + 10 }),
           1,
         );
-        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
+        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELED, null]);
 
         const busySession = `wrun_${randomUUID()}`;
         const busy = yield* openConversation(CONVERSATION_KIND.AGENT, busySession);
@@ -311,7 +311,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
   );
 
   it.effect(
-    "the sweep settles a turn whose Stop eve never confirmed as cancelled once past the Stop's bound, and not before, dropping the turn a native projection holds",
+    "the sweep settles a turn whose Stop eve never confirmed as canceled once past the Stop's bound, and not before, dropping the turn a native projection holds",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
@@ -335,7 +335,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           { writer },
           { now: stoppedAt + TURN_ABANDON.CANCEL_AFTER_MS + 1 },
         );
-        assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.CANCELLED, null]);
+        assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.CANCELED, null]);
         const [row] = yield* db
           .select({ projection: conversations.nativeProjection })
           .from(conversations)

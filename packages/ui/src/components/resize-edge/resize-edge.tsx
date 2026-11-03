@@ -74,7 +74,7 @@ const KEY_STEP = 16;
 /**
  * A pane's widths, in CSS pixels: the least and greatest it is dragged to, and
  * the one a reset gives it. A pane with no greatest width of its own is held
- * only by the reserve its neighbour keeps.
+ * only by the reserve its neighbor keeps.
  */
 interface EdgeBounds {
   readonly MIN: number;
@@ -88,7 +88,7 @@ export interface ResizeEdgeOptions {
   width: number;
   bounds: EdgeBounds;
   /**
-   * What the pane leaves its neighbour in the container they share, read from
+   * What the pane leaves its neighbor in the container they share, read from
    * that container as a drag or a key press begins: the pane is dragged no
    * wider than the container less this, whatever its own bound says, so the
    * column beside it stays readable.

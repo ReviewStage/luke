@@ -67,7 +67,7 @@ const MAPS_PAGE = {
   DIRECTIONS: "dir",
 } as const;
 
-/** A step after a Maps page's names that is the view's and no name: its centre and zoom, `@37.8,-122.4,17z`, or its state, `data=…`. */
+/** A step after a Maps page's names that is the view's and no name: its center and zoom, `@37.8,-122.4,17z`, or its state, `data=…`. */
 const MAPS_VIEW_STEP = /^(?:@|data=)/u;
 
 /** The editors on Google's Docs host, each by the first step of its pages' paths. */

@@ -18,7 +18,7 @@ type ImageIntake = (typeof IMAGE_INTAKE)[keyof typeof IMAGE_INTAKE];
  * How a re-encode is drawn: scaled to fit the longest edge and written as
  * lossy WebP. Two rounds, because the first is quality worth keeping and the
  * second is the difference between a screenshot arriving smaller and not
- * arriving at all. A screenshot is mostly flat colour and text, which WebP
+ * arriving at all. A screenshot is mostly flat color and text, which WebP
  * holds well at these settings.
  */
 const RECODE_ROUNDS = [
@@ -77,7 +77,7 @@ interface RecodeRegion {
 
 /**
  * What a round draws: the whole picture scaled to fit its longest edge, or,
- * for a square, the picture's centre square, its shorter side's length on
+ * for a square, the picture's center square, its shorter side's length on
  * both, scaled to the square's edge, so a wide or tall picture loses its
  * ends rather than being squashed.
  */
@@ -155,7 +155,7 @@ async function recodedImage(
  * Turns one picked or pasted file into an image of at most the bytes given,
  * or nothing if it cannot come: a feedback note's screenshot, a file on a
  * coding agent's message, or, given `square`, a workspace's photo, always
- * re-encoded as WebP to its centre square that many pixels a side.
+ * re-encoded as WebP to its center square that many pixels a side.
  * Everything here happens on the user's machine: a file is only read,
  * scaled, and encoded — nothing leaves until the message it belongs to is
  * sent.

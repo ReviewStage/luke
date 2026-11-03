@@ -99,7 +99,7 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
   );
 }
 
-/* The navs stand under the notes' column, not centred on the page, so they
+/* The navs stand under the notes' column, not centered on the page, so they
    line up with what they page through: clear of the entry's 8.5rem rail and
    its `gap-10`, 176px in all; on one column there is no rail to clear. */
 const UNDER_NOTES = "ml-44 pt-4 max-[640px]:ml-0";

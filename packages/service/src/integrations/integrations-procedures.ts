@@ -21,7 +21,7 @@
  *   (`accountIntegrationConnect`) stands unavailable, and every route below
  *   refuses it as one with no connector here. A caller with only the
  *   session cookie is answered where each row stands as stored, a sign-in
- *   under way `pending`, and nothing is settled, ended, or labelled: a Lax
+ *   under way `pending`, and nothing is settled, ended, or labeled: a Lax
  *   cookie rides a link another site's page sends a browser on, which must
  *   not settle the account's sign-in.
  * - `POST /api/account/integrations/settle` is that read with its settling,
@@ -397,7 +397,7 @@ const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * A connected account as the statuses read answers it, labelled once from
+ * A connected account as the statuses read answers it, labeled once from
  * its grant where it carries no label: an account connected before labels
  * were kept, or one whose sign-in's grant named nothing then. Its name at
  * the provider is read from Connect's grant fields, the same ones a
@@ -412,7 +412,7 @@ const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
  * answered no name, or could not be read, is held from asking again for as
  * long as a tools read is (`unnamed`), so the read never waits on it twice.
  */
-const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
+const labeledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   unnamed: UnnamedHold,
   connector: ConnectorService,
@@ -489,7 +489,7 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
             ? { ...row, label: standing.accountName }
             : row;
         return {
-          row: yield* labelledRow(seams, unnamed, connector, settled, standing.status),
+          row: yield* labeledRow(seams, unnamed, connector, settled, standing.status),
           standing,
         };
       });

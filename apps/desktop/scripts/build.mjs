@@ -268,8 +268,8 @@ await Promise.all([
     sourcemap: "external",
     logLevel: "info",
   }),
-  // The code colouring process main forks with `utilityProcess`
-  // (`src/main/services/task-code-colouring.ts`), its own bundle so Shiki,
+  // The code coloring process main forks with `utilityProcess`
+  // (`src/main/services/task-code-coloring.ts`), its own bundle so Shiki,
   // its themes and its grammars ride in it alone and never in main's.
   build({
     entryPoints: [path.join(appRoot, "src/utility/task-code.ts")],

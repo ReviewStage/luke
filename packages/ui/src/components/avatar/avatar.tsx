@@ -28,7 +28,7 @@ import {
  * Nobody, where a place says who is on something and no one is, stands as
  * an empty seat in a dashed outline of the same box (`UnassignedAvatar`),
  * as Linear draws a task with no assignee: a solid head and shoulders cut
- * off by the ring, so the row reads level with its neighbours, never passes
+ * off by the ring, so the row reads level with its neighbors, never passes
  * for anyone's face, and the figure, solid rather than traced so it holds at
  * a row's smallest size, tells it from the backlog's dashed status ring.
  *
@@ -172,21 +172,21 @@ function groundClass({ glyph, tiled, blank, hue }: Look): string {
   return "bg-secondary text-muted-foreground";
 }
 
-/** A disc's edge: a hairline, so a picture keeps its edge on a ground of its own colour; a tile's, only where it is `edged`; none round an app's glyph. */
+/** A disc's edge: a hairline, so a picture keeps its edge on a ground of its own color; a tile's, only where it is `edged`; none round an app's glyph. */
 function edgeClass({ shape, glyph, edged }: Look): string {
   if (glyph) return "after:content-none";
   if (shape !== AVATAR_SHAPE.TILE) return "after:shadow-avatar-edge";
   return edged ? "after:shadow-avatar-tile-edge" : "after:content-none";
 }
 
-/** Every class a disc wears, its line closing them so a letter of any size sits at the box's centre. */
+/** Every class a disc wears, its line closing them so a letter of any size sits at the box's center. */
 function discClass(look: Look): string {
   return `ui-avatar ${typeClass(look)} ${SHAPE_CLASS[look.shape]} ${groundClass(look)} ${edgeClass(look)} leading-none`;
 }
 
 interface AvatarProps {
   name: string;
-  /** What the hue is read off, so a rename keeps the colour a person is known by. */
+  /** What the hue is read off, so a rename keeps the color a person is known by. */
   id?: string;
   /** The picture's address, which a caller sizes for the disc. */
   src?: string | undefined;

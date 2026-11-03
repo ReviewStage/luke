@@ -15,7 +15,7 @@ import { WorkingMark } from "../working-mark/working-mark.js";
  *
  * An agent that failed wears the failed mark every failure wears; an
  * agent at work, the working mark; and else the pull request they left, in GitHub's
- * glyph and colour for where it stands: open in the success green, a draft
+ * glyph and color for where it stands: open in the success green, a draft
  * in the muted ink, merged in the merged purple, closed in the danger red,
  * and an open one in the merge queue the merge's glyph in the attention
  * orange, as every other mark of a pull request draws it.
@@ -48,7 +48,7 @@ const PULL_REQUEST_WORDS = {
   [PULL_REQUEST_MARK_QUEUED]: "Pull request queued",
 } as const satisfies Record<PullRequestMarkState, string>;
 
-/** GitHub's colour for where a pull request stands. */
+/** GitHub's color for where a pull request stands. */
 const PULL_REQUEST_INK = {
   [PULL_REQUEST_STATE.OPEN]: "text-complete",
   [PULL_REQUEST_STATE.DRAFT]: "text-muted-foreground",

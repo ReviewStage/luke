@@ -50,11 +50,11 @@ function ErrorStates(): React.JSX.Element {
           </ErrorState>
         </div>
       </CatalogSection>
-      <CatalogSection id="error-state-centred" title="Alone in its region">
+      <CatalogSection id="error-state-centered" title="Alone in its region">
         <div className="catalog-frame catalog-region catalog-error-region">
           <ErrorState
             failure={CATALOG_FAILURE}
-            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
             onRetry={stay}
           >
             The changes could not be read.

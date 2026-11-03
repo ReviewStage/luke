@@ -55,7 +55,7 @@ import {
 } from "../testing/agents-app-support.js";
 import { queueAtTurnEnd, sendQueued, sweepAgentQueues } from "./coder-host/agent-queue.js";
 import { steerAgentWritten } from "./coder-host/steer.js";
-import { cancelledTurn } from "./coder-host/stop.js";
+import { canceledTurn } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
 
@@ -715,7 +715,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 2,
-          status: RUN_STATUS.CANCELLED,
+          status: RUN_STATUS.CANCELED,
           responseIds: [],
           at: 0,
         });
@@ -843,7 +843,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
     () =>
       Effect.gen(function* () {
         let racing: Effect.Effect<void> = Effect.void;
-        const eve = fakeEve({ cancelling: Effect.suspend(() => racing) });
+        const eve = fakeEve({ canceling: Effect.suspend(() => racing) });
         const { agent, ask, owner, target, writer, turnId, github } = yield* messagedAgent(eve, {
           running: true,
         });
@@ -862,7 +862,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
             conversationId: sessionKey(target.conversationId),
             turnId,
             sequence: 2,
-            status: RUN_STATUS.CANCELLED,
+            status: RUN_STATUS.CANCELED,
             responseIds: [],
             at: 0,
           }),
@@ -884,7 +884,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
   );
 
   it.effect(
-    "a turn cancelled other than by the Stop route, as a Continue, another agent's stop_agent, or a rewind cancels it, pauses the queue before the cancel",
+    "a turn canceled other than by the Stop route, as a Continue, another agent's stop_agent, or a rewind cancels it, pauses the queue before the cancel",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -896,7 +896,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         });
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
 
-        yield* cancelledTurn(
+        yield* canceledTurn(
           Effect.succeed(eve.eve(`deployment:${owner}`)),
           storeWriter({ tools: CODER_TOOL_SET }),
           stored,

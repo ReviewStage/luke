@@ -1104,14 +1104,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         message(agent, "Also the emails.", lineId),
       );
       const turnId = yield* turnUnderWay(userId, agent);
-      const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
+      const canceled = yield* sessions.cancel(opened.sessionId, turnId);
 
       assert.deepEqual(sent, {
         outcome: EVE_SEND_OUTCOME.ACCEPTED,
         sessionId: opened.sessionId,
         deliveryId: lineId,
       });
-      assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+      assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
       const [model, line, stop] = ((yield* launchLines(api.commands[0])) as InputLine[]).slice(2);
       // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
@@ -1161,7 +1161,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a Stop its runner never confirms ends that runner and settles the turn cancelled once its bound is up",
+    "a Stop its runner never confirms ends that runner and settles the turn canceled once its bound is up",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1175,7 +1175,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const turnId = yield* turnUnderWay(userId, agent);
         const kept = keptAfterResponse();
 
-        const cancelled = yield* sessions
+        const canceled = yield* sessions
           .cancel(opened.sessionId, turnId)
           .pipe(Effect.provide(kept.layer));
         // The Stop's stamp, as `stop.ts` writes it once the cancel is taken.
@@ -1192,9 +1192,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* TestClock.adjust("1 second");
         yield* across(Fiber.join(forcing), CODER.RUNNER_LEASE.POLL, 5);
 
-        assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+        assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
         assert.equal(before.status, TURN_STATUS.QUEUED);
-        assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.CANCELLED);
+        assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.CANCELED);
         assert.equal(api.commands.length, 1);
         assert.notEqual(api.commands[0]?.exitCode, null, "the runner was ended");
       }),
@@ -1213,9 +1213,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       yield* TestClock.adjust("1 second");
       yield* turnUnderWay(userId, agent);
 
-      const cancelled = yield* sessions.cancel(opened.sessionId, stopped);
+      const canceled = yield* sessions.cancel(opened.sessionId, stopped);
 
-      assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+      assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
       assert.ok(
         ((yield* launchLines(api.commands[0])) as InputLine[]).every(
           (line) => line.type !== INPUT_LINE.STOP,
@@ -2119,12 +2119,12 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
         const before = (yield* launchLines(api.commands[0])).length;
-        const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
+        const canceled = yield* sessions.cancel(opened.sessionId, turnId);
         const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Again."));
-        assert.deepEqual(cancelled, { outcome: "failed", status: 503 });
+        assert.deepEqual(canceled, { outcome: "failed", status: 503 });
         assert.equal(retuned, RUNNER_CHOICE.FAILED);
         assert.equal(api.commands.length, 1);
         assert.equal((yield* launchLines(api.commands[0])).length, before);
@@ -2734,12 +2734,12 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const queuedBehind = yield* mySessions
         .send(opened.sessionId, message(mine.agent, "Still not yours."))
         .pipe(Effect.provide(keptAfterResponse().layer));
-      const cancelled = yield* mySessions.cancel(opened.sessionId, "turn_0");
+      const canceled = yield* mySessions.cancel(opened.sessionId, "turn_0");
       const reset = yield* mySessions.reset(opened.sessionId);
 
       assert.deepEqual(sent, { outcome: EVE_SEND_OUTCOME.RETIRED });
       assert.deepEqual(queuedBehind, { outcome: EVE_SEND_OUTCOME.RETIRED });
-      assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+      assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
       assert.equal(reset.outcome, EVE_RESET_OUTCOME.NO_ACTIVE_SESSION);
       assert.equal(api.sandboxes[0]?.deleted, false);
       assert.equal((yield* launchLines(api.commands[0])).length, 2);

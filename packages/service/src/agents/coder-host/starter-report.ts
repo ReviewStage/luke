@@ -70,7 +70,7 @@ function finalWords(journal: StoredUIMessage): string | undefined {
 
 /** How the turn ended, in the head's words. */
 function ended(turn: SettledAgentTurn): string {
-  if (turn.status === TURN_STATUS.CANCELLED) return "was stopped before it finished";
+  if (turn.status === TURN_STATUS.CANCELED) return "was stopped before it finished";
   if (turn.status === TURN_STATUS.FAILED) {
     return `failed its turn${turn.failure === null ? "" : ` (${turn.failure})`}`;
   }

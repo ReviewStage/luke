@@ -15,7 +15,7 @@ import { cn } from "../cn.js";
  * takes the control it hangs from (`anchor`) and a fixed position, because
  * when it shows is `@repo/ui`'s `Tooltip`'s (`components/tooltip/hint.tsx`),
  * not a trigger's. shadcn's arrow, trigger, and provider are left out: the
- * pill always hangs centred on what it names. What an app draws is
+ * pill always hangs centered on what it names. What an app draws is
  * `@repo/ui`'s `TooltipPill`; this is its inside.
  */
 

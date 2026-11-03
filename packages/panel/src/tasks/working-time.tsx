@@ -27,7 +27,7 @@ import { TurnCard } from "./turn-card.js";
  * saying how long it worked and when it ended, as Codex and Cursor end a
  * turn: "Worked for 1m 18s · Today, 3:42 PM", the day worded as a call's
  * header words it, and the turn's card on hover (`turn-card.tsx`). The two
- * read as one line in two states, so they share a type, a colour, and the
+ * read as one line in two states, so they share a type, a color, and the
  * room above them, the finished line only without the shimmer: both are
  * the transcript's quiet note line (`NoteLine`), selectable, as the
  * transcript around them is.

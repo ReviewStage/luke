@@ -6,7 +6,7 @@
  * `actContract`, so the panel's act door calls a kind by its own name.
  */
 
-/** The account's asks: a sign-in begun, begun again, or cancelled, a sign-out, and the account deleted. */
+/** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, and the account deleted. */
 export const ACCOUNT_ACT_KIND = {
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
   ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
@@ -274,7 +274,7 @@ export const SETTINGS_ACT_KIND = {
  * GitHub connected or disconnected. And
  * what one task holds, read as its tabs draw it: its
  * earlier work and conversation, its repository's files,
- * folders, skills, pull requests, and issues, a fenced block coloured, its
+ * folders, skills, pull requests, and issues, a fenced block colored, its
  * plan's history, pages, pictures, and comments, and a task given its
  * status and priority.
  */
@@ -320,7 +320,7 @@ export const TASKS_ACT_KIND = {
   GITHUB_DISCONNECT: "github.disconnect",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
-  /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
+  /** A File tab's window of a file of the open task's repository, read from GitHub through the service and colored by main; answered to the tab, never on the document. */
   TASKS_FILE: "tasks.file",
   /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
   TASKS_TREE: "tasks.tree",
@@ -341,8 +341,8 @@ export const TASKS_ACT_KIND = {
    * Realtime, never on the document.
    */
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
-  /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
-  TASKS_COLOUR_CODE: "tasks.colourCode",
+  /** A fenced block of a transcript's markdown, colored by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
+  TASKS_COLOR_CODE: "tasks.colourCode",
   /** The id of the task a link names by its workspace and its number, found on the service before the link opens; answered to the window, never on the document. */
   TASKS_FIND: "tasks.find",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -351,7 +351,7 @@ export const TASKS_ACT_KIND = {
   TASKS_REVISION: "tasks.revision",
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
-  /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
+  /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and colored by main as HTML; answered to the tab, never on the document. */
   TASKS_PAGE_SOURCE: "tasks.pageSource",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
   TASKS_PAGES: "tasks.pages",

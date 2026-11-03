@@ -43,7 +43,7 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
  * picks a destination rather than a `ConfirmDialog`, which only asks yes or
  * no. The question goes with its task and its surface (`@repo/ui`'s
  * `useConfirmDialog`), a move landed puts it away, and a refused one keeps it up saying so under the
- * list, the toast the move would raise held back in its favour.
+ * list, the toast the move would raise held back in its favor.
  */
 
 /** What the dialog says under its list when the service refused the move. */

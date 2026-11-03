@@ -126,7 +126,7 @@ test("a pool kept for a list drawn in another look hands its workers that look",
   });
 });
 
-test("a list's workers colour with Highlights where the window may compile WebAssembly", async () => {
+test("a list's workers color with Highlights where the window may compile WebAssembly", async () => {
   started = startHighlighting(() => new StandInWorker(true), LOOK, 1000);
   assert.equal(await started.settled, HIGHLIGHT_MODE.POOL);
   const starts = sent.filter((request) => request.type === "initialize");
