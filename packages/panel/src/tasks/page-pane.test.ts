@@ -487,7 +487,7 @@ test("on a phone the page draws no bar, and the task's header's ⋯ offers every
   assert.match(sheet.textContent ?? "", /View options.*Word wrap/);
 });
 
-test("Comment asks the frame for an element, an element holding threads is pinned with their count, and the element picked opens a comment quoting its words", async () => {
+test("Comment asks the frame for an element, an element holding threads is pinned, the element picked opens a comment quoting its words, and a press in the page lets go of it", async () => {
   const path = "body > p:nth-of-type(1)";
   const thread: PlanCommentThread = {
     id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e61",
@@ -545,12 +545,23 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   });
 
   assert.deepEqual(posted, [
-    { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.MARK, paths: [path] },
+    { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.MARK, marks: [{ path }] },
     { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.START },
     { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.STOP },
   ]);
-  assert.ok(container.querySelector('button[aria-label="1 comment"]'), "the element is pinned");
+  assert.ok(
+    container.querySelector('button.luke-comment-pin[aria-label="1 comment"]'),
+    "the element is pinned",
+  );
   const field = container.querySelector(".page-comment-float");
   assert.ok(field, "the comment is started by the element");
   assert.match(field.textContent ?? "", /Totals/);
+
+  // A press in the page, selecting nothing, is a press away, which lets go of a comment holding no words of its own.
+  postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, pressed: true });
+  assert.equal(
+    container.querySelector(".luke-rect-float:not([data-leaving]) .page-comment-float"),
+    null,
+    "the comment being started goes",
+  );
 });

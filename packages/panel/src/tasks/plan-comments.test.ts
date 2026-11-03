@@ -217,12 +217,12 @@ function drawn(
   return { container, asked, started, documentsShown, notes, rethread };
 }
 
-/** What `draw` drew with the column stood wide enough for its margin, since jsdom lays nothing out. */
-function wide<Drawn>(draw: () => Drawn): Drawn {
+/** What `draw` drew with the column stood `across` wide, by default wide enough for its margin, since jsdom lays nothing out. */
+function wide<Drawn>(draw: () => Drawn, across = 1400): Drawn {
   const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
     configurable: true,
-    get: () => 1400,
+    get: () => across,
   });
   try {
     return draw();
@@ -2081,4 +2081,11 @@ test("an edit emptied and saved asks to delete the comment, and only the confirm
   assert.deepEqual(asked, [
     { thread: ID.OPEN, action: { action: PLAN_COMMENT_ACTION.DELETE_THREAD } },
   ]);
+});
+
+test("a scroller with room for the reading width and one margin, but not one on each side of the centred column, folds its threads to counts rather than running a card past its edge", () => {
+  const { container } = wide(() => drawn("page"), 1200);
+
+  assert.ok(container.querySelector(".comment-count"), "the threads are counted at their lines");
+  assert.equal(container.querySelector(".comment-margin"), null, "no margin stands");
 });

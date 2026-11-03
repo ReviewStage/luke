@@ -239,8 +239,9 @@ const planCommentPlanStartSchema = EffectSchema.Struct({
 /**
  * A thread started on one of the task's pages (the same POST): its first
  * comment, the page and the version the member was reading, and the element
- * they picked in its frame, where they picked one, by its path, its words,
- * and the heading of the section it stands in. The service takes the page's
+ * they picked in its frame, or that holds the words they selected there,
+ * where they did, by its path, its words or those selected, and the heading
+ * of the section it stands in. The service takes the page's
  * title as the quote of a thread on the whole page.
  */
 const planCommentPageStartSchema = EffectSchema.Struct({
@@ -253,6 +254,8 @@ const planCommentPageStartSchema = EffectSchema.Struct({
       section: EffectSchema.String.check(
         EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS),
       ),
+      /** Whether the quote is words selected in the element, which the page tints, rather than the element as a whole. */
+      words: EffectSchema.optionalKey(EffectSchema.Literal(true)),
     }),
   ),
   words: planCommentWordsSchema,

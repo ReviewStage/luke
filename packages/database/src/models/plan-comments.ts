@@ -697,8 +697,9 @@ function placedOnPlan(
 
 /**
  * A thread placed on the version of the task's page the request names: on
- * the element it picked there, or on the whole page, quoted by the version's
- * title; no page where the task holds no such version.
+ * the element it picked there, or on words selected in one, or on the whole
+ * page, quoted by the version's title; no page where the task holds no such
+ * version.
  */
 function placedOnPage(
   taskId: string,
@@ -716,7 +717,7 @@ function placedOnPage(
         }
         return {
           ...on,
-          scope: PLAN_COMMENT_SCOPE.ELEMENT,
+          scope: element.words === true ? PLAN_COMMENT_SCOPE.WORDS : PLAN_COMMENT_SCOPE.ELEMENT,
           quote: element.quote,
           section: element.section,
           pageElement: element.path,

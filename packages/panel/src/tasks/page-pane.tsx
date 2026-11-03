@@ -11,12 +11,13 @@ import {
   type FrameBox,
   PAGE_PICK_ACT,
   PAGE_PICK_TYPE,
+  type PageMark,
   type PagePickAsk,
   type PagePicked,
   pagePickAnswerSchema,
 } from "@luke/features/page-pick";
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import { PLAN_COMMENT_STATUS, type PlanCommentThread } from "@luke/features/plan-comment-wire";
+import { PLAN_COMMENT_SCOPE, type PlanCommentThread } from "@luke/features/plan-comment-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { readingWords } from "@luke/features/words";
@@ -69,11 +70,13 @@ import {
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
 import {
+  ownWordsIn,
   PAGE_COMMENT_WORDS,
   PageCommentLayer,
   type PageCommentOn,
   PageComments,
   pageDraftPlace,
+  threadsByElement,
   withQuote,
 } from "./plan-comments.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
@@ -270,13 +273,17 @@ function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
 interface FrameComments {
   /** Whether the frame takes the next press as a comment's element. */
   readonly picking: boolean;
-  /** The path of the element outlined, whose threads are open by it; none outlined. */
+  /** The path of the element outlined, whose threads are open; none outlined. */
   readonly shown: string | undefined;
-  /** The paths of the elements holding threads, whose boxes the frame says. */
-  readonly paths: readonly string[];
+  /** The path of the element outlined faintly, whose pin the pointer is over; none outlined. */
+  readonly hinted: string | undefined;
+  /** The elements holding threads, whose boxes the frame says, and the words their threads quote. */
+  readonly marks: readonly PageMark[];
   readonly onPicked: (picked: PagePicked) => void;
   /** The pick let go in the page, by Escape. */
   readonly onStopped: () => void;
+  /** A press landed in the page, selecting nothing, which closes what stands over it as a press away does. */
+  readonly onPressed: () => void;
 }
 
 /** What the frame said for a page's comments: where each element marked stands, by its path, and the words selected in it. */
@@ -287,8 +294,11 @@ interface FrameSaid {
 
 const NOTHING_SAID: FrameSaid = { marks: new Map(), selected: undefined };
 
-function samePaths(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((path, at) => path === b[at]);
+function sameMarks(a: readonly PageMark[], b: readonly PageMark[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((mark, at) => mark.path === b[at]?.path && mark.words === b[at]?.words)
+  );
 }
 
 /**
@@ -312,12 +322,13 @@ function useFrameComments(frame: RefObject<HTMLIFrameElement | null>, asks: Fram
     [frame],
   );
   // Note that a page no one comments on is asked nothing.
-  const told = useRef<{ picking: boolean; shown: string | undefined; paths: readonly string[] }>({
-    picking: false,
-    shown: undefined,
-    paths: [],
-  });
-  const { picking, shown, paths } = asks;
+  const told = useRef<{
+    picking: boolean;
+    shown: string | undefined;
+    hinted: string | undefined;
+    marks: readonly PageMark[];
+  }>({ picking: false, shown: undefined, hinted: undefined, marks: [] });
+  const { picking, shown, hinted, marks } = asks;
   useEffect(() => {
     if (picking !== told.current.picking) {
       post({ type: PAGE_PICK_TYPE, act: picking ? PAGE_PICK_ACT.START : PAGE_PICK_ACT.STOP });
@@ -325,17 +336,20 @@ function useFrameComments(frame: RefObject<HTMLIFrameElement | null>, asks: Fram
     if (shown !== told.current.shown) {
       post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.SHOW, path: shown ?? "" });
     }
-    if (!samePaths(paths, told.current.paths)) {
-      post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.MARK, paths });
+    if (hinted !== told.current.hinted) {
+      post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.HINT, path: hinted ?? "" });
     }
-    told.current = { picking, shown, paths };
-  }, [post, picking, shown, paths]);
+    if (!sameMarks(marks, told.current.marks)) {
+      post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.MARK, marks });
+    }
+    told.current = { picking, shown, hinted, marks };
+  }, [post, picking, shown, hinted, marks]);
   const loaded = useCallback(() => {
-    const { picking, shown, paths } = latest.current;
+    const { picking, shown, marks } = latest.current;
     setSaid(NOTHING_SAID);
     if (picking) post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.START });
     if (shown !== undefined) post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.SHOW, path: shown });
-    if (paths.length > 0) post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.MARK, paths });
+    if (marks.length > 0) post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.MARK, marks });
   }, [post]);
   const unselect = useCallback(() => {
     setSaid((was) => ({ ...was, selected: undefined }));
@@ -356,6 +370,7 @@ function useFrameComments(frame: RefObject<HTMLIFrameElement | null>, asks: Fram
         const selected = message.selected ?? undefined;
         return setSaid((was) => ({ ...was, selected }));
       }
+      if ("pressed" in message) return latest.current.onPressed();
       if (!latest.current.picking) return;
       if ("stopped" in message) return latest.current.onStopped();
       if (navigator.userActivation?.isActive !== true) return;
@@ -596,27 +611,36 @@ function versionStepAction(
 /**
  * Where commenting on the page stands: whether its column is open beside
  * it, whether the frame is picking an element, the thread being started,
- * and the element whose threads are open by it. An element picked, or words
- * selected and replied to, are quoted into the comment being started, the
- * first starting one on that element with its draft written afresh; Whole
- * page starts one on the page as a whole.
+ * and the threads open. An element picked, or words selected and replied
+ * to, are quoted into the comment being started, the first starting one on
+ * that element; Whole page starts one on the page as a whole. A comment
+ * being started is let go on Escape, Cancel, or a press away, its draft
+ * kept where it holds words or files of the writer's own, and dropped where
+ * it holds only the quotes it was started from, so the next starts afresh.
  */
 function useCommenting(place: PlanCommentPlace | undefined) {
   const drafts = useDraftWriter();
   const [column, setColumn] = useState(false);
   const [picking, setPicking] = useState(false);
   const [pending, setPending] = useState<PageCommentOn | undefined>(undefined);
-  const [open, setOpen] = useState<string | undefined>(undefined);
+  const [open, setOpen] = useState<readonly string[] | undefined>(undefined);
   const begin = (on: PageCommentOn, quote: string | undefined) => {
     setPicking(false);
     setOpen(undefined);
-    if (place !== undefined) {
-      drafts.update(place, (was) => {
-        const text = pending === undefined ? "" : was.text;
-        return { ...was, text: quote === undefined ? text : withQuote(text, quote) };
-      });
+    if (place !== undefined && quote !== undefined) {
+      drafts.update(place, (was) => ({ ...was, text: withQuote(was.text, quote) }));
     }
     if (pending === undefined) setPending(on);
+  };
+  const dismiss = () => {
+    setPicking(false);
+    setOpen(undefined);
+    if (pending === undefined) return;
+    setPending(undefined);
+    if (place === undefined) return;
+    drafts.update(place, (was) =>
+      ownWordsIn(was.text) || was.attachments.length > 0 ? was : { ...was, text: "" },
+    );
   };
   return {
     column,
@@ -633,24 +657,18 @@ function useCommenting(place: PlanCommentPlace | undefined) {
     wholePage: () => begin({ element: undefined, box: undefined }, undefined),
     started: (thread: PlanCommentThread) => {
       setPending(undefined);
-      setOpen(thread.page?.element);
+      setOpen([thread.id]);
     },
-    cancel: () => {
-      setPending(undefined);
-      setPicking(false);
-    },
+    dismiss,
     setOpen,
   };
 }
 
-/** The paths of the elements holding open threads, each once, in the order their threads were started. */
-function threadPaths(threads: readonly PlanCommentThread[]): readonly string[] {
-  const paths = threads.flatMap((thread) =>
-    thread.page?.element === undefined || thread.status !== PLAN_COMMENT_STATUS.OPEN
-      ? []
-      : [thread.page.element],
+/** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected. */
+function threadMarks(threads: readonly PlanCommentThread[]): readonly PageMark[] {
+  return [...threadsByElement(threads)].map(([path, [first]]) =>
+    first?.scope === PLAN_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
   );
-  return [...new Set(paths)];
 }
 
 /**
@@ -693,13 +711,18 @@ export function PagePane({
   const frame = useRef<HTMLIFrameElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const threads = comments?.control.threads;
-  const paths = useMemo(() => threadPaths(threads ?? []), [threads]);
+  const marks = useMemo(() => threadMarks(threads ?? []), [threads]);
+  const [hinted, setHinted] = useState<string | undefined>(undefined);
+  const shown = threads?.find((thread) => commenting.open?.includes(thread.id) === true)?.page
+    ?.element;
   const framed = useFrameComments(frame, {
     picking: commenting.picking,
-    shown: commenting.open,
-    paths,
+    shown,
+    hinted,
+    marks,
     onPicked: commenting.quote,
     onStopped: commenting.stopPick,
+    onPressed: commenting.dismiss,
   });
   const copyWithToast = useCopyToast();
   const sources = usePageSources(readSource);
@@ -905,7 +928,9 @@ export function PagePane({
                   picking={commenting.picking}
                   pending={commenting.pending}
                   open={commenting.open}
+                  floats={!commenting.column}
                   onOpen={commenting.setOpen}
+                  onHint={setHinted}
                   onReply={(selected) => {
                     framed.unselect();
                     commenting.quote(selected);
@@ -913,7 +938,7 @@ export function PagePane({
                   onWholePage={commenting.wholePage}
                   onStopPick={commenting.stopPick}
                   onStarted={commenting.started}
-                  onCancel={commenting.cancel}
+                  onCancel={commenting.dismiss}
                 />
               )}
             </PageFrame>
@@ -921,17 +946,16 @@ export function PagePane({
           {comments === undefined || !commenting.column ? null : (
             <div
               className="page-comments-column"
-              // Note that a column standing over a narrow page steps aside while the page is picked in, or a thread is open on it.
-              data-aside={commenting.picking || commenting.open !== undefined ? "" : undefined}
+              // Note that a column standing over a narrow page steps aside while the page is picked in.
+              data-aside={commenting.picking ? "" : undefined}
             >
               <PageComments
                 control={comments.control}
                 doors={comments.doors}
-                onComment={comment}
-                onShowElement={(thread) => {
-                  setView(PAGE_VIEW.PAGE);
-                  commenting.setOpen(thread.page?.element);
-                }}
+                open={commenting.open}
+                onOpen={(thread) =>
+                  commenting.setOpen(thread === undefined ? undefined : [thread.id])
+                }
               />
             </div>
           )}

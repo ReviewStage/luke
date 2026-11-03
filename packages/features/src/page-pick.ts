@@ -13,11 +13,15 @@ import { PLAN_COMMENT_BOUNDS } from "./plan-comment-wire.js";
  * to the panel by its path from the document's root, its words, the
  * heading of the section it stands in, and where it stands in the frame; it
  * outlines the element a thread is on and brings it into view, where the
- * version drawn still holds it; it says where each element the panel marks
- * stands, again as the page scrolls, resizes, or changes, so the panel pins
- * the threads on it over the frame; and it posts the words selected in the
+ * version drawn still holds it, and faintly the one whose pin the pointer
+ * is over; it says where each element the panel marks stands, again as the
+ * page scrolls, resizes, or changes, so the panel pins the threads on it
+ * over the frame, and tints in it the words a thread quotes, with the CSS
+ * Custom Highlight API, as the find tints its matches; and it posts the words selected in the
  * page, with where they stand and the element holding them, as a press or
- * a key lets them go, or a finger's rests, and that none are once they go.
+ * a key lets them go, or a finger's rests, and that none are once they go;
+ * and it says a press landed in the page that selected nothing, which
+ * dismisses a card standing over it, as a press anywhere else does.
  * The outline is a stylesheet the document adopts over an attribute set on
  * the element, so the page's own tree is never rewritten.
  *
@@ -42,7 +46,9 @@ export const PAGE_PICK_ACT = {
   STOP: "stop",
   /** Outline the element a path names and bring it into view; an empty path outlines none. */
   SHOW: "show",
-  /** Say where the elements the paths name stand, now and each time they move. */
+  /** Outline faintly the element a path names, as the pointer is over its pin; an empty path outlines none. */
+  HINT: "hint",
+  /** Say where the elements the marks name stand, now and each time they move, and tint the words selected in them that a thread quotes. */
   MARK: "mark",
   /** Let go of the words selected, as a reply quoting them was pressed. */
   UNSELECT: "unselect",
@@ -59,14 +65,20 @@ export type PagePickAsk =
     }
   | {
       readonly type: typeof PAGE_PICK_TYPE;
-      readonly act: typeof PAGE_PICK_ACT.SHOW;
+      readonly act: typeof PAGE_PICK_ACT.SHOW | typeof PAGE_PICK_ACT.HINT;
       readonly path: string;
     }
   | {
       readonly type: typeof PAGE_PICK_TYPE;
       readonly act: typeof PAGE_PICK_ACT.MARK;
-      readonly paths: readonly string[];
+      readonly marks: readonly PageMark[];
     };
+
+/** An element the panel marks: by its path, with the words selected in it that a thread quotes, where one does. */
+export interface PageMark {
+  readonly path: string;
+  readonly words?: string;
+}
 
 /** Where something stands in the frame, in its own viewport's pixels. */
 const frameBoxSchema = EffectSchema.Struct({
@@ -94,6 +106,8 @@ const pickedSchema = EffectSchema.Struct({
     EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS),
   ),
   box: frameBoxSchema,
+  /** Whether the quote is words selected in the element rather than the element as a whole. */
+  words: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type PagePicked = typeof pickedSchema.Type;
@@ -101,8 +115,9 @@ export type PagePicked = typeof pickedSchema.Type;
 /**
  * A message the frame posts to the panel: the element picked; that the pick
  * was let go, by Escape in the page; where each element marked stands, or
- * none where the page holds it no more; or the words selected, in the shape
- * of an element picked whose quote they are, or none once they go.
+ * none where the page holds it no more; the words selected, in the shape
+ * of an element picked whose quote they are, or none once they go; or that
+ * a press landed in the page, selecting nothing.
  */
 export const pagePickAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ type: EffectSchema.Literal(PAGE_PICK_TYPE), picked: pickedSchema }),
@@ -119,6 +134,10 @@ export const pagePickAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(PAGE_PICK_TYPE),
     selected: EffectSchema.NullOr(pickedSchema),
+  }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(PAGE_PICK_TYPE),
+    pressed: EffectSchema.Literal(true),
   }),
 ]);
 
@@ -141,7 +160,9 @@ export const PAGE_PICK_SCRIPT = `(() => {
   const MAX_SECTION = ${PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS};
   const MARK = "data-luke-pick";
   const PRESSES = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu"];
-  const pick = { on: false, hovered: null, shown: null, styled: false };
+  const WORDS = "luke-comment-words";
+  const pick = { on: false, hovered: null, shown: null, hinted: null, styled: false };
+  const painted = typeof CSS !== "undefined" && CSS.highlights !== undefined && typeof Highlight === "function";
 
   const post = (message) => parent.postMessage(Object.assign({ type: TYPE }, message), "*");
   const flat = (text) => String(text ?? "").replace(/\\s+/g, " ").trim();
@@ -150,7 +171,7 @@ export const PAGE_PICK_SCRIPT = `(() => {
   const style = () => {
     if (pick.styled || typeof CSSStyleSheet !== "function") return;
     const sheet = new CSSStyleSheet();
-    sheet.replaceSync("[" + MARK + "] { outline: 2px solid #0a84ff !important; outline-offset: 2px !important; } [" + MARK + "=hover] { cursor: crosshair !important; }");
+    sheet.replaceSync("[" + MARK + "] { outline: 2px solid #0a84ff !important; outline-offset: 2px !important; } [" + MARK + "=hover] { cursor: crosshair !important; } [" + MARK + "=hint] { outline-color: rgba(10, 132, 255, 0.45) !important; } ::highlight(" + WORDS + ") { background-color: rgba(255, 196, 0, 0.32); }");
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     pick.styled = true;
   };
@@ -161,7 +182,7 @@ export const PAGE_PICK_SCRIPT = `(() => {
     pick[key] = element;
     for (const each of [was, element]) {
       if (each === null) continue;
-      const value = each === pick.hovered ? "hover" : each === pick.shown ? "shown" : null;
+      const value = each === pick.hovered ? "hover" : each === pick.shown ? "shown" : each === pick.hinted ? "hint" : null;
       if (value === null) {
         each.removeAttribute(MARK);
       } else {
@@ -227,7 +248,38 @@ export const PAGE_PICK_SCRIPT = `(() => {
     }
   };
 
-  const told = { paths: [], marks: "[]", selected: "", queued: false, settle: undefined };
+  const told = { marks: [], said: "[]", selected: "", queued: false, settle: undefined };
+
+  // The words a thread quotes, found in its element's text as one string, as a range; none where they stand there no more.
+  const wordsIn = (element, words) => {
+    const nodes = [];
+    let text = "";
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      nodes.push({ node, start: text.length });
+      text += node.data;
+    }
+    const at = text.indexOf(words);
+    if (at < 0 || words === "") return null;
+    const end = at + words.length;
+    const first = nodes.findLast((each) => each.start <= at);
+    const last = nodes.findLast((each) => each.start < end);
+    const range = document.createRange();
+    range.setStart(first.node, at - first.start);
+    range.setEnd(last.node, end - last.start);
+    return range;
+  };
+
+  const tint = () => {
+    if (!painted) return;
+    style();
+    const ranges = told.marks.flatMap((each) => {
+      const element = typeof each.words === "string" ? find(each.path) : null;
+      const range = element === null ? null : wordsIn(element, each.words);
+      return range === null ? [] : [range];
+    });
+    CSS.highlights.set(WORDS, new Highlight(...ranges));
+  };
 
   // The words selected, as an element picked whose quote they are: none where none are, or they stand in a field.
   const selected = () => {
@@ -238,20 +290,21 @@ export const PAGE_PICK_SCRIPT = `(() => {
     const node = range.commonAncestorContainer;
     const element = node instanceof Element ? node : node.parentElement;
     if (words === "" || element === null || element.closest("input, textarea, select, [contenteditable]") !== null) return null;
-    return { path: pathOf(element), quote: words, section: sectionOf(element), box: boxOf(range.getBoundingClientRect()) };
+    return { path: pathOf(element), quote: words, section: sectionOf(element), box: boxOf(range.getBoundingClientRect()), words: true };
   };
 
   // What the panel holds of the page told again where it moved: each element marked, and the words selected.
   const tell = () => {
     told.queued = false;
-    const marks = told.paths.map((path) => {
+    const marks = told.marks.map(({ path }) => {
       const element = find(path);
       return { path, box: element === null ? null : boxOf(element.getBoundingClientRect()) };
     });
     const said = JSON.stringify(marks);
-    if (said !== told.marks) {
-      told.marks = said;
+    if (said !== told.said) {
+      told.said = said;
       post({ marks });
+      tint();
     }
     if (told.selected !== "" && told.selected !== "null") tellSelected();
   };
@@ -299,6 +352,11 @@ export const PAGE_PICK_SCRIPT = `(() => {
     }, true);
   }
 
+  // Note that a press the pick took for itself stops before this, and one that selected words is a selection's.
+  addEventListener("click", () => {
+    if (getSelection()?.isCollapsed !== false) post({ pressed: true });
+  }, true);
+
   addEventListener("keydown", (event) => {
     if (!pick.on || event.key !== "Escape") return;
     event.preventDefault();
@@ -313,14 +371,17 @@ export const PAGE_PICK_SCRIPT = `(() => {
     if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.START)}) pick.on = true;
     else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.STOP)}) stop();
     else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.UNSELECT)}) getSelection()?.removeAllRanges();
-    else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.MARK)} && Array.isArray(ask.paths)) {
-      told.paths = ask.paths.filter((path) => typeof path === "string");
-      told.marks = "";
+    else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.MARK)} && Array.isArray(ask.marks)) {
+      told.marks = ask.marks.filter((each) => each !== null && typeof each === "object" && typeof each.path === "string");
+      told.said = "";
       tell();
+      tint();
     } else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.SHOW)} && typeof ask.path === "string") {
       const element = find(ask.path);
       mark("shown", element);
       element?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.HINT)} && typeof ask.path === "string") {
+      mark("hinted", find(ask.path));
     }
   });
 })();`;

@@ -372,17 +372,20 @@ it.effect(
       ].map(press);
 
       assert.deepEqual(prevented, [true, false, true, true, true, true, true]);
-      assert.deepEqual(posted, [
-        { type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" },
-        { type: PAGE_LINK_TYPE, href: "https://example.com/new" },
-        { type: PAGE_LINK_TYPE, href: "https://example.com/gone" },
-        { type: PAGE_LINK_TYPE, href: "mailto:dean@example.com" },
-      ]);
+      assert.deepEqual(
+        posted.filter((message) => message.type === PAGE_LINK_TYPE),
+        [
+          { type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" },
+          { type: PAGE_LINK_TYPE, href: "https://example.com/new" },
+          { type: PAGE_LINK_TYPE, href: "https://example.com/gone" },
+          { type: PAGE_LINK_TYPE, href: "mailto:dean@example.com" },
+        ],
+      );
     }),
 );
 
 it.effect(
-  "a pick asked of the page takes the next press for itself and hands the panel the element's path, words, section, and box; the press after it is the page's; and the elements marked are said where they stand, or none where the page holds none",
+  "a pick asked of the page takes the next press for itself and hands the panel the element's path, words, section, and box; the press after it is the page's, said to the panel; and the elements marked are said where they stand, or none where the page holds none",
   () =>
     Effect.gen(function* () {
       const { frame, ask, posted } = yield* draw(
@@ -412,12 +415,16 @@ it.effect(
       assert.equal(page.body.dataset.pressed, undefined, "the page heard no press while picking");
       press();
       assert.equal(page.body.dataset.pressed, "yes");
-      assert.equal(posted.length, 1);
+      assert.deepEqual(
+        posted.slice(1),
+        [{ type: PAGE_PICK_TYPE, pressed: true }],
+        "the page's press is said",
+      );
 
       ask({
         type: PAGE_PICK_TYPE,
         act: PAGE_PICK_ACT.MARK,
-        paths: ["body > h2:nth-of-type(1)", "#gone"],
+        marks: [{ path: "body > h2:nth-of-type(1)" }, { path: "#gone" }],
       });
       assert.deepEqual(posted.at(-1), {
         type: PAGE_PICK_TYPE,
