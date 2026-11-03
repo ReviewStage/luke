@@ -343,7 +343,6 @@ test("a server or a tool the words mention is handed as one note naming its conn
   const rollout = words.indexOf('The plan\'s section "Rollout":');
   assert.ok(server > 0 && server < tool && tool < rollout, words);
   assert.equal(words.split("The developer pointed you at").length - 1, 2, words);
-  assert.match(words, /`connection_search`/u);
 });
 
 test("the servers the words mention, by themselves or by a tool, are named each once, and nothing else is", () => {

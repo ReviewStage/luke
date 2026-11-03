@@ -1,5 +1,5 @@
 import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
-import { AGENT_TOOL, CONNECTION_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
@@ -360,12 +360,12 @@ function noteOf(mention: ServerMention): string {
   const server = `the ${INTEGRATION_NAME[mention.provider]} MCP server (connection \`${connection}\`)`;
   const joins = "If that connection is not among yours in this turn, it joins at your next.";
   if (mention.kind === MENTION_KIND.SERVER) {
-    return `The developer pointed you at ${server} for this message: find its tools with \`${CONNECTION_TOOL.SEARCH}\` on that connection and run them with \`${CONNECTION_TOOL.EXECUTE}\` before reaching for anything else. ${joins}`;
+    return `The developer pointed you at ${server} for this message: use that connection's tools before reaching for anything else. ${joins}`;
   }
   if (mention.kind === MENTION_KIND.LINK) {
     return `The developer pointed you at ${mention.url}, a page of ${server}, for this message: read it through that connection's tools rather than the web. ${joins}`;
   }
-  return `The developer pointed you at the tool \`${mention.tool}\` of ${server} for this message: run it with \`${CONNECTION_TOOL.EXECUTE}\` in preference to other tools. ${joins}`;
+  return `The developer pointed you at the tool \`${mention.tool}\` of ${server} for this message: run it in preference to other tools. ${joins}`;
 }
 
 /**

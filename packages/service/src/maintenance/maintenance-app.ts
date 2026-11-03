@@ -48,10 +48,9 @@ const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
  * cron on the cadence `vercel.json` fixes. The logic lives in
  * `maintenance/maintenance-sweep.ts`; this hands it the deployment's real
  * seams and the database queries behind them, each answering an Effect over
- * the group's own `SqlClient.SqlClient`. An automation's run reaches eve as the deployment acting for the
- * automation's owner, under the deployment's own eve secret, never the
- * bearer the cron called with; a deployment without it, or without an
- * origin for eve, fails each run it acts on as unavailable.
+ * the group's own `SqlClient.SqlClient`. An automation's run reaches its
+ * agent's session through `routedSessions` acting for the automation's
+ * owner, never the bearer the cron called with.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,

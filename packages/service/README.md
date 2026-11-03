@@ -1188,10 +1188,9 @@ harness the conversation runs on (`sessionsRouter` in
 `src/agents/coder-host/runtime-sessions.ts`, over the `claudeCodeSessions`
 and `codexSessions` that `native-agent-sessions.ts` builds). An agent that ran on eve has
 ended for good: every call on it is refused as `agent-retired`, and only a
-new agent goes on from its work. A route holding the developer's own bearer
-calls as the developer, and one reached on a browser's session cookie alone
-as the deployment acting for the cookie's account ("Reaching eve as the
-deployment").
+new agent goes on from its work. Every caller reaches the session for the
+account its route resolved, whether a bearer or a browser's session cookie
+named it (`routedSessions`), and the harness acts for the agent's starter.
 
 The agent is offered Vespin's own tools on Vespin's MCP server
 (`src/agents/workspace-mcp/app.ts`, at `/api/agents/mcp`), which admits the
