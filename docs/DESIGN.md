@@ -223,9 +223,7 @@ exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.
 
 The window's buttons are `@repo/ui`'s Button and IconButton
-(`packages/ui/src/components/button/`); `desktop.css` keeps one of its own,
-`.toolbar-button`, for the file tree's Retry, a button the tree's own DOM
-builds. A glyph alone is an IconButton: a `--ui-control-height` square with a `--ui-control-icon` glyph in
+(`packages/ui/src/components/button/`). A glyph alone is an IconButton: a `--ui-control-height` square with a `--ui-control-icon` glyph in
 `--ui-color-text-muted`, nothing behind it at rest, the `--ui-color-fill-selected` fill and
 `--ui-color-text` under the pointer, `--ui-color-fill-pressed` held down, and the
 `--ui-color-focus-ring` for the keyboard. A glyph and words, or words alone, is a
@@ -270,11 +268,11 @@ marks it `/* no ring: … */` with what shows focus instead; menus mark a row
 with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
 
 Every menu and popover is one surface, from the menu tokens: the desktop
-profile's menu roles, and `--menu-glyph` and `--menu-shadow` in
-`desktop.css`'s `:root`. It is the `--ui-color-overlay` ground in a
-`--ui-color-border-strong` edge, the `--ui-menu-radius` corner and `--menu-shadow` under
-it, its items `--ui-menu-inset` from its edge, each row `--ui-menu-row-height` tall
-with a `--ui-menu-row-radius` highlight and a `--menu-glyph` glyph. The corner is
+profile's menu roles in `packages/ui/src/tokens/profiles.css`. It is the
+`--ui-color-overlay` ground in a `--ui-color-border-strong` edge, the
+`--ui-menu-radius` corner and `--ui-menu-shadow` under it, its items
+`--ui-menu-inset` from its edge, each row `--ui-menu-row-height` tall with a
+`--ui-menu-row-radius` highlight and a `--ui-menu-glyph` glyph. The corner is
 the row's corner plus the inset, so a highlighted row follows the menu's
 curve; the profile works the corner out from the other two. A task's menu, a
 picker, a submenu, a crumb's tree, the find bar, and a tooltip card all draw
