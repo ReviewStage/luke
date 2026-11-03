@@ -94,7 +94,7 @@ test("the thread post tool and the plan's edit tool show a file's link Vespin dr
 
 /** Every mention of an app-only thing the words show, as the mention its target names, and whether its label is a mention's. */
 function appMentionsIn(words: string): { kind: string | undefined; mention: boolean }[] {
-  return [...words.matchAll(/\[([^\]]+)\]\((luke:\/\/mcp\/[^)\s`]+)\)/gu)].map(
+  return [...words.matchAll(/\[([^\]]+)\]\((mention:\/\/mcp\/[^)\s`]+)\)/gu)].map(
     ([, label, target]) => ({
       kind: decodeMention(target ?? "", REPOSITORY)?.kind,
       mention: isMentionLabel(label ?? ""),
@@ -119,7 +119,7 @@ test("a coding agent is shown to name an MCP server as a mention Vespin draws as
 
 /** Every date mention the words show, as the mention its target names. */
 function datesIn(words: string): (string | undefined)[] {
-  return [...words.matchAll(/\]\((luke:\/\/date\/[^)\s`]+)\)/gu)].map(
+  return [...words.matchAll(/\]\((mention:\/\/date\/[^)\s`]+)\)/gu)].map(
     ([, target]) => decodeMention(target ?? "", REPOSITORY)?.kind,
   );
 }
