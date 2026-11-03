@@ -1663,16 +1663,21 @@ double, reading every run for the token and never finding it.
 
 ## Automations
 
-An automation is an account's saved agent Start on one of its tasks,
-fired by a trigger. The account, the task, the trigger, the
-action, and the guards are an `automation` row
+An automation is an account's saved agent Start in one of its workspaces,
+on no task, fired by a trigger. The account, the workspace
+(`organization_id`), its `scope` (`personal`, the default, or `workspace`,
+which every member reads and runs), its `repositories` (the first is where
+a run's agent starts), the trigger, the action, and the guards are an
+`automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
 and the guards as `@repo/features/automation-wire`'s own JSON; every
 firing is an `automation_run` row, kept whatever came of it, under a
 dedupe key unique per automation, so the same firing claimed twice is one
-run. The store is `packages/database/src/models/automation-store.ts`: an
-automation is made only on a task the account reaches, and every other
-statement an account makes names it.
+run. The store is `packages/database/src/models/automation-store.ts`: every
+statement an account makes names the automation and is gated on the
+account's membership of its workspace (`allowedTo`), as its scope and the
+account's role there allow, so an account that leaves keeps its automations
+there, unread, and their runs fail as they fire.
 
 A schedule is five-field cron read in an IANA zone
 (`@repo/features/automation-schedule`), so nine o'clock stays nine o'clock
@@ -1698,12 +1703,12 @@ a run past the daily cap (runs started in the last twenty-four
 hours) or past the concurrency guard (agents its runs started still
 starting or running, read as each agent's tab reads it) is skipped, never
 queued. Then it is a Start with a prompt, on the one path a Start takes
-(`src/agents/coder-host/start.ts`): the task, its repository, the owner's reach of it
-through the App, and the model are checked as for the developer's own
+(`src/agents/coder-host/start.ts`): the owner's membership of the workspace,
+the automation's repository and the reach of it through the workspace's
+installation, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and its session is
-reached as the deployment acting for the owner ("Reaching eve as the
-deployment"), never on the bearer the cron called with, as an agent's own
-`start_agent` reaches one. The prompt is the
+reached through `routedSessions` acting for the owner, never on the bearer
+the cron called with, as an agent's own `start_agent` reaches one. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
@@ -1738,17 +1743,25 @@ made where one stands, and failed as `unavailable` where none does.
 
 The routes are procedures of the hosted oRPC router
 (`src/automations/automations-procedures.ts`), under the account bearer, every
-row gated by the store on the account owning the automation and still
-reaching its task, so another account's automation, or one on a task of a
-workspace the account left, is `not-found`:
+row gated by the store on the account's membership of the automation's
+workspace and what its scope lets the account do there, so another
+account's personal automation, or one in a workspace the account left, is
+`not-found`:
 
-- `GET /api/automations` answers the account's automations newest first,
-  or one task's under `?planId=`, each with its newest run;
-  `POST /api/automations` makes one (`201`). A schedule that does not
+- `GET /api/automations` answers the automations the account may read
+  newest first, or one workspace's under `?workspaceId=`, each with its
+  newest run, and `[]` under `?planId=`, kept for the released desktops
+  that still send it;
+  `POST /api/automations` makes one (`201`) in the workspace its
+  `workspaceId` names, on its `repositories`, each reached through the
+  workspace's installation (`standingOf`). A schedule that does not
   read (five-field cron, a known zone, no more often than every fifteen
-  minutes), a model the catalog does not offer the account, or a key the
-  frame does not name is `invalid-request`; a task with no repository is
-  `no-repository`. A webhook trigger's secret is minted here, answered
+  minutes), a model the catalog does not offer the account, a key the
+  frame does not name, a `planId`, no workspace or no repositories, or the
+  `workspace` scope in the account's personal workspace is
+  `invalid-request`, a workspace the account is not in is `not-found`, and
+  a GitHub trigger with no repository is `no-repository`
+  (`checkTriggerRepositories`). A webhook trigger's secret is minted here, answered
   once as `webhookSecret`, and kept only as its SHA-256.
 - `GET`, `PATCH`, and `DELETE /api/automations/{id}` read, change, and
   delete one. A resume, or a new trigger, computes a schedule's next due
@@ -1797,8 +1810,8 @@ reopened, marked ready, or pushed to (`pull-request-updated`; a draft fires
 nothing until it is marked ready, and an opened pull request is both this and
 `pull-request-opened`), an issue opened or labelled, a check suite that
 completed as `failure` or `timed_out`, and a push to a branch, each in any of
-the automation's repositories (or its task's, on a row an older build wrote,
-matched the way GitHub folds a name's case), of an owner still a member of
+the automation's repositories (matched the way GitHub folds a name's case),
+of an owner still a member of
 the automation's workspace, filtered by the trigger's labels (the label just applied, or
 any label of what was opened) and branches (a pull request's base, a check
 suite's or a push's branch). Only the repository, the number, title, and
