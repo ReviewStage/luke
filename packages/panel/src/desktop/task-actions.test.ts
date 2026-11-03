@@ -867,9 +867,9 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
 });
 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
-const CHIP_ITEMS = ["Status", "Priority", "Assignee", "Change repository"];
+const CHIP_ITEMS = ["Status", "Priority", "Assignee"];
 
-test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U, S, and P, which act on the focused row", () => {
+test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Status, Priority, and Assignee to the plan's chips, which a row keeps, and keeps Change repository, Choose a repository on a task with none; another task's row prints only U, S, and P, which act on the focused row", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountPlanTab(tasks));
@@ -886,14 +886,22 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves
     [],
     "the plan's chips stand for these",
   );
+  assert.ok(offered.includes("Change repository"), "the plan's repository is words, not a chip");
+
+  unmountAll();
+  openMenu(mountPlanTab(openTab().tasks));
+  assert.ok(
+    menuItems().map(itemLabel).includes("Choose a repository"),
+    "a task with no repository is offered the pick it still needs",
+  );
 
   unmountAll();
   const other: TaskSummary = { ...OTHER, ...STANDING };
   rightClick(mountSidebarTask(tasksControl({ tasks: [other] }), other, asked), 40, 60);
   const row = menuItems().map(itemLabel);
   assert.deepEqual(
-    CHIP_ITEMS.filter((item) => row.includes(item)),
-    CHIP_ITEMS,
+    [...CHIP_ITEMS, "Change repository"].filter((item) => row.includes(item)),
+    [...CHIP_ITEMS, "Change repository"],
     "a row draws no chips, so its menu keeps them",
   );
   assert.deepEqual(
