@@ -32,6 +32,12 @@ export const accountPreference = pgTable("account_preference", {
    */
   agentEnter: text("agent_enter").$type<AgentEnter>(),
   /**
+   * Whether the account finished its setup after sign-in, so setup stands
+   * once for the account rather than once on each device; null until it
+   * does. A part of the snapshot of its own, as the link choice is.
+   */
+  setupFinished: boolean("setup_finished"),
+  /**
    * The model and effort a coding agent starts on when Start is clicked, as
    * AI Gateway's catalog names them (`packages/service/src/providers/model-catalog.ts`); null on both
    * means the account has never chosen and starts on the catalog's default.

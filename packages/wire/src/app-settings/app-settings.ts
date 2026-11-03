@@ -52,6 +52,7 @@ export const APP_SETTING_ID = {
   LINK_OPEN: "link_open",
   USAGE_DATA: "usage_data",
   OPEN_NEW_TASK: "open_new_task",
+  SETUP_FINISHED: "setup_finished",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];

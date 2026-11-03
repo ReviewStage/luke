@@ -153,6 +153,19 @@ export function buildToggleSetting<Field extends string, Id extends AppSettingId
 }
 
 /**
+ * A stored on/off the account carries (`ACCOUNT_PREFERENCE_FIELDS`). Nothing
+ * stored is kept as nothing rather than read as `default`, because a device
+ * clears an account's preferences when another account signs in, and nothing
+ * then reads as the default.
+ */
+export function accountToggleSetting<Field extends string, Id extends AppSettingId>(
+  spec: ToggleSpec<Field, Id>,
+): AppSettingSchemaEntry<Field, boolean | undefined, Id, boolean> {
+  const isBoolean = Schema.is(Schema.Boolean);
+  return { ...toggleEntry(spec), guard: (value: UnparsedWireValue) => optional(value, isBoolean) };
+}
+
+/**
  * A stored one-of. `values` is the stored vocabulary and `token` is the word
  * the control stores each by — also what it shows, unless `optionLabel` words
  * it differently, which is the difference between "marin" as a token and

@@ -79,6 +79,7 @@ test("the snapshot's preferences part carries only the keys v0.18.0 reads, whate
   const everything = {
     linkOpen: LINK_OPEN.MAC_APP,
     agentEnter: AGENT_ENTER.QUEUE,
+    setupFinished: true,
   } satisfies Required<AccountPreferences>;
   const shared = Object.keys(accountPreferencesParts(everything).preferences);
   assert.deepEqual(

@@ -5,7 +5,7 @@ import { SETUP_AUDIENCE, SETUP_GATE, SETUP_STEP, setupGate, setupSteps } from ".
 const NEW = {
   id: "user-ada",
   fresh: true,
-  finished: [],
+  finished: false,
   started: false,
   personalOnly: true,
   agent: false,
@@ -30,8 +30,8 @@ test.each([
   },
   { case: "an account with tasks", account: { ...NEW, fresh: false }, gate: SETUP_GATE.NONE },
   {
-    case: "an account that finished on this machine",
-    account: { ...NEW, finished: ["user-ada"] },
+    case: "an account that finished, on any machine",
+    account: { ...NEW, started: true, finished: true },
     gate: SETUP_GATE.NONE,
   },
   {

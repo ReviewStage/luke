@@ -127,7 +127,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
   );
 });
 
-it.layer(getTestDB())("the account store's link and Enter choices", (it) => {
+it.layer(getTestDB())("the account store's link and Enter choices and setup finished", (it) => {
   it.effect(
     "are each written on their own, stand through a shared preferences write, move no instant, and are no other account's",
     () =>
@@ -137,12 +137,14 @@ it.layer(getTestDB())("the account store's link and Enter choices", (it) => {
         assert.deepEqual(chosen.preferences, { linkOpen: LINK_OPEN.MAC_APP });
         assert.equal(chosen.updatedAt, undefined);
         yield* writeAccountPreferences(userId, { agentEnter: AGENT_ENTER.QUEUE });
+        yield* writeAccountPreferences(userId, { setupFinished: true });
 
         yield* writeAccountPreferences(userId, { preferences: {} });
         const read = yield* readAccountPreferences(userId);
         assert.deepEqual(read?.preferences, {
           linkOpen: LINK_OPEN.MAC_APP,
           agentEnter: AGENT_ENTER.QUEUE,
+          setupFinished: true,
         });
         assert.deepEqual(
           (yield* readAccountPreferences(yield* openAccount))?.preferences,

@@ -274,7 +274,8 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * Writes each part the body carries — `preferences`, a validated
      * settings snapshot that replaces the stored one whole, `linkOpen`,
      * where the account's links open, `agentEnter`, what Enter does in an
-     * agent's box while it works, `agent`, a choice the catalog
+     * agent's box while it works, `setupFinished`, whether the account
+     * finished setup, `agent`, a choice the catalog
      * accepts, moved only to a model the account pays for, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
@@ -286,6 +287,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         body.preferences === undefined &&
         body.linkOpen === undefined &&
         body.agentEnter === undefined &&
+        body.setupFinished === undefined &&
         body.agent === undefined &&
         body.chaptersModel === undefined &&
         body.experiments === undefined
@@ -308,6 +310,11 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         const agentEnter = ownPreferenceFromWire("agentEnter", body.agentEnter);
         if (agentEnter === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
         write.agentEnter = agentEnter;
+      }
+      if (body.setupFinished !== undefined) {
+        const setupFinished = ownPreferenceFromWire("setupFinished", body.setupFinished);
+        if (setupFinished === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+        write.setupFinished = setupFinished;
       }
       if (body.agent !== undefined) {
         write.agent = yield* acceptedAgentChoice(seams, context.userId, body.agent);

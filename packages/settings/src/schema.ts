@@ -31,7 +31,13 @@ import {
   MAC_COMMAND_MODE_LABEL,
   MAC_COMMAND_MODE_LIST,
 } from "./mac-commands.js";
-import { buildToggleSetting, choiceSetting, optional, toggleSetting } from "./schema-builders.js";
+import {
+  accountToggleSetting,
+  buildToggleSetting,
+  choiceSetting,
+  optional,
+  toggleSetting,
+} from "./schema-builders.js";
 import {
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
@@ -285,6 +291,23 @@ export const APP_SETTING_SCHEMA = {
     // Nothing to run per write: the message box reads the choice as a key is pressed.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
+  }),
+  /*
+   * Whether the account finished its setup after sign-in, so setup stands
+   * once for the account rather than once on each device. An account
+   * preference riding a part of the snapshot of its own, as Enter's choice
+   * does; drawn nowhere, since only setup's Finish writes it.
+   */
+  setupFinished: accountToggleSetting({
+    field: "setupFinished",
+    id: APP_SETTING_ID.SETUP_FINISHED,
+    label: "Setup finished",
+    default: false,
+    page: SETTINGS_PAGE.ACCOUNT,
+    order: 900,
+    // Nothing to run per write: the window reads it as it decides whether setup stands.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    visible: () => false,
   }),
   lineNumbers: toggleSetting({
     field: "lineNumbers",
