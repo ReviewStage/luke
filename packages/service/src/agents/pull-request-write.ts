@@ -1,5 +1,5 @@
 /**
- * pull-request-write.ts -- the one seam every change to a coding agent's pull request goes through: made on GitHub as the workspace member who asked, on their own GitHub sign-in, or not at all.
+ * pull-request-write.ts -- the one seam every change to a pull request goes through, a coding agent's or one named by its repository and number: made on GitHub as the workspace member who asked, on their own GitHub sign-in, or not at all.
  *
  * A member may press a button on any agent of their workspace, a teammate's
  * among them, so who acts on GitHub is the member and never the agent's
@@ -8,7 +8,10 @@
  * access. The agent is first reached as every read reaches it
  * (`agent-reach.ts`, then `coder-host/published.ts`'s
  * `agentPullRequestReach`), so a repository the workspace's installation no
- * longer reaches is refused before the member's token is read. That token is
+ * longer reaches is refused before the member's token is read; a pull
+ * request named by its repository and number is reached as its reads reach
+ * it (`github/repository-pull-request-procedures.ts`) before it comes here
+ * (`memberWriteOnReached`). That token is
  * the member's own GitHub App user token (`GitHubApp.userToken`), the one an
  * agent opens its pull request on as its developer
  * (`coder-host/pull-request.ts`), and it never leaves the service. A member
@@ -128,6 +131,32 @@ function writtenOf<A>(failure: GitHubWriteFailure): Effect.Effect<MemberWritten<
   }
 }
 
+/** The write a caller makes on a pull request, on the member's token. */
+export type MemberWrite<A> = (
+  pullRequest: MemberPullRequest,
+) => Effect.Effect<A, GitHubWriteFailure, HttpClient.HttpClient>;
+
+/**
+ * One write as the member on a pull request whose repository the caller
+ * already confirmed in the workspace's reach: the member's token read, and
+ * the write made with it; how it went, or Luke's own refusal.
+ */
+export const memberWriteOnReached = <A>(
+  userId: string,
+  pullRequest: Omit<MemberPullRequest, "token">,
+  write: MemberWrite<A>,
+): Effect.Effect<MemberWritten<A>, HostedRefusal, WriteServices> =>
+  Effect.gen(function* () {
+    const token = yield* memberToken(userId);
+    if (token === undefined) return SIGN_IN_REQUIRED;
+    return yield* write({ ...pullRequest, token }).pipe(
+      Effect.map(
+        (value): MemberWritten<A> => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, value }),
+      ),
+      Effect.catch(writtenOf<A>),
+    );
+  });
+
 /**
  * One write on the agent's pull request as the member: the repository
  * reached, the member's token read, and the write made with it; how it went,
@@ -137,21 +166,12 @@ export const memberPullRequestWrite = <A>(
   userId: string,
   agent: WithRepository<Agent>,
   number: number,
-  write: (
-    pullRequest: MemberPullRequest,
-  ) => Effect.Effect<A, GitHubWriteFailure, HttpClient.HttpClient>,
+  write: MemberWrite<A>,
 ): Effect.Effect<MemberWritten<A>, HostedRefusal, WriteServices> =>
-  Effect.gen(function* () {
-    yield* reached(userId, agent);
-    const token = yield* memberToken(userId);
-    if (token === undefined) return SIGN_IN_REQUIRED;
-    return yield* write({ repository: agent.repository, number, token }).pipe(
-      Effect.map(
-        (value): MemberWritten<A> => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, value }),
-      ),
-      Effect.catch(writtenOf<A>),
-    );
-  });
+  Effect.andThen(
+    reached(userId, agent),
+    memberWriteOnReached(userId, { repository: agent.repository, number }, write),
+  );
 
 /** How a write went, as the wire answers it: what a made write answered is the caller's, never the wire's. */
 export function writeAnswerOf<A>(written: MemberWritten<A>): PullRequestWriteAnswer {

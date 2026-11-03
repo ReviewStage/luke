@@ -32,7 +32,7 @@
  * changes.
  */
 
-import { type Agent, hasRepository, type WithRepository } from "@luke/database/models/agent-store";
+import { type Agent, hasRepository } from "@luke/database/models/agent-store";
 import {
   type AgentPullRequest,
   PULL_REQUEST_STATE,
@@ -101,6 +101,7 @@ import {
   askedPullRequest,
   forgetPublished,
   githubReadRefusal,
+  type PullRequestSubject,
   pullRequestNumberOf,
 } from "./asked-pull-request.js";
 import {
@@ -111,6 +112,7 @@ import {
 } from "./coder-host/published.js";
 import {
   type MemberPullRequest,
+  type MemberWritten,
   memberPullRequestWrite,
   memberReadToken,
   writeAnswerOf,
@@ -137,10 +139,10 @@ const askedOfAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { agent, pullRequest };
 });
 
-/** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
-type OverviewRead<A, R> = (
+/** One of the overview's reads of a pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
+export type OverviewRead<A, R> = (
   token: Redacted.Redacted,
-  agent: WithRepository<Agent>,
+  subject: PullRequestSubject,
   pullRequest: AgentPullRequest,
   /** The member reading, whose own reads mark what is theirs. */
   userId: string,
@@ -202,23 +204,24 @@ const memberCanEdit = (userId: string, repository: string, number: number) =>
  * own token, whether they may edit its description. None where the
  * repository no longer holds it.
  */
-const overviewPullRequestRead = (
+export const overviewPullRequestRead = (
   token: Redacted.Redacted,
-  agent: WithRepository<Agent>,
+  subject: PullRequestSubject,
   pullRequest: AgentPullRequest,
   userId: string,
 ) =>
   Effect.gen(function* () {
+    const { repository } = subject;
     const [read, merging, canEditDescription] = yield* Effect.all(
       [
-        pullRequestOverview(token, agent.repository, pullRequest.number, stackable(pullRequest)),
-        mergingOrNone(token, agent.repository, pullRequest.number),
-        memberCanEdit(userId, agent.repository, pullRequest.number),
+        pullRequestOverview(token, repository, pullRequest.number, stackable(pullRequest)),
+        mergingOrNone(token, repository, pullRequest.number),
+        memberCanEdit(userId, repository, pullRequest.number),
       ],
       { concurrency: "unbounded" },
     );
     if (Option.isNone(read)) return null;
-    const named = { ...(yield* namedOverviewPullRequest(agent, read.value)), canEditDescription };
+    const named = { ...(yield* namedOverviewPullRequest(subject, read.value)), canEditDescription };
     return Option.isNone(merging) ? named : { ...named, merging: merging.value };
   });
 
@@ -228,16 +231,16 @@ const overviewPullRequestRead = (
  * whatever their number, the check runs, the commit statuses, and the
  * deployments.
  */
-const overviewChecksRead = (
+export const overviewChecksRead = (
   token: Redacted.Redacted,
-  agent: WithRepository<Agent>,
+  subject: PullRequestSubject,
   pullRequest: AgentPullRequest,
 ) =>
   Effect.map(
     Effect.all(
       [
-        pullRequestChecks(token, agent.repository, pullRequest.number),
-        pullRequestDeployments(token, agent.repository, pullRequest.number),
+        pullRequestChecks(token, subject.repository, pullRequest.number),
+        pullRequestDeployments(token, subject.repository, pullRequest.number),
       ],
       { concurrency: "unbounded" },
     ),
@@ -262,9 +265,9 @@ const memberPendingReview = (userId: string, repository: string, number: number)
  * named against the workspace's members; and, read beside it on the
  * member's own token, which reactions are theirs.
  */
-const overviewConversationRead = (
+export const overviewConversationRead = (
   token: Redacted.Redacted,
-  agent: WithRepository<Agent>,
+  subject: PullRequestSubject,
   pullRequest: AgentPullRequest,
   userId: string,
 ) =>
@@ -274,15 +277,15 @@ const overviewConversationRead = (
         Effect.flatMap(
           pullRequestConversation(
             token,
-            agent.repository,
+            subject.repository,
             pullRequest,
-            memberReactions(userId, agent.repository, pullRequest.number),
+            memberReactions(userId, subject.repository, pullRequest.number),
           ),
-          (read) => namedOverviewConversation(agent, pullRequest.number, read),
+          (read) => namedOverviewConversation(subject, pullRequest.number, read),
         ),
         Effect.flatMap(
-          memberPendingReview(userId, agent.repository, pullRequest.number),
-          (pending) => namedPendingReview(agent, pullRequest.number, pending),
+          memberPendingReview(userId, subject.repository, pullRequest.number),
+          (pending) => namedPendingReview(subject, pullRequest.number, pending),
         ),
       ],
       { concurrency: "unbounded" },
@@ -389,7 +392,7 @@ function countedAction(request: PullRequestActionRequest) {
 }
 
 /** The write a change makes on the pull request, on the member's token. */
-function actionWrite(
+export function actionWrite(
   request: PullRequestActionRequest,
 ): (
   pullRequest: MemberPullRequest,
@@ -420,6 +423,19 @@ function actionWrite(
         );
     }
   };
+}
+
+/** Which of the pull request's files the member marked viewed, read as a write is made, on their own token. */
+export const viewedRead = (member: MemberPullRequest) =>
+  pullRequestViewedStates(member.token, member.repository, member.number);
+
+/** How the read of the viewed marks went, as the wire answers it. */
+export function viewedAnswerOf(
+  read: MemberWritten<Effect.Success<ReturnType<typeof viewedRead>>>,
+): PullRequestViewedAnswer {
+  return read.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE
+    ? { outcome: read.outcome, files: read.value }
+    : read;
 }
 
 /** The agent pull request resource: the tab's five reads and its one change, to a signed-in member of the agent's workspace. */
@@ -497,13 +513,9 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
         context.userId,
         agent,
         pullRequest.number,
-        (member) => pullRequestViewedStates(member.token, member.repository, member.number),
+        viewedRead,
       );
-      const answer: PullRequestViewedAnswer =
-        read.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE
-          ? { outcome: read.outcome, files: read.value }
-          : read;
-      return answer;
+      return viewedAnswerOf(read);
     }),
     overviewPullRequest: signedIn.overviewPullRequest.effect(function* ({ input, context }) {
       const { agent, pullRequest } = yield* askedOfAgent(
