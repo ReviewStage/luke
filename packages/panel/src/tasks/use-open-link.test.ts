@@ -2,15 +2,23 @@
 
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
-import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
 import type { TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { act, createElement, memo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
+import { rendererRegistry } from "../renderer-runtime.js";
+import { ADDRESS } from "../route.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { useAppState } from "../use-app-state.js";
 import {
   ListedPullRequests,
+  OpenAddressesHere,
   OpenLinkProvider,
   PullRequestsOnGitHub,
   useOpenLink,
@@ -18,9 +26,10 @@ import {
 
 /**
  * use-open-link.test.ts -- a pull request inside a pull request's own tab
- * opens on GitHub, though a listed task's agent opened it, and a new list
+ * opens on GitHub, though a listed task's agent opened it, a new list
  * draws no part opening links again, which reads the list as the link
- * opens; where every other link opens is the route table's
+ * opens, and a link naming a listed task by its number reaches the place
+ * pressed on by the task's id; where every other link opens is the route table's
  * (`../route.test.ts`). Synthetic ids, a task card's pull request row
  * standing for every press.
  */
@@ -127,4 +136,59 @@ test("a new list of tasks draws no part opening links again, and a link opened a
     links.map((link) => link.place),
     [{ kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT }],
   );
+});
+
+test("a link naming a listed task by its number is asked of the place it is pressed on by the task's id", async () => {
+  const page = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const acme = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+    memberCount: 1,
+  };
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [acme],
+        tasks: LISTED.map((task) => ({ ...task, number: 42 })),
+      },
+    },
+  );
+  const asked: LinkPlace[] = [];
+  let open: ((href: string) => void) | undefined;
+  // Note that the part reads the window's document, so it is read by the press.
+  function Opener(): null {
+    useAppState();
+    open = useOpenLink();
+    return null;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () =>
+    root?.render(
+      onRegistry(
+        rendererRegistry,
+        createElement(
+          OpenAddressesHere,
+          {
+            value: (address) => {
+              if (address.kind === ADDRESS.PLACE) asked.push(address.link.place);
+              return true;
+            },
+          },
+          createElement(Opener),
+        ),
+      ),
+    ),
+  );
+  // The window's document lands a few turns after the read is asked.
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  act(() => open?.(`https://vespin.dev/acme/task/42/page/${page}`));
+
+  assert.deepEqual(asked, [{ kind: LINK_PLACE.PAGE, planId: TASK, pageId: page }]);
 });

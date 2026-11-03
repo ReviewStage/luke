@@ -6,9 +6,10 @@ import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import type { Address } from "../route.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
-import { OpenHereProvider } from "./use-open-link.js";
+import { OpenAddressesHere } from "./use-open-link.js";
 
 /**
  * pull-request-call.test.ts -- a pull request an agent was refused is a fold
@@ -53,10 +54,10 @@ function drawn(output: WireRecord | undefined) {
   act(() =>
     root.render(
       createElement(
-        OpenHereProvider,
+        OpenAddressesHere,
         {
-          value: (href: string) => {
-            links.push(href);
+          value: (address: Address) => {
+            if (address.href !== undefined) links.push(address.href);
             return true;
           },
         },
