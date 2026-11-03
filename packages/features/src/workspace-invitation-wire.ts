@@ -1,4 +1,4 @@
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, Option } from "effect";
 import { workspaceIdSchema } from "./task-wire.js";
 import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
 
@@ -75,6 +75,16 @@ const invitedEmailSchema = EffectSchema.Trim.check(
 );
 
 const invitationRoleSchema = EffectSchema.Literals(Object.values(INVITATION_ROLE));
+
+const readInvitedEmail = EffectSchema.decodeUnknownOption(invitedEmailSchema);
+
+/**
+ * Whether typed words are an address the service invites, read as it reads
+ * them, so a form says what is wrong before it asks.
+ */
+export function isInvitableEmail(typed: string): boolean {
+  return Option.isSome(readInvitedEmail(typed));
+}
 
 /**
  * One pending invitation as the Mac shows it: whom it is for, as what, until

@@ -119,7 +119,7 @@ function Mark({ provider }: { provider: (typeof MARK_PROVIDER)[keyof typeof MARK
 function KeyForm(): React.JSX.Element {
   const [key, setKey] = useState("");
   return (
-    <form className="catalog-settings-key" onSubmit={(event) => event.preventDefault()}>
+    <form className="catalog-settings-key" noValidate onSubmit={(event) => event.preventDefault()}>
       <TextField
         type={TEXT_FIELD_TYPE.PASSWORD}
         label="Linear API key"

@@ -2018,7 +2018,28 @@ test("the invite form's address field is named by a visible label, and, being re
     [...(address.labels ?? [])].map((each) => each.textContent),
     ["Email address"],
   );
-  assert.equal(address.required, true);
+  assert.equal(address.getAttribute("aria-required"), "true");
+});
+
+test("an address the service would refuse is said under the field, in the app's error line rather than the browser's, and nothing is sent until it is fixed", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const address = form.querySelector("input") ?? assert.fail("no address field");
+
+  await invite(page, "alan", WORKSPACE_ROLE.MEMBER);
+
+  assert.equal(
+    form.querySelector('[data-slot="field-error"]')?.textContent,
+    "Enter an address like name@example.com.",
+  );
+  assert.equal(address.getAttribute("aria-invalid"), "true");
+  assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 0);
+
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+
+  assert.equal(address.getAttribute("aria-invalid"), null);
+  assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 1);
 });
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
