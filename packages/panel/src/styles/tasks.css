@@ -127,18 +127,16 @@
   font-size: inherit;
 }
 
-/* Note that a drawn section's heading margin folds into the gap above its
-   section, so a heading in the editor stands the gap alone. An h3 after a
-   block stands it too, as it does drawn (desktop.css), so opening the text
-   does not pull it up onto the block before it. */
+/* Note that a drawn section's heading margin collapses with the gap above
+   its section, so the larger of the two stands: the heading's own (desktop.css),
+   since it is measured at the heading's larger size. A heading in the editor
+   stands that larger one, so opening the text does not pull each section up
+   onto the one before it. An h3 after a block keeps its own margin, as it
+   does drawn, from desktop.css. */
 .desktop-document
   .plan-document-text
-  > .ui-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child),
-.desktop-document
-  .plan-document-text
-  > :not(.ui-markdown-heading)
-  + .ui-markdown-heading[data-level="3"] {
-  margin-top: var(--plan-section-gap);
+  > .ui-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
+  margin-top: max(var(--plan-section-gap), 1.6em);
 }
 
 /* A link the read view draws as a mention's chip wears the chip's light look
@@ -191,6 +189,12 @@
 
 .plan-document-text li[data-checked] > div {
   margin-top: 0;
+}
+
+/* A loose task list, its items a blank line apart, opens as a list per item,
+   which stand an item's gap apart, as the read view's one list does. */
+.plan-document-text ul[data-type="taskList"] + ul[data-type="taskList"] {
+  margin-top: 0.25em;
 }
 
 /* The editor's box takes a finger's press around it on a coarse pointer, as
