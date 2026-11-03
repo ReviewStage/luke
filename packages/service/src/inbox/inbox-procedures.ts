@@ -147,6 +147,12 @@ const retitled = (
     yield* retitleInboxThread(item.id, item.title, title.value);
   });
 
+/** What a press in a Slack DM says in that DM once its answer is taken: the message whose ask it answered, and the line naming the option chosen. */
+interface SlackChosen {
+  readonly messageId: string;
+  readonly line: string;
+}
+
 /** Whether a hand-off was refused because the agent's session has ended for good, so no message will ever reach it. */
 function retiredRefusal(refusal: HostedRefusal): boolean {
   return refusal.error === HOSTED_REFUSAL.AGENT_RETIRED.error;
@@ -212,6 +218,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly attachments: readonly AgentAttachment[];
   },
   counted: Effect.Effect<void, never, DatabaseServices>,
+  chosen?: SlackChosen,
 ) {
   const { text, clientKey, attachments } = message;
   const handedOver = Effect.gen(function* () {
@@ -237,7 +244,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted only once the hand-off stands, since a failed one withdraws the answer above.
   yield* counted;
-  yield* afterResponse("an answered thread's Slack DM", settleThreadDms(itemId));
+  yield* afterResponse("an answered thread's Slack DM", settleThreadDms(itemId, chosen));
   // The question settled may have finished the task's work, asked once the agent was told, so one
   // woken by the answer reads as running (`tasks/task-finish.ts`).
   yield* settleAgentTaskIfFinished(userId, agentId);
@@ -303,24 +310,27 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * A member's reply that answers the thread's open ask, as the window sends
- * one from version 5: the answer taken first, with the reply's words and
- * files, as the member's message that carries it (`answerInboxAsk`), and
- * then, by the rule every answer follows (`inboxAnswerHeard`),
- * handed to the agent under the answer's own lead, its files with it, under
- * the reply's key through the one steer path; otherwise kept for the agent
- * to read in its own time. An item put away with its task is not answered.
- * An answer to an ask the thread no longer holds open, to another message,
- * or one the ask does not take is refused, as a message's request is. A
- * hand-off that fails, is interrupted, or dies takes the answer back, as
- * a nod's does, so the thread never reads answered while the agent
- * was not told; an answer sent again under the key it was taken by is
+ * A member's answer to the thread's open ask, taken first, with its words
+ * and files, as the member's message that carries it (`answerInboxAsk`),
+ * and then, by the rule every answer follows (`inboxAnswerHeard`), handed
+ * to the agent under the answer's own lead, its files with it, under the
+ * answer's key through the one steer path; otherwise kept for the agent to
+ * read in its own time. An item put away with its task is not found. An
+ * answer to an ask the thread no longer holds open, to another message, or
+ * one the ask does not take is answered by what it came to and handed to
+ * nobody. A hand-off that fails, is interrupted, or dies takes the answer
+ * back, as a nod's does, so the thread never reads answered while the
+ * agent was not told; an answer sent again under the key it was taken by is
  * handed off again, which the steer's own key makes reach the agent once.
  * An agent whose session has ended for good can hear nothing again, so its
- * item keeps the answer. It answers as a plain reply does: the item as it
- * then stands.
+ * item keeps the answer.
+ *
+ * Exported for a caller with no request of its own, our Slack route
+ * (`slack/slack-events-app.ts`), which answers a press in a DM as the
+ * member it maps the presser to, and names the line that DM says once the
+ * answer is taken (`chosen`).
  */
-const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const answerAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   itemId: string,
@@ -330,6 +340,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly attachments: readonly AgentAttachment[];
     readonly answers: InboxAnswers;
   },
+  chosen?: SlackChosen,
 ) {
   const { text, clientKey, attachments, answers } = sent;
   const answered = yield* hostedStoreOrUnavailable(
@@ -339,7 +350,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { item, outcome, txid } = answered.value;
   const writtenIn = txid === undefined ? {} : { txid };
   if (outcome === INBOX_ASK_ANSWER.NOT_OPEN || outcome === INBOX_ASK_ANSWER.REFUSED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    return { item, outcome, ...writtenIn };
   }
   // An answer sent again under the key it was taken under is the same answer, counted once.
   const counted =
@@ -363,7 +374,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!inboxAnswerHeard(item, reply, attachments)) {
     yield* counted;
     yield* settleAgentTaskIfFinished(userId, item.agentId);
-    return { item, ...writtenIn };
+    return { item, outcome, ...writtenIn };
   }
   const message = inboxAnswerMessage(
     item,
@@ -377,7 +388,33 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     item.agentId,
     { text: message, clientKey, attachments },
     counted,
+    chosen,
   );
+  return { item, outcome, ...writtenIn };
+});
+
+/**
+ * A member's reply that answers the thread's open ask, as the window sends
+ * one from version 5, taken and handed to the agent as `answerAsMember`
+ * says. An answer to an ask the thread no longer holds open, to another
+ * message, or one the ask does not take is refused, as a message's request
+ * is. It answers as a plain reply does: the item as it then stands.
+ */
+const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
+  writer: Effect.Effect<StoreWriter>,
+  userId: string,
+  itemId: string,
+  sent: {
+    readonly text: string;
+    readonly clientKey: string;
+    readonly attachments: readonly AgentAttachment[];
+    readonly answers: InboxAnswers;
+  },
+) {
+  const { item, outcome, ...writtenIn } = yield* answerAsMember(writer, userId, itemId, sent);
+  if (outcome === INBOX_ASK_ANSWER.NOT_OPEN || outcome === INBOX_ASK_ANSWER.REFUSED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   return { item, ...writtenIn };
 });
 

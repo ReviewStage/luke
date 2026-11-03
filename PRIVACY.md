@@ -999,6 +999,12 @@ service keeps that Slack message's conversation and timestamp beside the
 agent's message so it can rewrite it once the ask is answered, withdrawn, or
 replaced, then forgets them. Slack notifications, under the bot's row in
 Settings › Workspace, turns these messages off for you in every workspace.
+Where the thread asks you to pick one option, the message carries a button
+for each, and pressing one answers the ask as you, as picking it in Vespin
+would: Slack sends the press through Vercel Connect to our service, which
+reads only the Slack user and Slack workspace who pressed it and the
+thread, message, and option the button names, finds you by the Slack user
+id it kept, and keeps nothing else of the press.
 
 **Gmail, Google Calendar, and Google Drive, where they are offered.** Our
 service offers them only to the accounts of the organization it names, while
