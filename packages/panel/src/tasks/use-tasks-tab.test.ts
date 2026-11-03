@@ -1235,16 +1235,17 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const unknownId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
+  // The service finds the first item, and then not the second.
+  const homes = [
+    { agentId: AGENT_ID, planId: alerts, workspaceId: ACME.id },
+    { failure: AGENT_CALL_FAILURE.NOT_FOUND },
+  ] as const;
+  let asked = 0;
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
     {
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
-      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: ({ itemId: asked }) =>
-        Promise.resolve(
-          asked === itemId
-            ? { agentId: AGENT_ID, planId: alerts, workspaceId: ACME.id }
-            : { failure: AGENT_CALL_FAILURE.NOT_FOUND },
-        ),
+      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () => Promise.resolve(homes[asked++] ?? homes[1]),
     },
   );
 
