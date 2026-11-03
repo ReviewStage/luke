@@ -79,7 +79,7 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
     },
     // A one-shot read, and a read kind kept in a local to send later.
     {
-      code: "askAct(ACT_KIND.TASKS_PAGES, place);",
+      code: "askAct(ACT_KIND.TASKS_ISSUE, place);",
       filename: NEW_FILE,
       errors: [{ messageId: "newRead" }],
     },
