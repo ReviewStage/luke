@@ -3,6 +3,7 @@ import {
   IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
+  LIST_ROW_CHEVRON,
   LIST_ROW_CURRENT,
   LIST_ROW_CURRENT_LOOK,
   LIST_ROW_INK,
@@ -488,6 +489,22 @@ function ListRows(): React.JSX.Element {
               chevron
               onPress={() => undefined}
             />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-chevron-over" title="A chevron over words that run to the acts">
+        <div className="catalog-narrow">
+          <List label="Servers" density={LIST_DENSITY.COMPACT}>
+            {[LIST_ROW_CHEVRON.ROOM, LIST_ROW_CHEVRON.OVER].map((at) => (
+              <ListRow
+                key={at}
+                title="search_issues_across_every_repository_of_an_organization"
+                chevron
+                chevronAt={at}
+                actions={<Switch checked label={`Chevron ${at}`} onChange={() => undefined} />}
+                onPress={() => undefined}
+              />
+            ))}
           </List>
         </div>
       </CatalogSection>

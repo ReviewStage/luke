@@ -40,6 +40,7 @@ import {
   GLYPH_INK,
   GlyphSlot,
   LIST_DENSITY,
+  LIST_ROW_CHEVRON,
   LIST_ROW_CURRENT,
   List,
   ListMotion,
@@ -966,6 +967,8 @@ function ServersPopover({
             actions={input.actions}
             current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
             chevron={input.opens}
+            // Note that the chevron keeps no room of its own, because a server's account fades to the row's end and kept room left it giving out early.
+            chevronAt={LIST_ROW_CHEVRON.OVER}
             keepFocus
             tabbable={false}
             onPress={input.onPress}

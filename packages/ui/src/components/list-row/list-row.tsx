@@ -240,6 +240,20 @@ export const LIST_ROW_TITLE_LINES = {
 
 export type ListRowTitleLines = (typeof LIST_ROW_TITLE_LINES)[keyof typeof LIST_ROW_TITLE_LINES];
 
+/**
+ * Where a row's chevron stands: in room of its own at the row's end, kept so
+ * nothing moves as it shows, or over the end of the row's words, keeping no
+ * room, for a row whose words run to its acts and fade there (a server's
+ * account beside its switch), where kept room reads as the words giving out
+ * early. Over the words it shows on their faded tail.
+ */
+export const LIST_ROW_CHEVRON = {
+  ROOM: "room",
+  OVER: "over",
+} as const;
+
+export type ListRowChevron = (typeof LIST_ROW_CHEVRON)[keyof typeof LIST_ROW_CHEVRON];
+
 /** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
   ALWAYS: "always",
@@ -383,6 +397,10 @@ const LEADING_CLASS =
 /** The row's end, its metadata and its chevron, at the end of its track, so it lines up with the acts that share it. */
 const END_CLASS =
   "luke-list-row-end col-[end] ms-icon-gap flex min-w-0 items-center justify-self-end gap-icon-gap";
+
+/** A lone chevron drawn over the end of the words: its start pulled back by its own width, so its track keeps no room and the words' track runs to the acts. */
+const END_OVER_CLASS =
+  "luke-list-row-end col-[end] -ms-luke-12 flex min-w-0 items-center justify-self-end";
 
 /** A chevron at the end of a row that goes deeper, its room kept so nothing moves as it shows. */
 const CHEVRON_CLASS =
@@ -550,6 +568,7 @@ export function ListRow({
   currentLook = LIST_ROW_CURRENT_LOOK.SHEET,
   menuOpen = false,
   chevron = false,
+  chevronAt = LIST_ROW_CHEVRON.ROOM,
   keepFocus = false,
   disabled = false,
   tabbable,
@@ -613,6 +632,8 @@ export function ListRow({
   menuOpen?: boolean | undefined;
   /** Whether a chevron at its end says the press goes somewhere deeper. */
   chevron?: boolean | undefined;
+  /** Where the chevron stands: in room of its own, or over the end of the words where the row has no metadata. */
+  chevronAt?: ListRowChevron | undefined;
   /** Whether a pointer's press leaves the focus where it is, as on a field beside the list that holds the keys. */
   keepFocus?: boolean | undefined;
   /** Whether its press is unavailable: refused and out of the tab order. */
@@ -718,7 +739,9 @@ export function ListRow({
   // the place a hover row's acts step into.
   const end =
     said(meta) || chevron ? (
-      <span className={END_CLASS}>
+      <span
+        className={chevronAt === LIST_ROW_CHEVRON.OVER && !said(meta) ? END_OVER_CLASS : END_CLASS}
+      >
         {said(meta) ? (
           <span id={metaId} className="luke-list-row-meta">
             {meta}
