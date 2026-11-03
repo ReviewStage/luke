@@ -50,7 +50,7 @@ import {
 
 export const REPOSITORY_SNAPSHOT = {
   /** Every repository snapshot's sandbox is named with this, its digest after it; no other sweep's prefix is a prefix of it. */
-  NAME_PREFIX: "luke-repository-",
+  NAME_PREFIX: "agent-repository-",
   /** How long a snapshot is opened from after it was built: past it, a launch builds it again and the sweep deletes it. */
   MAX_AGE: Duration.days(3),
   /** How long a build may stand unmarked before it is taken for left behind. */
@@ -71,7 +71,19 @@ export const REPOSITORY_SNAPSHOT = {
 
 /** The sandbox's tags: its key, and the instant a build that ended well was marked at. */
 const SNAPSHOT_TAG = {
-  KEY: "lukeRepositorySnapshot",
+  KEY: "agentRepositorySnapshot",
+  BUILT: "agentRepositoryBuilt",
+} as const;
+
+/**
+ * A repository snapshot's name prefix and built tag before the product's
+ * rename, which only the sweep reads, deleting each snapshot under them as
+ * it would one under today's, since no launch opens one again. Note that
+ * both can go once `MAX_AGE` and `BUILD_GRACE` have passed since the rename
+ * deployed and the sweep has read every shard after that, which leaves none.
+ */
+const SNAPSHOT_BEFORE_RENAME = {
+  NAME_PREFIX: "luke-repository-",
   BUILT: "lukeRepositoryBuilt",
 } as const;
 
@@ -141,7 +153,7 @@ function olderThan(now: number, at: number | undefined, bound: Duration.Duration
 
 /** The instant a sandbox's build was marked built at, where it was. */
 function builtAt(sandbox: ListedSandbox): number | undefined {
-  const built = sandbox.tags?.[SNAPSHOT_TAG.BUILT];
+  const built = sandbox.tags?.[SNAPSHOT_TAG.BUILT] ?? sandbox.tags?.[SNAPSHOT_BEFORE_RENAME.BUILT];
   return built === undefined ? undefined : Number(built);
 }
 
@@ -304,26 +316,18 @@ export interface RepositorySnapshotSweepOutcome {
   readonly deleted: number;
 }
 
-/** The names the sweep reads this minute: the prefix and the one hex digit of the digest its shard begins with. */
-function shardPrefixAt(now: number): string {
+/** The names the sweep reads this minute: each prefix and the one hex digit of the digest its shard begins with. */
+function shardPrefixesAt(now: number): readonly string[] {
   const minute = Math.floor(now / Duration.toMillis(REPOSITORY_SNAPSHOT.SWEEP_PERIOD));
-  return `${REPOSITORY_SNAPSHOT.NAME_PREFIX}${(minute % REPOSITORY_SNAPSHOT.SWEEP_SHARDS).toString(16)}`;
+  const shard = (minute % REPOSITORY_SNAPSHOT.SWEEP_SHARDS).toString(16);
+  return [REPOSITORY_SNAPSHOT.NAME_PREFIX, SNAPSHOT_BEFORE_RENAME.NAME_PREFIX].map(
+    (prefix) => `${prefix}${shard}`,
+  );
 }
 
-/**
- * The sweep's turn at the repository snapshots: a few pages of this
- * minute's shard of them read (`SWEEP_SHARDS`), and each built past
- * `MAX_AGE` or left unbuilt past `BUILD_GRACE` deleted with its snapshots,
- * unless a launch replaced it since it was listed, so a repository no agent
- * starts on keeps nothing. A delete Vercel refused is left for the shard's
- * next turn.
- */
-export const sweepRepositorySnapshots = (
-  api: VercelSandboxApi,
-): Effect.Effect<RepositorySnapshotSweepOutcome, SandboxUnavailable> =>
+/** A few pages of the snapshots named with the prefix read, and each expired one deleted, as `sweepRepositorySnapshots` says. */
+const sweepNamed = (api: VercelSandboxApi, prefix: string, now: number) =>
   Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const prefix = shardPrefixAt(now);
     let listed = 0;
     let deleted = 0;
     let cursor: string | undefined;
@@ -340,6 +344,28 @@ export const sweepRepositorySnapshots = (
       cursor = read.next;
     }
     return { listed, deleted };
+  });
+
+/**
+ * The sweep's turn at the repository snapshots: a few pages of this
+ * minute's shard of them read (`SWEEP_SHARDS`), and each built past
+ * `MAX_AGE` or left unbuilt past `BUILD_GRACE` deleted with its snapshots,
+ * unless a launch replaced it since it was listed, so a repository no agent
+ * starts on keeps nothing. A delete Vercel refused is left for the shard's
+ * next turn.
+ */
+export const sweepRepositorySnapshots = (
+  api: VercelSandboxApi,
+): Effect.Effect<RepositorySnapshotSweepOutcome, SandboxUnavailable> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const swept = yield* Effect.forEach(shardPrefixesAt(now), (prefix) =>
+      sweepNamed(api, prefix, now),
+    );
+    return {
+      listed: swept.reduce((sum, each) => sum + each.listed, 0),
+      deleted: swept.reduce((sum, each) => sum + each.deleted, 0),
+    };
   });
 
 /**

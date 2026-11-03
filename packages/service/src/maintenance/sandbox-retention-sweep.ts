@@ -13,11 +13,12 @@
  *
  * Each minute the sweep reads one bucket of the project's sandboxes, those
  * whose names, eve's (`eve-sbx-vercel-` and a hex digest) and a native
- * agent's (`luke-agent-` and a UUID), go on with the two hex digits the
+ * agent's (`agent-sandbox-` and a UUID, or `luke-agent-` and a UUID from
+ * before the rename), go on with the two hex digits the
  * minute picks, so every sandbox is read once in 256 minutes with no cursor
  * kept between sweeps, through the list by name prefix Vercel's documented
  * "List sandboxes" takes (https://vercel.com/docs/rest-api/sandboxes/list-sandboxes).
- * Templates (`eve-sbx-tpl-vercel-`, `luke-native-template-`) are never in a
+ * Templates (`eve-sbx-tpl-vercel-`, `agent-template-`) are never in a
  * bucket, since a template's one snapshot is what every new sandbox opens
  * from. At most `MAX_PAGES` pages of each prefix are read, which holds
  * 200 sandboxes a bucket, some 51,000 of each kind in all, and at most
@@ -28,7 +29,7 @@
 
 import { Effect, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import { SANDBOX_NAME } from "../agents/machine/vercel-machine.js";
+import { SANDBOX_NAME, SANDBOX_NAME_BEFORE_RENAME } from "../agents/machine/vercel-machine.js";
 import {
   boundSnapshotRetention,
   RETENTION_ENDING,
@@ -54,8 +55,12 @@ export const SANDBOX_RETENTION_SWEEP = {
   CONCURRENCY: 5,
 } as const;
 
-/** The name prefixes of the coding agents' own sandboxes, eve's and a native agent's. */
-const AGENT_SANDBOX_NAMES = [EVE_SESSION_SANDBOX_NAME, SANDBOX_NAME] as const;
+/** The name prefixes of the coding agents' own sandboxes, eve's and a native agent's, and a native agent's from before the rename. */
+const AGENT_SANDBOX_NAMES = [
+  EVE_SESSION_SANDBOX_NAME,
+  SANDBOX_NAME,
+  SANDBOX_NAME_BEFORE_RENAME,
+] as const;
 
 /** What one sweep came to: sandboxes brought onto the bound, ones left, ones Vercel did not confirm, ones past the bound, and ones whose snapshot went. */
 export interface SandboxRetentionSweepOutcome {
