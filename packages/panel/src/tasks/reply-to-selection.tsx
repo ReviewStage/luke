@@ -111,16 +111,32 @@ function scopeOf(node: Node): Element | null {
   return (node instanceof Element ? node : node.parentElement)?.closest(SCOPE_SELECTOR) ?? null;
 }
 
+/** Whether `range` holds words of `text` a selection takes: more than spaces, in an element the reader may select. */
+function takesWords(text: Text, range: Range): boolean {
+  const from = text === range.startContainer ? range.startOffset : 0;
+  const to = text === range.endContainer ? range.endOffset : text.length;
+  if (text.data.slice(from, to).trim() === "" || text.parentElement === null) return false;
+  const style = getComputedStyle(text.parentElement);
+  // Note that WebKit answers the property by its prefixed name alone.
+  return (style.userSelect || style.webkitUserSelect) !== "none";
+}
+
 /**
- * `range` cut to what it holds of `words`, or nothing where what it holds
- * past them is more than blank: as a triple-click's selection of a run's
- * last paragraph holds, which runs on to the start of the next block.
+ * `range` cut to what it holds of `words`, or nothing where it takes words
+ * past them: as a triple-click's selection of a run's last paragraph does
+ * not, though it runs on to the start of the next block, past what no
+ * selection takes, such as the letter of the next comment's avatar.
  */
 function cutTo(words: Element, range: Range): Range | undefined {
+  const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node instanceof Text && !words.contains(node) && range.intersectsNode(node)) {
+      if (takesWords(node, range)) return undefined;
+    }
+  }
   const cut = range.cloneRange();
-  if (!words.contains(range.startContainer)) cut.setStart(words, 0);
   if (!words.contains(range.endContainer)) cut.setEnd(words, words.childNodes.length);
-  return cut.toString().trim() === range.toString().trim() ? cut : undefined;
+  return cut;
 }
 
 /** The selection inside one run of words a reply may quote under `scope`, as Reply answers it; nothing for any other. */
