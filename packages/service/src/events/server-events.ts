@@ -221,8 +221,7 @@ export const SERVER_SIGN_IN_METHOD = {
 
 /** What kind of machine first connected: a box on its approved pairing, or the Mac's own desktop. */
 export const SERVER_HOST_KIND = {
-  // Note that the box's word keeps the host program's old name, because the counted events before the rename carry it and a new word would split their history.
-  BOX_HOST: "luke_host",
+  BOX_HOST: "box_host",
   THIS_MAC: "this_mac",
 } as const;
 
@@ -500,7 +499,7 @@ const GROUP_IDENTIFY_EVENT = "$groupidentify";
 const WORKSPACE_GROUP_REFRESH_MS = 24 * 60 * 60_000;
 
 /** The `$lib` every server-recorded event is stamped with, beside the desktop's own. */
-const SERVER_EVENT_LIB = "luke-service";
+const SERVER_EVENT_LIB = "vespin-service";
 
 /**
  * How long one capture may take. It runs once the request has answered

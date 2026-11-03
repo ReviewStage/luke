@@ -381,7 +381,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations.", lineId));
 
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.match(opened.sessionId, /^luke-codex-[0-9a-f]{12}-[0-9a-f-]{36}$/u);
+        assert.match(opened.sessionId, /^codex-[0-9a-f]{12}-[0-9a-f-]{36}$/u);
         const [sandbox] = api.sandboxes;
         assert.equal(sandbox?.tags.sessionId, opened.sessionId);
         // A token with an hour left is launched on as it stands.

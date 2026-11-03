@@ -717,7 +717,7 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
           "collecting its secret is not calling in; its program's register is",
         );
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
-          { kind: "luke_host" },
+          { kind: "box_host" },
         ]);
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
           { action: SERVER_HOST_PAIRING_ACTION.APPROVE },

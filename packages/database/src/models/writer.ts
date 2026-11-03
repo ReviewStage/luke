@@ -1152,7 +1152,7 @@ const TRANSCRIPT_KINDS: ReadonlySet<string> = new Set([
  * a txid.
  */
 const JOURNAL_METRIC = {
-  REWRITE_BYTES: Metric.histogram("luke.transcript.journal_rewrite_bytes", {
+  REWRITE_BYTES: Metric.histogram("app.transcript.journal_rewrite_bytes", {
     description: "Bytes of parts a landed journal amendment wrote, as the row's whole parts",
     boundaries: Metric.exponentialBoundaries({ start: 1024, factor: 2, count: 12 }),
   }),
