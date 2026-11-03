@@ -18,6 +18,7 @@ import {
 } from "@repo/agent-runner/pins";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
+import { RECORDING_CURSOR_FILE, RECORDING_CURSOR_SOURCE } from "../browser/recording-cursor.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { PREPARE_TMUX, SUDO_LINE } from "../terminal/tmux.js";
 
@@ -151,6 +152,18 @@ const INSTALL_CODEX = [
 ];
 
 /**
+ * The agent's pointer as a video draws it (`../browser/recording-cursor.ts`),
+ * kept where every user reads it, for an agent's own Playwright script to
+ * add to the pages it records. Note that it is written from base64, so no
+ * character of the source is the shell's to read.
+ */
+const INSTALL_RECORDING_CURSOR = [
+  `$SUDO install -d -o root -g root -m 0755 ${RECORDING_CURSOR_FILE.DIRECTORY}`,
+  `printf '%s' '${Buffer.from(RECORDING_CURSOR_SOURCE).toString("base64")}' | base64 -d | $SUDO tee ${RECORDING_CURSOR_FILE.PATH} >/dev/null`,
+  `$SUDO chmod 0644 ${RECORDING_CURSOR_FILE.PATH}`,
+];
+
+/**
  * The directory each launch installs the runner's bundle in, made root's
  * here, before any Terminal opens, so no shell of the default user's makes
  * it first and replaces the bundle in it.
@@ -250,14 +263,16 @@ const SYSTEM_STAGE = stage([
  * changes rarely to what changes often, each one command, with the code
  * extension's tooling between the first and the rest. `gh stack` follows the
  * tooling, which installs the `gh` it extends;
- * Codex follows the `agent` user, whose home holds its `CODEX_HOME`; and
- * the capability check comes last, once everything is in place.
+ * Codex follows the `agent` user, whose home holds its `CODEX_HOME`; the
+ * recording pointer, which changes with the app, follows the tools; and the
+ * capability check comes last, once everything is in place.
  */
 export const PREPARE_STAGES: readonly string[] = [
   SYSTEM_STAGE,
   stage(INSTALL_GH_STACK),
   stage(INSTALL_CLAUDE_CODE),
   stage(INSTALL_CODEX),
+  stage(INSTALL_RECORDING_CURSOR),
   stage(CHECK_CAPABILITY_DROP),
 ];
 

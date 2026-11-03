@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
-import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./sandbox-recorder.js";
+import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./recording-cursor.js";
 
 /**
  * recording-cursor.test.ts -- the agent's pointer as the recorder draws it into
