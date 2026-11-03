@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-black" alt="macOS 14 or newer, Apple silicon">
 </p>
 <p align="center">
-  <a href="https://vespin.dev">Website</a> - <a href="https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg">Download</a> - <a href="https://vespin.dev/app">Web app</a> - <a href="CHANGELOG.md">Changelog</a> - <a href="https://github.com/ReviewStage/vespin/issues/new/choose">Bug reports</a>
+  <a href="https://vespin.dev">Website</a> - <a href="https://github.com/ReviewStage/vespin/releases/latest/download/Vespin.dmg">Download</a> - <a href="https://vespin.dev/app">Web app</a> - <a href="CHANGELOG.md">Changelog</a> - <a href="https://github.com/ReviewStage/vespin/issues/new/choose">Bug reports</a>
 </p>
 <p align="center">
   <img src="apps/web/public/changelog/0.24.0/sub-tasks-and-blocked-tasks.png" alt="Vespin: a task's plan with its sub-tasks, each worked on by a coding agent">
@@ -83,7 +83,7 @@ in a browser at [vespin.dev/app](https://vespin.dev/app). It is free.
 
 ## Install
 
-1. Download [Vespin for macOS](https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg),
+1. Download [Vespin for macOS](https://github.com/ReviewStage/vespin/releases/latest/download/Vespin.dmg),
    open it, and drag **Vespin** into **Applications**.
 2. Open Vespin and sign in with Google or GitHub.
 3. In Settings › Workspace, under **Workspace connections**, press **Connect**
