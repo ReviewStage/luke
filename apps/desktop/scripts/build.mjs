@@ -114,14 +114,36 @@ const sideStylesheetsLinked = {
 // The commit the bundle is cut from, which Settings › Updates names
 // (`@repo/host`'s `build-commit.ts`): the short SHA, whether the tree held
 // uncommitted changes (a new file the bundle may carry counts too), and the
-// branch unless the head is detached, as a tag's checkout is. A build made
-// where git cannot answer stamps none.
+// branch. A detached head names the nearest ref that holds it
+// (`fix/x~2`), or else the linked worktree's folder, so a development
+// build always says where it came from. A build made where git cannot
+// answer stamps none.
 function git(...args) {
   return execFileSync("git", args, {
     cwd: appRoot,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
+}
+
+// The ref nearest a detached head that holds it, without a remote's prefix;
+// none where no ref holds it.
+function nearestRef() {
+  try {
+    const ref = git("name-rev", "--name-only", "--no-undefined", "HEAD");
+    return ref.replace(/^remotes\/[^/]+\//u, "").replace(/\^0$/u, "");
+  } catch {
+    return undefined;
+  }
+}
+
+// The folder of the linked worktree the build runs in; none in the main
+// checkout, whose folder names the repository rather than the work.
+function worktreeFolder() {
+  const gitDirectory = git("rev-parse", "--absolute-git-dir");
+  const commonDirectory = path.resolve(appRoot, git("rev-parse", "--git-common-dir"));
+  if (gitDirectory === commonDirectory) return undefined;
+  return path.basename(git("rev-parse", "--show-toplevel"));
 }
 
 function buildCommit() {
@@ -131,7 +153,8 @@ function buildCommit() {
       dirty: git("status", "--porcelain") !== "",
     };
     const branch = git("rev-parse", "--abbrev-ref", "HEAD");
-    if (branch !== "HEAD") commit.branch = branch;
+    const named = branch === "HEAD" ? (nearestRef() ?? worktreeFolder()) : branch;
+    if (named !== undefined) commit.branch = named;
     return commit;
   } catch {
     return null;

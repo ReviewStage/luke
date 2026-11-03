@@ -1,0 +1,13 @@
+/* build-chip.css -- BuildChip: the dot of a development build's colour its
+   chip leads with, at a status dot's size, as a toned chip's dot is
+   (`../chip/chip.css`). */
+
+@layer components {
+  .ui-build-dot {
+    display: block;
+    width: 7px; /* off-scale: a status dot */
+    height: 7px; /* off-scale: a status dot */
+    border-radius: var(--ui-radius-full);
+    background: var(--ui-build-dot);
+  }
+}

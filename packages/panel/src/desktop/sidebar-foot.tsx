@@ -3,6 +3,7 @@ import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { VERB } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
+import { devBuildBadge } from "@repo/settings/dev-build";
 import type { UpdateControl } from "@repo/settings/settings-controls";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { UPDATE_STATUS } from "@repo/settings/update";
@@ -11,6 +12,7 @@ import {
   BUTTON_SHAPE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
+  BuildChip,
   type ButtonVariant,
   ExternalIcon,
   FoldingButton,
@@ -46,9 +48,10 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
+import { copyThroughShell } from "../copy-feedback.js";
 import { useOpenPerson } from "../person-door.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
-import { useCapability } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { OfflineMark } from "./offline-mark.js";
 
@@ -153,6 +156,23 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
       variant={BUTTON_VARIANT.DANGER_TINT}
       onClick={updates.onOpenLatest}
     />
+  );
+}
+
+/**
+ * A development build's chip over the account's row: its colour, the one its
+ * Dock band wears, and where it was cut, which a press copies, so builds run
+ * side by side are told apart without opening Settings. A release, the web,
+ * and a fixture run, whose captures are the product's pictures, draw none.
+ */
+function SidebarBuild(): React.JSX.Element | null {
+  const run = useAppSlice(APP_SLICE.RUN);
+  if (run === undefined || run.packaged || run.fixtureMode) return null;
+  const badge = devBuildBadge({ instance: run.instance, commit: run.commit });
+  return (
+    <div className="flex min-w-0 pb-ui-4">
+      <BuildChip detail={badge.detail} color={badge.color} copy={copyThroughShell} />
+    </div>
   );
 }
 
@@ -338,6 +358,7 @@ export function SidebarFoot({
 }): React.JSX.Element {
   return (
     <SidebarFootBox>
+      <SidebarBuild />
       <SidebarAccountRow>
         <AccountMenu
           account={account}
