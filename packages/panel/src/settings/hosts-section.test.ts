@@ -6,8 +6,6 @@ import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@luke/features/device
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { ThisMacHostRead } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -18,7 +16,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { chooseMenuItem } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -251,19 +248,17 @@ async function press(words: string): Promise<void> {
   await settle();
 }
 
-/** Hosts drawn in the desktop over the hosts given, This Mac read as given, the beats given, and the One host program experiment on, or off where `kept` says so. */
+/** Hosts drawn in the desktop over the hosts given, This Mac read as given, and the beats given. */
 async function machinesWithThisMac(
   hosts: readonly Host[],
   thisMac: ThisMacHostRead,
   beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
-  kept = true,
 ): Promise<void> {
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
     [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [...beats] }),
     [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(thisMac),
   });
-  handState(kept ? experimentsOn(EXPERIMENT.THIS_MAC_ACCOUNT_HOST) : experimentsOn());
   drawHosts();
   await settle();
 }
@@ -295,14 +290,6 @@ test("This Mac stands first on the row of the machine it is, with no Remove", as
   assert.equal(document.querySelector('button[aria-label="This Mac actions"]'), null);
 });
 
-test("with One host program off, This Mac is named but stands where the list puts it, with its Remove", async () => {
-  await machinesWithThisMac(SERVER_AND_THIS_MAC, { machineId: MACHINE_ID }, [], false);
-  const text = document.body.textContent ?? "";
-
-  assert.ok(text.indexOf("fra-03") < text.indexOf("This Mac"), text);
-  assert.ok(document.querySelector('button[aria-label="This Mac actions"]') !== null);
-});
-
 test("a host's row says Updating… in place of Online while its update runs", async () => {
   const hosts: readonly Host[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "ams-01", update: HOST_UPDATE.WAITING },
@@ -324,7 +311,7 @@ test("each host's ⋯ is named by its host, and its Remove asks about that host 
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" },
   ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
-  await machinesWithThisMac(hosts, {}, [], false);
+  await machinesWithThisMac(hosts, {});
   const more =
     document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
     assert.fail("sfo-02's ⋯ is drawn");

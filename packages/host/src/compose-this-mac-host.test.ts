@@ -1,5 +1,5 @@
 /**
- * compose-this-mac-host.test.ts -- This Mac's host kept as the account's experiments say: a Mac with no record enrolled under a new id, its record written and the install script run; a record of the account's kept under its id, never enrolled again while it stands; the host stopped with its files kept where Bring your own host is off; and a record that is not the account's, or a gate that is off, left alone.
+ * compose-this-mac-host.test.ts -- This Mac's host kept as the account's experiments say: a Mac with no record enrolled under a new id, its record written and the install script run; a record of the account's kept under its id, never enrolled again while it stands; the host stopped with its files kept where Bring your own host is off; and a record that is not the account's left alone.
  *
  * The composer runs over a real state folder of its own, a fake service
  * that enrolls the Mac, lists the account's hosts, and serves the install
@@ -42,13 +42,12 @@ const ENROLL_URL = `${SERVICE}/enroll`;
 const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 const FILES = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 
-const BOTH_ON = {
-  [EXPERIMENT.THIS_MAC_ACCOUNT_HOST]: true,
+const BRING_YOUR_OWN_HOST_ON = {
   [EXPERIMENT.BRING_YOUR_OWN_HOST]: true,
 };
 
 interface MacOptions {
-  /** The experiments the account has on; both by default. */
+  /** The experiments the account has on; Bring your own host by default. */
   readonly experiments?: Partial<Record<Experiment, boolean>>;
   /** The devices the service lists among the account's hosts, beside each it enrolls. */
   readonly listed?: readonly string[];
@@ -89,7 +88,8 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
     const asked: string[] = [];
     const enrolled: { deviceId: string; version: string | null }[] = [];
     let failedInstalls = options.failedInstalls ?? 0;
-    const experiments: Partial<Record<Experiment, boolean>> = options.experiments ?? BOTH_ON;
+    const experiments: Partial<Record<Experiment, boolean>> =
+      options.experiments ?? BRING_YOUR_OWN_HOST_ON;
     const listed = new Set(options.listed ?? []);
     let version: string | null = null;
     const client = {
@@ -270,7 +270,7 @@ it.effect(
         yield* fileSystem.makeDirectory(join(stateRoot, "owned-agents"), { recursive: true });
         yield* fileSystem.writeFileString(join(stateRoot, "owned-agents", "agent-1"), "");
         const mac = yield* thisMac(stateRoot, {
-          experiments: { [EXPERIMENT.THIS_MAC_ACCOUNT_HOST]: true },
+          experiments: {},
           listed: [KEPT_ID],
           loaded: true,
         });
@@ -286,23 +286,18 @@ it.effect(
 
 it.effect.each([
   {
-    case: "the One host program experiment is off",
-    record: { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE, refused: true },
-    experiments: { [EXPERIMENT.BRING_YOUR_OWN_HOST]: true },
-  },
-  {
     case: "the record was enrolled with another service",
     record: {
       deviceId: KEPT_ID,
       deviceSecret: OLD_SECRET,
       serviceOrigin: "https://preview.luke.test",
     },
-    experiments: BOTH_ON,
+    experiments: BRING_YOUR_OWN_HOST_ON,
   },
   {
     case: "the record is another account's",
     record: { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE },
-    experiments: BOTH_ON,
+    experiments: BRING_YOUR_OWN_HOST_ON,
   },
 ] as const)("nothing is enrolled, installed, or stopped where $case", ({ record, experiments }) =>
   Effect.scoped(

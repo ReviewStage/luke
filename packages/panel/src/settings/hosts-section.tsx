@@ -5,7 +5,6 @@ import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   ANNOUNCE,
@@ -55,7 +54,6 @@ import {
   type ThisMac,
   useThisMac,
 } from "../machine-name.js";
-import { useExperiment } from "../use-app-state.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -76,11 +74,11 @@ import { MenuRow } from "./menu-row.js";
  * set it up. Adding takes a Linux server and a Mac alike, through one
  * command.
  *
- * In the desktop app, behind the One host program experiment, This Mac
- * always stands first, and offers no Remove, since the app keeps that host
- * as Bring your own host says; until the service lists it, on a This Mac
- * row of its own that reads offline. A browser tab has no This Mac, so it
- * draws neither, and with no host says what one is above Add hosts.
+ * In the desktop app, This Mac always stands first, and offers no Remove,
+ * since the app keeps that host as Bring your own host says; until the
+ * service lists it, on a This Mac row of its own that reads offline. A
+ * browser tab has no This Mac, so it draws neither, and with no host says
+ * what one is above Add hosts.
  *
  * Add hosts shows the install command, public and the same for every
  * member, which pairs a box with a code the member approves, and waits.
@@ -203,7 +201,7 @@ function HostRow({
   label: string;
   book: PresenceBook;
   onRemove: (id: string) => Promise<ActionResult>;
-  /** Whether the machine is This Mac as the app keeps its host, behind the One host program experiment. */
+  /** Whether the machine is This Mac as the app keeps its host. */
   kept: boolean;
 }): React.JSX.Element {
   const removing = useConfirmDialog(
@@ -334,7 +332,6 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [attempt, setAttempt] = useState(0);
   // The ids of the account's hosts as Add hosts opened, while its dialog stands.
   const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
-  const thisMacKept = useExperiment(EXPERIMENT.THIS_MAC_ACCOUNT_HOST);
   const thisMac = useThisMac(signedIn);
   const [connecting, closeConnect] = useHostConnect();
   // A pairing's question does not outlive the page it was asked over.
@@ -418,17 +415,16 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   );
 
   const listed = hosts?.map(machineOf) ?? [];
-  // Note that This Mac stands first, with no Remove, only where the app keeps its host, behind the One host program experiment.
-  const kept = thisMacKept ? thisMac : undefined;
+  // Note that This Mac stands first, with no Remove, only where the app keeps its host.
   const listedMac =
-    kept === undefined ? undefined : hosts?.find((host) => isThisMac(machineOf(host), kept));
+    thisMac === undefined ? undefined : hosts?.find((host) => isThisMac(machineOf(host), thisMac));
   const loaded = signedIn && hosts !== undefined && installScriptUrl !== undefined;
   const ordered =
     hosts === undefined || listedMac === undefined
       ? (hosts ?? [])
       : [listedMac, ...hosts.filter((host) => host !== listedMac)];
   // Note that this Mac stands even before the service lists its host, reading offline as a host does until it calls in.
-  const thisMacAlone = kept !== undefined && listedMac === undefined;
+  const thisMacAlone = thisMac !== undefined && listedMac === undefined;
   return (
     <>
       {/* Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member. */}
