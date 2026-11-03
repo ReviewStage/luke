@@ -86,6 +86,7 @@ import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
+import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 
@@ -1110,6 +1111,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       accountId: options.accountId ?? (() => "user-dana"),
+      kept: yield* keptContent(KEPT_CONTENT_CHARACTERS),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
@@ -1233,6 +1235,40 @@ it.effect(
       });
 
       assert.deepEqual(read, { file: window });
+    }),
+);
+
+it.effect(
+  "a file read at a commit answers what was first read there, while one read at the head or at another commit answers the file as it stands",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const window = {
+        path: "src/seats.ts",
+        repository: "acme/relay",
+        branch: "main",
+        firstLine: 1,
+        lineCount: 2,
+        lines: ["const seats = 3;", "export { seats };"],
+      };
+      service.files["src/seats.ts"] = { file: window };
+      const { call } = yield* subject(service);
+      const read = { taskId: INVITES, path: "src/seats.ts", firstLine: 1, lastLine: 2 };
+      const atCommit = { ...read, ref: "0123456789abcdef0123456789abcdef01234567" };
+
+      yield* call(GATEWAY_METHOD.TASKS_FILE, atCommit);
+      const changed = { ...window, lines: ["const seats = 4;", "export { seats };"] };
+      service.files["src/seats.ts"] = { file: changed };
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_FILE, atCommit), { file: window });
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_FILE, read), { file: changed });
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_FILE, {
+          ...read,
+          ref: "89abcdef0123456789abcdef0123456789abcdef",
+        }),
+        { file: changed },
+      );
     }),
 );
 
