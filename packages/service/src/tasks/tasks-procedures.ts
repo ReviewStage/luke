@@ -350,8 +350,14 @@ const startedAgentOn = (
           const plan = yield* taskAfterStart(userId, task);
           return { plan, agent: made.value } satisfies TaskStartAnswer;
         }
+        // Note that the provider and the model asked for are kept beside the refusal, because a credential refused names neither in its words.
         yield* Effect.logWarning(
           `the agent a task's start asked for was refused: ${refusal.error}`,
+        ).pipe(
+          Effect.annotateLogs({
+            ...(refusal.provider === undefined ? undefined : { provider: refusal.provider }),
+            ...(agent.model === undefined ? undefined : { model: agent.model }),
+          }),
         );
         const agentRefusal = {
           error: refusal.error,
