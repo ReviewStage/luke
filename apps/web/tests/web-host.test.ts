@@ -7,6 +7,7 @@ import {
   TERMINAL_PORT_CHANNEL,
   TERMINAL_PORT_MESSAGE,
 } from "@repo/features/terminal-acts";
+import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
 import { askAct } from "@repo/panel/act";
@@ -330,8 +331,11 @@ it.effect(
         yield* Effect.promise(() =>
           askAct(ACT_KIND.TERMINAL_ATTACH, { agentId, terminalId, cols: 120, rows: 32 }),
         );
-        yield* until(() => RelaySocket.opened.length === 1);
-        const [relay] = RelaySocket.opened;
+        // Note that the shell's relay is found by its path, because the tab's live reads open a socket of their own.
+        const shellRelay = () =>
+          RelaySocket.opened.find((socket) => new URL(socket.url).pathname === TERMINAL_RELAY.PATH);
+        yield* until(() => shellRelay() !== undefined);
+        const relay = shellRelay();
         assert.ok(relay);
         assert.equal(
           relay.url,
