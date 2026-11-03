@@ -42,10 +42,11 @@ import { OpenLinkProvider } from "./use-open-link.js";
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
  * agent carries their face and name under its bubble, as a teammate's line
  * on a call does, and the reader's own carries none; the app's carries
- * its tile, an automation's its own, GitHub's the login it names, another
- * coding agent's its harness's mark by its name, where the service says
- * the model it runs on, and a member's who has left the quiet
- * outline, and a message from before senders were kept names nobody.
+ * its tile, a wakeup the agent set the agent's own mark and name, an
+ * automation's its own, GitHub's the login it names, another coding
+ * agent's its harness's mark by its name, where the service says the
+ * model it runs on, and a member's who has left the quiet outline, and a
+ * message from before senders were kept names nobody.
  * Synthetic throughout.
  */
 
@@ -119,6 +120,11 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
   { ...line("charles", "Not five.", { ...CHARLES, kind: MEMBER }), sentAt: CHARLES_SENT_AT },
   line("earlier", "Keep the old copy."),
   line("luke", "Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.LUKE }),
+  // A wakeup the agent set comes back as a line of the app's, which is the agent's own.
+  {
+    ...line("wakeup", "Read the checks.", { name: "Vespin", kind: AGENT_SENDER.LUKE }),
+    metadata: { channel: "luke" },
+  },
   line("automation", "Triage the failures.", {
     name: "Nightly triage",
     kind: AGENT_SENDER.AUTOMATION,
@@ -244,7 +250,7 @@ async function sendersFor(
   });
 }
 
-test("each member sees a teammate's face and name under the teammate's messages and none under their own, Vespin, an automation, and another agent each as itself, someone who left on an outline, and a message with no sender names nobody", async () => {
+test("each member sees a teammate's face and name under the teammate's messages and none under their own, Vespin, an automation, and another agent each as itself, a wakeup as the agent's own, someone who left on an outline, and a message with no sender names nobody", async () => {
   const deanSees = await sendersFor(DEAN.userId);
   act(() => root?.unmount());
   const charlesSees = await sendersFor(CHARLES.userId);
@@ -253,6 +259,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
   // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
   const others: readonly Seen[] = [
     ["luke", ACTOR_KIND.LUKE, "Vespin"],
+    ["wakeup", ACTOR_KIND.AGENT, "Invite flow"],
     ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
     ["gone", ACTOR_KIND.SOMEONE, "Former member"],
     // GitHub names who caused what it told the agent of: a person by their login and its avatar, a bot by its App's.

@@ -26,6 +26,7 @@ import {
   type FailureAbout,
 } from "@luke/features/shown-failure";
 import type { TaskStatus } from "@luke/features/task-wire";
+import { workingTime } from "@luke/features/time-format";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -61,6 +62,7 @@ import {
   OneLine,
   STATUS_TONE,
   SUBJECT_FIT,
+  SubjectLine,
   TaskStatusMark,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -69,7 +71,7 @@ import {
   useAnnounce,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { ICON_SIZE } from "@luke/ui/icons";
+import { AlarmClockCheckIcon, ICON_SIZE } from "@luke/ui/icons";
 import { skillWord } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -116,6 +118,7 @@ import {
   AGENT_PART,
   type AgentPart,
   type AgentPartCut,
+  agentActor,
   agentLines,
   agentListCallIds,
   agentMessageOf,
@@ -139,6 +142,7 @@ import {
   finishedReplyLead,
   githubLineOf,
   isTodos,
+  isWakeupLine,
   lineSender,
   macOwnerOf,
   messageWords,
@@ -161,6 +165,7 @@ import {
   transcriptRowKey,
   turnStretches,
   unreadOpeningLine,
+  wakeupDelayOf,
   workerLines,
   workerStatusOf,
   workerToolState,
@@ -1346,6 +1351,24 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   );
 }
 
+/** What a wakeup's line says the agent did, after its own chip. */
+const WAKEUP_LEAD = "woke up";
+
+/** A wakeup's head: that the agent woke up, then the wakeup it set, by how long it waited, where its call says. */
+function WakeupHead({ delay }: { delay: number | undefined }): React.JSX.Element {
+  return (
+    <SubjectLine lead={WAKEUP_LEAD} fit={SUBJECT_FIT.OWN}>
+      {delay === undefined ? null : (
+        <InlineRef
+          look={INLINE_REF_LOOK.PILL}
+          glyph={<AlarmClockCheckIcon />}
+          label={`${workingTime(delay)} wakeup`}
+        />
+      )}
+    </SubjectLine>
+  );
+}
+
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
 export interface ArrivedLine {
   readonly message: AgentTranscriptMessage;
@@ -1426,6 +1449,7 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
+  wakeupDelay,
   taskId,
   forkable = true,
   forkCut,
@@ -1451,10 +1475,12 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Who wrote or said the message, named over it: a teammate, the app, or an automation; none for the reader's own, or where nobody is named. */
+  /** Who wrote or said the message, named over it: a teammate, the app, an automation, or the agent itself, whose wakeup it is; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
   arrived?: readonly ArrivedLine[];
+  /** How long the wakeup this line hands back waited, where it is one and the turn that set it says (`wakeupDelayOf`). */
+  wakeupDelay?: number | undefined;
 }): ReactNode {
   const words = messageWords(message);
   const forkOffered = useForkOffered();
@@ -1521,6 +1547,8 @@ export function AgentMessage({
       thread === undefined ? null : (
         <ThreadLineHead line={thread} words={words} fit={received ? SUBJECT_FIT.OWN : undefined} />
       );
+    // A wakeup is the agent's own line, headed by what it did, as a thread's line is.
+    const subject = isWakeupLine(message) ? <WakeupHead delay={wakeupDelay} /> : threadHead;
     return (
       <Message
         from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
@@ -1528,7 +1556,7 @@ export function AgentMessage({
         data-message-id={message.id}
         data-undelivered={marked ? "" : undefined}
       >
-        {received ? <MessageHead sender={named}>{threadHead}</MessageHead> : threadHead}
+        {received ? <MessageHead sender={named}>{subject}</MessageHead> : subject}
         <MessageFileChips message={message} sending={sending} />
         {shown === "" ? null : (
           <MessageContent>
@@ -2176,6 +2204,7 @@ function AgentTranscriptView({
   earlierOmitted = false,
   briefTitle,
   briefSender,
+  self,
   origin,
   readerId,
   agentId,
@@ -2235,6 +2264,8 @@ function AgentTranscriptView({
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
   briefSender?: Actor | undefined;
+  /** The agent itself, named over a wakeup it set when the line comes back to it; none where no line can be one. */
+  self?: Actor | undefined;
   /** Who handed the agent what it opens on, which is then its card under their line, a prompt among them; none where only a plan is, whose card names nobody. */
   origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
@@ -2382,7 +2413,14 @@ function AgentTranscriptView({
                           sender={
                             message === task
                               ? briefSender
-                              : lineSender(message.sentBy, readerId, members, former)
+                              : isWakeupLine(message) && self !== undefined
+                                ? self
+                                : lineSender(message.sentBy, readerId, members, former)
+                          }
+                          wakeupDelay={
+                            isWakeupLine(message)
+                              ? wakeupDelayOf(placed[index - 1]?.message)
+                              : undefined
                           }
                           arrived={arrivals.get(message.id) ?? NO_ARRIVED}
                           piece={piece}
@@ -2759,6 +2797,7 @@ function AgentTabView({
                     messages={lines}
                     brief={agent.brief}
                     briefSender={starter === undefined ? undefined : starterActor}
+                    self={agentActor({ model: agent.model }, name)}
                     origin={origin}
                     readerId={readerId}
                     agentId={agent.id}

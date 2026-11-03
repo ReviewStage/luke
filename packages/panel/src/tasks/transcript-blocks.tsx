@@ -69,6 +69,7 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import {
+  AlarmClockIcon,
   AppWindowIcon,
   ArchiveIcon,
   ArchiveRestoreIcon,
@@ -1046,6 +1047,7 @@ const CALL_ICON = {
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
   [CALL_KIND.OPEN_PULL_REQUEST]: () => <GLYPH.PULL_REQUEST />,
   [CALL_KIND.SLEEP]: TimerIcon,
+  [CALL_KIND.SCHEDULE_WAKEUP]: AlarmClockIcon,
   [CALL_KIND.LIST_TASKS]: () => <GLYPH.TASK />,
   [CALL_KIND.REMEMBER]: () => <GLYPH.MEMORY />,
   [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
