@@ -249,10 +249,10 @@ const FAVICON = { side: 240, inset: 8, radius: 52 };
 }
 
 // Mark: the disc alone on transparency with a twelfth of air on each side,
-// in each mode's ink, in pure white, and in pure black, the one-ink glyph a
-// partner surface tints for its own theme, such as an integration's icon on
-// Sentry, which takes no colour but black. The disc on a tile is the avatar,
-// below.
+// in each mode's ink, in pure white, in each mode's copper as the colour
+// logos draw it, and in pure black, the one-ink glyph a partner surface tints
+// for its own theme, such as an integration's icon on Sentry, which takes no
+// colour but black. The disc on a tile is the avatar, below.
 const SQUARE = { side: 120, disc: 100 };
 {
   const at = (SQUARE.side - SQUARE.disc) / 2;
@@ -261,6 +261,7 @@ const SQUARE = { side: 120, disc: 100 };
     ...Object.entries(INKS),
     ["white", "#ffffff"],
     ["monochrome", "#000000"],
+    ...Object.entries(COLOUR_INKS).map(([mode, { mark }]) => [`colour-${mode}`, mark]),
   ]) {
     emit(`mark/mark-${name}.svg`, `${open}${markAt(at, at, SQUARE.disc, ink)}</svg>`, PRODUCT_NAME);
   }
