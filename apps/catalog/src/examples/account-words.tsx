@@ -1,8 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   AccountWords,
-  BUTTON_VARIANT,
-  Button,
   MoreButton,
   ProviderMark,
   SETTINGS_ROW_STATE,
@@ -10,14 +8,15 @@ import {
   SettingsRowMark,
   SettingsRowStateLine,
   SettingsSection,
+  TextButton,
 } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * account-words.tsx -- an account's name beside its provider's: two accounts
- * at one provider, a lone named one, a long address that fades, an expired
- * one, and a provider that names none, as Settings › Integrations draws
+ * at one provider, a lone named one, a long address cut short, an expired
+ * one mended on its line, and a provider that names none, as Settings › Integrations draws
  * them, at a settings page's measure and narrower than 380px.
  */
 
@@ -83,8 +82,11 @@ function Rows(): React.JSX.Element {
           }
           description={
             row.expired ? (
-              <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
-                Sign-in expired
+              <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION} wrap>
+                {"Sign-in expired · "}
+                <TextButton aria-label={`Reconnect ${row.name}`} onClick={() => undefined}>
+                  Reconnect
+                </TextButton>
               </SettingsRowStateLine>
             ) : (
               <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
@@ -93,12 +95,7 @@ function Rows(): React.JSX.Element {
             )
           }
         >
-          {() => (
-            <>
-              {row.expired ? <Button variant={BUTTON_VARIANT.OUTLINE}>Reconnect</Button> : null}
-              <MoreButton thing={row.name} />
-            </>
-          )}
+          {() => (row.expired ? null : <MoreButton thing={row.name} />)}
         </SettingsRow>
       ))}
     </SettingsSection>
