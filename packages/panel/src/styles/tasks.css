@@ -394,7 +394,8 @@
 
 /* A page's comments over the page (plan-comments.tsx's PageCommentLayer):
    the layer takes no press but its own; each pin's pointed corner, its
-   upper right one, touches its element's top left corner, the pin beside it, the line comment mode says stands over the page's
+   upper right one, touches its element's top left corner, the pin beside it,
+   or inside the corner where the room has none beside it, the line comment mode says stands over the page's
    top, and a card by an element is a comment card's width. */
 .page-comment-layer {
   position: absolute;
@@ -410,6 +411,10 @@
   position: absolute;
   display: flex;
   translate: -100% 0;
+}
+
+.page-comment-pin[data-stands="inside"] {
+  translate: 0 0;
 }
 
 .page-comment-hint {
