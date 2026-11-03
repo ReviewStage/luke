@@ -84,6 +84,68 @@ export const LIVE_USER_QUERY = "userId";
 /** A live read the service refused as signed out: no session, or one of another account than the read names. */
 export const LIVE_SIGNED_OUT = { failure: "signed-out" } as const;
 
+const LIVE_SOCKET_PATH = "/api/live/socket";
+
+/**
+ * The one WebSocket a signed-in host sends its live polls over, in place of
+ * a held request per read. It is no subscription: an ask is one poll, named
+ * by the path and query (`READ_PREFIX` onward) its HTTP poll would GET, and
+ * its answer is that poll's status and body as the HTTP poll would answer
+ * them, so a read's key, `after`, and `cursor` travel as they always have
+ * and a new socket resumes nothing. The socket is opened under the account's
+ * credential, the desktop's bearer or the page's cookie
+ * (`@repo/service/http/relay-upgrade`), which every ask is answered under,
+ * whatever its frame says.
+ *
+ * Every frame is a JSON text frame. An ask refuses a key it did not name,
+ * and the service closes the socket on one that does not read; an answer is
+ * read dropping any key a newer service added.
+ */
+export const LIVE_SOCKET = {
+  PATH: LIVE_SOCKET_PATH,
+  /** Where the path of every read an ask names begins: the socket's own directory, which every live read's path shares (`service-paths.ts`). */
+  READ_PREFIX: LIVE_SOCKET_PATH.slice(0, LIVE_SOCKET_PATH.lastIndexOf("/") + 1),
+} as const;
+
+/** The most characters an ask's path may carry: a read's ids, account, digest, and cursor are well under it. */
+const LIVE_SOCKET_PATH_MAX_CHARS = 8 * 1024;
+
+/** Any origin, for reading a path alone: an ask's origin is the service's own, never its frame's. */
+const PATH_BASE = "http://live.invalid";
+
+/**
+ * Whether a path names a live read: under `READ_PREFIX` as written, which
+ * leaves it no scheme or host of its own, and once its dot segments are
+ * resolved, encoded ones among them.
+ */
+function isLiveReadPath(path: string): boolean {
+  if (!path.startsWith(LIVE_SOCKET.READ_PREFIX) || !URL.canParse(path, PATH_BASE)) return false;
+  return new URL(path, PATH_BASE).pathname.startsWith(LIVE_SOCKET.READ_PREFIX);
+}
+
+/** Which ask an answer is to: the host's own count, unique among its socket's open asks. */
+const liveSocketAskIdSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0));
+
+/** One poll a host asks over its socket: the path and query its HTTP poll would GET. */
+export const liveSocketAskSchema = EffectSchema.Struct({
+  id: liveSocketAskIdSchema,
+  path: EffectSchema.String.check(
+    EffectSchema.isMaxLength(LIVE_SOCKET_PATH_MAX_CHARS),
+    EffectSchema.makeFilter(isLiveReadPath),
+  ),
+});
+
+export type LiveSocketAsk = typeof liveSocketAskSchema.Type;
+
+/** One poll answered over the socket: the status and body its HTTP poll would have answered, the body as the text it was. */
+export const liveSocketAnswerSchema = EffectSchema.Struct({
+  id: liveSocketAskIdSchema,
+  status: EffectSchema.Int,
+  body: EffectSchema.String,
+});
+
+export type LiveSocketAnswer = typeof liveSocketAnswerSchema.Type;
+
 /**
  * Where a polled read's rows stand as one value: each part's digest, in
  * the parts' name order. A reader sends the one it last saw as `after`, and

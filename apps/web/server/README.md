@@ -394,7 +394,7 @@ and lands each request by `api-rewrites.json` through the same replay the tests
 use (`server/local-deployment.ts`, `server/platform-landing.ts`). Every path no
 rewrite takes is the site's, which Vite serves in middleware mode from the page
 the web service's page routes in `vercel.json` land it on, as `/app` and a
-workspace's links land on `app.html`, without those routes' headers. The two
+workspace's links land on `app.html`, without those routes' headers. The three
 WebSocket functions and the feedback courier are not served, and the scheduled
 sweep is called in process on the cron's cadence under `CRON_SECRET`.
 
@@ -666,7 +666,7 @@ route through the one fallback rewrite of `server/function-rewrites.ts`,
 which carries the whole path in `route-path` for the dispatcher to restore,
 and a path no procedure matches is the router's own JSON 404. Vercel runs the
 web service's routes before the filesystem, so the functions that answer by
-their own name (the two WebSocket functions and the feedback courier) each
+their own name (the three WebSocket functions and the feedback courier) each
 stand on a pass-through rule ahead of the fallback.
 Every answer the route gives, a refusal and an unmatched path's 404 among
 them, carries `nosniff` and `Cross-Origin-Resource-Policy: same-origin`
@@ -897,8 +897,9 @@ minutes, and an email to the issue's owners on a high-priority issue.
 
 ### Deploying
 
-The terminal relay and the Browser tab's live view are WebSocket functions,
-each exporting the `http.Server` Vercel upgrades into, so enable the
+The terminal relay, the Browser tab's live view, and the live reads' socket
+(`/api/live/socket`, which answers a host's live polls) are WebSocket
+functions, each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
 keys. A native agent's runner reports to the deployment's own origin, its
