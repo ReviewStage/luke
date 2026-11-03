@@ -23,7 +23,7 @@ kept them, so a new table declares `timestamptz`.
 For a new table or a changed one, edit the `packages/database/src/schemas/*.ts`
 module that declares it, run `pnpm db:generate --name=<what_it_does>`, and
 commit the folder it writes under `packages/database/migrations/`, its
-`migration.sql` and `snapshot.json`, in the same commit, with whatever query modules under `server/` need it. The
+`migration.sql` and `snapshot.json`, in the same commit, with whatever query modules under `packages/database/src/models/` need it. The
 conventions: a text column typed by `$type<>()` rather than a `pgEnum`, a
 surrogate key rather than a new composite one, and an online index or a
 backfill written as idempotent SQL. Dropping a column means deleting it from that module, and
@@ -152,12 +152,14 @@ every member of its workspace, whichever of them started it:
 membership of the task's workspace rather than on the task's starter.
 
 A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
-`bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@repo/features/picture-wire`)
+`bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@repo/features/picture-wire`),
+or to `MAX_VIDEO_BYTES` for a WebM an agent recorded
 (`packages/database/src/models/plan-attachments.ts`), gated by the same
 `taskReachableBy`. `POST /api/plans/<id>/attachments { picture }` keeps one, a
-`data:` URL of a PNG, JPEG, or WebP whose bytes sniff as its label, on a plan
-that is not archived and holds fewer than `MAX_PER_PLAN`, answering `{ id }`
-or `{ refused: "too-many" }`; `GET /api/plans/<id>/attachments/<picture>`
+`data:` URL of a PNG, JPEG, WebP, or WebM whose bytes sniff as its label, on a plan
+that is not archived and holds fewer than `MAX_PER_PLAN`, and, for a WebM,
+fewer than `MAX_VIDEOS_PER_PLAN` videos, answering `{ id }`
+or `{ refused: "too-many" }` or `{ refused: "too-many-videos" }`; `GET /api/plans/<id>/attachments/<picture>`
 serves the bytes under their sniffed type, `nosniff` and `private, no-store`,
 to a member alone, anyone else reading `not-found`. The plan's text names a
 picture by its address (`@repo/features/plan-attachment-link`), which
@@ -543,13 +545,12 @@ matters because this layer stands in the runtime every function shares and an
 eager round trip would land on the cold start of the functions that never
 query.
 
-Every module under `server/` that reads or writes this database reads the
+Every query module that reads or writes this database, each under
+`packages/database/src/models/`, reads the
 client out of the fiber it runs on rather than holding one of its own, the
 Drizzle `Database` of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
-query modules are on it, the store writer among them.
-Outside `packages/database/src/models/`, `packages/database/src/models/task-store.ts` is on the same
-client.
+query modules are on it, the store writer and `task-store.ts` among them.
 `hostedStore()` takes no argument, and answers an
 `Effect<A, SqlError | Schema.SchemaError, SqlClient>` from every method, so
 the caller composes a store read into whatever it already runs. A route
@@ -566,18 +567,14 @@ client's own transaction. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 
-`effect` and `@effect/sql-pg` are declared dependencies of this app, which is
-what leaves them external to the bundles rather than inlined into each of them,
-so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
-`pg`, which is external on the same terms and already was.
-
 A test reads the same client through `@repo/database/testing`, which
 chooses its dialect the way its `hosted-store-database.ts` does:
 PGlite in process, so `check.sh` needs no service, or the Postgres named by
 `APP_STORE_TEST_DATABASE_URL`, which the CI job points at its service
 container. The Postgres half is the production layer's own client; the PGlite
-half is a small `SqlClient` over `@electric-sql/pglite`, because no
-`@effect/sql-pglite` ships against the 3.x Effect line.
+half is `@effect/sql-pglite`'s `PgliteClient` over `@electric-sql/pglite`,
+with Drizzle's PGlite driver beside it
+(`packages/database/src/testing/sql-client.ts`).
 
 ## A route built from a route layer
 
@@ -591,10 +588,13 @@ a layer rather than a value because that is what an `HttpRouter` registration
 is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
 provides per request from the context `runWeb` read. The routes the hosted
-oRPC route does not answer are converted this way: auth, the two webhooks,
-the maintenance sweep and key rewrap, the GitHub and integration redirects,
-and the byte routes; the WebSocket routes alone export something else, the
-`http.Server` described under "WebSocket functions".
+oRPC route does not answer are converted this way: auth, the GitHub,
+automation, Slack, and Sentry webhooks, the maintenance sweep and key rewrap,
+the GitHub, integration, and Sentry redirects, the byte routes, the runner's
+routes, the workspace's MCP door, and the page sandbox. The two chapters
+routes are the hosted oRPC route itself in a function of its own, and the
+WebSocket routes export something else, the `http.Server` described under
+"WebSocket functions".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
