@@ -4,6 +4,25 @@
    window's. */
 
 @layer components {
+  /* The row wraps, so the presses leave the words' line for one of their own
+     beneath it only where they would not fit beside the words at their
+     narrowest, however wide the banner is. Note that the words' narrowest
+     is never more than the room beside the glyph (the card's disc, or the
+     others' icon, and the gap after it), so the glyph never stands on a
+     line of its own. */
+  .ui-banner-row {
+    flex-wrap: wrap;
+  }
+
+  .ui-banner-words {
+    --ui-banner-glyph-room: calc(var(--ui-control-icon) + var(--ui-icon-gap));
+    flex-basis: min(calc(2 * var(--ui-space-96)), 100% - var(--ui-banner-glyph-room));
+  }
+
+  .ui-banner[data-look="card"] .ui-banner-words {
+    --ui-banner-glyph-room: calc(var(--ui-space-32) + var(--ui-space-12));
+  }
+
   /* Note that the presses' share of the row, and a strip's words held to
      one line, stay here rather than in utilities, because the narrow rules
      below undo them, and a rule in this layer cannot undo a utility. A
@@ -30,23 +49,13 @@
     mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
-  /* Narrow, the presses leave the words' line for one of their own beneath
-     it, each as wide as the line allows, and the words wrap at their own
-     width rather than being squeezed past it or cut short. A container query
-     at the banner's own breakpoint, which no utility spells exactly. */
+  /* Narrow, a strip's words wrap at their own width rather than being cut
+     short, and its presses may take the whole line, so they wrap beneath
+     the words rather than squeeze. A container query at the strip's own
+     breakpoint, which no utility spells exactly. */
   @container ui-banner (width < 480px) {
-    .ui-banner-row {
-      flex-wrap: wrap;
-    }
-
-    .ui-banner-actions,
     .ui-banner[data-look="strip"] .ui-banner-actions {
       max-width: none;
-      flex: 1 0 100%;
-    }
-
-    .ui-banner-actions > * {
-      flex: 1 1 0%;
     }
 
     .ui-banner[data-look="strip"] .ui-banner-words {

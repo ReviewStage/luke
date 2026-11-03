@@ -21,8 +21,8 @@ import { STATUS_TONE, type StatusTone } from "../status-tone.js";
  *   flex row (`AlertRow`) of a glyph slot (`AlertGlyph`, which shadcn reaches
  *   as `*:[svg]`), the words (`AlertDescription`), and the presses
  *   (`AlertAction`), which stand in the row rather than absolutely at its
- *   corner, so they drop beneath the words where the banner is narrow
- *   (`components/banner/banner.css`'s container query).
+ *   corner, so they drop beneath the words where they would not fit beside
+ *   them (`components/banner/banner.css`).
  * - Our inks, type, spacing, and radii from the theme rather than
  *   `bg-card` and `text-sm`, and no `text-balance`, link underline, or
  *   `md:` breakpoint, because a banner measures its own width.
@@ -90,7 +90,7 @@ const alertGlyphVariants = cva(
   },
 );
 
-const alertDescriptionVariants = cva("ui-banner-words min-w-0 flex-1", {
+const alertDescriptionVariants = cva("ui-banner-words min-w-0 grow", {
   variants: {
     look: {
       strip: "block overflow-hidden text-body text-body-foreground",
