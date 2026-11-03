@@ -9,7 +9,7 @@ import { CatalogSection } from "../section";
  * lands and turns to the check, one the clipboard refuses and turns to the
  * alert, compact, one with nothing to copy, and the chip look that names
  * what it copies, a branch, and a development build's chip, led by its
- * colour. The catalog's copy act is
+ * color. The catalog's copy act is
  * the browser's own clipboard; an app hands in its shell's.
  */
 
@@ -64,7 +64,7 @@ function CopyButtons(): React.JSX.Element {
           />
         </Inline>
       </CatalogSection>
-      <CatalogSection id="copy-button-build" title="A development build, led by its colour">
+      <CatalogSection id="copy-button-build" title="A development build, led by its color">
         <Inline gap={GAP.CONTROL}>
           {BUILDS.map((build) => (
             <BuildChip

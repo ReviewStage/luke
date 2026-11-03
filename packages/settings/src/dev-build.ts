@@ -1,11 +1,11 @@
-// dev-build.ts -- what tells one development build from another: its label, its colour, and where it was cut.
+// dev-build.ts -- what tells one development build from another: its label, its color, and where it was cut.
 import type { BuildCommit } from "./update.js";
 
 /**
- * The colours a development build is told apart by, on its Dock tile's band
+ * The colors a development build is told apart by, on its Dock tile's band
  * and its window's chip alike. They are values rather than `--ui-*` tokens
  * because the Dock's tile is drawn in the main process, which reads no
- * stylesheet, and the chip must wear the very colour the tile does. Each
+ * stylesheet, and the chip must wear the very color the tile does. Each
  * carries white words, and none is near the copper tile's own, against which
  * an orange band would vanish.
  */
@@ -21,7 +21,7 @@ const DEV_BUILD_COLORS = [
 /** How many characters a label keeps, about what a Dock tile's band holds legibly. */
 const LABEL_LENGTH = 8;
 
-/** What a plain development build with no branch to name is labelled. */
+/** What a plain development build with no branch to name is labeled. */
 const PLAIN_LABEL = "dev";
 
 /** A development build as its tile and chip draw it. */
@@ -30,7 +30,7 @@ export interface DevBuildBadge {
   readonly label: string;
   /** Where it was cut, for the chip to show and copy: `branch @ sha`. */
   readonly detail: string;
-  /** Its colour, the same on every launch of the same build. */
+  /** Its color, the same on every launch of the same build. */
   readonly color: string;
 }
 
@@ -47,7 +47,7 @@ function shortLabel(name: string): string {
   return word.slice(0, LABEL_LENGTH);
 }
 
-/** A colour from the palette, read off the name the same way every launch. */
+/** A color from the palette, read off the name the same way every launch. */
 function colorFor(name: string): string {
   let hash = 0;
   for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
@@ -67,7 +67,7 @@ export function devBuildDetail(commit: BuildCommit | undefined): string {
 
 /**
  * A development build's badge: a named instance by its name, the plain one by
- * its branch. The colour is read off the same name, so two runs of one build
+ * its branch. The color is read off the same name, so two runs of one build
  * match, and two builds may still share one, the label then telling them apart.
  */
 export function devBuildBadge({

@@ -16,7 +16,7 @@ const DOCK_ICON_FILES = {
 
 /**
  * Where a development build's band stands, in the tile art's 1024-unit
- * canvas: across the foot of the 824-unit tile `@repo/brand` centres on it
+ * canvas: across the foot of the 824-unit tile `@repo/brand` centers on it
  * (`ICON_GRID` in its generate-brand-assets.mjs), clipped to its corners.
  */
 const BAND = {

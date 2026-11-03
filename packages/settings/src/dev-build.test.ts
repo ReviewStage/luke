@@ -22,7 +22,7 @@ it.each([
   expect(devBuildBadge({ instance, commit }).label).toBe(label);
 });
 
-it("gives a build the same colour on every launch", () => {
+it("gives a build the same color on every launch", () => {
   const commit = { sha: "a1b2c3d", dirty: true, branch: "feat/dock-ribbon" };
   const first = devBuildBadge({ commit });
   const again = devBuildBadge({ commit: { ...commit, sha: "f8b5406" } });

@@ -160,7 +160,7 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
 }
 
 /**
- * A development build's chip over the account's row: its colour, the one its
+ * A development build's chip over the account's row: its color, the one its
  * Dock band wears, and where it was cut, which a press copies, so builds run
  * side by side are told apart without opening Settings. A release, the web,
  * and a fixture run, whose captures are the product's pictures, draw none.
