@@ -43,6 +43,14 @@
     "dest": "/api/default.js?route=hosts/install-script"
   },
   {
+    "src": "/\\.well-known/oauth-protected-resource/api/mcp",
+    "dest": "/api/member-mcp.js?route=mcp/resource-metadata"
+  },
+  {
+    "src": "/\\.well-known/oauth-protected-resource",
+    "dest": "/api/member-mcp.js?route=mcp/resource-metadata"
+  },
+  {
     "src": "/api/auth/(.*)",
     "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
   },
@@ -145,6 +153,14 @@
   {
     "src": "/api/maintenance/sweep",
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
+  },
+  {
+    "src": "/api/mcp",
+    "dest": "/api/member-mcp.js?route=mcp"
+  },
+  {
+    "src": "/api/mcp/resource-metadata",
+    "dest": "/api/member-mcp.js?route=mcp/resource-metadata"
   },
   {
     "src": "/api/pages/sandbox",

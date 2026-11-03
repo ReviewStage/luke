@@ -1549,6 +1549,77 @@ ReviewStage's rules in one pass, and the diff laid out as stage-cli's `prep`
 lays it out are `src/chapters/chapters-prompt.ts`.
 `src/chapters/chapters-generator.test.ts` answers it over a scripted model.
 
+## The member MCP server
+
+An outside MCP client, an agent harness acting for a member, reaches Vespin
+at `/api/mcp` (`src/member-mcp/app.ts`), beside the agents' own server at
+`/api/agents/mcp`, which stays as it is. The server is the MCP SDK's
+(`@modelcontextprotocol/server`, pinned exactly in the pnpm catalog), served
+through `createMcpHandler`: the 2026-07-28 revision and the 2025-era ones on
+the one endpoint, each request answered by a server instance of its own with
+no session kept, as a function needs, so a GET or a DELETE, the 2025 session
+operations, answers 405. A request carrying an `Origin` is refused before
+its token is read, since no page has business here.
+
+**Admission** (`src/member-mcp/admission.ts`) runs in the route before the
+SDK sees the request, through Better Auth's resource client over the auth
+service itself (`@better-auth/oauth-provider/resource-client`'s
+`verifyAccessTokenRequest`): a token is a JWT the auth service signed, read
+against the deployment's own key set, which the client fetches from
+`/api/auth/jwks` over HTTP and holds five minutes, with its `aud` the
+resource, its `iss` the auth service (`${baseURL}/api/auth`), and
+`vespin:mcp` among its scopes. A missing or invalid token, the desktop's
+opaque one among them, answers 401 with the challenge the client builds,
+`WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/api/mcp"`;
+a token without the scope answers 403 `insufficient_scope`; a key set that
+could not be read answers unavailable, never a refused token. The member
+admitted is the token's subject, provided to the tools as the
+`AdmittedMember` service beside the OAuth `client_id`; a token whose subject
+is the client itself names no member and is refused.
+
+**The resource** (`src/member-mcp/resource.ts`) is the provider's
+`oauth_resource` row, which the deployment's seeder writes at every build
+beside the desktop client's (`apps/web/server/seed-clients.ts`, `pnpm
+auth:seed`) and writes over, since the code is where it is declared and
+nobody edits the row (`resourcePrivileges` denies every session); it is not
+the provider's own `resources` option, whose seed queries the store as the
+auth service loads, which every function bundle must do with nothing
+configured. Its identifier is
+`${baseURL}/api/mcp`, its allowed scopes `vespin:mcp` (`MEMBER_MCP_SCOPE`)
+and `offline_access`, never `openid`, its access token lives fifteen minutes,
+since a token verified against the key set alone does not see its
+revocation, and its refresh token lapses after thirty days unused. A client
+reaches it only once linked to it in `oauth_client_resource`
+(`enforcePerClientResources`, the plugin's default), which no client is yet:
+the sign-in of outside clients is a later change, so in production every
+call answers the 401 challenge until then. Every address is the
+deployment's base URL's, so a Preview is its own resource and issuer.
+
+**The metadata** (RFC 9728) is the resource client's own
+`getProtectedResourceMetadata` document, served at
+`/.well-known/oauth-protected-resource/api/mcp`, the path a client derives
+from the resource's address, and at the well-known root, both rewritten by
+`apps/web/server/function-rewrites.ts` onto `/api/mcp/resource-metadata`: it
+names the resource, the auth service as its one authorization server, the
+scopes, and that a token travels in the header. The authorization server's
+own metadata is the later change's.
+
+**The tools** (`src/member-mcp/tools.ts`) are declared once each, name,
+description, wire input, and effect, and registered with the SDK by
+`src/member-mcp/server.ts`, which runs each tool's effect through the one
+promise door the SDK's awaited handlers need, on the services the request's
+fiber handed it, the admitted member provided (a permanent adaptor, root
+`AGENTS.md`). A tool's input is shown to the model as wire emits it, recorded
+under `fixtures/json-schema/`, and handed to the SDK as the same declaration
+in the Standard Schema's form (`@repo/wire/effect`'s `standardSchemaOf`), so
+the SDK checks a call's arguments against what the model was shown. The first
+tool, `list_workspaces`, answers the member's workspaces, each by id, slug,
+name, and the member's role. The route is `apps/web/server/routes/mcp.ts`,
+in the `member-mcp` function (`function-durations.ts`);
+`src/member-mcp/app.test.ts` mints the tokens through a seeded client linked
+to the resource and drives the server with the SDK's own client at both
+revisions.
+
 ## The agent routes
 
 The desktop starts, lists, reads, messages, re-models, and stops a task's

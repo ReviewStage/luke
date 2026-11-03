@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import { MEMBER_MCP_METADATA_PATHS, MEMBER_MCP_METADATA_ROUTE } from "@repo/service/member-mcp/app";
 import { isRecord, unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { Schema } from "effect";
 import { functionAliasPath, HAND_WRITTEN_FUNCTIONS } from "./build-output.js";
@@ -107,8 +108,11 @@ const API_ROUTE_PREFIX = "/api/";
  * own, each by an exact rule onto its route: the host's install script, which
  * a member's install command fetches from `/install.sh` at whichever address
  * of the deployment Settings showed it on, so the route can name that address
- * as the script's origin. Vercel runs these rules before it looks at the
- * built site's files, and the build writes no file at such a path besides.
+ * as the script's origin; and the member MCP server's protected resource
+ * metadata, which an MCP client reads under `/.well-known/` (RFC 9728) at the
+ * path it derives from the resource's address and at the well-known root.
+ * Vercel runs these rules before it looks at the built site's files, and the
+ * build writes no file at such a path besides.
  */
 interface PublicRewrite {
   readonly path: string;
@@ -120,6 +124,10 @@ const PUBLIC_REWRITES: readonly PublicRewrite[] = [
     path: HOST_WIRE.INSTALL_SCRIPT_PATH,
     route: HOST_WIRE.INSTALL_SCRIPT_ROUTE.slice(API_ROUTE_PREFIX.length),
   },
+  ...MEMBER_MCP_METADATA_PATHS.map((path) => ({
+    path,
+    route: MEMBER_MCP_METADATA_ROUTE.slice(API_ROUTE_PREFIX.length),
+  })),
 ];
 
 /**
