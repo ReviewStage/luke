@@ -2048,7 +2048,7 @@ export function isTodos(
   );
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures, a page, or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => {
     if (part.kind === AGENT_PART.TOOL) return part.callId;
@@ -2061,7 +2061,7 @@ const AGENT_READING: RowReading<AgentPart> = {
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.AGENT;
     // Note that what the agent showed is never grouped, because a group folds closed once the agent moves on and would fold the pictures with it.
-    return isTodos(part) || isShownSet(part) || keptRecording(part)
+    return isTodos(part) || isShownSet(part) || isShownPage(part) || keptRecording(part)
       ? ROW_PART.LONE_CALL
       : ROW_PART.CALL;
   },
@@ -2105,6 +2105,16 @@ function isShownSet(part: AgentPart): part is ToolPart {
     isRecord(part.output) &&
     part.output.status === ACTION_RESULT_STATUS.ACCEPTED
   );
+}
+
+/**
+ * Whether a part is a `show_page` call, whose page is drawn under its row
+ * and, as a set of pictures is, never folds away. Note that the call stands
+ * on a row of its own from the moment it starts, not only once it showed
+ * its page, so a row opened while it runs stays open as the page lands.
+ */
+function isShownPage(part: AgentPart): boolean {
+  return part.kind === AGENT_PART.TOOL && part.tool === AGENT_TOOL.SHOW_PAGE;
 }
 
 /** Whether a part is a browser call that kept a recording, which a reader watches as a shown set and never folds away. */
@@ -2217,8 +2227,8 @@ function afterStepOf(line: AgentTranscriptMessage): number {
  * its agent's does, since a run of calls reads the same whoever made it.
  * The agent's newest to-do list, named by the call that wrote it
  * (`newestTodos`), stays out of a finished turn's fold, so the list
- * standing is never folded away, and so does every set of pictures the
- * agent showed, which is its answer as much as its words are. A line that
+ * standing is never folded away, and so does every set of pictures and
+ * every page the agent showed, which is its answer as much as its words are. A line that
  * reached the turn while it ran (`arrived`) stands among its parts where it
  * arrived, splitting the fold of a finished turn around it.
  */
@@ -2236,6 +2246,7 @@ export function agentRows(
     kept: (part) =>
       (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) ||
       isShownSet(part) ||
+      isShownPage(part) ||
       keptRecording(part),
   };
   return turnRows(parts, reading, { key: message.id, moving, done: !moving });

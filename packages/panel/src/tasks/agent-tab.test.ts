@@ -856,13 +856,15 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
   fakeAppBridge({});
 });
 
-test("a page shown is drawn live under its row, at the version the call showed", () => {
+test("a page shown is drawn live under its row, at the version the call showed, and stays out of the finished turn's fold", () => {
+  const wrote = toolPart("write", { file_path: "pricing.html" }, { status: "ok" });
   const shown = toolPart(
     "show_page",
     { title: "Pricing explorer", path: "pricing.html" },
     { status: "accepted", page: { id: "page-1", version: 2 } },
   );
-  const { container } = drawn(assistant([shown]), false, TASK_PAGE);
+  const said = { type: "text", text: "The explorer is up." };
+  const { container } = drawn(assistant([wrote, shown, said]), false, TASK_PAGE);
   const frame = container.querySelector<HTMLIFrameElement>('iframe[title="Pricing explorer"]');
   assert.equal(
     frame?.getAttribute("src"),
