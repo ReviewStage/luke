@@ -19,7 +19,7 @@ import {
   saveProviderKey,
 } from "@repo/database/models/provider-key-store";
 import { readTask, updateTask } from "@repo/database/models/task-store";
-import { storeWriter } from "@repo/database/models/writer";
+import { SettledTurnListener, storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, messages, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
@@ -92,7 +92,9 @@ const ANALYTICS = recordingProductAnalytics();
 /** The route's group over the test's database, as a fetch. */
 const standingWith = (
   options: RunnerEventsOptions,
-  after: Layer.Layer<AfterResponse> = Layer.empty as Layer.Layer<AfterResponse>,
+  after:
+    | Layer.Layer<AfterResponse>
+    | Layer.Layer<SettledTurnListener> = Layer.empty as Layer.Layer<AfterResponse>,
 ) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -672,6 +674,44 @@ it.layer(getTestDB())("the runner events route", (it) => {
         assert.deepEqual(
           told.map((each) => [each.target, each.sequence]),
           [[agent.target, turn.length - 1]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a turn the batch settles is heard once its transaction is over, so what it said is committed",
+    () =>
+      Effect.gen(function* () {
+        const heard: { readonly turnId: string; readonly inTransaction: boolean }[] = [];
+        const listener = Layer.succeed(SettledTurnListener, {
+          heard: (turn) =>
+            Effect.flatMap(SqlClient.SqlClient, (client) =>
+              Effect.map(Effect.serviceOption(client.transactionService), (open) => {
+                heard.push({ turnId: turn.turnId, inTransaction: Option.isSome(open) });
+              }),
+            ),
+        });
+        const post = yield* standingWith({}, listener);
+        const agent = yield* agentWithBearer;
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        // SAFETY: each message below is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...envelope },
+          {
+            type: "assistant",
+            message: { content: [{ type: "text", text: "Edited the launch post." }] },
+            ...envelope,
+          },
+          { type: "result", subtype: "success", is_error: false, ...envelope },
+          { type: RUNNER_EVENT.IDLE },
+        ].map((message, sequence) => ({ sequence, message }) as RunnerEvent);
+
+        yield* post(agent.bearer, events);
+
+        assert.deepEqual(
+          heard.map((each) => each.inTransaction),
+          [false],
         );
       }),
   );

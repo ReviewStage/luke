@@ -18,6 +18,8 @@ import { setPlanStatus } from "@repo/database/models/provider-key-store";
 import { acceptRunnerLine } from "@repo/database/models/runner-line-store";
 import {
   type ConversationTarget,
+  type SettledAgentTurn,
+  SettledTurnListener,
   type StoreWriter,
   storeWriter,
 } from "@repo/database/models/writer";
@@ -723,11 +725,23 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     payer: Option.getOrUndefined(routing)?.payer ?? undefined,
     brief: agent.value.prompt ?? agent.value.planSnapshot ?? "",
   };
+  // Note that the turns the batch settles are heard once its transaction commits, not as the
+  // writer's savepoint inside it ends, so what a listener reads of a turn (its final words, for
+  // the Slack thread and the agent's starter) is what the batch wrote, and a rolled back batch
+  // tells nobody.
+  const settled: SettledAgentTurn[] = [];
+  const collecting = Layer.succeed(SettledTurnListener, {
+    heard: (turn) => Effect.sync(() => void settled.push(turn)),
+  });
   const applied = yield* hostedStoreOrUnavailable(
     withNativeProjection(target, runnerTokenDigest(bearer), (held) =>
       applyBatch(applying, batch.value, held),
-    ),
+    ).pipe(Effect.provide(collecting)),
   );
+  const listener = yield* Effect.serviceOption(SettledTurnListener);
+  if (Option.isSome(listener)) {
+    yield* Effect.forEach(settled, listener.value.heard, { discard: true });
+  }
   // Note that a conversation cleared, or a bearer retired, since the bearer was read takes nothing more.
   if (Option.isNone(applied)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const { taskId } = agent.value;
