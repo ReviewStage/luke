@@ -9,6 +9,7 @@ export * from "./components/attention-mark/attention-mark.js";
 export * from "./components/auth-page/auth-mark.js";
 export * from "./components/auth-page/auth-page.js";
 export * from "./components/auth-page/auth-step-foot.js";
+export * from "./components/auth-page/consent-card.js";
 export * from "./components/auth-page/social-sign-in.js";
 export * from "./components/avatar/avatar.js";
 export * from "./components/back-button/back-button.js";

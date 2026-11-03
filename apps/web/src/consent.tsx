@@ -1,45 +1,134 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { LANDING_TONE } from "@repo/features/landing-outcome";
-import { AuthMark, AuthPage } from "@repo/ui";
+import { oauthRedirectDestination, oauthScopeLines } from "@repo/features/oauth-consent";
+import { AuthMark, AuthPage, CONSENT_ANSWER, type ConsentAnswer, ConsentCard } from "@repo/ui";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
-import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
+import { completeSiteSignIn, startSiteAnalytics } from "./analytics";
 import { openAppFromMac } from "./open-app";
 import "./styles.css";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { mountPrerenderedPage } from "./mount-page";
 
+// The provider client forwards the signed authorization on this page's
+// address as `oauth_query` with every answer, and follows the redirect the
+// answer comes back with, to the client's own redirect.
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 /**
- * The page opens on the app's mark, unbadged while the consent goes through,
- * badged as failed where it could not, when the title says so and the Open
- * link goes back to start again.
+ * The authorization the server signed onto this page's address: the client
+ * asking, the scopes it asks, and where its answer goes. Better Auth's
+ * consent page reads these off its address (its `consentPage` docs), and the
+ * answer is refused if any of them was changed.
+ */
+const AUTHORIZATION = {
+  CLIENT_ID: "client_id",
+  SCOPE: "scope",
+  REDIRECT_URI: "redirect_uri",
+} as const;
+
+/** What the card names a client that registered no name. */
+const UNNAMED_CLIENT = "An unnamed app";
+
+/** Where the page stands: reading the request, asking the member, or unable to go on. */
+const CONSENT_STEP = {
+  READING: "reading",
+  ASKING: "asking",
+  FAILED: "failed",
+} as const;
+
+/** The request as the card says it. */
+interface ConsentRequest {
+  readonly client: string;
+  readonly account: string;
+  readonly abilities: readonly string[];
+  readonly destination: string;
+}
+
+type ConsentState =
+  | { readonly step: typeof CONSENT_STEP.READING }
+  | { readonly step: typeof CONSENT_STEP.ASKING; readonly request: ConsentRequest }
+  | { readonly step: typeof CONSENT_STEP.FAILED };
+
+/** The account the browser is signed in as, or nothing where it is signed out or the read failed. */
+const signedIn = authClient
+  .getSession()
+  .then((answer) => answer.data)
+  .catch(() => null);
+
+/**
+ * The request this page asks about: the client's registered name, as the
+ * provider's public client read answers it, the account, and the scopes and
+ * redirect the signed authorization names; undefined where any is missing.
+ */
+async function readRequest(): Promise<ConsentRequest | undefined> {
+  const authorization = new URLSearchParams(window.location.search);
+  const clientId = authorization.get(AUTHORIZATION.CLIENT_ID);
+  const redirectUri = authorization.get(AUTHORIZATION.REDIRECT_URI);
+  if (clientId === null || redirectUri === null) return undefined;
+  const [session, client] = await Promise.all([
+    signedIn,
+    authClient.oauth2.publicClient({ query: { client_id: clientId } }),
+  ]);
+  if (!session || !client.data) return undefined;
+  return {
+    client: client.data.client_name ?? UNNAMED_CLIENT,
+    account: session.user.email,
+    abilities: oauthScopeLines(authorization.get(AUTHORIZATION.SCOPE) ?? ""),
+    destination: oauthRedirectDestination(redirectUri),
+  };
+}
+
+/**
+ * The page opens on the app's mark while it reads the request, then asks
+ * the member through the consent card until they answer. Allow and Deny
+ * each go to the client's redirect, with a code or with `access_denied`;
+ * a request it cannot read, or an answer the server refuses, badges the
+ * mark as failed, when the title says so and the Open link goes back to
+ * start again.
  */
 function Consent(): React.JSX.Element {
-  const [failure, setFailure] = useState(false);
+  const [state, setState] = useState<ConsentState>({ step: CONSENT_STEP.READING });
+  const [answering, setAnswering] = useState<ConsentAnswer>();
   useEffect(() => {
-    const signedIn = authClient
-      .getSession({ fetchOptions: { signal: signInCountDeadline() } })
-      .then((answer) => answer.data)
-      .catch(() => null);
-    void authClient.oauth2.consent({ accept: true }).then(async (result) => {
-      if (result.error) {
-        setFailure(true);
-        return;
-      }
-      // Note that the desktop's client skips this page, so its hand-off
-      // (`desktop-session.tsx`) is where a sign-in is usually counted; one
-      // that passes both is counted once, by its session.
-      await completeSiteSignIn(signedIn);
-    });
+    void readRequest().then((request) =>
+      setState(
+        request === undefined
+          ? { step: CONSENT_STEP.FAILED }
+          : { step: CONSENT_STEP.ASKING, request },
+      ),
+    );
   }, []);
+
+  const answer = async (given: ConsentAnswer) => {
+    if (answering !== undefined) return;
+    setAnswering(given);
+    const accept = given === CONSENT_ANSWER.ALLOW;
+    // Note that the desktop's client skips this page, so its hand-off
+    // (`desktop-session.tsx`) is where a sign-in is usually counted; one
+    // that passes both is counted once, by its session. It is counted
+    // before the answer goes, because the browser leaves as it lands.
+    if (accept) await completeSiteSignIn(signedIn);
+    const result = await authClient.oauth2.consent({ accept });
+    if (result.error) setState({ step: CONSENT_STEP.FAILED });
+  };
+
+  if (state.step === CONSENT_STEP.ASKING) {
+    return (
+      <ConsentCard
+        {...state.request}
+        answering={answering}
+        onAnswer={(given) => void answer(given)}
+      />
+    );
+  }
+  const failed = state.step === CONSENT_STEP.FAILED;
   return (
     <AuthPage
-      mark={<AuthMark tone={failure ? LANDING_TONE.DANGER : undefined} />}
-      title={failure ? `${PRODUCT_NAME} could not continue` : `Continuing to ${PRODUCT_NAME}…`}
-      description={failure ? "Start sign-in again." : undefined}
-      action={failure ? openAppFromMac() : undefined}
+      mark={<AuthMark tone={failed ? LANDING_TONE.DANGER : undefined} />}
+      title={failed ? `${PRODUCT_NAME} could not continue` : `Continuing to ${PRODUCT_NAME}…`}
+      description={failed ? "Start sign-in again." : undefined}
+      action={failed ? openAppFromMac() : undefined}
     />
   );
 }

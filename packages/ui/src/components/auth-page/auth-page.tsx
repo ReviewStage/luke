@@ -8,7 +8,7 @@ import { FailureCopy } from "../failure-copy/failure-copy.js";
  *
  * The card holds, one under another, the artwork it opens with, its title,
  * what the title means, the form or the provider choices the page is for,
- * a step's foot where the page is one step of several (`AuthStepFoot`),
+ * a foot under them (a step's `AuthStepFoot`, or a consent's answers),
  * what went wrong, the one way on it offers, and a closing note. The page
  * owns every length between them and the card's own width, which gives way
  * to a narrow window rather than overflowing it: its inset narrows under a
@@ -67,7 +67,7 @@ export function AuthPage({
   action?: AuthAction | undefined;
   /** A closing note under everything else ("You can close this window"). */
   footnote?: ReactNode;
-  /** The foot of a page that is one step of several, an `AuthStepFoot`, under what the step holds. */
+  /** The foot under what the page holds: a step's `AuthStepFoot`, or a consent's answers. */
   foot?: ReactNode;
   /** The form or the provider choices, each stretched to the card's width. */
   children?: ReactNode;
