@@ -313,7 +313,9 @@ import {
   type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceSentryDisconnectParams,
   type TasksWorkspaceSlackBotAnswer,
+  type TasksWorkspaceSlackBotChannelParams,
   type TasksWorkspaceSlackBotNotificationsParams,
+  type TasksWorkspaceSlackBotRepositoryParams,
   type TasksWorkspaceSlugSetParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
@@ -627,6 +629,14 @@ export interface HostOperator {
   /** The reader's own Slack notifications turned on or off; the bot as it then stands, or why it is not. */
   workspaceSlackBotNotifications(
     params: TasksWorkspaceSlackBotNotificationsParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** The workspace's default repository for Slack starts named or cleared; the bot as it then stands, or why it is not. */
+  workspaceSlackBotRepository(
+    params: TasksWorkspaceSlackBotRepositoryParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** One channel's bot membership or default repository changed; the bot as it then stands, or why it is not. */
+  workspaceSlackBotChannel(
+    params: TasksWorkspaceSlackBotChannelParams,
   ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
@@ -1582,6 +1592,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           notifications: params.notifications,
         }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotRepository: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+        }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotChannel: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, { ...params }),
         answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceMembers: (params) =>

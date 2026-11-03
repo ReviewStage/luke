@@ -255,6 +255,14 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`slack-bot-notifications:${params.workspaceId}`, () => ({
         slackBot: { configured: true },
       })),
+    workspaceSlackBotRepository: (params) =>
+      ask(`slack-bot-repository:${params.workspaceId}`, () => ({
+        slackBot: { configured: true },
+      })),
+    workspaceSlackBotChannel: (params) =>
+      ask(`slack-bot-channel:${params.workspaceId}`, () => ({
+        slackBot: { configured: true },
+      })),
     workspaceMembers: (params) =>
       ask(`members:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id ? { members: [GRACE], former: [ALAN] } : refusal(),

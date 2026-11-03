@@ -18,7 +18,9 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
+  tasksWorkspaceSlackBotChannelParamsSchema,
   tasksWorkspaceSlackBotNotificationsParamsSchema,
+  tasksWorkspaceSlackBotRepositoryParamsSchema,
   tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
@@ -120,6 +122,16 @@ export const workspaceActsContract = {
     "Could not change your Slack notifications on this system.",
   )
     .input(exactInput(tasksWorkspaceSlackBotNotificationsParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_REPOSITORY]: actProcedure(
+    "Could not change the Slack bot's default repository on this system.",
+  )
+    .input(exactInput(tasksWorkspaceSlackBotRepositoryParamsSchema))
+    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL]: actProcedure(
+    "Could not change that Slack channel on this system.",
+  )
+    .input(exactInput(tasksWorkspaceSlackBotChannelParamsSchema))
     .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actProcedure(
     "Could not read that workspace's members on this system.",

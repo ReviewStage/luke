@@ -116,7 +116,9 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
+  tasksWorkspaceSlackBotChannelParamsSchema,
   tasksWorkspaceSlackBotNotificationsParamsSchema,
+  tasksWorkspaceSlackBotRepositoryParamsSchema,
   tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
@@ -378,6 +380,8 @@ export type TasksClient = Pick<
     | "slackBotConnect"
     | "slackBotDisconnect"
     | "slackBotNotifications"
+    | "slackBotRepository"
+    | "slackBotChannel"
     | "people"
     | "peopleLive"
     | "invitationsLive"
@@ -2848,6 +2852,32 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const slackBot = yield* served(
           client.workspaces.slackBotNotifications(read.workspaceId, read.notifications),
         );
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceSlackBotRepositoryParamsSchema,
+          params,
+          "naming the Slack bot's default repository names a workspace and a repository or none",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBotRepository(read));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceSlackBotChannelParamsSchema,
+          params,
+          "changing a Slack channel names a workspace, the channel, and what changes",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(client.workspaces.slackBotChannel(read));
         return carried<TasksWorkspaceSlackBotAnswer>(
           slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
         );

@@ -35,7 +35,9 @@ import {
 import {
   WORKSPACE_SLACK_BOT_QUERY,
   type WorkspaceSlackBot,
+  workspaceSlackBotChannelRequestSchema,
   workspaceSlackBotNotificationsRequestSchema,
+  workspaceSlackBotRepositoryRequestSchema,
   workspaceSlackBotRequestSchema,
 } from "./slack-bot-wire.js";
 import {
@@ -446,6 +448,34 @@ export class HostedWorkspaceClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
       askHosted(this.#hosted.workspaceSlackBot.notifications, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** The workspace's default repository for Slack starts named or cleared by an owner or admin, answering the bot as it then stands. */
+  slackBotRepository(
+    params: typeof workspaceSlackBotRepositoryRequestSchema.Type,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotRepositoryRequestSchema)(params),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.repository, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** One channel's bot membership or default repository changed by an owner or admin, answering the bot as it then stands. */
+  slackBotChannel(
+    params: typeof workspaceSlackBotChannelRequestSchema.Type,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotChannelRequestSchema)(params),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.channel, admitted),
       (answer) => answer,
     );
   }
