@@ -341,8 +341,10 @@ const GITHUB_LINE_CHECK = EffectSchema.Struct({
  * the agent: a review with its verdict, words and inline comments, a comment
  * with its words, a failed check, or every check finished on a commit; the
  * repository, the pull request where GitHub named it, the page, and who
- * caused it, by their login. The words are the reviewer's, never the
- * developer's, and whether anyone but the agent's owner wrote them, which
+ * caused it, by their login and, where GitHub named one, the avatar its own
+ * avatar host serves for them (`by_avatar`), since an App's bot's picture
+ * lives at an address its login does not name. The words are the
+ * reviewer's, never the developer's, and whether anyone but the agent's owner wrote them, which
  * `run_on_mac` reads. A check line says whether a check failed, and every
  * check finished names each finished check; no output a check wrote rides
  * it. Each is absent from a line kept before it was said.
@@ -354,6 +356,7 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
   number: EffectSchema.optional(nonNegativeInteger),
   url: githubName(GITHUB_LINE_BOUNDS.URL_CHARS),
   by: githubName(GITHUB_LINE_BOUNDS.NAME_CHARS),
+  by_avatar: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.URL_CHARS)),
   verdict: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
   words: EffectSchema.optional(githubBody),
   comments: EffectSchema.optional(

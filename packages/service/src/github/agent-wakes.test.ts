@@ -313,7 +313,11 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
   const comment = (pullRequest: boolean, action = "created") => ({
     action,
     repository,
-    sender: { login: "octocat", type: "User" },
+    sender: {
+      login: "octocat",
+      type: "User",
+      avatar_url: "https://avatars.githubusercontent.com/u/583231?v=4",
+    },
     comment: {
       html_url: `https://github.com/${RELAY_FULL_NAME}/pull/41#issuecomment-7`,
       created_at: new Date(MADE_AT).toISOString(),
@@ -328,6 +332,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     pullRequest: 41,
     url: `https://github.com/${RELAY_FULL_NAME}/pull/41#issuecomment-7`,
     by: "octocat",
+    byAvatar: "https://avatars.githubusercontent.com/u/583231?v=4",
     at: MADE_AT,
     words: "Does this handle a revoked seat?",
   });
@@ -339,7 +344,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
       head_sha: "0123abcd",
       conclusion,
       updated_at: new Date(MADE_AT).toISOString(),
-      app: { slug: "github-actions" },
+      app: { slug: "github-actions", id: 15368 },
       pull_requests: [{ number: 41 }],
     },
   });
@@ -350,6 +355,8 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     pullRequest: 41,
     url: `https://github.com/${RELAY_FULL_NAME}/commit/0123abcd/checks`,
     by: "github-actions[bot]",
+    // GitHub serves an App's logo by its id, which its bot's login does not name.
+    byAvatar: "https://avatars.githubusercontent.com/in/15368?v=4",
     at: MADE_AT,
     sha: "0123abcd",
   });
@@ -880,6 +887,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           pullRequest: 41,
           url: `https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks`,
           by: "github-actions[bot]",
+          byAvatar: "https://avatars.githubusercontent.com/in/15368?v=4",
           at: MADE_AT,
           sha: HEAD,
         };
@@ -947,6 +955,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           number: 41,
           url: `https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks`,
           by: "github-actions[bot]",
+          by_avatar: "https://avatars.githubusercontent.com/in/15368?v=4",
           sha: HEAD,
           outside_words: false,
           failing: true,
