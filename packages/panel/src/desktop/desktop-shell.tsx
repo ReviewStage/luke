@@ -11,6 +11,8 @@ import {
   CollectionPage,
   DrawerScrim,
   IconButton,
+  NOT_FOUND_THING,
+  NotFound,
   PAGE_FRAME,
   PANE_PIN_ELEMENT,
   PanePin,
@@ -70,7 +72,7 @@ import { OfflineMark } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneHead, phoneBar } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -165,6 +167,15 @@ const TASKS_EXIT_PLACE = "tasks";
 
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
 const HISTORY_EXIT_PLACE = "plan";
+
+/** What a phone's row is named for over a workspace's address that names none of the reader's. */
+const UNKNOWN_WORKSPACE_PHONE_PLACE = "unknown-workspace";
+
+/** The window's title over a workspace's address that names none of the reader's, as the state's own. */
+const NOT_FOUND_TITLE = "Not found";
+
+/** The way out of a workspace's address that names none of the reader's: the reader's own Home. */
+const GO_HOME = "Go home";
 
 /**
  * What stands while a version history's chunk loads: its frame, the list's
@@ -587,6 +598,9 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.boardView.open) return { signedIn, subject: "Tasks", workspace: tasks.workspace };
+  // A workspace not there for the reader names none, the listed one least of all.
+  if (tasks.unknownWorkspace.open)
+    return { signedIn, subject: NOT_FOUND_TITLE, workspace: undefined };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -742,7 +756,8 @@ export function DesktopShell({
     tasks.personView.userId !== undefined ||
     tasks.automationsView.open ||
     tasks.boardView.open ||
-    tasks.adminView.open;
+    tasks.adminView.open ||
+    tasks.unknownWorkspace.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -895,6 +910,7 @@ export function DesktopShell({
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
+  const unknownWorkspace = tasks.unknownWorkspace.open;
   const inboxItemShown = tasks.inboxView.chosen !== undefined;
   // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
@@ -1008,6 +1024,17 @@ export function DesktopShell({
                   <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
+            ) : unknownWorkspace ? (
+              // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
+              <NotFound
+                thing={NOT_FOUND_THING.WORKSPACE}
+                bar={
+                  room === SHELL_ROOM.NARROW
+                    ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
+                    : {}
+                }
+                action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
+              />
             ) : (
               <DesktopTasks
                 tasks={tasks}

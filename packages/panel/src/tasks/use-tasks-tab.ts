@@ -366,9 +366,11 @@ const STAND_IN = {
   AUTOMATIONS: "automations",
   BOARD: "board",
   ADMIN: "admin",
+  /** A workspace's Home or Board asked for under a step naming none of the reader's workspaces. */
+  UNKNOWN_WORKSPACE: "unknown-workspace",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, a person's page, the Automations page, or the Board. */
+/** The window's Inbox with the item chosen in it, one agent's page, a person's page, the Automations page, the Board, or a workspace not there for the reader. */
 type StandIn =
   | {
       readonly kind: typeof STAND_IN.INBOX;
@@ -389,7 +391,8 @@ type StandIn =
       readonly runs?: boolean | undefined;
     }
   | { readonly kind: typeof STAND_IN.BOARD }
-  | { readonly kind: typeof STAND_IN.ADMIN; readonly view: AdminView };
+  | { readonly kind: typeof STAND_IN.ADMIN; readonly view: AdminView }
+  | { readonly kind: typeof STAND_IN.UNKNOWN_WORKSPACE };
 
 /** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
 interface AdminViewControl {
@@ -405,6 +408,12 @@ interface AdminViewControl {
 interface BoardViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
+  readonly onClose: () => void;
+}
+
+/** A workspace's address naming none of the reader's workspaces: whether its not-found state stands in the plan's place, and its way out. */
+interface UnknownWorkspaceControl {
+  readonly open: boolean;
   readonly onClose: () => void;
 }
 
@@ -724,6 +733,8 @@ export interface TasksControl {
   automationsView: AutomationsViewControl;
   /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
   boardView: BoardViewControl;
+  /** A Home or Board link whose first step names none of the reader's workspaces, which stands as not found (`desktop-shell.tsx`). */
+  unknownWorkspace: UnknownWorkspaceControl;
   /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (taskId: string, ref: CodeRef, commit: string | undefined) => void;
   /** Opens a tab-shaped pin of the sidebar's: its holder, the task where it is not the open one or the agent's own page, and the tab in its column, an agent's in the task's own and any other in the side panel. */
@@ -3067,16 +3078,21 @@ export function useTasksTab(input: {
     navigations.current += 1;
     switch (place.kind) {
       // Note that a workspace's Home, and its Board, stand over the launch's reopen of the task last open, since a fresh tab's
-      // address may name either; a slug naming no workspace of the reader's opens it in the one listed, as every link's does.
+      // address may name either; a step naming no workspace of the reader's, by id, slug, or former slug, is not there for
+      // them, so it stands as not found rather than opening the listed workspace or where the window rests.
       case LINK_PLACE.HOME:
-        forgoReopen();
-        listLinked(workspace);
-        goHome();
-        return;
       case LINK_PLACE.BOARD:
         forgoReopen();
+        if (
+          viewed.workspaces.length > 0 &&
+          workspaceOfSlug(viewed.workspaces, workspace) === undefined
+        ) {
+          standInFor({ kind: STAND_IN.UNKNOWN_WORKSPACE });
+          return;
+        }
         listLinked(workspace);
-        standInFor({ kind: STAND_IN.BOARD });
+        if (place.kind === LINK_PLACE.HOME) goHome();
+        else standInFor({ kind: STAND_IN.BOARD });
         return;
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
@@ -3625,6 +3641,10 @@ export function useTasksTab(input: {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.BOARD });
       }),
+      onClose: guard(() => setStandIn(undefined)),
+    },
+    unknownWorkspace: {
+      open: standIn?.kind === STAND_IN.UNKNOWN_WORKSPACE,
       onClose: guard(() => setStandIn(undefined)),
     },
     onShowFile: showFile,

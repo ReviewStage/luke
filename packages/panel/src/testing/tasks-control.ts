@@ -392,6 +392,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onClose: ignore,
     },
     boardView: { open: false, onOpen: ignore, onClose: ignore },
+    unknownWorkspace: { open: false, onClose: ignore },
     automationsView: {
       open: false,
       place: { kind: AUTOMATIONS_PAGE.LIST },

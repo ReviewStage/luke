@@ -1224,6 +1224,7 @@ export function useWindowHistory(input: {
     | "workspace"
     | "automationsView"
     | "boardView"
+    | "unknownWorkspace"
     | "adminView"
     | "restoring"
     | "leaveGuard"
@@ -1282,6 +1283,7 @@ export function useWindowHistory(input: {
     narrow && !automationsTab(automationsPage) ? tasks.automationsView.runs : undefined;
   const experiments = useExperimentChoices();
   const boardOpen = tasks.boardView.open;
+  const unknownWorkspace = tasks.unknownWorkspace.open;
   const adminOpen = tasks.adminView.open;
   const adminView = tasks.adminView.view;
   // A reloaded tab's Admin step is reachable while the account's access is still being read, as the place waits on it.
@@ -1304,7 +1306,8 @@ export function useWindowHistory(input: {
   const titleColumn = input.title?.panes?.column;
   const titleSide = input.title?.panes?.side;
   const untitled = useMemo((): Place | undefined => {
-    if (!known) return undefined;
+    // A workspace's address naming none of the reader's is no place of theirs to come back to, so it is no step, and the tab keeps its address.
+    if (!known || unknownWorkspace) return undefined;
     if (tab === PANEL_TAB.SETTINGS) {
       return {
         kind: PLACE_KIND.SETTINGS,
@@ -1347,6 +1350,7 @@ export function useWindowHistory(input: {
         };
   }, [
     known,
+    unknownWorkspace,
     tab,
     settingsView,
     settingsListed,

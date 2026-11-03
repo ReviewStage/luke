@@ -359,6 +359,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
     return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
   }
+  // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
+  if (tasks.unknownWorkspace.open) return [];
   // The Board stands over the plan, on the same terms; and with no task bound for, the window stands on the home page.
   if (tasks.boardView.open) return [at_({ kind: LINK_PLACE.BOARD }, LINK_THING.BOARD)];
   if (tasks.boundFor === undefined && !tasks.restoring) {

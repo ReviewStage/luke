@@ -192,7 +192,7 @@ const WEB_ROUTES: readonly WebRoute[] = vercel.services[SERVICE.WEB].routes;
 /**
  * What the web service answers a path made to a host with, the app's unless
  * named, read as Vercel reads its routes, in order: each whose pattern
- * matches the whole path, whatever its case, and whose conditions the request
+ * matches the whole path, in its own case, and whose conditions the request
  * meets lays its headers on the answer, a later route's header standing in
  * for an earlier one of the same name; one that continues lets routing go on,
  * and the first that does not rewrites the path to its destination, the
@@ -203,7 +203,7 @@ function servedBy(path: string, host = APP_HOST): Served {
   const headers = new Map<string, string>();
   const named = new Map<string, string[]>();
   for (const route of WEB_ROUTES) {
-    const pattern = new RegExp(`^${route.src}$`, "iu");
+    const pattern = new RegExp(`^${route.src}$`, "u");
     if (!heldTo(route, host) || !pattern.test(path)) continue;
     for (const [name, value] of Object.entries(route.headers ?? {})) {
       const key = name.toLowerCase();
@@ -361,6 +361,21 @@ test("no page of Vespin's own, by any first step a workspace's slug may not take
   }
 });
 
+test("a first step no workspace's slug or id could be is answered the site's not-found page under a 404, and one a workspace's could be is served the web app, to say nothing of which are taken", () => {
+  // A slug is lower case but `personal-<account id>`, and an id is 32 letters and digits of either case, or a UUID.
+  for (const path of ["/About", "/Stage/", `/${"a".repeat(97)}`]) {
+    const served = servedBy(path);
+    assert.ok("file" in served && served.file === "/404.html" && served.forced === 404, path);
+  }
+  for (const path of [
+    "/xyz",
+    "/Xq3vT9bLmN2pRw7sYk4dHc6fJg8aZe1u",
+    `/personal-${"Ab3".repeat(10)}Cd-3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b`,
+  ]) {
+    assert.equal(servedFile(path), "/app.html", path);
+  }
+});
+
 test("each standalone page is served at its clean path and at its .html file's alike, under the same headers, and neither is redirected", () => {
   for (const page of [
     "sign-in",
@@ -466,15 +481,7 @@ test("on any host but the sandbox's, a link's address reaches no route, and the 
 test("every path the web app is served at sends its own Content Security Policy and no other, refuses to be framed, keeps the connect tabs it opens, and is never sniffed", () => {
   const app = WEB_ROUTES.filter((route) => route.dest === "/app.html");
   assert.ok(app.length > 0);
-  for (const path of [
-    "/app",
-    "/app/",
-    // Vercel matches a route's pattern whatever the address's case.
-    "/App",
-    "/acme/plan/p1",
-    "/acme/inbox",
-    "/acme/settings/agents",
-  ]) {
+  for (const path of ["/app", "/app/", "/acme/plan/p1", "/acme/inbox", "/acme/settings/agents"]) {
     const answer = answeredHeaders(path);
     const { headers } = answer;
     // The app is sent its own policy alone, never the site's beside it to be enforced too.
