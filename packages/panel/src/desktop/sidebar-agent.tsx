@@ -1,4 +1,5 @@
-import { AGENT_BOUNDS, type TasklessAgent } from "@repo/features/agent-wire";
+import { AGENT_BOUNDS, AGENT_SOURCE, type TasklessAgent } from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { automationRun } from "@repo/features/model-label";
 import {
   InlineEdit,
@@ -9,6 +10,8 @@ import {
   ListRow,
   type ListRowNest,
   OneLine,
+  PROVIDER_MARK_SIZE,
+  ProviderMark,
   RowHint,
   RowHintOptions,
   Time,
@@ -71,6 +74,9 @@ import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
  */
+
+/** What a reader hears of the Slack mark an agent started from Slack wears. */
+const FROM_SLACK = "(from Slack)";
 
 /** Who started the agent, as its row's end wears them: its automation, or a teammate's face where it has none and `face` allows it. */
 function starterOf(
@@ -257,6 +263,16 @@ export function SidebarAgent({
                     {repository}
                   </OneLine>
                 )}
+                {/* Note that an agent started from Slack wears Slack's mark before whoever started it, as an automation's wears its tile. */}
+                {agent.source?.kind === AGENT_SOURCE.SLACK ? (
+                  <>
+                    <ProviderMark
+                      provider={INTEGRATION_PROVIDER.SLACK}
+                      size={PROVIDER_MARK_SIZE.CAPTION}
+                    />
+                    <VisuallyHidden>{FROM_SLACK}</VisuallyHidden>
+                  </>
+                ) : null}
                 {starter === undefined ? null : (
                   <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
                 )}

@@ -10,9 +10,11 @@ import {
   type AgentMachineKind,
   type AgentPayer,
   type AgentPullRequest,
+  type AgentSource,
   type AgentSubagentTitle,
   agentPayerSchema,
   agentPullRequestSchema,
+  agentSourceSchema,
   CONTEXT_WINDOW,
   type ContextWindow,
   contextWindowSchema,
@@ -177,6 +179,8 @@ export interface Agent {
   readonly automationRunId: string | null;
   /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
   readonly startedFrom: StoredStartedFrom | null;
+  /** What outside the app the agent was started from, a Slack message; null for one started in the app, and absent where a caller built the agent without it. */
+  readonly source?: AgentSource | null;
   /** The account's coding agent whose `start_agent` started this one; null for any other starter, and once that agent's row is gone. */
   readonly startedByAgentId: string | null;
   readonly conversationId: string;
@@ -302,6 +306,8 @@ export type NewAgent = AgentPlace & {
   readonly automationRunId?: string | undefined;
   /** The agent of the same plan this one is started from, with its replay's counts; none for one started afresh. */
   readonly startedFrom?: StoredStartedFrom | undefined;
+  /** What outside the app starts the agent, a Slack message; none for a Start in the app. */
+  readonly source?: AgentSource | undefined;
   /** The coding agent whose `start_agent` starts this one; none for a Start by a member, the brain, or an automation. */
   readonly startedByAgentId?: string | undefined;
   /** The pilot this one continues, whose unarchived agents of the account now report to this one; none for any other Start. */
@@ -358,6 +364,7 @@ const AGENT_COLUMNS = {
   automationOrigin: agentTable.automationOrigin,
   automationRunId: agentTable.automationRunId,
   startedFrom: agentTable.startedFrom,
+  source: agentTable.source,
   startedByAgentId: agentTable.startedByAgentId,
   conversationId: agentTable.conversationId,
   model: agentTable.model,
@@ -397,6 +404,7 @@ const AGENT_LINE_COLUMNS = {
   automationName: agentAutomationNameSql(agentTable),
   automationRunId: agentTable.automationRunId,
   startedFrom: agentTable.startedFrom,
+  source: agentTable.source,
   startedByAgentId: agentTable.startedByAgentId,
   conversationId: agentTable.conversationId,
   model: agentTable.model,
@@ -495,6 +503,7 @@ const AgentRowSchema = Schema.Struct({
   automationOrigin: AutomationOriginColumnSchema,
   automationRunId: Schema.NullOr(Schema.String),
   startedFrom: StartedFromColumnSchema,
+  source: Schema.NullOr(agentSourceSchema),
   startedByAgentId: Schema.NullOr(Schema.String),
   conversationId: Schema.String,
   model: Schema.String,
@@ -758,6 +767,7 @@ const insertAgent = SqlSchema.findOne({
     automationOrigin: AutomationOriginColumnSchema,
     automationRunId: Schema.NullOr(Schema.String),
     startedFrom: StartedFromColumnSchema,
+    source: Schema.NullOr(agentSourceSchema),
     startedByAgentId: Schema.NullOr(Schema.String),
     title: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
@@ -790,6 +800,7 @@ const insertAgent = SqlSchema.findOne({
           automationOrigin: write.automationOrigin,
           automationRunId: write.automationRunId,
           startedFrom: write.startedFrom,
+          source: write.source,
           startedByAgentId: write.startedByAgentId,
           title: write.title,
           conversationId: write.conversationId,
@@ -2134,6 +2145,7 @@ export function createAgent(
           automationOrigin: started.automationOrigin ?? null,
           automationRunId: started.automationRunId ?? null,
           startedFrom: started.startedFrom ?? null,
+          source: started.source ?? null,
           startedByAgentId: yield* ownStarterOf(userId, started.startedByAgentId),
           title: started.title ?? null,
           idempotencyKey: started.idempotencyKey,

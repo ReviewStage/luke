@@ -40,6 +40,9 @@ import { CURSOR_START } from "./transcript.js";
  * An agent started from another is named from the brief and the note it
  * was handed, never from the other agent's transcript replayed between
  * them (`@repo/features/agent-replay`), whose words are that agent's.
+ * A message to the Slack bot is named from its member's words alone, as a
+ * window draws it, never the thread's other messages or what the agent is
+ * told of the reply.
  * An automation's run is named from the automation's prompt alone in its
  * opening's place, without the lines we add of the firing, which would
  * name every run of it alike, and the GitHub event's subject where one
@@ -160,8 +163,15 @@ function withoutReplay(text: string): string {
   return read.note === undefined ? read.brief : `${read.brief}\n${read.note.text}`;
 }
 
-/** A message's words as the call reads them: its text alone, any replay of another agent left out, cut to the excerpt; a file it carries is no word of it. */
+/** A message's words as the call reads them: its text alone, any replay of another agent left out, or a Slack message's member's words alone, without the thread and the instructions around them, cut to the excerpt; a file it carries is no word of it. */
 function excerptOf(message: StoredUIMessage | undefined): string {
+  if (
+    message?.role === MESSAGE_ROLE.USER &&
+    "channel" in message.metadata &&
+    message.metadata.channel === MESSAGE_CHANNEL.SLACK
+  ) {
+    return message.metadata.words.trim().slice(0, AGENT_TITLE.EXCERPT_CHARS);
+  }
   const words = (message?.parts ?? [])
     .filter((part) => isTextUIPart(part))
     .map((part) => withoutReplay(part.text).trim())

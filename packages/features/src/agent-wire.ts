@@ -220,6 +220,28 @@ export const AGENT_KIND = {
 export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
 
 /**
+ * What outside the app an agent was started from, which a list marks it by:
+ * a member's message to the Slack bot. An agent started in the app, by an
+ * automation, or by another agent has none.
+ */
+export const AGENT_SOURCE = {
+  SLACK: "slack",
+} as const;
+
+/** The most an agent's source's link spells, far past what Slack mints. */
+const AGENT_SOURCE_URL_CHARS = 2_048;
+
+/** An agent's source as its row keeps it and a list carries it: what it was, and the message's link where one was answered. */
+export const agentSourceSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(AGENT_SOURCE)),
+  url: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(AGENT_SOURCE_URL_CHARS)),
+  ),
+});
+
+export type AgentSource = typeof agentSourceSchema.Type;
+
+/**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
  * agent from before the column does, or one of the starter's devices, which
  * takes its work as rows it follows (`@repo/features/device-agent-wire`).
@@ -1016,6 +1038,8 @@ export const agentSummarySchema = EffectSchema.Struct({
    * started by hand, and from a service before it.
    */
   automationName: EffectSchema.optionalKey(EffectSchema.String),
+  /** What outside the app the agent was started from, a Slack message; absent for one started in the app, and from a service before it. */
+  source: EffectSchema.optionalKey(agentSourceSchema),
   /** What the agent belongs to; absent once its owner is gone, and from a service before it. */
   owner: EffectSchema.optionalKey(agentOwnerSchema),
   /**

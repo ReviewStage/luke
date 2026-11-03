@@ -157,6 +157,7 @@ function agentsStatement(userId: string) {
           disabledServers: agentTable.disabledServers,
           published: agentTable.published,
           startedFrom: agentTable.startedFrom,
+          source: agentTable.source,
           runtime: conversations.runtime,
           machine: agentTable.machine,
           deviceId: agentTable.deviceId,
