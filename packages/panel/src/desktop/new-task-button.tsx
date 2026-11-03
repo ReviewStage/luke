@@ -24,9 +24,9 @@ export function groupStanding(head: TasksGroupHead): TaskStanding | undefined {
 
 /**
  * New task's glyph, kept in reach where the sidebar's own button is not: it
- * asks for exactly what the sidebar's button asks for, the New task dialog,
- * over whatever stands, the way a chat app keeps its compose button in reach.
- * Pressed by nothing while no one is signed in.
+ * asks for exactly what the sidebar's button asks for, the New task dialog
+ * over whatever stands, or Home's own composer on Home, the way a chat app
+ * keeps its compose button in reach. Pressed by nothing while no one is signed in.
  */
 export function NewTaskButton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   return (

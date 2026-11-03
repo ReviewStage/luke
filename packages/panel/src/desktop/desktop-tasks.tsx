@@ -1401,8 +1401,8 @@ export const DesktopTasks = memo(function DesktopTasks({
           />
         </SkillFiles>
       );
-    // With no task open the column is Home, and ⌘N's dialog stands over it
-    // as it stands over a task.
+    // With no task open the column is Home, whose own composer New task
+    // hands the caret rather than opening its dialog over it.
     case TASKS_PAGE.HOME:
       return (
         <>

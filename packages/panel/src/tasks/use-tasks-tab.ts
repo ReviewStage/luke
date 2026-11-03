@@ -762,7 +762,7 @@ export interface TasksControl {
   ) => Promise<boolean>;
   onRetryList: () => void;
   onRetryDocument: () => void;
-  /** Opens the New task dialog over whatever stands open, which it leaves standing. */
+  /** Opens the New task dialog over whatever stands open, which it leaves standing; on Home, hands Home's own composer the caret instead (`newTask.homeAsks`). */
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
@@ -781,6 +781,8 @@ export interface TasksControl {
     open: boolean;
     /** What the press that opened the dialog chose: a repository, where it chose one. */
     preset: NewTaskPreset | undefined;
+    /** How many times New task was pressed on Home, whose composer takes the caret at each press rather than a dialog opening over it. */
+    homeAsks: number;
     /** The workspaces a task may start in, the account's every one. */
     workspaces: readonly Workspace[];
     /** The workspace the dialog starts the task in until another is chosen: the one listed; none before the workspaces are read. */
@@ -1255,6 +1257,8 @@ export function useTasksTab(input: {
   const [newTaskAsk, setNewTaskAsk] = useState<
     { readonly preset: TasksControl["newTask"]["preset"] } | undefined
   >(undefined);
+  // How many times New task was pressed while Home stood, whose own composer takes the caret on each.
+  const [homeNewTasks, setHomeNewTasks] = useState(0);
   // New task's agent start under way: the line its agent opens on, and the navigation it was pressed at.
   const [startingTask, setStartingTask] = useState<
     { readonly line: SentLine; readonly navigation: number } | undefined
@@ -2743,6 +2747,15 @@ export function useTasksTab(input: {
   // because a fresh ask would keep the card's draft under another preset.
   const newTaskWith = (preset: TasksControl["newTask"]["preset"]) =>
     setNewTaskAsk((standing) => standing ?? { preset });
+  // Home opens on New task's composer, so a plain New task there takes its
+  // caret rather than drawing the same card again in a dialog over it. Note
+  // that the tab need not be shown, because every New task press brings it
+  // forward first.
+  const newTask = () => {
+    const atHome = page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined;
+    if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
+    else newTaskWith(undefined);
+  };
   // The dialog is the Tasks tab's, so Settings taking the window puts it
   // away rather than leaving it to stand again on the way back.
   if (!shown && newTaskAsk !== undefined) setNewTaskAsk(undefined);
@@ -3660,7 +3673,7 @@ export function useTasksTab(input: {
     onRetryDocument: () => {
       if (tasks.activeTaskId !== undefined) select(tasks.activeTaskId);
     },
-    onNewTask: () => newTaskWith(undefined),
+    onNewTask: newTask,
     onNewTaskIn: (repository) => newTaskWith({ repository }),
     onNewRelatedTask: (taskId, kind) => {
       // The open document stands for its task where the list read did not land, as its menu reads it.
@@ -3677,6 +3690,7 @@ export function useTasksTab(input: {
     newTask: {
       open: newTaskAsk !== undefined,
       preset: newTaskAsk?.preset,
+      homeAsks: homeNewTasks,
       workspaces: viewed.workspaces,
       workspaceId: listedWorkspace?.id,
       repositoriesIn,
