@@ -313,18 +313,23 @@ subagent's tab stays in the side panel.
   starts the agent with those words as its prompt; the agent's own tab then
   takes the draft's place. Closing the draft lets it go.
 
-- **The head.** The model · the effort · the status, which the tab's glyph
-  wears (`state-glyph.tsx`): the mark of the harness the model runs in
-  (Claude Code or Codex), giving way to the working mark while the agent is
-  starting or running, and an alert in the danger colour once it failed. A Stop
-  stands while the agent may still write; it asks the service to cancel the
-  turn, and anything the agent pushed stays.
-- **What it published.** Once the agent has pushed, the head wears a pill
-  for its pull request (`tasks/agent-published.tsx`), coloured by where the
-  pull request stands with a dot for its checks, which opens it in the
-  browser, or a chip naming the branch pushed with no pull request yet. The
-  window reads `GET /api/agents/{id}/pull-request` as the tab comes on
-  screen, as pages of the transcript land, and the moment the agent ends.
+- **No head.** The tab has no head over its transcript
+  (`tasks/agent-tab.tsx`): the model chip stands at the composer's foot, and
+  the Stop is the composer's, standing while the agent may still write; it
+  asks the service to cancel the turn, and anything the agent pushed stays.
+  The status is the tab's glyph (`state-glyph.tsx`): the mark of the harness
+  the model runs in (Claude Code or Codex), giving way to the working mark
+  while the agent is starting or running, with a failed mark at the tab's
+  end once it failed.
+- **What it published.** Once the agent has opened a pull request, its row
+  is pinned over the composer (`tasks/agent-published.tsx`): its mark, its
+  number and title, "checks failed" while its checks fail, and the lines it
+  adds and removes. A press opens its Pull request tab in the side panel. A
+  branch pushed with no pull request yet is a chip at the composer's foot,
+  which opens the branch compared on GitHub. The window reads
+  `GET /api/agents/{id}/pull-request` as the tab comes on screen, as pages
+  of the transcript land, and the moment the agent ends
+  (`tasks/use-agent-pull-request.ts`).
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the AI
   Elements components: the plan or prompt it was handed, the developer's
   messages, and each of its turns with its text as Markdown, its reasoning
@@ -692,4 +697,5 @@ Copy copies the new document.
   `unavailable` where the agent's session could not be started; the reason is said
   under the composer that sent it, or on the window's toast for a start from
   the terminal picker. An agent that ends `failed` or
-  `cancelled` says so in its tab's head, and anything it pushed stays.
+  `cancelled` says so at the end of its transcript, and anything it pushed
+  stays.
