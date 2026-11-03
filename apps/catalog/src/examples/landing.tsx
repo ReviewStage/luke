@@ -8,6 +8,7 @@ import {
   LandingSection,
   LostPage,
   ScrollArea,
+  SiteBarPages,
 } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -25,7 +26,10 @@ function Bar(): React.JSX.Element {
     <nav className="catalog-public-banner" aria-label="Site">
       <span className="catalog-public-wordmark">{PRODUCT_NAME}</span>
       <span className="catalog-public-links">
-        <span>Changelog</span>
+        <SiteBarPages>
+          <span>About</span>
+          <span>Changelog</span>
+        </SiteBarPages>
         <span>Sign in</span>
       </span>
     </nav>
