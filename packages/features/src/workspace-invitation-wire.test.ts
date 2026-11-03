@@ -7,7 +7,7 @@ test("the accept page reads back the invitation and the address the invite page 
     invitationAcceptUrl("https://vespin.dev", "inv_1", "ada+luke&co@example.com"),
   );
 
-  assert.equal(link.origin + link.pathname, "https://vespin.dev/accept-invitation.html");
+  assert.equal(link.origin + link.pathname, "https://vespin.dev/accept-invitation");
   assert.deepEqual(invitationAcceptQuery(link.search), {
     id: "inv_1",
     email: "ada+luke&co@example.com",

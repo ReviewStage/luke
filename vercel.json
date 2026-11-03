@@ -267,7 +267,7 @@
           }
         },
         {
-          "src": "/page-in-mac-app\\.html",
+          "src": "/page-in-mac-app(?:\\.html)?",
           "dest": "/page-in-mac-app.html",
           "headers": {
             "Content-Security-Policy": "default-src 'none'; style-src 'sha256-T8LCl/OB0jEsLle1y3r4VpAUju2q/bJyH99iBqhrZi8='; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
@@ -278,7 +278,7 @@
           }
         },
         {
-          "src": "/(connect-github|github-installed|integration-connected)\\.html",
+          "src": "/(connect-github|github-installed|integration-connected)(?:\\.html)?",
           "dest": "/$1.html",
           "headers": {
             "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
@@ -332,6 +332,10 @@
           "headers": {
             "Location": "/$1"
           }
+        },
+        {
+          "src": "/(sign-in|consent|desktop-session|accept-invitation)",
+          "dest": "/$1.html"
         },
         {
           "src": "/about",

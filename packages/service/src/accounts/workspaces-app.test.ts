@@ -156,7 +156,7 @@ const emailsTo = (address: string) =>
 
 const ORIGIN = "https://app.test";
 const INSTALL_ADDRESS = "https://github.com/apps/luke/installations/new";
-const LANDING = "/github-installed.html?status=";
+const LANDING = "/github-installed?status=";
 
 const ACME = { id: 31_001, login: "acme", accountType: "Organization", repositories: [] } as const;
 const LABS = {
@@ -2257,7 +2257,7 @@ it.effect(
         assert.equal(made.email, "alan@example.com");
         assert.equal(made.role, "member");
         const link = new URL(made.acceptUrl);
-        assert.equal(link.origin + link.pathname, `${ORIGIN}/accept-invitation.html`);
+        assert.equal(link.origin + link.pathname, `${ORIGIN}/accept-invitation`);
         assert.equal(link.searchParams.get("id"), made.id);
         assert.deepEqual(listed, [made]);
         assert.deepEqual(canceled, { status: HOSTED_HTTP_STATUS.OK, body: { invitations: [] } });

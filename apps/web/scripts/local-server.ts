@@ -129,7 +129,7 @@ function answerRawImports(): void {
 /**
  * The routes this server answers ahead of the deployment's and the pages,
  * by the path each answers: where a local-only route mounts. The demo's
- * sign-in answers `/sign-in.html` in the page's place, as the member the
+ * sign-in answers `/sign-in` in the page's place, as the member the
  * demo seed writes (`server/local-sign-in.ts`). None ever stands under
  * `server/routes/`, so no function a deploy carries reaches one. Read once
  * the environment is settled, as the deployment's routes are, since what

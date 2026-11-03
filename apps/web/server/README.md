@@ -399,13 +399,13 @@ route that only the local server answers mounts in the entry's `localRoutes`
 and never under `server/routes/`, so no deployed function reaches it.
 
 The one such route is the demo's sign-in (`server/local-sign-in.ts`), which
-answers `/sign-in.html` in the page's place: it mints a session for the member
+answers `/sign-in` in the page's place: it mints a session for the member
 the demo seed writes, records its way in as a sign-in does (the provider the
 desktop's `state` names, or GitHub; the web app reads it to count a session
 signed in), sets Better Auth's session cookie, and sends the browser
 back to authorize on the query the provider signed, less `prompt=login`, so the
 desktop's sign-in completes to its loopback with no provider. A bare
-`/sign-in.html` lands on `/app` signed in. Each request reads the environment
+`/sign-in` lands on `/app` signed in. Each request reads the environment
 again and is refused where the server would have refused to start, and no
 function's bundle may reach the module: `localOnlyReach`
 (`server/function-bundles.ts`) fails `tests/vercel-functions.test.ts` and the
@@ -713,7 +713,7 @@ Vespin's own, so a load that names itself a tab's, or names nothing, is 404.
 A frame on the app's host asks the app's own `…/versions/{version}/frame`
 procedure under the session cookie, which answers 303 to a link on the
 sandbox minted for that account, signed with `AGENT_PAGES_SECRET` and good
-for a minute (`packages/service/src/pages/`), or to `/page-in-mac-app.html`
+for a minute (`packages/service/src/pages/`), or to `/page-in-mac-app`
 where the deployment has no sandbox. The app's policy frames the sandbox's
 origin by name, because `vercel.json` cannot read the environment; the
 service takes `AGENT_PAGES_ORIGIN` only where it names that same origin, so

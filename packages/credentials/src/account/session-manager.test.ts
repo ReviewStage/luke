@@ -439,7 +439,7 @@ it.effect(
       );
       const page = handOffPage(yield* grantCode(subject.authorizations));
       assert.equal((yield* Fiber.join(signingIn)).status, ACCOUNT_STATUS.SIGNED_IN);
-      assert.equal(page.origin + page.pathname, "https://example.com/desktop-session.html");
+      assert.equal(page.origin + page.pathname, "https://example.com/desktop-session");
       assert.equal(new URL(page.searchParams.get("return_to") ?? "").hostname, "127.0.0.1");
 
       const landed = yield* returnCode(page);
@@ -484,7 +484,7 @@ it.effect("an account signed in without a session asks for one through the hand-
     yield* returnCode(page);
 
     assert.equal(yield* Fiber.join(asked), true);
-    assert.equal(page.pathname, "/desktop-session.html");
+    assert.equal(page.pathname, "/desktop-session");
     assert.deepEqual(subject.stored(), { ...STORED, sessionToken: "signed-session" });
   }),
 );

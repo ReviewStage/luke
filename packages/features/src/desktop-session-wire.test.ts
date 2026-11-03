@@ -21,7 +21,7 @@ test("the hand-off page reads back the transfer the Mac asked for and the loopba
   const page = new URL(desktopSessionPageUrl("https://vespin.dev", REQUEST));
   const query = desktopSessionPageQuery(page.search);
 
-  assert.equal(page.origin + page.pathname, "https://vespin.dev/desktop-session.html");
+  assert.equal(page.origin + page.pathname, "https://vespin.dev/desktop-session");
   assert.deepEqual(query?.transfer, {
     client_id: DESKTOP_SESSION_CLIENT_ID,
     state: "state-1",

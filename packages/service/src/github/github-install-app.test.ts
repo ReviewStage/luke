@@ -22,7 +22,7 @@ import { githubInstallApp } from "./github-install-app.js";
 
 const ORIGIN = "https://app.test";
 const INSTALLATION_ID = 777;
-const LANDING = "/github-installed.html?status=";
+const LANDING = "/github-installed?status=";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 

@@ -338,6 +338,27 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
   }
 });
 
+test("each standalone page is served at its clean path and at its .html file's alike, under the same headers, and neither is redirected", () => {
+  for (const page of [
+    "sign-in",
+    "consent",
+    "desktop-session",
+    "accept-invitation",
+    "connect-github",
+    "github-installed",
+    "integration-connected",
+    "page-in-mac-app",
+  ]) {
+    const file = `/${page}.html`;
+    const clean = servedBy(`/${page}`);
+    const alias = servedBy(file);
+    assert.ok("file" in clean && clean.file === file && clean.forced === undefined, page);
+    // A shipped desktop and a sent invitation open the file's own address, which a route rewrites or leaves to the build's file.
+    assert.ok("file" in alias && (alias.file ?? file) === file && alias.forced === undefined, page);
+    assert.deepEqual([...clean.named], [...alias.named], page);
+  }
+});
+
 /** A link's token as the routing sees it: its claims and its signature, base64url, joined by a dot. */
 const LINK_TOKEN = "eyJzaXRlIjoiaHR0cHM6Ly9mdWxsc3Bpbi5wYWdlIn0.c2lnbmVkLWJ5LXRoZS1zZXJ2aWNl";
 

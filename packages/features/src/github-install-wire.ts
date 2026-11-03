@@ -12,7 +12,7 @@
  */
 
 export const GITHUB_INSTALL_LANDING = {
-  PATH: "/github-installed.html",
+  PATH: "/github-installed",
   STATUS_PARAM: "status",
 } as const;
 

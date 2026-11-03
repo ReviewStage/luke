@@ -176,7 +176,7 @@ installs the App on an account or organization and chooses its repositories.
 The App's registered Setup URL, with "Redirect on update", is
 `https://vespin.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
-`/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
+`/github-installed?status=…` with one word from `GITHUB_INSTALL_STATUS`
 (`@repo/features`). Without a `state`, the route confirms the installation
 through `installation(id)` as the App and links nothing: `installed`,
 `updated`, `requested` (a member asked an organization's owner, so there is
@@ -732,7 +732,7 @@ more than one sees exactly what it saw before:
 - `GET /api/account/integrations/connected` is where Connect returns the
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on
-  `/integration-connected.html` with the provider and one word: `connected`,
+  `/integration-connected` with the provider and one word: `connected`,
   `not-completed` (declined or cancelled), `expired`, or `unavailable`. A
   `not-completed` ends the sign-in, so the desktop's next read finds it no
   longer pending and says it failed, unless Connect's result names it
