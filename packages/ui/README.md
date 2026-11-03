@@ -371,7 +371,7 @@ What the barrel holds (`src/index.ts`):
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch` (and `LabeledSwitch`, with its name beside it), `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
-| Patterns | `Toolbar` (a workspace's top bar, with `NotFound` under it; `PageToolbar` until its callers move), `PageHeader` (a document's own, which `SettingsPage`, `CollectionPage`, and `DetailPage` head themselves with), `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
+| Patterns | `Toolbar` (a workspace's top bar, with `NotFound` under it), `PageHeader` (a document's own, which `SettingsPage`, `CollectionPage`, and `DetailPage` head themselves with), `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `ProductMark`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
 
 Each component's design comment, at the top of its `.tsx`, says what it owns
@@ -414,6 +414,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-ui-profile` selector or variant | A control reads `cursor-press` (`--ui-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--ui-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
 | `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--ui-list-gap`, `--ui-tight-gap`, `--ui-control-gap`, `--ui-row-inset`, `--ui-section-gap`, `--ui-page-section-gap`) or, where no role fits, a `--ui-space-*` step |
 | `crumb-width` | A `min-width` above zero on a path's crumb (`.ui-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
+| `has-over-any` | A `:has()` on an ancestor or an earlier sibling of a subject that is any element (`> *`, `> :not(.a)`) | Say the state on the subject's parent, or by an attribute the component sets: a `:has()` over any element restyles the whole window for every element added under it |
 | `bar-corner` | A corner radius on a bar's own box (`.ui-pane-bar`, `.ui-toolbar`), in a stylesheet or as a `rounded-*` beside its class | Nothing: a bar standing at a sheet's top takes the sheet's radius from the one rule in `packages/panel/src/styles/shell.css` ("The sheet's top"). Where a bar there runs square, fix how that rule reads the sheet's top (a layout laying columns side by side joins its split list), never the page |
 | `grid-columns` | A block grid that places its items (`place-items-*`, `justify-items-*`, `place-items: center`) and names no columns | Name them, `grid-cols-1` (`minmax(0, 1fr)`), under the grid's own variants (`sm:grid-cols-1` leaves a phone's column `auto`, as `grid-cols-none` and `[auto]` do everywhere), so the column is the box's width: an `auto` column grows to its item's widest line, and a card or a sheet whose width is a share of it (`min(520px, 100%)`) then centres in a column wider than the screen and stands off its edge on a phone, as New task's Relation sheet did. A grid drawn inline (`inline-grid`) is sized by what it holds and passes |
 
@@ -424,7 +425,7 @@ counts each file's places, and the guard fails on a file holding more than its
 count and on a count above what the file still holds. So the change that fixes a
 place lowers its count; `node tools/anti-slop/style-guard.ts --shrink` lowers
 every count to what the files hold and never raises one. A rule that started
-clean (`literal-duration`, `literal-picker-width`, `crumb-width`, `pointer-cursor`, `bar-corner`) takes no baseline at all, and a baseline is deleted
+clean (`literal-duration`, `literal-picker-width`, `crumb-width`, `pointer-cursor`, `has-over-any`, `bar-corner`) takes no baseline at all, and a baseline is deleted
 from nothing: once every count is gone, its file is `{}`.
 
 ### Folding in a narrow container
@@ -437,6 +438,7 @@ each control answers it with a style query of its own:
 | --- | --- |
 | `folded` | A `FoldingButton`'s words, and a `SplitButton` main part's, fold away, leaving the glyph and the name; a `SearchField`'s tally is said rather than drawn |
 | `bare` | A `SplitButton` is its main part's glyph alone, at the control's corner, with no chevron |
+| `tight` | A fill `ChoiceBar` that is folding together, or named in words alone, takes its options' room in |
 
 ## Adding a component
 
