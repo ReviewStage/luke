@@ -177,11 +177,11 @@ async function mount(
   return container;
 }
 
-/** A harness's row button's words, the check it may end in having none. */
+/** A harness's row button, or the link it draws in a button's place, the check it may end in having none. */
 const rowButton = (page: HTMLElement, harness: string) =>
   [...page.querySelectorAll<HTMLElement>(".ui-settings-row")]
     .find((row) => row.textContent?.startsWith(harness))
-    ?.querySelector<HTMLButtonElement>("button") ?? assert.fail(`no ${harness} row`);
+    ?.querySelector<HTMLElement>("button, a") ?? assert.fail(`no ${harness} row`);
 
 /** What a harness's row says under its name, and in which tint, or nothing where it says nothing. */
 const rowState = (page: HTMLElement, harness: string) => {
@@ -275,17 +275,18 @@ const forAgentsSent = () =>
     .filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_FOR_AGENTS)
     .map((each) => each.payload);
 
-test("each harness's row says how it is connected beside an act: nothing and Connect, or its plan, its key, or a plan needing a hand, and Manage", async () => {
+test("each harness's row names the credential in use, then what is wrong with it, beside the fix: Connect, Manage, Sign in again, or Manage usage", async () => {
   const empty = await mount();
   assert.equal(rowButton(empty, "Claude").textContent, "Connect");
   assert.equal(rowButton(empty, "Codex").textContent, "Connect");
   assert.equal(rowButton(empty, "Codex").getAttribute("aria-label"), "Connect Codex");
-  assert.equal(rowState(empty, "Claude"), undefined);
-  assert.equal(rowState(empty, "Codex"), undefined);
+  const notConnected = { words: "Not connected", state: SETTINGS_ROW_STATE.PLAIN };
+  assert.deepEqual(rowState(empty, "Claude"), notConnected);
+  assert.deepEqual(rowState(empty, "Codex"), notConnected);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   held = {
-    keys: [{ ...ANTHROPIC_KEY, provider: PROVIDER_KEY_PROVIDER.OPENAI }],
+    keys: [{ ...ANTHROPIC_KEY, provider: PROVIDER_KEY_PROVIDER.OPENAI, hint: "sk-proj-…7Qx2" }],
     subscriptions: [CLAUDE_PLAN],
   };
   const connected = await mount();
@@ -298,9 +299,9 @@ test("each harness's row says how it is connected beside an act: nothing and Con
       .split(" ")
       .map((id) => document.getElementById(id)?.textContent)
       .join(" ");
-  assert.match(described("Claude"), /Connected with a subscription/u);
-  assert.deepEqual(rowState(connected, "Claude"), connectedWith("Connected with a subscription"));
-  assert.deepEqual(rowState(connected, "Codex"), connectedWith("Connected with an API key"));
+  assert.match(described("Claude"), /Claude plan/u);
+  assert.deepEqual(rowState(connected, "Claude"), connectedWith("Claude plan"));
+  assert.deepEqual(rowState(connected, "Codex"), connectedWith("OpenAI API key sk-proj-…7Qx2"));
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   // The plan's default off with a key saved is the key, whatever the plan's state.
@@ -312,16 +313,33 @@ test("each harness's row says how it is connected beside an act: nothing and Con
     ],
   };
   const attention = await mount();
-  assert.deepEqual(rowState(attention, "Claude"), connectedWith("Connected with an API key"));
-  assert.deepEqual(rowState(attention, "Codex"), needsHand("Sign-in expired"));
-  assert.equal(rowButton(attention, "Codex").textContent, "Manage");
+  assert.deepEqual(rowState(attention, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
+  assert.deepEqual(rowState(attention, "Codex"), needsHand("ChatGPT plan · Signed out"));
+  assert.equal(rowButton(attention, "Codex").textContent, "Sign in again");
+  assert.equal(rowButton(attention, "Codex").getAttribute("aria-label"), "Sign in to Codex again");
   for (const root of roots.splice(0)) act(() => root.unmount());
 
+  // A plan at its limit says so after its name; only ChatGPT's offers Manage usage, which opens ChatGPT's usage settings.
   held = {
     keys: [],
-    subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.LIMIT_REACHED }],
+    subscriptions: [
+      { ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.LIMIT_REACHED },
+      { ...CHATGPT_PLAN, status: PROVIDER_KEY_STATUS.LIMIT_REACHED },
+    ],
   };
-  assert.deepEqual(rowState(await mount(), "Claude"), needsHand("Usage limit reached"));
+  const limited = await mount();
+  assert.deepEqual(rowState(limited, "Claude"), needsHand("Claude plan · Usage limit reached"));
+  assert.equal(rowButton(limited, "Claude").textContent, "Manage");
+  assert.deepEqual(rowState(limited, "Codex"), needsHand("ChatGPT plan · Usage limit reached"));
+  assert.equal(rowButton(limited, "Codex").textContent, "Manage usage");
+  assert.equal(rowButton(limited, "Codex").getAttribute("aria-label"), "Manage Codex usage");
+  act(() => rowButton(limited, "Codex").click());
+  await settle();
+  assert.deepEqual(
+    sent.filter((each) => each.kind === ACT_KIND.WEB_OPEN).map((each) => each.payload),
+    [{ url: "https://chatgpt.com/settings/usage" }],
+  );
+  assert.equal(document.querySelector('[role="dialog"]'), null, "Manage usage opens no dialog");
 });
 
 test("each harness's row stands where a link to its section lands", async () => {
@@ -356,13 +374,13 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
   ]);
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
   assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "false");
-  assert.deepEqual(rowState(both, "Claude"), connectedWith("Connected with an API key"));
+  assert.deepEqual(rowState(both, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
 
   act(() => radio(dialog, "Claude plan").click());
   await settle();
   assert.equal(forAgentsSent().at(-1)?.forAgents, true);
   assert.equal(radio(dialog, "Claude plan").getAttribute("aria-checked"), "true");
-  assert.deepEqual(rowState(both, "Claude"), connectedWith("Connected with a subscription"));
+  assert.deepEqual(rowState(both, "Claude"), connectedWith("Claude plan"));
 });
 
 test("an API key is pasted into a masked field with an eye, sent once, drawn as its hint with a check, and removed with its Remove key button after asking", async () => {
@@ -397,7 +415,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   assert.equal(saved.readOnly, true);
   assert.ok(radio(dialog, "API key").querySelector(".ui-settings-saved-mark"));
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
-  assert.deepEqual(rowState(page, "Claude"), connectedWith("Connected with an API key"));
+  assert.deepEqual(rowState(page, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
   for (const spy of logged) {
     assert.ok(spy.mock.calls.every((call) => !JSON.stringify(call).includes(KEY)));
@@ -483,7 +501,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
   assert.ok(radio(dialog, "Claude plan").querySelector(".ui-settings-saved-mark"));
-  assert.deepEqual(rowState(page, "Claude"), connectedWith("Connected with a subscription"));
+  assert.deepEqual(rowState(page, "Claude"), connectedWith("Claude plan"));
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 
   await press(plan, "Disconnect");
@@ -528,7 +546,7 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
 test("a Claude token Anthropic rejected says so in its card and offers Replace token, without the setup-token hint", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
-  assert.deepEqual(rowState(page, "Claude"), needsHand("Subscription needs attention"));
+  assert.deepEqual(rowState(page, "Claude"), needsHand("Claude plan · Needs attention"));
   const dialog = await open(page, "Claude");
   const plan = card(dialog, "Claude plan");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
@@ -539,14 +557,18 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   assert.equal(field.value, "");
 });
 
-test("a ChatGPT sign-in OpenAI no longer honors says it signed out of ChatGPT, and how to reconnect", async () => {
+test("a ChatGPT sign-in OpenAI no longer honors says it signed out of ChatGPT, and its row's Sign in again opens the dialog on Continue with ChatGPT", async () => {
   held = { keys: [], subscriptions: [{ ...CHATGPT_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
-  assert.deepEqual(rowState(page, "Codex"), needsHand("Sign-in expired"));
+  assert.deepEqual(rowState(page, "Codex"), needsHand("ChatGPT plan · Signed out"));
   const dialog = await open(page, "Codex");
   assert.match(
     card(dialog, "ChatGPT plan").textContent ?? "",
     /Signed out of ChatGPT\.(?! Continue)/u,
+  );
+  assert.ok(
+    document.activeElement === button(card(dialog, "ChatGPT plan"), "Continue with ChatGPT"),
+    "Continue with ChatGPT has focus",
   );
 });
 
@@ -564,7 +586,7 @@ test("Codex's ChatGPT plan continues with ChatGPT on the desktop, meets the firs
   assert.match(card(dialog, "ChatGPT plan").textContent ?? "", /You're using your ChatGPT plan/u);
   await press(card(dialog, "ChatGPT plan"), "Got it");
   assert.doesNotMatch(dialog.textContent ?? "", /You're using your ChatGPT plan/u);
-  assert.deepEqual(rowState(page, "Codex"), connectedWith("Connected with a subscription"));
+  assert.deepEqual(rowState(page, "Codex"), connectedWith("ChatGPT plan"));
   assert.equal(radio(dialog, "ChatGPT plan").getAttribute("aria-checked"), "true");
 
   await press(card(dialog, "ChatGPT plan"), "Disconnect");
@@ -600,5 +622,5 @@ test("without the sign-in's loopback, Codex's ChatGPT plan card stands disabled 
   assert.equal(radio(dialog, "ChatGPT plan").disabled, true);
   const field = labeled(card(dialog, "API key"), "OpenAI API key");
   await pasteAndSave(field, KEY.replace("sk-ant-api03", "sk-proj"));
-  assert.deepEqual(rowState(page, "Codex"), connectedWith("Connected with an API key"));
+  assert.deepEqual(rowState(page, "Codex"), connectedWith("OpenAI API key sk-ant-…wxyz"));
 });
