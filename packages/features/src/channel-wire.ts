@@ -174,8 +174,6 @@ export const channelThreadSchema = EffectSchema.Struct({
   agent: EffectSchema.optionalKey(channelThreadAgentSchema),
 });
 
-export type ChannelThread = typeof channelThreadSchema.Type;
-
 /**
  * A page of a channel's threads the reader may read, the least recently
  * active first, a thread's activity being its last change (`updatedAt`).

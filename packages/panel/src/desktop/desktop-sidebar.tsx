@@ -11,7 +11,6 @@ import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSectionWrite } from "@repo/features/task-section-wire";
 import { isAgentEntry, type SectionMember } from "@repo/features/task-section-writes";
 import type { TaskAgentPin, TaskSummary } from "@repo/features/task-wire";
-import { EXPERIMENT } from "@repo/settings";
 import type { UpdateControl } from "@repo/settings/settings-controls";
 import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
@@ -138,8 +137,6 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { agentName } from "../tasks/agent-model.js";
-import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
-import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import {
   type AgentPin,
@@ -151,7 +148,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useAdminAccess, useExperiment } from "../use-app-state.js";
+import { useAdminAccess } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
 import { useFailedRunsMark } from "./failed-runs.js";
@@ -161,11 +158,10 @@ import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
+import { useInboxWaiting } from "./places-waiting.js";
 import { ProductIdentity } from "./product-identity.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
-import { SidebarChannels } from "./sidebar-channels.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
@@ -1820,21 +1816,8 @@ function SidebarColumn({
     inBoard ||
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // With Channels on, the channels stand under the Inbox's row as its filters, and one chosen narrows the Inbox to it, which then marks its row rather than the Inbox's.
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const channels = useChannels(channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined);
-  const channelPlace = useChannelPlace();
-  const narrowed = useInboxNarrowed();
-  // Note that a channel archived or unknown marks no row, its place saying it is gone.
-  const channelState = channelShown(
-    channelsOn && inInbox ? channels.channels : undefined,
-    channelPlace.channelId,
-  );
-  const shownChannelId =
-    channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
-  const channelWaiting = useChannelWaiting(tasks);
-  // The Inbox's row and each channel's mark their threads read from their right-click.
+  // The Inbox's row marks its threads read from its right-click.
   const readAll = useSidebarReadAll(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
@@ -1856,10 +1839,6 @@ function SidebarColumn({
   const openInbox = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.inboxView.onOpen();
-  };
-  const openChannel = (channelId: string) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.inboxView.onOpenChannel(channelId);
   };
   const openBoard = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -2203,40 +2182,14 @@ function SidebarColumn({
           Search
         </NavItem>
         <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
-        {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters, the row heading them. */}
-        {channelsOn && tasks.signedIn ? (
-          <SidebarChannels
-            workspaceId={tasks.workspace?.id}
-            channels={channels}
-            waiting={channelWaiting}
-            currentId={shownChannelId}
-            shown={tasks.shown && overlay.inSight}
-            readAll={readAll}
-            folded={folds.channelsFolded}
-            onFold={folds.toggleChannels}
-            inbox={(head) => (
-              <SidebarInboxRow
-                waiting={waiting}
-                current={inInbox && !narrowed}
-                disabled={!tasks.signedIn}
-                shown={tasks.shown && overlay.inSight}
-                readAll={readAll}
-                channels={head}
-                onOpen={chosen(openInbox)}
-              />
-            )}
-            onOpen={chosen(openChannel)}
-          />
-        ) : (
-          <SidebarInboxRow
-            waiting={waiting}
-            current={inInbox && !narrowed}
-            disabled={!tasks.signedIn}
-            shown={tasks.shown && overlay.inSight}
-            readAll={readAll}
-            onOpen={chosen(openInbox)}
-          />
-        )}
+        <SidebarInboxRow
+          waiting={waiting}
+          current={inInbox}
+          disabled={!tasks.signedIn}
+          shown={tasks.shown && overlay.inSight}
+          readAll={readAll}
+          onOpen={chosen(openInbox)}
+        />
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         <SidebarAutomationsRow
           current={inAutomations}

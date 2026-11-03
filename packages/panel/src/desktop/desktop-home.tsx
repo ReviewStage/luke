@@ -113,8 +113,7 @@ function HomeInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element | null
   const read = useWaitingItems(tasks);
   const drafts = useInboxRowDrafts();
   const waiting = read.items.filter((listed) => needsYou(listed, tasks.me));
-  const open = (listed: InboxListed) =>
-    tasks.inboxView.onOpenItem(choiceOf(listed), listed.item.channelId);
+  const open = (listed: InboxListed) => tasks.inboxView.onOpenItem(choiceOf(listed));
   // Note that a refused list read says nothing here, because what waits hangs on the list, which Recent says could not be read.
   if (waiting.length === 0 && tasks.listFailed) return null;
   if (read.failed) {

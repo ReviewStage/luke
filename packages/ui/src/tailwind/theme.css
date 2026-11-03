@@ -362,10 +362,7 @@
   --spacing-row-inset: var(--ui-row-inset);
   --spacing-list-inset: var(--ui-list-inset);
   --spacing-control-gap: var(--ui-control-gap);
-  /* A row nested under a place stands in by the place's glyph and its gap,
-     so its own glyph stands under the place's name (`SidebarFilters`). */
-  --spacing-nav-nest: calc(var(--ui-control-icon) + var(--ui-icon-gap));
-  /* A list row nested under another stands in by that nest once for each
+  /* A list row nested under another stands in by the glyph and its gap once for each
      level it stands at (`ListRow`'s `depth`), so its glyph stands under the
      name of the row it is nested under. */
   --spacing-list-row-nest: calc(

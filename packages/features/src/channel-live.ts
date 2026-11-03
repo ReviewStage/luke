@@ -53,8 +53,6 @@ export const workspaceChannelsLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
-export type WorkspaceChannelsLiveAnswer = typeof workspaceChannelsLiveAnswerSchema.Type;
-
 /**
  * A workspace's channels list as its rows deliver it: each channel, its
  * archive null where it is open; how many threads of each the reader may

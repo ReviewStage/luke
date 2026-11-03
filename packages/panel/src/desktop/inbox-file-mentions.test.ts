@@ -184,7 +184,6 @@ async function inbox() {
             onClose: () => undefined,
             onChoose: setChosen,
             onOpenItem: () => undefined,
-            onOpenChannel: () => undefined,
             onClear: () => setChosen(undefined),
             pages: [],
             onTaskAgents: taskAgents.onRead,

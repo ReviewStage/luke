@@ -10,7 +10,6 @@ import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
@@ -93,7 +92,6 @@ import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
-import { useExperiment } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
@@ -183,11 +181,8 @@ function PersonSection({
   );
 }
 
-/** What the section of what waits says where some of it could not be read, and, with Channels on, while it is read, of threads rather than the Inbox. */
+/** What the section of what waits says where some of it could not be read. */
 const ITEMS_NOT_READ = "Some inbox items could not be read.";
-const THREADS_NOT_READ = "Some threads could not be read.";
-const THREADS_READING = "Reading your threads…";
-const THREADS_LIST = "Threads";
 
 /** What an agent's row is, naming its ⋯ and menu "Agent actions". */
 const AGENT_THING = "Agent";
@@ -685,8 +680,6 @@ function PersonColumn({
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
   const drafts = useInboxRowDrafts();
-  // With Channels on what waits is threads, so its wait and its failure say so.
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
   const waiting = read.items.filter(
     ({ holder, item }) =>
@@ -696,8 +689,7 @@ function PersonColumn({
           : undefined)) === userId,
   );
   const { inboxView } = tasks;
-  const openItem = (listed: InboxListed) =>
-    inboxView.onOpenItem(choiceOf(listed), listed.item.channelId);
+  const openItem = (listed: InboxListed) => inboxView.onOpenItem(choiceOf(listed));
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
@@ -784,16 +776,12 @@ function PersonColumn({
               failure={unreadShown(FAILURE_SURFACE.PERSON_INBOX_READ)}
               onRetry={read.onRetry}
             >
-              {channelsOn ? THREADS_NOT_READ : ITEMS_NOT_READ}
+              {ITEMS_NOT_READ}
             </ErrorState>
           </div>
         ) : waiting.length === 0 && read.reading ? (
           <SectionSkeleton>
-            {channelsOn ? (
-              <InboxListSkeleton reading={THREADS_READING} list={THREADS_LIST} />
-            ) : (
-              <InboxListSkeleton />
-            )}
+            <InboxListSkeleton />
           </SectionSkeleton>
         ) : null}
         {waiting.length === 0 ? null : (

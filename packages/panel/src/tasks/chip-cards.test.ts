@@ -10,7 +10,6 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@repo/features/automation-wire";
-import type { ArchivedChannel, Channel } from "@repo/features/channel-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -169,56 +168,8 @@ const AUDIT: AutomationSummary = {
   creatorId: PRIYA,
 };
 
-/** The time a channel's card counts back from: Oct 26, 2026, 3 PM, on the machine's own clock. */
-const CHANNELS_NOW = new Date(2026, 9, 26, 15).getTime();
-
-const MINUTE = 60_000;
-
-/** A standing channel Sam made, its latest post three minutes old, nothing in it waiting on the reader. */
-const BILLING: Channel = {
-  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c51",
-  name: "billing",
-  purpose: "Invoices, plans, and the payment provider",
-  project: false,
-  createdBy: SAM,
-  createdAt: new Date(2026, 9, 25, 12).getTime(),
-  waiting: 0,
-  latestPostedAt: CHANNELS_NOW - 3 * MINUTE,
-  threads: 42,
-};
-
-/** A project channel with two asks waiting on the reader. */
-const LAUNCH_WEEK: Channel = {
-  ...BILLING,
-  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c52",
-  name: "launch-week",
-  purpose: "Everything for the launch",
-  project: true,
-  waiting: 2,
-  threads: 12,
-};
-
-/** The workspace's #general, which the workspace minted itself, so nobody made it. */
-const { createdBy: _nobody, ...GENERAL_CHANNEL }: Channel = {
-  ...BILLING,
-  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c53",
-  name: "general",
-  purpose: "Whatever fits nowhere else",
-};
-
-/** A project channel archived on Oct 26. */
-const PRICING_PAGE: ArchivedChannel = {
-  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c54",
-  name: "pricing-page",
-  purpose: "The new pricing page",
-  project: true,
-  createdBy: SAM,
-  createdAt: new Date(2026, 9, 20, 12).getTime(),
-  archivedAt: new Date(2026, 9, 26, 9).getTime(),
-  waiting: 0,
-  latestPostedAt: CHANNELS_NOW - 3 * MINUTE,
-  threads: 5,
-};
+/** The time a card counts back from: Oct 26, 2026, 3 PM, on the machine's own clock. */
+const CARDS_NOW = new Date(2026, 9, 26, 15).getTime();
 
 /** Main's document holding the plan, its page, and an Inbox item waiting on it. */
 const STATE: AppStateSnapshot = (() => {
@@ -385,11 +336,6 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
-/** A workspace's channels as the host holds them, open and archived, the same for every workspace a chip names. */
-const CHANNELS_HELD = {
-  rows: { open: [BILLING, LAUNCH_WEEK, GENERAL_CHANNEL], archived: [PRICING_PAGE] },
-};
-
 /** The words drawn as a transcript draws them on a plan's page, the plan's own unless another is given, in a window holding `STATE`, whose feed holds the plan's items and the agent on no task's, which a chip's glyph and card read, unless another is given. */
 async function drawn(
   text: string,
@@ -408,7 +354,6 @@ async function drawn(
       Promise.resolve({
         ...state,
         [LIVE_READ.INBOX_ITEMS]: feed,
-        [LIVE_READ.CHANNELS]: { [ACME.id]: CHANNELS_HELD, [BETA.id]: CHANNELS_HELD },
       }),
   });
   fakeActPort({
@@ -763,7 +708,7 @@ test("a member's chip hangs their card", async () => {
 });
 
 test("an automation's chip hangs its card, who made it and when at its foot, the workspace's automations read only once the card is hung", async () => {
-  vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
+  vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationReads.length;
   const before = reads();
@@ -780,7 +725,7 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
 });
 
 test("a member's and an automation's chips under another workspace's link are read as that workspace holds them, not the words' own", async () => {
-  vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
+  vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(
     `Ask [Sam](https://vespin.dev/beta/person/${SAM}) about [the audit](https://vespin.dev/beta/automation/${AUDIT.id}).`,
   );
@@ -800,43 +745,4 @@ test("a member's chip under a link naming its workspace by id, as one with no sl
   const member = await cardOf(chipsOf(container)[0]);
 
   assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
-});
-
-/** The card a channel's chip hangs, its workspace's channels read as it is first hung, counted back from `CHANNELS_NOW`. */
-async function channelCard(channel: { readonly id: string; readonly name: string }) {
-  vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
-  const container = await drawn(`In [${channel.name}](${HOME}/channel/${channel.id}).`);
-  return cardOf(chipsOf(container)[0]);
-}
-
-test("a channel's chip hangs its card: its bare name, its kind and how many threads it holds, its latest post's age, its purpose, and who made it and when", async () => {
-  const standing = await channelCard(BILLING);
-  const project = await channelCard(LAUNCH_WEEK);
-
-  assert.equal(standing.card, "data-channel-card");
-  assert.deepEqual(
-    [standing.name, standing.sub, standing.corner, standing.notes],
-    ["billing", "Channel · 42 threads", "3m", ["Invoices, plans, and the payment provider"]],
-  );
-  assert.deepEqual(standing.detailWords, ["Created by Sam Okafor · 1d ago"]);
-  assert.equal(project.sub, "Project · 12 threads");
-});
-
-test("a channel's corner says how many asks in it wait on the reader rather than its latest post's age", async () => {
-  const card = await channelCard(LAUNCH_WEEK);
-
-  assert.equal(card.corner, "2 need you");
-});
-
-test("#general, which nobody made, hangs its card without the line saying who made it", async () => {
-  const card = await channelCard(GENERAL_CHANNEL);
-
-  assert.deepEqual([card.card, card.name], ["data-channel-card", "general"]);
-  assert.deepEqual(card.details, []);
-});
-
-test("an archived project's card says when it was archived in its size's place", async () => {
-  const card = await channelCard(PRICING_PAGE);
-
-  assert.equal(card.sub, "Project · archived Oct 26");
 });

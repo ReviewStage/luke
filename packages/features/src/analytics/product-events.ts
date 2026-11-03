@@ -263,6 +263,7 @@ export const PRODUCT_EXPERIMENT = {
   INBOX_FIRST: "inbox-first",
   /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   LOCAL_AGENTS: "local-agents",
+  /** Removed with Channels, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CHANNELS: "channels",
   PILOT: "pilot",
   SKILLS: "skills",

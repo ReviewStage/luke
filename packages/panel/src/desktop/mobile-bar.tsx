@@ -4,7 +4,6 @@ import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
-import { useInboxNarrowed } from "../tasks/use-channels.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useInboxWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -17,9 +16,9 @@ import { groupCount } from "./sidebar-fold.js";
  *
  * It stands only in a narrow room and only on a place's list, the Inbox's,
  * the Tasks page, Automations, or Home, so
- * a task, an agent's page, an item, or a channel being read keeps the whole
+ * a task, an agent's page, or an item being read keeps the whole
  * screen and is left by Back. Each press lands on its place's list, not on
- * the item or channel last read, since on a phone the list is the place
+ * the item last read, since on a phone the list is the place
  * (`use-tasks-tab.ts`'s `onOpen`).
  *
  * Settings, which stands over the places rather than among them, keeps the
@@ -31,11 +30,6 @@ import { groupCount } from "./sidebar-fold.js";
  * drawer's row shows, read from the one reading they draw from
  * (`places-waiting.ts`), so the two never disagree, and said in the
  * sidebar's words.
- *
- * With Channels on the bar is the same: the channels are
- * listed in the drawer under the Inbox, as the sidebar lists them, and a
- * channel chosen there narrows the Inbox to it, which the bar stands over
- * with no place marked, since the drawer's row is the place it is.
  */
 
 /** Whether the bar stands: a narrow room, signed in, on one of the places' lists. */
@@ -70,8 +64,6 @@ export function MobileBar({
 }): React.JSX.Element {
   const { inboxView, boardView } = tasks;
   const among = leave === undefined;
-  // Note that an Inbox narrowed to a channel is reached from the drawer, so the Inbox is not the place it marks.
-  const narrowed = useInboxNarrowed();
   const inInbox = among && inboxView.open;
   const inTasks = among && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
@@ -89,7 +81,7 @@ export function MobileBar({
     >
       <BarItem
         icon={<InboxIcon />}
-        current={inInbox && !narrowed}
+        current={inInbox}
         count={groupCount(waiting, NEEDS_YOU.COUNT)}
         inert={drawerOpen}
         onPress={go(inboxView.onOpen)}

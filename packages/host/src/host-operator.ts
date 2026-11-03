@@ -149,23 +149,6 @@ import {
   browserLiveMessageEventSchema,
 } from "@repo/features/browser-live-acts";
 import {
-  CHANNEL_CALL_FAILURE,
-  type ChannelArchiveParams,
-  type ChannelCreateParams,
-  type ChannelEditParams,
-  type ChannelLookParams,
-  type ChannelMoveParams,
-  type ChannelMoveView,
-  type ChannelsFollowParams,
-  type ChannelsView,
-  type ChannelThreadsParams,
-  type ChannelThreadsView,
-  type ChannelUnarchiveParams,
-  channelMoveViewSchema,
-  channelsViewSchema,
-  channelThreadsViewSchema,
-} from "@repo/features/channel-view";
-import {
   HOST_PAIRING_CALL_FAILURE,
   type HostPairingApproveView,
   type HostPairingDenyView,
@@ -411,7 +394,6 @@ import type {
   AppHostRead,
   AppInboxItems,
   AppPages,
-  AppWorkspaceChannels,
   SessionReplayState,
 } from "./app-state.js";
 import { type ThisMacHostRead, thisMacHostReadSchema } from "./contract/this-mac-host.js";
@@ -734,28 +716,6 @@ export interface HostOperator {
   agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
-  /** A channel made; the workspace's channels as they then stand, or why it was not made. */
-  channelsCreate(params: ChannelCreateParams): Effect.Effect<ChannelsView>;
-  /** A channel's name, purpose, or both edited; the workspace's channels as they then stand, or why it was not edited. */
-  channelsEdit(params: ChannelEditParams): Effect.Effect<ChannelsView>;
-  /** A channel archived; the workspace's channels as they then stand, or why it stands. */
-  channelsArchive(params: ChannelArchiveParams): Effect.Effect<ChannelsView>;
-  /** An archived channel opened again; the workspace's channels as they then stand, or why it stays archived. */
-  channelsUnarchive(params: ChannelUnarchiveParams): Effect.Effect<ChannelsView>;
-  /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
-  channelsLook(params: ChannelLookParams): Effect.Effect<ChannelsView>;
-  /** A page of a channel's threads the reader may read, oldest first; or why there are none. */
-  channelsThreads(params: ChannelThreadsParams): Effect.Effect<ChannelThreadsView>;
-  /** A thread moved into another open channel of its workspace; the thread as it then stands, or why it did not move. */
-  channelsMove(params: ChannelMoveParams): Effect.Effect<ChannelMoveView>;
-  /** A workspace's channels held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceChannelsChanged`. */
-  channelsFollow(params: ChannelsFollowParams): Effect.Effect<void>;
-  /** A workspace's channels let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  channelsUnfollow(params: ChannelsFollowParams): Effect.Effect<void>;
-  /** A held workspace's channels read again at once, as Try again asks. */
-  channelsRetry(params: ChannelsFollowParams): Effect.Effect<void>;
-  /** Every workspace's channels the host holds for the windows, whole, each time any of them moves. */
-  onWorkspaceChannelsChanged(listener: (held: AppWorkspaceChannels) => void): () => void;
   /** The account's automations, or one task's or one workspace's; or why there are none. */
   automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
@@ -1058,9 +1018,6 @@ const PAIRING_UNANSWERED = { failure: HOST_PAIRING_CALL_FAILURE.UNANSWERED } as 
 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
-
-/** A channel call that reached no answer, as every channel method answers one. */
-const CHANNEL_UNANSWERED = { failure: CHANNEL_CALL_FAILURE.UNANSWERED } as const;
 
 /** A task call that reached no answer, as every task method answers one. */
 const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
@@ -1927,54 +1884,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(agentPageAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    channelsCreate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_CREATE, params),
-        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsEdit: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_EDIT, params),
-        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsUnarchive: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_UNARCHIVE, params),
-        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsArchive: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_ARCHIVE, params),
-        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsLook: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_LOOK, params),
-        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsThreads: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_THREADS, params),
-        answerOf(channelThreadsViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsMove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_MOVE, params),
-        answerOf(channelMoveViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsFollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.CHANNELS_FOLLOW, { workspaceId: params.workspaceId })),
-    channelsUnfollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.CHANNELS_UNFOLLOW, { workspaceId: params.workspaceId })),
-    channelsRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.CHANNELS_RETRY, { workspaceId: params.workspaceId })),
-    onWorkspaceChannelsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.WORKSPACE_CHANNELS_CHANGED,
-        // Note that the held channels are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppWorkspaceChannels>(payload) : undefined),
-        listener,
       ),
     automationList: (params) =>
       Effect.map(

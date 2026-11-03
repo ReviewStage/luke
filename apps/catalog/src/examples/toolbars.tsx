@@ -68,7 +68,7 @@ function Toolbars(): React.JSX.Element {
         title="Told to fold, its controls draw their glyphs alone"
       >
         <Toolbar
-          title="Channels"
+          title="Automations"
           folded
           actions={<FoldingButton label="Send feedback" icon={<ComposeIcon />} onClick={stay} />}
         />

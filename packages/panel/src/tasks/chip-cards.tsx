@@ -311,7 +311,7 @@ export function PageChipCard({
 }
 
 /** The workspace a link was written under, by its slug, one it stood under before, or its id where it has none, as the account holds it; none where it holds no such workspace. */
-export function useLinkWorkspace(written: string): Workspace | undefined {
+function useLinkWorkspace(written: string): Workspace | undefined {
   const workspaces = useAppSlice(APP_SLICE.TASKS)?.workspaces;
   return workspaces === undefined ? undefined : workspaceOfSlug(workspaces, written);
 }

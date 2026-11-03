@@ -80,26 +80,6 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
-/** The Channels view's asks: a workspace's channels made, edited, archived, unarchived, and looked at, a page of one's threads read, a thread moved, and the channels held and read again. */
-export const CHANNEL_ACT_KIND = {
-  CHANNELS_CREATE: "channels.create",
-  CHANNELS_EDIT: "channels.edit",
-  CHANNELS_ARCHIVE: "channels.archive",
-  CHANNELS_UNARCHIVE: "channels.unarchive",
-  CHANNELS_LOOK: "channels.look",
-  CHANNELS_THREADS: "channels.threads",
-  CHANNELS_MOVE: "channels.move",
-  /**
-   * A workspace's channels, open and archived, held followed while the
-   * window holds the stream open, and a while after among those let go
-   * lately: what they hold reaches the panel on app state
-   * (`LIVE_READ.CHANNELS`), so the stream carries nothing.
-   */
-  CHANNELS_FOLLOW: "channels.follow",
-  /** A held workspace's channels, which the panel reads on app state, read again at once, as Try again asks. */
-  CHANNELS_RETRY: "channels.retry",
-} as const;
-
 /**
  * A task's coding agents, the core of what the Tasks tab asks of them: the
  * models, the default, the lists, an agent started, read, messaged, changed,
@@ -576,7 +556,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
-  ...CHANNEL_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,

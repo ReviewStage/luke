@@ -34,7 +34,7 @@
  * What a page shows within it is a step too: the tab the task's column
  * shows, the tab its side panel shows while open (a narrow room's panel
  * standing over the plan being a step of its own already), and the
- * Inbox's item, and with Channels on the channel it is narrowed to, so Back goes back to what the window was
+ * Inbox's item, so Back goes back to what the window was
  * just showing rather than past it to the page before. Such a choice is a
  * step only where a press or a key led to it: one the window makes by
  * itself, as a task's tabs arriving after it opens, an agent's tab shown as
@@ -110,18 +110,11 @@ import {
   useSyncExternalStore,
 } from "react";
 import { ADMIN_PAGE, type AdminView, adminSection } from "./admin/routing.js";
-import { channelStepTitle, liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
+import { liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
-import {
-  standChannelPlace,
-  useChannelPlace,
-  useChannels,
-  useInboxNarrowed,
-  useShownChannel,
-} from "./tasks/use-channels.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
 import type { HistorySpot } from "./tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
@@ -193,8 +186,6 @@ type Place =
       readonly listed?: boolean | undefined;
       /** The item standing alone, while one does. */
       readonly chosen?: InboxChoice | undefined;
-      /** The channel the Inbox is narrowed to, with Channels on. */
-      readonly channelId?: string | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
   | {
@@ -268,9 +259,9 @@ function namedStepOf(place: Place): NamedStep | undefined {
     case PLACE_KIND.VERSION_HISTORY:
       return { kind: NAMED_STEP.VERSION_HISTORY, taskId: place.taskId };
     case PLACE_KIND.INBOX: {
-      const { chosen, channelId } = place;
+      const { chosen } = place;
       const taskId = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
-      return { kind: NAMED_STEP.INBOX, taskId, channelId };
+      return { kind: NAMED_STEP.INBOX, taskId };
     }
     case PLACE_KIND.PERSON:
       return { kind: NAMED_STEP.PERSON, userId: place.userId };
@@ -421,8 +412,6 @@ function sameShown(one: Place, other: Place): boolean {
     );
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
-    // Note that the Inbox and each channel it is narrowed to are steps of their own, so moving between them is a visit rather than filling in the step.
-    if (one.channelId !== other.channelId) return false;
     return one.chosen === undefined || other.chosen === undefined
       ? true
       : sameInboxChoice(one.chosen, other.chosen);
@@ -470,8 +459,7 @@ function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
  * one, the column's held back while the task's agents are unread
  * (`columnKnown`), since the plan it would name may be an agent's tab still on
  * its way, and a narrow room's side panel, open, covers the column whole. The
- * Inbox's and an agent page's side panel is `beside`, wide rooms alone; a wide
- * channel holds its thread beside its list, where a single column shows one.
+ * Inbox's and an agent page's side panel is `beside`, wide rooms alone.
  */
 function surfacesOf(
   place: Place | undefined,
@@ -493,13 +481,8 @@ function surfacesOf(
     }
     case PLACE_KIND.VERSION_HISTORY:
       return [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: place.taskId }];
-    case PLACE_KIND.INBOX: {
-      if (place.channelId === undefined) return withSide([{ surface: PRODUCT_SURFACE.INBOX }]);
-      const channel = { surface: PRODUCT_SURFACE.CHANNEL, of: place.channelId };
-      if (place.chosen === undefined) return withSide([channel]);
-      const thread = { surface: PRODUCT_SURFACE.THREAD, of: place.chosen.itemId };
-      return withSide(place.listed === undefined ? [channel, thread] : [thread]);
-    }
+    case PLACE_KIND.INBOX:
+      return withSide([{ surface: PRODUCT_SURFACE.INBOX }]);
     case PLACE_KIND.AGENT:
       return withSide([{ surface: PRODUCT_SURFACE.AGENT, of: place.agentId }]);
     case PLACE_KIND.PERSON:
@@ -538,7 +521,7 @@ function samePlace(one: Place, other: Place): boolean {
     );
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
-    return one.channelId === other.channelId && sameInboxChoice(one.chosen, other.chosen);
+    return sameInboxChoice(one.chosen, other.chosen);
   }
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
     return one.workspaceId === other.workspaceId && sameAutomationsOpening(one.page, other.page);
@@ -1246,11 +1229,6 @@ export function useWindowHistory(input: {
   // The item chosen is a step of its own wherever it shows: alone in one column, or beside the list where the Inbox splits.
   const inboxChosen = tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxChosen === undefined : undefined;
-  // With a channel chosen, the Inbox is narrowed to it; the channel is the step's from the moment it is chosen, before its name is read.
-  const shown = useShownChannel(tasks.workspace?.id);
-  const narrowed = useInboxNarrowed();
-  const { channelId: chosenChannel } = useChannelPlace();
-  const inboxChannel = inboxOpen && narrowed ? chosenChannel : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
@@ -1316,8 +1294,7 @@ export function useWindowHistory(input: {
       };
     }
     if (inboxOpen) {
-      const inbox = { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen } as const;
-      return inboxChannel === undefined ? inbox : { ...inbox, channelId: inboxChannel };
+      return { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen };
     }
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
     if (pagePerson !== undefined) {
@@ -1366,7 +1343,6 @@ export function useWindowHistory(input: {
     inboxOpen,
     inboxListed,
     inboxChosen,
-    inboxChannel,
     pageAgent,
     pagePerson,
     personName,
@@ -1389,19 +1365,13 @@ export function useWindowHistory(input: {
     }, [untitled, columnKnown, sideTab, boundFor]),
     input.room,
   );
-  // Note that a channel's step is named by its channel, and by the thread's task while one stands open in it.
-  const channelName = inboxChannel === undefined ? undefined : shown?.channel.name;
-  const channelDetail = inboxChosen === undefined ? undefined : titleDetail;
   const place = useMemo((): Titled | undefined => {
     if (untitled === undefined || titleLabel === undefined) return untitled;
-    if (channelName !== undefined) {
-      return { ...untitled, title: channelStepTitle(channelName, channelDetail) };
-    }
     const label = { label: titleLabel, detail: titleDetail };
     const panes = { column: titleColumn, side: titleSide };
     const unnamed = titleColumn === undefined && titleSide === undefined;
     return { ...untitled, title: unnamed ? label : { ...label, panes } };
-  }, [untitled, titleLabel, titleDetail, titleColumn, titleSide, channelName, channelDetail]);
+  }, [untitled, titleLabel, titleDetail, titleColumn, titleSide]);
   // Whether the tabs a task's step showed still stand on its strips, as far as the window last saw them; a task not seen since is taken to.
   const tabsStand = (to: Extract<Place, { kind: typeof PLACE_KIND.TASK }>) => {
     const strips = knownStrips.get(to.taskId);
@@ -1443,13 +1413,7 @@ export function useWindowHistory(input: {
     const historyStanding = tab === PANEL_TAB.TASKS && historyOpen && spot !== undefined;
     if (tab !== PANEL_TAB.TASKS) input.onTabChange(PANEL_TAB.TASKS);
     if (to.kind === PLACE_KIND.INBOX) {
-      // Note that a channel's step holding no item opens the channel afresh, so no item chosen in a later step stands over it.
-      if (to.channelId !== undefined && to.chosen === undefined) {
-        tasks.inboxView.onOpenChannel(to.channelId);
-      } else {
-        tasks.inboxView.onOpen();
-      }
-      standChannelPlace(to.channelId);
+      tasks.inboxView.onOpen();
       if (to.chosen !== undefined) tasks.inboxView.onChoose(to.chosen);
       return;
     }
@@ -1542,10 +1506,7 @@ export function useWindowHistory(input: {
         .entries.some((entry) => entry.state?.kind === PLACE_KIND.PERSON),
   );
   const { members } = useWorkspaceMembersRead(personListed ? tasks.workspace : undefined);
-  // The workspace's channels as the window holds them, which a channel's step is listed by the name it goes by now.
-  const { channels } = useChannels(shown === undefined ? undefined : tasks.workspace?.id);
-  const named = (to: Place) =>
-    liveStepTitle(namedStepOf(to), titleOf(to), tasks, members, channels);
+  const named = (to: Place) => liveStepTitle(namedStepOf(to), titleOf(to), tasks, members);
   const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
     place,
     address: addressOf(input.link),

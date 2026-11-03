@@ -65,13 +65,7 @@ export function pushedTranscripts(
 }
 
 export function waitingOf(item: InboxItem): AppInboxWaitingItem {
-  const waiting = {
-    id: item.id,
-    agentId: item.agentId,
-    title: item.title,
-    postedAt: item.postedAt,
-  };
-  return item.channelId === undefined ? waiting : { ...waiting, channelId: item.channelId };
+  return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
 }
 
 /** The task's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
@@ -370,7 +364,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onClose: ignore,
       onChoose: ignore,
       onOpenItem: ignore,
-      onOpenChannel: ignore,
       onClear: ignore,
       pages: undefined,
       onTaskAgents: () => undefined,
