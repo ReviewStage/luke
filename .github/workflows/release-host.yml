@@ -55,11 +55,11 @@ jobs:
 
       - name: Build the daemon and the runner
         run: |
-          pnpm --filter @luke/agent-runner build
-          pnpm --filter @luke/host-daemon build
+          pnpm --filter @repo/agent-runner build
+          pnpm --filter @repo/host-daemon build
 
       - name: Package the tarball
-        run: pnpm --filter @luke/host-daemon package -- --arch "${{ matrix.arch }}"
+        run: pnpm --filter @repo/host-daemon package -- --arch "${{ matrix.arch }}"
 
       - name: Check the tarball
         run: |
@@ -106,15 +106,15 @@ jobs:
 
       - name: Build the daemon and the runner
         run: |
-          pnpm --filter @luke/agent-runner build
-          pnpm --filter @luke/host-daemon build
+          pnpm --filter @repo/agent-runner build
+          pnpm --filter @repo/host-daemon build
 
       # package.ts writes the tarball with GNU tar, which a Mac has as gtar.
       - name: Make sure GNU tar is installed
         run: command -v gtar || brew install gnu-tar
 
       - name: Package the tarball
-        run: pnpm --filter @luke/host-daemon package -- --os darwin --arch arm64
+        run: pnpm --filter @repo/host-daemon package -- --os darwin --arch arm64
 
       - name: Check the tarball
         run: |
