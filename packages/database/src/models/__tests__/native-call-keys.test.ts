@@ -24,7 +24,7 @@ const WINDOW_MS = 10 * 60_000;
 const openConversation = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
   const [row] = yield* Database.use((db) =>
     db

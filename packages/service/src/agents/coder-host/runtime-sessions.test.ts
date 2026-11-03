@@ -402,14 +402,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
           const { eve, claudeCode, native } = runtimes();
           const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
+            eveOrigin: () => "https://app.test",
             eve: () => eve.sessions,
             eveAs: () => eve.sessions,
           };
-          const bearer = new Request("https://luke.test/api/agents", {
+          const bearer = new Request("https://app.test/api/agents", {
             headers: { authorization: "Bearer luke_fixture" },
           });
-          const cookie = new Request("https://luke.test/api/agents");
+          const cookie = new Request("https://app.test/api/agents");
           const route = yield* sessionsRouter.pipe(Effect.provide(native));
           const composed: readonly (readonly [
             string,
@@ -441,7 +441,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           // The deployment's own eve, over HTTP, as a GitHub wake, an automation, and another agent's message reach it.
           const posted: string[] = [];
           const deployment = yield* deploymentEveForAccounts<typeof EVE_HOST_TURN.TYPED>(
-            "https://luke.test",
+            "https://app.test",
             "/eve/coder",
           ).pipe(
             Effect.provide(
@@ -715,10 +715,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             });
           }
           const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
+            eveOrigin: () => "https://app.test",
             eveAs: () => eve.sessions,
           };
-          const request = new Request("https://luke.test/api/agents/stop");
+          const request = new Request("https://app.test/api/agents/stop");
 
           yield* stoppedTurn(reach, writer, request, owner, onEve).pipe(Effect.provide(native));
           yield* stoppedTurn(reach, writer, request, owner, onClaudeCode).pipe(
@@ -761,14 +761,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(heard(claudeCode), ["send"]);
           assert.deepEqual(actingFor, [owner]);
           const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
+            eveOrigin: () => "https://app.test",
             eveAs: () => eve.sessions,
           };
           // And a teammate's Stop is admitted: the agent runs no turn, so it stops nothing.
           yield* stoppedTurn(
             reach,
             writer,
-            new Request("https://luke.test/"),
+            new Request("https://app.test/"),
             teammate,
             onClaudeCode,
           ).pipe(Effect.provide(native));
@@ -868,10 +868,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
           const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
+            eveOrigin: () => "https://app.test",
             eveAs: () => eve.sessions,
           };
-          yield* stoppedTurn(reach, writer, new Request("https://luke.test/"), owner, onCodex).pipe(
+          yield* stoppedTurn(reach, writer, new Request("https://app.test/"), owner, onCodex).pipe(
             Effect.provide(native),
           );
           assert.ok(

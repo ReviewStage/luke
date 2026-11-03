@@ -41,7 +41,7 @@ const openAgent = (turn?: TurnStatus) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const sessionId = `wrun_${randomUUID()}`;
     const [row] = yield* db
       .insert(conversations)

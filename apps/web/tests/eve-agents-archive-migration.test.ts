@@ -59,7 +59,7 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBut);
         yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "Dean", email: "dean@luke.test" }),
+          db.insert(user).values({ id: "dean", name: "Dean", email: "dean@app.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
         const { id: taskId } = yield* createTask("dean", { organizationId: workspaceId });

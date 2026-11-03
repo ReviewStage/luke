@@ -43,8 +43,8 @@ it.effect(
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBeforeBackfill);
         yield* sql`insert into "user" (id, name, email, created_at, updated_at)
-          values ('dean', 'Dean', 'dean@luke.test', now(), now()),
-                 ('charles', 'Charles', 'charles@luke.test', now(), now())`;
+          values ('dean', 'Dean', 'dean@app.test', now(), now()),
+                 ('charles', 'Charles', 'charles@app.test', now(), now())`;
         yield* sql`insert into organization (id, name, slug, created_at)
           values ('team', 'Team', 'team', now())`;
         yield* sql`insert into member (id, organization_id, user_id, role, created_at)

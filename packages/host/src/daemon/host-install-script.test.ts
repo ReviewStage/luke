@@ -49,7 +49,7 @@ const LINUX_PROC_VERSION = "Linux version 6.8.0-45-generic (buildd@ubuntu)";
  * The origin a run is handed, since the script as it stands here leaves its
  * own to the route that serves it (`@@ORIGIN@@`).
  */
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const ORIGIN_ARGS = ["--origin", ORIGIN] as const;
 
 /** The SHA-256 of the three bytes "abc", from FIPS 180-2's own examples. */

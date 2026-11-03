@@ -47,7 +47,7 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * tasks, and sessions throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SHELL: TerminalSummary = {
   id: "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d",
   title: "zsh",

@@ -23,7 +23,7 @@ const LATER_UNTIL = new Date("2026-10-22T02:10:01Z");
 const openAgent = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
-    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+    db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
   const task = yield* startTask(userId, { name: "Invitations" });
   const started = yield* createAgent(userId, {

@@ -149,7 +149,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
     const started = yield* createAgent(userId, {
       taskId: task.id,

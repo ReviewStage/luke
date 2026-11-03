@@ -21,7 +21,7 @@ it.layer(getTestDB())("the Users read's search", (it) => {
     Effect.gen(function* () {
       const db = yield* Database;
       yield* db.insert(user).values([
-        { id: "u-root", name: "Root", email: "root@luke.test", role: USER_ROLE.ADMIN },
+        { id: "u-root", name: "Root", email: "root@app.test", role: USER_ROLE.ADMIN },
         { id: "u-jane", name: "Jane Doe", email: "jane@acme.test", role: USER_ROLE.USER },
         { id: "u-bob", name: "Bob Ross", email: "bob@acme.test", role: USER_ROLE.USER },
       ]);

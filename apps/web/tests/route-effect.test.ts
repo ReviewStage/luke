@@ -47,13 +47,13 @@ afterEach(async () => {
 
 const CRON_SECRET = "CRON_SECRET";
 const GATE_PATH = "/api/gate";
-const GATE = `https://luke.test${GATE_PATH}`;
+const GATE = `https://app.test${GATE_PATH}`;
 const SECRET = "cron-secret-test";
 const USER_ID = "user-1";
 const AUTHORIZATION = "Bearer token";
 
 /** The deployment's own origin, which the guard reads from the address production registers. */
-const OWN_ORIGIN = "https://luke.test";
+const OWN_ORIGIN = "https://app.test";
 const FOREIGN_ORIGIN = "https://evil.example";
 const SESSION_COOKIE = "__Secure-better-auth.session_token=fixture";
 const WRITE_PATH = "/api/write";

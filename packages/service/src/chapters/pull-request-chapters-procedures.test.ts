@@ -63,7 +63,7 @@ import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedure
 // SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
 const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const BRANCH = "luke/expire-invitations";

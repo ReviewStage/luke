@@ -28,7 +28,7 @@ const openAccounts = Effect.gen(function* () {
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
     yield* Database.use((db) =>
-      db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+      db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
     );
   }
   return { owner, other };

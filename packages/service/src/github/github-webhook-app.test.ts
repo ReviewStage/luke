@@ -69,7 +69,7 @@ import { githubWebhookApp } from "./github-webhook-app.js";
  * Synthetic accounts, secrets, repositories, and deliveries throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const WEBHOOK = "/api/github/webhook";
 const SECRET = "whsec-fixture-luke";
 /** The origin eve answers on, as `LUKE_EVE_ORIGIN` names it to the delivery's wakes. */
@@ -407,7 +407,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
             yield* Database.use((db) =>
               db
                 .insert(user)
-                .values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+                .values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
             );
             for (const [providerId, accountId] of [
               [GITHUB_PROVIDER_ID, String(githubUserId)],

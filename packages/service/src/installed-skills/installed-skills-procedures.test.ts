@@ -75,7 +75,7 @@ const skillChangesCounted = (userId: string) =>
       return "action" in event.properties ? event.properties.action : undefined;
     });
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const SKILLS = HOSTED_SERVICE_PATH.INSTALLED_SKILLS;
 
 /** One commit of a fake repository: every file by its path from the root. */

@@ -153,7 +153,7 @@ const openTokenAgent = Effect.gen(function* () {
 const openGoogleUser = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });

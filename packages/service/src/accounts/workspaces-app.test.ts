@@ -118,7 +118,7 @@ const countedProperties = (userId: string, name: string) =>
 const RESEND = recordingHttpClient(() => jsonResponse({ id: "email-1" }));
 
 /** The sender invitations are emailed from in these tests. */
-const INVITE_FROM = "Invites <invites@luke.test>";
+const INVITE_FROM = "Invites <invites@app.test>";
 
 /** The invitation mailer over the recorded Resend, as a deployment naming a key and a sender builds it. */
 const INVITATION_MAIL = invitationMailFromEnvironment.pipe(
@@ -149,7 +149,7 @@ const emailsTo = (address: string) =>
     )
     .filter((email) => email.to.includes(address));
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const INSTALL_ADDRESS = "https://github.com/apps/luke/installations/new";
 const LANDING = "/github-installed.html?status=";
 
@@ -1035,9 +1035,9 @@ it.effect("a member reads the workspace's members, owners first, then admins, th
         status: HOSTED_HTTP_STATUS.OK,
         body: {
           members: [
-            { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
-            { userId: alan, name: "Alan Turing", email: `${alan}@luke.test`, role: "admin" },
-            { userId: grace, name: "Grace Hopper", email: `${grace}@luke.test`, role: "member" },
+            { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
+            { userId: alan, name: "Alan Turing", email: `${alan}@app.test`, role: "admin" },
+            { userId: grace, name: "Grace Hopper", email: `${grace}@app.test`, role: "member" },
           ],
         },
       });
@@ -1077,22 +1077,22 @@ it.effect(
               {
                 userId: ada,
                 name: "Ada Lovelace",
-                email: `${ada}@luke.test`,
+                email: `${ada}@app.test`,
                 role: "owner",
                 pictureUrl: "https://lh3.googleusercontent.com/a/ada=s96-c",
               },
-              { userId: alan, name: "Alan Turing", email: `${alan}@luke.test`, role: "member" },
+              { userId: alan, name: "Alan Turing", email: `${alan}@app.test`, role: "member" },
               {
                 userId: grace,
                 name: "Grace Hopper",
-                email: `${grace}@luke.test`,
+                email: `${grace}@app.test`,
                 role: "member",
                 pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
               },
               {
                 userId: linus,
                 name: "Linus Torvalds",
-                email: `${linus}@luke.test`,
+                email: `${linus}@app.test`,
                 role: "member",
               },
             ],
@@ -1230,7 +1230,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
             former: [
               {
@@ -1292,7 +1292,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
             former: [{ userId: lin, name: "Lin Chen" }],
           },
@@ -1338,7 +1338,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
             former: [{ userId: lin, name: "Lin Chen" }],
           },
@@ -1376,8 +1376,8 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
-              { userId: grace, name: "Grace Hopper", email: `${grace}@luke.test`, role: "admin" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
+              { userId: grace, name: "Grace Hopper", email: `${grace}@app.test`, role: "admin" },
             ],
           },
         });
@@ -2260,7 +2260,7 @@ const verified = (userId: string) =>
     yield* Database.use((db) =>
       db.update(user).set({ emailVerified: true }).where(eq(user.id, userId)),
     );
-    return `${userId}@luke.test`;
+    return `${userId}@app.test`;
   });
 
 /** The invitation accepted through the plugin's own call, under the account's session, as the accept page accepts it. */
@@ -2310,7 +2310,7 @@ it.effect(
               id: made.id,
               workspaceName: "Acme",
               role: "member",
-              inviter: { name: "Grace Hopper", email: `${grace}@luke.test` },
+              inviter: { name: "Grace Hopper", email: `${grace}@app.test` },
             },
           },
         });
@@ -2357,7 +2357,7 @@ it.effect(
             id: made.id,
             workspaceName: "Dr Ada Lovelace",
             role: "member",
-            inviter: { name: "Dr Ada Lovelace", email: `${ada}@luke.test` },
+            inviter: { name: "Dr Ada Lovelace", email: `${ada}@app.test` },
           },
         });
       }).pipe(Effect.provide(plugin.database));
@@ -2390,7 +2390,7 @@ it.effect(
           invitationId: canceled.id,
         });
         const forAlan = yield* invited(alanAddress);
-        const forUna = yield* invited(`${una}@luke.test`);
+        const forUna = yield* invited(`${una}@app.test`);
 
         const spentWhenCanceled = yield* readInSession(plugin, alan, offerAt(canceled.id));
         const otherAddress = yield* readInSession(plugin, kim, offerAt(forAlan.id));
@@ -2470,7 +2470,7 @@ it.effect(
           status: HOSTED_HTTP_STATUS.OK,
           body: {
             members: [
-              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@app.test`, role: "owner" },
             ],
           },
         });
@@ -2490,7 +2490,7 @@ it.effect(
 
         yield* inviting(plugin, ada, acme, "lin@example.com", "admin");
         const again = yield* inviting(plugin, ada, acme, "lin@example.com");
-        const member = yield* inviting(plugin, ada, acme, `${grace}@luke.test`);
+        const member = yield* inviting(plugin, ada, acme, `${grace}@app.test`);
 
         const alreadyInvited = refusedAs(
           HOSTED_HTTP_STATUS.CONFLICT,
@@ -2520,7 +2520,7 @@ it.effect(
         });
         assert.ok(emails[0]?.text.includes(`Expires ${expiryDay}.`));
         assert.ok(!emails[0]?.html.includes("<img"), "no picture stands in for the initials");
-        assert.deepEqual(emailsTo(`${grace}@luke.test`), []);
+        assert.deepEqual(emailsTo(`${grace}@app.test`), []);
 
         const linkedAt = new Date(yield* Clock.currentTimeMillis);
         yield* Database.use((db) =>

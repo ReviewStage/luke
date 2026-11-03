@@ -132,7 +132,7 @@ test("the default .func, loaded alone, lands the fallback's requests on the host
         "-e",
         ANSWER_REQUEST,
         functionEntryPath(outputDirectory, path),
-        `https://luke.test/${path}?${query}`,
+        `https://app.test/${path}?${query}`,
       ],
       {
         cwd: functionDirectory(outputDirectory, path),

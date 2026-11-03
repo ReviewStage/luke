@@ -28,7 +28,7 @@ import { afterEach, vi } from "vitest";
  * Synthetic accounts throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const ADA = "user-ada";
 const GRACE = "user-grace";
 const INVITED = "ada@example.com";

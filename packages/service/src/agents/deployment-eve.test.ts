@@ -18,7 +18,7 @@ import { EVE_MOUNT } from "./eve-host/eve-sessions.js";
  * Synthetic accounts, sessions, and secrets throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const EVE_DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const CRON_SECRET = "cron-secret-1";
 

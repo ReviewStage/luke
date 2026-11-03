@@ -71,7 +71,7 @@ export async function openHostedStoreTestDatabase({
       return run(
         Effect.asVoid(
           Database.use((db) =>
-            db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@luke.test` }),
+            db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@app.test` }),
           ),
         ),
       ).then(() => id);

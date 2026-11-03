@@ -20,7 +20,7 @@ import {
  * that never reached eve comes back typed.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-1";
 const CALLER: EveCaller = { secret: Redacted.make(DEPLOYMENT_SECRET), account: ACCOUNT };

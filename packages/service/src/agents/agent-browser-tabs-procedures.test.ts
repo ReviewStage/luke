@@ -76,7 +76,7 @@ import { AgentBrowser, agentBrowserOver } from "./browser/agent-browser.js";
  * Synthetic accounts, bearers, workspaces, agents, and pages throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** The repository a coding agent on its starter's token works in, which a reader's token reads. */
 const TOKEN_REPOSITORY = "octo-member/side";
@@ -89,7 +89,7 @@ interface Answer {
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   return id;
 });

@@ -23,7 +23,7 @@ import { HTTP_STATUS, jsonResponse, type RecordedRequest } from "@luke/wire/test
 import { Effect } from "effect";
 import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 const HOST_ID = "urn:uuid:00000000-0000-4000-8000-000000000002";
 
@@ -61,7 +61,7 @@ function harness(
 ) {
   const saves: string[] = [];
   const opened: URL[] = [];
-  const signedIn = { key: "ada@luke.test" as string | undefined };
+  const signedIn = { key: "ada@app.test" as string | undefined };
   const service = async (request: RecordedRequest) => {
     if (request.pathname === "/api/account/chatgpt/host") {
       options.whileAskingHost?.();
@@ -173,7 +173,7 @@ it.effect(
     Effect.gen(function* () {
       const setup = harness({
         whileBrowsing: (signedIn) => {
-          signedIn.key = "grace@luke.test";
+          signedIn.key = "grace@app.test";
         },
       });
       const answered = JSON.parse(yield* press(setup));

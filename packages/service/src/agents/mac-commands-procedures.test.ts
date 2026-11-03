@@ -50,7 +50,7 @@ import { runOnMacStanding } from "./luke-tools.js";
 import { askMac, MAC_COMMAND_STATUS, macCommandsFor, runOnMacTool } from "./mac-command.js";
 import { macCommandsProcedures } from "./mac-commands-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const MAC_COMMANDS = "/api/mac-commands";
 const CLAIM = "/api/mac-commands/claim";
 const LISTENING = "/api/mac-commands/listening";
@@ -156,7 +156,7 @@ const bytes = (incoming: Request) =>
 const account = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   });
 
 /** The commands a read was answered with, as the Mac reads its bytes. */

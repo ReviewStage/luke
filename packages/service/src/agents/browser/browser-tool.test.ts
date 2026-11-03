@@ -257,7 +257,7 @@ const owners = new Map<string, string>();
 const openConversation = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
-    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+    db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` }),
   );
   const [row] = yield* Database.use((db) =>
     db

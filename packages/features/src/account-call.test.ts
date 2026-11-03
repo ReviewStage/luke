@@ -18,7 +18,7 @@ import {
   NO_CREDENTIAL,
 } from "./account-call.js";
 
-const BASE_URL = "https://luke.test";
+const BASE_URL = "https://app.test";
 const PATH = "/api/account/preferences";
 
 function refusal(): Response {

@@ -65,7 +65,7 @@ const PANEL: ActSender = { sender: SENDER, panel: true };
 const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const SERVICE = "https://luke.test";
+const SERVICE = "https://app.test";
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */

@@ -196,7 +196,7 @@ import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
 const NOW = 1_800_000_000_000;
 const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
-const EVE_ORIGIN = "https://luke.test";
+const EVE_ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 /** What every agent the suite starts runs on and works in. */

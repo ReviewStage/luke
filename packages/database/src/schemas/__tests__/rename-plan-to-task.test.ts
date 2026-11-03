@@ -30,7 +30,7 @@ import { member, organization, user } from "../auth.js";
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const organizationId = randomUUID();
   const now = yield* DateTime.nowAsDate;
   yield* db

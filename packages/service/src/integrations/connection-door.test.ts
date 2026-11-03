@@ -80,7 +80,7 @@ const NOTION = INTEGRATION_PROVIDER.NOTION;
 const memberWithLinear = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -126,7 +126,7 @@ const postEvents = (bearer: string, events: readonly RunnerEvent[]) =>
     );
     const response = yield* Effect.promise(() =>
       web.handler(
-        new Request(`https://luke.test${RUNNER_EVENTS_PATH}`, {
+        new Request(`https://app.test${RUNNER_EVENTS_PATH}`, {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Bearer ${bearer}` },
           body: JSON.stringify({ events }),

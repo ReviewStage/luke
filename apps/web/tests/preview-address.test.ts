@@ -225,18 +225,18 @@ function previewAddress(
 
 test("a rebased head the ignore step skipped resolves to the build of the branch's earlier head that serves its tree", async (t) => {
   const fixture = await rebasedBranch(t, "web v1\n");
-  built(fixture.answers, fixture.earlier, 7, "https://luke-earlier.vercel.app");
+  built(fixture.answers, fixture.earlier, 7, "https://earlier.vercel.app");
   skipped(fixture.answers, fixture.head);
   pushed(fixture.answers, [fixture.head, fixture.earlier]);
   assert.deepEqual(previewAddress(fixture), {
     status: 0,
-    address: "https://luke-earlier.vercel.app",
+    address: "https://earlier.vercel.app",
   });
 });
 
 test("an earlier head of the branch that deployed a different tree is passed over", async (t) => {
   const fixture = await rebasedBranch(t, "web v0\n");
-  built(fixture.answers, fixture.earlier, 7, "https://luke-earlier.vercel.app");
+  built(fixture.answers, fixture.earlier, 7, "https://earlier.vercel.app");
   skipped(fixture.answers, fixture.head);
   pushed(fixture.answers, [fixture.head, fixture.earlier]);
   assert.equal(previewAddress(fixture).status, EXIT_NOT_AFFECTED);
@@ -244,20 +244,20 @@ test("an earlier head of the branch that deployed a different tree is passed ove
 
 test("an earlier head whose own build failed is passed over for an older one that served the tree", async (t) => {
   const fixture = await rebasedBranch(t, "web v1\n");
-  built(fixture.answers, fixture.earlier, 7, "https://luke-earlier.vercel.app");
-  built(fixture.answers, fixture.between, 8, "https://luke-between.vercel.app", "failure");
+  built(fixture.answers, fixture.earlier, 7, "https://earlier.vercel.app");
+  built(fixture.answers, fixture.between, 8, "https://between.vercel.app", "failure");
   skipped(fixture.answers, fixture.head);
   pushed(fixture.answers, [fixture.head, fixture.between, fixture.earlier]);
   assert.deepEqual(previewAddress(fixture), {
     status: 0,
-    address: "https://luke-earlier.vercel.app",
+    address: "https://earlier.vercel.app",
   });
 });
 
 test("a rebased branch whose pushes GitHub will not list answers unreadable rather than another branch's preview", async (t) => {
   const fixture = await rebasedBranch(t, "web v1\n");
   // Note that the rebased head here stands for the head of the branch rebased onto, built as that branch's own preview.
-  built(fixture.answers, fixture.head, 9, "https://luke-other-branch.vercel.app");
+  built(fixture.answers, fixture.head, 9, "https://other-branch.vercel.app");
   commit(fixture.checkout, "docs/NOTES.md", "notes\n");
   skipped(fixture.answers, git(fixture.checkout, "rev-parse", "HEAD"));
   pushed(fixture.answers, REFUSED);
@@ -269,13 +269,13 @@ test("an earlier head redeployed and failed still resolves to its first build, w
   deployed(fixture.answers, fixture.earlier, [
     {
       id: 7,
-      address: "https://luke-earlier.vercel.app",
+      address: "https://earlier.vercel.app",
       state: "success",
       at: "2026-10-20T10:00:00Z",
     },
     {
       id: 8,
-      address: "https://luke-redeploy.vercel.app",
+      address: "https://redeploy.vercel.app",
       state: "failure",
       at: "2026-10-20T11:00:00Z",
     },
@@ -284,7 +284,7 @@ test("an earlier head redeployed and failed still resolves to its first build, w
   pushed(fixture.answers, [fixture.head, fixture.earlier]);
   assert.deepEqual(previewAddress(fixture), {
     status: 0,
-    address: "https://luke-earlier.vercel.app",
+    address: "https://earlier.vercel.app",
   });
 });
 

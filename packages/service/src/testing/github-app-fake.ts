@@ -408,7 +408,7 @@ export const openGithubUser = (standing?: GitHubAccountRow) =>
     const now = yield* Clock.currentTimeMillis;
     const row = standing ?? standingGithubRow(now);
     const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     yield* db.insert(account).values({
       id: `account-${randomUUID()}`,
       accountId: GITHUB_FIXTURE_MEMBER.ID,

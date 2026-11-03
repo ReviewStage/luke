@@ -63,7 +63,7 @@ it.layer(getTestDB())("the integration accounts migration", (it) => {
         const userId = `user-${randomUUID()}`;
         yield* db
           .insert(user)
-          .values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+          .values({ id: userId, name: "Test User", email: `${userId}@app.test` });
         for (const statement of BEFORE) yield* sql.unsafe(statement);
         for (const provider of ["linear", "notion"]) {
           yield* sql`

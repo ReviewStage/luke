@@ -45,7 +45,7 @@ function sweepRequest(
   authorization: string | null = `Bearer ${Redacted.value(CRON_SECRET)}`,
   method = "GET",
 ): Request {
-  return new Request(`https://luke.test${MAINTENANCE_SWEEP_PATH}`, {
+  return new Request(`https://app.test${MAINTENANCE_SWEEP_PATH}`, {
     method,
     headers: authorization === null ? {} : { authorization },
   });

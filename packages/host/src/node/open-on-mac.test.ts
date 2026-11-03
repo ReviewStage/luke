@@ -23,9 +23,9 @@ const GIT_ENVIRONMENT = {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_TERMINAL_PROMPT: "0",
   GIT_AUTHOR_NAME: "Fixture",
-  GIT_AUTHOR_EMAIL: "fixture@luke.test",
+  GIT_AUTHOR_EMAIL: "fixture@app.test",
   GIT_COMMITTER_NAME: "Fixture",
-  GIT_COMMITTER_EMAIL: "fixture@luke.test",
+  GIT_COMMITTER_EMAIL: "fixture@app.test",
 };
 
 // Note that a test here runs real Git and bash, which a macOS runner has taken past vitest's 5s default.

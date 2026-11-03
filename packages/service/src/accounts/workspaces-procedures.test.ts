@@ -24,7 +24,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { workspacesProcedures } from "./workspaces-procedures.js";
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const USER_ID = "user-1";
 /** A browser's session cookie, which the fake session read below names the account by. */
 const SESSION_COOKIE = "better-auth.session_token=session";

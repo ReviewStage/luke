@@ -15,7 +15,7 @@ import { admitRelayUpgrade } from "./service.js";
 
 const AGENT = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const SHELL = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
-const OWN_ORIGIN = "https://luke.example.test";
+const OWN_ORIGIN = "https://app.example.test";
 const OWN = new Set([OWN_ORIGIN]);
 const BEARER = { authorization: "Bearer token-1" };
 const COOKIE = "__Secure-better-auth.session_token=session-1";
@@ -59,8 +59,8 @@ test("another site's page is refused before any socket stands, whatever it carri
     { ...BEARER, origin: "https://evil.test" },
     { ...PAGE, ...BEARER, origin: "https://evil.test" },
     { ...PAGE, origin: "null" },
-    { ...PAGE, origin: "http://luke.example.test" },
-    { ...PAGE, origin: "https://luke.example.test.evil.test" },
+    { ...PAGE, origin: "http://app.example.test" },
+    { ...PAGE, origin: "https://app.example.test.evil.test" },
   ]) {
     assert.deepEqual(
       admitRelayUpgrade(address(ASKED), headers, OWN),

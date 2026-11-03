@@ -110,7 +110,7 @@ import { dispatched } from "./support/platform-landing";
  * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 const TASKS = "/api/plans";
 const ONE_TASK = (taskId: string) => `${TASKS}/${taskId}`;
 const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
@@ -190,7 +190,7 @@ const openAccounts = (
     const db = yield* Database;
     const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@luke.test` });
+    yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@app.test` });
     const signedIn: SignedIn = {
       bearers: new Map([
         [`Bearer ${owner}`, owner],
@@ -721,7 +721,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const db = yield* Database;
         yield* db
           .insert(user)
-          .values({ id: stranger, name: "Stranger", email: `${stranger}@luke.test` });
+          .values({ id: stranger, name: "Stranger", email: `${stranger}@app.test` });
         const start = (body: WireBoundaryInput) =>
           ask(request(TASKS, owner, { method: "POST", body }));
 

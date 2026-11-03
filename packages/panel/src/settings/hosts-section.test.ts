@@ -37,7 +37,7 @@ declare global {
 beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   installScrollIntoView();
-  fakeAppPlatform({ assetBase: () => "https://luke.test/" });
+  fakeAppPlatform({ assetBase: () => "https://app.test/" });
 });
 
 const roots: Root[] = [];
@@ -50,7 +50,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-const SCRIPT = "https://luke.test/install.sh";
+const SCRIPT = "https://app.test/install.sh";
 
 /** Lets the window's document, the list's read, and a press's acts land. */
 async function settle(): Promise<void> {

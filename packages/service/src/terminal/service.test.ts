@@ -23,7 +23,7 @@ import { standTerminalRelay, terminalRelayServer } from "./service.js";
  * past the reach stands. Synthetic ids, cookies, and bearers throughout.
  */
 
-const OWN_ORIGIN = "https://luke.example.test";
+const OWN_ORIGIN = "https://app.example.test";
 const ADA = "user-ada";
 const GRACE = "user-grace";
 const ADA_AGENT = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";

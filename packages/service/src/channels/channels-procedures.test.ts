@@ -34,7 +34,7 @@ import { channelsProcedures } from "./channels-procedures.js";
  * Synthetic accounts, bearers, workspaces, and channels throughout.
  */
 
-const ORIGIN = "https://luke.test";
+const ORIGIN = "https://app.test";
 
 /** What the route counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
@@ -43,7 +43,7 @@ const ANALYTICS = recordingProductAnalytics();
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+  yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
   return id;
 });
 
