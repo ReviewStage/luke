@@ -15,7 +15,7 @@ import {
   type WorkspaceSeams,
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { invitation, member, organization, user } from "@luke/database/schemas/auth";
+import { account, invitation, member, organization, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { task } from "@luke/database/schemas/task";
 import { joinWorkspace } from "@luke/database/testing";
@@ -60,6 +60,7 @@ import {
   Effect,
   Layer,
   Option,
+  Redacted,
   Result,
   Schema,
 } from "effect";
@@ -71,6 +72,7 @@ import {
   SERVER_EVENT,
   SERVER_WORKSPACE_MEMBER_ACTION,
 } from "../events/server-events.js";
+import { GITHUB_PROVIDER_ID, GitHubApp } from "../github/github-app.js";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
@@ -79,6 +81,8 @@ import type { WebServices } from "../runtime.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   type FakeGitHub,
+  GITHUB_FIXTURE_AUTHORIZED_TOKEN,
+  GITHUB_FIXTURE_MEMBER,
   GITHUB_FIXTURE_REFUSED_CODE,
   githubReaching,
   openGithubUser,
@@ -175,6 +179,24 @@ const openGithubAccount = (name: string) =>
     return userId;
   });
 
+/** An account under the name given, signed in with Google alone: it holds no GitHub row. */
+const openGoogleAccount = (name: string) =>
+  Effect.gen(function* () {
+    const userId = `user-${randomUUID()}`;
+    yield* Database.use((db) =>
+      db.insert(user).values({ id: userId, name, email: `${userId}@luke.test` }),
+    );
+    return userId;
+  });
+
+/** Every account's GitHub row, as whose it is and which GitHub user it stands for. */
+const githubRows = Database.use((db) =>
+  db
+    .select({ userId: account.userId, accountId: account.accountId })
+    .from(account)
+    .where(eq(account.providerId, GITHUB_PROVIDER_ID)),
+);
+
 /** The plugin's member writes and the session they are made under, for the paths that write through the plugin. */
 interface SessionSeams {
   readonly members: MemberSeams;
@@ -261,7 +283,7 @@ const answered = <A>(
     }
     const routes = Layer.mergeAll(
       workspacesApp({ resolveUserId: bearerUserId }),
-      githubInstallApp(),
+      githubInstallApp({ resolveSessionUserId: session.resolveSessionUserId }),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       routes.pipe(HttpRouter.provideRequest(services)),
@@ -355,17 +377,25 @@ const connectState = (
 /** GitHub's web flow, which hands every authorization this code unless a test says otherwise. */
 const ONE_TIME_CODE = "one-time-code";
 
+/** A browser signed in to an account: the session cookie it sends, and the session read that names its account. */
+interface SignedInBrowser {
+  readonly cookie: string;
+  readonly session: SessionSeams;
+}
+
 /**
  * Where GitHub's return through the Setup URL lands the browser, as its
  * status word: at once, or once GitHub's one-time authorization returns to
  * the callback the Setup URL sent it on to, with the code given, or with
- * none where the user declined.
+ * none where the user declined, from the browser given, or one signed in to
+ * nothing.
  */
 const landedAt = (
   seams: WorkspaceSeams,
   github: FakeGitHub,
   query: Record<string, string>,
   code: string | null = ONE_TIME_CODE,
+  browser?: SignedInBrowser,
 ) =>
   Effect.gen(function* () {
     const setup = yield* send(seams, github, setupRequest(query));
@@ -384,7 +414,14 @@ const landedAt = (
     );
     if (code !== null) callback.searchParams.set("code", code);
     callback.searchParams.set("state", authorize.searchParams.get("state") ?? "");
-    const returned = yield* send(seams, github, new Request(callback, { redirect: "manual" }));
+    const headers = new Headers();
+    if (browser !== undefined) headers.set("cookie", browser.cookie);
+    const returned = yield* send(
+      seams,
+      github,
+      new Request(callback, { redirect: "manual", headers }),
+      browser?.session,
+    );
     assert.equal(returned.status, 303);
     return returned.location?.replace(LANDING, "");
   });
@@ -601,6 +638,54 @@ it.effect(
         const connected = { login: "acme", active: true };
         assert.deepEqual(githubOf(yield* workspacesOf(seams, github, ada), acme.id), connected);
         assert.deepEqual(githubOf(yield* workspacesOf(seams, github, linus), acme.id), connected);
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "an install from a browser signed in to the installer links their GitHub to their account once, and never from a browser signed in to another or a GitHub another account holds",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, seams, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGoogleAccount("Ada Lovelace");
+        const grace = yield* openGoogleAccount("Grace Hopper");
+        const github = githubReaching([ACME]);
+        const acme = yield* createAs(seams, github, ada, "Acme");
+        yield* Effect.promise(() =>
+          api.addMember({
+            body: { userId: grace, organizationId: acme.id, role: WORKSPACE_ROLE.ADMIN },
+          }),
+        );
+        const session = { ...NO_SESSION, resolveSessionUserId: plugin.resolveSessionUserId };
+        const browserOf = (userId: string) =>
+          Effect.map(plugin.sessionCookieOf(userId), (cookie) => ({ cookie, session }));
+        const install = (installer: string, browser: SignedInBrowser) =>
+          Effect.flatMap(connectState(seams, github, installer, acme.id), (state) =>
+            landedAt(
+              seams,
+              github,
+              { installation_id: String(ACME.id), setup_action: "install", state },
+              ONE_TIME_CODE,
+              browser,
+            ),
+          );
+
+        const elsewhere = yield* install(ada, yield* browserOf(grace));
+        yield* install(ada, yield* browserOf(ada));
+        yield* install(ada, yield* browserOf(ada));
+        // The GitHub user GitHub's flow authorizes is Ada's now, so Grace's own install keeps nothing.
+        yield* install(grace, yield* browserOf(grace));
+
+        assert.equal(elsewhere, GITHUB_INSTALL_STATUS.CONNECTED);
+        assert.deepEqual(yield* githubRows, [{ userId: ada, accountId: GITHUB_FIXTURE_MEMBER.ID }]);
+        const kept = yield* Effect.gen(function* () {
+          const app = yield* GitHubApp;
+          return yield* app.userToken(ada);
+        }).pipe(Effect.provide(github.layer));
+        assert.equal(Redacted.value(kept), GITHUB_FIXTURE_AUTHORIZED_TOKEN);
+        assert.equal(github.sent.filter((sent) => sent.method === "DELETE").length, 2);
       }).pipe(Effect.provide(database));
     }),
 );
