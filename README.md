@@ -27,12 +27,12 @@ to-do, or your review, and you reply there.
 
 ## Features
 
-- **One inbox** for every agent's questions, to-dos, and updates.
-- **Built-in task management**: agents break work into sub-tasks and hand them to other agents.
-- **Agents that work together**: they start other agents, message each other, and manage your task board.
-- **Cloud agents** that run Claude Code or Codex, open pull requests, and fix failing checks.
-- **Pull request review** in the app, with the diff split into chapters.
-- **Your own subscription**: agents run on your Claude or ChatGPT plan or API key.
+- One inbox for every agent's questions, to-dos, and updates.
+- Built-in task management: agents break work into sub-tasks and hand them to other agents.
+- Agents that work together: they start other agents, message each other, and manage your task board.
+- Cloud agents that run Claude Code or Codex, open pull requests, and fix failing checks.
+- Pull request review in the app, with the diff split into chapters.
+- Your own subscription: agents run on your Claude or ChatGPT plan or API key.
 
 ## Get started
 
