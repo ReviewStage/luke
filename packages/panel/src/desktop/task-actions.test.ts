@@ -3,9 +3,12 @@
 import assert from "node:assert/strict";
 import {
   PLAN_ACTOR,
+  TASK_BLOCK_CHANGE,
   TASK_PRIORITY,
+  TASK_RELATION_KIND,
   TASK_STATUS,
   type Task,
+  type TaskBlockRequest,
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
@@ -868,6 +871,56 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
   unmountAll();
   const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
   assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
+});
+
+test("a sidebar row's Task relation searches the workspace's tasks beside the menu and relates the one picked from the row, never opening either task", async () => {
+  const parented: [string, string | null][] = [];
+  const blocked: [string, TaskBlockRequest][] = [];
+  const other: TaskSummary = {
+    ...OTHER,
+    id: "5d1c9b7a-3e2f-4a6b-8c9d-0e1f2a3b4c5d",
+    name: "Ship signup",
+  };
+  const tasks = tasksControl({
+    tasks: [OTHER, other],
+    onSetTaskParent: (taskId, parentTaskId) => parented.push([taskId, parentTaskId]),
+    onSetTaskBlock: (taskId, block) => blocked.push([taskId, block]),
+  });
+  const asked: Asked = { opened: [], changed: [], deleted: [], renamed: [], marked: [] };
+  const row = mountSidebarTask(tasks, OTHER, asked);
+  const pick = (words: string) => {
+    const found = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="option"], [data-steered="true"]',
+      ),
+    ].find((each) => each.textContent?.startsWith(words));
+    assert.ok(found, `the menu offers ${words}`);
+    act(() => found.click());
+  };
+
+  rightClick(row, 40, 60);
+  choose("Task relation");
+  await act(async () => undefined);
+  pick("Ship signup");
+  rightClick(row, 40, 60);
+  choose("Task relation");
+  await act(async () => undefined);
+  pick("Relation");
+  pick("Blocked by");
+  pick("Ship signup");
+
+  assert.deepEqual(
+    parented,
+    [[other.id, OTHER.id]],
+    "Sub-task, the kind it opens on, sets the parent of the task picked",
+  );
+  assert.deepEqual(blocked, [
+    [
+      OTHER.id,
+      { change: TASK_BLOCK_CHANGE.ADD, relation: TASK_RELATION_KIND.BLOCKED_BY, taskId: other.id },
+    ],
+  ]);
+  assert.deepEqual(asked.opened, [], "relating from a row opens no task");
 });
 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
