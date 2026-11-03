@@ -31,8 +31,8 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { admitRunnerBearer, runnerTokenDigest } from "../agents/luke-mcp/bearer.js";
 import { RUNNER_EVENTS_PATH, runnerEventsApp } from "../agents/native-events/runner-events-app.js";
+import { admitRunnerBearer, runnerTokenDigest } from "../agents/workspace-mcp/bearer.js";
 import { NO_GITHUB } from "../testing/github-app-fake.js";
 import {
   CONNECTOR_ASKED_NOTHING,

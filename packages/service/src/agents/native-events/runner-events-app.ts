@@ -74,9 +74,9 @@ import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { compactNativeTurnHanded } from "../coder-host/turn-message.js";
-import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { keepAliveDue } from "../sandbox-keep-alive.js";
 import { keepSessionSandboxAlive } from "../session-sandboxes.js";
+import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { claudeCodeMoments } from "./claude-code-moments.js";
 import { codexMoments } from "./codex-moments.js";
 import type { NativeHeld, NativeMoment } from "./native-moments.js";
@@ -96,7 +96,7 @@ import {
  * numbered in order, in batches, under the bearer it was launched with, and
  * posts a batch again until we take it. A bearer no standing coding
  * agent's conversation holds, a retired one's among them, is refused before
- * the body is read (`../luke-mcp/bearer.ts`). The batch is read as moments
+ * the body is read (`../workspace-mcp/bearer.ts`). The batch is read as moments
  * by the reader of the harness the conversation runs on
  * (`claude-code-moments.ts`, `codex-moments.ts`), folded into the store
  * writer's events

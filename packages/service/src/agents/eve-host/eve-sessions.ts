@@ -1,162 +1,33 @@
 /**
- * eve-sessions.ts -- the host's calls into eve's session routes, as effects on the edge's HttpClient.
- */
-
-import { redactCredentials } from "@luke/features/credential-redaction";
-import { failureKind, reportUnexpected } from "@luke/runtime/effect";
-import { readEither } from "@luke/wire/effect";
-import type { UserContent } from "ai";
-import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
-import { FetchHttpClient } from "effect/http";
-import * as HttpClient from "effect/http/HttpClient";
-import type * as HttpClientError from "effect/http/HttpClientError";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/http/HttpClientResponse";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
-import { EVE_HOST_HEADER, type EVE_HOST_TURN, type EveHostTurn } from "./bounds.js";
-
-/**
- * The host's own calls into eve's HTTP API, made from a web function on the
- * developer's behalf: open the conversation's session with a first message,
- * follow up on the session it runs in, cancel one turn by eve's own id
- * for it, retire the session for good once we let go of it. eve's `Client` would make the same requests, but its session handle keeps the delivery id an accepted
- * follow-up answers to itself, and that id is what ties an ask to the turn
- * eve later starts, so the requests are made here as eve's own routes
- * document them. The caller is the deployment acting for an account it
- * names, under the deployment's own secret, with the
- * account beside it in the header the door reads it from, so nothing
- * dispatches that the door refuses. The conversation and the kind of turn
- * ride as the headers the door reads them from, and the kinds a client may
- * name are its type parameter. eve answers a follow-up to a session whose
- * command inbox is still starting with a 409 naming `session_not_ready`, and
- * one to a session it no longer runs with a 409 naming `session_not_active`;
- * the SDK's own client tries the first again for up to twenty seconds and
- * reads the second as terminal at once, and the same stands here. A session
- * still not ready past the last wait is answered as such, which a coding
- * agent's message answers as a conflict the desktop tries again. The retry is what makes a wrong
- * "retired" rare; it is not what makes one safe. That
- * is the conversation row's forward-only claim: an inbox slower than the
- * last wait costs a session opened for nothing, which the claim lets the
- * older one lose, and never two sessions writing one conversation. Reopening
- * is never eve's: the host decides it, under that claim. How a follow-up
- * reaches a turn under way is the channel's policy, which both of our
- * channels set to steer; no call here names one of its own.
+ * eve-sessions.ts -- the one interface every caller reaches a coding agent's sessions through, and the words its calls answer in.
  *
- * Every call is an effect on the `HttpClient` the web runtime builds once
- * per instance, read here once at composition rather than on each call, so
- * the client a caller holds answers `Effect<Outcome, EveUnreachable>` and
- * requires nothing, and the tests that hand a fake eve stand on no client
- * at all. A call eve answered, whatever
- * the status, is an outcome; a call that never reached eve or was never
- * answered whole — no address, a refused connection, a failed handshake, a
- * redirect, a dropped body — is `EveUnreachable`, typed so each caller
- * decides against its own refusal rather than dying mid-transaction.
+ * The interface and its outcomes were eve's session routes' first, and keep
+ * their names; every implementation now is a native harness's
+ * (`../coder-host/runtime-sessions.ts` routes each conversation to its own).
  */
 
-/**
- * Where the eve service's routes stand under its origin: the coding-agent
- * service's at the named mount `/eve/coder`, which the deployment's rewrite
- * carries into that service and whose own route transform turns back into
- * `/eve/v1/*` before the door reads it (`door.ts` spells the paths the door
- * sees).
- */
-export const EVE_MOUNT = {
-  CODER: "/eve/coder",
-} as const;
-
-export type EveMount = (typeof EVE_MOUNT)[keyof typeof EVE_MOUNT];
+import { failureKind } from "@luke/runtime/effect";
+import type { UserContent } from "ai";
+import { Data, type Effect, Schema as EffectSchema } from "effect";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import type { EVE_HOST_TURN, EveHostTurn } from "./bounds.js";
 
 /** A typed turn: the account's own words, the one kind a route's client may send. */
 export type EveTypedTurn = typeof EVE_HOST_TURN.TYPED;
 
-/** eve's session routes under a mount; a path is composed from these and nothing else. */
-const SESSION_ROUTE = "/v1/session";
-
-function sessionsPath(mount: EveMount): string {
-  return `${mount}${SESSION_ROUTE}`;
-}
-
-function sessionPath(mount: EveMount, sessionId: string): string {
-  return `${sessionsPath(mount)}/${encodeURIComponent(sessionId)}`;
-}
-
-/** eve's id for a session's first turn, the one the opening message runs: `turn_<sequence>` from zero. */
-export const EVE_FIRST_TURN_ID = "turn_0";
-
-/** The codes eve's follow-up route answers beside a 409: a session whose inbox is still starting, and one eve no longer runs. */
-const EVE_SESSION_REFUSAL = {
-  NOT_READY: "session_not_ready",
-  NOT_ACTIVE: "session_not_active",
-} as const;
-
-/**
- * The waits before a not-ready follow-up is tried again: a copy of the loop
- * eve 0.74.0's own client runs, not a number of ours to tune, so a dependency
- * bump is the moment to check it still matches. The first wait is 250
- * milliseconds, each wait after it is double the last up to two seconds, and
- * the tries end twenty seconds after the first. A session still not ready
- * past the last wait is answered `not_ready`.
- */
-const NOT_READY_WAIT = { FIRST: Duration.millis(250), LONGEST: Duration.seconds(2) } as const;
-const NOT_READY_TRIES = Duration.seconds(20);
-const SESSION_NOT_READY_RETRY = Schedule.exponential(NOT_READY_WAIT.FIRST).pipe(
-  Schedule.modifyDelay(({ duration }) =>
-    Effect.succeed(Duration.min(duration, NOT_READY_WAIT.LONGEST)),
-  ),
-  Schedule.upTo({ duration: NOT_READY_TRIES }),
-);
-
-const ACCEPTED_STATUS = 202;
-/** The statuses `Response.ok` names, which is what a cancel's answer was read under. */
-const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
-const CONFLICT_STATUS = 409;
-const JSON_CONTENT_TYPE = "application/json";
-
-/**
- * What the fetch under the runtime's client is handed for an eve call: a
- * redirect is an error, never followed, because the caller's bearer travels
- * on the request and a followed redirect would carry it to whatever answered.
- * The service is read from the calling fiber at each request, so it is
- * provided around each call rather than to the client the runtime built.
- */
-const EVE_REQUEST_INIT: RequestInit = { redirect: "error" };
-
-const trimmedText = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
-
-/**
- * Each answer names what this build reads of it and nothing more; every read
- * below drops the keys eve names beside them, so a newer eve that widens an
- * answer is still read here. The tolerance stands at the read rather than on
- * the declaration, because v4 settles parse options there.
- */
-const openedSession = EffectSchema.Struct({ sessionId: trimmedText });
-const acceptedDelivery = EffectSchema.Struct({
-  sessionId: trimmedText,
-  deliveryId: trimmedText,
-});
-const refusedSend = EffectSchema.Struct({ code: trimmedText });
 const EVE_CANCEL_STATUS = { ACCEPTED: "accepted", NO_ACTIVE_TURN: "no_active_turn" } as const;
-const cancelAnswer = EffectSchema.Struct({
-  status: EffectSchema.Literals(Object.values(EVE_CANCEL_STATUS)),
-});
 const EVE_RESET_STATUS = { RESET: "reset", NO_ACTIVE_SESSION: "no_active_session" } as const;
-const resetAnswer = EffectSchema.Struct({
-  status: EffectSchema.Literals(Object.values(EVE_RESET_STATUS)),
-});
 
-/** Every answer eve hands back is read with the keys this build does not name dropped. */
-const DROPPING_EXCESS = { excess: EXCESS_KEYS.DROP } as const;
-
-/** eve was not reached, or never answered whole; the client's own error says which, for the operator. */
+/** The session's runtime was not reached, or never answered whole; the client's own error says which, for the operator. */
 export class EveUnreachable extends Data.TaggedError("EveUnreachable")<{
   readonly cause: HttpClientError.HttpClientError;
 }> {}
 
 /**
  * The failure in the words a report carries: the client's kind of failure,
- * and the status where eve answered at all. Note that the client's message
+ * and the status where it answered at all. Note that the client's message
  * is not written, because it names the request's address and can describe
- * the body eve sent, and the platform's error beneath it is not either.
+ * the body it sent, and the platform's error beneath it is not either.
  */
 export function describeUnreachable(failure: EveUnreachable): string {
   const kind = failureKind(failure.cause);
@@ -164,17 +35,14 @@ export function describeUnreachable(failure: EveUnreachable): string {
   return status === undefined ? kind : `${kind} ${status}`;
 }
 
-/** A follow-up eve answered `session_not_ready`; the retry schedule's own input, and never a caller's. */
-class EveSessionNotReady extends Data.TaggedError("EveSessionNotReady") {}
-
-/** How eve answered a call: what it accepted, a session it no longer runs, one still coming up, or an answer this build cannot read as any. */
+/** How a session answered a call: what it accepted, a session that no longer runs, one still coming up, or an answer this build cannot read as any. */
 export const EVE_SEND_OUTCOME = {
   ACCEPTED: "accepted",
-  /** eve does not run the session: unknown to it, or ended; the conversation needs a new one. */
+  /** The session does not run: unknown, or ended; the conversation needs a new one. */
   RETIRED: "retired",
-  /** eve runs the session but its inbox was not up within the retry schedule; the same message later may be taken. */
+  /** The session runs but was not up in time; the same message later may be taken. */
   NOT_READY: "not_ready",
-  /** eve refused or answered outside its documented shape; the status travels for the operator. */
+  /** The runtime refused or answered outside its shape; the status travels for the operator. */
   FAILED: "failed",
 } as const;
 
@@ -182,8 +50,7 @@ export const EVE_SEND_OUTCOME = {
  * How the account's plan kept a native harness from launching or taking a
  * message, where it is why a call failed: no sign-in, one the provider
  * signed out, one the deployment cannot open, or the provider not reached.
- * eve never answers one; the agent waits on it rather than turning to
- * another payer.
+ * The agent waits on it rather than turning to another payer.
  */
 export const PLAN_REFUSAL = {
   NONE: "none",
@@ -215,8 +82,7 @@ export type KeyRefusal = (typeof KEY_REFUSAL)[keyof typeof KEY_REFUSAL];
  * Why a coding agent's native runtime did not take a call, where that is
  * why it failed: its conversation runs on a native harness that this
  * function has no way to launch or write to, nor to relay to one that can, or
- * whose sandbox image is still being prepared. eve never answers one;
- * nothing falls through to eve in its place.
+ * whose sandbox image is still being prepared.
  */
 export const RUNTIME_REFUSAL = {
   NOT_HERE: "not_here",
@@ -263,7 +129,7 @@ type EveSent =
   | { readonly outcome: typeof EVE_SEND_OUTCOME.NOT_READY }
   | EveFailed;
 
-/** How eve answered a cancel: its own two words, or an answer this build cannot read as either. */
+/** How a session answered a cancel: a turn cancelled, none under way, or a failure. */
 export const EVE_CANCEL_OUTCOME = {
   ACCEPTED: EVE_CANCEL_STATUS.ACCEPTED,
   NO_ACTIVE_TURN: EVE_CANCEL_STATUS.NO_ACTIVE_TURN,
@@ -279,7 +145,7 @@ type EveCancelled =
       readonly runtimeRefusal?: RuntimeRefusal;
     };
 
-/** How eve answered a reset: the session retired now, one it no longer ran, or an answer this build cannot read as either. */
+/** How a session answered a reset: retired now, one that no longer ran, or a failure. */
 export const EVE_RESET_OUTCOME = {
   RESET: EVE_RESET_STATUS.RESET,
   NO_ACTIVE_SESSION: EVE_RESET_STATUS.NO_ACTIVE_SESSION,
@@ -305,7 +171,7 @@ export interface EveMessage<Turn extends EveHostTurn = EveHostTurn> {
   /**
    * Our own id for the message, the client id of the line it wrote for
    * it: a native harness's runner names it back as it takes the message
-   * (`runner-sessions.ts`). eve is never handed it.
+   * (`runner-sessions.ts`).
    */
   readonly lineId?: string;
 }
@@ -314,309 +180,31 @@ export interface EveMessage<Turn extends EveHostTurn = EveHostTurn> {
  * An agent's sessions for one caller, sending the kinds of turn `Turn`
  * names: open, follow up, cancel a turn, and retire. Every caller
  * holds this interface rather than an implementation, so the runtime that
- * answers a conversation can change beneath it; eve's session routes, below,
- * are the one implementation today. Note that the two calls that carry a message are properties rather
+ * answers a conversation can change beneath it. Note that the two calls that carry a message are properties rather
  * than methods, because TypeScript checks a method's parameters both ways: a
  * client composed for one kind alone would pass for one that sends any
  * kind, and the narrowing would hold nothing.
  */
 export interface AgentSessions<Turn extends EveHostTurn = EveHostTurn> {
-  /** Opens a session over the conversation with its first message; eve's answer names the session, whose first turn is the message's. */
+  /** Opens a session over the conversation with its first message; the answer names the session, whose first turn is the message's. */
   readonly open: (message: EveMessage<Turn>) => Effect.Effect<EveOpened, EveUnreachable>;
-  /** Hands a message to the session the conversation runs in; eve's answer names the delivery its turn's events will carry. */
+  /** Hands a message to the session the conversation runs in; the answer names the delivery its turn's events will carry. */
   readonly send: (
     sessionId: string,
     message: EveMessage<Turn>,
   ) => Effect.Effect<EveSent, EveUnreachable>;
   /**
-   * Asks eve to cancel exactly the turn named, by eve's own id for it. A turn
+   * Cancels exactly the turn named, by the runtime's own id for it. A turn
    * no longer under way answers `no_active_turn` and the session's next turn
    * is left running; there is no form of the call that names the session's
-   * turn under way, because between a caller's read and eve's answer that
-   * turn can be the one queued after the one the caller meant. eve's cancel
-   * takes every task the session has working with it, which is what a Stop
-   * means: a subagent the stopped turn handed work to does not go on.
+   * turn under way, because between a caller's read and the answer that
+   * turn can be the one queued after the one the caller meant.
    */
   cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
   /**
-   * Asks eve to retire the session for good: a turn under way is cancelled
-   * with every task it handed out, the workflow run ends, and the session
-   * takes nothing again. eve answers once the session has let go of its
-   * inbox; a session it no longer runs answers `no_active_session`.
+   * Retires the session for good: a turn under way is cancelled and the
+   * session takes nothing again; a session that no longer runs answers
+   * `no_active_session`.
    */
   reset(sessionId: string): Effect.Effect<EveReset, EveUnreachable>;
-}
-
-/**
- * What a session is opened able to do: never ask a human. eve opens a
- * session that names no capabilities as one that can, and a session that
- * can answers its token budget's end by parking on a prompt for an Approve
- * or a Stop rather than failing, and every subagent it delegates to
- * inherits that. We read no such prompt and answer none, so a worker
- * past its per-session budget parked on one for good and held the
- * brain turn waiting on its result with it. Declared unable, the next
- * model call past the budget fails as `SESSION_TOKEN_LIMIT_REACHED`, and
- * the caller's task comes back failed, so the turn goes on without it.
- */
-const SESSION_CAPABILITIES = { requestInput: false } as const;
-
-/** What the host posts to eve: the message a turn opens with and, on an open, what the session may do, or the turn a cancel is scoped to. */
-interface EvePostBody {
-  readonly message?: string | UserContent;
-  readonly capabilities?: typeof SESSION_CAPABILITIES;
-  readonly turnId?: string;
-}
-
-/**
- * Who reaches eve: the deployment acting for an account it names, under its
- * own secret, or the account itself, under the bearer its request carried,
- * which the door resolves as a hosted route resolves a bearer
- * (`auth/bearer.ts`'s `hostedUserId`) and never by a session cookie. A
- * comment's ask of the app, and a coding agent's Start and Stop, come from a
- * route and reach eve as its caller (`coder-host/stop.ts`'s `eveFor`): over
- * the developer's own bearer, or, for a route a browser reached on its
- * session cookie alone, as the deployment acting for the account the cookie
- * named, since eve takes no cookie.
- */
-export type EveCaller =
-  | {
-      /** The deployment's own secret, the one the door's deployment actor was composed with; revealed onto the bearer alone. */
-      readonly secret: Redacted.Redacted;
-      /** The account acted for: one the caller already established, never one a request named. */
-      readonly account: string;
-    }
-  | {
-      /** The account's own `Authorization` value, as its request carried it; revealed onto the bearer alone. */
-      readonly authorization: Redacted.Redacted;
-    };
-
-export interface EveSessionsOptions {
-  /** The origin eve answers on; the deployment's own, where its rewrites carry the mount's `/v1/*` into the eve service. */
-  readonly origin: string;
-  readonly caller: EveCaller;
-  /**
-   * Which eve service's routes are reached. Note that it is always said,
-   * because the brain's is the one that takes a typed turn as the account's
-   * own words, and a client must never reach it by leaving a field out.
-   */
-  readonly mount: EveMount;
-}
-
-/** The constructor over one fiber's client: every seam handed eve's client composes it for a caller through this. */
-export type EveSessionsComposer = <Turn extends EveHostTurn = EveHostTurn>(
-  options: EveSessionsOptions,
-) => AgentSessions<Turn>;
-
-/** The headers the caller's identity travels as: the deployment's bearer with the account beside it, or the account's own authorization as it came. */
-function callerHeaders(caller: EveCaller) {
-  if ("authorization" in caller) return { authorization: Redacted.value(caller.authorization) };
-  return {
-    authorization: `Bearer ${Redacted.value(caller.secret)}`,
-    [EVE_HOST_HEADER.ACCOUNT]: caller.account,
-  };
-}
-
-/** The whole body as eve wrote it, or nothing for one that is not JSON or was not read whole. */
-function bodyOf(response: HttpClientResponse.HttpClientResponse): Effect.Effect<UnparsedWireValue> {
-  return response.json.pipe(
-    Effect.map((body) => unparsedWire(body)),
-    Effect.orElseSucceed(() => unparsedWire(undefined)),
-  );
-}
-
-/** The status and the body of one call eve answered; a call it did not answer is `EveUnreachable`. */
-interface EveAnswer {
-  readonly status: number;
-  readonly body: UnparsedWireValue;
-}
-
-/** One POST to eve as the client answers it; a call it did not answer is `EveUnreachable`. */
-function postToEve(
-  client: HttpClient.HttpClient,
-  url: URL,
-  headers: Readonly<Record<string, string>>,
-  body: EvePostBody,
-): Effect.Effect<EveAnswer, EveUnreachable> {
-  return client
-    .execute(
-      HttpClientRequest.post(url, { headers }).pipe(
-        HttpClientRequest.bodyText(JSON.stringify(body), JSON_CONTENT_TYPE),
-      ),
-    )
-    .pipe(
-      Effect.flatMap((response) =>
-        Effect.map(bodyOf(response), (read) => ({ status: response.status, body: read })),
-      ),
-      Effect.scoped,
-      Effect.provideService(FetchHttpClient.RequestInit, EVE_REQUEST_INIT),
-      Effect.mapError((cause) => new EveUnreachable({ cause })),
-    );
-}
-
-/** How much of a body eve refused a call with a log line keeps. */
-const REFUSED_BODY_CHARS = 300;
-
-/** The kind a refusal eve answered with a server error is reported under. */
-const EVE_REFUSED = "eve_refused";
-
-/** The first server error status, from which eve's refusal is its own fault and no outcome a member asked for. */
-const SERVER_ERROR_STATUS = 500;
-
-/** The ids a call to eve holds, which its log lines carry. */
-interface EveCallIds {
-  readonly conversationId: string;
-  readonly sessionId?: string;
-}
-
-/**
- * One line for a call eve did not take, with its status and its body
- * redacted and cut, since the caller keeps only the status; a server error
- * is reported too. Note that eve's body on a refusal is its own code and
- * words (`not_owner`, `no_turn_kind`, a 413's limit), never the message.
- */
-function refusalSaid({ status, body }: EveAnswer, ids: EveCallIds): Effect.Effect<void> {
-  // Redacted before the cut, so a cut never leaves the head of a credential standing.
-  const words = redactCredentials(JSON.stringify(body) ?? "no body").slice(0, REFUSED_BODY_CHARS);
-  return Effect.logError(`eve did not take a call: ${status} ${words}`).pipe(
-    Effect.andThen(
-      status >= SERVER_ERROR_STATUS
-        ? reportUnexpected(EVE_REFUSED, { ...ids, status, body: words })
-        : Effect.void,
-    ),
-    Effect.annotateLogs({ ...ids, reason: EVE_SEND_OUTCOME.FAILED }),
-  );
-}
-
-function readOpened({ status, body }: EveAnswer): EveOpened {
-  const opened = readEither(openedSession, DROPPING_EXCESS)(body);
-  if (status !== ACCEPTED_STATUS || Result.isFailure(opened)) {
-    return { outcome: EVE_SEND_OUTCOME.FAILED, status };
-  }
-  return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.success.sessionId };
-}
-
-/** A follow-up as eve answered it: a not-ready session is the retry's failure rather than an outcome, and a not-active one is retired. */
-function readSent({ status, body }: EveAnswer): Effect.Effect<EveSent, EveSessionNotReady> {
-  if (status === CONFLICT_STATUS) {
-    const refused = readEither(refusedSend, DROPPING_EXCESS)(body);
-    const code = Result.isSuccess(refused) ? refused.success.code : undefined;
-    if (code === EVE_SESSION_REFUSAL.NOT_READY) return Effect.fail(new EveSessionNotReady());
-    if (code === EVE_SESSION_REFUSAL.NOT_ACTIVE) {
-      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.RETIRED });
-    }
-  }
-  const accepted = readEither(acceptedDelivery, DROPPING_EXCESS)(body);
-  if (status !== ACCEPTED_STATUS || Result.isFailure(accepted)) {
-    return Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status });
-  }
-  return Effect.succeed({
-    outcome: EVE_SEND_OUTCOME.ACCEPTED,
-    sessionId: accepted.success.sessionId,
-    deliveryId: accepted.success.deliveryId,
-  });
-}
-
-function readCancelled({ status, body }: EveAnswer): EveCancelled {
-  const answer = readEither(cancelAnswer, DROPPING_EXCESS)(body);
-  if (status < OK_STATUS.FIRST || status > OK_STATUS.LAST || Result.isFailure(answer)) {
-    return { outcome: EVE_CANCEL_OUTCOME.FAILED, status };
-  }
-  return answer.success.status === EVE_CANCEL_STATUS.ACCEPTED
-    ? { outcome: EVE_CANCEL_OUTCOME.ACCEPTED }
-    : { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
-}
-
-function readReset({ status, body }: EveAnswer): EveReset {
-  const answer = readEither(resetAnswer, DROPPING_EXCESS)(body);
-  if (status < OK_STATUS.FIRST || status > OK_STATUS.LAST || Result.isFailure(answer)) {
-    return { outcome: EVE_RESET_OUTCOME.FAILED, status };
-  }
-  return answer.success.status === EVE_RESET_STATUS.RESET
-    ? { outcome: EVE_RESET_OUTCOME.RESET }
-    : { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION };
-}
-
-function sessionsOver<Turn extends EveHostTurn>(
-  client: HttpClient.HttpClient,
-  options: EveSessionsOptions,
-): AgentSessions<Turn> {
-  const identity = callerHeaders(options.caller);
-  const { mount } = options;
-  const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
-    postToEve(client, new URL(path, options.origin), { ...identity, ...headers }, body);
-  const turnHeaders = (message: EveMessage<Turn>) => ({
-    [EVE_HOST_HEADER.CONVERSATION]: message.conversationId,
-    [EVE_HOST_HEADER.TURN]: message.turn,
-    ...(message.timeZone === undefined
-      ? undefined
-      : { [EVE_HOST_HEADER.TIME_ZONE]: message.timeZone }),
-  });
-  return {
-    open: (message) =>
-      Effect.flatMap(
-        post(sessionsPath(mount), turnHeaders(message), {
-          message: message.message,
-          capabilities: SESSION_CAPABILITIES,
-        }),
-        (answer): Effect.Effect<EveOpened> => {
-          const opened = readOpened(answer);
-          return opened.outcome === EVE_SEND_OUTCOME.FAILED
-            ? Effect.as(refusalSaid(answer, { conversationId: message.conversationId }), opened)
-            : Effect.succeed(opened);
-        },
-      ),
-    // The not-ready follow-up is tried again on the schedule above, and one still not ready past
-    // its last wait is the not-ready the caller reads; an unreachable eve is retried nowhere.
-    send: (sessionId, message) => {
-      const ids = { conversationId: message.conversationId, sessionId: sessionId };
-      return post(sessionPath(mount, sessionId), turnHeaders(message), {
-        message: message.message,
-      }).pipe(
-        Effect.flatMap((answer) =>
-          Effect.tap(readSent(answer), (sent) =>
-            sent.outcome === EVE_SEND_OUTCOME.FAILED ? refusalSaid(answer, ids) : Effect.void,
-          ),
-        ),
-        Effect.retry({
-          schedule: SESSION_NOT_READY_RETRY,
-          while: (failure) => failure._tag === "EveSessionNotReady",
-        }),
-        Effect.catchTag("EveSessionNotReady", () =>
-          Effect.as(
-            Effect.logError("eve's session was still not ready past the follow-up's retries").pipe(
-              Effect.annotateLogs({ ...ids, reason: EVE_SEND_OUTCOME.NOT_READY }),
-            ),
-            { outcome: EVE_SEND_OUTCOME.NOT_READY },
-          ),
-        ),
-      );
-    },
-    cancel: (sessionId, eveTurnId) =>
-      Effect.map(
-        post(`${sessionPath(mount, sessionId)}/cancel`, {}, { turnId: eveTurnId }),
-        readCancelled,
-      ),
-    reset: (sessionId) =>
-      Effect.map(post(`${sessionPath(mount, sessionId)}/reset`, {}, {}), readReset),
-  };
-}
-
-/**
- * The constructor over the calling fiber's `HttpClient`, read once: a
- * composing edge holds the constructor and hands it to the seams that
- * compose eve's client for one caller at a time.
- */
-export const eveSessionsComposer: Effect.Effect<EveSessionsComposer, never, HttpClient.HttpClient> =
-  Effect.map(
-    HttpClient.HttpClient,
-    (client): EveSessionsComposer =>
-      (options) =>
-        sessionsOver(client, options),
-  );
-
-/** eve's client for one caller, over the calling fiber's `HttpClient`. */
-export function eveSessions<Turn extends EveHostTurn = EveHostTurn>(
-  options: EveSessionsOptions,
-): Effect.Effect<AgentSessions<Turn>, never, HttpClient.HttpClient> {
-  return Effect.map(eveSessionsComposer, (compose) => compose<Turn>(options));
 }

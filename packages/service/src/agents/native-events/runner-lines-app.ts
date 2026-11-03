@@ -17,7 +17,7 @@
  * is held; the runner asks again.
  *
  * The bearer is admitted as the events route admits it
- * (`../luke-mcp/bearer.ts`): one no standing agent holds, a retired one's
+ * (`../workspace-mcp/bearer.ts`): one no standing agent holds, a retired one's
  * among them, is refused, and a launch's bearer is its own, so a launch a
  * newer one replaced reads nothing more. An answer carries the lines whole,
  * at least one, up to `RUNNER_LINES_ANSWER.MAX_BYTES`, so a run of large
@@ -44,7 +44,7 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { CODER } from "../coder-host/bounds.js";
-import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
+import { admitRunnerBearer, presentedBearer } from "../workspace-mcp/bearer.js";
 
 /** The path a runner reads its lines from. */
 export const RUNNER_LINES_PATH = "/api/agents/runner-lines";

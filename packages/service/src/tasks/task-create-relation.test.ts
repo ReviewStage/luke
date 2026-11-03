@@ -71,7 +71,6 @@ const starting = (bearers: ReadonlyMap<string, string>) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-        eveOrigin: () => undefined,
         sessionSandboxes: sessionSandboxesLayer,
         keepAwake: keepAwakeDetached,
         workspaces: yield* fakeWorkspaceSeams,

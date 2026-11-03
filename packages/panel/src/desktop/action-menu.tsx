@@ -39,11 +39,8 @@ export interface MenuSubmenu {
   command?: KeyedCommand;
 }
 
-/** One line of a menu: an action, or a submenu of them. */
-export type MenuEntry = MenuAction | MenuSubmenu;
-
-/** One line of a menu that may also hold a panel its owner draws beside it as its submenu (`@luke/ui`'s `MenuPanel`). */
-export type PanelMenuEntry = MenuEntry | MenuPanel;
+/** One line of a menu: an action, a submenu of them, or a panel its owner draws beside it as its submenu (`@luke/ui`'s `MenuPanel`). */
+export type MenuEntry = MenuAction | MenuSubmenu | MenuPanel;
 
 /** What a menu draws beyond its items: what it acts on, which heads it as a phone's sheet, and a foot under the items, as a task's menu says who created and last edited it. */
 export interface MenuEnds {
@@ -57,7 +54,7 @@ function sharedAction({ command, ...action }: MenuAction): SharedMenuAction {
   return { ...action, hint: <Shortcut chord={APP_SHORTCUTS[command].chord} /> };
 }
 
-function sharedEntry(entry: PanelMenuEntry): SharedMenuEntry {
+function sharedEntry(entry: MenuEntry): SharedMenuEntry {
   if ("panel" in entry) return entry;
   if (!("items" in entry)) return sharedAction(entry);
   const { command, ...submenu } = entry;
@@ -85,7 +82,7 @@ export function ActionMenu({
   /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
   menu: DrawnMenu;
   heading?: React.ReactNode;
-  groups: readonly (readonly PanelMenuEntry[])[];
+  groups: readonly (readonly MenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {

@@ -144,11 +144,11 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
  */
 export function toolAnswerSettlement(
   answer:
-    | { readonly lukeTool: true; readonly text: string }
-    | { readonly lukeTool: false; readonly text: string; readonly output: UnparsedWireValue },
+    | { readonly workspaceTool: true; readonly text: string }
+    | { readonly workspaceTool: false; readonly text: string; readonly output: UnparsedWireValue },
   isError: boolean,
 ): ToolCallSettlement {
-  const output: UnparsedWireValue = answer.lukeTool
+  const output: UnparsedWireValue = answer.workspaceTool
     ? valueFromJsonText(answer.text)
     : answer.output;
   if (isError) {
@@ -159,7 +159,7 @@ export function toolAnswerSettlement(
       status: ACTION_RESULT_STATUS.REJECTED,
     };
   }
-  if (!answer.lukeTool) return toolCallSettlementOf(JSON.stringify(answer.output), undefined);
+  if (!answer.workspaceTool) return toolCallSettlementOf(JSON.stringify(answer.output), undefined);
   const status = isRecord(output) && isWireString(output.status) ? output.status : undefined;
   return toolCallSettlementOf(answer.text, status);
 }

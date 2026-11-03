@@ -69,10 +69,10 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
@@ -139,7 +139,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
 };

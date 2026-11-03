@@ -44,7 +44,7 @@ function nativeCallDigest(tool: string, input: UnparsedWireValue): string {
 }
 
 /** The key the admitted agent's call of the tool on this input runs under: one call's within the window. */
-export function lukeMcpCallKey(
+export function workspaceMcpCallKey(
   admitted: AdmittedConversation,
   tool: string,
   input: UnparsedWireValue,

@@ -146,7 +146,6 @@ import {
   PLAN_REFUSAL,
   RUNTIME_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   AgentMachine,
   type AgentMachineService,
@@ -173,6 +172,7 @@ import {
   SandboxUnavailable,
   sessionEnding,
 } from "../vercel-sandbox-api.js";
+import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";

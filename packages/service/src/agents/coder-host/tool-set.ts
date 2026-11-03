@@ -179,7 +179,7 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
  * repository or where it runs offers it, `run_on_mac` where no one but its
  * starter has put words into it, and `save_memory` and `search_memory` where
  * its starter has Memory on, the same rules eve's tool files read as each
- * turn started; an eve agent's MCP popover reads it (`../luke-tools.ts`).
+ * turn started; an eve agent's MCP popover reads it (`../workspace-tools.ts`).
  */
 export function offeredCoderTools(
   agent: CoderOfferedTo,

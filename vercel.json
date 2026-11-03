@@ -133,11 +133,11 @@
         },
         {
           "src": "/api/agents/mcp",
-          "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp"
+          "dest": "/api/workspace-mcp.js?route=agents/mcp&route-path=agents/mcp"
         },
         {
           "src": "/api/agents/mcp/integrations/([^/]+)",
-          "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp/integrations/$1"
+          "dest": "/api/workspace-mcp.js?route=agents/mcp&route-path=agents/mcp/integrations/$1"
         },
         {
           "src": "/api/account/integrations/connected",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { RUN_ON_MAC_REASON, runOnMacReason } from "./luke-tools-model.js";
-import { RUN_ON_MAC_OFF } from "./luke-tools-wire.js";
+import { RUN_ON_MAC_REASON, runOnMacReason } from "./workspace-tools-model.js";
+import { RUN_ON_MAC_OFF } from "./workspace-tools-wire.js";
 
 /**
  * Why `run_on_mac` is off, in the order the popover says it: this Mac's

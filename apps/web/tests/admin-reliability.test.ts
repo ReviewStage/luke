@@ -89,7 +89,6 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
         analyticsRecording: true,
         analyticsErasure: true,
         sweep: true,
-        eveDeployment: true,
         ownKeys: true,
         connectors: new Map([[INTEGRATION_PROVIDER.LINEAR, true]]),
       }),

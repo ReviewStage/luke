@@ -271,7 +271,7 @@ demo_origin="http://127.0.0.1:$demo_port"
 (
     export DATABASE_URL="$demo_database_url" DATABASE_URL_UNPOOLED="$demo_database_url" \
         BETTER_AUTH_SECRET="$demo_auth_secret" PROVIDER_KEY_ENCRYPTION_KEYS="$demo_key_ring" \
-        CRON_SECRET="$demo_cron_secret" BETTER_AUTH_URL="$demo_origin" APP_EVE_ORIGIN="$demo_origin"
+        CRON_SECRET="$demo_cron_secret" BETTER_AUTH_URL="$demo_origin" APP_DEPLOYMENT_ORIGIN="$demo_origin"
     cd apps/web
     exec node --import tsx scripts/local-server.ts --port "$demo_port"
 ) >"$demo_folder/server.log" 2>&1 &

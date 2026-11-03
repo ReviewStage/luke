@@ -33,7 +33,6 @@ import {
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
-  type AgentLukeToolsAnswerView,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -66,6 +65,7 @@ import {
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
   type AgentWorkspaceListParams,
+  type AgentWorkspaceToolsAnswerView,
   agentAccountInboxAnswerViewSchema,
   agentAgentAnswerSchema,
   agentChangesAnswerViewSchema,
@@ -78,7 +78,6 @@ import {
   agentInboxReadAllViewSchema,
   agentInboxReadStateViewSchema,
   agentListAnswerViewSchema,
-  agentLukeToolsAnswerViewSchema,
   agentMessagesAnswerViewSchema,
   agentModelsAnswerSchema,
   agentOverviewChecksAnswerViewSchema,
@@ -93,6 +92,7 @@ import {
   agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
+  agentWorkspaceToolsAnswerViewSchema,
   type ChatGptSignInAnswerView,
   chatGptSignInAnswerViewSchema,
   type DevicePresenceAnswerView,
@@ -801,7 +801,7 @@ export interface HostOperator {
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now; or why there is no answer. */
-  agentLukeTools(params: AgentPullRequestParams): Effect.Effect<AgentLukeToolsAnswerView>;
+  agentWorkspaceTools(params: AgentPullRequestParams): Effect.Effect<AgentWorkspaceToolsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   agentOverviewChecks(
     params: AgentPullRequestReadParams,
@@ -2037,10 +2037,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
         answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentLukeTools: (params) =>
+    agentWorkspaceTools: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_LUKE_TOOLS, { agentId: params.agentId }),
-        answerOf(agentLukeToolsAnswerViewSchema, AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS, { agentId: params.agentId }),
+        answerOf(agentWorkspaceToolsAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentOverviewChecks: (params) =>
       Effect.map(
