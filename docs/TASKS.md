@@ -277,9 +277,10 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 - **Tabs.** `Comments`, the plan's threads. The plan's document is the
   column's Overview ("Agent tabs" below), and a Plan tab an earlier version
   kept or pinned opens it there. The task's Inbox tab of old is drawn and
-  offered nowhere: a thread, a call's row naming one, ⌘K's Inbox row, and
-  the summary's open the window's Inbox narrowed to the task
-  (`/inbox/plan/<taskId>`), the thread chosen where one is named. After them stand the workers
+  offered nowhere: a link to a thread, or a call's row naming one, opens it
+  in the window's Inbox as it stands, its search, view, and channel kept,
+  and ⌘K's Inbox row, the summary's, and a call's row naming no thread open
+  the window's Inbox narrowed to the task (`/inbox/plan/<taskId>`). After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
   terminals, and browsers, as the "+" lists them. The plan's versions open in
   the whole window ("History" below). The agents themselves have tabs

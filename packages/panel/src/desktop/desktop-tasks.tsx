@@ -566,8 +566,9 @@ function PlanDocument({
   };
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: an agent or the plan in this column, the
-  // window's Inbox narrowed to the task, on the thread a call names where
-  // the task's items hold it, posted by the agent whose row it was (`from`),
+  // thread a call names in the window's Inbox as it stands, where the task's
+  // items hold it, posted by the agent whose row it was (`from`), else the
+  // window's Inbox narrowed to the task,
   // another task as a link to it opens (`route.ts`), the rest in the side panel.
   const openPlace = useOpenPlace();
   const openTarget = (target: ToolTarget, from?: string) => {

@@ -55,7 +55,7 @@ import {
  * comment was left on its plan. The plan's own tab once stood here on every
  * task, and the task's Inbox on a task where an item waited; neither is
  * drawn or offered now, since the column's Overview holds the plan and a
- * task's threads open in the window's Inbox narrowed to the task, and what
+ * task's threads open in the window's Inbox, and what
  * an earlier version kept of either reads and opens nothing
  * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
