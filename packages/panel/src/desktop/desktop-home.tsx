@@ -26,7 +26,8 @@ import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
-import { DesktopWelcome, letGoOfFocus, welcomed } from "./desktop-welcome.js";
+import { letGoOfFocus, welcomed } from "./desktop-welcome.js";
+import { SetupSections } from "../onboarding/setup-sections.js";
 import { PersonSectionFrame, RowsSkeleton, SectionSkeleton } from "./person-frame.js";
 import { RecentRow } from "./recent-row.js";
 
@@ -43,13 +44,13 @@ import { RecentRow } from "./recent-row.js";
  * each a task's row as a person's page lists it (`recent-row.tsx`), a press
  * opening it. Its sections are a person's page's (`person-frame.tsx`),
  * whose voice was Home's to begin with. Nothing waiting says so in the
- * Inbox's own words. An account with nothing yet is welcomed instead
- * (`desktop-welcome.tsx`), its composer under the welcome's line. Nothing
- * here names the sidebar, which may be folded away.
+ * Inbox's own words. An account with nothing yet is greeted as new, and
+ * asked over the composer for what setup left undone (`setup-sections.tsx`).
+ * Nothing here names the sidebar, which may be folded away.
  *
  * The composer starts the task in the listed workspace, as the dialog
  * would. The dialog stays for ⌘N and every other New task press; only Home
- * and the welcome hold the card inline. Its words take the caret as the page
+ * holds the card inline. Its words take the caret as the page
  * shows, unless the developer is typing in a field elsewhere or the room is a
  * phone's, whose places bar a field typed in puts away, and Escape
  * there with nothing in it to close takes the caret out of the words. Its
@@ -86,10 +87,11 @@ const ITEMS_NOT_READ = "Some inbox items could not be read.";
 /** What the page says where the task list could not be read, as the sidebar says it. */
 const TASKS_NOT_READ = "Your tasks could not be read.";
 
-/** The greeting: the account's first name where it has one. */
-function greeting(name: string | undefined): string {
+/** The greeting: the account's first name where it has one, welcomed back unless the account is new. */
+function greeting(name: string | undefined, fresh: boolean): string {
   const first = name?.trim().split(/\s+/u)[0];
-  return first === undefined || first === "" ? "Welcome back" : `Welcome back, ${first}`;
+  const words = fresh ? "Welcome" : "Welcome back";
+  return first === undefined || first === "" ? words : `${words}, ${first}`;
 }
 
 /** The listed workspace's tasks with the latest activity, their own saves and their agents' alike. */
@@ -244,7 +246,7 @@ function HomeSectionsSkeleton(): React.JSX.Element {
   );
 }
 
-/** Home, in the task's place while no task is open, or a new account's welcome in Home's place. */
+/** Home, in the task's place while no task is open, with a new account's Finish setting up over its composer. */
 export function DesktopHome({
   tasks,
   room = SHELL_ROOM.WIDE,
@@ -263,13 +265,14 @@ export function DesktopHome({
   const roving = useRovingKeys<HTMLDivElement>();
   // Note that on a phone the words leave the caret alone, because a field typed in puts the places bar away (`mobile-bar.tsx`).
   const takesFocus = room !== SHELL_ROOM.NARROW;
-  if (welcomed(tasks)) return <DesktopWelcome tasks={tasks} />;
   const reading = !tasks.listRead && !tasks.listFailed;
   return (
     <DetailPage
       frame={PAGE_FRAME.PAGE}
-      title={reading ? <GreetingSkeleton /> : greeting(accountName)}
+      title={reading ? <GreetingSkeleton /> : greeting(accountName, welcomed(tasks))}
     >
+      {/* A new account is asked here for what setup left undone, above the box that starts its first task. */}
+      {welcomed(tasks) ? <SetupSections tasks={tasks} /> : null}
       <HomeComposer tasks={tasks} takesFocus={takesFocus} />
       {/* Note that the box lays nothing out: it only hears the arrows its rows walk by. */}
       <div className="home-rows contents" {...roving}>

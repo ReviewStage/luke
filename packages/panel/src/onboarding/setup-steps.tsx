@@ -22,8 +22,8 @@ import { ToolRows } from "./setup-tools.js";
  *
  * Each card is the sign-in's own, so setup reads as the sign-in going on.
  * The team's workspace, an agent, and GitHub may each be skipped; what an
- * agent needs and was skipped is asked again where the welcome stands
- * (`setup-checklist.tsx`). Finish lets the app in and keeps, on this
+ * agent needs and was skipped is asked again on Home
+ * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on this
  * machine, that the account finished setup, so it stands once.
  */
 

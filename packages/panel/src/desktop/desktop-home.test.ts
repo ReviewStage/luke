@@ -237,31 +237,52 @@ test("nothing waiting says so in the Inbox's words, and a list that could not be
   assert.match(refused.page.textContent ?? "", /Your tasks could not be read\./u);
 });
 
-test("an account with nothing yet is welcomed in Home's place", async () => {
+/** A new account, its one model missing its credential where `agentMissing` says, over a workspace that reaches no repository. */
+function newAccount(agentMissing: boolean): Partial<TasksControl> {
   const base = tasksControl();
-  const { page } = mount(
-    {
-      tasks: [],
-      listed: { tasks: [], inbox: [], inboxTasks: [] },
-      // An agent connected, so the welcome asks nothing of setup and stands whole.
-      newTask: {
-        ...base.newTask,
-        workspaceId: ACME.id,
-        models: [
-          {
-            id: "anthropic/claude-opus-5.5",
-            name: "Claude Opus 5.5",
-            provider: MODEL_PROVIDER.ANTHROPIC,
-            efforts: ["high"],
-          },
-        ],
-      },
+  return {
+    tasks: [],
+    listed: { tasks: [], inbox: [], inboxTasks: [] },
+    newTask: {
+      ...base.newTask,
+      workspaceId: ACME.id,
+      models: [
+        {
+          id: "anthropic/claude-opus-5.5",
+          name: "Claude Opus 5.5",
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          efforts: ["high"],
+          ...(agentMissing ? { credentialMissing: true } : {}),
+        },
+      ],
     },
-    [],
-  );
+  };
+}
+
+test("a new account with an agent is greeted as new on Home itself, over New task's composer, with nothing asked of setup", async () => {
+  const { page } = mount(newAccount(false), []);
   await settle();
-  assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
-  assert.equal(page.querySelector("section.home-section"), null);
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome, Dean");
+  assert.ok(page.querySelector(".home-composer .new-task-composer"), "New task's composer stands");
+  assert.equal(page.querySelector("[aria-label='Finish setting up']"), null);
+});
+
+test("a new account without an agent is asked to finish setting up above the composer", async () => {
+  const { page } = mount(newAccount(true), []);
+  await settle();
+  const setup = page.querySelector("[aria-label='Finish setting up']");
+  assert.ok(setup, "Finish setting up stands");
+  assert.match(setup.textContent ?? "", /Connect an agent/u);
+  assert.doesNotMatch(
+    setup.textContent ?? "",
+    /Connect GitHub/u,
+    "a GitHub read that did not answer asks nothing of it",
+  );
+  const composer = page.querySelector(".home-composer");
+  assert.ok(
+    composer && setup.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the composer stands under it",
+  );
 });
 
 test("the composer's words take the caret as Home shows, but on a phone, whose places bar a field typed in puts away, they leave it", async () => {

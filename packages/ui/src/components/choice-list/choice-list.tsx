@@ -139,14 +139,15 @@ const ROW =
  * Each look's own row. A pill's corners are half its one-line height
  * rather than a full round, so a long option that wraps in a narrow column
  * stands as a rounded box instead of swelling into an ellipse, while a short
- * one is the same capsule as ever. A card's row is its head's radio alone,
- * the card wearing the box.
+ * one is the same capsule as ever. A card's row is its head's radio and
+ * words, the card wearing the box, and fills the head beside its aside, so
+ * the badge stands at the head's right as a row's does.
  */
 const ROW_LOOK = {
   plain: "",
   marked: "",
   pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--ui-control-height)/2)] text-caption leading-body",
-  card: "p-0",
+  card: "p-0 flex-auto",
 } as const satisfies Record<ChoiceLook, string>;
 
 /** A row standing beside the others shares the width, each as tall as the tallest. */
@@ -300,7 +301,9 @@ function afterPress<Value extends string>(
 function labelFlex(option: ChoiceOption<string>, look: ChoiceLook | undefined): string {
   // Note that a pill sizes to its words, and that only a badge asks a label for a measure, since a number alone stands beside any label.
   if (look === CHOICE_LOOK.PILL) return "flex-initial";
-  return option.badge === undefined ? "flex-[1_1_0]" : "flex-[1_1_10em]";
+  if (option.badge === undefined) return "flex-[1_1_0]";
+  // A card's label is a name of a few words, so its badge keeps the head's right on a phone's width too.
+  return look === CHOICE_LOOK.CARD ? "flex-[1_1_6em]" : "flex-[1_1_10em]";
 }
 
 /**
@@ -329,12 +332,7 @@ function ChoiceWords({
 }): React.JSX.Element {
   const hung = after ?? option.after;
   return (
-    <span
-      className={cn(
-        "ui-choice-words flex flex-col gap-0.5 min-w-0",
-        look === CHOICE_LOOK.CARD ? "flex-initial" : "flex-auto",
-      )}
-    >
+    <span className={cn("ui-choice-words flex flex-auto flex-col gap-0.5 min-w-0")}>
       <span className="ui-choice-head flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
         <span
           className={cn(
