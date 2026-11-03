@@ -335,6 +335,23 @@ function slackLine(addressed: SlackAddressed, permalink: Option.Option<string>):
   return { channel: MESSAGE_CHANNEL.SLACK, words, ...(url === undefined ? undefined : { url }) };
 }
 
+/**
+ * A later message in the agent's Slack thread as the agent reads it: the
+ * member's words, then that it came from the thread and that the turn's
+ * final message is posted back there, as the start's prompt says.
+ */
+function followUpPrompt(addressed: SlackAddressed, permalink: Option.Option<string>): string {
+  const where = Option.match(permalink, {
+    onNone: () => "the Slack thread",
+    onSome: (link) => `the Slack thread (${link})`,
+  });
+  return [
+    addressed.text.slice(0, PROMPT_BOUND / 2),
+    "---",
+    `A member wrote this in ${where} you were started from. Your final message is posted back in that thread, so make it stand on its own.`,
+  ].join("\n\n");
+}
+
 /** The agent's link in the workspace, as the member's other links name it. */
 const agentLink = (userId: string, organizationId: string, agentId: string) =>
   Effect.map(workspaceStepOf(userId, organizationId), (step) =>
@@ -361,7 +378,9 @@ const sendToAgent = Effect.fnUntraced(function* (
       userId,
       agent.value,
       {
-        text: addressed.text,
+        text: followUpPrompt(addressed, permalink),
+        // Only the member's own words hand the agent servers, never the note after them.
+        serverWords: addressed.text,
         clientKey: addressed.eventId,
         sender: { kind: MESSAGE_SENDER.MEMBER, userId },
         metadata: slackLine(addressed, permalink),
