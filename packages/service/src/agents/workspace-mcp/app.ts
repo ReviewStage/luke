@@ -353,8 +353,7 @@ function callWorkspaceTool(
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
  * repository, where it runs, whether anyone but its starter has put words
- * into it, and its starter's Memory (`offeredWorkspaceMcpTool`),
- * each in the words it is shown them with (`describe`); those eve offers
+ * into it, and its starter's Memory (`offeredWorkspaceMcpTool`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
@@ -378,19 +377,16 @@ function listWorkspaceTools(
           ),
       ),
     ),
-    Effect.flatMap((offered) => {
-      const listed = [...WORKSPACE_MCP_TOOLS].filter(([name]) => offered(name));
-      return Effect.map(
-        Effect.forEach(listed, ([name, tool]) =>
-          Effect.map(tool.describe?.(admitted) ?? Effect.succeed(tool.description), (words) => ({
-            name,
-            description: words,
-            inputSchema: tool.inputSchema,
-            _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
-          })),
-        ),
-        (tools) => Result.succeed({ tools }),
-      );
+    Effect.map((offered) => {
+      const tools = [...WORKSPACE_MCP_TOOLS]
+        .filter(([name]) => offered(name))
+        .map(([name, tool]) => ({
+          name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
+        }));
+      return Result.succeed({ tools });
     }),
     Effect.catchCause((cause) =>
       Effect.as(

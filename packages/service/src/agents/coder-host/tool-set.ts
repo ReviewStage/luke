@@ -22,7 +22,7 @@ import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
  * key, the hosted page read, the delegation of a slice of its
  * work to a worker, the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list, and the
- * threads it posts to its workspace's channels (`inbox.ts`), the pull
+ * threads it posts to the inbox (`inbox.ts`), the pull
  * request the service opens for it (`pull-request.ts`), its reach to the
  * other coding agents of its workspace, a message to one among it
  * (`../agent-tools.ts`, `agent-message.ts`), the load of one of its
@@ -58,9 +58,6 @@ export const CODER_TOOL = {
   POST_THREAD: AGENT_TOOL.POST_THREAD,
   WITHDRAW_ASK: AGENT_TOOL.WITHDRAW_ASK,
   READ_THREADS: AGENT_TOOL.READ_THREADS,
-  CREATE_CHANNEL: AGENT_TOOL.CREATE_CHANNEL,
-  UPDATE_CHANNEL: AGENT_TOOL.UPDATE_CHANNEL,
-  MOVE_THREAD: AGENT_TOOL.MOVE_THREAD,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
@@ -205,6 +202,8 @@ export function offeredCoderTools(
  * of and reply on an inbox item since folded into `withdraw_ask` and
  * `post_to_inbox`, that post and its read, since named `post_thread` and
  * `read_threads`, the four of the workspace's Chat, removed with it,
+ * `create_channel`, `update_channel`, and `move_thread`, removed with the
+ * channels they kept,
  * `show_code`, `draw_on_board`, and `look_at_board`, removed with the Code
  * and Board tabs, and a voice call's `queue_question`, `withdraw_question`,
  * and `end_call`, removed with GPT Live, `remember` and `recall`, since
@@ -226,6 +225,9 @@ export const RETIRED_CODER_TOOL = {
   READ_CHAT: RETIRED_TOOL.READ_CHAT,
   RESOLVE_ASK: RETIRED_TOOL.RESOLVE_ASK,
   EDIT_CHANNEL: RETIRED_TOOL.EDIT_CHANNEL,
+  CREATE_CHANNEL: RETIRED_TOOL.CREATE_CHANNEL,
+  UPDATE_CHANNEL: RETIRED_TOOL.UPDATE_CHANNEL,
+  MOVE_THREAD: RETIRED_TOOL.MOVE_THREAD,
   SHOW_CODE: RETIRED_TOOL.SHOW_CODE,
   DRAW_ON_BOARD: RETIRED_TOOL.DRAW_ON_BOARD,
   LOOK_AT_BOARD: RETIRED_TOOL.LOOK_AT_BOARD,

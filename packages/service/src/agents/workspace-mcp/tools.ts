@@ -33,10 +33,7 @@
  * the cap holds per turn as eve's does. The list is narrowed per agent as
  * eve narrows its own (`offeredWorkspaceMcpTool`), `save_memory` and `search_memory` by its
  * starter's Memory among it, and a tool left out is still refused by its
- * door where a harness calls it anyway. A tool whose words differ by
- * workspace, `post_thread`'s naming its open channels, is described for
- * the agent as the list is made (`describe`), as eve describes it at each
- * turn's start.
+ * door where a harness calls it anyway.
  */
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
@@ -46,7 +43,6 @@ import {
   settleTurnPlanNotes,
 } from "@repo/database/models/agent-store";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
-import { CHANNEL_TOOL } from "@repo/features/channel-wire";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { pictureTypeSchema } from "@repo/features/picture-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@repo/wire";
@@ -111,7 +107,7 @@ import {
 } from "../coder-host/agent-doors.js";
 import { MESSAGE_AGENT_TOOL } from "../coder-host/agent-message.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
-import { postThreadWords, runAgentInbox } from "../coder-host/inbox-door.js";
+import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import {
   EDIT_PLAN_TOOL,
@@ -175,10 +171,6 @@ export interface WorkspaceMcpTool {
   ) => Effect.Effect<WorkspaceMcpToolResult, unknown, WorkspaceMcpToolServices>;
   /** How a result is shown to the agent, where it is more than its JSON: a picture as an image. */
   readonly content?: (result: WorkspaceMcpToolResult) => readonly McpContent[];
-  /** The tool's words as the admitted agent is shown them, where they differ by workspace; `description` otherwise. */
-  readonly describe?: (
-    admitted: AdmittedConversation,
-  ) => Effect.Effect<string, never, WorkspaceMcpServices>;
 }
 
 /** A tool as its eve file declares it: its name, its words, and its input schema. */
@@ -210,14 +202,6 @@ function entryOf(
     ...(content === undefined ? {} : { content }),
   };
   return [name, tool];
-}
-
-/** An entry whose words the admitted agent is shown as `describe` answers them. */
-function described(
-  [name, tool]: readonly [string, WorkspaceMcpTool],
-  describe: NonNullable<WorkspaceMcpTool["describe"]>,
-): readonly [string, WorkspaceMcpTool] {
-  return [name, { ...tool, describe }];
 }
 
 /** A tool about the workspace's agents and tasks, run through their one door under the call's key. */
@@ -359,27 +343,15 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   string,
   WorkspaceMcpTool
 >([
-  // The threads, posted to the workspace's channels, and the channels themselves.
-  described(
-    entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
-      runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
-    ),
-    postThreadWords,
+  // The threads, posted to the inbox.
+  entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
+    runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
   ),
   entry(INBOX_TOOLS.READ, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   ),
   entry(INBOX_TOOLS.WITHDRAW, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
-  ),
-  entry(INBOX_TOOLS.CREATE_CHANNEL, (admitted, input) =>
-    runAgentInbox(admitted, { tool: CHANNEL_TOOL.CREATE, input }),
-  ),
-  entry(INBOX_TOOLS.UPDATE_CHANNEL, (admitted, input) =>
-    runAgentInbox(admitted, { tool: CHANNEL_TOOL.UPDATE, input }),
-  ),
-  entry(INBOX_TOOLS.MOVE_THREAD, (admitted, input) =>
-    runAgentInbox(admitted, { tool: CHANNEL_TOOL.MOVE, input }),
   ),
   // The pull request, the plan, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
