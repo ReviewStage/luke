@@ -25,7 +25,6 @@
   "packages/panel/src/settings/workspace-token-repositories.tsx": "P18, P19: GitHub token set, token repositories, repositories",
   "packages/panel/src/tasks/agent-tab.tsx": "P23: task list read again",
   "packages/panel/src/tasks/agent-workspace-tools.ts": "P19: workspace tools",
-  "packages/panel/src/tasks/chip-cards.tsx": "P3: a page chip's card",
   "packages/panel/src/tasks/cloud-browser-tabs.ts": "P12: Cloud Browser tabs",
   "packages/panel/src/tasks/task-mentions.tsx": "P18: agents for mentions",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",

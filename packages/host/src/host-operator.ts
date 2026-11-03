@@ -246,8 +246,6 @@ import {
   type TasksMoveParams,
   type TasksPageAnswer,
   type TasksPageParams,
-  type TasksPagesAnswer,
-  type TasksPagesParams,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPictureKeepParams,
@@ -321,7 +319,6 @@ import {
   tasksIssueAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
-  tasksPagesAnswerSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
   tasksPullRequestAnswerSchema,
@@ -524,9 +521,7 @@ export interface HostOperator {
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
-  /** One plan's pages, each by its newest version; or that the service did not answer. */
-  tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
-  /** One plan's or agent's pages held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPagesChanged`. */
+  /** One plan's or agent's pages held followed for the windows from now until let go, and a while after among those let go lately, the open task's among them; what they hold is heard through `onPagesChanged`. */
   tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** One plan's or agent's pages let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
@@ -1428,14 +1423,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             readEither(taskHistoryFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
-      ),
-    tasksPages: (params) =>
-      Effect.map(
-        client.call(
-          GATEWAY_METHOD.TASKS_PAGES,
-          "taskId" in params ? { taskId: params.taskId } : { agentId: params.agentId },
-        ),
-        answerOf(tasksPagesAnswerSchema, TASK_UNANSWERED),
       ),
     tasksRestore: (params) =>
       Effect.map(

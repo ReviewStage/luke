@@ -18,6 +18,7 @@ import {
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   encodeMention,
   MENTION_KIND,
@@ -26,6 +27,7 @@ import {
   mentionMarkdown,
 } from "@repo/features/mention-link";
 import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_OWNER } from "@repo/features/page-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
@@ -1387,10 +1389,10 @@ test("a page's address pasted in the app's own scheme is called by the name the 
         stateWith(
           {},
           {
-            tasks: {
-              ...IDLE_TASKS_VIEW,
-              activeTaskId: TASK_ID,
-              pages: [{ ...PAGE, version: 1, at: 1_000 }],
+            tasks: { ...IDLE_TASKS_VIEW, activeTaskId: TASK_ID },
+            [LIVE_READ.PAGES]: {
+              [PAGE_OWNER.TASK]: { [TASK_ID]: { rows: [{ ...PAGE, version: 1, at: 1_000 }] } },
+              [PAGE_OWNER.AGENT]: {},
             },
           },
         ),

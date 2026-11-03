@@ -653,8 +653,8 @@ export interface TasksControl {
   sidePanel: SidePanelControl;
   /** The side panel's tabs holding something that arrived while the panel showed another, and the agents' tabs that ended unseen, each until it is shown. */
   unreadTabs: readonly StripTab[];
-  /** The pages agents wrote for the open task, each by its newest version; absent with none. */
-  pages: TasksView["pages"];
+  /** The pages agents wrote for the open task, each by its newest version, as the window holds them (`LIVE_READ.PAGES`); none until read. */
+  pages: readonly PageLine[] | undefined;
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
   agents: AgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
@@ -1088,7 +1088,7 @@ const NO_REPOSITORY_PINS: readonly RepositoryPin[] = [];
 const NO_PENDING_TASKS: readonly string[] = [];
 
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
-const NO_PAGES: NonNullable<TasksView["pages"]> = [];
+const NO_PAGES: readonly PageLine[] = [];
 
 /** What the Inbox's bare panel, and an agent's own page, hold of the plan's panel kinds: nothing, the task's page drawing what they show. */
 const NO_HOLDS: TaskHolds = {};
@@ -1529,8 +1529,13 @@ export function useTasksTab(input: {
     agents.draft?.id,
   );
   mainRef.current = mainTabs;
-  // A page's tab is held to the pages agents wrote for the task.
-  const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
+  // The open task's pages are held whenever a task is open, the Inbox's or an agent's page over it
+  // among them, so its page draws them from where they stand, and a page's tab is held to them.
+  const taskPages = useHostRead(
+    LIVE_READ.PAGES,
+    viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId },
+  ).rows;
+  const pages = useMemo(() => (taskPages ?? NO_PAGES).map((page) => page.id), [taskPages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
   // Terminal's tabs, and nothing of the plan the host has open beneath it, which keeps its own.
   const pageAgent = agentView?.agentId;
@@ -3353,7 +3358,8 @@ export function useTasksTab(input: {
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
-    if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
+    // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
+    if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     return true;
   };
@@ -3578,7 +3584,7 @@ export function useTasksTab(input: {
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
-    pages: tasks.pages,
+    pages: taskPages,
     agents,
     history: {
       ...history,

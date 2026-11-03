@@ -46,8 +46,6 @@ import {
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPageSourceAnswerSchema,
-  tasksPagesAnswerSchema,
-  tasksPagesParamsSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
   tasksPictureKeepParamsSchema,
@@ -250,9 +248,6 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksPageParamsSchema))
     .output(EffectSchema.flip(tasksPageSourceAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_PAGES]: actProcedure("Could not read that plan's pages on this system.")
-    .input(exactInput(tasksPagesParamsSchema))
-    .output(EffectSchema.flip(tasksPagesAnswerSchema)),
   // Note that the hold's stream carries nothing: the held pages reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
     "Could not follow that plan's pages on this system.",

@@ -395,11 +395,12 @@ export function nextFailedRunExpiry(
 /**
  * An open task's plan, pages, calls, and agents' code sealed for following: the
  * address, and one statement a part, each a mark that moves as its rows do
- * and carries none of their words: the plan's last save (`plan`), the pages agents showed (`pages`), the
- * calls about the task (`calls`) and the code its agents showed (`code`),
- * which this build no longer reads but a released desktop still requires.
- * The desktop reads a part again once its mark moves,
- * rather than when a call's activity or end suggests it might have. The
+ * and carries none of their words: the plan's last save (`plan`), and the
+ * pages agents showed (`pages`), the calls about the task (`calls`), and the
+ * code its agents showed (`code`), which this build no longer reads, since
+ * it holds a task's pages on their own read (`LIVE_READ.PAGES`), but a
+ * released desktop still requires. The desktop reads the plan again once its
+ * mark moves, rather than when a call's activity or end suggests it might have. The
  * service answers `not-found` for a task the account does not reach, and
  * `unavailable` where its deployment's Realtime is misconfigured, which the
  * desktop answers by asking again.
@@ -434,7 +435,7 @@ const taskCodeLiveRowSchema = EffectSchema.Struct({
   calls: EffectSchema.String,
 });
 
-/** The task's plan, pages, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+/** The task's plan, pages, and agents' code as Realtime delivers them, a part's rows each, of which this build compares the plan's alone: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
   plan: EffectSchema.Array(taskPlanLiveRowSchema),
   pages: EffectSchema.Array(taskPageLiveRowSchema),

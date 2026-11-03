@@ -357,14 +357,13 @@ export const TASKS_ACT_KIND = {
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and colored by main as HTML; answered to the tab, never on the document. */
   TASKS_PAGE_SOURCE: "tasks.pageSource",
-  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
-  TASKS_PAGES: "tasks.pages",
   /**
    * One plan's pages, or one agent's on no task, held followed while the
-   * window holds the stream open for the panel beside an Inbox item or an
-   * agent's page, and a while after among those let go lately: what they
-   * hold reaches the panel on app state (`LIVE_READ.PAGES`), so the stream
-   * carries nothing.
+   * window holds the stream open for a surface that draws them, the open
+   * task's page, the panel beside an Inbox item, an agent's page, or a
+   * page's card or frame, and a while after among those let go lately: what
+   * they hold reaches the panel on app state (`LIVE_READ.PAGES`), so the
+   * stream carries nothing.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
   /**
@@ -757,7 +756,6 @@ export const PORT_ACT_USE = {
   TASKS_REVISION: ACT_USE.FETCH,
   TASKS_RESTORE: ACT_USE.WRITE,
   TASKS_PAGE_SOURCE: ACT_USE.FETCH,
-  TASKS_PAGES: ACT_USE.READ,
   TASKS_PAGES_FOLLOW: ACT_USE.READ,
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
