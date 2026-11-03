@@ -84,8 +84,8 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 - A workspace is a team's shared tasks; the first one, made for the account
   when it signs in, is one like any other. A signed-in account sees the list
   headed by the workspace it lists, its first one until another is chosen. Its menu lists every workspace the
-  account is a member of, the listed one checked, then "New workspace…",
-  which asks a name and lists the workspace made, and "Workspace settings…",
+  account is a member of, the listed one checked, then "New workspace",
+  which asks a name and lists the workspace made, and "Workspace settings",
   which opens Settings' Workspace page on the listed workspace; nothing else
   stands in it. That page (`settings/workspace-page.tsx`) has a picker of
   the account's workspaces, the workspace's name and the account's role,
@@ -105,7 +105,7 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   where it has no GitHub connected, and the task starts with none), and the
   choice is remembered on this Mac. A task whose repository its own
   workspace cannot reach but another of the account's can, one stranded by
-  #2524, says so in a banner over every tab of the task, "This plan's
+  #2524, says so in a banner over every tab of the task, "This task's
   repository belongs to <workspace> · Move to <workspace>", whose press opens
   Move to workspace on that workspace; nothing moves it without that press,
   since a move shares the task with the other workspace's members.
@@ -161,7 +161,7 @@ Dictate, and Start.
 
 1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
-   on the task (`plan.repository`). It starts on the repository of the newest
+   on the task (`task.repository`). It starts on the repository of the newest
    started task that has one, and its menu is the app's searchable picker,
    listing the repositories the workspace's GitHub reaches. An agent needs a
    repository, so Start is held without one, and the card says so.
@@ -345,7 +345,7 @@ subagent's tab stays in the side panel.
 
 The model and effort every agent starts on are
 the account's one default, kept on the service with the account preferences
-(`/api/account/preferences`'s `codingAgent` part) and shown on the Agents
+(`/api/account/preferences`'s `agent` part) and shown on the Agents
 page of Settings (`settings/agents-page.tsx`): a model menu
 with each model under its harness's mark (Claude Code's for Anthropic's,
 Codex's for OpenAI's), the efforts the chosen model lists, and, for a
@@ -436,7 +436,7 @@ into another, and saves nothing of the call, whose result hands the plan as it
 then stands.
 
 Each save is written into
-the task's journal (`plan.agent_edits`, the last fifty) as the agent's id,
+the task's journal (`task.agent_edits`, the last fifty) as the agent's id,
 the instant, and the notes as taken, a deletion kept as a `remove` and a
 replaced text cut to 500 characters. The agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
@@ -590,7 +590,7 @@ leaving redraws no other section.
 ### The plan's text
 
 A plan is one free Markdown document (`packages/features/src/plan-document.ts`,
-the row's `plan.document`), with no title line, since the task's name is its
+the row's `task.document`), with no title line, since the task's name is its
 own, and its assumptions an ordinary section of the text. Every plan starts
 empty, and its sections are whatever headings the developer and the agents
 write into it.
