@@ -1,5 +1,5 @@
-import { WORKSPACE_BOUNDS } from "@repo/features/workspace-wire";
 import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
+import { WORKSPACE_BOUNDS } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   AVATAR_SHAPE,
@@ -23,8 +23,8 @@ import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
  *
  * The workspace is made first, then its photo set and each address invited
  * as a member. A photo or an invitation refused does not undo the
- * workspace: what was refused is said, and the step goes on, since both can
- * be done again in Settings › Workspace.
+ * workspace: the step says what was refused, and goes on at Continue, since
+ * both can be done again in Settings › Workspace.
  */
 
 /** The addresses typed into the invite field, each once. */
@@ -32,11 +32,17 @@ function addressesOf(words: string): readonly string[] {
   return [...new Set(words.split(/[\s,;]+/u).filter((one) => one.includes("@")))];
 }
 
-/** The team step's form; `onCreated` hears the workspace made, by its id. */
+/**
+ * The team step's form. `onCreated` hears the workspace made, by its id, the
+ * moment it is made, so a reload while its photo and invitations go out does
+ * not make it again; `onDone` hears, once they have gone, what was refused.
+ */
 export function TeamForm({
   onCreated,
+  onDone,
 }: {
   onCreated: (workspaceId: string) => void;
+  onDone: (refused: readonly string[]) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const [name, setName] = useState("");
@@ -70,6 +76,7 @@ export function TeamForm({
       setRefusal((refused as Error).message);
       return;
     }
+    onCreated(workspaceId);
     // Note that the photo and the invitations follow the workspace made, and one refused leaves the rest standing.
     const refused: string[] = [];
     if (photo !== undefined) {
@@ -85,8 +92,7 @@ export function TeamForm({
       }).catch((why: Error) => refused.push(`${email}: ${why.message}`));
     }
     setBusy(false);
-    if (refused.length > 0) setRefusal(refused.join(" "));
-    onCreated(workspaceId);
+    onDone(refused);
   };
   return (
     <div className="flex flex-col gap-control-gap">

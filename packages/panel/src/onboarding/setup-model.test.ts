@@ -1,33 +1,47 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { SETUP_AUDIENCE, SETUP_STEP, setupOwed, setupSteps } from "./setup-model.js";
+import { SETUP_AUDIENCE, SETUP_GATE, SETUP_STEP, setupGate, setupSteps } from "./setup-model.js";
+
+const NEW = {
+  id: "user-ada",
+  fresh: true,
+  finished: [],
+  started: false,
+  personalOnly: true,
+  agent: false,
+} as const;
 
 test.each([
+  { case: "a new account with no agent", account: NEW, gate: SETUP_GATE.OWED },
   {
-    case: "a fresh account that has not finished",
-    id: "user-ada",
-    fresh: true,
-    finished: [],
-    owed: true,
+    case: "a new account whose agent read is out",
+    account: { ...NEW, agent: undefined },
+    gate: SETUP_GATE.WAIT,
   },
   {
-    case: "a fresh account that finished on this machine",
-    id: "user-ada",
-    fresh: true,
-    finished: ["user-ada"],
-    owed: false,
+    case: "an account with an agent connected, as every account that has worked has",
+    account: { ...NEW, agent: true },
+    gate: SETUP_GATE.NONE,
   },
   {
-    case: "another account finished here, not this one",
-    id: "user-ada",
-    fresh: true,
-    finished: ["user-theo"],
-    owed: true,
+    case: "an account in a team's workspace",
+    account: { ...NEW, personalOnly: false },
+    gate: SETUP_GATE.NONE,
   },
-  { case: "an account with tasks", id: "user-ada", fresh: false, finished: [], owed: false },
-  { case: "no account signed in", id: undefined, fresh: true, finished: [], owed: false },
-])("setup is owed to $case: $owed", ({ id, fresh, finished, owed }) => {
-  assert.equal(setupOwed({ id, fresh, finished }), owed);
+  { case: "an account with tasks", account: { ...NEW, fresh: false }, gate: SETUP_GATE.NONE },
+  {
+    case: "an account that finished on this machine",
+    account: { ...NEW, finished: ["user-ada"] },
+    gate: SETUP_GATE.NONE,
+  },
+  {
+    case: "an account midway, its agent and team made",
+    account: { ...NEW, started: true, agent: true, personalOnly: false },
+    gate: SETUP_GATE.OWED,
+  },
+  { case: "no account signed in", account: { ...NEW, id: undefined }, gate: SETUP_GATE.NONE },
+])("setup for $case: $gate", ({ account, gate }) => {
+  assert.equal(setupGate(account), gate);
 });
 
 test("a team's workspace is made before GitHub, which is installed on it", () => {

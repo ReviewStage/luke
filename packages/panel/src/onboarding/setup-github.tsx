@@ -22,7 +22,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
 import {
@@ -213,16 +213,27 @@ export function GitHubSetup({
 }): React.JSX.Element {
   const [route, setRoute] = useState<Route>(ROUTE.APP);
   const [answer, setAnswer] = useState<TasksRepositoriesAnswer | undefined>(undefined);
-  const { read } = repositories;
+  // Note that the chooser is a new object on each of its owner's draws, so its read is held rather than depended on: the workspace alone asks for a read.
+  const read = useRef(repositories.read);
+  read.current = repositories.read;
+  const latest = useRef(0);
   const reread = useCallback(() => {
-    read().then(setAnswer, () => undefined);
-  }, [read]);
-  // The install and the link finish in the browser, so the window's coming back reads the repositories again.
+    latest.current += 1;
+    const asked = latest.current;
+    // Only the newest read lands, since an older one answered late says less than it.
+    read.current().then(
+      (landed) => {
+        if (asked === latest.current) setAnswer(landed);
+      },
+      () => undefined,
+    );
+  }, []);
+  // The install finishes in the browser, so the window's coming back reads the repositories again.
   useEffect(() => {
     reread();
     window.addEventListener("focus", reread);
     return () => window.removeEventListener("focus", reread);
-  }, [reread]);
+  }, [reread, workspaceId]);
   const reached = reachedOf(answer);
   useEffect(() => onReached(reached > 0), [reached, onReached]);
   const done =

@@ -85,6 +85,7 @@ export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Ele
       {missing.github ? (
         <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect GitHub">
           <GitHubSetup
+            key={workspaceId}
             workspaceId={workspaceId}
             repositories={repositoriesIn(workspaceId)}
             onReached={IGNORE_REACHED}

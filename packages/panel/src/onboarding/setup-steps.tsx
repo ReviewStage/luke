@@ -6,14 +6,28 @@ import {
   ChoiceList,
   type ChoiceOption,
   ProductMark,
+  SETTINGS_ROW_STATE,
+  SettingsRowStateLine,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@repo/ui";
 import { Schema } from "effect";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { welcomed } from "../desktop/desktop-welcome.js";
 import { AgentAuthSection } from "../settings/agent-auth-section.js";
+import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { SETUP_AUDIENCE, SETUP_STEP, type SetupAudience, setupSteps } from "./setup-model.js";
 import { GitHubSetup } from "./setup-github.js";
+import {
+  SETUP_AUDIENCE,
+  SETUP_STEP,
+  type SetupAudience,
+  type SetupGate,
+  setupGate,
+  setupSteps,
+} from "./setup-model.js";
 import { TeamForm } from "./setup-team.js";
 import { ToolRows } from "./setup-tools.js";
 
@@ -48,6 +62,40 @@ const SETUP_PLACE = keptKey(
 
 /** Where setup starts. */
 const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
+
+/**
+ * What the window does about setup for the account signed in (`setupGate`):
+ * it reads whether an agent is connected, asking for the models where no
+ * read has, only for an account that could still be new.
+ */
+export function useSetupGate(
+  tasks: TasksControl,
+  accountId: string | undefined,
+  finished: readonly string[],
+): SetupGate {
+  const [places] = useKept(SETUP_PLACE, {});
+  const { models, modelsRead, readModels, workspaces } = tasks.newTask;
+  const fresh = welcomed(tasks);
+  const candidate = fresh && accountId !== undefined && !finished.includes(accountId);
+  useEffect(() => {
+    if (candidate && modelsRead.state === MODELS_READ.UNREAD) readModels();
+  }, [candidate, modelsRead.state, readModels]);
+  // Note that a read that failed is taken as an agent standing, so a hitch never stands setup before an account that has worked.
+  const agent =
+    models !== undefined
+      ? models.some((model) => model.credentialMissing !== true)
+      : modelsRead.state === MODELS_READ.FAILED
+        ? true
+        : undefined;
+  return setupGate({
+    id: accountId,
+    fresh,
+    finished,
+    started: accountId !== undefined && places[accountId] !== undefined,
+    personalOnly: workspaces.every((workspace) => workspace.personal === true),
+    agent,
+  });
+}
 
 /** The accounts that finished setup on this machine, by id. */
 export const SETUP_FINISHED = keptKey(
@@ -110,12 +158,20 @@ export function SetupSteps({
 }): React.JSX.Element {
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const place = places[accountId] ?? SETUP_START;
-  const { audience, at, team } = place;
+  const { audience, team } = place;
+  const [creating, setCreating] = useState(false);
+  const [refused, setRefused] = useState<readonly string[]>([]);
   const move = (change: Partial<SetupPlace>) =>
     changePlaces((kept) => ({
       ...kept,
       [accountId]: { ...(kept[accountId] ?? SETUP_START), ...change },
     }));
+  // Setup starting is kept at once, so it stands until finished on a reload, whatever it connects meanwhile.
+  useEffect(() => {
+    changePlaces((kept) =>
+      kept[accountId] === undefined ? { ...kept, [accountId]: SETUP_START } : kept,
+    );
+  }, [accountId, changePlaces]);
   const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
   const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);
@@ -123,6 +179,8 @@ export function SetupSteps({
   const onConnected = useCallback((connected: boolean) => setAgent(connected), []);
   const onReached = useCallback((now: boolean) => setReached(now), []);
   const steps = setupSteps(audience);
+  // A place kept by another window or an earlier build may stand past the last step, which is held to it.
+  const at = Math.min(Math.max(place.at, 0), steps.length - 1);
   const step = steps[at] ?? SETUP_STEP.TOOLS;
   const last = at === steps.length - 1;
   const finish = () => {
@@ -132,7 +190,9 @@ export function SetupSteps({
   };
   const forward = () => (last ? finish() : setAt(at + 1));
   const back = at === 0 ? undefined : () => setAt(at - 1);
-  const workspaceId = team ?? tasks.newTask.workspaceId;
+  // A team's workspace made and then left for Just me is not the one GitHub is installed on.
+  const workspaceId =
+    (audience === SETUP_AUDIENCE.TEAM ? team : undefined) ?? tasks.newTask.workspaceId;
   const foot = (done: boolean, optional: boolean, label = "Continue") => (
     <StepFoot
       at={at + 1}
@@ -167,15 +227,32 @@ export function SetupSteps({
   if (step === SETUP_STEP.TEAM) {
     return (
       <AuthPage mark={<ProductMark />} title="Create a team workspace">
-        {team === undefined ? (
+        {team === undefined || creating ? (
           <TeamForm
             onCreated={(made) => {
-              move({ team: made, at: at + 1 });
+              setCreating(true);
+              move({ team: made });
               tasks.onChooseWorkspace(made);
             }}
+            onDone={(failed) => {
+              setCreating(false);
+              setRefused(failed);
+              if (failed.length === 0) setAt(at + 1);
+            }}
           />
-        ) : null}
-        {foot(team !== undefined, true)}
+        ) : (
+          <>
+            <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+              Workspace created
+            </SettingsRowStateLine>
+            {refused.map((words) => (
+              <Text key={words} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                {words}
+              </Text>
+            ))}
+          </>
+        )}
+        {foot(team !== undefined && !creating, team === undefined)}
       </AuthPage>
     );
   }

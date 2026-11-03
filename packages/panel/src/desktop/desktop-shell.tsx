@@ -38,11 +38,11 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
+import { SETUP_GATE } from "../onboarding/setup-model.js";
+import { SETUP_FINISHED, SetupSteps, useSetupGate } from "../onboarding/setup-steps.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { setupOwed } from "../onboarding/setup-model.js";
-import { SETUP_FINISHED, SetupSteps } from "../onboarding/setup-steps.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
@@ -68,7 +68,6 @@ import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-import { welcomed } from "./desktop-welcome.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
@@ -726,7 +725,7 @@ export function DesktopShell({
   // A new account is set up once, in the window before the app, until it finishes on this machine.
   const [setupFinished, , keepSetupFinished] = useKept(SETUP_FINISHED, []);
   const signedInId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
-  const owesSetup = setupOwed({ id: signedInId, fresh: welcomed(tasks), finished: setupFinished });
+  const setup = useSetupGate(tasks, signedInId, setupFinished);
   const inboxKept = useInboxKept(
     tasks.inboxView.open,
     tasks.workspace?.id,
@@ -746,7 +745,8 @@ export function DesktopShell({
   });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
-  usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
+  // Note that setup standing before the app holds the places' chords too, so none lands behind it.
+  usePlaceCommands(!gated && setup === SETUP_GATE.NONE, tab, onTabChange, tasks, settings, history);
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
   // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
   const adminAccess = useAdminAccess();
@@ -818,16 +818,19 @@ export function DesktopShell({
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
   const away = useMemo(() => ({ label: awayLabel, onPress: onLeave }), [awayLabel, onLeave]);
-  if (owesSetup && signedInId !== undefined) {
+  if (setup !== SETUP_GATE.NONE && signedInId !== undefined) {
+    // While a new account's agent is still read, the window waits on setup's own ground rather than glimpsing the app.
     return (
       <ScrollArea>
         <div className="desktop-onboarding flex min-h-full flex-col pb-onboarding-foot">
           <div className="desktop-drag-strip" />
-          <SetupSteps
-            tasks={tasks}
-            accountId={signedInId}
-            onFinish={() => keepSetupFinished((finished) => [...finished, signedInId])}
-          />
+          {setup === SETUP_GATE.OWED ? (
+            <SetupSteps
+              tasks={tasks}
+              accountId={signedInId}
+              onFinish={() => keepSetupFinished((finished) => [...finished, signedInId])}
+            />
+          ) : null}
         </div>
       </ScrollArea>
     );
