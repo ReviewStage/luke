@@ -110,6 +110,7 @@ import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
+import { SwitchRow } from "./switch-row.js";
 import { useWorkspaceRead } from "./use-workspace-read.js";
 import {
   AddTokenRepository,
@@ -1744,10 +1745,76 @@ function ManagedSlackBot({
 }
 
 /**
+ * The reader's own Slack notifications, under the bot's row once it is
+ * connected: one switch, on until they turn it off, which holds in every
+ * workspace whose bot is connected. The switch flips at once and the
+ * answer is the bot as it then stands.
+ */
+function SlackNotificationsRow({
+  workspaceId,
+  on,
+  onChanged,
+}: {
+  workspaceId: string;
+  on: boolean;
+  onChanged: (slackBot: WorkspaceSlackBot) => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  return (
+    <SwitchRow
+      label="Slack notifications"
+      detail="Get a Slack message when a thread waits on you."
+      checked={on}
+      changed={!on}
+      onChange={(notifications) =>
+        act(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS, { workspaceId, notifications }).then(
+          (now) => {
+            onChanged(now);
+            return ACCEPTED;
+          },
+          refusedWith,
+        )
+      }
+    />
+  );
+}
+
+/** The bot's row, and under it the reader's own switch where the bot is connected. */
+function SlackBotRows({
+  workspace,
+  slackBot,
+  onChanged,
+}: {
+  workspace: Workspace;
+  slackBot: WorkspaceSlackBot;
+  onChanged: (slackBot: WorkspaceSlackBot) => void;
+}): React.JSX.Element {
+  const row = managesWorkspace(workspace) ? (
+    <ManagedSlackBot workspace={workspace} slackBot={slackBot} onChanged={onChanged} />
+  ) : (
+    <SettingsRow leading={SLACK_MARK} label="Slack bot" description={slackBotLine(slackBot, false)}>
+      {() => null}
+    </SettingsRow>
+  );
+  if (slackBot.team === undefined || slackBot.notifications === undefined) return row;
+  return (
+    <Stack gap={GAP.NONE}>
+      {row}
+      <SlackNotificationsRow
+        workspaceId={workspace.id}
+        on={slackBot.notifications}
+        onChanged={onChanged}
+      />
+    </Stack>
+  );
+}
+
+/**
  * The workspace's Slack bot: drawn only where the deployment holds
  * our bot, an owner's or an admin's to connect for everyone, and for a
- * member, read only, where it is connected or the ask to have it; a read
- * that did not land says so in the row's place, with Retry.
+ * member, read only, where it is connected or the ask to have it, with
+ * the reader's own Slack notifications under it once it is connected; a
+ * read that did not land says so in the row's place, with Retry.
  */
 function WorkspaceSlackBotRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
   const { read, retry, changed } = useWorkspaceRead(
@@ -1765,14 +1832,7 @@ function WorkspaceSlackBotRow({ workspace }: { workspace: Workspace }): React.JS
     );
   const slackBot = read.answer;
   if (!slackBot.configured) return null;
-  if (managesWorkspace(workspace)) {
-    return <ManagedSlackBot workspace={workspace} slackBot={slackBot} onChanged={changed} />;
-  }
-  return (
-    <SettingsRow leading={SLACK_MARK} label="Slack bot" description={slackBotLine(slackBot, false)}>
-      {() => null}
-    </SettingsRow>
-  );
+  return <SlackBotRows workspace={workspace} slackBot={slackBot} onChanged={changed} />;
 }
 
 /** What Settings' Workspace page is handed: the workspaces, the one the sidebar lists, and the fall back after a leave. */

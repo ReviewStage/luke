@@ -38,7 +38,10 @@ import {
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
-import { workspaceSlackBotAnswerSchema } from "./slack-bot-wire.js";
+import {
+  workspaceSlackBotAnswerSchema,
+  workspaceSlackBotNotificationsRequestSchema,
+} from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   listedPullRequestSchema,
@@ -933,6 +936,13 @@ export const tasksWorkspaceSlackBotAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSlackBotAnswer = typeof tasksWorkspaceSlackBotAnswerSchema.Type;
+
+/** The reader's own Slack notifications turned on or off, as the window asks for it: the workspace it asks from, and the switch. */
+export const tasksWorkspaceSlackBotNotificationsParamsSchema =
+  workspaceSlackBotNotificationsRequestSchema;
+
+export type TasksWorkspaceSlackBotNotificationsParams =
+  typeof tasksWorkspaceSlackBotNotificationsParamsSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

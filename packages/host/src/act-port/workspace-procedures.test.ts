@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import { ORPCError } from "@orpc/client";
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import type {
   TasksWorkspaceGitHubConnectAnswer,
@@ -7,7 +8,6 @@ import type {
   WorkspacePeopleFollowed,
 } from "@repo/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import { ALREADY_INVITED_REFUSAL, WORKSPACE_NOT_PERMITTED_REFUSAL } from "../acts.js";
 import {
@@ -245,6 +245,10 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`slack-bot-disconnect:${params.workspaceId}`, () =>
         script.notPermitted ? refusal() : { slackBot: { configured: true } },
       ),
+    workspaceSlackBotNotifications: (params) =>
+      ask(`slack-bot-notifications:${params.workspaceId}`, () => ({
+        slackBot: { configured: true },
+      })),
     workspaceMembers: (params) =>
       ask(`members:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id ? { members: [GRACE], former: [ALAN] } : refusal(),

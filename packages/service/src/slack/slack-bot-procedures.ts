@@ -1,7 +1,7 @@
 /**
  * slack-bot-procedures.ts -- a workspace's own Slack bot read, connected, and disconnected.
  *
- * Three procedures the signed-in desktop calls with its bearer:
+ * Four procedures the signed-in desktop calls with its bearer:
  *
  * - `GET /api/workspaces/slack-bot` takes any member, and answers whether
  *   this deployment holds the bot and the Slack team the workspace's bot is
@@ -12,6 +12,8 @@
  * - `POST /api/workspaces/slack-bot/disconnect` takes an owner or admin,
  *   and deletes the installation, every member's Slack id with it; the
  *   bot stays installed in Slack, where only Slack's admins remove it.
+ * - `POST /api/workspaces/slack-bot/notifications` takes any member, and
+ *   turns their own Slack notifications on or off, in every workspace.
  *
  * A workspace the account is not in is not found, whatever it asked. The
  * bearer is resolved before the body is read, by the middleware on the
@@ -22,7 +24,9 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import {
   deleteSlackInstallation,
   linkSlackInstallation,
+  slackNotificationsOn,
   workspaceSlackInstallation,
+  writeSlackNotifications,
 } from "@repo/database/models/slack-installation-store";
 import { type Workspace, workspaceOf } from "@repo/database/models/workspace-store";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
@@ -61,26 +65,27 @@ const administeredWorkspace = Effect.fn("web/slackBotAdministered")(function* (
   return workspace;
 });
 
-/** The workspace's Slack bot as the wire carries it. */
+/** The workspace's Slack bot as the wire carries it to the member: the team, and their own switch where it is connected. */
 const workspaceSlackBot = Effect.fn("web/workspaceSlackBot")(function* (
   workspaceId: string,
+  userId: string,
 ): Effect.fn.Return<WorkspaceSlackBot, HostedRefusal, DatabaseServices | SlackBot> {
   const { configured } = yield* SlackBot;
   const installation = yield* hostedStoreOrUnavailable(workspaceSlackInstallation(workspaceId));
-  return Option.match(installation, {
-    onNone: () => ({ configured }),
-    onSome: ({ teamId, teamName }) => ({ configured, team: { id: teamId, name: teamName } }),
-  });
+  if (Option.isNone(installation)) return { configured };
+  const { teamId, teamName } = installation.value;
+  const notifications = yield* hostedStoreOrUnavailable(slackNotificationsOn(userId));
+  return { configured, team: { id: teamId, name: teamName }, notifications };
 });
 
-/** The workspace Slack bot resource: connect and disconnect to an owner or admin, and the read to any member. */
+/** The workspace Slack bot resource: connect and disconnect to an owner or admin, and the read and the member's own switch to any member. */
 export function slackBotProcedures(seams: SlackBotProcedureSeams) {
   const resource = hosted.workspaceSlackBot.use(accountMiddleware(seams.resolveUserId));
   return {
     /** The workspace's Slack bot, to any member of it. */
     read: resource.read.effect(function* ({ input, context }) {
       const workspace = yield* memberWorkspace(context.userId, input.workspaceId);
-      return yield* workspaceSlackBot(workspace.id);
+      return yield* workspaceSlackBot(workspace.id, context.userId);
     }),
     /** The bot connected to the team its token answers for; unavailable where the deployment holds no bot or Slack did not answer. */
     connect: resource.connect.effect(function* ({ input, context }) {
@@ -101,13 +106,19 @@ export function slackBotProcedures(seams: SlackBotProcedureSeams) {
           userId: context.userId,
         }),
       );
-      return yield* workspaceSlackBot(workspace.id);
+      return yield* workspaceSlackBot(workspace.id, context.userId);
     }),
     /** The bot disconnected from the workspace; disconnecting one already gone answers it as it stands. */
     disconnect: resource.disconnect.effect(function* ({ input, context }) {
       const workspace = yield* administeredWorkspace(context.userId, input.workspaceId);
       yield* hostedStoreOrUnavailable(deleteSlackInstallation(workspace.id));
-      return yield* workspaceSlackBot(workspace.id);
+      return yield* workspaceSlackBot(workspace.id, context.userId);
+    }),
+    /** The member's own Slack notifications turned on or off, which holds in every workspace. */
+    notifications: resource.notifications.effect(function* ({ input, context }) {
+      const workspace = yield* memberWorkspace(context.userId, input.workspaceId);
+      yield* hostedStoreOrUnavailable(writeSlackNotifications(context.userId, input.notifications));
+      return yield* workspaceSlackBot(workspace.id, context.userId);
     }),
   };
 }

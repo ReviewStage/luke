@@ -54,6 +54,7 @@ import { readEither } from "@repo/wire/effect";
 import { Data, DateTime, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
+import { afterResponse } from "../../http/after-response.js";
 import { logStoreFailure, type StoreFailure } from "../../http/store-failure.js";
 import {
   agentInboxItems,
@@ -67,6 +68,7 @@ import {
   moveChannelThread,
   postInboxThread,
 } from "../../inbox/inbox-store.js";
+import { dmThreadPost, settleThreadDms, threadStandsOpen } from "../../slack/thread-dms.js";
 import { pageStepOf } from "../written-mentions.js";
 import { CODER } from "./bounds.js";
 import {
@@ -750,11 +752,20 @@ export function postToInbox(
     const pictures = yield* bodyPictures(post.body, sandbox);
     if (Result.isFailure(pictures)) return inboxRejected(pictures.failure);
     const thread = threadPost(post, place.success);
-    return yield* Effect.flatMap(postInboxThread(agent, thread, pictures.success), (posted) =>
-      Result.isFailure(posted)
-        ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
-        : accepted(agent),
+    const wasOpen = yield* threadStandsOpen(agent, thread.key);
+    const posted = yield* postInboxThread(agent, thread, pictures.success);
+    if (Result.isFailure(posted)) return inboxRejected(storeRefusal(posted.failure));
+    const { organizationId } = agent;
+    yield* afterResponse(
+      "a thread's Slack DM",
+      dmThreadPost({
+        organizationId,
+        item: posted.success,
+        asked: post.ask !== undefined,
+        wasOpen,
+      }),
     );
+    return yield* accepted(agent);
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
@@ -771,11 +782,12 @@ export function withdrawAsk(
     return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_WITHDRAW));
   }
   const { key, reason } = read.success;
-  return Effect.flatMap(closeInboxItem(agent, key, reason), (withdrawn) =>
-    Option.isNone(withdrawn)
-      ? Effect.succeed(inboxRejected(INBOX_REFUSAL.NO_OPEN_ASK))
-      : accepted(agent),
-  ).pipe(
+  return Effect.gen(function* () {
+    const withdrawn = yield* closeInboxItem(agent, key, reason);
+    if (Option.isNone(withdrawn)) return inboxRejected(INBOX_REFUSAL.NO_OPEN_ASK);
+    yield* afterResponse("a withdrawn thread's Slack DM", settleThreadDms(withdrawn.value.id));
+    return yield* accepted(agent);
+  }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
   );

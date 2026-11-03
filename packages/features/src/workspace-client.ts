@@ -35,6 +35,7 @@ import {
 import {
   WORKSPACE_SLACK_BOT_QUERY,
   type WorkspaceSlackBot,
+  workspaceSlackBotNotificationsRequestSchema,
   workspaceSlackBotRequestSchema,
 } from "./slack-bot-wire.js";
 import {
@@ -411,6 +412,21 @@ export class HostedWorkspaceClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
       askHosted(this.#hosted.workspaceSlackBot.disconnect, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** The reader's own Slack notifications turned on or off, answering the bot as it then stands. */
+  slackBotNotifications(
+    workspaceId: string,
+    notifications: boolean,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSlackBotNotificationsRequestSchema)({ workspaceId, notifications }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSlackBot.notifications, admitted),
       (answer) => answer,
     );
   }

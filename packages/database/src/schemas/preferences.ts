@@ -2,7 +2,7 @@ import type { AgentMachineKind, ContextWindow } from "@repo/features/agent-wire"
 import type { ChaptersModelId } from "@repo/features/chapters-model-choice";
 import type { LinkOpen } from "@repo/features/link-open";
 import type { AgentEnter, ExperimentChoices } from "@repo/settings";
-import { jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -66,6 +66,13 @@ export const accountPreference = pgTable("account_preference", {
    * since removed is still told apart from no pick at all. Written alone,
    * it moves no `updated_at`.
    */
+  /**
+   * Whether our Slack bot writes the account the threads that wait on them
+   * (`packages/service/src/slack/thread-dms.ts`), in every workspace whose
+   * bot is connected; null until the account chooses, which reads as on.
+   * Written alone, it moves no `updated_at`.
+   */
+  slackNotifications: boolean("slack_notifications"),
   runsOnMachine: text("runs_on_machine").$type<AgentMachineKind>(),
   runsOnDeviceId: uuid("runs_on_device_id"),
   createdAt: createdAt(),

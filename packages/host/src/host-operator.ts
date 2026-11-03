@@ -308,6 +308,7 @@ import {
   type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceSentryDisconnectParams,
   type TasksWorkspaceSlackBotAnswer,
+  type TasksWorkspaceSlackBotNotificationsParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
   type TasksWorkspaceTokenRepositorySetParams,
@@ -611,6 +612,10 @@ export interface HostOperator {
   /** A workspace's Slack bot disconnected; the bot as it then stands, or why it is not. */
   workspaceSlackBotDisconnect(
     params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+  /** The reader's own Slack notifications turned on or off; the bot as it then stands, or why it is not. */
+  workspaceSlackBotNotifications(
+    params: TasksWorkspaceSlackBotNotificationsParams,
   ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
@@ -1539,6 +1544,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, {
           workspaceId: params.workspaceId,
+        }),
+        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceSlackBotNotifications: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS, {
+          workspaceId: params.workspaceId,
+          notifications: params.notifications,
         }),
         answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
       ),

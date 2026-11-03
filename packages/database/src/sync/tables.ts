@@ -334,7 +334,7 @@ export const inboxItemSync = defineSyncTable(inboxItem, {
   ],
 });
 
-/** A message on an inbox item's thread, on its item's task and agent, which it names only by the item. */
+/** A message on an inbox item's thread, on its item's task and agent, which it names only by the item; its Slack DM is no reader's, so it is hot. */
 export const inboxMessageSync = defineSyncTable(inboxMessage, {
   topics: [
     {
@@ -347,6 +347,7 @@ export const inboxMessageSync = defineSyncTable(inboxMessage, {
       ],
     },
   ],
+  ignore: [inboxMessage.slackDm],
 });
 
 /** Where a member read an inbox item through, or marked it unread, on the member's topic and on the item's task and agent. */

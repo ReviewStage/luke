@@ -73,6 +73,7 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { providerModelOf } from "../providers/model-catalog.js";
+import { settleThreadDms } from "../slack/thread-dms.js";
 import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
 import {
   acknowledgeInboxItem,
@@ -236,6 +237,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted only once the hand-off stands, since a failed one withdraws the answer above.
   yield* counted;
+  yield* afterResponse("an answered thread's Slack DM", settleThreadDms(itemId));
   // The question settled may have finished the task's work, asked once the agent was told, so one
   // woken by the answer reads as running (`tasks/task-finish.ts`).
   yield* settleAgentTaskIfFinished(userId, agentId);
@@ -428,7 +430,9 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const { txid, ...taken } = written;
   const writtenIn = txid === undefined ? {} : { txid };
+  const dmSettled = afterResponse("a closed thread's Slack DM", settleThreadDms(itemId));
   if (!taken.needsReply) {
+    yield* dmSettled;
     yield* settleAgentTaskIfFinished(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
   }
@@ -453,6 +457,7 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     ),
   );
+  yield* dmSettled;
   yield* settleAgentTaskIfFinished(userId, taken.agentId);
   return { item: taken, taken: true, ...writtenIn };
 });

@@ -9,10 +9,10 @@ import {
 } from "@repo/features/inbox-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect } from "effect";
+import { SqlClient } from "effect/sql";
 import { Database } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { inboxMessage } from "../schemas/inbox-message.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 
@@ -83,16 +83,13 @@ export const openInboxItem = (
       options: [{ label: INBOX_APPROVAL_OPTION.APPROVE }, { label: INBOX_APPROVAL_OPTION.DECLINE }],
       status: INBOX_ASK_STATUS.OPEN,
     } as const;
-    const [message] = yield* db
-      .insert(inboxMessage)
-      .values({
-        itemId: id,
-        author: INBOX_MESSAGE_AUTHOR.AGENT,
-        text: "Rebase onto main?",
-        ask: asking ? ask : null,
-        createdAt: now,
-      })
-      .returning({ id: inboxMessage.id });
+    // Note that the message is written naming only its columns, because a migration's test writes it on a database migrated short of today's.
+    const sql = yield* SqlClient.SqlClient;
+    const [message] = yield* sql<{
+      readonly id: string;
+    }>`insert into inbox_message (item_id, author, text, ask, created_at)
+      values (${id}, ${INBOX_MESSAGE_AUTHOR.AGENT}, 'Rebase onto main?', ${asking ? JSON.stringify(ask) : null}::jsonb, ${now})
+      returning id`;
     // A notice's message asks nothing, so the item names no open ask.
     if (asking) {
       yield* db

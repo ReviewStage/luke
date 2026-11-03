@@ -114,6 +114,7 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
+  tasksWorkspaceSlackBotNotificationsParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
@@ -371,6 +372,7 @@ export type TasksClient = Pick<
     | "slackBot"
     | "slackBotConnect"
     | "slackBotDisconnect"
+    | "slackBotNotifications"
     | "people"
     | "peopleLive"
     | "invitationsLive"
@@ -2794,6 +2796,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
         const slackBot = yield* served(client.workspaces.slackBotDisconnect(read.workspaceId));
+        return carried<TasksWorkspaceSlackBotAnswer>(
+          slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceSlackBotNotificationsParamsSchema,
+          params,
+          "changing Slack notifications names a workspace and the switch",
+        );
+        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
+        const slackBot = yield* served(
+          client.workspaces.slackBotNotifications(read.workspaceId, read.notifications),
+        );
         return carried<TasksWorkspaceSlackBotAnswer>(
           slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
         );

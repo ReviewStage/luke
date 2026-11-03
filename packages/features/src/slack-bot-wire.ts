@@ -10,7 +10,9 @@ import { workspaceIdSchema } from "./task-wire.js";
  * whether the deployment holds the bot at all, and the team it is
  * connected to; `POST /api/workspaces/slack-bot/connect` connects it, and
  * `POST /api/workspaces/slack-bot/disconnect` disconnects it, each answering
- * the same. No answer carries a Slack token.
+ * the same. `POST /api/workspaces/slack-bot/notifications` turns the
+ * reader's own Slack notifications on or off, which is theirs alone and
+ * holds in every workspace. No answer carries a Slack token.
  */
 
 /** The query the read names its workspace by. */
@@ -27,14 +29,23 @@ const slackTeamSchema = EffectSchema.Struct({
   name: EffectSchema.String,
 });
 
+/** The reader's Slack notifications turned on or off, from Settings in the workspace named (POST body). */
+export const workspaceSlackBotNotificationsRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  notifications: EffectSchema.Boolean,
+});
+
 /**
  * A workspace's Slack bot as it stands: whether this deployment holds the
- * bot, without which nothing is offered, and the team it is connected to,
- * absent while it is not.
+ * bot, without which nothing is offered, the team it is connected to,
+ * absent while it is not, and whether the bot writes the reader the threads
+ * that wait on them, which is on until they turn it off; absent from a
+ * service before the switch.
  */
 export const workspaceSlackBotAnswerSchema = EffectSchema.Struct({
   configured: EffectSchema.Boolean,
   team: EffectSchema.optionalKey(slackTeamSchema),
+  notifications: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type WorkspaceSlackBot = typeof workspaceSlackBotAnswerSchema.Type;

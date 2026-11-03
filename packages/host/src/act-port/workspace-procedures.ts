@@ -21,6 +21,7 @@ import type {
   TasksWorkspaceSentryAnswer,
   TasksWorkspaceSentryDisconnectParams,
   TasksWorkspaceSlackBotAnswer,
+  TasksWorkspaceSlackBotNotificationsParams,
   TasksWorkspaceTokenRepositoriesAnswer,
   TasksWorkspaceTokenRepositoriesParams,
   TasksWorkspaceTokenRepositorySetParams,
@@ -76,6 +77,9 @@ export interface WorkspaceProceduresDependencies {
     ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
     workspaceSlackBotDisconnect(
       params: TasksWorkspaceParams,
+    ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
+    workspaceSlackBotNotifications(
+      params: TasksWorkspaceSlackBotNotificationsParams,
     ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
     workspaceMembers(
       params: TasksWorkspaceMembersParams,
@@ -302,6 +306,14 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const answer = yield* host.workspaceSlackBotDisconnect(input);
+      if ("slackBot" in answer) return answer.slackBot;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceSlackBotNotifications(input);
       if ("slackBot" in answer) return answer.slackBot;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
