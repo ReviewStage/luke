@@ -17,7 +17,7 @@ import { queueRunnerLine, runnerLinesPast } from "../runner-line-store.js";
  * while another's queue for the same agent is uncommitted waits for it, so
  * the agent's lines commit in the order of their places and a runner reading
  * past its cursor never passes over one. This file runs in CI's Postgres job,
- * where `LUKE_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
+ * where `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
 /** The launch both lines are written for. */

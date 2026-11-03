@@ -106,13 +106,13 @@ import {
  * How to run it: `DATABASE_URL=<a Postgres on loopback> pnpm --filter
  * @luke/web demo:seed` (`apps/web/server/demo-seed.ts`), once the database
  * is migrated and `auth:seed` has run. It refuses any database that is not
- * on loopback (`demo-database.ts`). Where `LUKE_DEMO_CLAUDE_TOKEN` (a
- * `claude setup-token`) or `LUKE_DEMO_ANTHROPIC_API_KEY` is set, it is saved
+ * on loopback (`demo-database.ts`). Where `APP_DEMO_CLAUDE_TOKEN` (a
+ * `claude setup-token`) or `APP_DEMO_ANTHROPIC_API_KEY` is set, it is saved
  * as Dean's, for his agents, sealed under `PROVIDER_KEY_ENCRYPTION_KEYS`,
  * which the local server must then be handed too, or it cannot open it. The
  * token is never logged, written to a fixture, or traced: it goes from the
  * environment to its sealed row alone. Where the run starts a host on this
- * Mac for Dean (`LUKE_DEMO_HOST_STATE`), it is enrolled as his own under
+ * Mac for Dean (`APP_DEMO_HOST_STATE`), it is enrolled as his own under
  * `DEMO_HOST`'s id, and every task runs its agents there, with no Runs on
  * to pick.
  *

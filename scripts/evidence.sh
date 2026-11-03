@@ -5,12 +5,12 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-LUKE_FIXTURE_SCENARIO=smoke
-LUKE_EVIDENCE_ROOT="$LUKE_ARTIFACT_ROOT/evidence"
-LUKE_EXPANDED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-expanded.png"
-LUKE_TASKS_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks.png"
-LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-transcript.png"
-LUKE_TASKS_WORK_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-work.png"
+APP_FIXTURE_SCENARIO=smoke
+APP_EVIDENCE_ROOT="$APP_ARTIFACT_ROOT/evidence"
+APP_EXPANDED_EVIDENCE_PATH="$APP_EVIDENCE_ROOT/app-smoke-expanded.png"
+APP_TASKS_EVIDENCE_PATH="$APP_EVIDENCE_ROOT/app-smoke-tasks.png"
+APP_TASKS_TRANSCRIPT_EVIDENCE_PATH="$APP_EVIDENCE_ROOT/app-smoke-tasks-transcript.png"
+APP_TASKS_WORK_EVIDENCE_PATH="$APP_EVIDENCE_ROOT/app-smoke-tasks-work.png"
 
 luke_require_macos
 luke_require_node
@@ -18,7 +18,7 @@ luke_require_command sips
 luke_require_command plutil
 luke_ensure_dependencies
 
-cd "$LUKE_REPO_ROOT"
+cd "$APP_REPO_ROOT"
 pnpm package:dir
 PACKAGED_APP=$(node -e "import('./apps/desktop/scripts/package-layout.mjs').then((layout) => process.stdout.write(layout.packagedAppPath(process.cwd())))")
 APP_EXECUTABLE="$PACKAGED_APP/Contents/MacOS/Vespin"
@@ -41,38 +41,38 @@ if [[ ! -f "$PACKAGED_ICON" ]]; then
     printf 'error: packaged app is missing its declared icon: %s\n' "$PACKAGED_ICON" >&2
     exit 1
 fi
-if ! cmp -s "$PACKAGED_ICON" "$LUKE_DESKTOP_APP_ROOT/.build/Vespin.icns"; then
+if ! cmp -s "$PACKAGED_ICON" "$APP_DESKTOP_APP_ROOT/.build/Vespin.icns"; then
     printf 'error: packaged app icon does not match the generated Vespin icon\n' >&2
     exit 1
 fi
 
-mkdir -p "$LUKE_EVIDENCE_ROOT"
-rm -f -- "$LUKE_EVIDENCE_ROOT"/app-smoke-*.png
+mkdir -p "$APP_EVIDENCE_ROOT"
+rm -f -- "$APP_EVIDENCE_ROOT"/app-smoke-*.png
 
 capture_evidence() {
     local name=$1
     shift
     local profile
-    profile=$(mktemp -d "$LUKE_BUILD_ROOT/evidence-${name}.XXXXXX")
+    profile=$(mktemp -d "$APP_BUILD_ROOT/evidence-${name}.XXXXXX")
     "$APP_EXECUTABLE" \
         --user-data-dir="$profile" \
-        --fixture "$LUKE_FIXTURE_SCENARIO" \
+        --fixture "$APP_FIXTURE_SCENARIO" \
         "$@"
 }
 
 # The window opens on Plans: the fixture's synthetic plan list, with no plan
 # open.
-capture_evidence expanded --capture-evidence "$LUKE_EXPANDED_EVIDENCE_PATH"
+capture_evidence expanded --capture-evidence "$APP_EXPANDED_EVIDENCE_PATH"
 # The panel's Plans tab over the fixture's synthetic plan: the open plan's
 # saved document with its assumption checklist, scrolled inside the panel's
 # own ceiling, and the idle microphone row under it.
-capture_evidence tasks --profile tasks --capture-evidence "$LUKE_TASKS_EVIDENCE_PATH"
+capture_evidence tasks --profile tasks --capture-evidence "$APP_TASKS_EVIDENCE_PATH"
 # The same plan mid-call on its transcript: the earlier call from the record,
 # and the call standing now growing under it.
-capture_evidence tasks-transcript --profile tasks-transcript --capture-evidence "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
+capture_evidence tasks-transcript --profile tasks-transcript --capture-evidence "$APP_TASKS_TRANSCRIPT_EVIDENCE_PATH"
 # The same plan mid-call on its work: an earlier turn folded to its answer,
 # and the turn standing now with the worker running beside its reads.
-capture_evidence tasks-work --profile tasks-work --capture-evidence "$LUKE_TASKS_WORK_EVIDENCE_PATH"
+capture_evidence tasks-work --profile tasks-work --capture-evidence "$APP_TASKS_WORK_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -112,14 +112,14 @@ validate_evidence() {
 # Every capture is Vespin's one app window at the size it opens at
 # (DESKTOP_WINDOW in apps/desktop/src/main/window/panel-manager.ts).
 for evidence_path in \
-    "$LUKE_EXPANDED_EVIDENCE_PATH" \
-    "$LUKE_TASKS_EVIDENCE_PATH" \
-    "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH" \
-    "$LUKE_TASKS_WORK_EVIDENCE_PATH"; do
+    "$APP_EXPANDED_EVIDENCE_PATH" \
+    "$APP_TASKS_EVIDENCE_PATH" \
+    "$APP_TASKS_TRANSCRIPT_EVIDENCE_PATH" \
+    "$APP_TASKS_WORK_EVIDENCE_PATH"; do
     validate_evidence "$evidence_path" 1280 840
 done
 
-printf 'Expanded visual evidence: %s\n' "$LUKE_EXPANDED_EVIDENCE_PATH"
-printf 'Tasks visual evidence: %s\n' "$LUKE_TASKS_EVIDENCE_PATH"
-printf 'Tasks transcript visual evidence: %s\n' "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
-printf 'Tasks work visual evidence: %s\n' "$LUKE_TASKS_WORK_EVIDENCE_PATH"
+printf 'Expanded visual evidence: %s\n' "$APP_EXPANDED_EVIDENCE_PATH"
+printf 'Tasks visual evidence: %s\n' "$APP_TASKS_EVIDENCE_PATH"
+printf 'Tasks transcript visual evidence: %s\n' "$APP_TASKS_TRANSCRIPT_EVIDENCE_PATH"
+printf 'Tasks work visual evidence: %s\n' "$APP_TASKS_WORK_EVIDENCE_PATH"

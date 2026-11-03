@@ -27,7 +27,7 @@ test("the account override is read in a development run and never in a packaged 
   const development = bootstrapDesktop({
     app: recordingApp(steps),
     argv: [],
-    environment: { LUKE_ACCOUNT_BASE_URL: "https://example.invalid/api/auth" },
+    environment: { APP_ACCOUNT_BASE_URL: "https://example.invalid/api/auth" },
     resourceDirectory: "/tmp/resources",
     report: () => undefined,
     openExternal: async () => undefined,
@@ -40,7 +40,7 @@ test("the account override is read in a development run and never in a packaged 
   const packaged = bootstrapDesktop({
     app: recordingApp(steps, true),
     argv: [],
-    environment: { LUKE_ACCOUNT_BASE_URL: "https://example.invalid/api/auth" },
+    environment: { APP_ACCOUNT_BASE_URL: "https://example.invalid/api/auth" },
     resourceDirectory: "/tmp/resources",
     report: () => undefined,
     openExternal: async () => undefined,
@@ -68,11 +68,11 @@ test("a named development instance keeps its state apart, and a packaged build h
       appLinks: appLinkInbox(),
     });
   const plain = launch(false, {});
-  const named = launch(false, { LUKE_INSTANCE: "preview" });
+  const named = launch(false, { APP_INSTANCE: "preview" });
   assert.equal(plain.instance, undefined);
   assert.equal(named.instance, "preview");
   assert.notEqual(named.stateRoot, plain.stateRoot);
-  const packaged = launch(true, { LUKE_INSTANCE: "preview" });
+  const packaged = launch(true, { APP_INSTANCE: "preview" });
   assert.equal(packaged.instance, undefined);
   assert.equal(packaged.stateRoot, launch(true, {}).stateRoot);
 });

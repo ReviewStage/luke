@@ -15,7 +15,7 @@ set -euo pipefail
 # window, to take in wallpaper), and scales it to the whole picture's height:
 # a close-up as tall as every other screenshot, only narrower. `--zoom` says
 # the capture was taken zoomed by that factor (the changelog-screenshots
-# skill's LUKE_SHOT_ZOOM), so the crop's points hold that many times the
+# skill's APP_SHOT_ZOOM), so the crop's points hold that many times the
 # pixels and a close-up stays sharp. `--layout` frames what is not an
 # ordinary window, for the notch era: `top` hangs a borderless panel captured
 # with the app's own `--capture-evidence` flush from the top edge, and `bleed`
@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 
-work_root="$LUKE_BUILD_ROOT/changelog-screenshot"
+work_root="$APP_BUILD_ROOT/changelog-screenshot"
 framer="$work_root/frame-screenshot"
 framer_source="$SCRIPT_DIRECTORY/lib/frame-screenshot.swift"
 mkdir -p "$work_root"

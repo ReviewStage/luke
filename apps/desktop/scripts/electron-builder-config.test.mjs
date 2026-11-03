@@ -4,7 +4,7 @@ import { createElectronBuilderConfig } from "./electron-builder-config.mjs";
 /** Each way the app is packaged: ad hoc on a developer's Mac, and Developer ID for a release. */
 const SIGNING_ENVIRONMENTS = {
   adHoc: {},
-  developerId: { LUKE_CODESIGN_IDENTITY: "Developer ID Application: Example (TEAMID)" },
+  developerId: { APP_CODESIGN_IDENTITY: "Developer ID Application: Example (TEAMID)" },
 };
 
 test.each(Object.entries(SIGNING_ENVIRONMENTS))(

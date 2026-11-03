@@ -24,13 +24,13 @@ import { Pool } from "pg";
  * - `DATABASE_URL`, which must name a Postgres on this machine's loopback
  *   (`127.0.0.1`, `localhost`, or `::1`); anything else is refused before a
  *   connection is opened.
- * - `LUKE_DEMO_CLAUDE_TOKEN`, a `claude setup-token`, or else
- *   `LUKE_DEMO_ANTHROPIC_API_KEY`, optional: saved as Dean's, for his agents.
+ * - `APP_DEMO_CLAUDE_TOKEN`, a `claude setup-token`, or else
+ *   `APP_DEMO_ANTHROPIC_API_KEY`, optional: saved as Dean's, for his agents.
  * - `PROVIDER_KEY_ENCRYPTION_KEYS`, needed only with a credential: the ring
  *   it is sealed under, which the local server must hold too.
- * - `LUKE_DEMO_HOST_STATE` and `LUKE_DEMO_SERVICE_ORIGIN`, optional and
+ * - `APP_DEMO_HOST_STATE` and `APP_DEMO_SERVICE_ORIGIN`, optional and
  *   given together: the state folder of the host the run starts on this Mac
- *   (`luke-host run` under `LUKE_HOST_STATE_ROOT`), and the local server's
+ *   (`luke-host run` under `APP_HOST_STATE_ROOT`), and the local server's
  *   origin it calls. The host is enrolled as Dean's, every task runs its
  *   agents on it, and its record is written into that folder once the seed
  *   has landed, holding a device secret minted here, which the database
@@ -42,11 +42,11 @@ import { Pool } from "pg";
 
 const DEMO_ENVIRONMENT = {
   DATABASE_URL: "DATABASE_URL",
-  CLAUDE_TOKEN: "LUKE_DEMO_CLAUDE_TOKEN",
-  ANTHROPIC_API_KEY: "LUKE_DEMO_ANTHROPIC_API_KEY",
+  CLAUDE_TOKEN: "APP_DEMO_CLAUDE_TOKEN",
+  ANTHROPIC_API_KEY: "APP_DEMO_ANTHROPIC_API_KEY",
   KEY_RING: "PROVIDER_KEY_ENCRYPTION_KEYS",
-  HOST_STATE: "LUKE_DEMO_HOST_STATE",
-  SERVICE_ORIGIN: "LUKE_DEMO_SERVICE_ORIGIN",
+  HOST_STATE: "APP_DEMO_HOST_STATE",
+  SERVICE_ORIGIN: "APP_DEMO_SERVICE_ORIGIN",
 } as const;
 
 /** The credential the run hands in, the setup token before the API key, sealed under the ring it names; none where it hands none. */

@@ -67,7 +67,7 @@ describe("the driver", () => {
     const driver = await driverIn(await temporaryDirectory(t));
     const child = spawn(process.execPath, [driver]);
     children.push(child);
-    send(child, { token: "not-a-token", tokenVariable: "LUKE_TEST_TOKEN", cwd: ".", options: {} });
+    send(child, { token: "not-a-token", tokenVariable: "APP_TEST_TOKEN", cwd: ".", options: {} });
     send(child, { type: "message", text: "run sleep 600" });
 
     const seen: string[] = [];

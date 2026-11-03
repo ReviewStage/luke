@@ -72,7 +72,7 @@ const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 const BEARER = "fixture-runner-bearer-0123456789";
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
 const FIRST_LINES = '{"harness":"claude_code"}\n{"type":"message"}\n';
-const ENV = { CLAUDE_CODE_OAUTH_TOKEN: PLAN_TOKEN, LUKE_RUNNER_BEARER: BEARER };
+const ENV = { CLAUDE_CODE_OAUTH_TOKEN: PLAN_TOKEN, APP_RUNNER_BEARER: BEARER };
 
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,

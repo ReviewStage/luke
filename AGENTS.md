@@ -256,7 +256,7 @@ pnpm check:affected                      # what changed since origin/main, from 
   `.todo`, or `it.flakyTest`, no looser assertion, and no longer timeout or
   extra retry without evidence of what was slow. A flaky test is fixed or
   deleted.
-- `[review]` A golden is rewritten only by `LUKE_UPDATE_FIXTURES=1` through
+- `[review]` A golden is rewritten only by `APP_UPDATE_FIXTURES=1` through
   the shared helpers, never by hand, and the PR explains its diff. A JSON
   Schema golden exists only for a schema a model sees as a tool's input.
 - `[review]` A test that breaks under a refactor because it pinned wiring is

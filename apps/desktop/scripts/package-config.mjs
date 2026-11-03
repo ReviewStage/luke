@@ -52,7 +52,7 @@ export function iconutilArguments(iconsetPath, icnsPath) {
 }
 
 export function resolveSigningMode(env) {
-  const rawIdentity = env.LUKE_CODESIGN_IDENTITY;
+  const rawIdentity = env.APP_CODESIGN_IDENTITY;
   const identity =
     Object.prototype.toString.call(rawIdentity) === "[object String]" ? rawIdentity.trim() : "";
   return identity ? { mode: SIGNING_MODE.DEVELOPER_ID, identity } : { mode: SIGNING_MODE.AD_HOC };
@@ -78,7 +78,7 @@ export function signingModeDefine(env) {
  * The esbuild define holding the analytics project key the renderer's session
  * replay records into, baked only into a bundle built for Developer ID
  * release: `scripts/release-macos.sh` and the release workflow set
- * `LUKE_CODESIGN_IDENTITY` beside `POSTHOG_PROJECT_API_KEY`. Note that the
+ * `APP_CODESIGN_IDENTITY` beside `POSTHOG_PROJECT_API_KEY`. Note that the
  * key is withheld from every other build, because the service reads its own
  * key under the same variable name, so a development shell that holds it for
  * a local service would otherwise record that build into production's

@@ -25,8 +25,8 @@ export type CheckoutIdentity = typeof checkoutIdentitySchema.Type;
 
 /** The variables the script reads the identity from. */
 export const CHECKOUT_IDENTITY_VARIABLE = {
-  NAME: "LUKE_GIT_NAME",
-  EMAIL: "LUKE_GIT_EMAIL",
+  NAME: "APP_GIT_NAME",
+  EMAIL: "APP_GIT_EMAIL",
 } as const;
 
 /**

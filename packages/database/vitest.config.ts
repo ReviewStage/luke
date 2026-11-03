@@ -2,8 +2,8 @@ import { configDefaults, defineConfig } from "vitest/config";
 
 // A `*.postgres.test.ts` shows what only a real Postgres can, two connections
 // contending for one lock, which PGlite's one connection cannot hold apart;
-// it runs where `LUKE_STORE_TEST_DATABASE_URL` names one, CI's Postgres job.
-const POSTGRES_ONLY = process.env.LUKE_STORE_TEST_DATABASE_URL ? [] : ["src/**/*.postgres.test.ts"];
+// it runs where `APP_STORE_TEST_DATABASE_URL` names one, CI's Postgres job.
+const POSTGRES_ONLY = process.env.APP_STORE_TEST_DATABASE_URL ? [] : ["src/**/*.postgres.test.ts"];
 
 export default defineConfig({
   test: {

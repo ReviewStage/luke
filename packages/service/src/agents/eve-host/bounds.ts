@@ -36,7 +36,7 @@ export const EVE_HOST_TURN_KIND = {
 /** The environment the host reads beside the names every hosted route already honours. */
 export const EVE_HOST_ENVIRONMENT = {
   /** The origin native runners report to; unset, the deployment's own: its production domain, or its own host (`eve-origin.ts`). */
-  EVE_ORIGIN: "LUKE_EVE_ORIGIN",
+  EVE_ORIGIN: "APP_EVE_ORIGIN",
   /**
    * The secret the deployment acts for an account under at eve's door, read on
    * both sides of it: the web functions and the eve service send it, and the

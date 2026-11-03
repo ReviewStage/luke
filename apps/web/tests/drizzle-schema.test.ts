@@ -20,7 +20,7 @@ import { afterAll, test } from "vitest";
  * So every column a module declares is compared, over the whole public
  * schema, against a database built by `runWebMigrations` through the same door
  * every store test uses — PGlite in process, or the Postgres of
- * `LUKE_STORE_TEST_DATABASE_URL` on CI, where the real `pg` driver reads
+ * `APP_STORE_TEST_DATABASE_URL` on CI, where the real `pg` driver reads
  * `information_schema` back. Better Auth's tables are compared with the rest:
  * `schemas/auth.ts` is in the barrel, and nothing else holds it to the
  * database.

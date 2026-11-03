@@ -183,7 +183,7 @@ const KEEP_SUDO_ENVIRONMENT = [
   `$SUDO chmod 0440 ${SUDO_ENV_DROP_IN}`,
   `$SUDO visudo -c -q -f ${SUDO_ENV_DROP_IN}`,
   `$SUDO visudo -c -q`,
-  `if [ "$(id -un)" = ${SANDBOX_USER} ]; then LUKE_SUDO_KEEPS=kept sudo -n bash -c '[ "\${LUKE_SUDO_KEEPS:-}" = kept ]' || { echo 'sudo does not keep the environment' >&2; exit 1; }; fi`,
+  `if [ "$(id -un)" = ${SANDBOX_USER} ]; then APP_SUDO_KEEPS=kept sudo -n bash -c '[ "\${APP_SUDO_KEEPS:-}" = kept ]' || { echo 'sudo does not keep the environment' >&2; exit 1; }; fi`,
 ];
 
 /**
