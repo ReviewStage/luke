@@ -93,6 +93,8 @@ the rename still open in Vespin, and agents' pages now come from vespin.page.
 [#6407](https://github.com/ReviewStage/vespin/pull/6407),
 [#6458](https://github.com/ReviewStage/vespin/pull/6458))
 
+![Vespin's Keel mark from the landing page at vespin.dev: a copper disc cut by a V that cradles an island, drawn in metal on the site's near-black ground.](apps/web/public/changelog/0.25.0/luke-is-now-vespin.png)
+
 ### Home is back
 
 With no task open, Vespin rests on Home again: "Welcome back" over New task's
@@ -101,6 +103,8 @@ recent tasks, one press from any of them. Every window and browser tab opens
 on Home, which the sidebar's Home row, ⇧⌘H, and ⌘K reach from anywhere.
 ([#6424](https://github.com/ReviewStage/vespin/pull/6424),
 [#6439](https://github.com/ReviewStage/vespin/pull/6439))
+
+![Vespin's whole window in Copper with the sidebar open on Home: "Welcome back, Dean" over New task on acme/relay, an Inbox of three items waiting on Dean across Teammate invitations, Usage-based billing, and Webhook retries, and acme's six most recent tasks.](apps/web/public/changelog/0.25.0/home-is-back.png)
 
 ### Cleaner links
 
@@ -135,6 +139,8 @@ reached an agent shows in its transcript as the comment it was.
 [#6373](https://github.com/ReviewStage/vespin/pull/6373),
 [#6375](https://github.com/ReviewStage/vespin/pull/6375),
 [#6378](https://github.com/ReviewStage/vespin/pull/6378))
+
+![Relay's Invite teammates page full screen in the side panel, a comment pin on Send invite and another on Pending invites, and the comment column open on Dean's question about the button, answered by the Add teammate invitations agent, above Dana's comment on the pending list.](apps/web/public/changelog/0.25.0/comments-on-pages.png)
 
 ### Vespin in Slack
 

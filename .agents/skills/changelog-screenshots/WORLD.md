@@ -182,3 +182,9 @@ Every time is counted back from the capture: the hero task edited 4 minutes
 ago, its agent finished 12 minutes ago, siblings from 26 minutes to 4 days,
 the archived task 18 days. A running turn started seconds before the capture,
 a finished one ran minutes. Yesterday's call ran 12 minutes 41 seconds.
+
+## Added in 0.25.0
+
+- **acme's Slack**: channels `#relay-eng` (on `acme/relay`), `#web` (`acme/web`), `#billing` (`acme/ledger`), `#general` and `#design`, with Vespin's bot connected and `acme/relay` its default repository. In it, Dean's `@Vespin` in `#relay-eng` asked for the accept page to name its workspace ("Join acme on Relay"), which the agent did on #219.
+- **Relay's Invite teammates page** (`fixture-stage.ts`'s `SHOT_PAGE`, version 3), the page the Add teammate invitations agent showed: an email field holding sam@acme.dev, Member, a full-width Send invite, and Pending invites for priya@, theo@ and jordan@acme.dev.
+- **Inbox items waiting on Dean**: the Invite emails agent's decide on how long an invite link lasts (24 hours, 7 days recommended, 30 days), the Meter API calls agent's to-do to add `STRIPE_METER_KEY` to acme/ledger's secrets, and the Retry failed webhook deliveries agent's notice that #231 is ready for review.
