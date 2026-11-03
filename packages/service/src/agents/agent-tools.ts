@@ -38,6 +38,7 @@ import {
   type TaskChanges,
   updateTaskCommitted,
 } from "@repo/database/models/task-store";
+import { isWorkspaceMember } from "@repo/database/models/workspace-store";
 import type { StoreWriter } from "@repo/database/models/writer";
 import type { StoredArchive } from "@repo/database/schemas/agent";
 import { START_NOTE_HEADING } from "@repo/features/agent-replay";
@@ -183,7 +184,11 @@ import {
  * `read_agent`, and `start_agent`, one implementation each;
  * the caller is what differs (`AgentCaller`):
  * a coding agent acting for its starter, on its own task, which the host
- * read from the session it admitted and never from the call. A list and a read
+ * read from the session it admitted and never from the call; or a member,
+ * as an outside agent acts for them through the member MCP server
+ * (`../member-mcp/`), on the token it admitted, in the one workspace a call
+ * is about, on no task and as no agent, so nothing is left out of a list
+ * or read around it, and nothing is ever its own. A list and a read
  * reach any agent of the caller's workspace, on any task or none
  * and by any member, read on the caller's standing on every call
  * (`workspace-agents.ts`); an agent of another workspace is none of them,
@@ -270,9 +275,9 @@ import {
  */
 
 /** The most tasks a list of them answers, the newest started first. */
-const TASKS_LIST_LIMIT = 50;
+export const TASKS_LIST_LIMIT = 50;
 
-const AGENT_TOOL_BOUNDS = {
+export const AGENT_TOOL_BOUNDS = {
   /** The newest turns a progress read walks first, the one under way included. */
   TAIL_TURNS: 3,
   /** The entries a progress read answers where it asks for no number, the newest last. */
@@ -355,7 +360,7 @@ export const STOP_AGENT_REFUSAL = {
 } as const;
 
 /** The most characters of a page's HTML a read answers, about ten thousand tokens: the rest is counted, never sent. */
-const READ_PAGE_CHARS = 40_000;
+export const READ_PAGE_CHARS = 40_000;
 
 /** Why a page read answered nothing, in words the model can act on. */
 export const READ_PAGE_REFUSAL = {
@@ -498,16 +503,27 @@ function notOwnerWords(device: RefusedDevice | undefined): string {
   return `Not started: this task runs on ${where}. Only ${who} can start agents on it, so ask them to, or start the work on a task that runs elsewhere.`;
 }
 
-/** Who calls an agent tool: a coding agent from its own session. */
+/** Who calls an agent tool: a coding agent from its own session, or a member through the member MCP server. */
 export const AGENT_CALLER = {
   AGENT: "agent",
+  MEMBER: "member",
 } as const;
 
 /**
  * Who a call is made by, as the host established it and never as the call
- * said: a coding agent, acting for the member who started it, on its own task.
+ * said: a coding agent, acting for the member who started it, on its own
+ * task; or a member, as an outside agent acts for them through the member
+ * MCP server (`../member-mcp/`) on a token minted to an OAuth client, in the
+ * one workspace the call is about, on no task and as no agent.
  */
-type AgentCaller = { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: Agent };
+export type AgentCaller =
+  | { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: Agent }
+  | {
+      readonly kind: typeof AGENT_CALLER.MEMBER;
+      readonly userId: string;
+      readonly workspaceId: string;
+      readonly clientId: string;
+    };
 
 /** What a call of the agent tools runs under: who calls, the agents' sessions as the deployment acting for the caller's member, the writer, and the key the one message or start is made under. */
 export interface AgentCall {
@@ -522,6 +538,9 @@ export interface AgentCall {
   /** How a start from another agent summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out unsummarized. */
   readonly summaryModel?: SummaryModelOf | undefined;
 }
+
+/** What a read of the agent tools runs under: who calls, alone, since a read reaches no session, writes nothing, and keys nothing. */
+export type AgentReadCall = Pick<AgentCall, "caller">;
 
 /** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
 export type AgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
@@ -1249,36 +1268,48 @@ const publishedOf = (
     Result.isSuccess(read) ? read.success : undefined,
   );
 
-/** The member a call acts for: the starter of the coding agent calling. */
-export function callerUserId(caller: AgentCaller): string {
-  return caller.agent.userId;
+/** The coding agent calling; none for a member, who is never one of the agents a tool reaches as itself. */
+export function callerAgent(caller: AgentCaller): Agent | undefined {
+  return caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined;
 }
 
-/** The task the caller works on: the coding agent's own, which may be none. */
+/** The member a call acts for: the starter of the coding agent calling, or the member calling. */
+export function callerUserId(caller: AgentCaller): string {
+  return caller.kind === AGENT_CALLER.AGENT ? caller.agent.userId : caller.userId;
+}
+
+/** The task the caller works on: the coding agent's own, which may be none; none for a member. */
 export function callerTask(caller: AgentCaller): string | null {
-  return caller.agent.taskId;
+  return caller.kind === AGENT_CALLER.AGENT ? caller.agent.taskId : null;
 }
 
 /**
  * The workspace the caller reaches agents in, read on its member's standing
- * now as the agent reads itself (`ownAgentWorkspace`); nothing where they no
- * longer reach the agent. Every agent and task its tools act on is still
- * read on the member's own rule (`workspaceAgent`, a start's reach).
+ * now: as the agent reads itself (`ownAgentWorkspace`), or the member's
+ * workspace while they are still a member of it; nothing where they no
+ * longer reach it. Every agent and task its tools act on is still read on
+ * the member's own rule (`workspaceAgent`, a start's reach).
  */
-export const callerWorkspace = (caller: AgentCaller) =>
-  ownAgentWorkspace(caller.agent.userId, caller.agent);
+export const callerWorkspace = (
+  caller: AgentCaller,
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> =>
+  caller.kind === AGENT_CALLER.AGENT
+    ? ownAgentWorkspace(caller.agent.userId, caller.agent)
+    : Effect.map(isWorkspaceMember(caller.userId, caller.workspaceId), (member) =>
+        member ? Option.some(caller.workspaceId) : Option.none(),
+      );
 
-/** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
 /** The agent's native runtime and payer, which decide the models it may move to; none on eve. */
 const agentRouteOf = (agent: Agent) =>
   Effect.map(nativeRouteOfReached(agent.conversationId), Option.getOrUndefined);
 
-const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
+/** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
+export const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
   Effect.gen(function* () {
     const workspace = yield* callerWorkspace(caller);
     if (Option.isNone(workspace)) return Option.none();
     const userId = callerUserId(caller);
-    const found = yield* workspaceAgent(userId, workspace.value, agentId, caller.agent.id);
+    const found = yield* workspaceAgent(userId, workspace.value, agentId, callerAgent(caller)?.id);
     if (Option.isNone(found)) return Option.none();
     const agent = found.value;
     const task = yield* agentTaskOf(userId, agent);
@@ -1398,9 +1429,9 @@ export const orStoreRefusal = <R>(
     Effect.as(logStoreFailure(failure), agentToolRejected(AGENT_TOOL_REFUSAL.STORE)),
   );
 
-/** The repository the caller works in: the calling agent's own; none where it names none. */
+/** The repository the caller works in: the calling agent's own; none where it names none, or for a member, who works in none. */
 export const workedRepository = (caller: AgentCaller) =>
-  Effect.succeed<string | null>(caller.agent.repository);
+  Effect.succeed<string | null>(callerAgent(caller)?.repository ?? null);
 
 /**
  * What a call made before, run again after its start landed: the agent made
@@ -1445,7 +1476,7 @@ function readingRecord(reading: AgentReading): WireRecord {
 
 /** One call of `list_agents`: a page of the agents of the caller's workspace, or of one task of it, or those the words name, the calling agent left out, archived ones marked, the caller's own first and then the newest, and the next page's offset where more stand. */
 export function runListAgents(
-  call: AgentCall,
+  call: AgentReadCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const { caller } = call;
@@ -1459,7 +1490,7 @@ export function runListAgents(
       const { agents, taskOf, nextOffset } = yield* workspaceAgentsOf(
         callerUserId(caller),
         workspace.value,
-        caller.agent,
+        callerAgent(caller),
         narrowed.success,
       );
       const standing = yield* standingsOf(agents);
@@ -1509,7 +1540,7 @@ const tailOf = (agent: Agent, entries: number, entryChars: number) =>
 
 /** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns, as long as asked and each entry cut for the caller. */
 export function runReadAgent(
-  call: AgentCall,
+  call: AgentReadCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readAgentAsked(input);
@@ -1634,7 +1665,12 @@ const sourceLanding = (
       return Result.succeed({ place, continuedBy: [] });
     }
     // Note that a continue of an agent that started the caller records the caller as the new agent's starter and, for a pilot, moves the agents it started under it, so the two would name each other.
-    if (yield* startedThrough(callerUserId(caller), caller.agent.id, source.id)) {
+    // A member is started by no agent, so no source started them.
+    const calling = callerAgent(caller);
+    if (
+      calling !== undefined &&
+      (yield* startedThrough(callerUserId(caller), calling.id, source.id))
+    ) {
       return Result.fail(START_AGENT_REFUSAL.STARTER_CONTINUE);
     }
     // A continue takes over work that has ended; one already continued is
@@ -1673,11 +1709,11 @@ function startFromRefusalWords(refusal: HostedRefusal, from: AgentStartFrom | un
   return startRefusalWords(refusal);
 }
 
-/** Who hands pictures on in the caller's name: the coding agent its own conversation's. */
+/** Who hands pictures on in the caller's name: the coding agent its own conversation's; a member, who keeps no conversation here, none. */
 function forwarderOf(caller: AgentCaller): ImageForwarder {
   return {
     userId: callerUserId(caller),
-    conversationId: caller.agent.conversationId,
+    conversationId: callerAgent(caller)?.conversationId,
   };
 }
 
@@ -1712,7 +1748,7 @@ function startInputRefusal(
   if (prompt !== undefined || start.branch !== undefined) {
     return START_AGENT_REFUSAL.FROM_WITH_PROMPT;
   }
-  const self = from.agentId === caller.agent.id;
+  const self = from.agentId === callerAgent(caller)?.id;
   return self && from.messageId === undefined ? START_AGENT_REFUSAL.SELF_CONTINUE : undefined;
 }
 
@@ -1771,19 +1807,19 @@ export function runStartAgent(
       if (landing !== undefined && Result.isFailure(landing)) {
         return agentToolRejected(landing.failure);
       }
-      // A caller on no task starts beside itself where it names none, handing words alone.
+      // A caller on no task starts beside itself where it names none, handing words alone: a member in their workspace, in the repository named or none.
       const taskId = named ?? ownTask;
-      const place: StartWhere | undefined =
+      const place: StartWhere =
         landing?.success.place ??
         (taskId !== null
           ? { taskId }
-          : caller.kind === AGENT_CALLER.AGENT
-            ? ownPlaceOf(caller.agent, asked.success.repository)
-            : undefined);
-      if (
-        place === undefined ||
-        (place.taskId === null && from === undefined && prompt === undefined)
-      ) {
+          : ownPlaceOf(
+              caller.kind === AGENT_CALLER.AGENT
+                ? caller.agent
+                : { organizationId: caller.workspaceId, repository: null },
+              asked.success.repository,
+            ));
+      if (place.taskId === null && from === undefined && prompt === undefined) {
         return agentToolRejected(START_AGENT_REFUSAL.NO_PROMPT);
       }
       if (
@@ -1801,8 +1837,10 @@ export function runStartAgent(
       if (Result.isFailure(images)) {
         return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }
-      // An agent a coding agent starts hears who started it, and that it reports back to it by message.
-      const note = startedByNote(caller.agent, asked.success.note);
+      // An agent a coding agent starts hears who started it, and that it reports back to it by message; one a member starts hears their note as the developer's.
+      const calling = callerAgent(caller);
+      const note =
+        calling === undefined ? asked.success.note : startedByNote(calling, asked.success.note);
       const started = yield* startAgent(Effect.succeed(eve), userId, {
         ...place,
         idempotencyKey: call.clientKey,
@@ -1814,13 +1852,14 @@ export function runStartAgent(
         branch: asked.success.branch,
         from,
         summaryModel: call.summaryModel,
-        noteHeading: START_NOTE_HEADING.AGENT,
-        startedBy: caller.agent,
+        ...(calling === undefined
+          ? undefined
+          : { noteHeading: START_NOTE_HEADING.AGENT, startedBy: calling }),
         // One that lands on no task belongs to the caller's run, if any; one on a task is the task's.
         // Note that the automation and its origin are not handed on, because either would make it an
         // automation's agent, which changes who it commits as and how its start is counted.
         automationRunId:
-          place.taskId === null ? (caller.agent.automationRunId ?? undefined) : undefined,
+          place.taskId === null ? (calling?.automationRunId ?? undefined) : undefined,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;
@@ -1839,9 +1878,12 @@ export function runStartAgent(
   );
 }
 
-/** Who an archive is by: the calling coding agent by its id and name, for the member the caller acts for, with the reason given. */
+/** Who an archive is by: the calling coding agent by its id and name, for the member the caller acts for, or the member calling, with the reason given. */
 function archiverOf(caller: AgentCaller, reason: string | undefined): StoredArchive {
   const why = reason === undefined ? undefined : { reason };
+  if (caller.kind === AGENT_CALLER.MEMBER) {
+    return { by: AGENT_ARCHIVER.MEMBER, userId: caller.userId, ...why };
+  }
   return {
     by: AGENT_ARCHIVER.AGENT,
     userId: caller.agent.userId,
@@ -2295,16 +2337,20 @@ const stopOf = (
   writer: Effect.Effect<StoreWriter>,
   agent: Agent,
   key: string,
-  by: string,
+  by: string | undefined,
 ) =>
   Effect.gen(function* () {
     const earlier = yield* hostedStoreOrUnavailable(
       turnStoppedUnderReached(agent.conversationId, key),
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
+    // A member's Stop names no agent that made it, as the developer's names none.
     const canceled = earlier
       ? false
-      : yield* canceledTurn(Effect.succeed(eve), writer, agent, { key, by });
+      : yield* canceledTurn(Effect.succeed(eve), writer, agent, {
+          key,
+          ...(by === undefined ? undefined : { by }),
+        });
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const status = agentStatusOf(after.turn, {
       createdAt: agent.createdAt,
@@ -2327,7 +2373,7 @@ export function runStopAgent(
   }
   const { agentId } = asked.success;
   const { caller, eve } = call;
-  if (agentId === caller.agent.id) {
+  if (agentId === callerAgent(caller)?.id) {
     return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.SELF));
   }
   return orStoreRefusal(
@@ -2342,7 +2388,7 @@ export function runStopAgent(
         );
       }
       const stop = yield* Effect.result(
-        stopOf(eve, call.writer, agent, call.clientKey, caller.agent.id),
+        stopOf(eve, call.writer, agent, call.clientKey, callerAgent(caller)?.id),
       );
       if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or
@@ -2436,7 +2482,7 @@ export function runUpdateAgent(
   const { agentId, title, model, effort, contextWindow, pinned, disabledServers } = asked.success;
   const { archived, reason } = asked.success;
   const { caller } = call;
-  if (archived === true && agentId === caller.agent.id) {
+  if (archived === true && agentId === callerAgent(caller)?.id) {
     return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.SELF));
   }
   const userId = callerUserId(caller);
@@ -2525,7 +2571,7 @@ export function runUpdateAgent(
 
 /** One call of `list_tasks`: the open tasks of the caller's workspace, and the archived ones too where asked, newest first, each with the section its member keeps it in, and those sections. */
 export function runListTasks(
-  call: AgentCall,
+  call: AgentReadCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const { caller } = call;
@@ -2588,6 +2634,30 @@ export function runListTasks(
   );
 }
 
+/** The models the member is offered, narrowed to what the agent's route runs where one is named, with the member's default and whether it is among them. */
+const modelsListed = (userId: string, route: NativeRoute | undefined) =>
+  Effect.gen(function* () {
+    const choices = yield* Effect.result(accountModelChoices(userId));
+    if (Result.isFailure(choices)) return agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE);
+    const { offered, defaultChoice } = choices.success;
+    const listed = runtimeModels(offered, route?.runtime, route?.payer);
+    return {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      models: listed.map((model) => ({
+        id: model.id,
+        name: modelLabel(model.id, offered),
+        efforts: [...model.efforts],
+      })),
+      default: {
+        model: defaultChoice.model,
+        modelName: modelLabel(defaultChoice.model, offered),
+        effort: defaultChoice.effort,
+        // Whether the default is among the models listed: for the agent named, one it may move to.
+        offered: Result.isSuccess(validateModelChoice(listed, defaultChoice)),
+      },
+    };
+  });
+
 /**
  * One call of `list_models`: the models the caller's member may start an
  * agent on, each by its catalog id, the name to say it by, and its efforts,
@@ -2596,7 +2666,7 @@ export function runListTasks(
  * choice listed is one `start_agent` takes. It names nothing of the call's.
  */
 export function runListModels(
-  call: AgentCall,
+  call: AgentReadCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readListModelsAsked(input);
@@ -2614,27 +2684,16 @@ export function runListModels(
         if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
         route = yield* agentRouteOf(found.value.agent);
       }
-      const choices = yield* Effect.result(accountModelChoices(callerUserId(caller)));
-      if (Result.isFailure(choices)) return agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE);
-      const { offered, defaultChoice } = choices.success;
-      const listed = runtimeModels(offered, route?.runtime, route?.payer);
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        models: listed.map((model) => ({
-          id: model.id,
-          name: modelLabel(model.id, offered),
-          efforts: [...model.efforts],
-        })),
-        default: {
-          model: defaultChoice.model,
-          modelName: modelLabel(defaultChoice.model, offered),
-          effort: defaultChoice.effort,
-          // Whether the default is among the models listed: for the agent named, one it may move to.
-          offered: Result.isSuccess(validateModelChoice(listed, defaultChoice)),
-        },
-      };
+      return yield* modelsListed(callerUserId(caller), route);
     }),
   );
+}
+
+/** The models a member may start an agent on, as `list_models` names them with no agent named, for a caller that names no workspace: the models are the member's own, in every workspace alike. */
+export function runListMemberModels(
+  userId: string,
+): Effect.Effect<WireRecord, never, AgentToolServices> {
+  return orStoreRefusal(modelsListed(userId, undefined));
 }
 
 /** A page's HTML as a read answers it, and how many characters of it were left out. */
@@ -2691,13 +2750,13 @@ const pageStandingOf = (caller: AgentCaller, owner: PageOwner) =>
     if (Option.isNone(found)) return Option.none<PageStanding>();
     return Option.some<PageStanding>({
       agent: { id: owner.agentId, name: agentName(found.value.agent) },
-      isYours: caller.agent.id === owner.agentId,
+      isYours: callerAgent(caller)?.id === owner.agentId,
     });
   });
 
 /** One call of `read_page`: a version of a page of the caller's workspace, on a task or on an agent with no task, its HTML cut to the bound, or why there is none. */
 export function runReadPage(
-  call: AgentCall,
+  call: AgentReadCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readPageAsked(input);

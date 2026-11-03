@@ -34,8 +34,10 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   type AgentCall,
+  type AgentReadCall,
   type AgentToolServices,
   agentToolRejected,
+  callerAgent,
   callerTask,
   callerUserId,
   callerWorkspace,
@@ -92,7 +94,7 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  */
 
 /** The most characters of a plan a read answers, about ten thousand tokens: the rest is counted, never sent. */
-const PLAN_TEXT_READ_CHARS = 40_000;
+export const PLAN_TEXT_READ_CHARS = 40_000;
 
 /** Why a read answered nothing, in words the model can act on. */
 export const READ_TASK_REFUSAL = {
@@ -125,7 +127,7 @@ export const READ_TASK_TOOL = {
 
 /** One call of `read_task`: a task of the caller's workspace, its plan cut to the bound, or why there is none. */
 export function runReadTask(
-  call: AgentCall,
+  call: AgentReadCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const asked = readTaskAsked(input);
@@ -315,14 +317,18 @@ function planTextOf(plan: string): string {
   return plan.replace(TITLE_HEADING, "").trim();
 }
 
-/** Who a task's first plan is written by, as its history names them: the calling coding agent. */
+/** Who a task's first plan is written by, as its history names them: the calling coding agent, or the member calling, as the developer. */
 function revisionWriterOf(call: AgentCall): RevisionWriter {
-  return { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id };
+  const agent = callerAgent(call.caller);
+  return agent === undefined
+    ? { actor: PLAN_ACTOR.DEVELOPER }
+    : { actor: PLAN_ACTOR.AGENT, agentId: agent.id };
 }
 
-/** Who made a task for the caller's member: the coding agent by its id. */
-function originOf(call: AgentCall): TaskOrigin {
-  return { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id };
+/** Who made a task for the caller's member: the coding agent by its id; none for the member calling, as for one they make by hand. */
+function originOf(call: AgentCall): { readonly origin?: TaskOrigin } {
+  const agent = callerAgent(call.caller);
+  return agent === undefined ? {} : { origin: { actor: PLAN_ACTOR.AGENT, agentId: agent.id } };
 }
 
 /** Who a revision is written by, as the history keeps it. */
@@ -389,7 +395,7 @@ export function runCreateTask(
       ? relation.taskId
       : asked.success.parentTaskId;
   // Note that a pilot task is only a pilot's to make, as a child, since its first agent is a pilot of its own.
-  if (mode === TASK_MODE.PILOT && call.caller.agent.kind !== AGENT_KIND.PILOT) {
+  if (mode === TASK_MODE.PILOT && callerAgent(call.caller)?.kind !== AGENT_KIND.PILOT) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.NOT_PILOT));
   }
   if (mode === TASK_MODE.PILOT && parentTaskId === undefined) {
@@ -475,7 +481,7 @@ export function runCreateTask(
               ...(runsOn.asked === undefined ? undefined : { runsOn: runsOn.asked }),
               ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
               ...(mode === undefined ? undefined : { mode }),
-              origin: originOf(call),
+              ...originOf(call),
             });
             if (Option.isSome(once) && text !== "") {
               yield* recordRevision({

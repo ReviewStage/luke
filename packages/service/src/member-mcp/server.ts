@@ -12,17 +12,21 @@
  * the 2026-07-28 revision without a session.
  *
  * A tool's result is answered as its JSON text, which is what an agent
- * reads of any tool; a store the tool could not read, or a defect in it, is
+ * reads of any tool, and a refusal, a result whose status is `rejected`, as
+ * the tool's own error in that same text, so the agent reads why and may
+ * call again; a store the tool could not read, or a defect in it, is
  * answered as the tool's own error in fixed words, so the agent reads a
- * failed call as it reads a refused one. The SDK checks a call's arguments
- * against the tool's input before the handler runs, and answers a mismatch
- * itself.
+ * failed call as it reads a refused one. Each tool is registered with its
+ * annotations, which tell a client whether it only reads. The SDK checks a
+ * call's arguments against the tool's input before the handler runs, and
+ * answers a mismatch itself.
  */
 
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { failureKind } from "@repo/runtime/effect";
-import { Cause, type Context, Effect, Exit } from "effect";
+import { Cause, type Context, Effect, Exit, Schema } from "effect";
+import { ACTION_RESULT_STATUS } from "../core.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
 import { MEMBER_MCP_TOOLS, type MemberMcpServices, type MemberMcpToolResult } from "./tools.js";
 
@@ -35,8 +39,14 @@ const TOOL_FAILED = "This tool could not run just now; try it again in a moment.
 /** The services a tool's effect needs beyond the admitted member, which the request's fiber hands over. */
 export type MemberMcpRequestServices = Exclude<MemberMcpServices, AdmittedMember>;
 
+/** A tool's refusal: a result that says it ran nothing, and why. */
+const isRefusal = Schema.is(
+  Schema.Struct({ status: Schema.Literal(ACTION_RESULT_STATUS.REJECTED) }),
+);
+
 function toolResult(result: MemberMcpToolResult): CallToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(result) }] };
+  const content: CallToolResult["content"] = [{ type: "text", text: JSON.stringify(result) }];
+  return isRefusal(result) ? { content, isError: true } : { content };
 }
 
 const TOOL_FAILED_RESULT: CallToolResult = {
@@ -75,7 +85,11 @@ export function memberMcpServer(
   for (const tool of MEMBER_MCP_TOOLS) {
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema: tool.inputSchema },
+      {
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+      },
       (input) => throughDoor(services, member, tool.name, tool.run(input)),
     );
   }

@@ -8,8 +8,14 @@ import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resourc
 import { it } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Database } from "@repo/database/core/query";
+import { createTask } from "@repo/database/models/task-store";
 import { oauthClient, oauthClientResource, oauthResource } from "@repo/database/schemas/auth";
-import { openMigratedPglite, openWorkspace, sqlClientOverPglite } from "@repo/database/testing";
+import {
+  openMigratedPglite,
+  openTaskAgent,
+  openWorkspace,
+  sqlClientOverPglite,
+} from "@repo/database/testing";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
 import { betterAuth } from "better-auth";
@@ -33,6 +39,8 @@ import {
   oauthClientRecord,
 } from "../auth/oauth-clients.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { modelCatalogOf } from "../providers/model-catalog.js";
+import { NO_GITHUB } from "../testing/github-app-fake.js";
 import { MEMBER_MCP_METADATA_ROUTE, memberMcpApp, memberMcpAuth, memberMcpIssuer } from "./app.js";
 import {
   MEMBER_MCP_PATH,
@@ -40,7 +48,7 @@ import {
   memberMcpResourceUrl,
   oauthResourceRecord,
 } from "./resource.js";
-import { LIST_WORKSPACES_TOOL } from "./tools.js";
+import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools.js";
 
 /**
  * The member MCP server, answered by its group the way a function answers
@@ -51,7 +59,8 @@ import { LIST_WORKSPACES_TOOL } from "./tools.js";
  * and the client exchanges its code. The key set the admission verifies
  * against is fetched from the auth service, as on a deployment, through a
  * `fetch` that reaches the in-process handler alone. The SDK's own client
- * drives the server at both revisions it serves. Synthetic accounts.
+ * drives the server at both revisions it serves. GitHub is reached by no
+ * read here, and the model catalog offers nothing. Synthetic accounts.
  */
 
 const ORIGIN = "https://app.test";
@@ -91,6 +100,10 @@ const decodeMetadata = Schema.decodeUnknownSync(
     bearer_methods_supported: Schema.Array(Schema.String),
   }),
 );
+/** The rows of a list read by their ids alone. */
+const IdsSchema = Schema.Array(Schema.Struct({ id: Schema.String }));
+const decodeTasks = Schema.decodeUnknownSync(Schema.Struct({ tasks: IdsSchema }));
+const decodeAgents = Schema.decodeUnknownSync(Schema.Struct({ agents: IdsSchema }));
 const decodeListed = Schema.decodeUnknownSync(
   Schema.Struct({
     workspaces: Schema.Array(
@@ -104,8 +117,24 @@ const decodeListed = Schema.decodeUnknownSync(
   }),
 );
 
-/** The JSON Schema goldens of this package, where a tool's input a model is shown is recorded. */
-const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../fixtures/json-schema");
+/** The JSON Schema goldens of the server's tools, where a tool's input a model is shown is recorded. */
+const GOLDEN_ROOT = path.join(
+  fileURLToPath(import.meta.url),
+  "../../../fixtures/json-schema/member-mcp",
+);
+
+/** The golden a tool's input is recorded under: its name, hyphenated, as the package's goldens are named. */
+function goldenOf(toolName: string): string {
+  return `${toolName.replaceAll("_", "-")}-input`;
+}
+
+/** A tool's answer as the agent reads it: whether it is the tool's error, and its JSON text read. */
+const decodeAnswer = Schema.decodeUnknownSync(
+  Schema.Struct({
+    isError: Schema.optionalKey(Schema.Boolean),
+    content: Schema.Tuple([Schema.Struct({ type: Schema.Literal("text"), text: Schema.String })]),
+  }),
+);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -142,7 +171,11 @@ const standing = Effect.gen(function* () {
     Effect.promise(() => opened.close()),
   );
   const auth = testAuth(client);
-  const services = Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client)));
+  const services = Layer.mergeAll(
+    Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
+    NO_GITHUB,
+    modelCatalogOf([]),
+  );
   yield* seedRows.pipe(Effect.provide(services));
   // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
   vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -341,7 +374,7 @@ it.effect(
 );
 
 it.effect.each(Object.values(REVISION))(
-  "an SDK client at %s lists list_workspaces as the golden shows it and runs it as the member",
+  "an SDK client at %s lists every tool as its golden shows it, each only reading, and runs list_workspaces as the member",
   (revision) =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -363,14 +396,22 @@ it.effect.each(Object.values(REVISION))(
       yield* Effect.promise(() => client.close());
 
       assert.equal(transport.protocolVersion, revision);
-      const golden = JSON.parse(
-        yield* Effect.promise(() =>
-          fs.readFile(path.join(GOLDEN_ROOT, "list-workspaces-input.json"), "utf8"),
-        ),
+      const goldens = yield* Effect.forEach(MEMBER_MCP_TOOLS, ({ name }) =>
+        Effect.promise(async () => ({
+          name,
+          inputSchema: JSON.parse(
+            await fs.readFile(path.join(GOLDEN_ROOT, `${goldenOf(name)}.json`), "utf8"),
+          ),
+          annotations: { readOnlyHint: true },
+        })),
       );
       assert.deepEqual(
-        listed.tools.map(({ name, inputSchema }) => ({ name, inputSchema })),
-        [{ name: LIST_WORKSPACES_TOOL.name, inputSchema: golden }],
+        listed.tools.map(({ name, inputSchema, annotations }) => ({
+          name,
+          inputSchema,
+          annotations,
+        })),
+        goldens,
       );
       assert.notEqual(called.isError, true, JSON.stringify(called));
       const [content] = called.content;
@@ -388,6 +429,97 @@ it.effect.each(Object.values(REVISION))(
     }),
 );
 
+it.effect(
+  "a member with several workspaces lists the one a list names, reads their own tasks and agents by id, and reads nothing of a workspace they are not in",
+  () =>
+    Effect.gen(function* () {
+      const { auth, fetch, services } = yield* standing;
+      const member = yield* Effect.promise(() => signUp(auth));
+      const stranger = yield* Effect.promise(() => signUp(auth));
+      const rows = yield* Effect.gen(function* () {
+        const own = yield* openWorkspace(member.userId);
+        const second = yield* openWorkspace(member.userId);
+        const elsewhere = yield* openWorkspace(stranger.userId);
+        const ownTask = yield* createTask(member.userId, {
+          organizationId: own,
+          name: "Seat billing",
+        });
+        const strangerTask = yield* createTask(stranger.userId, {
+          organizationId: elsewhere,
+          name: "A stranger's task",
+        });
+        return {
+          own,
+          second,
+          elsewhere,
+          ownTask: ownTask.id,
+          strangerTask: strangerTask.id,
+          ownAgent: yield* openTaskAgent(member.userId, own, ownTask.id),
+          strangerAgent: yield* openTaskAgent(stranger.userId, elsewhere, strangerTask.id),
+        };
+      }).pipe(Effect.provide(services));
+      const token = yield* Effect.promise(() =>
+        mintedToken(auth, member.cookie, {
+          client: MCP_CLIENT,
+          scope: [MEMBER_MCP_SCOPE.MCP],
+          resource: RESOURCE,
+        }),
+      );
+      const { client } = yield* connected(fetch, token, REVISION.MODERN);
+      const call = (name: string, args: Record<string, string>) =>
+        Effect.promise(async () => {
+          const answer = decodeAnswer(await client.callTool({ name, arguments: args }));
+          return { refused: answer.isError === true, text: answer.content[0].text };
+        });
+      const slugOf = (workspaceId: string) => `workspace-${workspaceId}`;
+
+      const unnamed = yield* call(MEMBER_MCP_TOOL.LIST_TASKS, {});
+      const tasks = yield* call(MEMBER_MCP_TOOL.LIST_TASKS, { workspace: slugOf(rows.own) });
+      const agents = yield* call(MEMBER_MCP_TOOL.LIST_AGENTS, { workspace: slugOf(rows.own) });
+      const strangers = yield* Effect.forEach(
+        [
+          [MEMBER_MCP_TOOL.LIST_TASKS, { workspace: slugOf(rows.elsewhere) }],
+          [MEMBER_MCP_TOOL.LIST_AGENTS, { workspace: slugOf(rows.elsewhere) }],
+          [MEMBER_MCP_TOOL.READ_TASK, { taskId: rows.strangerTask }],
+          [MEMBER_MCP_TOOL.READ_AGENT, { agentId: rows.strangerAgent }],
+          [MEMBER_MCP_TOOL.READ_AGENT_CHANGES, { agentId: rows.strangerAgent }],
+        ] as const,
+        ([name, args]) => call(name, args),
+      );
+      const owns = yield* Effect.forEach(
+        [
+          [MEMBER_MCP_TOOL.READ_TASK, { taskId: rows.ownTask }],
+          [MEMBER_MCP_TOOL.READ_AGENT, { agentId: rows.ownAgent }],
+          [MEMBER_MCP_TOOL.READ_AGENT_CHANGES, { agentId: rows.ownAgent }],
+        ] as const,
+        ([name, args]) => call(name, args),
+      );
+      yield* Effect.promise(() => client.close());
+
+      // A list that names no workspace is refused where the member has two, naming both and no other.
+      assert.equal(unnamed.refused, true);
+      assert.ok(
+        unnamed.text.includes(slugOf(rows.own)) && unnamed.text.includes(slugOf(rows.second)),
+      );
+      assert.ok(!unnamed.text.includes(slugOf(rows.elsewhere)));
+      assert.deepEqual(
+        decodeTasks(JSON.parse(tasks.text)).tasks.map(({ id }) => id),
+        [rows.ownTask],
+      );
+      assert.deepEqual(
+        decodeAgents(JSON.parse(agents.text)).agents.map(({ id }) => id),
+        [rows.ownAgent],
+      );
+      for (const refused of strangers) {
+        assert.equal(refused.refused, true, refused.text);
+        assert.ok(
+          !refused.text.includes(rows.strangerTask) && !refused.text.includes(rows.elsewhere),
+        );
+      }
+      for (const read of owns) assert.equal(read.refused, false, read.text);
+    }),
+);
+
 it.effect("the metadata names the resource, the auth service, the scopes, and the header", () =>
   Effect.gen(function* () {
     const { fetch } = yield* standing;
@@ -401,6 +533,9 @@ it.effect("the metadata names the resource, the auth service, the scopes, and th
   }),
 );
 
-it("list_workspaces shows the model the recorded input", async () => {
-  await settleJsonSchemaGolden(GOLDEN_ROOT, "list-workspaces-input", LIST_WORKSPACES_TOOL.input);
-});
+it.each(MEMBER_MCP_TOOLS.map((tool) => [tool.name, tool] as const))(
+  "%s shows the model the recorded input",
+  async (name, tool) => {
+    await settleJsonSchemaGolden(GOLDEN_ROOT, goldenOf(name), tool.input);
+  },
+);

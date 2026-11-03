@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The task to read, by the id list_tasks answered."
+    }
+  },
+  "required": [
+    "taskId"
+  ],
+  "additionalProperties": false
+}
